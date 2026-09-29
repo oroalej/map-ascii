@@ -1,0 +1,8 @@
+{
+  "id": "landmark/no-sources",
+  "osm_id": "osm:way/1",
+  "name": { "en": "Missing sources" },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": []
+}

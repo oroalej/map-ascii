@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+
+# tests
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# env (the site is fully static; keep any local secrets out of git)
+.env
+.env*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# data pipeline (raw downloads and intermediates; regenerate with `pnpm data:build`)
+packages/data/raw/
+packages/data/build/
+
+# generated tiles and search index (see docs/DATA.md)
+apps/web/public/tiles/*.pmtiles
+apps/web/public/tiles/search-index.json
+apps/web/public/tiles/imagery/

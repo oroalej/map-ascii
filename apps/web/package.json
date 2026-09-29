@@ -1,0 +1,27 @@
+{
+  "name": "@naga/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "serve": "serve out -l 3100",
+    "test:e2e": "playwright test",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@naga/renderer": "workspace:^",
+    "@naga/shared": "workspace:^",
+    "next": "16.3.6",
+    "react": "^19.3",
+    "react-dom": "^19.3",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "serve": "^14.2.6"
+  }
+}

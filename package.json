@@ -1,0 +1,33 @@
+{
+  "name": "naga-atlas",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.1",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @naga/web dev",
+    "build": "pnpm --filter @naga/web build",
+    "data:build": "pnpm --filter @naga/data build",
+    "test": "vitest run",
+    "test:e2e": "pnpm --filter @naga/web test:e2e",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@types/node": "^22.20.4",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "globals": "^17.12.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71",
+    "vitest": "^5"
+  }
+}

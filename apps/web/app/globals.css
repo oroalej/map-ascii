@@ -1,0 +1,25 @@
+:root {
+  --bg: #04050a;
+  --fg: #d8d4c8;
+  --fg-dim: #7a7a86;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+}
+
+a {
+  color: inherit;
+}

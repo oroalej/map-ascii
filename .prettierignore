@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+.next
+out
+coverage
+playwright-report
+test-results
+packages/data/raw
+packages/data/build
+apps/web/public/tiles
+
+# Hand-authored prose; keep as written
+*.md

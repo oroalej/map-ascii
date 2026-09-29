@@ -1,0 +1,7 @@
+.attribution {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}

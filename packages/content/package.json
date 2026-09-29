@@ -1,0 +1,17 @@
+{
+  "name": "@naga/content",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "validate": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@naga/shared": "workspace:^",
+    "zod": "^4.6"
+  }
+}

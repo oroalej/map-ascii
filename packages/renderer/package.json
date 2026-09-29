@@ -1,0 +1,16 @@
+{
+  "name": "@naga/renderer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@naga/shared": "workspace:^",
+    "twgl.js": "^7"
+  }
+}
