@@ -81,6 +81,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Names of major roads show from the District level (z14), other streets from the Street level (z15.5), and paths from z17. One name per street shows in a given stretch of screen.
 - Place names show by what they name: provinces at the Region level, cities and towns until the District level, subdivisions from z10.5 to z16, and smaller places from z13.5.
 - Labels have a 1-cell dark halo.
+- Tilted past map mode's 15° (orbit), names thin out so the buildings show: street and small-place names keep to the nearer part of the screen (the nearer 45% at 60°), major roads and monuments to the nearer 72%, with a row kept clear above and below each label. Landmarks and place names of subdivisions and up always show.
 - Labels and map layers fade at their band's edges: over half a zoom level, their cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping. A fading label keeps its place, so its neighbors don't jump.
 
 **Place-level detail.** Zooming in adds detail rather than only enlarging cells:
