@@ -70,9 +70,9 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 
 **Tasks**
 - [ ] Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset. *(Started early: right-drag / Ctrl+drag / two-finger twist, extrusions with shaded walls and solid roofs, and the compass reset are in; the skyline acceptance check is still to do.)*
-- [ ] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
-- [ ] Tours live in the city pack (`cities/<slug>/tours/`).
-- [ ] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
+- [x] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
+- [x] Tours live in the city pack (`cities/<slug>/tours/`).
+- [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
 - [ ] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Landmark visuals are parked until then, except fixes that block an acceptance criterion.
 
 **Accept when**

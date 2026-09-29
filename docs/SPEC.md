@@ -135,19 +135,21 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 A tour is an ordered list of steps. Each step has:
 - camera state: lat, lng, zoom, pitch, bearing
-- duration
+- duration: how long the step holds once the camera arrives
 - narration text
-- optional: `year`, `select` (feature id), `audio` clip, `highlight` (feature ids)
+- optional: a flight duration (`fly_ms`, up to 15 s, for slow establishing shots; otherwise the fly-to rule in §3), `year`, `select` (feature id), `audio` clip, `highlight` (feature ids), and `sources`
 
 Tours belong to a city and live in its city pack. Each city brief lists that city's launch set (for Naga, see `docs/cities/naga.md` §3). Every city should ship at least one establishing tour that flies from Region level down to street level.
 
-Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`.
+Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`. A tour is `draft` or `verified`: a verified tour has no `TODO(verify)` left and cites sources on every step (the validator enforces this). Draft tours play, marked "draft", with their placeholders showing.
 
 **Player behavior**
-- Steps auto-advance. Narration appears in a caption card.
-- Controls: pause, next, previous, exit, plus a progress bar.
-- If the visitor grabs the camera, the tour pauses and a "Resume tour" chip appears. Resuming flies back to the current step.
+- `T` or the Tours button opens the tours menu.
+- Steps auto-advance: each flies to its camera, then holds for its duration. Narration appears in a caption card (a bottom sheet on phones, in place of the info panel).
+- Controls: pause, next, previous, exit, plus a progress bar. `Space` pauses or resumes, and `Esc` exits.
+- If the visitor grabs the camera (drag, zoom, orbit, or selecting something else), the tour pauses and a "Resume tour" chip appears. Resuming flies back to the current step. A hidden browser tab pauses the tour too.
 - A step can set the timeline year. The slider animates to it.
+- Starting a tour adds a history entry; its steps don't. A shared URL with `tour` and `step` reopens the tour at that step, paused, so the link shows the view without playing on its own.
 
 ## 7. Timeline
 

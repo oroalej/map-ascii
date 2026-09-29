@@ -40,6 +40,8 @@ Seed landmarks (location and name only, sourced to OSM; dates and stories wait f
 3. **Campus belt.** Ateneo de Naga University, the University of Nueva Caceres, and the surrounding streets.
 4. **From Isarog to the river.** A single flight from Region level down to street level.
 
+Tours 2 and 4 are in the city pack (`packages/content/cities/naga/tours/`) as drafts: their camera paths come from the OSM data, and all narration is marked `TODO(verify)`. Tours 1 and 3 are Phase 5.
+
 Tour narration must be fact-checked against sources before shipping. Draft text may use placeholders marked `TODO(verify)`.
 
 ## 4. Research backlog (content team)
