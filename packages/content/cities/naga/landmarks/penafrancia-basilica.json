@@ -1,0 +1,16 @@
+{
+  "id": "landmark/penafrancia-basilica",
+  "osm_id": "osm:way/23670362",
+  "name": {
+    "en": "Peñafrancia Basilica"
+  },
+  "type": "church",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23670362",
+      "note": "Location and name only. OSM name: \"Minor Basilica and National Shrine of Our Lady of Peñafrancia\"; the short name is its linked Wikipedia title."
+    }
+  ]
+}

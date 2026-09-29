@@ -87,7 +87,8 @@ export function classify(
   if (kind === 'line') {
     if (tags.natural === 'coastline') return 'coastline';
     if (tags.highway) return highwayClass(tags.highway);
-    if (oneOf(tags.waterway, 'river', 'stream', 'canal')) return 'water_river';
+    if (tags.waterway === 'river') return 'water_river';
+    if (oneOf(tags.waterway, 'stream', 'canal')) return 'water_stream';
     if (tags.natural === 'tree_row') return 'tree';
     if (isBarrier(tags)) return 'barrier';
     return null;

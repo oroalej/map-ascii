@@ -19,13 +19,15 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   water_sea: { min: 0 },
   coastline: { min: 0 },
   water_area: { min: 0 },
-  water_river: { min: 0 },
   road_major: { min: 0 },
-  // City
+  // City. Rivers start here: at Region zoom the region's thousands of rivers, each a line of
+  // water glyphs, would cover the land.
+  water_river: { min: 9.5 },
   admin_city: { min: 9.5 },
   admin_subdivision: { min: 11, max: 16 },
   road_mid: { min: 11 },
   // District
+  water_stream: { min: 12.5 },
   park: { min: 12.5 },
   trees: { min: 12.5 },
   farmland: { min: 12.5 },
@@ -49,11 +51,39 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   place_label: { min: 0 },
 };
 
+/** What decides a single feature's band beyond its class (the pipeline's properties). */
+export type BandProps = { place?: string; subdivision_label?: boolean };
+
+/**
+ * A feature's band: its class's, except place labels, which show by what they name. Provinces
+ * belong to the Region level, cities and towns until the District level, subdivision names
+ * from the City level through the Street level, and smaller places from the District level.
+ */
+export function featureZoomBand(cls: AtlasClass, props: BandProps = {}): ZoomBand {
+  if (cls === 'place_label') {
+    if (props.place === 'province') return { min: 0, max: 9.5 };
+    if (props.place === 'city' || props.place === 'town') return { min: 0, max: 13 };
+    if (props.subdivision_label) return { min: 10.5, max: 16 };
+    return { min: 13.5 };
+  }
+  return CLASS_ZOOM[cls];
+}
+
+/**
+ * Deepest tile zoom for region-only features (the region download and what is derived from
+ * it: the sea, terrain, province labels). Deeper, the renderer draws them from their z11 tile
+ * (DATA.md §2 step 05: Region layers z6–z11, overzoomed in the client), so the region isn't
+ * tiled at street zooms.
+ */
+export const REGION_TILE_MAX_ZOOM = 11;
+
 /** Visibility of a band at `zoom`, from 0 (hidden) to 1 (fully shown). */
 export function bandVisibility(band: ZoomBand, zoom: number): number {
   const fadeIn = Math.min(1, Math.max(0, (zoom - (band.min - ZOOM_FADE)) / ZOOM_FADE));
   const fadeOut =
-    band.max === undefined ? 1 : Math.min(1, Math.max(0, (band.max + ZOOM_FADE - zoom) / ZOOM_FADE));
+    band.max === undefined
+      ? 1
+      : Math.min(1, Math.max(0, (band.max + ZOOM_FADE - zoom) / ZOOM_FADE));
   return Math.min(fadeIn, fadeOut);
 }
 

@@ -65,7 +65,10 @@ const inBbox = ([x, y]: Position, [w, s, e, n]: BBox) => x >= w && x <= e && y >
  * Features the region needs that aren't plain OSM features: the sea (from the coastline),
  * province label points (from their relations' centers), and nothing else.
  */
-export function regionDerived(region: OverpassResponse, bbox: BBox): Feature<Geometry, DerivedProperties>[] {
+export function regionDerived(
+  region: OverpassResponse,
+  bbox: BBox,
+): Feature<Geometry, DerivedProperties>[] {
   const nodes = new Map<number, Position>();
   for (const e of region.elements) {
     if (e.type === 'node' && e.lat !== undefined && e.lon !== undefined) {
@@ -110,7 +113,10 @@ export function regionDerived(region: OverpassResponse, bbox: BBox): Feature<Geo
 }
 
 /** Elevation bands from the cached DEM tiles, if any. */
-async function terrain(rawDir: string, bbox: BBox): Promise<Feature<Geometry, DerivedProperties>[]> {
+async function terrain(
+  rawDir: string,
+  bbox: BBox,
+): Promise<Feature<Geometry, DerivedProperties>[]> {
   const dir = join(rawDir, files.rawDem);
   const tiles = (await readdir(dir).catch(() => [] as string[]))
     .filter((f) => f.endsWith('.tif'))

@@ -27,6 +27,8 @@ describe('classify', () => {
 
   it('maps water, green, and farm areas', () => {
     expect(line({ waterway: 'river' })).toBe('water_river');
+    expect(line({ waterway: 'stream' })).toBe('water_stream');
+    expect(line({ waterway: 'canal' })).toBe('water_stream');
     expect(area({ natural: 'water' })).toBe('water_area');
     expect(area({ place: 'square' })).toBe('park');
     expect(area({ landuse: 'forest' })).toBe('trees');

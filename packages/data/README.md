@@ -13,12 +13,12 @@ pnpm data:build -- --city naga --from 03     # rerun from a step (earlier output
 
 | Step | Does |
 |---|---|
-| `01-fetch` | Look up the boundary relation (must match exactly one), then download OSM for the buffered boundary bbox and the region bounds into `raw/<city>/`. Downloads are cached for 7 days. |
-| `02-convert` | OSM → GeoJSON (`osmtogeojson`); derive the boundary bbox, region bounds, and default view (the `focus` feature, else the boundary centroid) |
-| `03-normalize` | Map OSM tags to atlas classes and tile layers, and compute heights, ids, OSM dates, and subdivisions (mapped boundaries only) |
-| `04-merge-content` | Join the city pack's landmarks onto features by `osm_id` |
-| `05-tiles` | Build `<city>.pmtiles` (z12–z16) with tippecanoe, write `<city>.meta.json`, and copy both to `apps/web/public/tiles/` |
-| `06-search-index` | Build `<city>.search-index.json` (Phase 2) |
+| `01-fetch` | Look up the boundary relation (must match exactly one), then download OSM for the buffered boundary bbox, the region's low-detail layers (per region part), and the Copernicus DEM GLO-90 tiles for the region into `raw/<city>/`. Downloads are cached for 7 days. |
+| `02-convert` | OSM → GeoJSON (`osmtogeojson`); derive the sea (from the coastline), province label points, and terrain bands (from the DEM); derive the boundary bbox, region bounds, default view (the `focus` feature, else the boundary centroid), and attribution |
+| `03-normalize` | Map OSM tags to atlas classes, tile layers, and zoom bands, and compute heights, widths, ids, OSM dates, and subdivisions (mapped boundaries, else approximate areas from `place` nodes) |
+| `04-merge-content` | Join the city pack's landmarks onto features by `osm_id`, add plan-view landmark parts from `plans/`, and write `<city>.art.json` from `art/` |
+| `05-tiles` | Build `<city>.pmtiles` (z6–z16) with tippecanoe, and write it, `<city>.meta.json`, and `<city>.subdivisions.json` to `apps/web/public/tiles/` |
+| `06-search-index` | Build `<city>.search-index.json`: entries plus a serialized MiniSearch index |
 
 `raw/` and `build/` are gitignored. Never hand-edit generated tiles.
 
@@ -32,4 +32,4 @@ Overpass: the public instances are tried in turn, with backoff when they are bus
 
 Step 05 uses a native `tippecanoe` if it is on `PATH`. Otherwise it builds and runs the Docker image in [`docker/`](docker/Dockerfile) (tippecanoe 2.79.0), so on Windows you only need Docker Desktop running. The first run builds the image, which takes a few minutes. If Docker Desktop is installed but not running, the pipeline starts it with `docker desktop start`. If step 05 still fails, start Docker Desktop yourself and resume with `pnpm data:build -- --city <slug> --from 05`.
 
-GDAL (DEM hillshade) arrives with the Region layers in Phase 2.
+No GDAL is needed: the DEM GeoTIFFs are read with `geotiff` and contoured with `d3-contour` in Node.

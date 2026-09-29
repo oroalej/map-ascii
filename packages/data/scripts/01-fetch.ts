@@ -164,7 +164,10 @@ export const step: Step = {
     const regionBbox = await regionBounds(city, rawDir, offline);
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {
-      const cacheFile = join(rawDir, files.rawRegion.replace('.osm.json', `-part-${i + 1}.osm.json`));
+      const cacheFile = join(
+        rawDir,
+        files.rawRegion.replace('.osm.json', `-part-${i + 1}.osm.json`),
+      );
       parts.push(await overpass(query, cacheFile, { offline }));
     }
     const region = mergeResponses(parts);

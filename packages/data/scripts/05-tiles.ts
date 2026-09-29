@@ -58,11 +58,15 @@ export const step: Step = {
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
     await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
-    await copyFile(join(buildDir, files.subdivisions), join(outDir, `${city.slug}.subdivisions.json`));
+    await copyFile(
+      join(buildDir, files.subdivisions),
+      join(outDir, `${city.slug}.subdivisions.json`),
+    );
     const mb = (await stat(pmtiles)).size / 1e6;
     console.log(
       `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, and .subdivisions.json to ${outDir}`,
     );
-    if (mb > 40) console.warn(`  ! ${city.slug}.pmtiles is over the 40 MB budget (ARCHITECTURE.md §8)`);
+    if (mb > 40)
+      console.warn(`  ! ${city.slug}.pmtiles is over the 40 MB budget (ARCHITECTURE.md §8)`);
   },
 };

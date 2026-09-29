@@ -90,6 +90,15 @@ const join2 = (a: BBox, b: BBox): BBox => [
 
 type Candidate = { feature: AtlasFeature; bbox: BBox; type: SearchType };
 
+/**
+ * A search entry's bbox, rounded, or nothing when it has no area (a point, or a way running
+ * exactly east–west or north–south): the entry's point is enough to fly to then.
+ */
+export function entryBbox(bbox: BBox): { bbox: BBox } | Record<string, never> {
+  const [west, south, east, north] = bbox.map(round6) as BBox;
+  return west < east && south < north ? { bbox: [west, south, east, north] } : {};
+}
+
 /** Cluster same-named features that lie within `gap` of each other. */
 function cluster(candidates: Candidate[], gap: number): Candidate[][] {
   const groups: { bbox: BBox; members: Candidate[] }[] = [];
@@ -160,23 +169,27 @@ export function searchEntries(
         lat: round6(lat),
         lng: round6(lng),
         zoomHint: main.type === 'street' ? zoomForSpan(span, 14, 17) : zoomHints[main.type],
-        bbox: bbox.map(round6) as BBox,
+        ...entryBbox(bbox),
         ...(group.length > 1 && { featureIds: group.map((c) => c.feature.properties.id) }),
       });
     }
   }
 
   for (const area of areas) {
-    const feature: Feature = { type: 'Feature', properties: {}, geometry: area.geometry as Geometry };
+    const feature: Feature = {
+      type: 'Feature',
+      properties: {},
+      geometry: area.geometry as Geometry,
+    };
     const node = placeNodes.get(area.name);
     const outline = features.find(
       (f) => f.properties.class === 'admin_subdivision' && f.properties.name === area.name,
     );
     const id = node?.properties.id ?? outline?.properties.id ?? `subdivision/${area.name}`;
     if (entries.has(id)) continue;
-    const [lng, lat] = (node
-      ? pointOn(node.geometry, node)
-      : turfCentroid(feature).geometry.coordinates) as [number, number];
+    const [lng, lat] = (
+      node ? pointOn(node.geometry, node) : turfCentroid(feature).geometry.coordinates
+    ) as [number, number];
     entries.set(id, {
       id,
       name: area.name,
@@ -187,7 +200,7 @@ export function searchEntries(
       lat: round6(lat),
       lng: round6(lng),
       zoomHint: zoomHints.subdivision,
-      bbox: (turfBbox(feature) as BBox).map(round6) as BBox,
+      ...entryBbox(turfBbox(feature) as BBox),
     });
   }
   return [...entries.values()];

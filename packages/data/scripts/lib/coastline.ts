@@ -10,7 +10,10 @@ import { difference, type Geom } from 'polyclip-ts';
 export type Position = [number, number];
 
 /** Stitch ways (node id lists) into chains by shared end nodes. */
-export function stitch(ways: readonly (readonly number[])[]): { closed: number[][]; open: number[][] } {
+export function stitch(ways: readonly (readonly number[])[]): {
+  closed: number[][];
+  open: number[][];
+} {
   const byStart = new Map<number, number[]>();
   const byEnd = new Map<number, number[]>();
   const closed: number[][] = [];

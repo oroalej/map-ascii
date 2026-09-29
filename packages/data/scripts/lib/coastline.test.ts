@@ -38,7 +38,15 @@ function ways(...lines: Position[][]) {
 
 describe('stitch', () => {
   it('joins ways by shared end nodes and detects closed rings', () => {
-    expect(stitch([[1, 2], [2, 3], [3, 1], [5, 6], [4, 5]])).toEqual({
+    expect(
+      stitch([
+        [1, 2],
+        [2, 3],
+        [3, 1],
+        [5, 6],
+        [4, 5],
+      ]),
+    ).toEqual({
       closed: [[1, 2, 3, 1]],
       open: [[4, 5, 6]],
     });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { foldTerm, SearchEntry } from './search';
-import { bandVisibility, CLASS_ZOOM, tileZoomRange, zoomLevel } from './zoom';
+import { bandVisibility, CLASS_ZOOM, featureZoomBand, tileZoomRange, zoomLevel } from './zoom';
 
 describe('bandVisibility', () => {
   it('fades in over the half zoom before min', () => {
@@ -16,6 +16,23 @@ describe('bandVisibility', () => {
     expect(bandVisibility(band, 9.5)).toBe(1);
     expect(bandVisibility(band, 9.75)).toBeCloseTo(0.5);
     expect(bandVisibility(band, 10)).toBe(0);
+  });
+});
+
+describe('featureZoomBand', () => {
+  it("uses the class's band for most classes", () => {
+    expect(featureZoomBand('water_river')).toEqual(CLASS_ZOOM.water_river);
+    expect(featureZoomBand('water_stream')).toEqual({ min: 12.5 });
+  });
+
+  it('shows place labels by what they name', () => {
+    expect(featureZoomBand('place_label', { place: 'province' })).toEqual({ min: 0, max: 9.5 });
+    expect(featureZoomBand('place_label', { place: 'city' })).toEqual({ min: 0, max: 13 });
+    expect(featureZoomBand('place_label', { place: 'village', subdivision_label: true })).toEqual({
+      min: 10.5,
+      max: 16,
+    });
+    expect(featureZoomBand('place_label', { place: 'neighbourhood' })).toEqual({ min: 13.5 });
   });
 });
 

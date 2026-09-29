@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import {
   CLASS_ZOOM,
+  featureZoomBand,
+  REGION_TILE_MAX_ZOOM,
   tileZoomRange,
   type AtlasClass,
   type SubdivisionArea,
@@ -68,6 +70,8 @@ export type AtlasProperties = {
   /** Where the renderer anchors the feature's name label. */
   label_lng?: number;
   label_lat?: number;
+  /** From the region download (or derived from it): tiled only to `REGION_TILE_MAX_ZOOM`. */
+  region?: boolean;
 } & { [tag in (typeof detailTags)[number]]?: string };
 
 export type AtlasFeature = Feature<Geometry, AtlasProperties> & {
@@ -92,18 +96,6 @@ const kindOfGeometry = (geometry: Geometry): GeometryKind | null => {
       return null;
   }
 };
-
-/** When a feature shows: its class's band, refined by tags where one class spans levels. */
-export function zoomBandFor(cls: AtlasClass, props: { place?: string; waterway?: string; subdivision_label?: boolean }): ZoomBand {
-  if (cls === 'water_river') return props.waterway === 'river' ? { min: 8 } : { min: 12.5 };
-  if (cls === 'place_label') {
-    if (props.place === 'province') return { min: 0, max: 9.5 };
-    if (props.place === 'city' || props.place === 'town') return { min: 0, max: 13 };
-    if (props.subdivision_label) return { min: 10.5, max: 16 };
-    return { min: 13.5 };
-  }
-  return CLASS_ZOOM[cls];
-}
 
 /** An admin boundary's rings as lines, so tile clipping doesn't add edges along tile seams. */
 const outline = (geometry: Polygon | MultiPolygon): MultiLineString => ({
@@ -137,6 +129,20 @@ const withZoom = (
   geometry,
   properties,
   tippecanoe: { layer, ...tileZoomRange(band, TILE_ZOOMS) },
+});
+
+/**
+ * A region-only feature: flagged `region`, and tiled no deeper than `REGION_TILE_MAX_ZOOM`;
+ * the renderer draws it from that zoom's tiles when the view is deeper.
+ */
+const regionOnly = (f: AtlasFeature): AtlasFeature => ({
+  ...f,
+  properties: { ...f.properties, region: true },
+  tippecanoe: {
+    ...f.tippecanoe,
+    minzoom: Math.min(f.tippecanoe.minzoom, REGION_TILE_MAX_ZOOM),
+    maxzoom: Math.min(f.tippecanoe.maxzoom, REGION_TILE_MAX_ZOOM),
+  },
 });
 
 /**
@@ -186,7 +192,9 @@ export function normalize(
     ),
   ];
 
-  for (const { feature, kind, cls, tags } of [...detail, ...regional]) {
+  const fromRegion = new Set(regional);
+  for (const item of [...detail, ...regional]) {
+    const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
     if (tags.name) properties.name = tags.name;
     const featureKind = kindOf(tags);
@@ -223,28 +231,40 @@ export function normalize(
         start?.certainty === 'circa' || end?.certainty === 'circa' ? 'circa' : 'exact';
     }
     const geometry =
-      cls === 'admin_subdivision' ? outline(feature.geometry as Polygon | MultiPolygon) : feature.geometry;
-    out.push(
-      withZoom(
-        geometry,
-        properties,
-        layerFor(cls, kind),
-        zoomBandFor(cls, { place: tags.place, waterway: tags.waterway, subdivision_label: properties.subdivision_label }),
-      ),
+      cls === 'admin_subdivision'
+        ? outline(feature.geometry as Polygon | MultiPolygon)
+        : feature.geometry;
+    const tiled = withZoom(
+      geometry,
+      properties,
+      layerFor(cls, kind),
+      featureZoomBand(cls, {
+        place: tags.place,
+        subdivision_label: properties.subdivision_label,
+      }),
     );
+    out.push(fromRegion.has(item) ? regionOnly(tiled) : tiled);
   }
 
   for (const feature of region.derived) {
     const p = feature.properties;
     const kind = kindOfGeometry(feature.geometry);
     if (!kind) continue;
-    out.push(withZoom(feature.geometry, { ...p }, layerFor(p.class, kind), zoomBandFor(p.class, p)));
+    out.push(
+      regionOnly(
+        withZoom(feature.geometry, { ...p }, layerFor(p.class, kind), featureZoomBand(p.class, p)),
+      ),
+    );
   }
   return { features: out, areas };
 }
 
 const round5 = (value: unknown): unknown =>
-  Array.isArray(value) ? value.map(round5) : typeof value === 'number' ? Math.round(value * 1e5) / 1e5 : value;
+  Array.isArray(value)
+    ? value.map(round5)
+    : typeof value === 'number'
+      ? Math.round(value * 1e5) / 1e5
+      : value;
 
 /** Subdivision areas for the HUD (`<city>.subdivisions.json`), with coordinates rounded. */
 export const areasFile = (areas: readonly Area[]): SubdivisionArea[] =>
@@ -294,7 +314,12 @@ export const step: Step = {
     );
     console.log(
       `  subdivisions: ${areas.length - approximate} mapped, ${approximate} approximate ` +
-        `(${areas.filter((a) => a.approximate).map((a) => a.name).join(', ') || 'none'})`,
+        `(${
+          areas
+            .filter((a) => a.approximate)
+            .map((a) => a.name)
+            .join(', ') || 'none'
+        })`,
     );
   },
 };

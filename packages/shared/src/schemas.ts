@@ -488,6 +488,8 @@ export const AtlasClass = z.enum([
   'admin_city',
   'admin_subdivision',
   'place_label',
+  // Appended so the classes above keep their renderer ids (glyphs/select.ts class masks).
+  'water_stream',
 ]);
 export type AtlasClass = z.infer<typeof AtlasClass>;
 
