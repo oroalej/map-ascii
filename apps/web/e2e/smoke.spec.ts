@@ -12,8 +12,18 @@ const cities = readdirSync(citiesDir)
       smoke_landmark: string;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
-    return { slug, name: city.name.en, smokeLandmark: city.smoke_landmark, hasMeta };
+    const toursDir = new URL(`${slug}/tours/`, citiesDir);
+    const tours = existsSync(toursDir)
+      ? readdirSync(toursDir)
+          .filter((file) => file.endsWith('.json'))
+          .sort()
+          .map((file) => JSON.parse(readFileSync(new URL(file, toursDir), 'utf8')) as TourFile)
+      : [];
+    return { slug, name: city.name.en, smokeLandmark: city.smoke_landmark, hasMeta, tours };
   });
+
+/** The parts of a city pack's tour file the tests read. */
+type TourFile = { id: string; title: { en: string }; steps: { narration: { en: string } }[] };
 
 /**
  * Share of pixels in a PNG screenshot that differ from the page background. The PNG is decoded
@@ -55,6 +65,19 @@ async function mapReady(page: Page) {
 
 /** The view parameters currently in the address bar. */
 const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParams);
+
+/** A tour's id as the URL has it. */
+const tourSlug = (tour: TourFile) => tour.id.replace(/^tour\//, '');
+
+/** Open the tours menu and start a tour. */
+async function startTour(page: Page, tour: TourFile) {
+  await page.getByRole('button', { name: /^Tours/ }).click();
+  await page
+    .getByRole('list', { name: 'Tours' })
+    .getByRole('button', { name: tour.title.en })
+    .click();
+  return page.getByRole('region', { name: 'Tour' });
+}
 
 test('/ opens the only city, keeping the view parameters', async ({ page }) => {
   test.skip(cities.length !== 1, 'with several cities, / is a city picker');
@@ -201,6 +224,98 @@ for (const city of cities) {
         expect(query(page)).toHaveProperty('lat');
         expect(query(page)).toHaveProperty('lng');
       });
+
+      test('tilting to 60° draws the skyline', async ({ page }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (err) => errors.push(err.message));
+        await page.goto(`/${city.slug}?z=17&pitch=60&bearing=15`);
+        await mapReady(page);
+        await expect(page.getByRole('button', { name: /tilt 60°/ })).toBeVisible();
+        const canvas = page.getByLabel(`Map of ${city.name}`);
+        await expect
+          .poll(async () => drawnShare(page, await canvas.screenshot()), { timeout: 20_000 })
+          .toBeGreaterThan(MIN_DRAWN);
+        expect(errors).toEqual([]);
+      });
+
+      for (const tour of city.tours) {
+        test.describe(`tour "${tour.title.en}"`, () => {
+          const count = tour.steps.length;
+
+          test('plays end to end on its own', async ({ page }) => {
+            // Short flights, and a fake clock to skip through each step's dwell.
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.clock.install();
+            await page.goto(`/${city.slug}`);
+            await mapReady(page);
+            const card = await startTour(page, tour);
+            for (let step = 1; step <= count; step++) {
+              await expect(async () => {
+                await page.clock.fastForward(1000);
+                await expect(card.getByLabel(`Step ${step} of ${count}`)).toBeVisible({
+                  timeout: 200,
+                });
+              }).toPass({ timeout: 30_000 });
+              await expect(card).toContainText(tour.steps[step - 1]!.narration.en);
+            }
+            await expect(async () => {
+              await page.clock.fastForward(1000);
+              await expect(card).toContainText('End of the tour.', { timeout: 200 });
+            }).toPass({ timeout: 30_000 });
+          });
+
+          test('steps through with the controls, mirrored in the URL', async ({ page }) => {
+            // The URL follows the camera once it settles; short flights keep that quick.
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.goto(`/${city.slug}`);
+            await mapReady(page);
+            const card = await startTour(page, tour);
+            await expect.poll(() => query(page).tour).toBe(tourSlug(tour));
+            await card.getByRole('button', { name: 'Pause' }).click();
+            for (let step = 1; step < count; step++) {
+              await card.getByRole('button', { name: 'Next step' }).click();
+              await expect(card.getByLabel(`Step ${step + 1} of ${count}`)).toBeVisible();
+              await expect(card).toContainText(tour.steps[step]!.narration.en);
+              await expect.poll(() => query(page).step).toBe(String(step));
+            }
+            await card.getByRole('button', { name: 'Next step' }).click();
+            await expect(card).toContainText('End of the tour.');
+            await card.getByRole('button', { name: 'Exit tour' }).click();
+            await expect(card).toHaveCount(0);
+            await expect.poll(() => query(page).tour).toBeUndefined();
+          });
+
+          test('pauses when the visitor moves the map, and resumes', async ({ page }) => {
+            await page.goto(`/${city.slug}`);
+            await mapReady(page);
+            const card = await startTour(page, tour);
+            const canvas = page.getByLabel(`Map of ${city.name}`);
+            const box = (await canvas.boundingBox())!;
+            const [x, y] = [box.x + box.width / 2, box.y + box.height / 3];
+            await page.mouse.move(x, y);
+            await page.mouse.down();
+            await page.mouse.move(x + 80, y + 40, { steps: 4 });
+            await page.mouse.up();
+            const resume = page.getByRole('button', { name: 'Resume tour' });
+            await expect(resume).toBeVisible();
+            await expect(card.getByRole('button', { name: 'Play' })).toBeVisible();
+            await resume.click();
+            await expect(resume).toHaveCount(0);
+            await expect(card.getByRole('button', { name: 'Pause' })).toBeVisible();
+          });
+
+          test('a shared URL reopens the tour, paused at its step', async ({ page }) => {
+            const step = Math.min(1, count - 1);
+            await page.goto(`/${city.slug}?tour=${tourSlug(tour)}&step=${step}`);
+            await mapReady(page);
+            const card = page.getByRole('region', { name: 'Tour' });
+            await expect(card.getByLabel(`Step ${step + 1} of ${count}`)).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Resume tour' })).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(card).toHaveCount(0);
+          });
+        });
+      }
     });
   });
 }
