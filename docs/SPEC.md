@@ -43,7 +43,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 
 **Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 19. Zooming out stops at the zoom that fits the whole region in the viewport (never below 7), so the visitor can't lose the region in empty space.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom that fits the whole region in the viewport (never below 7), so the visitor can't lose the region in empty space.
 
 ## 4. Visual language
 
@@ -78,8 +78,10 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 **Labels** are real text snapped to the cell grid.
 - Placement is by priority and zoom band, with collision detection so labels never overlap.
-- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street.
+- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Names of major roads show from the District level (z14), other streets from the Street level (z15.5), and paths from z17. One name per street shows in a given stretch of screen.
+- Place names show by what they name: provinces at the Region level, cities and towns until the District level, subdivisions from z10.5 to z16, and smaller places from z13.5.
 - Labels have a 1-cell dark halo.
+- Labels switch on and off at their band's edges. Map layers crossfade instead: over half a zoom level, a layer's cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping.
 
 **Place-level detail.** Zooming in adds detail rather than only enlarging cells:
 - Curated landmarks show their name from z16, and statues and monuments from z18.

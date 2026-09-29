@@ -55,7 +55,8 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 
 | Atlas class | OSM tags |
 |---|---|
-| `water_river` | `waterway=river|stream|canal` |
+| `water_river` | `waterway=river` (from the City level) |
+| `water_stream` | `waterway=stream|canal` (from the District level) |
 | `water_area` | `natural=water`, `water=*`, `waterway=riverbank`; `natural=coastline` (processed into sea polygons, with the Region layers in Phase 2) |
 | `road_major` | `highway=motorway|trunk|primary` (+ `_link`) |
 | `road_mid` | `highway=secondary|tertiary` (+ `_link`) |

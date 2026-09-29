@@ -16,7 +16,7 @@ ascii-atlas/
 │  └─ web/                    Next.js App Router, static export
 │     ├─ app/                 layout, global styles, `/` landing (redirect or city picker)
 │     │  └─ [city]/           per-city page, static params from the city registry
-│     ├─ components/          AtlasCanvas, SearchBox, InfoPanel, Timeline, TourPlayer, Hud
+│     ├─ components/          CityAtlas, AtlasCanvas, SearchBox, InfoPanel, Hud, Timeline, TourPlayer
 │     ├─ state/               Zustand store + URL sync
 │     └─ public/tiles/        per city: <city>.pmtiles, <city>.meta.json,
 │                             <city>.search-index.json, imagery/<city>/ (all generated)
@@ -31,7 +31,8 @@ ascii-atlas/
 │  │     ├─ glyphs/           glyph atlas generation, glyph selection rules
 │  │     ├─ shaders/          cell pass, glyph pass, composite
 │  │     ├─ labels.ts         placement + collision on the cell grid
-│  │     ├─ picking.ts        id buffer readback → feature id
+│  │     ├─ picking.ts        pointer → cell, highlight states (id readback is in index.ts)
+│  │     ├─ legend.ts         legend entries from the theme and zoom bands
 │  │     ├─ time.ts           year filtering + transition masks
 │  │     └─ theme.ts          glyph + color definitions per class
 │  ├─ data/                   pipeline (Node scripts + CLI tools)
@@ -63,15 +64,19 @@ const atlas = createAtlas(canvas, {
 });
 
 atlas.setCamera(partial, { animate?: boolean });
-atlas.flyTo(target: CameraState, opts?);
+atlas.flyTo(target: Partial<CameraState>);
+atlas.getCamera(): CameraState;
 atlas.setYear(year: number, { animate?: boolean });
 atlas.setTheme('dark' | 'light');
 atlas.setSelected(featureId | null);
-atlas.setHighlighted(featureIds: string[]);
+atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
+atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
 atlas.on('camerachange' | 'hover' | 'click' | 'flyend', handler);
 atlas.destroy();
 ```
+
+`hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom)` and `CLASS_LABELS` for the legend.
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
 
@@ -122,6 +127,14 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 - **One matrix path.** The cell pass maps tile units (and meters, for heights) to the cell grid with a per-tile 4×4 matrix. Flat north-up cameras use an affine matrix and the world-anchored grid; tilted or rotated cameras (orbit mode) use `WebMercatorViewport`'s view-projection with a screen-anchored grid.
 - **3D buildings.** The tile worker extrudes buildings with a height (a wall quad per footprint edge, the footprint's triangles as the roof); each wall's shade comes from its facing. In the tilted view, ground features keep their class-priority depth in the back of the depth range and extrusions use their real depth in front, so buildings hide what is behind them.
 
+**Implementation notes (Phase 2).**
+- **Crossfades.** Each frame the cell pass gets every class's visibility (`bandVisibility` of its `CLASS_ZOOM` band, 0–1). A partly visible class keeps only the cells whose per-world-cell hash falls under its visibility and discards the rest, so it dissolves into the layer beneath and the dither stays put while panning.
+- **Region layers.** The sea, coastline, terrain, and admin boundaries are ordinary classes: terrain bands nest, and the band number in the height byte makes the higher band win (the `ramp` glyph kind picks `. : - = + * # %` from it). Admin lines are see-through for outlines and curbs.
+- **Picking.** The pointer maps to a cell by inverting the glyph pass (`picking.ts`). After a frame is drawn, one texel of `idTex` is read (`readBuffer(COLOR_ATTACHMENT2)` + `readPixels`), at most once per frame. The tile worker sends a `FeatureInfo` for each feature it registers, so an index resolves to a feature without keeping tiles on the main thread.
+- **Selection.** The select pass compares each cell's feature index with the hovered, selected, and highlighted indices and writes a state into the glyph texture's spare channel; the glyph pass brightens hover and draws the accent color (with a shimmer for the selection, unless reduced motion is on).
+- **Fly-to.** Flights follow van Wijk and Nuij's zoom-and-pan path (as MapLibre's `flyTo`), eased, 0.8–3 s (≤0.3 s with reduced motion). Any input cancels one.
+- **Zoom-out limit.** On every resize, the minimum zoom becomes the zoom that fits `regionBounds` in the view, and flat views keep the whole screen over the region.
+
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.
@@ -136,8 +149,8 @@ The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be
 - **Roof ridges:** the tile worker gives each pitched-roof polygon a ridge along its principal axis, and each vertex its signed distance to it (positive on the lit slope). The cell pass marks a cell as ridge when `|d| ≤ fwidth(d) / 2` (the ridge line crosses it), else lit or shaded slope. From `ROOF_ZOOM`, interior cells draw `▓` / `▒` and the ridge as `─ ╲ │ ╱`, chosen from its angle in cell units (cells are 1.8× taller than wide). Flat roofs and landmark parts keep the height ramp.
 - **3D:** in the tilted view, extruded walls step `░▒▓` by shade and roofs are `█`; outlines and ridges are off.
 - **Outlines (Place level):** from `OUTLINE_ZOOM`, a cell of an outlined feature is a wall if any of its 8 neighbors belongs to another feature (per `idTex`; paths, statues, and markers are looked through). A wall joins its neighbor in a direction when that neighbor is in the same feature and a cell touching both is outside, which draws corners and concave corners correctly without false junctions in thin buildings. The join mask indexes the single- or double-line wall set. Grounds (no height) are never outlined.
-- **Classes by zoom:** a class can have a minimum zoom (e.g. `monument` from z17); the cell pass clips it below that.
-- **Labels:** curated landmarks (from z16) and monuments (from z18) are placed greedily by rank, then feature id: below, above, right, or left of the anchor, wrapped at 18 characters, with a one-cell halo, inside the on-screen cells, never overlapping. The result is a per-cell label texture drawn over the map in the glyph pass.
+- **Classes by zoom:** each class has a zoom band in the shared `CLASS_ZOOM` table (e.g. `monument` from z17, terrain until 9.5); the cell pass crossfades it at the band's edges (see the Phase 2 notes above).
+- **Labels:** place names (provinces, cities, subdivisions, smaller places, each with the band `featureZoomBand` gives it), curated landmarks (from z16), street names, and monuments (from z18) are placed greedily by rank, then feature id, inside the on-screen cells, never overlapping, with a one-cell halo. Names beside an anchor go below, above, right, or left of it, wrapped at 18 characters. A street's name sits at the middle of its longest straight run: along the street's row when the run is within 20° of horizontal, down its column when within 20° of vertical, else beside it; the same name within 30 cells is placed once. The result is a per-cell label texture drawn over the map in the glyph pass.
 
 ## 5. Time model
 
