@@ -1,0 +1,16 @@
+{
+  "id": "landmark/san-francisco-parish",
+  "osm_id": "osm:way/23662997",
+  "name": {
+    "en": "San Francisco Parish"
+  },
+  "type": "church",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23662997",
+      "note": "Location and name only."
+    }
+  ]
+}

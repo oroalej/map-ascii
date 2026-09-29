@@ -1,0 +1,56 @@
+{
+  "elements": [
+    {
+      "type": "relation",
+      "id": 200,
+      "bounds": {
+        "minlat": 0,
+        "minlon": 0,
+        "maxlat": 0.01,
+        "maxlon": 0.01
+      },
+      "members": [
+        {
+          "type": "way",
+          "ref": 100,
+          "role": "outer"
+        }
+      ],
+      "tags": {
+        "type": "boundary",
+        "boundary": "administrative",
+        "admin_level": "6",
+        "name": "Fixture City"
+      }
+    },
+    {
+      "type": "way",
+      "id": 100,
+      "nodes": [1, 2, 3, 4, 1]
+    },
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 0,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 2,
+      "lat": 0,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 3,
+      "lat": 0.01,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 4,
+      "lat": 0.01,
+      "lon": 0
+    }
+  ]
+}

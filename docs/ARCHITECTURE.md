@@ -75,7 +75,7 @@ atlas.destroy();
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
 
-**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (the boundary centroid unless the city config overrides it), `yearRange` (earliest year with data to the current year), and `attribution` (extra credits the city's layers need).
+**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), and `attribution` (extra credits the city's layers need).
 
 ## 3. Rendering pipeline (per frame)
 
@@ -109,6 +109,12 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - On hover or click, read back a single texel from `idTex` at the pointer cell (`readPixels`, throttled).
 
 Rasterization runs only when the camera, year, or tiles change. When idle, only the glyph pass re-runs, for animation.
+
+**Implementation notes (Phase 1).**
+- Steps 4 and 5 are split differently: a cell-resolution *select pass* does the neighborhood lookup and all glyph selection, writing one glyph index and class per cell, and the glyph pass is a single full-screen triangle that reads that texture. It gives the same result as instanced quads with less work.
+- Class priority is the cell pass's depth value, in tiers; within the building tier, taller features win, so height-less grounds (e.g. a school campus) sit under their buildings.
+- The cell grid is anchored to the world, and the glyph pass shifts it by the sub-cell pan offset, so panning scrolls smoothly instead of re-quantizing.
+- Zoom follows the 512-px tile convention (`@math.gl/web-mercator`, MapLibre).
 
 ## 4. Glyph selection rules
 

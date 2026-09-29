@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = 3100;
+// Override with E2E_PORT when 3100 is taken (e.g. by another local project).
+const port = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: './e2e',
@@ -15,7 +16,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     // Test the static export, which is what ships.
-    command: 'pnpm build && pnpm serve',
+    command: `pnpm build && pnpm exec serve out -l ${port}`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

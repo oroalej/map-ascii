@@ -1,0 +1,16 @@
+{
+  "id": "landmark/plaza-rizal",
+  "osm_id": "osm:way/201276956",
+  "name": {
+    "en": "Plaza Rizal"
+  },
+  "type": "plaza",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/201276956",
+      "note": "Location and name only."
+    }
+  ]
+}

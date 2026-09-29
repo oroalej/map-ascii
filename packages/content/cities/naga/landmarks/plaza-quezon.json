@@ -1,0 +1,16 @@
+{
+  "id": "landmark/plaza-quezon",
+  "osm_id": "osm:way/201276958",
+  "name": {
+    "en": "Plaza Quezon"
+  },
+  "type": "plaza",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/201276958",
+      "note": "Location and name only."
+    }
+  ]
+}

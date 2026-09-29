@@ -23,19 +23,19 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 **Tasks**
 - [x] `City` zod schema in `packages/shared`. Switch `LocalizedText` to "`en` + the city's declared languages" (`DATA.md` §4).
 - [x] City pack layout: move content under `packages/content/cities/<slug>/`, and add `cities/naga/city.json` **(Naga)**. The validator walks every city pack.
-- [ ] Pipeline takes `--city` (default: all registered cities), and writes `raw/<city>/`, `build/<city>/`, `<city>.pmtiles`, and `<city>.meta.json`.
-- [ ] Web app reads the city's meta for bounds and default camera. Remove the hardcoded Naga camera from the store, the hardcoded tiles URL, and the hardcoded canvas `aria-label`.
-- [ ] Data pipeline steps 01–05 for the Naga detail bbox only (no Region layers yet). Output `naga.pmtiles` **(Naga)**.
-- [ ] Renderer:
-  - [ ] tile loading in a worker
-  - [ ] cell pass (class and id buffers)
-  - [ ] glyph atlas
-  - [ ] glyph pass
-  - [ ] road connectivity LUT
-  - [ ] water animation
-- [ ] Map camera: pan, zoom anchored at the cursor, min/max zoom, bounds.
-- [ ] Theme file with the classes from `SPEC.md` §4.
-- [ ] Attribution line.
+- [x] Pipeline takes `--city` (default: all registered cities), and writes `raw/<city>/`, `build/<city>/`, `<city>.pmtiles`, and `<city>.meta.json`.
+- [x] Web app reads the city's meta for bounds and default camera. Remove the hardcoded Naga camera from the store, the hardcoded tiles URL, and the hardcoded canvas `aria-label`.
+- [x] Data pipeline steps 01–05 for the Naga detail bbox only (no Region layers yet). Output `naga.pmtiles` **(Naga)**.
+- [x] Renderer:
+  - [x] tile loading in a worker
+  - [x] cell pass (class and id buffers)
+  - [x] glyph atlas
+  - [x] glyph pass
+  - [x] road connectivity LUT
+  - [x] water animation
+- [x] Map camera: pan, zoom anchored at the cursor, min/max zoom, bounds.
+- [x] Theme file with the classes from `SPEC.md` §4.
+- [x] Attribution line.
 
 **Accept when**
 - **(Naga)** The Centro renders as recognizable ASCII at z14–z18: the river, major roads with correct box-drawing junctions, and buildings.
@@ -141,3 +141,4 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 
 - **2026-09-29 — Phase 0 (scaffold).** pnpm monorepo (`apps/web`, `packages/{renderer,data,content,shared}`); Next 16 static export showing a blank dark WebGL2 canvas with OSM attribution; renderer `createAtlas` stub; zod schemas for Landmark, NameHistory, Event, Tour, CameraState; content validator; pipeline step stubs; ESLint/Prettier/Vitest/Playwright; GitHub Actions CI. Known: Node 22.13+ required (Vitest 5), TypeScript pinned to ~6.0 (typescript-eslint), CI green pending first push.
 - **2026-09-29 — Renamed to ASCII Atlas.** Docs made city-generic with Naga City as the first city (`docs/cities/naga.md`); package scope renamed `@naga/*` → `@atlas/*`, root package `ascii-atlas`, product name in UI strings.
+- **2026-09-29 — Phase 1 (generic foundation + Naga Centro prototype).** WebGL2 ASCII renderer in `packages/renderer`: a tile worker (PMTiles range requests → vector-tile decode → earcut, Int16 tile-local positions), a cell pass with MRT class/attribute/id buffers and depth-based class priority, a select pass (road connectivity LUT, water animation, building ramp, area patterns), and a full-screen glyph pass over a canvas-generated glyph atlas (box-drawing and block glyphs drawn as shapes so lines join). Map camera with drag, cursor-anchored wheel and pinch zoom, keyboard `+`/`-`/arrows, zoom 7–19, and region bounds. Theme with the `SPEC.md` §4 classes. The pipeline now gives heights only to features with `building=*`, so school/church/market grounds render as `░` under their buildings. Tests: glyph LUT and rules, glyph atlas, camera math, tile selection and cache, tile geometry, a no-hardcoded-city guard, and an e2e check that the canvas draws. Measured 60 fps pan/zoom on a GTX 1650 SUPER. Known: labels, admin outlines, picking, and fly-to are Phase 2; `setYear` is still a stub (Phase 4); e2e port is overridable with `E2E_PORT`.

@@ -1,0 +1,211 @@
+{
+  "elements": [
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 0,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 2,
+      "lat": 0,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 3,
+      "lat": 0.01,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 4,
+      "lat": 0.01,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 5,
+      "lat": 0.005,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 6,
+      "lat": 0.005,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 7,
+      "lat": 0,
+      "lon": 0.005
+    },
+    {
+      "type": "node",
+      "id": 8,
+      "lat": 0.01,
+      "lon": 0.005
+    },
+    {
+      "type": "node",
+      "id": 9,
+      "lat": 0.002,
+      "lon": 0.002
+    },
+    {
+      "type": "node",
+      "id": 10,
+      "lat": 0.002,
+      "lon": 0.003
+    },
+    {
+      "type": "node",
+      "id": 11,
+      "lat": 0.003,
+      "lon": 0.003
+    },
+    {
+      "type": "node",
+      "id": 12,
+      "lat": 0.003,
+      "lon": 0.002
+    },
+    {
+      "type": "node",
+      "id": 13,
+      "lat": 0.006,
+      "lon": 0.006
+    },
+    {
+      "type": "node",
+      "id": 14,
+      "lat": 0.006,
+      "lon": 0.008
+    },
+    {
+      "type": "node",
+      "id": 15,
+      "lat": 0.008,
+      "lon": 0.008
+    },
+    {
+      "type": "node",
+      "id": 16,
+      "lat": 0.008,
+      "lon": 0.006
+    },
+    {
+      "type": "node",
+      "id": 17,
+      "lat": 0.009,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 18,
+      "lat": 0.0095,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 20,
+      "lat": 0,
+      "lon": 0.004
+    },
+    {
+      "type": "node",
+      "id": 21,
+      "lat": 0.01,
+      "lon": 0.004
+    },
+    {
+      "type": "node",
+      "id": 19,
+      "lat": 0.0075,
+      "lon": 0.0025,
+      "tags": {
+        "place": "quarter",
+        "name": "Fixture Quarter"
+      }
+    },
+    {
+      "type": "way",
+      "id": 101,
+      "nodes": [5, 6],
+      "tags": {
+        "highway": "primary",
+        "name": "Fixture Avenue"
+      }
+    },
+    {
+      "type": "way",
+      "id": 102,
+      "nodes": [7, 8],
+      "tags": {
+        "highway": "residential",
+        "name": "Fixture Street",
+        "start_date": "~1950"
+      }
+    },
+    {
+      "type": "way",
+      "id": 104,
+      "nodes": [9, 10, 11, 12, 9],
+      "tags": {
+        "building": "church",
+        "name": "Fixture Church",
+        "building:levels": "4"
+      }
+    },
+    {
+      "type": "way",
+      "id": 105,
+      "nodes": [13, 14, 15, 16, 13],
+      "tags": {
+        "leisure": "park",
+        "name": "Fixture Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106,
+      "nodes": [17, 18],
+      "tags": {
+        "waterway": "river",
+        "name": "Fixture River"
+      }
+    },
+    {
+      "type": "way",
+      "id": 107,
+      "nodes": [5, 7],
+      "tags": {
+        "highway": "proposed"
+      }
+    },
+    {
+      "type": "way",
+      "id": 108,
+      "nodes": [1, 20, 21, 4, 1]
+    },
+    {
+      "type": "relation",
+      "id": 201,
+      "members": [
+        {
+          "type": "way",
+          "ref": 108,
+          "role": "outer"
+        }
+      ],
+      "tags": {
+        "type": "boundary",
+        "boundary": "administrative",
+        "admin_level": "10",
+        "name": "West Ward"
+      }
+    }
+  ]
+}

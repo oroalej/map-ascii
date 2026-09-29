@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAtlas } from './index';
 
 const options = {
-  tilesUrl: '/tiles/naga.pmtiles',
-  initialCamera: { lat: 13.6218, lng: 123.1948, zoom: 13, pitch: 0, bearing: 0 },
+  tilesUrl: '/tiles/example.pmtiles',
+  bounds: [-1, -1, 1, 1] as [number, number, number, number],
+  initialCamera: { lat: 0, lng: 0, zoom: 13, pitch: 0, bearing: 0 },
   year: 2026,
 };
 

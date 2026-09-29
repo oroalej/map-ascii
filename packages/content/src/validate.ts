@@ -1,11 +1,14 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { City, contentSchemas } from '@atlas/shared';
 import type { z } from 'zod';
 
-/** Absolute path of `packages/content`. City packs live in its `cities/` folder. */
-export const contentRoot = fileURLToPath(new URL('..', import.meta.url));
+/**
+ * Absolute path of `packages/content`. City packs live in its `cities/` folder. (Not
+ * `new URL('..', import.meta.url)`: bundlers such as Turbopack treat that as an asset import.)
+ */
+export const contentRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 type Schemas = ReturnType<typeof contentSchemas>;
 

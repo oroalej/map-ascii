@@ -170,6 +170,13 @@ describe('City', () => {
     expect(City.safeParse({ ...city, center: [1, 2] }).success).toBe(false);
   });
 
+  it('takes a focus feature, not camera coordinates', () => {
+    const focus = { osm_id: 'osm:way/1', zoom: 17 };
+    expect(City.safeParse({ ...city, focus }).success).toBe(true);
+    expect(City.safeParse({ ...city, focus: { ...focus, osm_id: 'way/1' } }).success).toBe(false);
+    expect(City.safeParse({ ...city, focus: { ...focus, lat: 1 } }).success).toBe(false);
+  });
+
   it('rejects an inverted bbox', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
   });

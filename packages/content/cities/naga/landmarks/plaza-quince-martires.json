@@ -1,0 +1,16 @@
+{
+  "id": "landmark/plaza-quince-martires",
+  "osm_id": "osm:way/201276957",
+  "name": {
+    "en": "Plaza Quince Martires"
+  },
+  "type": "plaza",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/201276957",
+      "note": "Location and name only."
+    }
+  ]
+}

@@ -192,8 +192,8 @@ export type BBox = z.infer<typeof BBox>;
 
 /**
  * A city pack's config (`cities/<slug>/city.json`). Geography is looked up in OSM by the
- * pipeline; the only coordinates allowed here are a region bbox (when the region has no usable
- * OSM relation) and an optional camera override.
+ * pipeline; the only coordinates allowed here are a region bbox, when the region has no usable
+ * OSM relation.
  */
 export const City = z
   .strictObject({
@@ -227,7 +227,11 @@ export const City = z
       .refine((langs) => new Set(langs).size === langs.length, { message: 'duplicate language' }),
     /** Name the e2e smoke test searches for. */
     smoke_landmark: z.string().min(1),
-    initial_camera: CameraState.partial().optional(),
+    /**
+     * Where the city opens: an OSM feature (e.g. the main plaza) whose center the pipeline
+     * resolves into the meta's default camera. Without it, the boundary centroid is used.
+     */
+    focus: z.strictObject({ osm_id: OsmId, zoom: CameraState.shape.zoom }).optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.
@@ -243,3 +247,55 @@ export const City = z
     }
   });
 export type City = z.infer<typeof City>;
+
+/** A city's generated `<slug>.meta.json`: what the web app needs before loading tiles. */
+export const CityMeta = z.object({
+  slug: z.string().min(1),
+  name: LocalizedText,
+  subdivisionLabel: LocalizedText,
+  languages: z.array(LanguageCode),
+  /** The city boundary's bbox. */
+  bounds: BBox,
+  /** The camera is clamped to this. */
+  regionBounds: BBox,
+  defaultCamera: CameraState,
+  /** Earliest year with dated data, and the build year. */
+  yearRange: z.tuple([Year, Year]),
+  /** Extra credits this city's layers need, beyond OpenStreetMap. */
+  attribution: z.array(z.string().min(1)),
+});
+export type CityMeta = z.infer<typeof CityMeta>;
+
+/** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
+export const AtlasClass = z.enum([
+  'water_river',
+  'water_area',
+  'road_major',
+  'road_mid',
+  'road_minor',
+  'path',
+  'building',
+  'building_religious',
+  'building_school',
+  'building_market',
+  'park',
+  'trees',
+  'farmland',
+  'admin_city',
+  'admin_subdivision',
+  'place_label',
+]);
+export type AtlasClass = z.infer<typeof AtlasClass>;
+
+/** Vector tile layers, one per class group. */
+export const TileLayer = z.enum([
+  'water',
+  'roads',
+  'buildings',
+  'landuse',
+  'poi',
+  'admin',
+  'labels',
+  'events',
+]);
+export type TileLayer = z.infer<typeof TileLayer>;

@@ -33,9 +33,9 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 3. **`03-normalize`**
    - Map OSM tags to atlas classes (see section 3).
    - Drop untagged or irrelevant features.
-   - Compute building `height` (`height` tag, else `building:levels × 3`, else a class default).
+   - Compute building `height` (`height` tag, else `building:levels × 3`, else a class default) for features with `building=*` only. Grounds that share a building class (e.g. `amenity=school` on a campus polygon) get no height.
    - Assign stable ids: `osm:<type>/<id>`.
-   - Compute `subdivision` for each feature by point-in-polygon against the boundaries at the city's `subdivision.admin_level`.
+   - Compute `subdivision` for each feature by point-in-polygon against the boundaries at the city's `subdivision.admin_level`. Only mapped boundary polygons count; features outside them get no subdivision (see the city brief for coverage, e.g. `naga.md` §5).
 4. **`04-merge-content`**
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
@@ -44,7 +44,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
    - Zoom ranges: Region layers z6–z11; detail layers z12–z16 (overzoom to z19 in the client).
    - Output `<city>.pmtiles` (via `pmtiles convert` if needed) and copy it to `apps/web/public/tiles/`.
-   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds and default camera derived from the boundary, the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
+   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 
@@ -55,7 +55,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | Atlas class | OSM tags |
 |---|---|
 | `water_river` | `waterway=river|stream|canal` |
-| `water_area` | `natural=water`, `water=*`, `natural=coastline` (processed into sea polygons) |
+| `water_area` | `natural=water`, `water=*`, `waterway=riverbank`; `natural=coastline` (processed into sea polygons, with the Region layers in Phase 2) |
 | `road_major` | `highway=motorway|trunk|primary` (+ `_link`) |
 | `road_mid` | `highway=secondary|tertiary` (+ `_link`) |
 | `road_minor` | `highway=residential|unclassified|service|living_street` |
@@ -69,7 +69,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `admin_city` | the city's boundary relation (from `city.json`; admin_level 6 for Naga) |
 | `admin_subdivision` | boundaries at the city's `subdivision.admin_level` (10 for Naga's barangays) |
-| `place_label` | `place=city|town|village|suburb|neighbourhood` nodes |
+| `place_label` | named `place=city|town|village|suburb|quarter|neighbourhood` nodes |
 
 ## 4. Content schemas (defined in `packages/shared`)
 
@@ -84,7 +84,7 @@ City {                           // cities/<slug>/city.json
   subdivision: { admin_level: number; label: LocalizedText };        // e.g. 10, "barangay"
   languages: string[];           // extra content languages besides "en", e.g. ["fil", "bcl"]
   smoke_landmark: string;        // name the e2e test searches for
-  initial_camera?: Partial<CameraState>;  // optional override of the derived default
+  focus?: { osm_id: string; zoom: number };  // where the city opens, e.g. its main plaza
 }
 
 LocalizedText = { en: string } & { [lang: string]: string };  // keys limited to "en" + city.languages
@@ -137,7 +137,7 @@ Tour {
 Validation rules:
 - `sources` is non-empty for any record with a year or story.
 - Localized fields contain `en` and only the languages listed in the city's `languages`.
-- A `region` bbox is the only coordinate data allowed in a city config, and only when the region has no usable OSM relation. The boundary and camera always come from OSM.
+- A `region` bbox is the only coordinate data allowed in a city config, and only when the region has no usable OSM relation. The boundary and camera always come from OSM: the default camera is centered on the `focus` feature, or on the boundary centroid when there is no `focus`.
 - `end_year > start_year`.
 - Photo `credit` and `license` are required.
 

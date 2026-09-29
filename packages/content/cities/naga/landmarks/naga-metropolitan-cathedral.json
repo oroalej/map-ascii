@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-metropolitan-cathedral",
+  "osm_id": "osm:way/23666715",
+  "name": {
+    "en": "Naga Metropolitan Cathedral"
+  },
+  "type": "church",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23666715",
+      "note": "Location and name only."
+    }
+  ]
+}

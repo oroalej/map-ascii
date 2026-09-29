@@ -16,9 +16,12 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 | Region | Bicol Region, OSM relation 3561455 (low-detail layers: coastline, major roads, water, place nodes). It includes Masbate and Catanduanes, so the region view is wider than the peninsula. |
 | Subdivision | admin_level 10, local label **"barangay"** |
 | Content languages | `en` (required), `fil` (Filipino), `bcl` (Bikol) |
-| Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target) |
+| Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |
+| Focus | Plaza Quezon (way/201276958) at z17, between Plaza Rizal and Plaza Quince Martires. The boundary centroid is ~9 km east, on the slopes of Mt. Isarog, so the city needs an explicit focus. |
 
 Coordinates, bounds, and the default camera are **not** listed here. The pipeline derives them from OSM (see `DATA.md` §2).
+
+Seed landmarks (location and name only, sourced to OSM; dates and stories wait for real sources): Plaza Quezon, Plaza Rizal, Plaza Quince Martires, San Francisco Parish (OSM: "Parish of St. Francis of Assisi"), and the Naga Metropolitan Cathedral.
 
 ## 2. What each zoom level shows
 

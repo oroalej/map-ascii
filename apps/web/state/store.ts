@@ -5,7 +5,8 @@ export type AtlasMode = 'map' | 'orbit' | 'walk';
 export type Underlay = { kind: 'imagery' | 'historic-map'; id: string };
 
 export type AtlasState = {
-  camera: CameraState;
+  /** Null until the city's meta (or, from Phase 2, the URL) provides a camera. */
+  camera: CameraState | null;
   mode: AtlasMode;
   year: number;
   timelineOpen: boolean;
@@ -19,13 +20,15 @@ export type AtlasState = {
 };
 
 export type AtlasActions = {
+  /** Set the full camera, e.g. the city's default view. */
+  initCamera: (camera: CameraState) => void;
+  /** Merge a partial camera update. Ignored until a camera has been set. */
   setCamera: (camera: Partial<CameraState>) => void;
   setYear: (year: number) => void;
 };
 
-/** Initial view: Naga City, top-down. URL sync arrives in Phase 2. */
 export const initialAtlasState = (): AtlasState => ({
-  camera: { lat: 13.6218, lng: 123.1948, zoom: 13, pitch: 0, bearing: 0 },
+  camera: null,
   mode: 'map',
   year: new Date().getFullYear(),
   timelineOpen: false,
@@ -40,6 +43,7 @@ export const initialAtlasState = (): AtlasState => ({
 
 export const useAtlasStore = create<AtlasState & AtlasActions>()((set) => ({
   ...initialAtlasState(),
-  setCamera: (camera) => set((s) => ({ camera: { ...s.camera, ...camera } })),
+  initCamera: (camera) => set({ camera }),
+  setCamera: (camera) => set((s) => (s.camera ? { camera: { ...s.camera, ...camera } } : {})),
   setYear: (year) => set({ year }),
 }));

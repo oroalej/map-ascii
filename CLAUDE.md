@@ -28,8 +28,8 @@ Read these before doing substantial work:
 
 - `pnpm dev` — run the web app
 - `pnpm build` — static export to `apps/web/out`
-- `pnpm data:build [-- --city <slug>]` — run the data pipeline for one city (or all registered cities). For each city it outputs `<city>.pmtiles`, `<city>.meta.json`, and `<city>.search-index.json` in `apps/web/public/tiles/`. The `--city` flag arrives in Phase 1.
-- `pnpm test` / `pnpm test:e2e` (e2e builds the static export and serves it on port 3100)
+- `pnpm data:build [-- --city <slug>]` — run the data pipeline for one city (or all registered cities). For each city it outputs `<city>.pmtiles`, `<city>.meta.json`, and `<city>.search-index.json` in `apps/web/public/tiles/`. Flags: `--offline` (cached downloads only) and `--from <step>`. Step 05 needs tippecanoe, natively or via Docker (`packages/data/README.md`).
+- `pnpm test` / `pnpm test:e2e` (e2e builds the static export and serves it on port 3100; set `E2E_PORT` to use another)
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
 

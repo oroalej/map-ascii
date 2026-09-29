@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@atlas/shared": "workspace:^",
+    "@mapbox/vector-tile": "^3.0.0",
+    "@math.gl/web-mercator": "^4.1.0",
+    "earcut": "^3.2.4",
+    "pbf": "^5.1.2",
+    "pmtiles": "^4.5.0",
     "twgl.js": "^7"
   }
 }

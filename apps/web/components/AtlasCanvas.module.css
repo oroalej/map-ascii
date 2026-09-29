@@ -8,7 +8,7 @@
   touch-action: none;
 }
 
-.error {
+.notice {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -16,4 +16,13 @@
   margin: 0;
   max-width: calc(100vw - 32px);
   text-align: center;
+}
+
+.canvas:focus {
+  outline: none;
+}
+
+.canvas:focus-visible {
+  outline: 1px solid var(--fg-dim);
+  outline-offset: -1px;
 }
