@@ -23,6 +23,10 @@ describe('loadCityPacks', () => {
         file: 'cities/fixture/landmarks/undeclared-language.json',
         message: expect.stringMatching(/^name\.de: language "de" is not declared/) as string,
       },
+      {
+        file: 'cities/fixture/tours/verified-placeholder.json',
+        message: 'steps.0.narration: a verified tour cannot contain TODO(verify)',
+      },
       { file: 'cities/no-config/city.json', message: 'missing' },
     ]);
   });

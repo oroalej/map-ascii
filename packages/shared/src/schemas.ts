@@ -78,6 +78,12 @@ export const CameraState = z.object({
 });
 export type CameraState = z.infer<typeof CameraState>;
 
+/** Marks draft text that still has to be checked against sources (SPEC.md §6). */
+export const TODO_VERIFY = 'TODO(verify)';
+
+/** The longest flight a tour step may ask for, in ms. */
+export const MAX_TOUR_FLY_MS = 15_000;
+
 const endAfterStart = (v: { start_year?: number | undefined; end_year?: number | undefined }) =>
   v.start_year === undefined || v.end_year === undefined || v.end_year > v.start_year;
 
@@ -243,19 +249,51 @@ export function contentSchemas(languages?: readonly string[]) {
 
   const TourStep = z.object({
     camera: CameraState,
+    /** How long the step holds once the camera arrives. */
     duration_ms: z.int().positive(),
+    /** The flight's duration; without it, the renderer's 0.8–3 s rule (SPEC.md §3). */
+    fly_ms: z.int().positive().max(MAX_TOUR_FLY_MS).optional(),
     narration: text,
     year: Year.optional(),
-    select: z.string().min(1).optional(),
-    highlight: z.array(z.string().min(1)).optional(),
+    select: OsmId.optional(),
+    highlight: z.array(OsmId).max(64).optional(),
     audio: z.string().min(1).optional(),
+    /** Where the narration's claims come from; required once the tour is verified. */
+    sources: Sources.optional(),
   });
 
-  const Tour = z.object({
-    id: z.string().regex(/^tour\/[a-z0-9-]+$/, 'expected tour/<slug>'),
-    title: text,
-    steps: z.array(TourStep).min(1),
-  });
+  /**
+   * A guided tour (SPEC.md §6). Narration stays `draft` (and may hold `TODO(verify)`
+   * placeholders) until it is checked against sources; a `verified` tour has no placeholders
+   * and cites sources on every step.
+   */
+  const Tour = z
+    .object({
+      id: z.string().regex(/^tour\/[a-z0-9-]+$/, 'expected tour/<slug>'),
+      title: text,
+      description: text.optional(),
+      status: z.enum(['draft', 'verified']),
+      steps: z.array(TourStep).min(1),
+    })
+    .superRefine((tour, ctx) => {
+      if (tour.status !== 'verified') return;
+      tour.steps.forEach((step, i) => {
+        if (Object.values(step.narration).some((t) => t.includes(TODO_VERIFY))) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', i, 'narration'],
+            message: `a verified tour cannot contain ${TODO_VERIFY}`,
+          });
+        }
+        if (!step.sources) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', i, 'sources'],
+            message: 'every step of a verified tour needs sources',
+          });
+        }
+      });
+    });
 
   /**
    * An ASCII drawing of a landmark or monument, shown on the map at close zoom in place of its

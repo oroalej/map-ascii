@@ -131,17 +131,21 @@ Event {
   sources: Source[];
 }
 
-Tour {
-  id: string;
+Tour {                           // cities/<slug>/tours/*.json
+  id: string;                    // "tour/<slug>"
   title: LocalizedText;
+  description?: LocalizedText;
+  status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources on every step
   steps: {
     camera: { lat: number; lng: number; zoom: number; pitch: number; bearing: number };
-    duration_ms: number;
+    duration_ms: number;         // how long the step holds after the camera arrives
+    fly_ms?: number;             // flight duration (≤ 15 s); default: the 0.8–3 s fly-to rule
     narration: LocalizedText;
     year?: number;
-    select?: string;
-    highlight?: string[];
+    select?: string;             // feature id, "osm:<type>/<id>"
+    highlight?: string[];        // feature ids, at most 64
     audio?: string;
+    sources?: Source[];
   }[];
 }
 ```

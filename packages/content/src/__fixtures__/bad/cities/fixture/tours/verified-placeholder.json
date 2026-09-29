@@ -1,0 +1,13 @@
+{
+  "id": "tour/verified-placeholder",
+  "title": { "en": "Verified, but not really" },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": { "lat": 0, "lng": 0, "zoom": 12, "pitch": 0, "bearing": 0 },
+      "duration_ms": 4000,
+      "narration": { "en": "TODO(verify) Something happened here." },
+      "sources": [{ "title": "Example" }]
+    }
+  ]
+}

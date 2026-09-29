@@ -113,20 +113,41 @@ describe('CameraState', () => {
 
 describe('Tour', () => {
   const step = { camera, duration_ms: 4000, narration: { en: 'TODO(verify)' } };
+  const tour = { id: 'tour/x', title: { en: 'X' }, status: 'draft', steps: [step] };
 
-  it('accepts a tour with steps', () => {
-    expect(Tour.safeParse({ id: 'tour/x', title: { en: 'X' }, steps: [step] }).success).toBe(true);
+  it('accepts a draft tour with placeholder narration', () => {
+    expect(Tour.safeParse(tour).success).toBe(true);
+  });
+
+  it('requires a status', () => {
+    const { status: _unused, ...rest } = tour;
+    expect(Tour.safeParse(rest).success).toBe(false);
   });
 
   it('rejects an empty tour', () => {
-    expect(Tour.safeParse({ id: 'tour/x', title: { en: 'X' }, steps: [] }).success).toBe(false);
+    expect(Tour.safeParse({ ...tour, steps: [] }).success).toBe(false);
   });
 
-  it('rejects a non-positive duration', () => {
-    expect(
-      Tour.safeParse({ id: 'tour/x', title: { en: 'X' }, steps: [{ ...step, duration_ms: 0 }] })
-        .success,
-    ).toBe(false);
+  it('rejects a non-positive duration and an overlong flight', () => {
+    expect(Tour.safeParse({ ...tour, steps: [{ ...step, duration_ms: 0 }] }).success).toBe(false);
+    expect(Tour.safeParse({ ...tour, steps: [{ ...step, fly_ms: 9000 }] }).success).toBe(true);
+    expect(Tour.safeParse({ ...tour, steps: [{ ...step, fly_ms: 60_000 }] }).success).toBe(false);
+  });
+
+  it('takes feature ids for select and highlight', () => {
+    const ok = { ...step, select: 'osm:way/1', highlight: ['osm:way/2', 'osm:node/3'] };
+    expect(Tour.safeParse({ ...tour, steps: [ok] }).success).toBe(true);
+    expect(Tour.safeParse({ ...tour, steps: [{ ...step, select: 'landmark/x' }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('keeps placeholders and unsourced steps out of verified tours', () => {
+    const verified = { ...tour, status: 'verified' };
+    const issues = Tour.safeParse(verified).error?.issues.map((i) => i.path.join('.'));
+    expect(issues).toEqual(['steps.0.narration', 'steps.0.sources']);
+    const sourced = { ...step, narration: { en: 'Checked.' }, sources: [source] };
+    expect(Tour.safeParse({ ...verified, steps: [sourced] }).success).toBe(true);
   });
 });
 
