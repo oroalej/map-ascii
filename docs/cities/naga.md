@@ -18,6 +18,8 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 | Content languages | `en` (required), `fil` (Filipino), `bcl` (Bikol) |
 | Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |
 | Focus | Plaza Quezon (way/201276958) at z17, between Plaza Rizal and Plaza Quince Martires. The boundary centroid is ~9 km east, on the slopes of Mt. Isarog, so the city needs an explicit focus. |
+| Traffic | Jeepneys and cars lead on major roads, tricycles and motorcycles on secondary and side streets, with some bicycles; bancas on the Naga River; parked cars, motorcycles, and tricycles (`traffic` in `city.json`). This sets the look of the simulated life layer only. It is an impression, not traffic data. |
+| Climate | The wind follows the monsoons: the amihan from the northeast (45°) November to March, the habagat from the southwest (225°) June to September, a light easterly between (`climate` in `city.json`, from PAGASA's climate notes). It moves the grass, trees, fields, and water; a storm (chosen in the HUD) brings rain. |
 
 Apart from the downtown region bbox, coordinates, bounds, and the default camera are **not** listed here. The pipeline derives them from OSM (see `DATA.md` §2).
 
@@ -31,7 +33,7 @@ Seed landmarks (location and name only, sourced to OSM; dates and stories wait f
 | City | *(Mostly not reachable while the map is limited to downtown.)* Naga boundary, barangay outlines, Naga River, highways |
 | District | The Centro, all roads, building blocks, parks |
 | Street | Individual buildings and key street names (Magsaysay, Panganiban, Peñafrancia Avenue, Elias Angeles, General Luna…) in the Centro and the barangays |
-| Place | Detailed landmarks such as the Basilica, the Cathedral, and the plazas: landmark names and walls, building outlines, and the named statues and memorials from OSM (e.g. Jose Rizal and Quince Martires in the plazas; St. John the Evangelist, St. Pedro Calungsod, and St. Peter Baptist in the Cathedral Grounds); roof ridges on pitched roofs; and draft plan-view parts (`packages/content/cities/naga/plans/`): the Cathedral's two front belfries, crossing dome, and cupolas, San Francisco Parish's dome and tower, the Quince Martires and Rizal monuments' tiered bases, the Coliseum's crown, and the Cathedral Grounds statues' pedestals |
+| Place | Detailed landmarks such as the Basilica, the Cathedral, and the plazas: landmark names and walls, building outlines, and the named statues and memorials from OSM (e.g. Jose Rizal and Quince Martires in the plazas; St. John the Evangelist, St. Pedro Calungsod, and St. Peter Baptist in the Cathedral Grounds); roof ridges on pitched roofs; and draft plan-view parts (`packages/content/cities/naga/plans/`): the Cathedral's two front belfries, crossing dome, and cupolas, San Francisco Parish's dome and tower, the Quince Martires and Rizal monuments' tiered bases, the Coliseum's crown, and the Cathedral Grounds statues' pedestals; draft curated land cover (`packages/content/cities/naga/landcover/`, traced from Esri World Imagery because OSM maps none of it yet): trees in the Cathedral grounds and plaza, the Universidad de Santa Isabel courtyards, and the Archdiocese of Cáceres grounds (the grove south of the Archbishop's Residence as separate crowns), and the Cathedral's parking lot and plaza lawns |
 
 ## 3. Tours (launch set)
 
@@ -50,7 +52,7 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 - Founding and key dates for the Basilica Minore, the Naga Metropolitan Cathedral, Plaza Quince Martires, Plaza Rizal, the Naga City Hall, the public market, and the major bridges over the Naga River.
 - Street renamings in the Centro.
-- The Peñafrancia Traslación and fluvial procession routes, including how they changed over time.
+- The Peñafrancia Traslación and fluvial procession routes, including how they changed over time. The fluvial procession (`processions/penafrancia-fluvial.json`) is a draft: it lands at Danlugan ni Ina (OSM node 6791580317), but its start (now a placeholder 1.2 km upstream), direction, date rule (now the Saturday before the third Sunday of September), start time (15:00), duration, and formation all need sources before it can be `verified`.
 - Growth of the university belt.
 - Major flood and typhoon events affecting the city.
 

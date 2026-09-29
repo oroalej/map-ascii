@@ -10,6 +10,14 @@ export const markerClasses = [
 export type MarkerClass = (typeof markerClasses)[number];
 
 /**
+ * Parts of a feature the renderer draws in their own class: a tree's crown (raster/geometry.ts),
+ * around the `tree` point that marks its trunk. Each shows when its feature's class does.
+ */
+export const partClasses = ['tree_crown'] as const;
+export type PartClass = (typeof partClasses)[number];
+export const partOf: Readonly<Record<PartClass, AtlasClass>> = { tree_crown: 'tree' };
+
+/**
  * The life layer's simulated agents (life/simulate.ts). They are drawn over the map from their
  * own texture, never into cells, so they can't be picked and never reach the class buffer.
  */
@@ -17,20 +25,21 @@ export const lifeClasses = ['life_vehicle', 'life_person', 'life_boat', 'life_bi
 export type LifeClass = (typeof lifeClasses)[number];
 
 /**
- * Everything the renderer draws with a class color: the pipeline's classes, markers, and the
- * life layer's agents.
+ * Everything the renderer draws with a class color: the pipeline's classes, markers, feature
+ * parts, and the life layer's agents.
  */
-export type RenderClass = AtlasClass | MarkerClass | LifeClass;
+export type RenderClass = AtlasClass | MarkerClass | PartClass | LifeClass;
 
 /**
  * Id 0 means "empty cell"; classes are numbered from 1 in this order. Markers come first so
  * they, like the road and detail classes early in `AtlasClass`, keep ids that fit the select
- * shader's 32-bit class masks (glyphs/select.ts `classBit`). Life classes come last; they are
- * never in a mask.
+ * shader's 32-bit class masks (glyphs/select.ts `classBit`). Parts and life classes come last;
+ * they are never in a mask.
  */
 export const renderClasses: readonly RenderClass[] = [
   ...markerClasses,
   ...ATLAS_CLASSES,
+  ...partClasses,
   ...lifeClasses,
 ];
 
@@ -85,8 +94,24 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['water_river', 'water_stream'],
   ['coastline'],
   ['water_area', 'water_sea'],
+  // Crowns over the parks and grounds they stand in, under roads and buildings.
+  ['tree_crown'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
+  // Under the parks, woods, and fields drawn on it.
+  ['grass'],
   ['terrain'],
+];
+
+/**
+ * Classes whose features without a height are grounds (a campus, a church's grounds) rather
+ * than buildings. Grounds are drawn under everything on them but terrain (`groundDepth`), so a
+ * lawn, garden, or pond inside a campus shows.
+ */
+export const groundClasses: readonly RenderClass[] = [
+  'building',
+  'building_religious',
+  'building_school',
+  'building_market',
 ];
 
 /** Clip-space depth between tiers. */
@@ -105,17 +130,25 @@ export function classDepths(): Float32Array {
   return depths;
 }
 
+/** The cell pass's depth for grounds: under grass, above terrain. */
+export function groundDepth(): number {
+  const depths = classDepths();
+  return (depths[classId('grass')]! + depths[classId('terrain')]!) / 2;
+}
+
 /**
  * How much of each class shows at `zoom`, 0–1, from the shared `CLASS_ZOOM` table (SPEC.md §2
  * levels): classes fade in and out over half a zoom level instead of popping. The cell pass
  * turns a fraction into a dither (that share of cells, chosen by a fixed per-cell hash), so a
- * layer dissolves into what lies under it. Markers follow their features, so they are always 1.
+ * layer dissolves into what lies under it. Markers follow their features, so they are always 1;
+ * parts follow their feature's class.
  */
 export function classVisibility(zoom: number): Float32Array {
   const visibility = new Float32Array(MAX_CLASSES).fill(1);
   for (const cls of ATLAS_CLASSES) {
     visibility[classId(cls)] = bandVisibility(CLASS_ZOOM[cls], zoom);
   }
+  for (const part of partClasses) visibility[classId(part)] = visibility[classId(partOf[part])]!;
   return visibility;
 }
 
@@ -132,15 +165,24 @@ export const Flags = {
   top: 16,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
+  /** A tree's trunk: a vertical line from the ground to its crown (tilted views). */
+  trunk: 64,
 } as const;
+
+/** Tree kinds by variant byte (the pipeline's `variant`); 0 is unknown. */
+export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
 
 /**
  * The per-vertex variant byte from the pipeline's `variant` property: which furniture glyph to
- * draw, or a building's roof (1 = flat, 2 = pitched, 0 = unknown).
+ * draw, a tree's or wood's kind (`TREE_KINDS` + 1), or a building's roof (1 = flat,
+ * 2 = pitched). 0 is unknown.
  */
 export function variantCode(className: string, variant: unknown): number {
   if (typeof variant !== 'string') return 0;
   if (className === 'furniture') return ['bench', 'fountain', 'flagpole'].indexOf(variant) + 1;
+  if (className === 'tree' || className === 'trees') {
+    return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
+  }
   if (className.startsWith('building')) return variant === 'flat' ? 1 : 2;
   return 0;
 }

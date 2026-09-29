@@ -20,6 +20,24 @@ export const LabelRank = {
 } as const;
 export type LabelRank = (typeof LabelRank)[keyof typeof LabelRank];
 
+/** Punctuation the label atlas lacks, spelled with the ASCII it has. */
+const LABEL_ASCII: Readonly<Record<string, string>> = {
+  '–': '-',
+  '—': '-',
+  '‘': "'",
+  '’': "'",
+  '“': '"',
+  '”': '"',
+};
+
+/**
+ * A name as a label draws it: compatibility characters spelled out (`Ⅱ` → `II`, ligatures, full
+ * width forms) and typographic punctuation made ASCII, so it fits the label atlas (theme.ts
+ * `labelCharacters`) instead of showing `?`. Accented Latin letters stay.
+ */
+export const labelText = (name: string): string =>
+  name.normalize('NFKC').replace(/[–—‘’“”]/g, (c) => LABEL_ASCII[c] ?? c);
+
 /** When curated names show (SPEC.md §4 Place-level detail); place names use their own band. */
 export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
 export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };

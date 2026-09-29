@@ -9,8 +9,15 @@ const RAD = Math.PI / 180;
 const J2000_MS = Date.UTC(2000, 0, 1, 12);
 const DAY_MS = 86_400_000;
 
-/** The sun's altitude above the horizon in degrees at `date`, seen from `lng`, `lat`. */
-export function solarAltitude(date: Date, lng: number, lat: number): number {
+/**
+ * Where the sun is at `date`, seen from `lng`, `lat`: its altitude above the horizon and its
+ * azimuth (compass, clockwise from north), in degrees.
+ */
+export function solarPosition(
+  date: Date,
+  lng: number,
+  lat: number,
+): { altitude: number; azimuth: number } {
   const d = (date.getTime() - J2000_MS) / DAY_MS;
   const g = (357.529 + 0.98560028 * d) * RAD;
   const q = 280.459 + 0.98564736 * d;
@@ -24,7 +31,31 @@ export function solarAltitude(date: Date, lng: number, lat: number): number {
   const sinAlt =
     Math.sin(phi) * Math.sin(declination) +
     Math.cos(phi) * Math.cos(declination) * Math.cos(hourAngle);
-  return Math.asin(Math.max(-1, Math.min(1, sinAlt))) / RAD;
+  const altitude = Math.asin(Math.max(-1, Math.min(1, sinAlt))) / RAD;
+  // Measured from the south, westward; turned to the compass.
+  const fromSouth = Math.atan2(
+    Math.sin(hourAngle),
+    Math.cos(hourAngle) * Math.sin(phi) - Math.tan(declination) * Math.cos(phi),
+  );
+  const azimuth = (((fromSouth / RAD + 180) % 360) + 360) % 360;
+  return { altitude, azimuth };
+}
+
+/** The sun's altitude above the horizon in degrees at `date`, seen from `lng`, `lat`. */
+export const solarAltitude = (date: Date, lng: number, lat: number): number =>
+  solarPosition(date, lng, lat).altitude;
+
+/** A sun for the map's shadows: where it is (compass degrees) and how high (degrees). */
+export type Sun = { azimuth: number; altitude: number };
+
+/**
+ * The sun a fixed amount of daylight is lit as (the HUD's day and dusk): high in the south-east
+ * by day, low in the west at dusk, none at night (no shadows).
+ */
+export function fixedSun(daylight: number): Sun | null {
+  if (daylight >= 0.75) return { azimuth: 135, altitude: 60 };
+  if (daylight >= 0.25) return { azimuth: 260, altitude: 10 };
+  return null;
 }
 
 /**

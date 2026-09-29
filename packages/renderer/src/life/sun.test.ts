@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daylight, solarAltitude } from './sun';
+import { daylight, fixedSun, solarAltitude, solarPosition } from './sun';
 
 // Naga City's Centro.
 const lng = 123.19;
@@ -25,6 +25,38 @@ describe('solarAltitude', () => {
     // UTC+8.
     expect(solarAltitude(new Date('2026-06-21T04:00:00Z'), lng, lat)).toBeGreaterThan(60);
     expect(solarAltitude(new Date('2026-06-20T18:00:00Z'), lng, lat)).toBeLessThan(-30);
+  });
+});
+
+describe('solarPosition', () => {
+  it('puts the sun in the east in the morning and the west in the afternoon', () => {
+    const morning = solarPosition(atSolarHour(8, lng, equinox), lng, lat);
+    const afternoon = solarPosition(atSolarHour(16, lng, equinox), lng, lat);
+    expect(morning.azimuth).toBeGreaterThan(60);
+    expect(morning.azimuth).toBeLessThan(120);
+    expect(afternoon.azimuth).toBeGreaterThan(240);
+    expect(afternoon.azimuth).toBeLessThan(300);
+  });
+
+  it('puts the noon sun south of Naga in December and north of it in June', () => {
+    const dec = solarPosition(atSolarHour(12, lng, new Date(Date.UTC(2026, 11, 21))), lng, lat);
+    const jun = solarPosition(atSolarHour(12, lng, new Date(Date.UTC(2026, 5, 21))), lng, lat);
+    expect(Math.abs(dec.azimuth - 180)).toBeLessThan(15);
+    expect(Math.min(jun.azimuth, 360 - jun.azimuth)).toBeLessThan(15);
+    expect(dec.altitude).toBeCloseTo(90 - lat - 23.44, -1);
+  });
+
+  it('agrees with solarAltitude', () => {
+    const at = new Date('2026-09-29T02:00:00Z');
+    expect(solarPosition(at, lng, lat).altitude).toBe(solarAltitude(at, lng, lat));
+  });
+});
+
+describe('fixedSun', () => {
+  it('lights the fixed day and dusk with canonical suns, and night with none', () => {
+    expect(fixedSun(1)).toEqual({ azimuth: 135, altitude: 60 });
+    expect(fixedSun(0.5)).toEqual({ azimuth: 260, altitude: 10 });
+    expect(fixedSun(0)).toBeNull();
   });
 });
 

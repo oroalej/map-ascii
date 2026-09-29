@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildingHeight, classify, variantOf, layerFor, roadWidth } from './classify';
+import {
+  buildingHeight,
+  classify,
+  layerFor,
+  roadWidth,
+  treeKind,
+  treeSize,
+  variantOf,
+} from './classify';
 import { parseOsmDate } from './dates';
 import {
   bboxContains,
@@ -95,6 +103,40 @@ describe('classify: street-level detail', () => {
     expect(classify({ barrier: 'fence' }, 'line', 10)).toBe('barrier');
     expect(classify({ barrier: 'gate' }, 'point', 10)).toBe('barrier');
     expect(classify({ barrier: 'bollard' }, 'point', 10)).toBeNull();
+  });
+
+  it('classifies grass under parks', () => {
+    for (const tags of [
+      { landuse: 'grass' },
+      { landuse: 'meadow' },
+      { landuse: 'village_green' },
+      { natural: 'grassland' },
+      { leisure: 'recreation_ground' },
+    ]) {
+      expect(classify(tags, 'area', 10)).toBe('grass');
+    }
+    expect(classify({ leisure: 'park', landuse: 'grass' }, 'area', 10)).toBe('park');
+    expect(layerFor('grass', 'area')).toBe('landuse');
+  });
+
+  it('tells palms, needleleaved, and broadleaved trees apart', () => {
+    expect(treeKind({ natural: 'tree', genus: 'Cocos' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', species: 'Roystonea regia' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', 'species:en': 'Coconut Palm' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', leaf_type: 'needleleaved' })).toBe('needleleaved');
+    expect(treeKind({ natural: 'tree', leaf_type: 'broadleaved' })).toBe('broadleaved');
+    expect(treeKind({ natural: 'tree', genus: 'Pterocarpus' })).toBeUndefined();
+    expect(treeKind({ natural: 'tree' })).toBeUndefined();
+    expect(variantOf({ genus: 'Areca' }, 'tree')).toBe('palm');
+    expect(variantOf({ leaf_type: 'needleleaved' }, 'trees')).toBe('needleleaved');
+  });
+
+  it("sizes trees from their tags, else their kind's typical size", () => {
+    expect(treeSize({ height: '14', diameter_crown: '11.5' })).toEqual({ height: 14, crown: 11.5 });
+    expect(treeSize({ genus: 'Cocos' })).toEqual({ height: 12, crown: 6 });
+    expect(treeSize({})).toEqual({ height: 10, crown: 8 });
+    expect(treeSize({ height: 'tall', diameter_crown: '-3' })).toEqual({ height: 10, crown: 8 });
+    expect(treeSize({ height: '400' }).height).toBe(255);
   });
 
   it('classifies parking and pitches', () => {

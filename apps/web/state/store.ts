@@ -19,7 +19,6 @@ export type AtlasState = {
   tour: { id: string; step: number; paused: boolean } | null;
   underlay: Underlay | null;
   theme: 'dark' | 'light';
-  cellSize: number;
 };
 
 export type AtlasActions = {
@@ -47,7 +46,6 @@ export const initialAtlasState = (): AtlasState => ({
   tour: null,
   underlay: null,
   theme: 'dark',
-  cellSize: 10,
 });
 
 export const useAtlasStore = create<AtlasState & AtlasActions>()((set) => ({

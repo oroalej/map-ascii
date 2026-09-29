@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createOverlay,
-  labelVisibility,
-  LabelRank,
   packOverlay,
-  placeLabels,
-  streetMode,
+  createOverlay,
   tiltedLabelShows,
-  wrapText,
   type LabelArea,
   type LabelCandidate,
+  LabelRank,
+  labelText,
+  labelVisibility,
+  placeLabels,
+  streetMode,
+  wrapText,
 } from './labels';
 
 // A toy glyph index: ASCII letters and '?' map to their char code; anything else is unknown.
@@ -49,6 +50,21 @@ const label = (over: Partial<LabelCandidate>): LabelCandidate => ({
   col: 5,
   row: 1,
   ...over,
+});
+
+describe('labelText', () => {
+  it('spells out characters the label atlas lacks', () => {
+    expect(labelText('Ocampo Ⅱ Street')).toBe('Ocampo II Street');
+    expect(labelText('Santiago Ⅲ Street')).toBe('Santiago III Street');
+    expect(labelText('Tacolod Elementary School – Annex')).toBe(
+      'Tacolod Elementary School - Annex',
+    );
+    expect(labelText('“Plaza” Rizal’s')).toBe(`"Plaza" Rizal's`);
+  });
+
+  it('keeps accented Latin letters, which the atlas has', () => {
+    expect(labelText('Peñafrancia Basilica')).toBe('Peñafrancia Basilica');
+  });
 });
 
 describe('labelVisibility', () => {

@@ -15,9 +15,11 @@
  * fixed to the world, so the glyph pass's lit windows stay on their walls as the camera turns.
  */
 import { Flags, MAX_CLASSES, TIER_STEP } from '../classes';
-import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
+import { ROAD_AREA_ZOOM, RoofCode, SWAY } from '../glyphs/select';
 import { WINDOW } from '../life/config';
+import { CROWN_BASE } from '../raster/geometry';
 import { cellHashGlsl } from './hash';
+import { vegetationGlsl } from './vegetation';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -25,7 +27,7 @@ export const cellVertex = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec4 a_meta; // class, height, flags, variant
 layout(location = 2) in uint a_id;
-layout(location = 3) in float a_ridge; // pitched roofs: signed distance to the ridge
+layout(location = 3) in float a_ridge; // pitched roofs: signed distance to the ridge; crowns: reach from the trunk
 
 uniform mat4 u_matrix; // tile units (x, y) and meters (z) -> cell-grid clip space
 uniform float u_depth[${MAX_CLASSES}];
@@ -33,6 +35,13 @@ uniform float u_vis[${MAX_CLASSES}]; // 0-1 per class id
 uniform float u_zoom;
 uniform int u_roadMask; // carriageway class ids
 uniform vec3 u_facade;  // extrusions: tile origin in window bays (xy), bays per tile unit (z)
+uniform int u_groundMask;   // classes.ts groundClasses (bitmask)
+uniform float u_groundDepth; // their height-less features' depth
+uniform int u_crownClass;   // tree crowns, which sway in the wind
+uniform float u_time;       // seconds
+uniform float u_wind;       // 1, or 0 with reduced motion
+uniform vec2 u_grid;        // the cell grid's columns and rows
+uniform ivec2 u_origin;     // world cell of grid cell (0, 0) (flat views; 0 when tilted)
 
 flat out vec4 v_meta;
 flat out uint v_id;
@@ -43,14 +52,33 @@ out vec3 v_facade;      // position in window bays (xy) and storeys (z)
 // Depth ranges: extrusions [-1, 0.2), ground [0.2, 1); anything past 1 is clipped.
 const float SPLIT = 0.2;
 
+${cellHashGlsl}
+${vegetationGlsl}
+
 void main() {
   int cls = int(a_meta.x + 0.5);
   int flags = int(a_meta.z + 0.5);
   bool extruded = (flags & ${Flags.extruded}) != 0;
-  float z = (flags & ${Flags.top}) != 0 ? a_meta.y : 0.0;
+  bool top = (flags & ${Flags.top}) != 0;
+  bool crown = cls == u_crownClass;
+  // Extrusions start at the ground; a standing tree's crown starts above its trunk.
+  float z = top ? a_meta.y : extruded && crown ? a_meta.y * ${float(CROWN_BASE)} : 0.0;
   vec4 clip = u_matrix * vec4(a_pos, z, 1.0);
+  // Branches swing in the wind (glyphs/select.ts swayOffset): each vertex by the gust where it
+  // is and its reach from the trunk (a_ridge, tile units), so the tips swing most and the lobes
+  // move out of step. A standing crown leans over its trunk.
+  if (crown && u_wind > 0.0) {
+    vec2 cell = (clip.xy / clip.w * 0.5 + 0.5) * u_grid;
+    float gust = u_wind * treeGust(u_origin + ivec2(floor(cell)), u_time);
+    float cellsPerUnit = length(u_matrix[0].xy / clip.w * u_grid * 0.5);
+    vec2 sway = swayOffset(a_ridge * cellsPerUnit, gust, u_time, float(gl_VertexID % 13));
+    if (extruded && !top) sway *= ${float(SWAY.standingBase)};
+    clip.xy += sway / u_grid * 2.0 * clip.w;
+  }
   // Taller features win within a tier (a_meta.y is height in meters, 0–255).
   float depth = u_depth[cls] - a_meta.y / 255.0 * ${TIER_STEP * 0.9};
+  // Grounds (no height) go under the grass, parks, and water on them.
+  if (((u_groundMask >> cls) & 1) == 1 && a_meta.y == 0.0 && !extruded) depth = u_groundDepth;
   // Classes outside their zoom band are pushed out of the depth range (clipped).
   float vis = u_vis[cls];
   if (vis <= 0.0) depth = 2.0;

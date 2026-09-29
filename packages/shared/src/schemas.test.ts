@@ -5,12 +5,14 @@ import {
   City,
   contentSchemas,
   Event,
+  Landcover,
   Landmark,
   LandmarkArt,
   LandmarkPlan,
   LocalizedText,
   NameHistory,
   TilesLock,
+  Procession,
   Tour,
 } from './schemas';
 
@@ -112,6 +114,56 @@ describe('CameraState', () => {
   });
 });
 
+describe('Procession', () => {
+  const procession = {
+    id: 'procession/river',
+    title: { en: 'River procession' },
+    story: { en: 'TODO(verify)' },
+    status: 'draft',
+    kind: 'fluvial',
+    route: { to: 'osm:node/1', upstream_m: 1200 },
+    schedule: {
+      month: 9,
+      weekday: 0,
+      nth: 3,
+      offset_days: -1,
+      start: '15:00',
+      duration_min: 180,
+      timezone: 'Asia/Manila',
+    },
+  };
+  const ok = (p: unknown) => Procession.safeParse(p).success;
+
+  it('accepts a draft with placeholders', () => {
+    expect(ok(procession)).toBe(true);
+    expect(ok({ ...procession, route: { to: 'osm:node/1', from: 'osm:way/2' } })).toBe(true);
+  });
+
+  it('needs exactly one way to find its start', () => {
+    expect(ok({ ...procession, route: { to: 'osm:node/1' } })).toBe(false);
+    expect(
+      ok({ ...procession, route: { to: 'osm:node/1', from: 'osm:way/2', upstream_m: 5 } }),
+    ).toBe(false);
+  });
+
+  it('checks the schedule', () => {
+    const at = (schedule: object) =>
+      ok({ ...procession, schedule: { ...procession.schedule, ...schedule } });
+    expect(at({ start: '25:00' })).toBe(false);
+    expect(at({ weekday: 7 })).toBe(false);
+    expect(at({ timezone: 'Manila' })).toBe(false);
+  });
+
+  it('is verified only without placeholders and with sources', () => {
+    const verified = { ...procession, status: 'verified' };
+    expect(ok(verified)).toBe(false);
+    expect(ok({ ...verified, story: { en: 'The image returns by river.' } })).toBe(false);
+    expect(
+      ok({ ...verified, story: { en: 'The image returns by river.' }, sources: [source] }),
+    ).toBe(true);
+  });
+});
+
 describe('Tour', () => {
   const step = { camera, duration_ms: 4000, narration: { en: 'TODO(verify)' } };
   const tour = { id: 'tour/x', title: { en: 'X' }, status: 'draft', steps: [step] };
@@ -205,6 +257,20 @@ describe('City', () => {
   it('rejects an inverted bbox', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
   });
+
+  it('takes a traffic mix of known vehicle types by road class', () => {
+    const ok = (traffic: unknown) => City.safeParse({ ...city, traffic }).success;
+    expect(ok({ road_major: { car: 3, jeepney: 2, bus: 0 }, road_minor: { tricycle: 1 } })).toBe(
+      true,
+    );
+    expect(ok({ road_major: { hovercraft: 1 } })).toBe(false);
+    expect(ok({ road_major: { car: -1 } })).toBe(false);
+    expect(ok({ road_major: { car: 0 } })).toBe(false);
+    expect(ok({ path: { car: 1 } })).toBe(false);
+    expect(ok({ river: { banca: 2, rowboat: 1 }, parked: { car: 1, bicycle: 1 } })).toBe(true);
+    expect(ok({ river: { car: 1 } })).toBe(false);
+    expect(ok({ river: { banca: 0 } })).toBe(false);
+  });
 });
 
 describe('LandmarkArt', () => {
@@ -289,6 +355,59 @@ describe('LandmarkPlan', () => {
     const neither = { kind: 'dome', shape: 'circle', size_m: 5, height_m: 5 };
     expect(LandmarkPlan.safeParse({ ...plan, parts: [both] }).success).toBe(false);
     expect(LandmarkPlan.safeParse({ ...plan, parts: [neither] }).success).toBe(false);
+  });
+});
+
+describe('Landcover', () => {
+  const ring = [
+    [123.1, 13.6],
+    [123.101, 13.6],
+    [123.101, 13.601],
+    [123.1, 13.6],
+  ];
+  const pack = {
+    id: 'landcover/test-grounds',
+    title: 'Test grounds',
+    trees: [
+      { at: [123.1, 13.6], crown_m: 9 },
+      { at: [123.1002, 13.6], kind: 'palm' },
+    ],
+    rows: [{ line: [ring[0], ring[1]], kind: 'palm' }],
+    areas: [
+      { ring, cover: 'woods', kind: 'broadleaved' },
+      { ring, cover: 'parking' },
+    ],
+    status: 'draft',
+    credit: 'Tree positions: Example imagery',
+    sources: [{ title: 'Example imagery' }],
+  };
+
+  it('accepts a valid pack, with missing collections defaulting to empty', () => {
+    expect(Landcover.safeParse(pack).success).toBe(true);
+    const onlyTrees = Landcover.parse({ ...pack, rows: undefined, areas: undefined });
+    expect(onlyTrees.rows).toEqual([]);
+    expect(onlyTrees.areas).toEqual([]);
+  });
+
+  it('needs something to draw, sources, and a credit', () => {
+    expect(Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, sources: [] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, credit: '' }).success).toBe(false);
+  });
+
+  it('rejects unclosed rings, unknown covers, and tree kinds on non-woods', () => {
+    const open = { ring: ring.slice(0, 3).concat([[123.2, 13.7]]), cover: 'grass' };
+    expect(Landcover.safeParse({ ...pack, areas: [open] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, areas: [{ ring, cover: 'lawn' }] }).success).toBe(false);
+    const kindedGrass = { ring, cover: 'grass', kind: 'palm' };
+    expect(Landcover.safeParse({ ...pack, areas: [kindedGrass] }).success).toBe(false);
+  });
+
+  it('rejects bad tree kinds and positions off the globe', () => {
+    expect(Landcover.safeParse({ ...pack, trees: [{ at: [0, 0], kind: 'oak' }] }).success).toBe(
+      false,
+    );
+    expect(Landcover.safeParse({ ...pack, trees: [{ at: [13.6, 123.1] }] }).success).toBe(false);
   });
 });
 

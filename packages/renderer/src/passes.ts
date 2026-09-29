@@ -7,10 +7,12 @@
 import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
 import { isTilted, multiply, project, TILE_SIZE, viewportFor } from './camera';
-import { classDepths, classId, classVisibility } from './classes';
-import { roadMask, seeThroughMask, SUB, subcellMask } from './glyphs/select';
+import { classDepths, classId, classVisibility, groundClasses, groundDepth } from './classes';
+import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
+  copyRaster,
+  drawCrowns,
   drawExtrusions,
   drawGround,
   uploadLife,
@@ -33,14 +35,19 @@ import {
 import { cellBits, WINDOW } from './life/config';
 import { packLife } from './life/draw';
 import type { VisibleAgent } from './life/simulate';
+import type { Sun } from './life/sun';
+import { rainGlyphIndex, type WindNow } from './life/wind';
 import { EXTENT, type TileLabel } from './raster/geometry';
-import type { Theme } from './theme';
+import { rainGlyphs, type Theme } from './theme';
 import type { TileId } from './tiles';
 
 const depths = classDepths();
+const grounds = groundClasses.reduce((mask, cls) => mask | (1 << classId(cls)), 0);
+const groundsDepth = groundDepth();
+const crownClass = classId('tree_crown');
 const seeThrough = seeThroughMask();
 const roads = roadMask();
-const subcellAreas = subcellMask();
+const areas = subcellAreas();
 const lifeCellBits = cellBits();
 /** The world's width in mercator meters. */
 const MERCATOR_METERS = 40_075_016.686;
@@ -56,7 +63,15 @@ const rgb = (hex: number): [number, number, number] => [
 export type View = {
   camera: CameraState;
   dpr: number;
+  /** Map cell size (density.ts: it shrinks as the camera zooms in). */
   cellDev: CellSize;
+  /** Label cell size, fixed. */
+  labelDev: CellSize;
+  /**
+   * The zoom cell-sized detail follows (density.ts `detailZoom`): outlines, road strips, and
+   * roofs. What shows (class bands, labels) follows the camera zoom.
+   */
+  detailZoom: number;
   /** Canvas size in device pixels. */
   width: number;
   height: number;
@@ -77,9 +92,13 @@ export type GridPlacement = {
   toCell: (lng: number, lat: number) => [number, number];
 };
 
-export function placeGrid(view: View, targets: CellTargets): GridPlacement {
-  const { camera, dpr, cellDev, width: w, height: h } = view;
-  const { cols, rows } = targets;
+export function placeGrid(
+  view: View,
+  cellDev: CellSize,
+  cols: number,
+  rows: number,
+): GridPlacement {
+  const { camera, dpr, width: w, height: h } = view;
   if (isTilted(camera)) {
     const viewport = viewportFor(camera, { width: w / dpr, height: h / dpr });
     // Perspective: the grid is fixed to the screen, with a one-cell margin on each side.
@@ -146,8 +165,7 @@ export function placeGrid(view: View, targets: CellTargets): GridPlacement {
  * The grid cells actually on screen (the grid has a margin, and a sub-cell pan shift):
  * [left, top] inclusive to [right, bottom] exclusive.
  */
-export function screenArea(view: View, grid: Grid) {
-  const { cellDev } = view;
+export function screenArea(view: View, grid: Grid, cellDev: CellSize = view.cellDev) {
   return {
     left: Math.ceil(grid.shiftX / cellDev.w),
     top: Math.ceil(grid.shiftY / cellDev.h),
@@ -195,10 +213,14 @@ export function cellPass(
   gl.useProgram(program.program);
   twgl.setUniforms(program, {
     u_depth: depths,
+    u_groundMask: grounds,
+    u_groundDepth: groundsDepth,
     u_vis: classVisibility(camera.zoom),
-    u_zoom: camera.zoom,
+    u_zoom: view.detailZoom,
     u_roadMask: roads,
     u_origin: [placement.grid.originCol, placement.grid.originRow],
+    u_crownClass: crownClass,
+    u_wind: 0,
   });
   const matrices = layers.tiles.map(({ tile }) => placement.tileMatrix(tile));
   const drawFlat = () => {
@@ -219,7 +241,8 @@ export function cellPass(
     twgl.setUniforms(program, { u_sub: sub });
   };
 
-  begin(targets.cellFbo, cols, rows, [1, 1]);
+  // Everything but the tree crowns, which the crown pass adds (and moves) over this base.
+  begin(targets.base.fbo, cols, rows, [1, 1]);
   drawFlat();
   if (tilted) {
     layers.tiles.forEach(({ tile, mesh }, i) => {
@@ -228,8 +251,8 @@ export function cellPass(
     });
   } else {
     // The same ground again at SUB samples per cell, for sub-cell edges (select pass).
-    const { sub } = targets;
-    begin(sub.fbo, sub.width, sub.height, [SUB.cols, SUB.rows]);
+    const { subBase } = targets;
+    begin(subBase.fbo, subBase.width, subBase.height, [SUB.cols, SUB.rows]);
     drawFlat();
   }
   gl.bindVertexArray(null);
@@ -237,8 +260,66 @@ export function cellPass(
 }
 
 /**
- * Place the names whose zoom band reaches the camera zoom (labels.ts) and upload them to the
- * overlay texture. Returns the labels placed.
+ * Draw the tree crowns over the cell pass (kept in `targets.base` and `subBase`, without them):
+ * copy the base into the live targets and draw each tile's crowns on top, swaying in the wind
+ * at `time` in the `wind` (the cell shader; its strength is 0 with reduced motion). It runs after every cell pass
+ * and, while the wind blows through crowns on screen, every animated frame; where a crown has
+ * swung away, the base shows what is under it.
+ */
+export function crownPass(
+  gl: GL,
+  programs: Programs,
+  targets: CellTargets,
+  view: View,
+  placement: GridPlacement,
+  tiles: readonly TileDraw[],
+  time: number,
+  wind: WindNow,
+) {
+  const { cols, rows, base, subBase, sub } = targets;
+  const tilted = isTilted(view.camera);
+  const program = programs.cell;
+  copyRaster(gl, base.fbo, targets.cellFbo, cols, rows);
+  if (!tilted) copyRaster(gl, subBase.fbo, sub.fbo, sub.width, sub.height);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
+  gl.useProgram(program.program);
+  twgl.setUniforms(program, {
+    u_depth: depths,
+    u_groundMask: grounds,
+    u_groundDepth: groundsDepth,
+    u_vis: classVisibility(view.camera.zoom),
+    u_zoom: view.detailZoom,
+    u_roadMask: roads,
+    u_origin: [placement.grid.originCol, placement.grid.originRow],
+    u_crownClass: crownClass,
+    u_time: time,
+    u_wind: wind.strength,
+    u_windDir: wind.dir,
+    u_grid: [cols, rows],
+  });
+  const draw = (fbo: WebGLFramebuffer, width: number, height: number, sample: [number, number]) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, width, height);
+    twgl.setUniforms(program, { u_sub: sample });
+    for (const { tile, mesh } of tiles) {
+      twgl.setUniforms(program, { u_matrix: placement.tileMatrix(tile) });
+      drawCrowns(gl, mesh, tilted);
+    }
+  };
+  draw(targets.cellFbo, cols, rows, [1, 1]);
+  if (!tilted) draw(sub.fbo, sub.width, sub.height, [SUB.cols, SUB.rows]);
+  gl.bindVertexArray(null);
+  gl.disable(gl.DEPTH_TEST);
+}
+
+/** Whether any of `tiles` has tree crowns to sway. */
+export const hasCrowns = (tiles: readonly TileDraw[]): boolean =>
+  tiles.some(({ mesh }) => mesh.crowns.count > 0);
+
+/**
+ * Place the names whose zoom band reaches the camera zoom (labels.ts) on the label grid
+ * (`placement`) and upload them to the overlay texture. Returns the labels placed.
  */
 export function overlayPass(
   gl: GL,
@@ -250,10 +331,10 @@ export function overlayPass(
 ): LabelCandidate[] {
   const { camera } = view;
   const { toCell } = placement;
-  const overlay = createOverlay(targets.cols, targets.rows);
+  const overlay = createOverlay(targets.labelCols, targets.labelRows);
   const tilted = isTilted(camera);
-  const area = screenArea(view, placement.grid);
-  const glyphs = themeRes.atlas;
+  const area = screenArea(view, placement.grid, view.labelDev);
+  const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
     const index = glyphs.index(char);
     return index === 0 ? undefined : index;
@@ -264,7 +345,7 @@ export function overlayPass(
     const vis = labelVisibility(label.band, camera.zoom);
     if (vis <= 0) continue;
     const [col, row] = toCell(label.lng, label.lat);
-    if (tilted && !tiltedLabelShows(label.rank, row, targets.rows, camera.pitch)) continue;
+    if (tilted && !tiltedLabelShows(label.rank, row, targets.labelRows, camera.pitch)) continue;
     candidates.push({
       id: label.id,
       text: label.text,
@@ -290,7 +371,10 @@ export type Highlights = {
   highlightCount: number;
 };
 
-/** Pick each cell's glyph from its class and neighbors. */
+/**
+ * Pick each cell's glyph from its class and neighbors. `wind` blows over the grass, trees, and
+ * water (its strength is 0 with reduced motion).
+ */
 export function selectPass(
   gl: GL,
   programs: Programs,
@@ -300,8 +384,10 @@ export function selectPass(
   grid: Grid,
   time: number,
   highlights: Highlights,
+  wind: WindNow,
+  sun: Sun | null = null,
 ) {
-  const { tables } = themeRes;
+  const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
   gl.viewport(0, 0, targets.cols, targets.rows);
   gl.useProgram(programs.select.program);
@@ -309,13 +395,15 @@ export function selectPass(
     u_class: targets.classTex,
     u_attr: targets.attrTex,
     u_id: targets.idTex,
-    u_table: themeRes.tableTex,
+    u_table: themeRes.map.tableTex,
     u_kind: tables.kinds,
     u_count: tables.counts,
     u_connect: tables.connects,
     u_origin: [grid.originCol, grid.originRow],
     u_time: time,
-    u_zoom: view.camera.zoom,
+    u_wind: wind.strength,
+    u_windDir: wind.dir,
+    u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
     u_roadMask: roads,
     u_tilted: isTilted(view.camera),
@@ -328,10 +416,28 @@ export function selectPass(
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_subId: targets.sub.idTex,
-    u_subcellMask: subcellAreas,
+    u_area: areas,
+    ...sunUniforms(view, sun),
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/**
+ * The select pass's sun (glyphs/select.ts inShadow): the way toward it in world cells' axes
+ * (x east, y south) and the tangent of its altitude (0: no sun), and a cell's size in meters at
+ * the view's center.
+ */
+function sunUniforms(view: View, sun: Sun | null) {
+  const { camera, cellDev, dpr } = view;
+  const metersPerPx =
+    (MERCATOR_METERS * Math.cos((camera.lat * Math.PI) / 180)) / (TILE_SIZE * 2 ** camera.zoom);
+  const az = ((sun?.azimuth ?? 0) * Math.PI) / 180;
+  const tan = sun ? Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180) : 0;
+  return {
+    u_sun: [Math.sin(az), -Math.cos(az), tan],
+    u_cellMeters: [(cellDev.w / dpr) * metersPerPx, (cellDev.h / dpr) * metersPerPx],
+  };
 }
 
 /** Reused between frames; replaced when the grid's size changes. */
@@ -357,11 +463,14 @@ export function lifePass(
     { cols, rows, cellWidth: view.cellDev.w, cellHeight: view.cellDev.h, toCell: placement.toCell },
     agents,
     theme,
-    (glyph) => themeRes.atlas.index(glyph),
+    (glyph) => themeRes.map.atlas.index(glyph),
   );
   uploadLife(gl, targets, lifeTexels);
   return drawn;
 }
+
+/** The weather over the map: how hard it rains (0–1), in which wind. */
+export type Weather = { rain: number; wind: WindNow | null };
 
 /**
  * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
@@ -375,22 +484,29 @@ export function glyphPass(
   theme: Theme,
   view: View,
   grid: Grid,
+  labelGrid: Grid,
   time: number,
   reducedMotion: boolean,
   daylight: number,
+  weather: Weather = { rain: 0, wind: null },
 ) {
-  const { atlas, tables } = themeRes;
+  const { atlas, tables } = themeRes.map;
+  const label = themeRes.label;
   const { cellDev } = view;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.useProgram(programs.glyph.program);
   twgl.setUniforms(programs.glyph, {
     u_glyphs: targets.glyphTex,
-    u_atlas: themeRes.atlasTex,
+    u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
     u_shift: [grid.shiftX, grid.shiftY],
     u_height: view.height,
     u_columns: atlas.columns,
+    u_labelAtlas: label.atlasTex,
+    u_labelCell: [label.cellDev.w, label.cellDev.h],
+    u_labelShift: [labelGrid.shiftX, labelGrid.shiftY],
+    u_labelColumns: label.atlas.columns,
     u_colors: tables.colors,
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
@@ -407,6 +523,14 @@ export function glyphPass(
     u_tilted: isTilted(view.camera),
     u_daylight: daylight,
     u_vehicle: classId('life_vehicle'),
+    u_boat: classId('life_boat'),
+    u_person: classId('life_person'),
+    u_paints: theme.vehiclePaints.flatMap((paint) => rgb(paint)),
+    u_rain: weather.rain,
+    u_rainSlant: weather.wind?.dir[0] ?? 0,
+    u_rainGlyph: atlas.index(rainGlyphs[weather.wind ? rainGlyphIndex(weather.wind.dir) : 0]!),
+    // The label color, a little blue: pale drops on the dark theme, dark ones on the light.
+    u_rainColor: rgb(theme.label).map((c, i) => c * [0.82, 0.9, 1][i]!),
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);

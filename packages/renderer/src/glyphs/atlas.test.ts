@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   doubleLine,
   doubleWall,
+  labelCharacters,
+  mapGlyphs,
+  rainGlyphs,
   sextantGlyphs,
   singleLine,
   singleWall,
-  themeGlyphs,
   themes,
 } from '../theme';
 import { drawProcedural, shadeCoverage } from './atlas';
@@ -122,21 +124,23 @@ describe('sextants', () => {
 });
 
 describe('glyph set', () => {
-  it('puts every map glyph (styles and walls) in the first 256 atlas slots', () => {
+  it('fits every map glyph (styles, walls, sextants) in the 256 slots the glyph table holds', () => {
     for (const theme of Object.values(themes)) {
-      const glyphs = themeGlyphs(theme);
-      const mapGlyphs = new Set([
+      const glyphs = mapGlyphs(theme);
+      const expected = new Set([
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,
         ...doubleWall,
         ...sextantGlyphs,
+        ...rainGlyphs,
       ]);
-      for (const g of mapGlyphs) expect(glyphs.indexOf(g) + 1, g).toBeLessThan(256);
+      expect(new Set(glyphs)).toEqual(expected);
+      // Index 0 of the atlas is blank, so the glyphs take indices 1 on.
+      expect(glyphs.length).toBeLessThan(256);
     }
   });
 
-  it('includes the label text characters', () => {
-    const glyphs = new Set(themeGlyphs(themes.dark));
-    for (const g of ['A', 'z', 'ñ', '?']) expect(glyphs.has(g), g).toBe(true);
+  it('keeps label text in its own set', () => {
+    for (const g of ['A', 'z', 'ñ', '?']) expect(labelCharacters.includes(g), g).toBe(true);
   });
 });

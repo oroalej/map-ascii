@@ -11,7 +11,9 @@ import {
   lifeClasses,
   markerClasses,
   markerFor,
+  partOf,
   type LifeClass,
+  type PartClass,
   type RenderClass,
 } from './classes';
 import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
@@ -40,7 +42,15 @@ function sample(style: ClassStyle): string {
     case 'diagonal':
     case 'rows':
     case 'scatter':
-      return style.glyphs.filter((g) => g.trim()).join('');
+      return [...new Set(style.glyphs.filter((g) => g.trim()))].join('');
+    case 'grass':
+      return style.glyphs.slice(0, 3).join(''); // at rest
+    case 'canopy':
+      return [...new Set(style.glyphs.slice(0, 4))].join(''); // crowns and foliage
+    case 'crop':
+      return style.glyphs.slice(0, 2).join(''); // at rest
+    case 'foliage':
+      return style.glyphs.slice(0, 2).join(''); // at rest
     case 'single':
     case 'variant':
       return style.glyphs.slice(style.kind === 'variant' ? 1 : 0).join(' ');
@@ -63,6 +73,8 @@ const lifeKinds = new Map(
 function visibleAt(cls: RenderClass, zoom: number): boolean {
   const lifeKind = lifeKinds.get(cls as LifeClass);
   if (lifeKind) return bandVisibility(LIFE_ZOOM[lifeKind], zoom) >= 1;
+  const part = partOf[cls as PartClass];
+  if (part) return visibleAt(part, zoom);
   if ((markerClasses as readonly string[]).includes(cls)) {
     const parents = markerParents.get(cls);
     return !parents || parents.some((p) => visibleAt(p, zoom));

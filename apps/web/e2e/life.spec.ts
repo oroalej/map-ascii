@@ -49,6 +49,21 @@ for (const city of cities) {
       await expect(page.getByRole('button', { name: /^Time:/ })).toHaveText('Time: night');
     });
 
+    for (const procession of city.processions) {
+      test(`plays the ${procession.title.en}`, async ({ page }) => {
+        await page.goto(`/${city.slug}?z=16&debug=1`);
+        await mapReady(page);
+        const play = page.getByRole('button', { name: `▶ ${procession.title.en}` });
+        await play.click();
+        const caption = page.getByRole('status').filter({ hasText: '(simulated)' });
+        await expect(caption).toContainText(procession.title.en);
+        // Its boats and crowds are drawn.
+        await expect.poll(() => agents(page), { timeout: 20_000 }).toBeGreaterThan(0);
+        await page.getByRole('button', { name: 'Stop' }).click();
+        await expect(caption).toHaveCount(0);
+      });
+    }
+
     test('keeps the map still with reduced motion', async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(`/${city.slug}?z=17.5&debug=1`);

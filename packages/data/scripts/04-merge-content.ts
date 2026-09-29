@@ -7,6 +7,7 @@ import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
+import { landcoverFeatures } from './lib/landcover';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
@@ -107,11 +108,15 @@ export const step: Step = {
     }
     // Plan-view landmark parts (belfries, domes, tiered bases) as their own small footprints.
     const { parts, warnings } = planParts(merged, content.plans);
-    for (const warning of warnings) console.warn(`  warning: ${warning}`);
-    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts]);
+    // Curated trees and land cover that OSM doesn't have yet.
+    const landcover = landcoverFeatures(merged, content.landcover);
+    for (const warning of [...warnings, ...landcover.warnings]) {
+      console.warn(`  warning: ${warning}`);
+    }
+    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts, ...landcover.features]);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +
-        `checked ${content.tours.length} tours`,
+        `${landcover.features.length} curated trees and areas; checked ${content.tours.length} tours`,
     );
 
     // Landmark art, placed on its features, for the renderer (<city>.art.json).

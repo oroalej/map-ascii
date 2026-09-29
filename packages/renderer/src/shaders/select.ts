@@ -13,6 +13,11 @@ import {
   BUILDING_STEPS,
   Dir,
   EDGE_STATE,
+  SHADOW,
+  SHADOW_STATE,
+  GUST_STEPS,
+  TREE_WIND,
+  WIND_STATE,
   EXTRUDE_ROW,
   FALLING,
   kindCodes,
@@ -24,6 +29,7 @@ import {
   ROOF_ZOOM,
   SEXTANT_ROW,
   SUB,
+  TRUNK_VARIANT,
   WALL_DOUBLE_ROW,
   WALL_SHADE_STEPS,
   WALL_SINGLE_ROW,
@@ -32,6 +38,7 @@ import {
   WaterStroke,
 } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
+import { vegetationGlsl } from './vegetation';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -49,6 +56,7 @@ uniform int u_count[${MAX_CLASSES}];
 uniform int u_connect[${MAX_CLASSES}];
 uniform ivec2 u_origin;           // world cell of texel (0, 0)
 uniform float u_time;             // seconds; 0 with reduced motion
+uniform float u_wind;             // wind over grass: 1, or 0 with reduced motion
 uniform float u_zoom;
 uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
@@ -62,7 +70,9 @@ uniform bool u_subcell;           // sub-cell edges (flat views)
 uniform sampler2D u_subClass;     // the cell pass at SUB samples per cell
 uniform sampler2D u_subAttr;
 uniform sampler2D u_subId;
-uniform int u_subcellMask;        // area class ids that draw sub-cell edges (bitmask)
+uniform int u_area[${MAX_CLASSES}];
+uniform vec3 u_sun;               // toward the sun (x east, y south), tan(altitude); z <= 0: none
+uniform vec2 u_cellMeters;        // a cell's width and height in meters (flat views) // 1 for area classes, which draw sub-cell edges
 
 out vec4 o_glyph;
 
@@ -70,9 +80,11 @@ out vec4 o_glyph;
 // background, set in main before any emit.
 float g_state = 0.0;
 int g_bg = 0;
+// SHADOW_STATE if the cell is in a shadow (glyphs/select.ts inShadow), whatever it draws.
+float g_shadow = 0.0;
 
 void emit(float glyph, int cls) {
-  o_glyph = vec4(glyph, float(cls) / 255.0, g_state / 255.0, float(g_bg) / 255.0);
+  o_glyph = vec4(glyph, float(cls) / 255.0, (g_state + g_shadow) / 255.0, float(g_bg) / 255.0);
 }
 
 int classAt(ivec2 p) {
@@ -81,6 +93,7 @@ int classAt(ivec2 p) {
 }
 
 ${cellHashGlsl}
+${vegetationGlsl}
 
 vec4 idAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_id, 0) - 1);
@@ -123,7 +136,7 @@ int wallRowFor(int kind, vec4 attr) {
 }
 
 bool isArea(int c) {
-  return ((u_subcellMask >> c) & 1) == 1;
+  return u_area[c] == 1;
 }
 
 bool isBuilding(int c) {
@@ -144,7 +157,9 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
     ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
     int c = subClassAt(q);
-    if (isArea(c) && (fg == 0 || (!isBuilding(fg) && isBuilding(c)))) {
+    // A building (with a height, not grounds) wins over the area it stands in.
+    bool standing = isBuilding(c) && texelFetch(u_subAttr, q, 0).r > 0.0;
+    if (isArea(c) && (fg == 0 || (!(isBuilding(fg) && fgAttr.r > 0.0) && standing))) {
       fg = c;
       fgId = texelFetch(u_subId, q, 0);
       fgAttr = texelFetch(u_subAttr, q, 0);
@@ -169,7 +184,17 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
 // A neighbor is outside if it is another feature, unless its class is see-through.
 // o[] holds "outside" for the 3x3 neighborhood: 0 NW, 1 N, 2 NE, 3 W, 5 E, 6 SW, 7 S, 8 SE.
 // With byRoad, "outside" means any class that is neither a carriageway nor see-through (curbs).
-int wallMask(ivec2 p, bool byRoad) {
+// Wall modes: a feature's outline, a carriageway's curbs, or a 3D roof's rim.
+const int OUTLINE = 0;
+const int CURBS = 1;
+const int ROOF_RIM = 2;
+
+bool isRoofAt(ivec2 q) {
+  q = clamp(q, ivec2(0), textureSize(u_attr, 0) - 1);
+  return (int(texelFetch(u_attr, q, 0).g * 255.0 + 0.5) & ${Flags.roof}) != 0;
+}
+
+int wallMask(ivec2 p, int mode) {
   vec4 id = idAt(p);
   bool o[9];
   bool edge = false;
@@ -178,9 +203,12 @@ int wallMask(ivec2 p, bool byRoad) {
       ivec2 q = p + ivec2(dx, dy);
       int c = classAt(q);
       bool seeThrough = ((u_seeThrough >> c) & 1) == 1;
-      bool outside = byRoad
+      // A roof's rim also runs where its own front wall shows (same id, not roof).
+      bool outside = mode == CURBS
         ? ((u_roadMask >> c) & 1) == 0 && !seeThrough
-        : idAt(q) != id && !seeThrough;
+        : mode == ROOF_RIM
+          ? idAt(q) != id || !isRoofAt(q)
+          : idAt(q) != id && !seeThrough;
       o[(dy + 1) * 3 + dx + 1] = outside;
       edge = edge || outside;
     }
@@ -217,13 +245,37 @@ int waterStroke(ivec2 p, ivec2 w) {
   return -1;
 }
 
+// The height standing in a cell that casts a shadow: buildings, trees and their crowns (not
+// terrain, whose height byte is its band).
+float castsAt(ivec2 q) {
+  q = clamp(q, ivec2(0), textureSize(u_class, 0) - 1);
+  int k = u_kind[classAt(q)];
+  bool standing = k == ${kindCodes.building} || k == ${kindCodes.foliage} || k == ${kindCodes.variant};
+  return standing ? texelFetch(u_attr, q, 0).r * 255.0 : 0.0;
+}
+
+// Whether the cell is in shadow (glyphs/select.ts inShadow): looking toward the sun a cell
+// width at a time, something stands taller than the sun rises over that distance.
+bool inShadow(ivec2 p) {
+  if (u_tilted || u_sun.z <= 0.0) return false;
+  float self = castsAt(p);
+  vec2 perStep = u_sun.xy * u_cellMeters.x / u_cellMeters;
+  for (int k = 1; k <= ${SHADOW.steps}; k++) {
+    ivec2 q = p + ivec2(floor(perStep * float(k) + 0.5));
+    float h = castsAt(q);
+    if (h > 0.0 && h - self >= float(k) * u_cellMeters.x * u_sun.z) return true;
+  }
+  return false;
+}
+
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int cls = classAt(p);
   int kind = u_kind[cls];
+  g_shadow = inShadow(p) ? ${SHADOW_STATE}.0 : 0.0;
   if (cls == 0 || kind == 0) {
-    // An empty cell may still hold part of an area's edge.
-    if (!(u_subcell && subcellEdge(p, 0, vec4(0.0)))) o_glyph = vec4(0.0);
+    // An empty cell may still hold part of an area's edge, or a shadow on the ground.
+    if (!(u_subcell && subcellEdge(p, 0, vec4(0.0)))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
     return;
   }
   vec4 id = idAt(p);
@@ -236,7 +288,7 @@ void main() {
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (((u_roadMask >> cls) & 1) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
-    int curb = wallMask(p, true);
+    int curb = wallMask(p, CURBS);
     float glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).r : 0.0;
     emit(glyph, cls);
     return;
@@ -245,10 +297,31 @@ void main() {
   int flags = int(attr.g * 255.0 + 0.5);
 
   // 3D buildings (glyphs/select.ts extrusionVariant): solid roofs, walls shaded by facing.
+  // Standing trees: a trunk, and crowns in their own glyphs, darkest walls first, then the top.
   if ((flags & ${Flags.extruded}) != 0) {
+    if ((flags & ${Flags.trunk}) != 0) {
+      emit(texelFetch(u_table, ivec2(${TRUNK_VARIANT}, ${EXTRUDE_ROW}), 0).r, cls);
+      return;
+    }
+    // A roof's rim, at the zoom flat views outline the building, so neighbors read apart.
+    int rimRow = wallRowFor(kind, attr);
+    if ((flags & ${Flags.roof}) != 0 && kind == ${kindCodes.building} && rimRow >= 0) {
+      int rim = wallMask(p, ROOF_RIM);
+      if (rim >= 0) {
+        emit(texelFetch(u_table, ivec2(rim, rimRow), 0).r, cls);
+        return;
+      }
+    }
     int step = (flags & ${Flags.roof}) != 0 ? 3
       : variant < ${WALL_SHADE_STEPS[0]} ? 0 : variant < ${WALL_SHADE_STEPS[1]} ? 1 : 2;
-    float glyph = texelFetch(u_table, ivec2(step, ${EXTRUDE_ROW}), 0).r;
+    // A standing crown's leaves flutter in a gust, like a flat one's.
+    if (kind == ${kindCodes.foliage}) {
+      float gust = u_wind * treeGust(w, u_time);
+      if (gust >= ${float(TREE_WIND.step)}) step = foliageVariant(w, u_time, gust);
+    }
+    float glyph = kind == ${kindCodes.building}
+      ? texelFetch(u_table, ivec2(step, ${EXTRUDE_ROW}), 0).r
+      : texelFetch(u_table, ivec2(min(step, u_count[cls] - 1), cls), 0).r;
     emit(glyph, cls);
     return;
   }
@@ -256,7 +329,7 @@ void main() {
   // Outlines at close zoom (glyphs/select.ts wallStyle); the tilted view shows 3D instead.
   int wallRow = wallRowFor(kind, attr);
   if (wallRow >= 0 && !u_tilted) {
-    int mask = wallMask(p, false);
+    int mask = wallMask(p, OUTLINE);
     if (mask >= 0) {
       float wall = texelFetch(u_table, ivec2(mask, wallRow), 0).r;
       emit(wall, cls);
@@ -282,9 +355,13 @@ void main() {
     if (stroke >= 0) {
       v = stroke;
     } else {
+      // A gust ruffles the water in its bands (glyphs/select.ts waterVariant); else each cell
+      // flips on its own.
+      float gust = u_wind * windGust(w, u_time);
       uint h = cellHash(w);
       float phase = float((h >> 8u) & 255u) / 255.0;
-      v = int((h + uint(floor(u_time * ${float(WATER_RATE)} + phase))) & 1u);
+      v = gust >= ${float(GUST_STEPS[0])} ? (gust >= ${float(GUST_STEPS[1])} ? 0 : 1)
+        : int((h + uint(floor(u_time * ${float(WATER_RATE)} + phase))) & 1u);
     }
   } else if (kind == ${kindCodes.building}) {
     float height = attr.r * 255.0;
@@ -314,6 +391,21 @@ void main() {
     v = imod(w.y, u_count[cls]);
   } else if (kind == ${kindCodes.scatter}) {
     v = int(cellHash(w) % uint(u_count[cls]));
+  } else if (kind == ${kindCodes.grass}) {
+    // Wind (glyphs/select.ts grassVariant); bent-over blades catch the light (windLit).
+    float gust = u_wind * windGust(w, u_time);
+    v = min(grassVariant(w, gust), u_count[cls] - 1);
+    if (gust >= ${float(GUST_STEPS[0])}) g_state += ${WIND_STATE}.0;
+  } else if (kind == ${kindCodes.crop}) {
+    // Fields in the wind (glyphs/select.ts cropVariant).
+    v = min(cropVariant(w, u_wind * windGust(w, u_time)), u_count[cls] - 1);
+  } else if (kind == ${kindCodes.canopy} || kind == ${kindCodes.foliage}) {
+    // Trees in the wind (glyphs/select.ts treeGust): leaves flutter, woods lean downwind.
+    float gust = u_wind * treeGust(w, u_time);
+    v = kind == ${kindCodes.canopy}
+      ? canopyVariant(w, variant, gust, u_time)
+      : foliageVariant(w, u_time, gust);
+    v = min(v, u_count[cls] - 1);
   }
   float glyph = texelFetch(u_table, ivec2(v, cls), 0).r;
   emit(glyph, cls);

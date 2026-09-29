@@ -21,6 +21,8 @@ export const ATLAS_CLASSES = [
   'building_market',
   'park',
   'trees',
+  // Inserted mid-list: every class a select-shader mask holds still has an id under 32.
+  'grass',
   'farmland',
   'monument',
   'building_part',
@@ -45,6 +47,37 @@ export const CAMERA_RANGES = {
   pitch: [0, 60],
   bearing: [-180, 180],
 } as const satisfies Record<string, readonly [number, number]>;
+
+/** The kinds of vehicle the life layer draws (SPEC.md §4 "Life layer"). */
+export const VEHICLE_TYPES = [
+  'car',
+  'motorcycle',
+  'tricycle',
+  'jeepney',
+  'bus',
+  'truck',
+  'bicycle',
+] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+
+/** The kinds of boat the life layer draws on rivers. */
+export const BOAT_TYPES = ['rowboat', 'motorboat', 'banca'] as const;
+export type BoatType = (typeof BOAT_TYPES)[number];
+
+/** The road classes a city's traffic mix is set for. */
+export const TRAFFIC_ROADS = ['road_major', 'road_mid', 'road_minor'] as const;
+export type TrafficRoad = (typeof TRAFFIC_ROADS)[number];
+
+/**
+ * A city's traffic (the `Traffic` schema): per road class, how common each vehicle type is, as
+ * relative weights; the same for boats on rivers and for parked vehicles. What it leaves out
+ * uses the renderer's default mix.
+ */
+export type TrafficMix = Partial<
+  Record<TrafficRoad | 'parked', Partial<Record<VehicleType, number>>>
+> & {
+  river?: Partial<Record<BoatType, number>>;
+};
 
 /** The years the content can name (the `Year` schema). */
 export const YEAR_RANGE = [1000, 3000] as const;

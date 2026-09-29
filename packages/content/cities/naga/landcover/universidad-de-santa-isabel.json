@@ -1,0 +1,107 @@
+{
+  "id": "landcover/universidad-de-santa-isabel",
+  "title": "Universidad de Santa Isabel courtyards and Santonja St frontage",
+  "trees": [
+    {
+      "at": [123.188812, 13.629028],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188115, 13.628908],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188421, 13.628872],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188324, 13.628622],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188158, 13.628585],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188142, 13.628502],
+      "crown_m": 10
+    },
+    {
+      "at": [123.188485, 13.628502],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188265, 13.628481],
+      "crown_m": 8
+    },
+    {
+      "at": [123.188474, 13.628465],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188871, 13.62845],
+      "crown_m": 16
+    },
+    {
+      "at": [123.188769, 13.628403],
+      "crown_m": 10.5
+    },
+    {
+      "at": [123.188453, 13.628398],
+      "crown_m": 4.5
+    },
+    {
+      "at": [123.18871, 13.628366],
+      "crown_m": 13
+    },
+    {
+      "at": [123.188989, 13.628288],
+      "crown_m": 11
+    },
+    {
+      "at": [123.188903, 13.628278],
+      "crown_m": 4.5
+    },
+    {
+      "at": [123.188673, 13.628257],
+      "crown_m": 11.5
+    },
+    {
+      "at": [123.188104, 13.628252],
+      "crown_m": 5
+    },
+    {
+      "at": [123.187771, 13.628022],
+      "crown_m": 6
+    },
+    {
+      "at": [123.187825, 13.628001],
+      "crown_m": 7.5
+    },
+    {
+      "at": [123.187922, 13.627954],
+      "crown_m": 9.5
+    },
+    {
+      "at": [123.187986, 13.627939],
+      "crown_m": 4.5
+    },
+    {
+      "at": [123.188029, 13.627907],
+      "crown_m": 5
+    },
+    {
+      "at": [123.188431, 13.627662],
+      "crown_m": 7
+    }
+  ],
+  "status": "draft",
+  "credit": "Trees and ground cover traced from Esri, Maxar, Earthstar Geographics",
+  "sources": [
+    {
+      "title": "Esri World Imagery (Wayback release 2025-01-30)",
+      "url": "https://livingatlas.arcgis.com/wayback/",
+      "note": "Traced at z18 (~0.6 m/px) over the release 36557 tiles, 2026-09-29: tree crowns (sizes measured from the imagery; kinds are not identifiable at this resolution) and, at the Cathedral, the parking lot and plaza lawns."
+    }
+  ]
+}

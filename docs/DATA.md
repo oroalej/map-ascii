@@ -9,7 +9,7 @@ The pipeline and schemas are city-agnostic. Each city gives its inputs through a
 | OpenStreetMap (Overpass API or the Geofabrik extract for the city's country) | Roads, buildings, water, landuse, POIs, admin boundaries | ODbL — attribution "© OpenStreetMap contributors" required; derived databases must stay ODbL | Primary modern layer |
 | OpenHistoricalMap | Dated historical features | CC0 | Check coverage for each city; contribute back |
 | Copernicus DEM GLO-30 (or SRTM) | Terrain shading at Region level | Copernicus: free with attribution | Global coverage |
-| Esri World Imagery Wayback | Satellite snapshots by year (~2014+) | Esri terms — verify that deriving ASCII underlays is allowed before shipping; otherwise use Sentinel-2 | Timeline underlay |
+| Esri World Imagery Wayback | Satellite snapshots by year (~2014+) | Esri terms — verify that deriving ASCII underlays is allowed before shipping; otherwise use Sentinel-2 | Timeline underlay; tracing curated trees and land cover that OSM lacks (`landcover/`, credited in the attribution; same terms check) |
 | Sentinel-2 (Copernicus) | Satellite underlay 2015+ | Free with attribution | 10 m resolution; district-level only |
 | Landsat (USGS) | Urban growth 1980s+ | Public domain | 30 m; City/Region level only |
 | Mapillary / KartaView | Street-level photos in the info panel | CC BY-SA | Link out or embed per their terms |
@@ -39,6 +39,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 4. **`04-merge-content`**
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
+   - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, or woods areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
 5. **`05-tiles`**
@@ -48,6 +49,9 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
+7. **`07-processions`**
+   - For each of the pack's `processions`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 150 m of a river.
+   - Write `<city>.processions.json` (the `CityProcessions` schema), published with the tiles. Cities without processions get no file.
 
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
 
@@ -67,18 +71,19 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `building_school` | `amenity=school|university|college` (area or building) |
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
 | `park` | `leisure=park|garden|playground`, `place=square` |
-| `trees` | `natural=wood`, `landuse=forest` |
+| `trees` | `natural=wood`, `landuse=forest` (kind in `variant`) |
+| `grass` | `landuse=grass|meadow|village_green`, `natural=grassland`, `leisure=recreation_ground` (a park wins if both are tagged) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
 | `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
-| `tree` | `natural=tree` (points), `natural=tree_row` (lines) |
+| `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, or `trees` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
 | `furniture` | `amenity=bench|fountain`, `man_made=flagpole` (kind in `variant`) |
 | `parking` | `amenity=parking` |
 | `pitch` | `leisure=pitch` |
 
-Roads also carry `width` (meters: the `width` tag, else `lanes` × 3.2, else 14 / 10 / 6 m for major / mid / minor), and buildings with `roof:shape` carry it as `variant`.
+Roads also carry `width` (meters: the `width` tag, else `lanes` × 3.2, else 14 / 10 / 6 m for major / mid / minor), and buildings with `roof:shape` carry it as `variant`. Trees and woods carry their kind as `variant`: `palm` when `genus`, `species`, `species:en`, or `taxon` names a palm (OSM's `leaf_type` has no palm value), else `leaf_type` (`needleleaved` or `broadleaved`). Trees also carry `height` and `crown` (crown diameter) in meters: the `height` and `diameter_crown` tags, else a typical size for the kind (10 / 8 m, palms 12 / 6 m, needleleaved 12 / 5 m).
 | `admin_city` | the city's boundary relation (from `city.json`; admin_level 6 for Naga) |
 | `admin_subdivision` | boundaries at the city's `subdivision.admin_level` (10 for Naga's barangays) |
 | `place_label` | named `place=city|town|village|suburb|quarter|neighbourhood` nodes |
@@ -97,9 +102,25 @@ City {                           // cities/<slug>/city.json
   languages: string[];           // extra content languages besides "en", e.g. ["fil", "bcl"]
   smoke_landmark: string;        // name the e2e test searches for
   focus?: { osm_id: string; zoom: number };  // where the city opens, e.g. its main plaza
+  // The life layer's vehicle mix: per road class, relative weights of car, motorcycle,
+  // tricycle, jeepney, bus, and truck. A road class left out uses the default mix.
+  // `river`: boats (rowboat, motorboat, banca); `parked`: vehicles in lots and along curbs.
+  traffic?: { road_major?: Weights; road_mid?: Weights; road_minor?: Weights; river?: BoatWeights; parked?: Weights };
+  // The wind by season (SPEC.md §4 "Wind"): each season's months (1–12, each in at most one
+  // season), where the wind blows from (compass degrees) and how hard; `default` for the other
+  // months; `source` for where the seasons come from. Without it: a breeze from the east.
+  climate?: {
+    wind: { name?: string; months: number[]; from: number; strength: WindStrength }[];
+    default: { from: number; strength: WindStrength };
+    source: string;
+  };
 }
 
+WindStrength = "calm" | "breeze" | "gusty" | "storm";
+
 LocalizedText = { en: string } & { [lang: string]: string };  // keys limited to "en" + city.languages
+Weights = { car?: number; motorcycle?: number; tricycle?: number; jeepney?: number; bus?: number; truck?: number; bicycle?: number };  // ≥ 0, at least one > 0
+BoatWeights = { rowboat?: number; motorboat?: number; banca?: number };  // ≥ 0, at least one > 0
 
 Landmark {
   id: string;                    // "landmark/<slug-of-name>", unique within the city
@@ -129,6 +150,23 @@ Event {
   title: LocalizedText;
   story: LocalizedText;
   sources: Source[];
+}
+
+Procession {                     // cities/<slug>/processions/*.json
+  id: string;                    // "procession/<slug>"
+  title: LocalizedText;
+  story: LocalizedText;          // may hold "TODO(verify)" while draft
+  status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources
+  kind: 'fluvial';
+  route: { to: string; from?: string; upstream_m?: number };  // OSM ids; exactly one of from / upstream_m
+  schedule: {                    // offset_days after the nth weekday (0 = Sunday) of month
+    month: number; weekday: number; nth: number; offset_days: number;
+    start: string;               // "HH:MM", local
+    duration_min: number;
+    timezone: string;            // IANA, e.g. "Asia/Manila"
+  };
+  formation?: { columns?: number; ranks?: number; escorts?: number };
+  sources?: Source[];
 }
 
 Tour {                           // cities/<slug>/tours/*.json
@@ -166,6 +204,18 @@ LandmarkPlan {                   // cities/<slug>/plans/*.json — drawn on the 
   sources: Source[];
 }
 
+Landcover {                      // cities/<slug>/landcover/*.json — trees and ground cover OSM doesn't map yet
+  id: string;                    // "landcover/<slug>"
+  title: string;
+  trees?: { at: [lng, lat]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
+  rows?: { line: [lng, lat][]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
+  areas?: { ring: [lng, lat][]; cover: 'grass' | 'parking' | 'woods'; kind?: TreeKind }[];  // closed ring; kind: woods only
+  status: 'draft' | 'verified';  // draft until checked on the ground or against newer imagery
+  credit: string;                // shown with the map attribution, e.g. the traced imagery
+  sources: Source[];
+}
+TreeKind = 'broadleaved' | 'palm' | 'needleleaved';   // unset: the generic tree
+
 LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
   id: string;                    // "art/<slug>"
   osm_id: string;                // the landmark or monument it draws
@@ -185,6 +235,7 @@ Validation rules:
 - A `region` bbox is the only coordinate data allowed in a city config, and only when the region has no usable OSM relation. The boundary and camera always come from OSM: the default camera is centered on the `focus` feature, or on the boundary centroid when there is no `focus`.
 - `end_year > start_year`.
 - Photo `credit` and `license` are required.
+- A land cover file has at least one tree, row, or area, a `credit`, and `sources` naming what it was traced from. Positions come from imagery whose terms allow it (never Google), and each file retires as OSM maps what it holds (pipeline step 04 warns). Prefer separate trees to a woods area where crowns are distinguishable: at close zoom a woods area draws as one continuous canopy.
 
 ## 5. Dating historical features — rules
 

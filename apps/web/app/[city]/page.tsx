@@ -27,6 +27,8 @@ export default async function CityPage({ params }: Props) {
         slug={city.slug}
         name={city.name.en}
         subdivisionLabel={city.subdivision.label.en}
+        traffic={city.traffic}
+        climate={city.climate}
         landmarks={content.landmarks}
         art={content.art}
         tours={content.tours}

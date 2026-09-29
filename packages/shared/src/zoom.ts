@@ -30,6 +30,7 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   water_stream: { min: 12.5 },
   park: { min: 12.5 },
   trees: { min: 12.5 },
+  grass: { min: 12.5 },
   farmland: { min: 12.5 },
   road_minor: { min: 13 },
   building: { min: 13 },

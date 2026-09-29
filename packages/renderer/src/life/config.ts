@@ -22,8 +22,53 @@ export const MAX_VISIBLE_AGENTS = 1200;
 export const MAX_TILE_AGENTS = 600;
 /** A longer frame (a background tab) is simulated as this long, so agents don't jump. */
 export const MAX_STEP_S = 0.1;
-/** Vehicles keep this far right of the road's center line, so two-way traffic passes. */
-export const LANE_OFFSET_M = 2.5;
+/** A lane's width, m (the pipeline's, for roads tagged with lanes but no width). */
+export const LANE_WIDTH_M = 3.2;
+/** The width of a road line without one, m. */
+export const DEFAULT_ROAD_WIDTH_M = 6;
+/** Vehicles keep at least this far inside the road's edge, m. */
+export const ROAD_MARGIN_M = 0.2;
+
+/**
+ * How far right of a road's center line a vehicle drives, m, so two-way traffic passes: down
+ * the middle of one of the lanes on its half of the road (`lane`, 0–1, picks which), or by the
+ * edge with `curb` (bicycles), never closer to the edge than `ROAD_MARGIN_M`.
+ */
+export function laneOffset(
+  roadWidth: number,
+  vehicleWidth: number,
+  lane: number,
+  curb = false,
+): number {
+  const half = roadWidth / 2;
+  if (curb) return Math.max(0, half - vehicleWidth / 2 - ROAD_MARGIN_M);
+  const lanes = Math.max(1, Math.floor(half / LANE_WIDTH_M));
+  const index = Math.min(lanes - 1, Math.floor(lane * lanes));
+  const offset = ((index + 0.5) * half) / lanes;
+  return Math.max(0, Math.min(offset, half - vehicleWidth / 2 - ROAD_MARGIN_M));
+}
+
+/**
+ * Following: a vehicle or boat slows behind the one ahead in its lane, keeping this gap (m)
+ * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
+ * side may overlap this much (m) and still pass.
+ */
+export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
+
+/**
+ * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of the roads at least
+ * `minWidth` m wide, in a strip `strip` m wide, one every vehicle length plus `gap` m with
+ * `taken` of the places filled; and on `lotTaken` of parking lots' stalls.
+ */
+export const PARKED = {
+  zoom: { min: 17 } as ZoomBand,
+  minWidth: 10,
+  chance: 0.5,
+  strip: 2.4,
+  gap: 1.5,
+  taken: 0.6,
+  lotTaken: 0.65,
+} as const;
 
 /** The line kinds each moving kind may use, at junctions too. */
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
@@ -73,6 +118,14 @@ export const BIRDS = {
   /** Wing beats per second (the glyph alternates). */
   flap: 3,
 };
+
+/**
+ * Birds in trees: a flock picking where to go next lands in a tree (a perch, raster/geometry.ts)
+ * with chance `chance`, settles within `spread` m of its trunk, and stays its `stay`. A gust in
+ * the crown of at least `flush` (life/wind.ts strength × glyphs/select.ts treeGust) sends it up
+ * at once, its birds scattering outward for `scatter` seconds before they regroup.
+ */
+export const PERCH = { chance: 0.5, spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
 
 /**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):

@@ -51,6 +51,18 @@ const content: ContentBundle = {
       sources: [{ title: 'Fixture source' }],
     },
   ],
+  landcover: [
+    {
+      id: 'landcover/fixture-grounds',
+      title: 'Fixture grounds',
+      trees: [{ at: [0.004, 0.004], crown_m: 10 }],
+      rows: [],
+      areas: [],
+      status: 'draft',
+      credit: 'Fixture imagery',
+      sources: [{ title: 'Fixture imagery' }],
+    },
+  ],
   art: [
     {
       id: 'art/fixture-statue',
@@ -63,6 +75,7 @@ const content: ContentBundle = {
       sources: [{ title: 'Fixture source' }],
     },
   ],
+  processions: [],
 };
 
 let ctx: StepContext;
@@ -96,6 +109,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
       .map((f) => [f.properties.id, f.properties.class, f.tippecanoe.layer])
       .sort(([a], [b]) => String(a).localeCompare(String(b)));
     expect(summary).toEqual([
+      ['cover:fixture-grounds/tree-1', 'tree', 'poi'],
       ['osm:node/19', 'place_label', 'labels'],
       ['osm:node/90', 'monument', 'poi'],
       ['osm:relation/200', 'admin_city', 'admin'],
@@ -167,6 +181,13 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(meta.defaultCamera.lat).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera.lng).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera).toMatchObject({ zoom: 16, pitch: 0, bearing: 0 });
+    const credited = buildMeta(
+      city,
+      { ...geography, attribution: ['DEM'] },
+      [1890, 2026],
+      ['Imagery', 'DEM'],
+    );
+    expect(credited.attribution).toEqual(['DEM', 'Imagery']);
   });
 
   it('checks that tours point at features in the data and stay in the region', () => {

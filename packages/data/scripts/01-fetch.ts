@@ -38,7 +38,9 @@ const detailQuery = (
   nwr["water"];
   nwr["landuse"~"^(forest|farmland|paddy)$"];
   way["crop"="rice"];
-  nwr["leisure"~"^(park|garden|playground)$"];
+  nwr["leisure"~"^(park|garden|playground|recreation_ground)$"];
+  nwr["landuse"~"^(grass|meadow|village_green)$"];
+  nwr["natural"="grassland"];
   way["place"="square"];
   nwr["amenity"~"^(place_of_worship|school|university|college|marketplace)$"];
   nwr["shop"~"^(mall|supermarket)$"];

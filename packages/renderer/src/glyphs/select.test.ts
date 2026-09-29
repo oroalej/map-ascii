@@ -238,7 +238,7 @@ describe('glyph tables', () => {
     expect(tables.kinds[classId('admin_city')]).toBe(kindCodes.road);
     // Place names are labels (the overlay), never cells.
     expect(tables.kinds[classId('place_label')]).toBe(0);
-    expect(tables.counts[classId('park')]).toBe(3);
+    expect(tables.counts[classId('park')]).toBe(6);
     const mask = tables.connects[classId('path')]!;
     expect(mask & (1 << classId('road_major'))).not.toBe(0);
     expect(mask & (1 << classId('building'))).toBe(0);
@@ -294,6 +294,16 @@ describe('sub-cell edges', () => {
 
   it('gives an empty cell the edge of an area that reaches into it', () => {
     expect(subcellEdge(_, [_, _, _, _, P, P], never)).toEqual({ fg: P, mask: 48, bg: null });
+  });
+
+  it('draws the lawn inside a campus over its grounds (no height)', () => {
+    const G: Sample = { cls: 'building_school', id: 9, height: 0 };
+    const L: Sample = { cls: 'grass', id: 4 };
+    expect(subcellEdge(L, [L, G, L, G, L, G], never)).toEqual({
+      fg: L,
+      mask: 21,
+      bg: 'building_school',
+    });
   });
 
   it('draws a building over the park it stands in', () => {

@@ -1,11 +1,17 @@
 'use client';
 
-import { legendEntries, type Atlas, type RenderClass } from '@atlas/renderer';
-import { zoomLevel, type SubdivisionArea } from '@atlas/shared';
+import { legendEntries, type Atlas, type RenderClass, type WindChoice } from '@atlas/renderer';
+import {
+  seasonalWind,
+  windArrow,
+  zoomLevel,
+  type ClimateConfig,
+  type SubdivisionArea,
+} from '@atlas/shared';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { isSubdivisionAreas } from '@/lib/guards';
-import { TIME_CHOICES, useLifeStore, type TimeChoice } from '@/state/life';
+import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import { Compass } from './Compass';
@@ -121,15 +127,38 @@ const TIME_LABELS: Record<TimeChoice, string> = {
   night: 'Time: night',
 };
 
+const WIND_TITLES: Record<WindChoice, string> = {
+  live: "The season's wind in the city",
+  calm: 'A calm day',
+  breeze: 'A breeze',
+  gusty: 'Gusty',
+  storm: 'A storm',
+};
+
+const noSubscription = () => () => {};
+/** This month (1–12) in the browser; none while rendering on the server (static export). */
+const useMonth = () =>
+  useSyncExternalStore(
+    noSubscription,
+    () => new Date().getMonth() + 1,
+    () => null,
+  );
+
 /**
  * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds on or
- * off, and the time of day the map is lit for (cycling live → day → dusk → night).
+ * off, the time of day the map is lit for (cycling live → day → dusk → night), and the wind
+ * over grass, trees, and water (live → calm → breeze → gusty → storm), with an arrow the way
+ * the season's wind blows.
  */
-function LifeControls() {
+function LifeControls({ climate }: { climate?: ClimateConfig | undefined }) {
   const enabled = useLifeStore((s) => s.enabled);
   const time = useLifeStore((s) => s.time);
+  const wind = useLifeStore((s) => s.wind);
+  const month = useMonth();
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
   const nextTime = TIME_CHOICES[(TIME_CHOICES.indexOf(time) + 1) % TIME_CHOICES.length]!;
+  const nextWind = WIND_CHOICES[(WIND_CHOICES.indexOf(wind) + 1) % WIND_CHOICES.length]!;
+  const arrow = month === null ? '' : ` ${windArrow(seasonalWind(climate, month).from)}`;
   return (
     <>
       <button
@@ -156,6 +185,64 @@ function LifeControls() {
       >
         {TIME_LABELS[time]}
       </button>
+      <button
+        type="button"
+        className={styles.button}
+        disabled={reduced}
+        title={reduced ? 'Still while your system asks for reduced motion' : WIND_TITLES[wind]}
+        onClick={() => useLifeStore.setState({ wind: nextWind })}
+      >
+        Wind{arrow}: {wind}
+      </button>
+    </>
+  );
+}
+
+/**
+ * River processions (SPEC.md §4 "Processions"): a button to play each, and while one is under
+ * way, what it is and whether it is live. A draft says its route and schedule aren't verified.
+ */
+function ProcessionControls() {
+  const processions = useUiStore((s) => s.processions);
+  const run = useUiStore((s) => s.procession);
+  const atlas = useAtlasInstance((s) => s.atlas);
+  const life = useLifeShown();
+  if (processions.length === 0) return null;
+  const current = run && processions.find((p) => p.id === run.id);
+  const play = (id: string) => {
+    const route = processions.find((p) => p.id === id);
+    if (!atlas || !route || !atlas.playProcession(id)) return;
+    const [lng, lat] = route.route[0]!;
+    atlas.flyTo({ lng, lat, zoom: Math.max(17.5, atlas.getCamera().zoom) });
+  };
+  return (
+    <>
+      {processions.map((p) => (
+        <div className={styles.row} key={p.id}>
+          <button
+            type="button"
+            className={styles.button}
+            disabled={!life}
+            title={life ? 'Play it as a time-lapse' : 'Turn Life on to see it'}
+            onClick={() => play(p.id)}
+          >
+            ▶ {p.title.en}
+          </button>
+        </div>
+      ))}
+      {current && (
+        <div className={styles.row}>
+          <p className={styles.line} role="status">
+            {current.title.en} (simulated){run.live ? ' · happening now' : ''}
+            {current.status === 'draft' ? ' · draft: route and schedule not yet verified' : ''}
+          </p>
+          {!run.live && (
+            <button type="button" className={styles.button} onClick={() => atlas?.stopProcession()}>
+              Stop
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -190,7 +277,15 @@ function ShareButton() {
  * The HUD (SPEC.md §5): the zoom and its level, the compass, and the legend top right; the
  * scale bar, the subdivision under the center, coordinates, and sharing bottom left.
  */
-export function Hud({ city, subdivisionLabel }: { city: string; subdivisionLabel: string }) {
+export function Hud({
+  city,
+  subdivisionLabel,
+  climate,
+}: {
+  city: string;
+  subdivisionLabel: string;
+  climate?: ClimateConfig | undefined;
+}) {
   useSubdivisionTracking(city);
   const camera = useAtlasStore((s) => s.camera);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
@@ -240,8 +335,9 @@ export function Hud({ city, subdivisionLabel }: { city: string; subdivisionLabel
           <ShareButton />
         </div>
         <div className={styles.row}>
-          <LifeControls />
+          <LifeControls climate={climate} />
         </div>
+        <ProcessionControls />
       </div>
     </>
   );

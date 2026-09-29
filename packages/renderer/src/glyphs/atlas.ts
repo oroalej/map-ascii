@@ -125,12 +125,15 @@ export const shadeCoverage: Readonly<Record<string, number>> = { '░': 80, '▒
 
 /**
  * Block glyphs. Shades are flat fills at partial coverage, with a one-pixel gap on the right and
- * bottom so shaded areas still read as a grid of characters; `█` fills the whole cell.
+ * bottom so shaded areas still read as a grid of characters; `█` fills the whole cell. Small
+ * cells (density.ts) leave the gap out: a pixel of a few would draw a mesh over every building.
  */
+export const SHADE_GAP_MIN_WIDTH = 8;
+
 function drawBlock(slot: Slot, glyph: string) {
   const { data, stride, w, h } = slot;
   const shade = shadeCoverage[glyph];
-  const gap = shade !== undefined && w > 4 ? 1 : 0;
+  const gap = shade !== undefined && w >= SHADE_GAP_MIN_WIDTH ? 1 : 0;
   const bottom = glyph === '▀' ? Math.ceil(h / 2) : h - gap;
   const value = shade ?? 255;
   for (let y = 0; y < bottom; y++) {

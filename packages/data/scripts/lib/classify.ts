@@ -38,11 +38,56 @@ const isMonument = (tags: Tags) =>
 const furnitureKinds = ['bench', 'fountain', 'flagpole'] as const;
 const barrierKinds = ['fence', 'wall', 'hedge', 'gate'] as const;
 
+/** Tree kinds the renderer draws with their own glyphs (SPEC.md §4). */
+export type TreeKind = 'palm' | 'needleleaved' | 'broadleaved';
+
+/** Palm genera (and the family), matched against a tree's taxonomy tags. */
+const PALM =
+  /\b(palm|arecaceae|cocos|areca|roystonea|elaeis|phoenix|livistona|caryota|washingtonia|nypa|corypha|metroxylon)\b/i;
+
 /**
- * The renderer's glyph variant for a feature: the kind of `furniture` or `barrier`, or a
- * building's roof shape (`roof:shape`), if any.
+ * What kind of tree a `natural=tree`, `tree_row`, or wood is: a palm if its taxonomy names one
+ * (OSM's `leaf_type` has no palm value), else its `leaf_type`, else unknown.
+ */
+export function treeKind(tags: Tags): TreeKind | undefined {
+  const taxonomy = [tags.genus, tags.species, tags['species:en'], tags.taxon, tags['taxon:en']];
+  if (taxonomy.some((value) => value !== undefined && PALM.test(value))) return 'palm';
+  if (tags.leaf_type === 'needleleaved' || tags.leaf_type === 'broadleaved') return tags.leaf_type;
+  return undefined;
+}
+
+/** Typical tree height and crown diameter in meters, by kind, when OSM gives neither. */
+const treeDefaults: Record<TreeKind | 'unknown', { height: number; crown: number }> = {
+  broadleaved: { height: 10, crown: 8 },
+  unknown: { height: 10, crown: 8 },
+  palm: { height: 12, crown: 6 },
+  needleleaved: { height: 12, crown: 5 },
+};
+
+const positive = (value: string | undefined) => {
+  const n = Number.parseFloat(value ?? '');
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : undefined;
+};
+
+/**
+ * A tree's height and crown diameter in meters (the renderer draws its crown, and stands it up
+ * in tilted views): `height` and `diameter_crown`, else typical values for its kind. Heights are
+ * capped at 255, the renderer's height byte.
+ */
+export function treeSize(tags: Tags): { height: number; crown: number } {
+  const fallback = treeDefaults[treeKind(tags) ?? 'unknown'];
+  return {
+    height: Math.min(255, positive(tags.height) ?? fallback.height),
+    crown: Math.min(60, positive(tags.diameter_crown) ?? fallback.crown),
+  };
+}
+
+/**
+ * The renderer's glyph variant for a feature: the kind of `furniture` or `barrier`, a tree's
+ * or wood's kind (`treeKind`), or a building's roof shape (`roof:shape`), if any.
  */
 export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
+  if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
     return furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k);
   }
@@ -105,6 +150,8 @@ export function classify(
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
   if (tags.natural === 'wood' || tags.landuse === 'forest') return 'trees';
+  if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
+  if (tags.natural === 'grassland' || tags.leisure === 'recreation_ground') return 'grass';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';
   if (tags.amenity === 'parking') return 'parking';
   if (tags.leisure === 'pitch') return 'pitch';

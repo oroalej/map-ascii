@@ -8,7 +8,7 @@
 import { featureZoomBand, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
 import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
-import { LabelRank, LANDMARK_LABEL_BAND, MONUMENT_LABEL_BAND } from '../labels';
+import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '../labels';
 import {
   LifeBuilder,
   LifeLine,
@@ -134,6 +134,16 @@ export type GroundGeometry = {
 export type TileGeometry = GroundGeometry & {
   /** Buildings as 3D walls and roofs (the variant byte holds the face's shade). */
   extrusions: GeometryArrays & { indices: Uint32Array };
+  /** Tree trunks, as vertical lines from the ground to the crown (`Flags.trunk`). */
+  trunks: GeometryArrays;
+  /**
+   * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
+   * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
+   * trunk in tile units, how far it swings.
+   */
+  crowns: GeometryArrays & { indices: Uint32Array };
+  /** Tree crowns standing on their trunks (tilted views), with the same `ridge`. */
+  standingCrowns: GeometryArrays & { indices: Uint32Array };
   /**
    * Region-only features (the pipeline's `region` flag), kept apart: they are tiled only to
    * `REGION_TILE_MAX_ZOOM`, and deeper views draw them from that zoom's tile under the
@@ -375,12 +385,108 @@ function addExtrusion(
   for (const i of roof) out.indices.push(base + i);
 }
 
+/** Sides of the polygon a tree's crown is drawn as. */
+export const CROWN_SIDES = 24;
+/** A standing tree's crown starts this far up its height; the trunk is below it. */
+export const CROWN_BASE = 0.45;
+
+/** A 32-bit FNV-1a hash of a string: a feature's seed, the same in every tile. */
+export function hashString(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
+/** Mulberry32: a small seeded generator of numbers in [0, 1). */
+function random(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * A tree's crown outline: a closed ring of `CROWN_SIDES` points around `center` (its first point
+ * repeated last), lobed and a little oval like a real canopy, its shape picked by `seed`. Its
+ * mean radius is `radius`, so the crown keeps the tree's diameter.
+ */
+export function crownRing(center: TilePoint, radius: number, seed: number): TilePoint[] {
+  const next = random(seed);
+  const lobes = 3 + Math.floor(next() * 3);
+  const phase1 = next() * 2 * Math.PI;
+  const phase2 = next() * 2 * Math.PI;
+  const stretch = 0.88 + next() * 0.24;
+  const axis = next() * Math.PI;
+  const shape = Array.from({ length: CROWN_SIDES }, (_, i) => {
+    const a = (-2 * Math.PI * i) / CROWN_SIDES;
+    const lumps =
+      1 +
+      0.14 * Math.sin(lobes * a + phase1) +
+      0.07 * Math.sin((lobes + 2) * a + phase2) +
+      0.05 * (next() - 0.5);
+    // Stretched along `axis`, squeezed across it.
+    const along = Math.cos(a - axis);
+    const across = Math.sin(a - axis);
+    const oval = Math.hypot(along * stretch, across / stretch);
+    return { a, r: lumps * oval };
+  });
+  const mean = shape.reduce((sum, { r }) => sum + r, 0) / shape.length;
+  const ring = shape.map(({ a, r }) => ({
+    x: center.x + (radius * r * Math.cos(a)) / mean,
+    y: center.y + (radius * r * Math.sin(a)) / mean,
+  }));
+  return [...ring, ring[0]!];
+}
+
+/** Triangles over a closed ring's points (indices into the ring; the lobes aren't convex). */
+export const ringTriangles = (ring: readonly TilePoint[]): number[] =>
+  earcut(ring.slice(0, -1).flatMap((p) => [p.x, p.y]));
+
+/** Points every `step` along a line, from its start (a tree row's trees). */
+export function pointsAlong(line: readonly TilePoint[], step: number): TilePoint[] {
+  const out: TilePoint[] = [];
+  if (line.length === 0 || !(step > 0)) return out;
+  out.push(line[0]!);
+  let carry = 0; // distance walked since the last point
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]!;
+    const b = line[i]!;
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    let at = step - carry;
+    while (at <= length) {
+      const t = at / length;
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      at += step;
+    }
+    carry = length - (at - step);
+  }
+  return out;
+}
+
 /**
  * A pitched roof's ridge, from the footprint's principal axis through its centroid (the long
  * axis of a rectangle). `distance` is signed so that positive is the slope facing the light,
  * and `angle` is the ridge direction as a byte (0–255 over 0–180°, tile y pointing down).
  */
 export function roofRidge(ring: readonly TilePoint[]) {
+  const { cx, cy, ux, uy, theta } = principalAxis(ring);
+  // The side with positive cross(u, p - c) faces (-uy, ux); flip so that side is the lit one.
+  const sign = -uy * LIGHT.x + ux * LIGHT.y >= 0 ? 1 : -1;
+  const folded = ((theta % Math.PI) + Math.PI) % Math.PI;
+  return {
+    distance: (p: TilePoint) => sign * (ux * (p.y - cy) - uy * (p.x - cx)),
+    angle: Math.min(255, Math.round((folded / Math.PI) * 255)),
+  };
+}
+
+/**
+ * A ring's principal axis through its vertex centroid (`cx`, `cy`): the unit vector (`ux`, `uy`)
+ * along its long side, at angle `theta`.
+ */
+export function principalAxis(ring: readonly TilePoint[]) {
   const n =
     ring.length > 1 && ring[0]!.x === ring.at(-1)!.x && ring[0]!.y === ring.at(-1)!.y
       ? ring.length - 1
@@ -393,14 +499,63 @@ export function roofRidge(ring: readonly TilePoint[]) {
     [sxx, syy, sxy] = [sxx + dx * dx, syy + dy * dy, sxy + dx * dy];
   }
   const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-  const [ux, uy] = [Math.cos(theta), Math.sin(theta)];
-  // The side with positive cross(u, p - c) faces (-uy, ux); flip so that side is the lit one.
-  const sign = -uy * LIGHT.x + ux * LIGHT.y >= 0 ? 1 : -1;
-  const folded = ((theta % Math.PI) + Math.PI) % Math.PI;
-  return {
-    distance: (p: TilePoint) => sign * (ux * (p.y - cy) - uy * (p.x - cx)),
-    angle: Math.min(255, Math.round((folded / Math.PI) * 255)),
-  };
+  return { cx, cy, ux: Math.cos(theta), uy: Math.sin(theta), theta };
+}
+
+/** Whether `p` is inside a polygon (its outer ring, less its holes), even–odd. */
+export function insidePolygon(polygon: readonly (readonly TilePoint[])[], p: TilePoint): boolean {
+  let inside = false;
+  for (const ring of polygon) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i]!;
+      const b = ring[j]!;
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
+/** A parking lot's stalls: this far apart along a row, and rows this far apart, m. */
+export const STALL = { width: 2.7, row: 8 } as const;
+
+/**
+ * Stalls over a parking lot for the life layer's parked vehicles: rows along the lot's long
+ * axis, centered on it, each stall facing across the row (alternating by row). Only stalls
+ * inside the lot and inside the tile (not its buffer) are kept.
+ */
+export function parkingStalls(
+  polygon: readonly (readonly TilePoint[])[],
+  unitMeters: number,
+): { p: TilePoint; hx: number; hy: number }[] {
+  const outer = polygon[0];
+  if (!outer || outer.length < 3) return [];
+  const { cx, cy, ux, uy } = principalAxis(outer);
+  // (vx, vy) is across the rows.
+  const [vx, vy] = [-uy, ux];
+  let [u0, u1, v0, v1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const q of outer) {
+    const u = (q.x - cx) * ux + (q.y - cy) * uy;
+    const v = (q.x - cx) * vx + (q.y - cy) * vy;
+    [u0, u1, v0, v1] = [Math.min(u0, u), Math.max(u1, u), Math.min(v0, v), Math.max(v1, v)];
+  }
+  const du = STALL.width / unitMeters;
+  const dv = STALL.row / unitMeters;
+  const columns = Math.floor((u1 - u0) / du);
+  const rows = Math.max(1, Math.floor((v1 - v0) / dv));
+  const out: { p: TilePoint; hx: number; hy: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    const v = (v0 + v1) / 2 + (r - (rows - 1) / 2) * dv;
+    const facing = r % 2 === 0 ? 1 : -1;
+    for (let c = 0; c < columns; c++) {
+      const u = (u0 + u1) / 2 + (c - (columns - 1) / 2) * du;
+      const p = { x: cx + u * ux + v * vx, y: cy + u * uy + v * vy };
+      if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT) continue;
+      if (insidePolygon(polygon, p)) out.push({ p, hx: vx * facing, hy: vy * facing });
+    }
+  }
+  return out;
 }
 
 /** Which tile is being built; the worker passes it for real-world sizes and positions. */
@@ -465,6 +620,9 @@ export function buildTileGeometry(
   const main = ground();
   const regional = ground();
   const extrusions = new Builder();
+  const trunks = new Builder();
+  const crowns = new Builder();
+  const standingCrowns = new Builder();
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
 
@@ -487,7 +645,9 @@ export function buildTileGeometry(
         ? Math.max(0, Math.min(255, Math.round(rawHeight)))
         : 0;
       const landmark = feature.properties.landmark === true;
-      const { name: text, label_lng: lng, label_lat: lat } = feature.properties;
+      const { name: featureName, label_lng: lng, label_lat: lat } = feature.properties;
+      // Labels draw the name in the characters the label atlas has (the panel keeps the name).
+      const text = typeof featureName === 'string' ? labelText(featureName) : featureName;
 
       // Place names are only labels: a point per place, never drawn as cells.
       if (className === 'place_label') {
@@ -534,6 +694,32 @@ export function buildTileGeometry(
         if (marker) addPoint(p, classId(marker));
         if (landmark) addPoint(p, classId('marker_landmark' satisfies RenderClass));
       };
+      // A tree's crown, flat on the ground and standing on its trunk (tilted views), sized by
+      // the pipeline's `crown` diameter in meters. Its trunk's own cell is the `tree` point.
+      const crown = Number(feature.properties.crown ?? 0);
+      // Shaped by the tree's id (and its place along a tree row), so it is the same tree in
+      // every tile that holds it.
+      const crownSeed = hashString(featureId);
+      const addCrown = (p: TilePoint, index = 0) => {
+        if (!unitMeters || !(crown > 0)) return;
+        const ring = crownRing(p, crown / 2 / unitMeters, crownSeed + Math.imul(index, 0x9e3779b9));
+        const triangles = ringTriangles(ring);
+        const crownCls = classId('tree_crown' satisfies RenderClass);
+        const reach = (q: TilePoint) => Math.hypot(q.x - p.x, q.y - p.y);
+        const first = crowns.count;
+        for (const q of ring)
+          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, reach(q));
+        for (const i of triangles) crowns.indices.push(first + i);
+        // Standing, the crown starts at CROWN_BASE × its height (the cell shader).
+        addExtrusion(standingCrowns, [ring], triangles, (q, extra, shade) =>
+          standingCrowns.vertex(q.x, q.y, crownCls, height, flags | extra, id, shade, reach(q)),
+        );
+        const base = Math.round(height * CROWN_BASE);
+        const trunk = flags | Flags.extruded | Flags.trunk;
+        trunks.vertex(p.x, p.y, cls, base, trunk, id, variant);
+        trunks.vertex(p.x, p.y, cls, base, trunk | Flags.top, id, variant);
+      };
+      const isTree = className === 'tree' && !isRegion;
 
       const rings = feature
         .loadGeometry()
@@ -544,6 +730,10 @@ export function buildTileGeometry(
           for (const p of ring) {
             if (marker || landmark) addMarkers(p);
             else addPoint(p, cls);
+            if (isTree) addCrown(p);
+            // A tree birds can land in, in the tile that holds it.
+            const inTile = p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
+            if (isTree && inTile) life.perch(p);
           }
         }
       } else if (feature.type === 2) {
@@ -581,8 +771,15 @@ export function buildTileGeometry(
             }
           }
         }
+        // A tree row: a crown every crown's width along it.
+        if (isTree && unitMeters && crown > 0) {
+          let index = 0;
+          for (const line of rings) {
+            for (const p of pointsAlong(line, crown / unitMeters)) addCrown(p, index++);
+          }
+        }
         const lifeLine = isRegion ? undefined : lifeLineFor[className];
-        if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine);
+        if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine, width);
         const first = rings[0];
         if (landmark && first && first.length > 0) addMarkers(first[Math.floor(first.length / 2)]!);
       } else if (feature.type === 3) {
@@ -629,6 +826,9 @@ export function buildTileGeometry(
           }
           const outer = polygon[0]!;
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
+          if (!isRegion && className === 'parking' && unitMeters) {
+            for (const { p, hx, hy } of parkingStalls(polygon, unitMeters)) life.spot(p, hx, hy);
+          }
           const area = Math.abs(signedArea(outer));
           if (!largest || area > largest.area) largest = { ring: outer, area };
         }
@@ -652,6 +852,12 @@ export function buildTileGeometry(
   return {
     ...finish(main),
     extrusions: { ...extrusions.finish(), indices: Uint32Array.from(extrusions.indices) },
+    trunks: trunks.finish(),
+    crowns: { ...crowns.finish(), indices: Uint32Array.from(crowns.indices) },
+    standingCrowns: {
+      ...standingCrowns.finish(),
+      indices: Uint32Array.from(standingCrowns.indices),
+    },
     region: finish(regional),
     labels,
     life: life.finish(),
@@ -665,6 +871,9 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   for (const g of [
     geometry.fills,
     geometry.extrusions,
+    geometry.trunks,
+    geometry.crowns,
+    geometry.standingCrowns,
     geometry.lines,
     geometry.points,
     region.fills,
@@ -681,6 +890,8 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   out.push(
     geometry.fills.indices.buffer as ArrayBuffer,
     geometry.extrusions.indices.buffer as ArrayBuffer,
+    geometry.crowns.indices.buffer as ArrayBuffer,
+    geometry.standingCrowns.indices.buffer as ArrayBuffer,
     region.fills.indices.buffer as ArrayBuffer,
     ...lifeTransferables(geometry.life),
   );

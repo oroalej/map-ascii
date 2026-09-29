@@ -7,6 +7,7 @@ import {
   CAMERA_RANGES,
   type CameraState,
   type CityMeta,
+  type CityProcessions,
   type SearchIndexFile,
   type SubdivisionArea,
 } from '@atlas/shared';
@@ -42,6 +43,29 @@ export function isCityMeta(v: unknown): v is CityMeta {
     isNumbers(v.yearRange, 2) &&
     Array.isArray(v.attribution) &&
     v.attribution.every(isText)
+  );
+}
+
+/** A city's `<slug>.processions.json` (step 07). */
+export function isCityProcessions(v: unknown): v is CityProcessions {
+  return (
+    isRecord(v) &&
+    Array.isArray(v.processions) &&
+    v.processions.every(
+      (p) =>
+        isRecord(p) &&
+        isText(p.id) &&
+        isLocalized(p.title) &&
+        (p.status === 'draft' || p.status === 'verified') &&
+        p.kind === 'fluvial' &&
+        Array.isArray(p.route) &&
+        p.route.length >= 2 &&
+        p.route.every((q) => isNumbers(q, 2)) &&
+        isNumber(p.length_m) &&
+        isRecord(p.schedule) &&
+        isText(p.schedule.timezone) &&
+        isText(p.schedule.start),
+    )
   );
 }
 

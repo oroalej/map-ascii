@@ -29,6 +29,7 @@ import {
   kindOf,
   layerFor,
   roadWidth,
+  treeSize,
   variantOf,
   type GeometryKind,
   type Tags,
@@ -47,7 +48,10 @@ export type AtlasProperties = {
   id: string;
   class: AtlasClass;
   name?: string;
+  /** Buildings and trees, in meters. */
   height?: number;
+  /** Trees: crown diameter in meters (`treeSize`). */
+  crown?: number;
   /** Roads: carriageway width in meters (the renderer draws it from Place level). */
   width?: number;
   /** Renderer glyph variant: the kind of furniture or barrier, or a roof shape (`variantOf`). */
@@ -208,6 +212,7 @@ export function normalize(
     }
     const height = buildingHeight(tags, cls);
     if (height !== undefined) properties.height = height;
+    if (cls === 'tree') Object.assign(properties, treeSize(tags));
     const width = roadWidth(tags, cls);
     if (width !== undefined) properties.width = width;
     const variant = variantOf(tags, cls);

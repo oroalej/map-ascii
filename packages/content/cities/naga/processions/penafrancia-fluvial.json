@@ -1,0 +1,31 @@
+{
+  "id": "procession/penafrancia-fluvial",
+  "title": {
+    "en": "Peñafrancia fluvial procession"
+  },
+  "story": {
+    "en": "TODO(verify): The image of Our Lady of Peñafrancia is carried along the Naga River on a pagoda barge, towed by voyadores in paddle boats, and lands at Danlugan ni Ina. The start point, direction, date, and times here are placeholders until they are sourced."
+  },
+  "status": "draft",
+  "kind": "fluvial",
+  "route": {
+    "to": "osm:node/6791580317",
+    "upstream_m": 1200
+  },
+  "schedule": {
+    "month": 9,
+    "weekday": 0,
+    "nth": 3,
+    "offset_days": -1,
+    "start": "15:00",
+    "duration_min": 180,
+    "timezone": "Asia/Manila"
+  },
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/6791580317",
+      "note": "Location and name of Danlugan ni Ina only. The route, schedule, and formation are unsourced placeholders."
+    }
+  ]
+}

@@ -19,6 +19,8 @@ const collections = {
   tours: 'Tour',
   art: 'LandmarkArt',
   plans: 'LandmarkPlan',
+  landcover: 'Landcover',
+  processions: 'Procession',
 } as const satisfies Record<string, keyof Schemas>;
 
 type Collections = typeof collections;
@@ -134,6 +136,8 @@ export async function loadCityPacks(
       tours: [],
       art: [],
       plans: [],
+      landcover: [],
+      processions: [],
     };
     const seenIds = new Map<string, string>();
     const before = errors.length;

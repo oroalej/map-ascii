@@ -13,6 +13,14 @@ export const cities = readdirSync(citiesDir)
       smoke_landmark: string;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
+    const processionsFile = new URL(`../public/tiles/${slug}.processions.json`, import.meta.url);
+    const processions = existsSync(processionsFile)
+      ? (
+          JSON.parse(readFileSync(processionsFile, 'utf8')) as {
+            processions: { id: string; title: { en: string } }[];
+          }
+        ).processions
+      : [];
     const toursDir = new URL(`${slug}/tours/`, citiesDir);
     const tours = existsSync(toursDir)
       ? readdirSync(toursDir)
@@ -20,7 +28,14 @@ export const cities = readdirSync(citiesDir)
           .sort()
           .map((file) => JSON.parse(readFileSync(new URL(file, toursDir), 'utf8')) as TourFile)
       : [];
-    return { slug, name: city.name.en, smokeLandmark: city.smoke_landmark, hasMeta, tours };
+    return {
+      slug,
+      name: city.name.en,
+      smokeLandmark: city.smoke_landmark,
+      hasMeta,
+      tours,
+      processions,
+    };
   });
 
 /** The parts of a city pack's tour file the tests read. */
