@@ -35,11 +35,16 @@ export type WorshipSchedule = { weekdays: number[]; times: string[] };
 /** School days (0 = Sunday … 6 = Saturday), and when classes start and end. */
 export type SchoolSchedule = { weekdays: number[]; in: string; out: string };
 
+/** When a city's shops typically open and close (each keeps its own hours around them). */
+export type ShopSchedule = { open: string; close: string };
+
 export type LifeSchedules = {
   /** Crowds at churches around service times; without it, only a few visitors. */
   worship?: WorshipSchedule[];
   /** Crowds at school gates before classes and after; default `DEFAULT_SCHOOL`. */
   school?: SchoolSchedule;
+  /** Shops' typical hours, which light them at night (`shopHours`); default `DEFAULT_SHOPS`. */
+  shops?: ShopSchedule;
 };
 
 export type CityLifeConfig = {
@@ -128,6 +133,55 @@ export const DEFAULT_SCHOOL: SchoolSchedule = {
   in: '07:00',
   out: '16:00',
 };
+
+/** Shops' typical hours when a city gives none: 08:00 to 20:00. An impression. */
+export const DEFAULT_SHOPS: ShopSchedule = { open: '08:00', close: '20:00' };
+
+/** A shop's own hours, in minutes past local midnight; or open all night. */
+export type ShopHours = { open: number; close: number; allNight: boolean };
+
+/** A number in 0–1 from a shop's seed and a salt (an integer hash), for its own hours. */
+function unitOf(seed: number, salt: number): number {
+  let h = Math.imul((seed ^ Math.imul(salt, 0x27d4eb2f)) >>> 0, 0x9e3779b1) >>> 0;
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca77) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae3d) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * A shop's own hours, fixed by its `seed`, spread around the city's typical hours (`DEFAULT_SHOPS`
+ * unless the city gives its own): it opens from 2 hours before the typical time to 1½ after;
+ * most (70%) close within an hour of the typical time, some (20%) close early, a few (7%) stay
+ * open up to 2½ hours late, and 3% are open all night. With the default, about nine in ten are
+ * closed by 21:00. An impression, not data about any shop.
+ */
+export function shopHours(seed: number, life?: CityLifeConfig): ShopHours {
+  const typical = life?.schedules?.shops ?? DEFAULT_SHOPS;
+  const day = (m: number) => ((Math.round(m) % 1440) + 1440) % 1440;
+  const which = unitOf(seed, 2);
+  if (which < 0.03) return { open: 0, close: 0, allNight: true };
+  const spread = unitOf(seed, 3);
+  const close = minutesOf(typical.close);
+  const closing =
+    which < 0.23
+      ? close - 150 + spread * 90
+      : which < 0.93
+        ? close - 60 + spread * 120
+        : close + 60 + spread * 90;
+  const open = minutesOf(typical.open) - 120 + unitOf(seed, 1) * 210;
+  return { open: day(open), close: day(closing), allNight: false };
+}
+
+/** Whether a shop is open at `minutes` past local midnight (its hours may run past midnight). */
+export function shopOpen(hours: ShopHours, minutes: number): boolean {
+  if (hours.allNight) return true;
+  const m = ((minutes % 1440) + 1440) % 1440;
+  const { open, close } = hours;
+  return open <= close ? m >= open && m < close : m >= open || m < close;
+}
 
 /** When people play on sports grounds: after school and work, most in the late afternoon. */
 const PITCH: RhythmCurve = [

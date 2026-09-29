@@ -13,7 +13,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
-import { useUiStore } from '@/state/ui';
+import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
 import styles from './AtlasCanvas.module.css';
 
@@ -139,6 +139,7 @@ export function AtlasCanvas({
       initialCamera: camera,
       year: store.year,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      interactive: isPickable,
       life: lifeSettings(lifePrefs),
       traffic,
       climate,

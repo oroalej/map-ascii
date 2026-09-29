@@ -5,6 +5,7 @@ import {
   FIGURE_MASTERS,
   figureGlyph,
   figureOf,
+  figurePixels,
   PAINT_NONE,
   PersonPart,
   personByte,
@@ -30,7 +31,7 @@ describe('people', () => {
       expect(g.charCodeAt(0)).toBeLessThan(0xf900);
       const f = figureOf(g)!;
       const at = f.slice === undefined ? { scale: f.scale! } : { slice: f.slice };
-      expect(figureGlyph(f.figure, f.across, f.frame, at)).toBe(g);
+      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0)).toBe(g);
     }
     expect(figureOf('☺')).toBeUndefined();
   });
@@ -40,10 +41,34 @@ describe('people', () => {
       for (const [size, rows] of Object.entries(masters)) {
         expect(rows, `${figure} ${size}`).toHaveLength(Number(size));
         for (const row of rows) expect(row).toMatch(new RegExp(`^[#o.]{${size}}$`));
+        // A paddler turned round is the other side's paddler at the other end of the stroke.
+        if (figure === 'rower') continue;
         const turned = [...rows].reverse().map((row) => [...row].reverse().join(''));
         expect(turned, `${figure} ${size}`).toEqual(rows);
       }
     }
+  });
+
+  it('draws a paddler turned half round as the other side’s, at the other end of the stroke', () => {
+    const box = 10;
+    const pixels = (frame: 0 | 1, stroke: 0 | 1) => {
+      const at = figurePixels({ figure: 'rower', across: false, frame, stroke }, box);
+      return Array.from({ length: box }, (_, y) =>
+        Array.from({ length: box }, (_, x) => at(x, y)).join(''),
+      );
+    };
+    const turn = (rows: string[]) => [...rows].reverse().map((row) => [...row].reverse().join(''));
+    for (const frame of [0, 1] as const) {
+      for (const stroke of [0, 1] as const) {
+        expect(turn(pixels(frame, stroke))).toEqual(
+          pixels((1 - frame) as 0 | 1, (1 - stroke) as 0 | 1),
+        );
+      }
+    }
+    // Paddle on the left at the reach: its blade is ahead and out to the left.
+    expect(pixels(0, 0)[0]![0]).toBe('o');
+    expect(pixels(0, 1)[box - 1]![0]).toBe('o');
+    expect(pixels(1, 0)[0]![box - 1]).toBe('o');
   });
 
   it('opens more umbrellas in the rain and under a high sun, a few otherwise', () => {

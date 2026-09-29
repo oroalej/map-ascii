@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curveAt, DEFAULT_RHYTHM, placeShare, rhythmFor } from './rhythm';
+import { curveAt, DEFAULT_RHYTHM, placeShare, rhythmFor, shopHours, shopOpen } from './rhythm';
 import { CityLife } from './schemas';
 
 describe('curveAt', () => {
@@ -111,5 +111,41 @@ describe('placeShare', () => {
     expect(placeShare('farm', monday(7), undefined)).toBeGreaterThan(0.8);
     expect(placeShare('farm', monday(13), undefined)).toBeLessThan(0.2);
     expect(placeShare('farm', monday(22), undefined)).toBe(0);
+  });
+});
+
+describe('shopHours', () => {
+  const hours = Array.from({ length: 5000 }, (_, seed) => shopHours(seed));
+  const openAt = (hour: number) =>
+    hours.filter((h) => shopOpen(h, hour * 60)).length / hours.length;
+
+  it('keeps each shop’s own hours, fixed by its seed', () => {
+    expect(shopHours(42)).toEqual(shopHours(42));
+    expect(new Set(hours.map((h) => h.close)).size).toBeGreaterThan(100);
+  });
+
+  it('has nearly every shop open at midday, and about nine in ten closed by 21:00', () => {
+    expect(openAt(12)).toBeGreaterThan(0.95);
+    expect(1 - openAt(21)).toBeGreaterThan(0.85);
+    expect(1 - openAt(21)).toBeLessThan(0.95);
+    // A few stay open late, and fewer all night.
+    expect(openAt(22)).toBeGreaterThan(0.02);
+    expect(openAt(3)).toBeLessThan(0.05);
+  });
+
+  it('shifts with the city’s own typical hours', () => {
+    const late = { source: 'test', schedules: { shops: { open: '10:00', close: '22:00' } } };
+    const share = (hour: number) =>
+      Array.from({ length: 2000 }, (_, seed) => shopHours(seed, late)).filter((h) =>
+        shopOpen(h, hour * 60),
+      ).length / 2000;
+    expect(share(21)).toBeGreaterThan(0.5);
+  });
+
+  it('handles hours that run past midnight', () => {
+    const h = { open: 18 * 60, close: 2 * 60, allNight: false };
+    expect(shopOpen(h, 23 * 60)).toBe(true);
+    expect(shopOpen(h, 60)).toBe(true);
+    expect(shopOpen(h, 12 * 60)).toBe(false);
   });
 });

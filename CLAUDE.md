@@ -30,14 +30,14 @@ Read these before doing substantial work:
 - `pnpm build` — static export to `apps/web/out`
 - `pnpm data:build [-- --city <slug>]` — run the data pipeline for one city (or all registered cities). For each city it outputs `<city>.pmtiles`, `<city>.meta.json`, and `<city>.search-index.json` (and `<city>.processions.json` when the pack has processions) in `apps/web/public/tiles/`. Downloads are saved in `packages/data/raw/` and reused until replaced. Flags: `--offline` (saved downloads only), `--refresh` (download OSM data again), and `--from <step>`. Step 05 needs tippecanoe, natively or via Docker (`packages/data/README.md`).
 - `pnpm data:publish [-- --city <slug>]` / `pnpm data:fetch` — upload a city's generated tiles as a GitHub release and pin them in its `tiles.lock.json` / download the pinned tiles (the web build runs it first). See `docs/DATA.md` §9.
-- `pnpm test` / `pnpm test:e2e` (e2e builds the static export and serves it on port 3100; set `E2E_PORT` to use another). Both take filters: `pnpm test --changed`, `pnpm test:e2e life.spec.ts --project=chromium -g "<test name>"`.
+- `pnpm test` / `pnpm test:e2e` (e2e builds the static export and serves it on port 3100; set `E2E_PORT` to use another). Both take filters: `pnpm test --changed`, `pnpm test:e2e smoke.spec.ts --project=chromium -g "<test name>"`.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
 
 ## Verifying changes
 
-Run the smallest check that covers what changed. CI runs the full suite (lint, typecheck, every unit test, every e2e spec in both projects) on every PR, so don't repeat it locally.
+Run the smallest check that covers what changed. CI runs the full suite (lint, typecheck, every unit test, the e2e smoke suite on desktop and, for tests tagged `@mobile`, a Pixel 7) on every PR, so don't repeat it locally.
 
 | Change touches | Run |
 | --- | --- |
@@ -45,9 +45,10 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 | City pack content | `pnpm --filter @atlas/content validate` |
 | Package code (`renderer`, `shared`, `data`, `content`) | `pnpm test --changed` (the Vitest files that depend on uncommitted changes) + `pnpm --filter @atlas/<pkg> typecheck` |
 | `apps/web` code | the above + `pnpm --filter @atlas/web typecheck` + `pnpm lint` |
-| What the browser shows (renderer output, UI flows, URL state) | the above + only the related spec, desktop only: `pnpm test:e2e <spec>.spec.ts --project=chromium` (add `-g "<test name>"` to narrow it) |
+| What the browser shows (renderer output, UI flows, URL state) | the above + only the related e2e test, desktop only: `pnpm test:e2e --project=chromium -g "<test name>"` |
 
-- Run the whole e2e suite (all specs, both projects) only when asked.
+- Run the whole e2e suite (both projects) only when asked.
+- Keep e2e a small smoke suite: add a Playwright test only for what unit tests can't see (the static export boots, the map draws, a core flow works end to end). Logic goes in Vitest.
 - e2e builds the site before testing unless something is already serving on the port (`reuseExistingServer`). When e2e is needed more than once, `pnpm build` once and keep `pnpm --filter @atlas/web serve` running in the background. Rebuild only when app or renderer code changed since that build.
 - Rerun a failing e2e test with `--last-failed`, not the whole spec.
 - Report which checks ran and which were left to CI.

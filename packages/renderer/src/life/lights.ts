@@ -10,14 +10,15 @@
  * Pure, so it can be unit-tested.
  */
 import type { TilePoint } from '../raster/geometry';
-import { BEAM, CANDLE, DEFAULT_ROAD_WIDTH_M, FLOOD, STREETLIGHT } from './config';
+import { BEAM, BULB, CANDLE, DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP, STREETLIGHT } from './config';
 import { random } from './random';
 import type { VisibleAgent } from './simulate';
 import { VEHICLES } from './vehicles';
 
 /**
- * What lights a cell: a streetlight lit, out, or flickering; a vehicle's headlight `beam` or a
- * `candle`, lit with the vehicles' own lamps; or a landmark's `flood`light.
+ * What lights a cell: a streetlight lit, out, or flickering; a vehicle's headlight `beam`, a
+ * `candle`, or a vendor cart's `bulb`, lit with the vehicles' own lamps; a landmark's
+ * `flood`light; or an open `shop`.
  */
 export const LampState = {
   working: 0,
@@ -26,6 +27,8 @@ export const LampState = {
   beam: 3,
   candle: 4,
   flood: 5,
+  shop: 6,
+  bulb: 7,
 } as const;
 export type LampState = (typeof LampState)[keyof typeof LampState];
 
@@ -42,13 +45,19 @@ export const LAMP_STRIDE = 8;
 /** Floats per floodlight in a tile's `floods`: its center x, y and radius (tile units). */
 export const FLOOD_STRIDE = 3;
 
+/** Floats per shop in a tile's `shops`: its center x, y and radius (tile units). */
+export const SHOP_STRIDE = 3;
+
+/** A seed for a place in the world (`x`, `y`, m), the same in every tile and at every zoom. */
+export const placeSeed = (x: number, y: number): number =>
+  (Math.imul(Math.round(x) | 0, 0x8da6b343) ^ Math.imul(Math.round(y) | 0, 0xd8163841)) >>> 0;
+
 /**
  * A lamp's condition and flicker seed, from its place in the world (`x`, `y`, m), so it stays
  * the same on every visit, in every tile and at every zoom.
  */
 export function lampCondition(x: number, y: number): { state: LampState; seed: number } {
-  const h =
-    (Math.imul(Math.round(x) | 0, 0x8da6b343) ^ Math.imul(Math.round(y) | 0, 0xd8163841)) >>> 0;
+  const h = placeSeed(x, y);
   const r = random(h)();
   const state =
     r < STREETLIGHT.dead
@@ -370,7 +379,7 @@ export function packLights(
   // Heads first, so pools leave them be.
   let drawn = 0;
   for (const lamp of lamps) {
-    if (lamp.state === LampState.flood) continue;
+    if (lamp.state === LampState.flood || lamp.state === LampState.shop) continue;
     let [hx, hy] = toCell(lamp.lng, lamp.lat);
     const [mx, my] = toCell(...lamp.center);
     const side = Math.hypot(hx - mx, hy - my);
@@ -395,7 +404,12 @@ export function packLights(
     // At least a cell, so the pool still shows when zoomed out.
     const rx = Math.max(1, Math.hypot(ex - cx, ey - cy));
     const ry = Math.max(1, Math.hypot(nx - cx, ny - cy));
-    const strength = lamp.state === LampState.flood ? FLOOD.strength : 1;
+    const strength =
+      lamp.state === LampState.flood
+        ? FLOOD.strength
+        : lamp.state === LampState.shop
+          ? SHOP.strength
+          : 1;
     pool(out, grid, cx, cy, rx, ry, strength, lightByte(lamp.state, lamp.seed));
   }
   return drawn;
@@ -474,8 +488,9 @@ export function packBeams(
 
 /**
  * The candles people carry (config.ts `CANDLE`), each a small flickering pool, over the light
- * texels: a crowd of them runs together into a river of light. `cellsPerMeter` sizes them (the
- * view's scale at its center). Returns how many were lit.
+ * texels: a crowd of them runs together into a river of light. Vendors' carts carry a bulb
+ * (config.ts `BULB`). `cellsPerMeter` sizes them (the view's scale at its center). Returns how
+ * many were lit.
  */
 export function packCandles(
   out: Uint8Array,
@@ -486,11 +501,18 @@ export function packCandles(
   // At least a cell and a half, so a crowd's candles still read zoomed out.
   const radius = Math.max(1.5, CANDLE.radius * cellsPerMeter);
   let lit = 0;
+  const bulb = Math.max(1, BULB.radius * cellsPerMeter);
   agents.forEach((agent, i) => {
-    if (!agent.candle) return;
+    const cart = agent.kind === 'person' && agent.vehicle === 'cart';
+    if (!agent.candle && !cart) return;
+    const r = agent.candle ? radius : bulb;
     const [cx, cy] = grid.toCell(agent.lng, agent.lat);
-    if (cx < -radius || cy < -radius || cx > grid.cols + radius || cy > grid.rows + radius) return;
-    pool(out, grid, cx, cy, radius, radius, CANDLE.strength, lightByte(LampState.candle, i));
+    if (cx < -r || cy < -r || cx > grid.cols + r || cy > grid.rows + r) return;
+    if (agent.candle) {
+      pool(out, grid, cx, cy, r, r, CANDLE.strength, lightByte(LampState.candle, i));
+    } else {
+      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i));
+    }
     lit++;
   });
   return lit;

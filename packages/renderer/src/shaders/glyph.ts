@@ -110,6 +110,8 @@ float lamps() {
 const vec3 LAMP = vec3(1.0, 0.78, 0.45);
 
 const vec3 LAMP_WHITE = vec3(1.0, 0.9, 0.7);
+// A shop's warm interior light, spilling out of its door.
+const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 
 // How much a light shines (life/lights.ts LampState, lightByte): a working streetlight fully,
 // one that is out not at all. A flickering one is mostly on, but now and then stutters on and
@@ -137,7 +139,15 @@ float lampOn(int g) {
 float switchedOn(int g) {
   int state = g & 7;
   // Headlight beams and candles shine with the vehicles' own lamps; floodlights come on early.
-  if (state == ${LampState.beam} || state == ${LampState.candle}) return lamps();
+  // Shops and carts, open while their lights are needed, light up with the dusk.
+  if (
+    state == ${LampState.beam} ||
+    state == ${LampState.candle} ||
+    state == ${LampState.shop} ||
+    state == ${LampState.bulb}
+  ) {
+    return lamps();
+  }
   if (state == ${LampState.flood}) return smoothstep(0.2, 0.3, 1.0 - u_daylight);
   float at = 0.3 + 0.3 * float(g >> 3) / 31.0;
   return smoothstep(at, at + 0.04, 1.0 - u_daylight);
@@ -156,6 +166,14 @@ float rainLight = 0.0;
 // water moves (still with reduced motion).
 float reflection(vec2 at, ivec2 cell) {
   ivec2 size = textureSize(u_light, 0);
+  // Most water has no lamp above it: look at every third cell up the streak before tracing it
+  // (the smallest pool, with its claimed rim, is four cells across).
+  ivec2 c = ivec2(floor(at));
+  float claimed = 0.0;
+  for (int k = 0; k <= 9; k += 3) {
+    claimed += texelFetch(u_light, clamp(c - ivec2(0, k), ivec2(0), size - 1), 0).a;
+  }
+  if (claimed < 0.5) return 0.0;
   float row = float(u_origin.y + cell.y);
   if (u_shimmer) at.x += sin(u_time * 1.7 + row * 0.9) * 0.35;
   float best = 0.0;
@@ -308,12 +326,14 @@ void main() {
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
   bool flood = (lampG & 7) == ${LampState.flood};
   // Floodlights and candles light wherever they are; streetlights light the ground.
-  bool everywhere = flood || (lampG & 7) == ${LampState.candle};
-  poolColor = flood ? LAMP_WHITE : LAMP;
+  bool shop = (lampG & 7) == ${LampState.shop};
+  // Floods, candles, and open shops light their own place, whatever it is.
+  bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
+  poolColor = flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
   float poolR = texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
   float pool = 0.0;
-  if (poolR > 0.0 && light.a > 0.5 && lampLight > 0.0) {
+  if (poolR > 0.01 && light.a > 0.5 && lampLight > 0.0) {
     pool = poolR * lampLight * (everywhere ? 1.0 : groundMask(grid / u_cell));
   }
   rainLight = pool;

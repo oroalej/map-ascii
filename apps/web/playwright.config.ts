@@ -31,8 +31,9 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    // Touch, a small screen, and the bottom-sheet panel (SPEC.md §8).
-    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    // Touch, a small screen, and the bottom-sheet panel (SPEC.md §8): only the tests tagged
+    // @mobile, since the rest exercise the same code as on desktop.
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, grep: /@mobile/ },
   ],
   webServer: {
     // Test the static export, which is what ships.

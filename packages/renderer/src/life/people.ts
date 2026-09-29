@@ -12,7 +12,8 @@
  */
 import { Paint } from './vehicles';
 
-export type PersonFigure = 'adult' | 'child' | 'umbrella';
+/** Someone walking, a child, an umbrella from above, or a paddler in a boat with their paddle. */
+export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower';
 
 /**
  * One person as drawn (life/draw.ts `drawPeople`): their figure and its paint (`PAINT_NONE` for
@@ -35,6 +36,8 @@ export const FIGURE_SIZE_M: Readonly<Record<PersonFigure, number>> = {
   adult: 0.6,
   child: 0.45,
   umbrella: 1,
+  // A paddler with their paddle reaching out over the water.
+  rower: 1.2,
 };
 
 /** A one-cell figure's width, as a share of the cell's (`figureFit`). */
@@ -54,7 +57,8 @@ export function figureFit(
   cellsAcross: number,
 ): FigureScale | 'big' | 'stamp' {
   if (cellsAcross >= (figure === 'child' ? 2 : 3)) return 'stamp';
-  if (cellsAcross >= 1.5 && figure !== 'child') return 'big';
+  // A paddler shows only close up (life/procession.ts `PROCESSION.crewZoom`): never in one cell.
+  if ((cellsAcross >= 1.5 && figure !== 'child') || figure === 'rower') return 'big';
   return cellsAcross < 0.7 ? 0 : cellsAcross < 0.9 ? 1 : 2;
 }
 
@@ -193,9 +197,42 @@ const UMBRELLA: Readonly<Record<number, readonly string[]>> = {
   20: canopy(20),
 };
 
+/**
+ * A paddler seated at a boat's side, heading up, paddle on their left at the reach (its blade
+ * forward): the paddle (tone) out over the water, arms to it, shoulders (paint, their team's)
+ * and head (tone) in the right half. Unlike the others it is not the same turned half round:
+ * turned, it is the other side's paddler at the other end of the stroke (`stroke`).
+ */
+// prettier-ignore
+const ROWER_10 = [
+  'oo........',
+  'oo........',
+  '..o.......',
+  '...o......',
+  '....o#ooo#',
+  '....##ooo#',
+  '.....#ooo#',
+  '..........',
+  '..........',
+  '..........',
+];
+
+// prettier-ignore
+const ROWER: Readonly<Record<number, readonly string[]>> = {
+  5: [
+    'o....',
+    '.o...',
+    '..#o#',
+    '.....',
+    '.....',
+  ],
+  10: ROWER_10,
+  20: doubled(ROWER_10),
+};
+
 export const FIGURE_MASTERS: Readonly<
   Record<PersonFigure, Readonly<Record<number, readonly string[]>>>
-> = { adult: ADULT, child: CHILD, umbrella: UMBRELLA };
+> = { adult: ADULT, child: CHILD, umbrella: UMBRELLA, rower: ROWER };
 
 /**
  * A figure glyph: which figure, turned across the screen or not, and which step; then for a
@@ -208,6 +245,8 @@ export type FigureGlyph = {
   frame: 0 | 1;
   scale?: FigureScale;
   slice?: 0 | 1 | 2 | 3;
+  /** A paddler: at the reach (0, the blade forward) or the pull (1, the master turned end to end). */
+  stroke?: 0 | 1;
 };
 
 /** Where a figure glyph goes: one cell at a scale, or one cell of a 2×2 figure. */
@@ -234,25 +273,37 @@ for (const across of [false, true]) {
 for (const slice of [0, 1, 2, 3] as const) {
   glyphTable.push({ figure: 'umbrella', across: false, frame: 0, slice });
 }
+// Paddlers: 2×2 only; `frame` is the side their paddle is on.
+for (const across of [false, true]) {
+  for (const frame of [0, 1] as const) {
+    for (const stroke of [0, 1] as const) {
+      for (const slice of [0, 1, 2, 3] as const) {
+        glyphTable.push({ figure: 'rower', across, frame, slice, stroke });
+      }
+    }
+  }
+}
 
-const keyOf = ({ figure, across, frame, scale, slice }: FigureGlyph) => {
+const keyOf = ({ figure, across, frame, scale, slice, stroke }: FigureGlyph) => {
   const at = slice === undefined ? `s${scale}` : `c${slice}`;
-  return figure === 'umbrella' ? `umbrella:${at}` : `${figure}:${+across}:${frame}:${at}`;
+  if (figure === 'umbrella') return `umbrella:${at}`;
+  return `${figure}:${+across}:${frame}:${at}:${stroke ?? 0}`;
 };
 const byKey = new Map(glyphTable.map((g, i) => [keyOf(g), String.fromCharCode(FIRST_CODE + i)]));
 const byGlyph = new Map(glyphTable.map((g, i) => [String.fromCharCode(FIRST_CODE + i), g]));
 
 /**
  * The glyph for a figure: in one cell at a scale (a whole cell by default), or one cell of a 2×2
- * figure, which exist for adults and umbrellas only.
+ * figure, which exist for adults, umbrellas, and paddlers (at each `stroke`) only.
  */
 export function figureGlyph(
   figure: PersonFigure,
   across: boolean,
   frame: 0 | 1,
   at: FigureAt = { scale: 2 },
+  stroke: 0 | 1 = 0,
 ): string {
-  return byKey.get(keyOf({ figure, across, frame, ...at }))!;
+  return byKey.get(keyOf({ figure, across, frame, ...at, stroke }))!;
 }
 
 /** Which figure a glyph draws, if it is one. */
@@ -276,8 +327,9 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
   const size = sizes.find((s) => s >= box) ?? sizes[sizes.length - 1]!;
   const master = masters[size]!;
   return (x, y) => {
-    const [turnedX, my] = g.across ? [y, box - 1 - x] : [x, y];
+    const [turnedX, turnedY] = g.across ? [y, box - 1 - x] : [x, y];
     const mx = g.frame === 1 ? box - 1 - turnedX : turnedX;
+    const my = g.stroke === 1 ? box - 1 - turnedY : turnedY;
     const row = master[Math.floor(((my + 0.5) * size) / box)];
     return row?.[Math.floor(((mx + 0.5) * size) / box)] ?? '.';
   };
@@ -285,9 +337,10 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
 
 /**
  * The ink of a figure at (`u` along it from the back, `v` across it from the left), both 0–1, on
- * the step `frame`: '#' paint, 'o' tone, '.' empty, for a figure stamped at its real size and
- * sampled `detail` times across. From the largest master no finer than that (the smallest, if
- * all are), so thin lines like a canopy's ribs stay as wide as a sample.
+ * the step `frame` (a paddler: their side, and their `stroke`): '#' paint, 'o' tone, '.' empty,
+ * for a figure stamped at its real size and sampled `detail` times across. From the largest
+ * master no finer than that (the smallest, if all are), so thin lines like a canopy's ribs stay
+ * as wide as a sample.
  */
 export function figureInk(
   figure: PersonFigure,
@@ -295,6 +348,7 @@ export function figureInk(
   u: number,
   v: number,
   detail: number,
+  stroke: 0 | 1 = 0,
 ): string {
   const masters = FIGURE_MASTERS[figure];
   const sizes = Object.keys(masters)
@@ -303,5 +357,6 @@ export function figureInk(
   const size = sizes.filter((s) => s <= detail).pop() ?? sizes[0]!;
   const at = (t: number) => Math.min(size - 1, Math.max(0, Math.floor(t * size)));
   const x = at(v);
-  return masters[size]![at(1 - u)]![frame === 1 ? size - 1 - x : x]!;
+  const y = at(1 - u);
+  return masters[size]![stroke === 1 ? size - 1 - y : y]![frame === 1 ? size - 1 - x : x]!;
 }

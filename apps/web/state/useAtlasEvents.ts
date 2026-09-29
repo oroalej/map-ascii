@@ -10,8 +10,8 @@ export const PLACE_ZOOM = 17.5;
 /**
  * Connect the renderer to the app (ARCHITECTURE.md §2: the app owns state, the renderer emits
  * events):
- * - hover shows the tooltip; a click on a place selects it and flies there, a click on nothing
- *   (or on backdrop such as the sea) clears the selection;
+ * - hovering a landmark shows the tooltip; a click on a landmark selects it and flies there, a
+ *   click on anything else clears the selection (only landmarks respond, `isPickable`);
  * - the selection in the store (from clicks, search, or the URL) drives the renderer's;
  * - Esc cancels a flight and closes the panel.
  */

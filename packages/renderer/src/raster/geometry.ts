@@ -20,7 +20,7 @@ import {
   roostClasses,
   type LifeGeometry,
 } from '../life/geometry';
-import { FLOOD } from '../life/config';
+import { FLOOD, SHOP } from '../life/config';
 import { placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
@@ -746,6 +746,9 @@ export function buildTileGeometry(
             if (isTree && inTile) life.perch(p);
             if (className === 'building_station' && !isRegion) life.station(p);
             if (className === 'building_market' && !isRegion) life.market(p);
+            if (className === 'building_market' && !isRegion && unitMeters && inTile) {
+              life.shop(p, SHOP.pointRadius / 2 / unitMeters);
+            }
             if (place && inTile) life.place(p, place, 0);
           }
         }
@@ -867,6 +870,13 @@ export function buildTileGeometry(
               ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
             );
             life.flood(center, reach);
+          }
+          // A shop or market glows while it is open (life/lights.ts), from its tile.
+          if (!isRegion && className === 'building_market' && inTileAt(center)) {
+            const reach = Math.max(
+              ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
+            );
+            life.shop(center, reach);
           }
           // A roost belongs to the tile that holds it, not to its neighbors' buffers.
           const inside = center.x >= 0 && center.x < EXTENT && center.y >= 0 && center.y < EXTENT;

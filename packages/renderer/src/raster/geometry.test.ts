@@ -729,6 +729,25 @@ describe('buildTileGeometry life', () => {
     expect(lampsOn('road_minor')).toBe(0);
   });
 
+  it('lights shops and markets, as areas or points, in the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building_market', id: 'm' }, [square(1000, 1000, 200)]),
+          feature(1, { class: 'building_market', id: 's' }, [[[3000, 3000]]]),
+          feature(3, { class: 'building', id: 'b' }, [square(2000, 2000, 200)]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const shops = Array.from(g.life.shops);
+    expect(shops).toHaveLength(6);
+    expect(shops.slice(0, 2)).toEqual([1100, 1100]);
+    expect(shops[2]).toBeCloseTo(Math.hypot(100, 100));
+    expect(shops.slice(3, 5)).toEqual([3000, 3000]);
+  });
+
   it('floodlights landmarks over their footprint, in the tile that holds them', () => {
     const g = buildTileGeometry(
       {

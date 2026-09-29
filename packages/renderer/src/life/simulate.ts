@@ -1221,6 +1221,10 @@ export type VisibleAgent = {
    * it, a person is one adult in `paint` (or the theme's person color), stepping with `flap`.
    */
   people?: readonly PersonLook[];
+  /** People in a boat (a procession's paddlers): drawn over the water, not on land. */
+  aboard?: boolean;
+  /** Paddlers: at the reach (0) or the pull (1) of their stroke (life/people.ts). */
+  stroke?: 0 | 1;
   /**
    * A line over the water instead of a boat (life/draw.ts `drawLine`): a rope or a pole, as
    * [lng, lat] points, its cells painted in turn from `paints`, and a glyph at its tip.
@@ -1370,6 +1374,7 @@ export class LifeWorld {
       ? scene.agents(run.progress, this.clock, {
           boats: shows('boat'),
           crowds: zoom >= PROCESSION.crowdZoom,
+          crews: zoom >= PROCESSION.crewZoom,
         })
       : [];
     for (const life of this.tiles.values()) {

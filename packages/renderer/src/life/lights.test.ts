@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TilePoint } from '../raster/geometry';
-import { BEAM, CANDLE, FLOOD, STREETLIGHT } from './config';
+import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import {
   lampCondition,
   LAMP_STRIDE,
@@ -238,7 +238,32 @@ describe('packLights', () => {
   });
 });
 
+describe('packLights shops', () => {
+  it('lights an open shop at its own strength, with no head', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    expect(packLights(out, grid, [lamp(5.5, 5.5, LampState.shop, 3)])).toBe(0);
+    expect(cell(out, 5, 5)).toEqual([
+      Math.round(255 * SHOP.strength),
+      lightByte(LampState.shop, 3),
+      0,
+      255,
+    ]);
+  });
+});
+
 describe('packCandles', () => {
+  it('hangs a bulb on a vendor’s cart, but not on a plain passer-by', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const people: VisibleAgent[] = [
+      { kind: 'person', lng: 5.5, lat: 5.5, vehicle: 'cart', flap: 0 },
+      { kind: 'person', lng: 15.5, lat: 5.5, flap: 0 },
+    ];
+    expect(packCandles(out, grid, people, 1)).toBe(1);
+    expect(cell(out, 5, 5)[0]).toBe(Math.round(255 * BULB.strength));
+    expect(cell(out, 5, 5)[1]).toBe(lightByte(LampState.bulb, 0));
+    expect(cell(out, 15, 5)).toEqual([0, 0, 0, 0]);
+  });
+
   it('lights a small flickering pool around each candle', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const people: VisibleAgent[] = [

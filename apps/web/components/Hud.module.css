@@ -61,12 +61,12 @@
   overflow: hidden;
 }
 
-/* Pictures of what is drawn pixel by pixel (people), a little taller than the text. */
+/* Pictures of what is drawn pixel by pixel (people), the size of the glyphs beside them. */
 .icon {
-  width: 1.4em;
-  height: 1.4em;
-  margin-right: 0.3em;
-  vertical-align: -0.35em;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.2em;
+  vertical-align: -0.1em;
 }
 
 .bottomLeft {

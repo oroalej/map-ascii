@@ -175,6 +175,34 @@ describe('ProcessionScene', () => {
     }
   });
 
+  it('seats two files of paddlers in each voyador, in its colors, pulling in time', () => {
+    const at = (time: number, crews = true) => scene.agents(0.5, time, { crowds: false, crews });
+    const agents = at(0);
+    const voyadores = agents.filter((a) => a.vehicle === 'voyador');
+    const rowers = agents.filter((a) => a.people?.[0]?.figure === 'rower');
+    expect(voyadores.length).toBeGreaterThan(0);
+    expect(rowers).toHaveLength(voyadores.length * 2 * PROCESSION.crew.pairs);
+    for (const r of rowers) {
+      expect(r.aboard).toBe(true);
+      expect(VEHICLES.voyador.paints).toContain(r.people![0]!.paint);
+    }
+    // As many paddling on the left as on the right.
+    const left = rowers.filter((r) => r.people![0]!.flap === 0).length;
+    expect(left * 2).toBe(rowers.length);
+    expect(at(0, false).some((a) => a.people?.[0]?.figure === 'rower')).toBe(false);
+    // Each boat's paddlers follow it, all at the same point of the stroke, which comes round.
+    const crew = PROCESSION.crew.pairs * 2;
+    const strokes = (time: number) => {
+      const list = at(time);
+      return list.flatMap((a, i) =>
+        a.vehicle === 'voyador' ? [list.slice(i + 1, i + 1 + crew).map((r) => r.stroke)] : [],
+      );
+    };
+    for (const boat of strokes(0)) expect(new Set(boat).size).toBe(1);
+    const first = (time: number) => strokes(time)[0]![0];
+    expect(new Set([0, 0.2, 0.4, 0.6, 0.8].map(first))).toEqual(new Set([0, 1]));
+  });
+
   it('paints its boats in colors that stand out from the water', () => {
     for (const craft of ['pagoda', 'voyador', 'baroto', 'sailboat'] as const) {
       for (const paint of VEHICLES[craft].paints) expect(BOAT_PAINTS_AVOID).not.toContain(paint);

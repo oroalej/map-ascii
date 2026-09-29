@@ -435,6 +435,16 @@ export const CANDLE = { radius: 6, strength: 0.85 } as const;
  */
 export const FLOOD = { spill: 6, maxRadius: 30, pointRadius: 6, strength: 0.55 } as const;
 
+/**
+ * Lit shops and markets (life/lights.ts), while open (shared rhythm.ts `shopHours`): the light
+ * spills `spill` m past the footprint, counted at most `maxRadius` m from its center, `strength`
+ * at its brightest; a point shop counts as `pointRadius` m across.
+ */
+export const SHOP = { spill: 8, maxRadius: 30, pointRadius: 10, strength: 0.9 } as const;
+
+/** A vendor's cart carries a bulb at night: a pool `radius` m across, `strength` at its brightest. */
+export const BULB = { radius: 3, strength: 0.6 } as const;
+
 /** The bit an agent needs on the cell under it. */
 export const agentBit: Readonly<Record<AgentKind, number>> = {
   vehicle: CellBit.vehicle,

@@ -101,6 +101,8 @@ export type LifeGeometry = {
   lamps: Float32Array;
   /** Floodlit landmarks: center x, y and radius (tile units; life/lights.ts `FLOOD_STRIDE`). */
   floods: Float32Array;
+  /** Shops and markets, lit while open: center x, y and radius (tile units, `SHOP_STRIDE`). */
+  shops: Float32Array;
   /**
    * Places people gather at (`PLACE_STRIDE` floats each): center x, y (tile units), the place's
    * `placeCode`, its radius (tile units; 0 for a point), and 1 when it is a building (people
@@ -130,6 +132,7 @@ export class LifeBuilder {
   private markets: number[] = [];
   private lamps: number[] = [];
   private floods: number[] = [];
+  private shops: number[] = [];
   private places: number[] = [];
 
   line(points: readonly TilePoint[], kind: LifeLine, width = 0) {
@@ -174,6 +177,11 @@ export class LifeBuilder {
     this.floods.push(p.x, p.y, radius);
   }
 
+  /** A shop or market centered at `p`, `radius` tile units across, lit while it is open. */
+  shop(p: TilePoint, radius: number) {
+    this.shops.push(p.x, p.y, radius);
+  }
+
   /**
    * A place people gather at, centered at `p`, `radius` tile units across (0 for a point);
    * `building` when people stand around it rather than on it. Past `MAX_TILE_PLACES`, dropped.
@@ -196,6 +204,7 @@ export class LifeBuilder {
       markets: Float32Array.from(this.markets),
       lamps: Float32Array.from(this.lamps),
       floods: Float32Array.from(this.floods),
+      shops: Float32Array.from(this.shops),
       places: Float32Array.from(this.places),
     };
   }
@@ -213,5 +222,6 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   g.markets.buffer as ArrayBuffer,
   g.lamps.buffer as ArrayBuffer,
   g.floods.buffer as ArrayBuffer,
+  g.shops.buffer as ArrayBuffer,
   g.places.buffer as ArrayBuffer,
 ];

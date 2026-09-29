@@ -678,6 +678,8 @@ export const CityLife = z.strictObject({
         .strictObject({ weekdays: Weekdays, in: ClockTime, out: ClockTime })
         .refine((s) => s.in < s.out, { message: 'classes must end after they start' })
         .optional(),
+      /** Shops' typical opening and closing times (each keeps its own around them). */
+      shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
     })
     .optional(),
   source: z.string().min(1),

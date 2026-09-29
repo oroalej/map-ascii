@@ -115,7 +115,7 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - CPU placement on the cell grid with a greedy, priority-ordered collision grid.
    - Drawn as glyphs in the same pass, so they look native.
 7. **Picking.**
-   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below).
+   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below). A feature that fails the `interactive` option (the web app passes "is a landmark") counts as a miss: it is neither highlighted nor reported.
 
 Rasterization runs only when the camera, year, or tiles change. When idle, only the glyph pass re-runs, for animation.
 
@@ -262,12 +262,13 @@ Zod stays out of the browser bundle: the pipeline validates each generated file 
 - **Pipeline:**
   - snapshot test on a small fixture OSM extract with a fixture city config (not tied to any real city)
   - asserts expected layers and properties
-- **E2E (Playwright):**
-  - `/` reaches a city, and the canvas is non-blank
-  - the map redraws after a lost WebGL context is restored; "Places in view" works from the keyboard; `?debug=1` shows stats and stays out of share URLs
-  - for each registered city, search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral")
-  - timeline scrub changes the rendered cell hash
+- **E2E (Playwright):** a small smoke suite (`apps/web/e2e/smoke.spec.ts`) for what unit tests can't see, run against the static export on desktop Chromium; tests tagged `@mobile` also run on a Pixel 7 (touch and the bottom sheet). Logic (tour player, URL state, life preferences) is unit-tested instead. For each registered city:
+  - `/` reaches a city, and the canvas draws with attribution
+  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"), and a click on a place opens the panel
   - share URL round-trips
+  - the map redraws after a lost WebGL context is restored
+  - the city's first tour plays end to end
+  - timeline scrub changes the rendered cell hash (Phase 4)
 - **Visual regression:** screenshot a few fixed camera states per theme, with a tolerance threshold.
 
 ## 10. Deployment

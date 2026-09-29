@@ -13,14 +13,6 @@ export const cities = readdirSync(citiesDir)
       smoke_landmark: string;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
-    const processionsFile = new URL(`../public/tiles/${slug}.processions.json`, import.meta.url);
-    const processions = existsSync(processionsFile)
-      ? (
-          JSON.parse(readFileSync(processionsFile, 'utf8')) as {
-            processions: { id: string; title: { en: string } }[];
-          }
-        ).processions
-      : [];
     const toursDir = new URL(`${slug}/tours/`, citiesDir);
     const tours = existsSync(toursDir)
       ? readdirSync(toursDir)
@@ -34,7 +26,6 @@ export const cities = readdirSync(citiesDir)
       smokeLandmark: city.smoke_landmark,
       hasMeta,
       tours,
-      processions,
     };
   });
 

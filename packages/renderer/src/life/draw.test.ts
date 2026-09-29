@@ -489,6 +489,30 @@ describe('packLife people', () => {
     expect(close.cells).toHaveLength(9);
   });
 
+  it('draws a paddler over the water, turned round as the other side’s at the other stroke', () => {
+    const rower = (dy: number, scale: number) =>
+      pack(
+        person(0, dy, scale, {
+          aboard: true,
+          stroke: 0,
+          people: [look({ figure: 'rower', flap: 0 })],
+        }),
+      );
+    const slices = (frame: 0 | 1, stroke: 0 | 1) =>
+      ([0, 1, 2, 3] as const).map((slice) =>
+        glyphIndex(figureGlyph('rower', false, frame, { slice }, stroke)),
+      );
+    // 1.2 m across, heading up at 1.8 cells per meter: 2×2 cells, over the water only.
+    const up = rower(-1, 1);
+    expect(up.cells.map((c) => c.texel[0])).toEqual(slices(0, 0));
+    for (const c of up.cells) expect(c.texel[2]).toBe(CellBit.boat);
+    expect(rower(1, 1).cells.map((c) => c.texel[0])).toEqual(slices(1, 1));
+    // Closest up, stamped at its real size.
+    const near = rower(-1, 5);
+    expect(near.cells.length).toBeGreaterThan(8);
+    for (const c of near.cells) expect(c.texel[2]).toBe(CellBit.boat);
+  });
+
   it('draws a vendor’s cart as a vehicle standing where people walk, the vendor beside it', () => {
     const cart = (scale: number) =>
       pack(

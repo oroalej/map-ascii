@@ -12,7 +12,7 @@
  */
 import type { ProcessionRoute, ProcessionSchedule } from '@atlas/shared';
 import { dayNumber, localTime } from './clock';
-import { SHIRT_PAINTS } from './people';
+import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
 import { Paint, PENNANT_GLYPH, VEHICLES, type CraftType } from './vehicles';
@@ -58,6 +58,13 @@ export const PROCESSION = {
   candles: 0.6,
   /** Crowds show from this zoom (boats from the boats' zoom band). */
   crowdZoom: 16,
+  /**
+   * Voyadores' paddlers (life/people.ts `rower`): `pairs` of them seated down each voyador,
+   * `beside` m either side of its center line, all pulling in time at `strokeRate` strokes a
+   * second. They show from `crewZoom`, where the hull is a few cells wide.
+   */
+  crew: { pairs: 10, beside: 0.45, strokeRate: 1.2 },
+  crewZoom: 19.5,
 } as const;
 
 type Point = [number, number];
@@ -382,6 +389,41 @@ export class ProcessionScene {
     };
   }
 
+  /**
+   * A voyador's paddlers, seated in two files down its hull in its team's color, each with the
+   * paddle out over the water on their side, the whole boat pulling in time (its own beat).
+   */
+  private crewOf(at: Placed, boat: Boat, time: number, out: VisibleAgent[]) {
+    const { pairs, beside, strokeRate } = PROCESSION.crew;
+    const { x, y, hx, hy } = at;
+    // The right of its heading, with y pointing north.
+    const [rx, ry] = [hy, -hx];
+    const reach = VEHICLES.voyador.length / 2 - 1;
+    const stroke = (Math.floor(time * strokeRate * 2 + boat.sway.phase) & 1) as 0 | 1;
+    // A paddler's figure is centered past their seat, over the paddle's side.
+    const offset = beside + FIGURE_SIZE_M.rower / 4;
+    for (let k = 0; k < pairs; k++) {
+      const along = -reach + (2 * reach * k) / Math.max(1, pairs - 1);
+      for (const side of [0, 1] as const) {
+        const across = side === 0 ? -offset : offset;
+        const px = x + hx * along + rx * across;
+        const py = y + hy * along + ry * across;
+        const [lng, lat] = this.lngLat(px, py);
+        out.push({
+          kind: 'person',
+          lng,
+          lat,
+          ahead: this.lngLat(px + hx, py + hy),
+          aboard: true,
+          stroke,
+          // `flap` is the side their paddle is on: left (0) or right (1).
+          people: [{ figure: 'rower', paint: boat.paint, lateral: 0, back: 0, flap: side }],
+          flap: 0,
+        });
+      }
+    }
+  }
+
   /** A line over the water through `points` (meters). */
   private lineAgent(
     points: readonly Point[],
@@ -420,9 +462,14 @@ export class ProcessionScene {
 
   /**
    * What to draw `progress` (0–1) of the way through, `time` s into it (for sway and jitter):
-   * the boats between the start and the landing, and, from `PROCESSION.crowdZoom`, the crowds.
+   * the boats between the start and the landing (with `crews`, the voyadores' paddlers), and,
+   * from `PROCESSION.crowdZoom`, the crowds.
    */
-  agents(progress: number, time: number, { boats = true, crowds = true } = {}): VisibleAgent[] {
+  agents(
+    progress: number,
+    time: number,
+    { boats = true, crowds = true, crews = false } = {},
+  ): VisibleAgent[] {
     const out: VisibleAgent[] = [];
     const ropes: VisibleAgent[] = [];
     const poles: VisibleAgent[] = [];
@@ -458,6 +505,7 @@ export class ProcessionScene {
         const at = this.place(s, off, b.vehicle, sway.yaw * Math.cos(beat));
         placed.set(b, at);
         out.push(this.boatAgent(at, b));
+        if (crews && b.vehicle === 'voyador') this.crewOf(at, b, time, out);
       }
       this.towRopes(placed, ropes);
       const pagodaAt = placed.get(this.boats[0]!);

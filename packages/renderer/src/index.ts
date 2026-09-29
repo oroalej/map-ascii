@@ -1,4 +1,4 @@
-import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
+import { bandVisibility, CLASS_ZOOM, shopHours, shopOpen, type ShopHours } from '@atlas/shared';
 import type {
   BBox,
   CameraState,
@@ -62,11 +62,20 @@ import {
 } from './passes';
 import { LabelRank } from './labels';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
-import { activityChanged, activityLevels, FLOOD, STREETLIGHT, type Activity } from './life/config';
+import {
+  activityChanged,
+  activityLevels,
+  FLOOD,
+  SHOP,
+  STREETLIGHT,
+  type Activity,
+} from './life/config';
 import {
   FLOOD_STRIDE,
   LAMP_STRIDE,
   LampState,
+  placeSeed,
+  SHOP_STRIDE,
   type LampState as LampStateValue,
   type VisibleLamp,
 } from './life/lights';
@@ -85,7 +94,13 @@ import {
   type WindNow,
 } from './life/wind';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
-import { metersPerUnit, tileToLngLat, type FeatureInfo, type TileLabel } from './raster/geometry';
+import {
+  EXTENT,
+  metersPerUnit,
+  tileToLngLat,
+  type FeatureInfo,
+  type TileLabel,
+} from './raster/geometry';
 import { Readback } from './readback';
 import { themes, type ThemeName } from './theme';
 import { TileCache } from './tile-cache';
@@ -144,6 +159,11 @@ export type AtlasOptions = {
    * flights are short.
    */
   reducedMotion?: boolean;
+  /**
+   * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
+   * events report them. Anything else is treated as nothing. Default: every feature.
+   */
+  interactive?: (feature: FeatureInfo) => boolean;
   /** CSS font family for non-box-drawing glyphs. */
   font?: string;
   /** Default: enabled, live time of day. */
@@ -172,13 +192,16 @@ export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
   camerachange: CameraState;
-  /** The feature under the mouse changed. `point` is in CSS px from the canvas's top left. */
+  /**
+   * The interactive feature under the mouse changed (`AtlasOptions.interactive`). `point` is in
+   * CSS px from the canvas's top left.
+   */
   hover: {
     featureId: string | null;
     feature: FeatureInfo | null;
     point: [number, number] | null;
   };
-  /** A click or tap, on a feature or on nothing. */
+  /** A click or tap, on an interactive feature or on nothing. */
   click: {
     featureId: string | null;
     feature: FeatureInfo | null;
@@ -319,6 +342,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     maxZoom: options.maxZoom ?? MAX_ZOOM,
   };
   const reducedMotion = options.reducedMotion ?? false;
+  const interactive = options.interactive ?? (() => true);
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
   let life: LifeSettings = { enabled: true, time: 'live', wind: 'live', ...options.life };
@@ -631,14 +655,48 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
   // lighting, like windows, so they show with the life layer off and with reduced motion too.
   let lamps: VisibleLamp[] = [];
+  /** The shops on screen, each with its own hours, and which of them are open (by index). */
+  let shops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
+  let shopsKey = '';
+  /** The city's local time, minutes past midnight (`updateSun`), for shops' hours. */
+  let cityMinutes = 12 * 60;
+  const openShops = () => shops.filter((s) => shopOpen(s.hours, cityMinutes)).map((s) => s.lamp);
+  const openShopsKey = () =>
+    shops.map((s) => (shopOpen(s.hours, cityMinutes) ? '1' : '0')).join('');
   /** Whether the light texture holds lamps (so it is cleared once when they go). */
   let lampsShown = false;
   const lampShow = () => bandVisibility(STREETLIGHT.zoom, camera.zoom);
   const syncLamps = (tiles: readonly TileId[]) => {
     lamps = [];
+    shops = [];
+    shopsKey = '';
     if (lampShow() <= 0) return;
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      // Shops and markets: lit while open, each by its own hours (shared rhythm.ts shopHours).
+      const shopsHere = tileCache.get(tile)?.life.shops;
+      for (let i = 0; shopsHere && i < shopsHere.length; i += SHOP_STRIDE) {
+        const x = shopsHere[i]!;
+        const y = shopsHere[i + 1]!;
+        const perMeter = 1 / metersPerUnit(tile);
+        const reach =
+          Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
+        const at = tileToLngLat(tile, { x, y });
+        const seed = placeSeed((tile.x * EXTENT + x) / perMeter, (tile.y * EXTENT + y) / perMeter);
+        shops.push({
+          lamp: {
+            lng: at[0],
+            lat: at[1],
+            center: at,
+            pool: at,
+            east: tileToLngLat(tile, { x: x + reach, y }),
+            north: tileToLngLat(tile, { x, y: y - reach }),
+            state: LampState.shop,
+            seed: seed & 31,
+          },
+          hours: shopHours(seed, options.cityLife),
+        });
+      }
       // Floodlit landmarks: a wash of light over each footprint, and a little past it.
       const floods = tileCache.get(tile)?.life.floods;
       for (let i = 0; floods && i < floods.length; i += FLOOD_STRIDE) {
@@ -692,15 +750,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const on = lampShow() > 0 && daylight < 0.75;
     const beams = on && lifeAgents.length > 0;
     const changed = on !== lampsShown;
-    if (!changed && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    // A shop opening or closing packs the lamps again.
+    const key = on ? openShopsKey() : '';
+    const shopsChanged = key !== shopsKey;
+    shopsKey = key;
+    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
     lightPass(
       gl,
       targets,
       view(),
       placement,
-      on ? lamps : [],
+      on ? [...lamps, ...openShops()] : [],
       beams ? lifeAgents : [],
-      changed || cellsDrawn,
+      changed || shopsChanged || cellsDrawn,
     );
     lampsShown = on;
     beamsShown = beams;
@@ -737,6 +799,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const next = daylightAt(position.altitude);
     const nextMoon = moonlight(moment, camera.lng, camera.lat);
     const local = cityTime(moment, zone);
+    cityMinutes = local.minutes;
     const nextActivity = activityLevels(next, {
       minutes: local.minutes,
       weekday: local.weekday,
@@ -820,9 +883,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const picker = new Picker(
     readback,
     () => targetsGeneration,
-    ({ point, click, index, camera: at, size }: PickResult) => {
-      const feature = source.feature(index) ?? null;
+    ({ point, click, index: hit, camera: at, size }: PickResult) => {
+      // A feature that isn't interactive counts as a miss: no highlight, and no feature reported.
+      const found = source.feature(hit);
+      const feature = found && interactive(found) ? found : null;
       const featureId = feature?.id ?? null;
+      const index = feature ? hit : 0;
       if (click) {
         const [lng, lat] = viewportFor(at, size).unproject([...point]) as [number, number];
         emit('click', { featureId, feature, point, lngLat: [lng, lat] });

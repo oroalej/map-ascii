@@ -191,6 +191,12 @@ function drawPeople(
   }
   const across = fx !== 0;
   const cls = classId(lifeClassFor.person);
+  // People in a boat stand over the water; others where people may.
+  const bits = agent.aboard ? CellBit.boat : CellBit.person;
+  const stroke = agent.stroke ?? 0;
+  // A paddler's glyphs head up or right; turned half round, they are the other side's paddler at
+  // the other end of the stroke (life/people.ts `ROWER`).
+  const turned = fx < 0 || fy > 0;
   const byteOf = (look: PersonLook, tone = false) => {
     const umbrella = look.figure === 'umbrella';
     const part = tone
@@ -208,16 +214,18 @@ function drawPeople(
     const at = (r * cols + c) * 4;
     out[at] = index;
     out[at + 1] = cls;
-    out[at + 2] = CellBit.person;
+    out[at + 2] = bits;
     out[at + 3] = byte;
     return true;
   };
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
   const putBig = (look: PersonLook, c: number, r: number) => {
-    const frame = look.flap === 1 ? 1 : 0;
+    const swap = look.figure === 'rower' && turned ? 1 : 0;
+    const frame = ((look.flap === 1 ? 1 : 0) ^ swap) as 0 | 1;
+    const pull = (stroke ^ swap) as 0 | 1;
     let any = false;
     for (const slice of [0, 1, 2, 3] as const) {
-      const glyph = figureGlyph(look.figure, across, frame, { slice });
+      const glyph = figureGlyph(look.figure, across, frame, { slice }, pull);
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
@@ -239,8 +247,9 @@ function drawPeople(
       const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
       if (fit === 'stamp') {
-        any = stampFigure(out, grid, [cx, cy], along, right, look, glyphIndex, (tone) => [
+        any = stampFigure(out, grid, [cx, cy], along, right, look, stroke, glyphIndex, (tone) => [
           cls,
+          bits,
           byteOf(look, tone),
         ]);
       } else if (fit === 'big') {
@@ -300,8 +309,9 @@ function stampFigure(
   [ax, ay]: [number, number],
   [sx, sy]: [number, number],
   look: PersonLook,
+  stroke: 0 | 1,
   glyphIndex: (glyph: string) => number,
-  texel: (tone: boolean) => [number, number],
+  texel: (tone: boolean) => [number, number, number],
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
@@ -329,7 +339,7 @@ function stampFigure(
         const side = (ax * py - ay * px) / det;
         if (Math.abs(forward) >= half || Math.abs(side) >= half) continue;
         const u = forward / half / 2 + 0.5;
-        const ink = figureInk(look.figure, frame, u, side / half / 2 + 0.5, detail);
+        const ink = figureInk(look.figure, frame, u, side / half / 2 + 0.5, detail, stroke);
         if (ink === '.') continue;
         mask |= 1 << bit;
         inked++;
@@ -337,13 +347,13 @@ function stampFigure(
       }
       if (mask === 0) continue;
       // A canopy's thin ribs show in a cell where they are a third of its ink.
-      const [cls, byte] = texel(tone * (look.figure === 'umbrella' ? 3 : 2) > inked);
+      const [cls, bits, byte] = texel(tone * (look.figure === 'umbrella' ? 3 : 2) > inked);
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > 255) continue;
       const at = (r * cols + c) * 4;
       out[at] = index;
       out[at + 1] = cls;
-      out[at + 2] = CellBit.person;
+      out[at + 2] = bits;
       out[at + 3] = byte;
       any = true;
     }
