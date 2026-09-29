@@ -11,10 +11,11 @@ export type RGBA = readonly [number, number, number, number];
  * - `building`: a height ramp, lowest first
  * - `diagonal` / `rows` / `scatter`: area patterns by `(x + y) mod n`, `y mod n`, or a cell hash
  * - `single`: always the first glyph
+ * - `ramp`: by the feature's height byte, 1 = the first glyph (terrain bands)
  * - `variant`: the glyph the feature's variant byte names (e.g. bench, fountain, flagpole)
  */
 export type GlyphKind =
-  'road' | 'water' | 'building' | 'diagonal' | 'rows' | 'scatter' | 'single' | 'variant';
+  'road' | 'water' | 'building' | 'diagonal' | 'rows' | 'scatter' | 'single' | 'variant' | 'ramp';
 
 export type ClassStyle = {
   kind: GlyphKind;
@@ -28,6 +29,8 @@ export type Theme = {
   background: RGBA;
   /** Label text, 0xRRGGBB (drawn over the background, which doubles as its halo). */
   label: number;
+  /** Highlighted and selected features, 0xRRGGBB. */
+  accent: number;
   /** Classes without a style are not drawn. */
   styles: Partial<Record<RenderClass, ClassStyle>>;
 };
@@ -67,6 +70,13 @@ export const pathLine = [
 export const singleWall = ['□', ...singleLine.slice(1)] as const;
 export const doubleWall = ['□', ...doubleLine.slice(1)] as const;
 
+/** Admin boundaries: the city's dashed, subdivisions' dotted. */
+// prettier-ignore
+export const dashedLine = ['╌', '╎', '╌', '╌', '╎', '╎', '╌', '╌', '╌', '╌', '╌', '╌', '╌', '╌', '╌', '╌', '╱', '╲'] as const;
+
+/** Terrain (Region level): one glyph per elevation band, lowest first (SPEC.md §4). */
+export const terrainRamp = ['.', ':', '-', '=', '+', '*', '#', '%'] as const;
+
 /** Building ramp by height, lowest first. */
 export const buildingRamp = ['░', '▒', '▓', '█'] as const;
 
@@ -80,6 +90,11 @@ const rgb = (hex: number): RGBA => [
 type Palette = Record<
   | 'river'
   | 'lake'
+  | 'sea'
+  | 'coast'
+  | 'terrain'
+  | 'adminCity'
+  | 'adminSubdivision'
   | 'roadMajor'
   | 'roadMid'
   | 'roadMinor'
@@ -99,7 +114,8 @@ type Palette = Record<
   | 'furniture'
   | 'parking'
   | 'pitch'
-  | 'label',
+  | 'label'
+  | 'accent',
   number
 >;
 
@@ -108,9 +124,16 @@ function makeTheme(background: number, c: Palette): Theme {
   return {
     background: rgb(background),
     label: c.label,
+    accent: c.accent,
     styles: {
       water_river: { kind: 'water', glyphs: ['~', '≈'], color: c.river },
+      water_stream: { kind: 'water', glyphs: ['~', '≈'], color: c.river },
       water_area: { kind: 'water', glyphs: ['≈', '~'], color: c.lake },
+      water_sea: { kind: 'water', glyphs: ['≈', '~'], color: c.sea },
+      coastline: { kind: 'road', glyphs: singleLine, color: c.coast },
+      terrain: { kind: 'ramp', glyphs: terrainRamp, color: c.terrain },
+      admin_city: { kind: 'road', glyphs: dashedLine, color: c.adminCity },
+      admin_subdivision: { kind: 'road', glyphs: pathLine, color: c.adminSubdivision },
       road_major: { kind: 'road', glyphs: doubleLine, color: c.roadMajor },
       road_mid: { kind: 'road', glyphs: singleLine, color: c.roadMid },
       road_minor: { kind: 'road', glyphs: singleLine, color: c.roadMinor },
@@ -144,6 +167,11 @@ export const themes: Record<ThemeName, Theme> = {
   dark: makeTheme(0x04050a, {
     river: 0x3fc8e0,
     lake: 0x2f6fc0,
+    sea: 0x1d4f94,
+    coast: 0xc9b98f,
+    terrain: 0x8a7a68,
+    adminCity: 0xc58fd6,
+    adminSubdivision: 0x7d6b88,
     roadMajor: 0xf4e8cc,
     roadMid: 0xb9bac2,
     roadMinor: 0x7a7c86,
@@ -164,10 +192,16 @@ export const themes: Record<ThemeName, Theme> = {
     parking: 0x6d7080,
     pitch: 0x6fa86a,
     label: 0xf6f1e4,
+    accent: 0xffd35c,
   }),
   light: makeTheme(0xf4f1e8, {
     river: 0x137f9a,
     lake: 0x1f4f95,
+    sea: 0x173f78,
+    coast: 0x7a6a40,
+    terrain: 0x8c7b66,
+    adminCity: 0x8a3fa3,
+    adminSubdivision: 0x9c8aa8,
     roadMajor: 0x2a2018,
     roadMid: 0x4d4d55,
     roadMinor: 0x7d7d86,
@@ -188,7 +222,47 @@ export const themes: Record<ThemeName, Theme> = {
     parking: 0x8a8d98,
     pitch: 0x4c8a48,
     label: 0x16130e,
+    accent: 0xc2410c,
   }),
+};
+
+/**
+ * What each class is, in words: the legend's entries and the info panel's type line (English
+ * for now; UI translations arrive in Phase 5).
+ */
+export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
+  water_river: 'River',
+  water_stream: 'Stream or canal',
+  water_area: 'Lake or pond',
+  water_sea: 'Sea',
+  coastline: 'Coastline',
+  terrain: 'Terrain (by elevation)',
+  road_major: 'Major road',
+  road_mid: 'Secondary road',
+  road_minor: 'Street',
+  path: 'Path or alley',
+  building: 'Building',
+  building_religious: 'Place of worship',
+  building_school: 'School',
+  building_market: 'Market or shop',
+  building_part: 'Landmark part',
+  park: 'Park or plaza',
+  trees: 'Woods',
+  farmland: 'Farmland',
+  monument: 'Monument',
+  tree: 'Tree',
+  barrier: 'Fence or wall',
+  entrance: 'Entrance',
+  furniture: 'Bench, fountain, or flagpole',
+  parking: 'Parking',
+  pitch: 'Sports pitch',
+  admin_city: 'City boundary',
+  admin_subdivision: 'Subdivision boundary',
+  place_label: 'Place',
+  marker_religious: 'Place of worship',
+  marker_school: 'School',
+  marker_market: 'Market',
+  marker_landmark: 'Landmark',
 };
 
 /** Characters labels can use: printable ASCII and the Latin-1 letters (e.g. "Peñafrancia"). */

@@ -14,6 +14,7 @@ import {
   MAX_VARIANTS,
   OUTLINE_ZOOM,
   patternVariant,
+  rampVariant,
   RIDGE_VARIANT,
   ridgeGlyphs,
   ridgeVariant,
@@ -116,6 +117,29 @@ describe('building ramp', () => {
   });
 });
 
+describe('terrain ramp', () => {
+  it('maps elevation bands (1 = lowest) onto . : - = + * # %', () => {
+    expect([1, 2, 8, 9, 0].map((band) => rampVariant(band, 8))).toEqual([0, 1, 7, 7, 0]);
+    const at = (height: number) =>
+      selectGlyph(themes.dark, 'terrain', { ...sketch(['.'], {}), height });
+    expect([1, 4, 8].map(at)).toEqual(['.', '=', '%']);
+  });
+});
+
+describe('boundaries and the coast', () => {
+  it('join their own class like roads, and subdivisions also meet the city boundary', () => {
+    expect(connects('coastline', 'coastline')).toBe(true);
+    expect(connects('coastline', 'road_major')).toBe(false);
+    expect(connects('admin_subdivision', 'admin_city')).toBe(true);
+    expect(connects('admin_city', 'admin_subdivision')).toBe(false);
+  });
+
+  it('are looked through by outlines and curbs', () => {
+    expect(seeThrough).toContain('admin_city');
+    expect(seeThrough).toContain('admin_subdivision');
+  });
+});
+
 describe('area patterns', () => {
   it('forms diagonals and rows from world cell coordinates', () => {
     expect([0, 1, 2, 3].map((x) => patternVariant('diagonal', x, 0, 3))).toEqual([0, 1, 2, 0]);
@@ -177,7 +201,9 @@ describe('glyph tables', () => {
 
   it('records kinds, counts, connectivity, and colors', () => {
     expect(tables.kinds[classId('road_mid')]).toBe(kindCodes.road);
-    expect(tables.kinds[classId('admin_city')]).toBe(0);
+    expect(tables.kinds[classId('admin_city')]).toBe(kindCodes.road);
+    // Place names are labels (the overlay), never cells.
+    expect(tables.kinds[classId('place_label')]).toBe(0);
     expect(tables.counts[classId('park')]).toBe(3);
     const mask = tables.connects[classId('path')]!;
     expect(mask & (1 << classId('road_major'))).not.toBe(0);

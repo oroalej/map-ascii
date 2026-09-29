@@ -1,7 +1,7 @@
 /** Tile selection, the tile cache, and the client side of the tile worker. */
 import type { BBox, CameraState } from '@atlas/shared';
 import { project, TILE_SIZE, type Size } from './camera';
-import type { TileGeometry } from './raster/geometry';
+import type { FeatureInfo, TileGeometry } from './raster/geometry';
 
 export type TileId = { z: number; x: number; y: number };
 
@@ -17,7 +17,7 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { type: 'header'; header: TileHeader }
-  | { type: 'tile'; key: string; geometry: TileGeometry | null; newIds: string[] }
+  | { type: 'tile'; key: string; geometry: TileGeometry | null; newFeatures: FeatureInfo[] }
   | { type: 'error'; key: string | null; message: string };
 
 export const tileKey = ({ z, x, y }: TileId) => `${z}/${x}/${y}`;
@@ -96,6 +96,13 @@ export function boundsTiles(
 }
 
 /** The nearest ancestor (down to `minZoom`) for which `has` is true. */
+/** The tile at zoom `z` (at most the tile's own) that contains `tile`. */
+export function ancestorAt(tile: TileId, z: number): TileId {
+  if (z >= tile.z) return tile;
+  const shift = tile.z - z;
+  return { z, x: Math.floor(tile.x / 2 ** shift), y: Math.floor(tile.y / 2 ** shift) };
+}
+
 export function findAncestor(
   tile: TileId,
   minZoom: number,
@@ -161,8 +168,10 @@ export type TileSourceHandlers = {
 
 /** Requests tiles from the worker and tracks the feature id strings it registers. */
 export class TileSource {
-  /** Feature id strings by index - 1 (the id buffer stores index; 0 = none). */
-  readonly featureIds: string[] = [];
+  /** Features by index - 1 (the id buffer stores the index; 0 = none). */
+  private readonly features: FeatureInfo[] = [];
+  /** Feature id string → index. */
+  private readonly indices = new Map<string, number>();
   private readonly pending = new Set<string>();
   private readonly worker: Worker;
 
@@ -174,7 +183,10 @@ export class TileSource {
         handlers.header(message.header);
       } else if (message.type === 'tile') {
         this.pending.delete(message.key);
-        this.featureIds.push(...message.newIds);
+        for (const info of message.newFeatures) {
+          this.features.push(info);
+          this.indices.set(info.id, this.features.length);
+        }
         handlers.tile(message.key, message.geometry);
       } else {
         if (message.key) this.pending.delete(message.key);
@@ -182,6 +194,21 @@ export class TileSource {
       }
     };
     this.post({ type: 'init', url });
+  }
+
+  /** The feature at an id-buffer index, if its tile has loaded. */
+  feature(index: number): FeatureInfo | undefined {
+    return index > 0 ? this.features[index - 1] : undefined;
+  }
+
+  /** A feature id's index in the id buffer, or 0 if no loaded tile has it yet. */
+  indexOf(id: string): number {
+    return this.indices.get(id) ?? 0;
+  }
+
+  /** A loaded feature by its id. */
+  featureById(id: string): FeatureInfo | undefined {
+    return this.feature(this.indexOf(id));
   }
 
   isPending(key: string) {

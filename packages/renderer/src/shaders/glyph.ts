@@ -1,9 +1,12 @@
 /**
  * Glyph pass: full-resolution draw. Each pixel finds its cell (the grid is shifted by the
  * sub-cell pan offset, so panning scrolls smoothly), reads the cell's glyph and class, samples
- * the glyph atlas, and tints it with the class color over the background.
+ * the glyph atlas, and tints it with the class color over the background. Hovered cells are
+ * brighter; highlighted and selected ones take the accent color, the selection with a slow
+ * shimmer (SPEC.md §4 "Hover and selection").
  */
 import { MAX_CLASSES } from '../classes';
+import { CellState } from '../picking';
 
 export const glyphFragment = /* glsl */ `#version 300 es
 precision highp float;
@@ -22,6 +25,8 @@ uniform float u_time;
 uniform int u_pulse;              // class id that pulses (landmarks)
 uniform sampler2D u_overlay;      // RGBA8: label glyph code (lo, hi; 0 none, 1 blank)
 uniform vec3 u_labelColor;
+uniform vec3 u_accent;            // highlighted and selected features
+uniform bool u_shimmer;           // off with reduced motion
 
 out vec4 o_color;
 
@@ -53,6 +58,15 @@ void main() {
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = u_colors[cls];
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
+  int state = int(g.b * 255.0 + 0.5);
+  if (state == ${CellState.hover}) {
+    color = mix(color, vec3(1.0), 0.45);
+  } else if (state == ${CellState.highlight}) {
+    color = u_accent;
+  } else if (state == ${CellState.selected}) {
+    color = u_accent;
+    if (u_shimmer) color *= 0.78 + 0.22 * sin(u_time * 2.5 - float(cell.x + cell.y) * 0.35);
+  }
   o_color = vec4(mix(u_background, color, coverage), 1.0);
 }
 `;

@@ -41,6 +41,23 @@ describe('procedural glyphs', () => {
     expect(rows('═')).toHaveLength(2);
   });
 
+  it('draws dashed lines on the line axis, with the given number of dashes', () => {
+    const runs = (values: number[]) =>
+      values.reduce((n, v, i) => n + (v > 0 && !(values[i - 1]! > 0) ? 1 : 0), 0);
+    const midRow = (g: string) => {
+      const rows = Array.from({ length: H }, (_, y) => y).filter((y) => draw('─').at(0, y) > 0);
+      return Array.from({ length: W }, (_, x) => draw(g).at(x, rows[0]!));
+    };
+    const midColumn = (g: string) => {
+      const cols = Array.from({ length: W }, (_, x) => x).filter((x) => draw('│').at(x, 0) > 0);
+      return Array.from({ length: H }, (_, y) => draw(g).at(cols[0]!, y));
+    };
+    expect(runs(midRow('┄'))).toBe(3);
+    expect(runs(midRow('╌'))).toBe(2);
+    expect(runs(midColumn('┆'))).toBe(3);
+    expect(runs(midColumn('╎'))).toBe(2);
+  });
+
   it('draws diagonals corner to corner', () => {
     const rising = draw('╱');
     expect(rising.at(0, H - 1) + rising.at(1, H - 1)).toBeGreaterThan(0);

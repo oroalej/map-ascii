@@ -1,9 +1,11 @@
 /**
  * Select pass: per cell, pick the glyph from the class, its neighbors, and the world position.
  * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output (RGBA8): glyph atlas index,
- * class id.
+ * class id, and the cell's highlight state (picking.ts `cellState`: hover, highlighted,
+ * selected), which the glyph pass colors.
  */
 import { Flags, MAX_CLASSES } from '../classes';
+import { CellState, MAX_HIGHLIGHT } from '../picking';
 import {
   BUILDING_STEPS,
   Dir,
@@ -21,6 +23,7 @@ import {
   WALL_SINGLE_ROW,
   WATER_RATE,
 } from '../glyphs/select';
+import { cellHashGlsl } from './hash';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -43,22 +46,26 @@ uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
 uniform bool u_tilted;            // perspective camera: no outlines, 3D buildings
 uniform float u_cellAspect;       // cell height / width, for ridge directions
+uniform uint u_hover;             // feature index under the pointer (0 = none)
+uniform uint u_selected;          // selected feature index (0 = none)
+uniform uint u_highlight[${MAX_HIGHLIGHT}];
+uniform int u_highlightCount;
 
 out vec4 o_glyph;
+
+// This cell's highlight state (picking.ts cellState), set at the start of main.
+float g_state = 0.0;
+
+void emit(float glyph, int cls) {
+  o_glyph = vec4(glyph, float(cls) / 255.0, g_state / 255.0, 1.0);
+}
 
 int classAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
   return int(texelFetch(u_class, p, 0).r * 255.0 + 0.5);
 }
 
-uint cellHash(ivec2 c) {
-  uvec2 p = uvec2(c);
-  uint h = (p.x * 0x8da6b343u) ^ (p.y * 0xd8163841u);
-  h ^= h >> 13u;
-  h *= 0x5bd1e995u;
-  h ^= h >> 15u;
-  return h;
-}
+${cellHashGlsl}
 
 vec4 idAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_id, 0) - 1);
@@ -110,6 +117,23 @@ void main() {
     o_glyph = vec4(0.0);
     return;
   }
+  uvec4 b = uvec4(idAt(p) * 255.0 + 0.5);
+  uint fid = b.r | (b.g << 8u) | (b.b << 16u) | (b.a << 24u);
+  if (fid != 0u) {
+    if (fid == u_selected) {
+      g_state = ${CellState.selected}.0;
+    } else {
+      for (int i = 0; i < ${MAX_HIGHLIGHT}; i++) {
+        if (i >= u_highlightCount) break;
+        if (u_highlight[i] == fid) {
+          g_state = ${CellState.highlight}.0;
+          break;
+        }
+      }
+      if (g_state == 0.0 && fid == u_hover) g_state = ${CellState.hover}.0;
+    }
+  }
+
   ivec2 w = u_origin + p;
   vec4 attr = texelFetch(u_attr, p, 0);
   int variant = int(attr.b * 255.0 + 0.5);
@@ -118,7 +142,7 @@ void main() {
   if (((u_roadMask >> cls) & 1) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     int curb = wallMask(p, true);
     float glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).r : 0.0;
-    o_glyph = vec4(glyph, float(cls) / 255.0, 0.0, 1.0);
+    emit(glyph, cls);
     return;
   }
 
@@ -129,7 +153,7 @@ void main() {
     int step = (flags & ${Flags.roof}) != 0 ? 3
       : variant < ${WALL_SHADE_STEPS[0]} ? 0 : variant < ${WALL_SHADE_STEPS[1]} ? 1 : 2;
     float glyph = texelFetch(u_table, ivec2(step, ${EXTRUDE_ROW}), 0).r;
-    o_glyph = vec4(glyph, float(cls) / 255.0, 0.0, 1.0);
+    emit(glyph, cls);
     return;
   }
 
@@ -149,7 +173,7 @@ void main() {
     int mask = wallMask(p, false);
     if (mask >= 0) {
       float wall = texelFetch(u_table, ivec2(mask, wallRow), 0).r;
-      o_glyph = vec4(wall, float(cls) / 255.0, 0.0, 1.0);
+      emit(wall, cls);
       return;
     }
   }
@@ -180,7 +204,7 @@ void main() {
         float phi = atan(sin(theta) / u_cellAspect, cos(theta));
         int bin = int(floor(phi / ${Math.PI / 4} + 0.5)) % 4;
         float ridge = texelFetch(u_table, ivec2(${RIDGE_VARIANT} + bin, ${EXTRUDE_ROW}), 0).r;
-        o_glyph = vec4(ridge, float(cls) / 255.0, 0.0, 1.0);
+        emit(ridge, cls);
         return;
       }
       // Without a ridge (flat roofs, landmark parts) the height ramp stays.
@@ -188,6 +212,8 @@ void main() {
     }
   } else if (kind == ${kindCodes.variant}) {
     v = min(variant, u_count[cls] - 1);
+  } else if (kind == ${kindCodes.ramp}) {
+    v = clamp(int(attr.r * 255.0 + 0.5) - 1, 0, u_count[cls] - 1);
   } else if (kind == ${kindCodes.diagonal}) {
     v = imod(w.x + w.y, u_count[cls]);
   } else if (kind == ${kindCodes.rows}) {
@@ -196,6 +222,6 @@ void main() {
     v = int(cellHash(w) % uint(u_count[cls]));
   }
   float glyph = texelFetch(u_table, ivec2(v, cls), 0).r;
-  o_glyph = vec4(glyph, float(cls) / 255.0, 0.0, 1.0);
+  emit(glyph, cls);
 }
 `;

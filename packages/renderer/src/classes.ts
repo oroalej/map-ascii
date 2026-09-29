@@ -1,4 +1,4 @@
-import { AtlasClass, CLASS_ZOOM } from '@atlas/shared';
+import { AtlasClass, bandVisibility, CLASS_ZOOM } from '@atlas/shared';
 
 /** Point markers the renderer adds on top of features (SPEC.md §4). */
 export const markerClasses = [
@@ -40,9 +40,10 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
 
 /**
  * Draw priority tiers, highest first (ARCHITECTURE.md §4: landmark > road > building > water >
- * area). Within the building tier, taller wins, so buildings sit on top of the height-less
- * school, church, and market grounds that share their classes. Classes not listed are never
- * drawn in Phase 1 (admin outlines and labels arrive in Phase 2).
+ * area > terrain). Within a tier, taller wins: buildings sit on top of the height-less school,
+ * church, and market grounds that share their classes, and higher terrain bands (the height
+ * byte holds the band) on top of the lower bands they nest in. Admin boundaries run over
+ * buildings and under paths. Classes not listed (place labels, drawn as text) are never cells.
  */
 export const priority: readonly (readonly RenderClass[])[] = [
   ['marker_landmark'],
@@ -52,10 +53,13 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['road_mid'],
   ['road_minor'],
   ['path', 'barrier'],
+  ['admin_city', 'admin_subdivision'],
   ['building', 'building_religious', 'building_school', 'building_market', 'building_part'],
-  ['water_river'],
-  ['water_area'],
+  ['water_river', 'water_stream'],
+  ['coastline'],
+  ['water_area', 'water_sea'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
+  ['terrain'],
 ];
 
 /** Clip-space depth between tiers. */
@@ -75,13 +79,17 @@ export function classDepths(): Float32Array {
 }
 
 /**
- * Zoom below which each class is not drawn, from the shared `CLASS_ZOOM` table (SPEC.md §2
- * levels), so small details only appear once there is room for them. Markers have no limit.
+ * How much of each class shows at `zoom`, 0–1, from the shared `CLASS_ZOOM` table (SPEC.md §2
+ * levels): classes fade in and out over half a zoom level instead of popping. The cell pass
+ * turns a fraction into a dither (that share of cells, chosen by a fixed per-cell hash), so a
+ * layer dissolves into what lies under it. Markers follow their features, so they are always 1.
  */
-export function classMinZooms(): Float32Array {
-  const zooms = new Float32Array(MAX_CLASSES);
-  for (const cls of AtlasClass.options) zooms[classId(cls)] = CLASS_ZOOM[cls].min;
-  return zooms;
+export function classVisibility(zoom: number): Float32Array {
+  const visibility = new Float32Array(MAX_CLASSES).fill(1);
+  for (const cls of AtlasClass.options) {
+    visibility[classId(cls)] = bandVisibility(CLASS_ZOOM[cls], zoom);
+  }
+  return visibility;
 }
 
 /** Per-feature flag bits, stored in the cell pass's attribute buffer. */

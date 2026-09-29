@@ -2,6 +2,12 @@ import type { CameraState } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import {
   clampCamera,
+  easeInOut,
+  fitZoom,
+  FLY_MAX_MS,
+  FLY_MIN_MS,
+  FLY_REDUCED_MS,
+  flyPath,
   isTilted,
   MAX_PITCH,
   MAX_ZOOM,
@@ -119,6 +125,95 @@ describe('clampCamera', () => {
     const anchored = groundAt(out, [200, 0]);
     const before = groundAt(camera, [200, 0]);
     expect(anchored[0]).toBeCloseTo(before[0], 9);
+  });
+});
+
+describe('clampCamera with a view size', () => {
+  const size = { width: 800, height: 600 };
+  const edges = (c: CameraState) => {
+    const [x, y] = project(c.lng, c.lat, c.zoom);
+    const [west, north] = unproject(x - size.width / 2, y - size.height / 2, c.zoom);
+    const [east, south] = unproject(x + size.width / 2, y + size.height / 2, c.zoom);
+    return { west, south, east, north };
+  };
+
+  it('keeps the whole view over the bounds', () => {
+    const corner = clampCamera({ ...camera, lng: 122.001, lat: 14.999, zoom: 10 }, limits, size);
+    const e = edges(corner);
+    expect(e.west).toBeGreaterThanOrEqual(122 - 1e-9);
+    expect(e.north).toBeLessThanOrEqual(15 + 1e-9);
+  });
+
+  it('centers on the bounds when the view is larger than them', () => {
+    const wide = clampCamera({ ...camera, zoom: 7 }, limits, { width: 4000, height: 4000 });
+    const [cx] = project(123.5, 13, 7);
+    expect(project(wide.lng, wide.lat, 7)[0]).toBeCloseTo(cx, 6);
+  });
+
+  it('leaves a view well inside the bounds alone', () => {
+    expect(clampCamera(camera, limits, size)).toEqual(camera);
+  });
+});
+
+describe('fitZoom', () => {
+  it('is the zoom at which the bounds just fit the view', () => {
+    const size = { width: 1000, height: 1000 };
+    const z = fitZoom(limits.bounds, size);
+    const [x0, y0] = project(122, 15, z);
+    const [x1, y1] = project(125, 11, z);
+    expect(Math.max(x1 - x0, y1 - y0)).toBeCloseTo(1000, 3);
+    // A wider view fits the same bounds at a higher zoom only if the height allows it.
+    expect(fitZoom(limits.bounds, { width: 2000, height: 1000 })).toBeCloseTo(z, 6);
+  });
+});
+
+describe('flyPath', () => {
+  const size = { width: 1200, height: 800 };
+  const from: CameraState = { lat: 13.62, lng: 123.19, zoom: 17, pitch: 0, bearing: 10 };
+  const far: CameraState = { lat: 12.5, lng: 124.0, zoom: 16, pitch: 30, bearing: -170 };
+
+  it('starts and ends at the two cameras', () => {
+    const path = flyPath(from, far, size);
+    expect(path.at(0)).toEqual(from);
+    expect(path.at(1)).toEqual(far);
+    const end = path.at(0.999999);
+    expect(end.lng).toBeCloseTo(far.lng, 3);
+    expect(end.zoom).toBeCloseTo(far.zoom, 2);
+  });
+
+  it('zooms out to travel and moves steadily toward the target', () => {
+    const path = flyPath(from, far, size);
+    expect(path.at(0.5).zoom).toBeLessThan(Math.min(from.zoom, far.zoom) - 2);
+    let last = Infinity;
+    for (let t = 0; t <= 1; t += 0.05) {
+      const c = path.at(t);
+      const d = Math.hypot(c.lng - far.lng, c.lat - far.lat);
+      expect(d).toBeLessThanOrEqual(last + 1e-9);
+      last = d;
+    }
+  });
+
+  it('turns the short way round', () => {
+    // 10° → -170°: through ±180, not through 0.
+    const mid = flyPath(from, far, size).at(0.5).bearing;
+    expect(Math.abs(mid)).toBeGreaterThan(90);
+  });
+
+  it('clamps the duration, and keeps it short with reduced motion', () => {
+    const near = { ...from, lng: from.lng + 1e-5 };
+    expect(flyPath(from, near, size).duration).toBe(FLY_MIN_MS);
+    const world: CameraState = { ...from, lng: -120, lat: 40, zoom: 19 };
+    expect(flyPath(from, world, size).duration).toBe(FLY_MAX_MS);
+    expect(flyPath(from, far, size, { reducedMotion: true }).duration).toBeLessThanOrEqual(
+      FLY_REDUCED_MS,
+    );
+  });
+
+  it('eases in and out', () => {
+    expect(easeInOut(0)).toBe(0);
+    expect(easeInOut(0.5)).toBeCloseTo(0.5);
+    expect(easeInOut(1)).toBe(1);
+    expect(easeInOut(0.1)).toBeLessThan(0.1);
   });
 });
 

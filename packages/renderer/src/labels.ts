@@ -1,14 +1,30 @@
 /**
  * The overlay: labels placed on the cell grid over the map (ARCHITECTURE.md §3 step 6),
- * greedily in priority order, with collision so they never overlap. Phase 1.5 places landmark
- * and monument names; street and subdivision names join in Phase 2.
+ * greedily in priority order, with collision so they never overlap: place names (provinces,
+ * cities, subdivisions, smaller places), landmarks, and monuments.
  */
+import type { ZoomBand } from '@atlas/shared';
 
 /** Label priority: lower ranks are placed first. */
-export const LabelRank = { landmark: 0, monument: 1 } as const;
+export const LabelRank = {
+  province: 0,
+  city: 1,
+  subdivision: 2,
+  landmark: 3,
+  roadMajor: 4,
+  monument: 5,
+  street: 6,
+  place: 7,
+} as const;
+export type LabelRank = (typeof LabelRank)[keyof typeof LabelRank];
 
-/** Zoom from which each rank's labels show (index = rank). */
-export const LABEL_MIN_ZOOM: readonly number[] = [16, 18];
+/** When curated names show (SPEC.md §4 Place-level detail); place names use their own band. */
+export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
+export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };
+
+/** Whether a label's band includes `zoom`. Labels switch at the band's edges; they don't fade. */
+export const labelShows = (band: ZoomBand, zoom: number) =>
+  zoom >= band.min && (band.max === undefined || zoom <= band.max);
 
 /** Longest line before a label wraps, in cells. */
 export const LABEL_WIDTH = 18;
@@ -69,7 +85,31 @@ export type LabelCandidate = {
   /** The anchor's cell in the grid (may be off-grid). */
   col: number;
   row: number;
+  /**
+   * How the text sits: `beside` the anchor (below, above, right, or left), or on one line
+   * `along` a horizontal street or `down` a vertical one, over the street's own cells.
+   */
+  mode?: LabelMode;
 };
+
+export type LabelMode = 'beside' | 'along' | 'down';
+
+/** Streets within this many degrees of horizontal or vertical carry their name on them. */
+export const STREET_ALIGN_DEG = 20;
+
+/**
+ * How a street's name sits, from the street's direction on screen (radians, any sign; y down):
+ * along it when it is near horizontal, down it when near vertical, else beside it.
+ */
+export function streetMode(angle: number): LabelMode {
+  const deg = ((((angle * 180) / Math.PI) % 180) + 180) % 180; // 0–180
+  if (deg <= STREET_ALIGN_DEG || deg >= 180 - STREET_ALIGN_DEG) return 'along';
+  if (Math.abs(deg - 90) <= STREET_ALIGN_DEG) return 'down';
+  return 'beside';
+}
+
+/** Labels with the same text closer than this (cells) are one: the first placed wins. */
+export const DUPLICATE_DISTANCE = 30;
 
 /** Split text into lines of at most `width` characters at word boundaries. */
 export function wrapText(text: string, width = LABEL_WIDTH): string[] {
@@ -89,7 +129,7 @@ export function wrapText(text: string, width = LABEL_WIDTH): string[] {
 }
 
 /** Candidate text boxes around an anchor: below, above, right, left. */
-function positions(col: number, row: number, width: number, height: number): Box[] {
+function besideBoxes(col: number, row: number, width: number, height: number): Box[] {
   const centered = col - Math.floor(width / 2);
   return [
     { left: centered, top: row + 1, width, height },
@@ -99,10 +139,17 @@ function positions(col: number, row: number, width: number, height: number): Box
   ];
 }
 
+/** A box grown by the one-cell halo: left and right of horizontal text, above and below `down`. */
+const withHalo = (b: Box, mode: LabelMode): Box =>
+  mode === 'down'
+    ? { ...b, top: b.top - 1, height: b.height + 2 }
+    : { ...b, left: b.left - 1, width: b.width + 2 };
+
 /**
- * Place labels. Characters the atlas lacks are drawn as `?`. Each label
- * gets a one-cell halo left and right; a label whose text fits nowhere inside `area` (e.g. the
- * on-screen cells) without overlapping what is already placed is dropped.
+ * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
+ * one-cell halo; a label whose text fits nowhere inside `area` (e.g. the on-screen cells)
+ * without overlapping what is already placed is dropped, and so is one whose text was already
+ * placed nearby (a street's other ways).
  */
 export function placeLabels(
   overlay: Overlay,
@@ -112,34 +159,51 @@ export function placeLabels(
 ) {
   const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
   const question = glyphIndex('?') ?? 0;
+  const placed = new Map<string, { col: number; row: number }[]>();
+  const glyphOf = (char: string) =>
+    char === ' ' ? OVERLAY_BLANK : (glyphIndex(char) ?? question) + 1;
 
   for (const label of sorted) {
-    const lines = wrapText(label.text);
-    if (lines.length === 0) continue;
+    const mode = label.mode ?? 'beside';
+    const nearby = placed.get(label.text) ?? [];
+    if (nearby.some((p) => Math.hypot(p.col - label.col, p.row - label.row) < DUPLICATE_DISTANCE)) {
+      continue;
+    }
+    // Text on a street is one line; text beside an anchor wraps.
+    const lines = mode === 'beside' ? wrapText(label.text) : [label.text.trim()];
+    if (lines.length === 0 || !lines[0]) continue;
     const width = Math.max(...lines.map((l) => [...l].length));
-    const box = positions(label.col, label.row, width, lines.length).find((b) => {
+    const boxes =
+      mode === 'along'
+        ? [{ left: label.col - Math.floor(width / 2), top: label.row, width, height: 1 }]
+        : mode === 'down'
+          ? [{ left: label.col, top: label.row - Math.floor(width / 2), width: 1, height: width }]
+          : besideBoxes(label.col, label.row, width, lines.length);
+    const box = boxes.find((b) => {
       const inside =
         b.left >= area.left &&
         b.top >= area.top &&
         b.left + b.width <= area.right &&
         b.top + b.height <= area.bottom;
-      const halo = { ...b, left: b.left - 1, width: b.width + 2 };
+      const halo = withHalo(b, mode);
       return inside && !overlay.taken.some((p) => overlaps(p, halo));
     });
     if (!box) continue;
-    overlay.taken.push({ ...box, left: box.left - 1, width: box.width + 2 });
+    const halo = withHalo(box, mode);
+    overlay.taken.push(halo);
+    placed.set(label.text, [...nearby, { col: label.col, row: label.row }]);
 
+    for (let y = halo.top; y < halo.top + halo.height; y++) {
+      for (let x = halo.left; x < halo.left + halo.width; x++) write(overlay, x, y, OVERLAY_BLANK);
+    }
+    if (mode === 'down') {
+      [...lines[0]].forEach((char, j) => write(overlay, box.left, box.top + j, glyphOf(char)));
+      continue;
+    }
     lines.forEach((line, i) => {
-      const y = box.top + i;
-      for (let x = box.left - 1; x < box.left + box.width + 1; x++) {
-        write(overlay, x, y, OVERLAY_BLANK);
-      }
       const chars = [...line];
       const start = box.left + Math.floor((width - chars.length) / 2);
-      chars.forEach((char, j) => {
-        const glyph = char === ' ' ? OVERLAY_BLANK : (glyphIndex(char) ?? question) + 1;
-        write(overlay, start + j, y, glyph);
-      });
+      chars.forEach((char, j) => write(overlay, start + j, box.top + i, glyphOf(char)));
     });
   }
 }

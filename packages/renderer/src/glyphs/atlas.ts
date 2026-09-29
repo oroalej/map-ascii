@@ -68,6 +68,33 @@ function drawBox(slot: Slot, [n, e, s, w]: Arms) {
   }
 }
 
+/** Dashed lines by number of dashes per cell: `┄ ┆` (fences) and `╌ ╎` (city boundary). */
+const dashes: Record<string, { vertical: boolean; count: number }> = {
+  '┄': { vertical: false, count: 3 },
+  '┆': { vertical: true, count: 3 },
+  '╌': { vertical: false, count: 2 },
+  '╎': { vertical: true, count: 2 },
+};
+
+/**
+ * A dashed line through the cell's middle, on the same axis as `─`/`│`. Each dash is centered
+ * in its share of the cell, so dashes keep an even rhythm across neighboring cells.
+ */
+function drawDashes(slot: Slot, { vertical, count }: { vertical: boolean; count: number }) {
+  const { w, h } = slot;
+  const t = Math.max(1, Math.floor(w / 8));
+  const cx = Math.floor(w / 2) - Math.floor(t / 2);
+  const cy = Math.floor(h / 2) - Math.floor(t / 2);
+  const length = vertical ? h : w;
+  const share = length / count;
+  for (let i = 0; i < count; i++) {
+    const a = Math.round(i * share + share * 0.2);
+    const b = Math.round((i + 1) * share - share * 0.2);
+    if (vertical) fill(slot, cx, a, cx + t, b);
+    else fill(slot, a, cy, b, cy + t);
+  }
+}
+
 /** Corner-to-corner diagonal, so steps join their diagonal neighbors. */
 function drawDiagonal(slot: Slot, rising: boolean) {
   const { w, h } = slot;
@@ -114,6 +141,7 @@ function drawBlock(slot: Slot, glyph: string) {
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
+  else if (dashes[glyph]) drawDashes(slot, dashes[glyph]);
   else if (glyph === '╱' || glyph === '╲') drawDiagonal(slot, glyph === '╱');
   else if (glyph === '□') drawSquare(slot);
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);

@@ -15,6 +15,7 @@ export const kindCodes: Record<GlyphKind, number> = {
   scatter: 6,
   single: 7,
   variant: 8,
+  ramp: 9,
 };
 
 /** Width of the glyph table: the most variants any class can have. */
@@ -150,6 +151,9 @@ export const seeThrough: readonly RenderClass[] = [
   'marker_school',
   'marker_market',
   'marker_landmark',
+  // Admin boundaries cross buildings and roads without being part of either.
+  'admin_city',
+  'admin_subdivision',
 ];
 
 /** A class's bit in the shader's 32-bit class masks (connectivity, see-through). */
@@ -181,6 +185,9 @@ const connectsTo: Partial<Record<RenderClass, readonly RenderClass[]>> = {
   road_minor: roadClasses,
   path: [...roadClasses, 'path'],
   barrier: ['barrier'],
+  coastline: ['coastline'],
+  admin_city: ['admin_city'],
+  admin_subdivision: ['admin_subdivision', 'admin_city'],
 };
 
 /**
@@ -214,6 +221,13 @@ export function buildingVariant(height: number): number {
   const step = BUILDING_STEPS.findIndex((limit) => height < limit);
   return step === -1 ? BUILDING_STEPS.length : step;
 }
+
+/**
+ * A ramp class's variant from its height byte: terrain bands are numbered from 1 (the lowest,
+ * the first glyph) in the pipeline (`lib/terrain.ts`).
+ */
+export const rampVariant = (height: number, count: number): number =>
+  Math.max(0, Math.min(count - 1, Math.round(height) - 1));
 
 /** A 32-bit integer hash of a world cell, identical to `cellHash` in the select shader. */
 export function cellHash(x: number, y: number): number {
@@ -288,6 +302,8 @@ export function variantFor(
       return 0;
     case 'variant':
       return Math.min(ctx.variant ?? 0, count - 1);
+    case 'ramp':
+      return rampVariant(ctx.height, count);
   }
 }
 

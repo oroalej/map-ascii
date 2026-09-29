@@ -2,6 +2,7 @@ import type { CameraState } from '@atlas/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { project, TILE_SIZE, viewportFor } from './camera';
 import {
+  ancestorAt,
   boundsTiles,
   findAncestor,
   LruCache,
@@ -119,5 +120,13 @@ describe('boundsTiles (tilted views)', () => {
   it('stays within the archive data and the cap', () => {
     expect(boundsTiles([0, 0, 1, 1], 14, header, [0.5, 0.5])).toEqual([]);
     expect(boundsTiles([-180, -85, 180, 85], 14, header, [123.2, 13.6], 10)).toHaveLength(10);
+  });
+});
+
+describe('ancestorAt', () => {
+  it('finds the tile at a coarser zoom that contains a tile', () => {
+    expect(ancestorAt({ z: 16, x: 55_247, y: 30_252 }, 11)).toEqual({ z: 11, x: 1726, y: 945 });
+    expect(ancestorAt({ z: 3, x: 5, y: 2 }, 3)).toEqual({ z: 3, x: 5, y: 2 });
+    expect(ancestorAt({ z: 9, x: 431, y: 236 }, 11)).toEqual({ z: 9, x: 431, y: 236 });
   });
 });

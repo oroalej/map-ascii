@@ -10,7 +10,21 @@ export type InputIntents = {
   zoom: (delta: number, anchor: [number, number]) => void;
   /** Rotate by `dBearing` and tilt by `dPitch` degrees (orbit mode, SPEC.md §3). */
   orbit: (dBearing: number, dPitch: number) => void;
+  /** The mouse is over (x, y) CSS pixels from the canvas's top left, or has left (null). */
+  hover: (point: [number, number] | null) => void;
+  /** A click or tap at (x, y): a press and release that barely moved. */
+  tap: (point: [number, number]) => void;
 };
+
+/** A press that moves less than this (CSS px) and ends within `TAP_MS` is a tap. */
+export const TAP_SLOP = 5;
+const TAP_MS = 500;
+/** A second tap this soon and close to the first zooms in instead. */
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP = 20;
+
+/** Whether a press was a tap: short, and barely moved. */
+export const isTap = (moved: number, ms: number) => moved < TAP_SLOP && ms < TAP_MS;
 
 /** Degrees of bearing and pitch per pixel of orbit drag. */
 const ORBIT_PER_PIXEL = 0.35;
@@ -24,6 +38,9 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   const pointers = new Map<number, { x: number; y: number }>();
   /** Whether the current single-pointer drag orbits (right button or Ctrl) instead of panning. */
   let orbiting = false;
+  /** The current press, while it may still be a tap. */
+  let press: { id: number; x: number; y: number; time: number; moved: number } | null = null;
+  let lastTap: { x: number; y: number; time: number } | null = null;
 
   const local = (e: { clientX: number; clientY: number }) => {
     const rect = canvas.getBoundingClientRect();
@@ -51,14 +68,29 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
       e.pointerType === 'mouse' && (e.button === 2 || (e.button === 0 && e.ctrlKey));
     if (e.button !== 0 && !orbitButton && e.pointerType === 'mouse') return;
     canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, local(e));
+    const p = local(e);
+    pointers.set(e.pointerId, p);
     orbiting = orbitButton && pointers.size === 1;
+    press =
+      pointers.size === 1 && !orbitButton
+        ? { id: e.pointerId, x: p.x, y: p.y, time: e.timeStamp, moved: 0 }
+        : null;
   };
 
   const onPointerMove = (e: PointerEvent) => {
-    if (!pointers.has(e.pointerId)) return;
+    if (!pointers.has(e.pointerId)) {
+      if (e.pointerType === 'mouse' && pointers.size === 0) {
+        const p = local(e);
+        intents.hover([p.x, p.y]);
+      }
+      return;
+    }
     const before = gesture();
-    pointers.set(e.pointerId, local(e));
+    const p = local(e);
+    if (press?.id === e.pointerId) {
+      press.moved = Math.max(press.moved, Math.hypot(p.x - press.x, p.y - press.y));
+    }
+    pointers.set(e.pointerId, p);
     const after = gesture();
     const [dx, dy] = [after.mid.x - before.mid.x, after.mid.y - before.mid.y];
     if (orbiting) {
@@ -81,6 +113,28 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
     pointers.delete(e.pointerId);
     if (pointers.size === 0) orbiting = false;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if (e.type === 'pointerup' && press?.id === e.pointerId) {
+      const { x, y, time, moved } = press;
+      press = null;
+      if (!isTap(moved, e.timeStamp - time)) return;
+      const double =
+        lastTap &&
+        e.timeStamp - lastTap.time < DOUBLE_TAP_MS &&
+        Math.hypot(x - lastTap.x, y - lastTap.y) < DOUBLE_TAP_SLOP;
+      if (double) {
+        lastTap = null;
+        intents.zoom(1, fromCenter({ x, y }));
+      } else {
+        lastTap = { x, y, time: e.timeStamp };
+        intents.tap([x, y]);
+      }
+    } else if (press?.id === e.pointerId) {
+      press = null;
+    }
+  };
+
+  const onPointerLeave = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && pointers.size === 0) intents.hover(null);
   };
 
   const onWheel = (e: WheelEvent) => {
@@ -116,6 +170,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('pointerleave', onPointerLeave);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('keydown', onKeyDown);
   // Right-drag orbits, so the canvas has no context menu.
@@ -127,6 +182,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerUp);
+    canvas.removeEventListener('pointerleave', onPointerLeave);
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('keydown', onKeyDown);
   };

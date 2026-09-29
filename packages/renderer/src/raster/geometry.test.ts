@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, variantCode } from '../classes';
+import { LabelRank } from '../labels';
 import {
   buildTileGeometry,
   classifyRings,
@@ -7,7 +8,9 @@ import {
   EXTENT,
   metersPerUnit,
   packId,
+  longestRun,
   roofRidge,
+  tileToLngLat,
   wallShade,
   ringCentroid,
   unpackId,
@@ -161,18 +164,124 @@ describe('buildTileGeometry', () => {
     ]);
   });
 
-  it('skips admin and label layers and unknown classes', () => {
+  it('skips event pins, unknown classes, and place labels as cells', () => {
     const { fills, lines, points } = buildTileGeometry(
       {
-        admin: layer([
-          feature(3, { id: 'osm:relation/5', class: 'admin_city' }, [square(0, 0, 10)]),
-        ]),
+        events: layer([feature(1, { id: 'event/1', class: 'monument' }, [[[2, 2]]])]),
         labels: layer([feature(1, { id: 'osm:node/6', class: 'place_label' }, [[[1, 1]]])]),
         water: layer([feature(3, { id: 'osm:way/7', class: 'mystery' }, [square(0, 0, 10)])]),
       },
       createIdRegistry(),
     );
     expect(fills.positions.length + lines.positions.length + points.positions.length).toBe(0);
+  });
+
+  it('keeps region-only features apart from the tile’s own', () => {
+    const river = (id: string, region: boolean) =>
+      feature(2, { id, class: 'water_river', ...(region && { region: true }) }, [
+        [
+          [0, 0],
+          [10, 0],
+        ],
+      ]);
+    const geometry = buildTileGeometry(
+      { water: layer([river('osm:way/1', false), river('osm:way/2', true)]) },
+      createIdRegistry(),
+    );
+    expect([...geometry.lines.ids]).toEqual([1, 1]);
+    expect([...geometry.region.lines.ids]).toEqual([2, 2]);
+    expect(geometry.region.fills.indices).toHaveLength(0);
+  });
+
+  it('draws admin boundaries as lines', () => {
+    const { lines } = buildTileGeometry(
+      {
+        admin: layer([
+          feature(2, { id: 'osm:relation/5', class: 'admin_city' }, [
+            [
+              [0, 0],
+              [10, 0],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+    );
+    expect(vertices(lines).map((v) => v.cls)).toEqual([
+      classId('admin_city'),
+      classId('admin_city'),
+    ]);
+  });
+
+  it('finds the longest nearly straight run of a line', () => {
+    const run = longestRun([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 20, y: 1 }, // a slight bend: same run
+      { x: 20, y: 5 }, // a turn: a new, shorter run
+    ])!;
+    expect(run.length).toBeCloseTo(Math.hypot(20, 1));
+    expect(run.mid).toEqual({ x: 10, y: 0.5 });
+    expect(run.angle).toBeCloseTo(0);
+    expect(longestRun([{ x: 1, y: 1 }])).toBeNull();
+  });
+
+  it('labels named streets on their longest run, ranked by road class', () => {
+    const tile = { z: 16, x: 55_247, y: 30_252 };
+    const street = (id: string, cls: string, name?: string) =>
+      feature(2, { id, class: cls, ...(name && { name }) }, [
+        [
+          [0, 100],
+          [0, 900],
+        ],
+      ]);
+    const { labels } = buildTileGeometry(
+      {
+        roads: layer([
+          street('osm:way/1', 'road_major', 'Magsaysay Avenue'),
+          street('osm:way/2', 'road_minor', 'Elias Angeles Street'),
+          street('osm:way/3', 'road_minor'),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(labels.map(({ text, rank, band }) => ({ text, rank, band }))).toEqual([
+      { text: 'Magsaysay Avenue', rank: LabelRank.roadMajor, band: { min: 14 } },
+      { text: 'Elias Angeles Street', rank: LabelRank.street, band: { min: 15.5 } },
+    ]);
+    expect(labels[0]!.angle).toBeCloseTo(Math.PI / 2); // north–south, y down
+  });
+
+  it('labels places at their point, ranked and banded by what they name', () => {
+    const tile = { z: 8, x: 215, y: 118 };
+    const place = (id: string, props: Record<string, string | boolean>) =>
+      feature(1, { id, class: 'place_label', ...props }, [[[2048, 2048]]]);
+    const { labels } = buildTileGeometry(
+      {
+        labels: layer([
+          place('osm:relation/1', { name: 'Camarines Sur', place: 'province' }),
+          place('osm:node/2', { name: 'Naga', place: 'city' }),
+          place('osm:node/3', { name: 'Abella', place: 'quarter', subdivision_label: true }),
+          place('osm:node/4', { name: 'Some Sitio', place: 'hamlet' }),
+          place('osm:node/5', { place: 'hamlet' }),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(labels.map(({ text, rank, band }) => ({ text, rank, band }))).toEqual([
+      { text: 'Camarines Sur', rank: LabelRank.province, band: { min: 0, max: 9.5 } },
+      { text: 'Naga', rank: LabelRank.city, band: { min: 0, max: 13 } },
+      { text: 'Abella', rank: LabelRank.subdivision, band: { min: 10.5, max: 16 } },
+      { text: 'Some Sitio', rank: LabelRank.place, band: { min: 13.5 } },
+    ]);
+    // The tile's center, in lng/lat.
+    const [lng, lat] = tileToLngLat(tile, { x: 2048, y: 2048 });
+    expect(labels[0]).toMatchObject({ lng, lat });
+    expect(lng).toBeCloseTo(-180 + (215.5 / 256) * 360, 6);
+    expect(lat).toBeGreaterThan(13);
+    expect(lat).toBeLessThan(15);
   });
 
   it('rescales other extents to 4096', () => {
@@ -201,7 +310,7 @@ describe('buildTileGeometry', () => {
       { roads: layer([road('osm:way/9'), road('osm:way/10')]) },
       registry,
     );
-    expect(registry.takeNew()).toEqual(['osm:way/9', 'osm:way/10']);
+    expect(registry.takeNew().map((f) => f.id)).toEqual(['osm:way/9', 'osm:way/10']);
     const b = buildTileGeometry({ roads: layer([road('osm:way/10')]) }, registry);
     expect(registry.takeNew()).toEqual([]);
     expect([...a.lines.ids]).toEqual([1, 1, 2, 2]);
@@ -235,15 +344,23 @@ describe('buildTileGeometry', () => {
       ).labels.map((l) => ({ ...l, x }));
     const [a, b] = [tile(0), tile(1)];
     expect(a).toEqual([
-      { id: 1, text: 'Plaza', rank: 0, lng: 123.5, lat: 13.5, x: 0 },
-      { id: 2, text: 'Statue', rank: 1, lng: 1, lat: 2, x: 0 },
+      {
+        id: 1,
+        text: 'Plaza',
+        rank: LabelRank.landmark,
+        lng: 123.5,
+        lat: 13.5,
+        band: { min: 16 },
+        x: 0,
+      },
+      { id: 2, text: 'Statue', rank: LabelRank.monument, lng: 1, lat: 2, band: { min: 18 }, x: 0 },
     ]);
     // The same feature in another tile carries the same id and anchor.
     expect(b.map(({ x: _x, ...l }) => l)).toEqual(a.map(({ x: _x, ...l }) => l));
   });
 
   it('adds roads as strips of their real width when it knows the tile', () => {
-    const tile = { z: 16, y: 30_252 }; // ~13.6° N
+    const tile = { z: 16, x: 55_247, y: 30_252 }; // ~13.6° N
     const perUnit = metersPerUnit(tile);
     expect(perUnit).toBeGreaterThan(0.13);
     expect(perUnit).toBeLessThan(0.15);
@@ -284,7 +401,7 @@ describe('buildTileGeometry', () => {
     expect(buildTileGeometry({ roads: layer([road]) }, createIdRegistry()).fills.ids).toHaveLength(
       0,
     );
-    const tile = { z: 16, y: 30_252 };
+    const tile = { z: 16, x: 55_247, y: 30_252 };
     expect(
       buildTileGeometry({ roads: layer([path]) }, createIdRegistry(), tile).fills.ids,
     ).toHaveLength(0);

@@ -1,7 +1,10 @@
-import type { BBox, CameraState } from '@atlas/shared';
+import { REGION_TILE_MAX_ZOOM, type BBox, type CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
 import {
   clampCamera,
+  easeInOut,
+  fitZoom,
+  flyPath,
   isTilted,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -11,10 +14,11 @@ import {
   project,
   TILE_SIZE,
   viewportFor,
-  zoomAroundClamped,
+  zoomAround,
   type CameraLimits,
+  type FlyPath,
 } from './camera';
-import { classDepths, classId, classMinZooms, MAX_CLASSES } from './classes';
+import { classDepths, classId, classVisibility, MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, DEFAULT_FONT, type GlyphAtlas } from './glyphs/atlas';
 import {
   buildGlyphTables,
@@ -30,7 +34,7 @@ import {
   deleteCellTargets,
   deleteTile,
   drawExtrusions,
-  drawTile,
+  drawGround,
   uploadOverlay,
   uploadTile,
   type CellTargets,
@@ -39,18 +43,21 @@ import {
 import { attachInput } from './input';
 import {
   createOverlay,
-  LABEL_MIN_ZOOM,
+  labelShows,
   packOverlay,
   placeLabels,
+  streetMode,
   type LabelCandidate,
 } from './labels';
-import { EXTENT, type TileLabel } from './raster/geometry';
+import { MAX_HIGHLIGHT, pointerCell } from './picking';
+import { EXTENT, unpackId, type FeatureInfo, type TileLabel } from './raster/geometry';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragment } from './shaders/glyph';
 import { selectFragment } from './shaders/select';
 import { themeGlyphs, themes, type ThemeName } from './theme';
 import {
+  ancestorAt,
   boundsTiles,
   findAncestor,
   LruCache,
@@ -62,7 +69,9 @@ import {
   type TileId,
 } from './tiles';
 
-export type { ThemeName } from './theme';
+export { CLASS_LABELS, type ThemeName } from './theme';
+export { legendEntries, type LegendEntry } from './legend';
+export type { FeatureInfo } from './raster/geometry';
 
 export type AtlasOptions = {
   tilesUrl: string;
@@ -73,10 +82,16 @@ export type AtlasOptions = {
   bounds: BBox;
   initialCamera: CameraState;
   year: number;
-  /** Zoom limits (default 7–21, SPEC.md §2). */
+  /**
+   * Zoom limits (default 7–21, SPEC.md §2). Zooming out also stops where the bounds fill the
+   * view (SPEC.md §3), recomputed when the canvas resizes.
+   */
   minZoom?: number;
   maxZoom?: number;
-  /** Disables the water animation and the landmark pulse (`prefers-reduced-motion`). */
+  /**
+   * `prefers-reduced-motion`: no water animation, landmark pulse, or selection shimmer, and
+   * flights are short.
+   */
   reducedMotion?: boolean;
   /** CSS font family for non-box-drawing glyphs. */
   font?: string;
@@ -84,22 +99,58 @@ export type AtlasOptions = {
 
 export type AtlasEventMap = {
   camerachange: CameraState;
-  hover: { featureId: string | null };
-  click: { featureId: string | null };
+  /** The feature under the mouse changed. `point` is in CSS px from the canvas's top left. */
+  hover: {
+    featureId: string | null;
+    feature: FeatureInfo | null;
+    point: [number, number] | null;
+  };
+  /** A click or tap, on a feature or on nothing. */
+  click: {
+    featureId: string | null;
+    feature: FeatureInfo | null;
+    point: [number, number];
+    lngLat: [number, number];
+  };
+  /** A flight reached its target (not sent when input cancels it). */
   flyend: CameraState;
 };
 
 export type AtlasEventName = keyof AtlasEventMap;
 
 export type Atlas = {
+  /** Move the camera, or fly there with `animate`. */
   setCamera(partial: Partial<CameraState>, opts?: { animate?: boolean }): void;
+  /** Fly to a camera (SPEC.md §3): zoom out, travel, zoom in. Any input cancels it. */
+  flyTo(target: Partial<CameraState>): void;
+  getCamera(): CameraState;
   setYear(year: number, opts?: { animate?: boolean }): void;
   setTheme(theme: ThemeName): void;
+  /** Select a feature by id (accent color and shimmer), or clear the selection. */
+  setSelected(featureId: string | null): void;
+  /** Highlight features by id (accent color), e.g. the ways of a street; at most 64. */
+  setHighlighted(featureIds: readonly string[]): void;
+  /** What the renderer knows about a feature, once a tile containing it has loaded. */
+  getFeature(featureId: string): FeatureInfo | undefined;
   on<K extends AtlasEventName>(event: K, handler: (payload: AtlasEventMap[K]) => void): () => void;
   destroy(): void;
 };
 
 const DEFAULT_CELL = { width: 10, height: 18 };
+
+/** 0xRRGGBB → [r, g, b] in 0–1. */
+const rgb = (hex: number): [number, number, number] => [
+  ((hex >> 16) & 0xff) / 255,
+  ((hex >> 8) & 0xff) / 255,
+  (hex & 0xff) / 255,
+];
+
+const sameCamera = (a: CameraState, b: CameraState) =>
+  a.lat === b.lat &&
+  a.lng === b.lng &&
+  a.zoom === b.zoom &&
+  a.pitch === b.pitch &&
+  a.bearing === b.bearing;
 const TILE_CACHE_SIZE = 256;
 /** While idle, animation (water, landmark pulse) redraws at most this often. */
 const IDLE_FRAME_MS = 1000 / 30;
@@ -121,9 +172,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   }
 
   const cellCss = options.cell ?? DEFAULT_CELL;
+  const baseMinZoom = options.minZoom ?? MIN_ZOOM;
   const limits: CameraLimits = {
     bounds: options.bounds,
-    minZoom: options.minZoom ?? MIN_ZOOM,
+    minZoom: baseMinZoom,
     maxZoom: options.maxZoom ?? MAX_ZOOM,
   };
   const reducedMotion = options.reducedMotion ?? false;
@@ -145,7 +197,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const glyphProgram = createProgram(gl, fullscreenVertex, glyphFragment);
   const emptyVao = gl.createVertexArray();
   const depths = classDepths();
-  const minZooms = classMinZooms();
   const seeThrough = seeThroughMask();
   const roads = roadMask();
 
@@ -199,6 +250,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!targets || targets.cols !== cols || targets.rows !== rows) {
       if (targets) deleteCellTargets(gl, targets);
       targets = createCellTargets(gl, cols, rows);
+    }
+    // Zooming out stops where the bounds fill the view (SPEC.md §3).
+    const size = cssSize();
+    limits.minZoom = Math.min(limits.maxZoom, Math.max(baseMinZoom, fitZoom(limits.bounds, size)));
+    const clamped = clampCamera(camera, limits, size);
+    if (!sameCamera(clamped, camera)) {
+      camera = clamped;
+      emit('camerachange', { ...camera });
     }
     cellDirty = true;
   };
@@ -276,6 +335,29 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return [...out.values()].sort((a, b) => a.z - b.z);
   };
 
+  /**
+   * Tiles whose region-only features to draw under the view's tiles: each view tile's
+   * ancestor at `REGION_TILE_MAX_ZOOM` (or the tile itself when it is that coarse), else, while
+   * that one loads, its nearest loaded ancestor.
+   */
+  const regionTilesFor = (tiles: readonly TileId[]): TileId[] => {
+    if (!header) return [];
+    const loaded = (key: string) => !!meshes.get(key);
+    const out = new Map<string, TileId>();
+    for (const tile of tiles) {
+      const region = ancestorAt(tile, Math.max(header.minZoom, REGION_TILE_MAX_ZOOM));
+      const key = tileKey(region);
+      if (loaded(key)) {
+        out.set(key, region);
+        continue;
+      }
+      if (!meshes.has(key) && !failed.has(key)) source.request(region);
+      const fallback = findAncestor(region, header.minZoom, loaded);
+      if (fallback) out.set(tileKey(fallback), fallback);
+    }
+    return [...out.values()].sort((a, b) => a.z - b.z);
+  };
+
   /** Screen position (CSS px) of a point, for the overlay; set by each cell pass. */
   let screenOf: (lng: number, lat: number) => [number, number] = () => [0, 0];
 
@@ -346,20 +428,30 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     gl.useProgram(cellProgram.program);
     twgl.setUniforms(cellProgram, {
       u_depth: depths,
-      u_minZoom: minZooms,
+      u_vis: classVisibility(camera.zoom),
       u_zoom: camera.zoom,
       u_roadMask: roads,
+      u_origin: [grid.originCol, grid.originRow],
     });
 
     const labels = new Map<number, TileLabel>();
     const drawn: { mesh: TileMesh; matrix: number[] }[] = [];
-    for (const tile of tilesToDraw()) {
+    const tiles = tilesToDraw();
+    // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
+    for (const tile of regionTilesFor(tiles)) {
+      const loaded = meshes.get(tileKey(tile));
+      if (!loaded) continue;
+      for (const label of loaded.labels) labels.set(label.id, label);
+      twgl.setUniforms(cellProgram, { u_matrix: tileMatrix(tile) });
+      drawGround(gl, loaded.mesh.region);
+    }
+    for (const tile of tiles) {
       const loaded = meshes.get(tileKey(tile));
       if (!loaded) continue;
       for (const label of loaded.labels) labels.set(label.id, label);
       const matrix = tileMatrix(tile);
       twgl.setUniforms(cellProgram, { u_matrix: matrix });
-      drawTile(gl, loaded.mesh);
+      drawGround(gl, loaded.mesh);
       drawn.push({ mesh: loaded.mesh, matrix });
     }
     // 3D buildings stand up only in the tilted view.
@@ -403,7 +495,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
     const candidates: LabelCandidate[] = [];
     for (const label of labels) {
-      if (camera.zoom < (LABEL_MIN_ZOOM[label.rank] ?? Infinity)) continue;
+      if (!labelShows(label.band, camera.zoom)) continue;
       const [col, row] = toCell(label.lng, label.lat);
       candidates.push({
         id: label.id,
@@ -411,14 +503,28 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         rank: label.rank,
         col: Math.floor(col),
         row: Math.floor(row),
+        // Street names follow the street in flat views; tilted ones keep them beside it.
+        mode: label.angle !== undefined && !tilted ? streetMode(label.angle) : 'beside',
       });
     }
     placeLabels(overlay, candidates, glyphIndex, area);
     return packOverlay(overlay);
   };
 
+  // Selection and highlights, by feature id; resolved to id-buffer indices each frame, since a
+  // feature's index is only known once a tile containing it has loaded.
+  let selectedId: string | null = null;
+  let highlightedIds: readonly string[] = [];
+  let hoverIndex = 0;
+  const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
+
   const selectPass = (time: number) => {
     if (!targets || !tables) return;
+    let highlightCount = 0;
+    for (const id of highlightedIds) {
+      const index = source.indexOf(id);
+      if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
     gl.viewport(0, 0, targets.cols, targets.rows);
     gl.useProgram(selectProgram.program);
@@ -437,6 +543,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       u_roadMask: roads,
       u_tilted: isTilted(camera),
       u_cellAspect: cellDev.h / cellDev.w,
+      u_hover: hoverIndex,
+      u_selected: selectedId ? source.indexOf(selectedId) : 0,
+      u_highlight: highlightIndices,
+      u_highlightCount: highlightCount,
     });
     gl.bindVertexArray(emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -459,11 +569,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       u_time: time,
       u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
       u_overlay: targets.overlayTex,
-      u_labelColor: [
-        ((theme.label >> 16) & 0xff) / 255,
-        ((theme.label >> 8) & 0xff) / 255,
-        (theme.label & 0xff) / 255,
-      ],
+      u_labelColor: rgb(theme.label),
+      u_accent: rgb(theme.accent),
+      u_shimmer: !reducedMotion,
     });
     gl.bindVertexArray(emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -476,6 +584,67 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   });
   observer.observe(canvas);
 
+  // Flights (SPEC.md §3 "Fly-to").
+  let flight: { path: FlyPath; start: number } | null = null;
+
+  const flyTo = (target: Partial<CameraState>) => {
+    const to = clampCamera({ ...camera, ...target }, limits, cssSize());
+    flight = { path: flyPath(camera, to, cssSize(), { reducedMotion }), start: performance.now() };
+    lastInput = performance.now();
+  };
+
+  const stepFlight = (now: number) => {
+    if (!flight) return;
+    const t = Math.min(1, (now - flight.start) / Math.max(1, flight.path.duration));
+    // Only the zoom is clamped mid-flight; the arc may pass over the edge of the region.
+    camera = clampCamera(flight.path.at(easeInOut(t)), limits);
+    cellDirty = true;
+    lastInput = now;
+    emit('camerachange', { ...camera });
+    if (t >= 1) {
+      flight = null;
+      camera = clampCamera(camera, limits, cssSize());
+      emit('flyend', { ...camera });
+    }
+  };
+
+  // Picking: at most one id-buffer read per frame, after drawing (ARCHITECTURE.md §3 step 7).
+  let pick: { point: [number, number]; click: boolean } | null = null;
+  const pixel = new Uint8Array(4);
+
+  const readFeatureIndex = (point: readonly [number, number]): number => {
+    if (!targets) return 0;
+    const [col, row] = pointerCell(point, dpr, {
+      shiftX: grid.shiftX,
+      shiftY: grid.shiftY,
+      cellWidth: cellDev.w,
+      cellHeight: cellDev.h,
+    });
+    if (col < 0 || row < 0 || col >= targets.cols || row >= targets.rows) return 0;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, targets.cellFbo);
+    gl.readBuffer(gl.COLOR_ATTACHMENT2);
+    gl.readPixels(col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    return unpackId(pixel);
+  };
+
+  const resolvePick = () => {
+    if (!pick) return;
+    const { point, click } = pick;
+    pick = null;
+    const index = readFeatureIndex(point);
+    const feature = source.feature(index) ?? null;
+    const featureId = feature?.id ?? null;
+    if (click) {
+      const [lng, lat] = viewportFor(camera, cssSize()).unproject([...point]) as [number, number];
+      emit('click', { featureId, feature, point, lngLat: [lng, lat] });
+    } else if (index !== hoverIndex) {
+      hoverIndex = index;
+      drawDirty = true;
+      emit('hover', { featureId, feature, point });
+    }
+  };
+
   let raf = 0;
   const frame = (now: number) => {
     if (destroyed) return;
@@ -484,6 +653,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       sizeDirty = false;
       resize();
     }
+    stepFlight(now);
     const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
     const animationDue = !reducedMotion && now - lastDraw >= interval;
     if (!cellDirty && !drawDirty && !animationDue) return;
@@ -496,31 +666,70 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     glyphPass(time);
     drawDirty = false;
     lastDraw = now;
+    resolvePick();
   };
   raf = requestAnimationFrame(frame);
 
   const applyCamera = (next: CameraState) => {
-    camera = clampCamera(next, limits);
+    camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
     lastInput = performance.now();
     emit('camerachange', { ...camera });
   };
 
+  /** Input takes over from any flight. */
+  const byUser =
+    <A extends unknown[]>(action: (...args: A) => void) =>
+    (...args: A) => {
+      flight = null;
+      action(...args);
+    };
+
   const detachInput = attachInput(canvas, {
-    pan: (dx, dy) => applyCamera(panByView(camera, dx, dy, cssSize())),
+    pan: byUser((dx: number, dy: number) => applyCamera(panByView(camera, dx, dy, cssSize()))),
     // Tilted views zoom around the center (the cursor anchor math is for flat views).
-    zoom: (delta, anchor) =>
-      applyCamera(
-        zoomAroundClamped(camera, camera.zoom + delta, isTilted(camera) ? [0, 0] : anchor, limits),
-      ),
-    orbit: (dBearing, dPitch) => applyCamera(orbitBy(camera, dBearing, dPitch)),
+    zoom: byUser((delta: number, anchor: [number, number]) => {
+      const zoom = Math.min(limits.maxZoom, Math.max(limits.minZoom, camera.zoom + delta));
+      applyCamera(zoomAround(camera, zoom, isTilted(camera) ? [0, 0] : anchor));
+    }),
+    orbit: byUser((dBearing: number, dPitch: number) =>
+      applyCamera(orbitBy(camera, dBearing, dPitch)),
+    ),
+    hover: (point) => {
+      if (point) {
+        if (!pick?.click) pick = { point, click: false };
+      } else if (hoverIndex !== 0) {
+        hoverIndex = 0;
+        drawDirty = true;
+        emit('hover', { featureId: null, feature: null, point: null });
+      }
+    },
+    tap: (point) => {
+      pick = { point, click: true };
+      drawDirty = true;
+    },
   });
 
   return {
-    setCamera(partial) {
-      // Fly-to animation arrives in Phase 2.
+    setCamera(partial, opts) {
+      if (opts?.animate) {
+        flyTo(partial);
+        return;
+      }
+      flight = null;
       applyCamera({ ...camera, ...partial });
     },
+    flyTo,
+    getCamera: () => ({ ...camera }),
+    setSelected(featureId) {
+      selectedId = featureId;
+      drawDirty = true;
+    },
+    setHighlighted(featureIds) {
+      highlightedIds = featureIds.slice(0, MAX_HIGHLIGHT);
+      drawDirty = true;
+    },
+    getFeature: (featureId) => source.featureById(featureId),
     setYear() {
       // Phase 4: time filtering.
     },

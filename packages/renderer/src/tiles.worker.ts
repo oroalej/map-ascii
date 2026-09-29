@@ -35,13 +35,13 @@ async function handle(request: WorkerRequest) {
   if (!archive) throw new Error('tile requested before init');
   const response = await archive.getZxy(z, x, y);
   if (!response) {
-    scope.postMessage({ type: 'tile', key, geometry: null, newIds: [] });
+    scope.postMessage({ type: 'tile', key, geometry: null, newFeatures: [] });
     return;
   }
   const tile = new VectorTile(new PbfReader(new Uint8Array(response.data)));
-  const geometry = buildTileGeometry(tile.layers, registry, { z, y });
+  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y });
   scope.postMessage(
-    { type: 'tile', key, geometry, newIds: registry.takeNew() },
+    { type: 'tile', key, geometry, newFeatures: registry.takeNew() },
     transferables(geometry),
   );
 }

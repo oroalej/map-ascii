@@ -1,6 +1,6 @@
 /** Small WebGL2 helpers: programs, textures, framebuffers, and per-tile meshes. */
 import * as twgl from 'twgl.js';
-import type { GeometryArrays, TileGeometry } from './raster/geometry';
+import type { GeometryArrays, GroundGeometry, TileGeometry } from './raster/geometry';
 
 export type GL = WebGL2RenderingContext;
 
@@ -98,8 +98,10 @@ export function uploadOverlay(gl: GL, t: CellTargets, texels: Uint8Array) {
 
 type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number };
 
-/** A tile's geometry on the GPU. */
-export type TileMesh = { fills: Mesh; extrusions: Mesh; lines: Mesh; points: Mesh };
+type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
+
+/** A tile's geometry on the GPU; `region` holds its region-only features. */
+export type TileMesh = GroundMesh & { extrusions: Mesh; region: GroundMesh };
 
 function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
   const vao = gl.createVertexArray();
@@ -133,17 +135,31 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
   return { vao, buffers, count: indices ? indices.length : arrays.ids.length };
 }
 
+const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({
+  fills: uploadMesh(gl, g.fills, g.fills.indices),
+  lines: uploadMesh(gl, g.lines),
+  points: uploadMesh(gl, g.points),
+});
+
 export function uploadTile(gl: GL, geometry: TileGeometry): TileMesh {
   return {
-    fills: uploadMesh(gl, geometry.fills, geometry.fills.indices),
+    ...uploadGround(gl, geometry),
     extrusions: uploadMesh(gl, geometry.extrusions, geometry.extrusions.indices),
-    lines: uploadMesh(gl, geometry.lines),
-    points: uploadMesh(gl, geometry.points),
+    region: uploadGround(gl, geometry.region),
   };
 }
 
 export function deleteTile(gl: GL, mesh: TileMesh) {
-  for (const m of [mesh.fills, mesh.extrusions, mesh.lines, mesh.points]) {
+  const { region } = mesh;
+  for (const m of [
+    mesh.fills,
+    mesh.extrusions,
+    mesh.lines,
+    mesh.points,
+    region.fills,
+    region.lines,
+    region.points,
+  ]) {
     gl.deleteVertexArray(m.vao);
     for (const b of m.buffers) gl.deleteBuffer(b);
   }
@@ -156,8 +172,11 @@ export function drawExtrusions(gl: GL, mesh: TileMesh) {
   gl.drawElements(gl.TRIANGLES, mesh.extrusions.count, gl.UNSIGNED_INT, 0);
 }
 
-/** Draw a tile's ground features: areas, lines, and points. */
-export function drawTile(gl: GL, mesh: TileMesh) {
+/**
+ * Draw ground features (areas, lines, and points): a tile's own, or its region-only ones
+ * (`mesh.region`).
+ */
+export function drawGround(gl: GL, mesh: GroundMesh) {
   if (mesh.fills.count > 0) {
     gl.bindVertexArray(mesh.fills.vao);
     gl.drawElements(gl.TRIANGLES, mesh.fills.count, gl.UNSIGNED_INT, 0);

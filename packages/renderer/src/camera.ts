@@ -69,10 +69,15 @@ export const wrapBearing = (bearing: number) => {
   return b === -180 ? 180 : b;
 };
 
-/** Clamp zoom to the limits, the center to the bounds, and the pitch to 0–60°. */
-export function clampCamera(camera: CameraState, limits: CameraLimits): CameraState {
+/**
+ * Clamp zoom to the limits, the pitch to 0–60°, and the view to the bounds. Given the view
+ * `size`, a flat view keeps the bounds under the whole screen where it can (the edges of the
+ * view stay inside; a view larger than the bounds centers on them), so the visitor can't drift
+ * off into empty space. Without a size, or in a tilted view, only the center is kept inside.
+ */
+export function clampCamera(camera: CameraState, limits: CameraLimits, size?: Size): CameraState {
   const [west, south, east, north] = limits.bounds;
-  return {
+  const clamped = {
     ...camera,
     zoom: clamp(camera.zoom, limits.minZoom, limits.maxZoom),
     lng: clamp(camera.lng, west, east),
@@ -80,7 +85,119 @@ export function clampCamera(camera: CameraState, limits: CameraLimits): CameraSt
     pitch: clamp(camera.pitch, 0, MAX_PITCH),
     bearing: wrapBearing(camera.bearing),
   };
+  if (!size || isTilted(clamped)) return clamped;
+  const { zoom } = clamped;
+  const [x0, y0] = project(west, north, zoom);
+  const [x1, y1] = project(east, south, zoom);
+  const [x, y] = project(camera.lng, camera.lat, zoom);
+  const within = (v: number, lo: number, hi: number, half: number) =>
+    hi - lo <= 2 * half ? (lo + hi) / 2 : clamp(v, lo + half, hi - half);
+  const cx = within(x, x0, x1, size.width / 2);
+  const cy = within(y, y0, y1, size.height / 2);
+  // Unchanged: keep the exact coordinates (a round trip through pixels would perturb them).
+  if (cx === x && cy === y) return { ...clamped, lng: camera.lng, lat: camera.lat };
+  const [lng, lat] = unproject(cx, cy, zoom);
+  return { ...clamped, lng, lat };
 }
+
+/**
+ * The zoom at which the bounds just fit the view (SPEC.md §3: zooming out stops there, so the
+ * whole region fills the screen at the widest).
+ */
+export function fitZoom([west, south, east, north]: BBox, size: Size): number {
+  const [x0, y0] = project(west, north, 0);
+  const [x1, y1] = project(east, south, 0);
+  const zx = Math.log2(Math.max(1, size.width) / Math.max(1e-9, x1 - x0));
+  const zy = Math.log2(Math.max(1, size.height) / Math.max(1e-9, y1 - y0));
+  return Math.min(zx, zy);
+}
+
+/** Fly-to duration limits in ms (SPEC.md §3), and the cap with reduced motion. */
+export const FLY_MIN_MS = 800;
+export const FLY_MAX_MS = 3000;
+export const FLY_REDUCED_MS = 300;
+
+/** Curvature of the fly-to arc: how far it zooms out to travel (van Wijk & Nuij's ρ). */
+const RHO = 1.42;
+/** Path length (in the arc's own units) flown per second before clamping. */
+const FLY_SPEED = 1.2;
+
+export type FlyPath = {
+  /** Milliseconds, already clamped. */
+  duration: number;
+  /** The camera at progress `t` (0–1, eased by the caller). */
+  at: (t: number) => CameraState;
+};
+
+/** Shortest turn from one bearing to another, in degrees. */
+const turn = (from: number, to: number) => wrapBearing(to - from);
+
+/**
+ * An eased flight between two cameras (SPEC.md §3 "Fly-to"): zoom out, travel, zoom in, along
+ * van Wijk & Nuij's optimal path ("Smooth and efficient zooming and panning", 2003), the same
+ * one MapLibre's `flyTo` uses. The screen speed feels constant, whatever the zooms.
+ */
+export function flyPath(
+  from: CameraState,
+  to: CameraState,
+  size: Size,
+  opts: { reducedMotion?: boolean } = {},
+): FlyPath {
+  const z0 = from.zoom;
+  const scale = 2 ** (to.zoom - z0);
+  const [ax, ay] = project(from.lng, from.lat, z0);
+  const [bx, by] = project(to.lng, to.lat, z0);
+  const w0 = Math.max(size.width, size.height, 1);
+  const w1 = w0 / scale;
+  const u1 = Math.hypot(bx - ax, by - ay);
+  const rho2 = RHO * RHO;
+
+  let length: number;
+  let width: (s: number) => number;
+  let along: (s: number) => number;
+  if (u1 < 1e-6) {
+    // No travel: a pure zoom.
+    const k = w1 < w0 ? -1 : 1;
+    length = Math.abs(Math.log(w1 / w0)) / RHO;
+    width = (s) => Math.exp(k * RHO * s);
+    along = () => 0;
+  } else {
+    const b = (i: 0 | 1) =>
+      (w1 * w1 - w0 * w0 + (i ? -1 : 1) * rho2 * rho2 * u1 * u1) / (2 * (i ? w1 : w0) * rho2 * u1);
+    const r = (i: 0 | 1) => Math.log(Math.sqrt(b(i) * b(i) + 1) - b(i));
+    const r0 = r(0);
+    length = (r(1) - r0) / RHO;
+    width = (s) => Math.cosh(r0) / Math.cosh(r0 + RHO * s);
+    along = (s) => (w0 * ((Math.cosh(r0) * Math.tanh(r0 + RHO * s) - Math.sinh(r0)) / rho2)) / u1;
+  }
+  const ideal = Number.isFinite(length) ? (length / FLY_SPEED) * 1000 : 0;
+  const duration = opts.reducedMotion
+    ? Math.min(FLY_REDUCED_MS, clamp(ideal, 0, FLY_MAX_MS))
+    : clamp(ideal, FLY_MIN_MS, FLY_MAX_MS);
+  const dBearing = turn(from.bearing, to.bearing);
+
+  return {
+    duration,
+    at(t) {
+      if (t <= 0) return { ...from };
+      if (t >= 1) return { ...to };
+      const s = t * (Number.isFinite(length) ? length : 0);
+      const k = Math.min(1, Math.max(0, along(s)));
+      const zoom = z0 + Math.log2(1 / width(s));
+      const [lng, lat] = unproject(ax + (bx - ax) * k, ay + (by - ay) * k, z0);
+      return {
+        lng,
+        lat,
+        zoom: Number.isFinite(zoom) ? zoom : to.zoom,
+        pitch: from.pitch + (to.pitch - from.pitch) * t,
+        bearing: wrapBearing(from.bearing + dBearing * t),
+      };
+    },
+  };
+}
+
+/** Ease-in-out for flights (cubic). */
+export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 /** Whether the camera is tilted or rotated (the perspective path) rather than flat north-up. */
 export const isTilted = (camera: CameraState) =>
