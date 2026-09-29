@@ -3,7 +3,14 @@
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
 import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
-import { buildingRamp, doubleWall, singleWall, type GlyphKind, type Theme } from '../theme';
+import {
+  buildingRamp,
+  doubleWall,
+  sextantGlyphs,
+  singleWall,
+  type GlyphKind,
+  type Theme,
+} from '../theme';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {
@@ -43,6 +50,99 @@ export const WALL_DOUBLE_ROW = MAX_CLASSES - 1;
 export const EXTRUDE_ROW = MAX_CLASSES - 3;
 export const RIDGE_VARIANT = 4;
 export const ridgeGlyphs = ['─', '╲', '│', '╱'] as const;
+
+/** Glyph-table rows for the sextants (two rows of 32, indexed by mask). */
+export const SEXTANT_ROW = MAX_CLASSES - 5;
+
+/**
+ * Sub-cell edges (SPEC.md §4 "Edges"): flat views also rasterize the map at `SUB.cols × SUB.rows`
+ * samples per cell. Where an area's edge crosses a cell, the cell draws the sextant of the
+ * samples inside the area, so footprints and shores keep their shape at a sixth of a cell.
+ */
+export const SUB = { cols: 2, rows: 3 } as const;
+
+/** Classes whose edges are drawn with sextants: areas, not lines or markers. */
+export const subcellClasses: readonly RenderClass[] = [
+  'building',
+  'building_religious',
+  'building_school',
+  'building_market',
+  'building_part',
+  'water_area',
+  'water_sea',
+  'park',
+  'trees',
+  'farmland',
+  'parking',
+  'pitch',
+];
+
+/** Bitmask of `subcellClasses` ids, for the select shader. */
+export const subcellMask = (): number =>
+  subcellClasses.reduce((mask, cls) => mask | classBit(cls), 0);
+
+/**
+ * A cell's sextant mask: bit `row * 2 + col` is set where that sample belongs to the feature
+ * (`inside(col, row)`, rows from the top).
+ */
+export function sextantMask(inside: (col: number, row: number) => boolean): number {
+  let mask = 0;
+  for (let row = 0; row < SUB.rows; row++) {
+    for (let col = 0; col < SUB.cols; col++) if (inside(col, row)) mask |= 1 << (row * SUB.cols + col);
+  }
+  return mask;
+}
+
+/** A mask on the feature's edge: some samples in, some out. Full and empty cells keep their glyph. */
+export const isEdgeMask = (mask: number): boolean => mask !== 0 && mask !== 63;
+
+/** Bit in the select pass's state byte for a sub-cell edge (above picking.ts `CellState`). */
+export const EDGE_STATE = 4;
+
+/** An edge's sextant is drawn this far from the feature's fill toward its glyph color, 0–1. */
+export const EDGE_INK = 0.6;
+
+/** One raster sample: its class (null for none) and feature id. */
+export type Sample = { cls: RenderClass | null; id: number };
+
+export type SubcellEdge = {
+  /** The feature the sextant draws. */
+  fg: Sample;
+  mask: number;
+  /** The class under the rest of the cell, whose fill shows there (null for none). */
+  bg: RenderClass | null;
+};
+
+const isBuilding = (cls: RenderClass | null) => cls !== null && cls.startsWith('building');
+
+/**
+ * A cell's sub-cell edge, or null if it keeps its glyph. `center` is the cell pass's winner,
+ * `samples` the cell's `SUB` samples in mask-bit order, and `outlined` whether a sample's
+ * feature is drawn with walls at this zoom (walls trace its edge instead).
+ *
+ * Only an empty cell or an area (`subcellClasses`) takes part: lines and markers win their cells
+ * whole. The sextant draws the cell's own area, unless it isn't a building and a sample is:
+ * buildings keep their shape over the grounds, parks, and water they stand in.
+ */
+export function subcellEdge(
+  center: Sample,
+  samples: readonly Sample[],
+  outlined: (sample: Sample) => boolean,
+): SubcellEdge | null {
+  const isArea = (s: Sample) => s.cls !== null && subcellClasses.includes(s.cls);
+  if (center.cls !== null && !isArea(center)) return null;
+  let fg: Sample | null = isArea(center) ? center : null;
+  for (const s of samples) {
+    if (isArea(s) && (fg === null || (!isBuilding(fg.cls) && isBuilding(s.cls)))) fg = s;
+  }
+  if (fg === null || outlined(fg)) return null;
+  const { id } = fg;
+  const mask = sextantMask((col, row) => samples[row * SUB.cols + col]!.id === id);
+  if (!isEdgeMask(mask)) return null;
+  // The rest of the cell shows the first other class there, if any.
+  const bg = samples.find((s) => s.id !== id && s.cls !== null)?.cls ?? null;
+  return { fg, mask, bg };
+}
 
 /** Roof code per cell (the attribute buffer's alpha): which slope, or the ridge. */
 export const RoofCode = { none: 0, lit: 1, shaded: 2, ridge: 3 } as const;
@@ -366,6 +466,8 @@ export type GlyphTables = {
   connects: Int32Array;
   /** Linear RGB per class id. */
   colors: Float32Array;
+  /** Background fill strength per class id (theme.ts `ClassStyle.fill`, 0 = none). */
+  fills: Float32Array;
 };
 
 /** Build the select shader's lookup tables from a theme and the glyph atlas's index. */
@@ -381,6 +483,7 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
   const counts = new Int32Array(MAX_CLASSES);
   const connectMasks = new Int32Array(MAX_CLASSES);
   const colors = new Float32Array(MAX_CLASSES * 3);
+  const fills = new Float32Array(MAX_CLASSES);
 
   for (const cls of renderClasses) {
     const id = classId(cls);
@@ -396,6 +499,7 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     colors[id * 3] = ((style.color >> 16) & 0xff) / 255;
     colors[id * 3 + 1] = ((style.color >> 8) & 0xff) / 255;
     colors[id * 3 + 2] = (style.color & 0xff) / 255;
+    fills[id] = style.fill ?? 0;
   }
   buildingRamp.forEach((glyph, v) => {
     table[EXTRUDE_ROW * MAX_VARIANTS + v] = glyphIndex(glyph);
@@ -407,5 +511,8 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     table[WALL_SINGLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('single', mask));
     table[WALL_DOUBLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('double', mask));
   }
-  return { table, kinds, counts, connects: connectMasks, colors };
+  sextantGlyphs.forEach((glyph, mask) => {
+    table[SEXTANT_ROW * MAX_VARIANTS + mask] = glyphIndex(glyph);
+  });
+  return { table, kinds, counts, connects: connectMasks, colors, fills };
 }

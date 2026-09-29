@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, MAX_CLASSES, type RenderClass } from '../classes';
-import { buildingRamp, doubleLine, singleLine, themes } from '../theme';
+import { buildingRamp, doubleLine, sextantGlyphs, singleLine, themes } from '../theme';
 import {
   buildGlyphTables,
   buildingVariant,
@@ -29,6 +29,11 @@ import {
   seeThrough,
   seeThroughMask,
   selectGlyph,
+  SEXTANT_ROW,
+  sextantMask,
+  isEdgeMask,
+  subcellEdge,
+  type Sample,
   WALL_DOUBLE_ROW,
   WALL_SINGLE_ROW,
   wallGlyph,
@@ -238,6 +243,66 @@ describe('glyph tables', () => {
     expect(mask & (1 << classId('road_major'))).not.toBe(0);
     expect(mask & (1 << classId('building'))).toBe(0);
     expect(tables.colors[classId('marker_landmark') * 3]).toBeCloseTo(0xff / 255);
+  });
+
+  it('records each class fill, none for lines and markers', () => {
+    expect(tables.fills[classId('building')]).toBeGreaterThan(0);
+    expect(tables.fills[classId('water_sea')]).toBeGreaterThan(0);
+    expect(tables.fills[classId('path')]).toBe(0);
+    expect(tables.fills[classId('marker_landmark')]).toBe(0);
+  });
+
+  it('holds the sextants by mask in two rows past the classes', () => {
+    const at = (mask: number) =>
+      tables.table[(SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31)];
+    for (const mask of [1, 21, 31, 32, 42, 62]) expect(at(mask)).toBe(index(sextantGlyphs[mask]!));
+    expect(SEXTANT_ROW + 1).toBeLessThan(EXTRUDE_ROW);
+  });
+});
+
+describe('sub-cell edges', () => {
+  const B: Sample = { cls: 'building', id: 7 };
+  const B2: Sample = { cls: 'building_school', id: 8 };
+  const P: Sample = { cls: 'park', id: 3 };
+  const R: Sample = { cls: 'road_mid', id: 5 };
+  const _: Sample = { cls: null, id: 0 };
+  const never = () => false;
+
+  it('packs samples row by row from the top left', () => {
+    expect(sextantMask((col) => col === 0)).toBe(21); // ▌
+    expect(sextantMask((_col, row) => row === 0)).toBe(3);
+    expect(sextantMask(() => true)).toBe(63);
+    expect([isEdgeMask(0), isEdgeMask(63), isEdgeMask(21)]).toEqual([false, false, true]);
+  });
+
+  it("draws an area's edge with the other class behind it", () => {
+    // Building on the left half, park on the right.
+    expect(subcellEdge(B, [B, P, B, P, B, P], never)).toEqual({ fg: B, mask: 21, bg: 'park' });
+    // Two buildings side by side keep their own shapes.
+    expect(subcellEdge(B, [B, B2, B, B2, B, B], never)).toEqual({
+      fg: B,
+      mask: 0b110101,
+      bg: 'building_school',
+    });
+  });
+
+  it('keeps the glyph inside an area and where a line wins the cell', () => {
+    expect(subcellEdge(B, [B, B, B, B, B, B], never)).toBeNull();
+    expect(subcellEdge(R, [B, B, R, R, B, B], never)).toBeNull();
+    expect(subcellEdge(_, [_, _, _, _, _, _], never)).toBeNull();
+  });
+
+  it('gives an empty cell the edge of an area that reaches into it', () => {
+    expect(subcellEdge(_, [_, _, _, _, P, P], never)).toEqual({ fg: P, mask: 48, bg: null });
+  });
+
+  it('draws a building over the park it stands in', () => {
+    expect(subcellEdge(P, [P, P, P, B, P, B], never)).toEqual({ fg: B, mask: 40, bg: 'park' });
+  });
+
+  it('leaves outlined features to their walls', () => {
+    const outlined = (s: Sample) => s.cls === 'building';
+    expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
   });
 });
 

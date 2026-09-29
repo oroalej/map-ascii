@@ -22,6 +22,12 @@ export type ClassStyle = {
   glyphs: readonly string[];
   /** 0xRRGGBB */
   color: number;
+  /**
+   * How strongly the class tints its cells' background, 0–1 toward `color` (SPEC.md §4 "Two
+   * colors per cell"). Areas get a dim fill under their glyphs, so a footprint reads as one
+   * shape; lines and markers leave it unset and draw over the plain background.
+   */
+  fill?: number;
 };
 
 export type Theme = {
@@ -77,6 +83,20 @@ export const dashedLine = ['╌', '╎', '╌', '╌', '╎', '╎', '╌', '╌
 /** Terrain (Region level): one glyph per elevation band, lowest first (SPEC.md §4). */
 export const terrainRamp = ['.', ':', '-', '=', '+', '*', '#', '%'] as const;
 
+/**
+ * Sextant blocks by mask (SPEC.md §4 "Edges"): bit 0 is the cell's top-left sixth, bit 1 its
+ * top-right, then the middle row (bits 2, 3) and the bottom row (4, 5). Mask 0 is blank, 21 and
+ * 42 are the half blocks, 63 the full block; the rest are Unicode's sextants (U+1FB00 onward, in
+ * mask order, skipping those four).
+ */
+export const sextantGlyphs: readonly string[] = Array.from({ length: 64 }, (_, mask) => {
+  if (mask === 0) return ' ';
+  if (mask === 21) return '▌';
+  if (mask === 42) return '▐';
+  if (mask === 63) return '█';
+  return String.fromCodePoint(0x1fb00 + mask - 1 - (mask > 21 ? 1 : 0) - (mask > 42 ? 1 : 0));
+});
+
 /** Building ramp by height, lowest first. */
 export const buildingRamp = ['░', '▒', '▓', '█'] as const;
 
@@ -131,27 +151,27 @@ function makeTheme(background: number, c: Palette): Theme {
     accent: c.accent,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
-      water_river: { kind: 'water', glyphs: ['~', '≈', '(', ')', '╱', '╲'], color: c.river },
+      water_river: { kind: 'water', glyphs: ['~', '≈', '(', ')', '╱', '╲'], color: c.river, fill: 0.16 },
       water_stream: { kind: 'water', glyphs: ['~', '≈', '(', ')', '╱', '╲'], color: c.river },
-      water_area: { kind: 'water', glyphs: ['≈', '~'], color: c.lake },
-      water_sea: { kind: 'water', glyphs: ['≈', '~'], color: c.sea },
+      water_area: { kind: 'water', glyphs: ['≈', '~'], color: c.lake, fill: 0.2 },
+      water_sea: { kind: 'water', glyphs: ['≈', '~'], color: c.sea, fill: 0.2 },
       coastline: { kind: 'road', glyphs: singleLine, color: c.coast },
       terrain: { kind: 'ramp', glyphs: terrainRamp, color: c.terrain },
       admin_city: { kind: 'road', glyphs: dashedLine, color: c.adminCity },
       admin_subdivision: { kind: 'road', glyphs: pathLine, color: c.adminSubdivision },
-      road_major: { kind: 'road', glyphs: doubleLine, color: c.roadMajor },
-      road_mid: { kind: 'road', glyphs: singleLine, color: c.roadMid },
-      road_minor: { kind: 'road', glyphs: singleLine, color: c.roadMinor },
+      road_major: { kind: 'road', glyphs: doubleLine, color: c.roadMajor, fill: 0.1 },
+      road_mid: { kind: 'road', glyphs: singleLine, color: c.roadMid, fill: 0.1 },
+      road_minor: { kind: 'road', glyphs: singleLine, color: c.roadMinor, fill: 0.1 },
       path: { kind: 'road', glyphs: pathLine, color: c.path },
-      building: { kind: 'building', glyphs: buildingRamp, color: c.building },
-      building_religious: { kind: 'building', glyphs: buildingRamp, color: c.religious },
-      building_school: { kind: 'building', glyphs: buildingRamp, color: c.school },
-      building_market: { kind: 'building', glyphs: buildingRamp, color: c.market },
+      building: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
+      building_religious: { kind: 'building', glyphs: buildingRamp, color: c.religious, fill: 0.22 },
+      building_school: { kind: 'building', glyphs: buildingRamp, color: c.school, fill: 0.22 },
+      building_market: { kind: 'building', glyphs: buildingRamp, color: c.market, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
-      building_part: { kind: 'building', glyphs: buildingRamp, color: c.part },
-      park: { kind: 'diagonal', glyphs: ['"', "'", ','], color: c.park },
-      trees: { kind: 'scatter', glyphs: ['♣', '♠', '↑'], color: c.trees },
-      farmland: { kind: 'rows', glyphs: ['≡', "'"], color: c.farmland },
+      building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
+      park: { kind: 'diagonal', glyphs: ['"', "'", ','], color: c.park, fill: 0.12 },
+      trees: { kind: 'scatter', glyphs: ['♣', '♠', '↑'], color: c.trees, fill: 0.1 },
+      farmland: { kind: 'rows', glyphs: ['≡', "'"], color: c.farmland, fill: 0.08 },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
       marker_school: { kind: 'single', glyphs: ['⌂'], color: c.school },
       marker_market: { kind: 'single', glyphs: ['$'], color: c.market },
@@ -162,8 +182,8 @@ function makeTheme(background: number, c: Palette): Theme {
       entrance: { kind: 'single', glyphs: ['▪'], color: c.monument },
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
       furniture: { kind: 'variant', glyphs: ['•', '╥', '○', '¶'], color: c.furniture },
-      parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking },
-      pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch },
+      parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },
+      pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch, fill: 0.12 },
       // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
       // screen (across, then up or down), a bird by its wing beat.
       life_vehicle: { kind: 'single', glyphs: ['▬', '▮'], color: c.vehicle },
@@ -302,6 +322,6 @@ export const labelCharacters: readonly string[] = [
 export function themeGlyphs(theme: Theme): string[] {
   const set = new Set<string>();
   for (const style of Object.values(theme.styles)) for (const g of style.glyphs) set.add(g);
-  for (const g of [...singleWall, ...doubleWall, ...labelCharacters]) set.add(g);
+  for (const g of [...singleWall, ...doubleWall, ...sextantGlyphs, ...labelCharacters]) set.add(g);
   return [...set];
 }

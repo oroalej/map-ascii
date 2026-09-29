@@ -77,10 +77,10 @@ describe('TileLife', () => {
   });
 
   it('spawns vehicles by the length of road', () => {
-    // About 600 m of major road, one vehicle per 60 m.
+    // About 600 m of major road, one vehicle per 30 m.
     const { movers } = new TileLife(tile, road, 7);
-    expect(movers.length).toBeGreaterThanOrEqual(8);
-    expect(movers.length).toBeLessThanOrEqual(12);
+    expect(movers.length).toBeGreaterThanOrEqual(17);
+    expect(movers.length).toBeLessThanOrEqual(23);
     expect(movers.every((m) => m.kind === 'vehicle')).toBe(true);
     expect(movers.every((m) => m.y === 2048 && m.x >= 0 && m.x <= 4095)).toBe(true);
   });

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { doubleLine, doubleWall, singleLine, singleWall, themeGlyphs, themes } from '../theme';
+import {
+  doubleLine,
+  doubleWall,
+  sextantGlyphs,
+  singleLine,
+  singleWall,
+  themeGlyphs,
+  themes,
+} from '../theme';
 import { drawProcedural, shadeCoverage } from './atlas';
 
 const W = 10;
@@ -78,6 +86,41 @@ describe('procedural glyphs', () => {
   });
 });
 
+describe('sextants', () => {
+  it('maps masks to the Unicode sextants, half blocks, and full block', () => {
+    expect(sextantGlyphs).toHaveLength(64);
+    expect(new Set(sextantGlyphs).size).toBe(64);
+    expect(sextantGlyphs[1]).toBe('\u{1FB00}'); // top-left sixth
+    expect(sextantGlyphs[20]).toBe('\u{1FB13}');
+    expect(sextantGlyphs[22]).toBe('\u{1FB14}'); // after skipping ▌ (21)
+    expect(sextantGlyphs[62]).toBe('\u{1FB3B}');
+    expect([sextantGlyphs[0], sextantGlyphs[21], sextantGlyphs[42], sextantGlyphs[63]]).toEqual([
+      ' ',
+      '▌',
+      '▐',
+      '█',
+    ]);
+  });
+
+  it('fills exactly the sixths in the mask, edge to edge', () => {
+    for (let mask = 1; mask < 63; mask++) {
+      const { drawn, at } = draw(sextantGlyphs[mask]!);
+      expect(drawn).toBe(true);
+      // Sample the middle of each sixth (2 columns of 5 px, 3 rows of 6 px).
+      for (let bit = 0; bit < 6; bit++) {
+        const x = (bit % 2) * 5 + 2;
+        const y = Math.floor(bit / 2) * 6 + 3;
+        expect(at(x, y) > 0, `mask ${mask} bit ${bit}`).toBe((mask & (1 << bit)) !== 0);
+      }
+    }
+    // The top-left sixth reaches the cell's corner, so neighbors join without a gap.
+    const topLeft = draw(sextantGlyphs[1]!);
+    expect([topLeft.at(0, 0), topLeft.at(4, 5), topLeft.at(5, 0), topLeft.at(0, 6)]).toEqual([
+      255, 255, 0, 0,
+    ]);
+  });
+});
+
 describe('glyph set', () => {
   it('puts every map glyph (styles and walls) in the first 256 atlas slots', () => {
     for (const theme of Object.values(themes)) {
@@ -86,6 +129,7 @@ describe('glyph set', () => {
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,
         ...doubleWall,
+        ...sextantGlyphs,
       ]);
       for (const g of mapGlyphs) expect(glyphs.indexOf(g) + 1, g).toBeLessThan(256);
     }

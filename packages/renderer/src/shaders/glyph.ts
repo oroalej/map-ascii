@@ -1,7 +1,8 @@
 /**
  * Glyph pass: full-resolution draw. Each pixel finds its cell (the grid is shifted by the
  * sub-cell pan offset, so panning scrolls smoothly), reads the cell's glyph and class, samples
- * the glyph atlas, and tints it with the class color over the background. Hovered cells are
+ * the glyph atlas, and tints it with the class color over the cell's background (the faint fill
+ * of the class the select pass names, SPEC.md §4 "Two colors per cell"). Hovered cells are
  * brighter; highlighted and selected ones take the accent color, the selection with a slow
  * shimmer (SPEC.md §4 "Hover and selection").
  *
@@ -12,6 +13,7 @@
  */
 import { MAX_CLASSES } from '../classes';
 import { CellBit } from '../life/config';
+import { EDGE_INK, EDGE_STATE } from '../glyphs/select';
 import { CellState } from '../picking';
 import { cellHashGlsl } from './hash';
 
@@ -27,6 +29,7 @@ uniform vec2 u_shift;             // screen pixel + shift = pixel in the cell gr
 uniform float u_height;           // canvas height in device pixels
 uniform int u_columns;            // glyph slots per atlas row
 uniform vec3 u_colors[${MAX_CLASSES}];
+uniform float u_fills[${MAX_CLASSES}]; // background fill strength per class (0 = none)
 uniform vec3 u_background;
 uniform float u_time;
 uniform int u_pulse;              // class id that pulses (landmarks)
@@ -56,6 +59,11 @@ vec3 daylit(vec3 color) {
   return mix(color, color * vec3(0.4, 0.48, 0.78), darkness() * 0.85);
 }
 
+// A class's fill in a color: the background tinted toward it by the class's fill strength.
+vec3 fillOf(int cls, vec3 color) {
+  return mix(u_background, color, u_fills[cls]);
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
   vec2 grid = screen + u_shift;
@@ -75,7 +83,13 @@ void main() {
 
   vec4 g = texelFetch(u_glyphs, cell, 0);
   int cls = int(g.g * 255.0 + 0.5);
+  int rawState = int(g.b * 255.0 + 0.5);
+  bool edge = (rawState & ${EDGE_STATE}) != 0;
+  int state = rawState & ${EDGE_STATE - 1};
+  int bgClass = int(g.a * 255.0 + 0.5);
   float night = darkness();
+  // The cell's background: its fill class's color, faint (theme.ts ClassStyle.fill).
+  vec3 back = fillOf(bgClass, daylit(u_colors[bgClass]));
 
   // Agents stand on top where the cell under them allows.
   vec4 life = texelFetch(u_life, cell, 0);
@@ -87,12 +101,12 @@ void main() {
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
     vec3 color = daylit(u_colors[lifeClass]);
     if (lifeClass == u_vehicle) color = mix(color, vec3(1.0, 0.95, 0.8), night * 0.7);
-    o_color = vec4(mix(u_background, color, coverage), 1.0);
+    o_color = vec4(mix(back, color, coverage), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(u_background, 1.0);
+    o_color = vec4(back, 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5);
@@ -111,7 +125,6 @@ void main() {
       color = mix(color, vec3(1.0, 0.82, 0.48) * flicker, 0.85);
     }
   }
-  int state = int(g.b * 255.0 + 0.5);
   if (state == ${CellState.hover}) {
     color = mix(color, vec3(1.0), 0.45);
   } else if (state == ${CellState.highlight}) {
@@ -120,6 +133,11 @@ void main() {
     color = u_accent;
     if (u_shimmer) color *= 0.78 + 0.22 * sin(u_time * 2.5 - float(cell.x + cell.y) * 0.35);
   }
-  o_color = vec4(mix(u_background, color, coverage), 1.0);
+  // The feature's own fill takes its highlight too, so a selected footprint lights up whole.
+  if (!edge && bgClass == cls) back = fillOf(cls, color);
+  // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
+  // shape reads as one area with a crisp rim.
+  if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
+  o_color = vec4(mix(back, color, coverage), 1.0);
 }
 `;

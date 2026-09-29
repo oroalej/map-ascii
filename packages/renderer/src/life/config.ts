@@ -17,9 +17,9 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
 };
 
 /** At most this many agents are drawn, those nearest the view's center first. */
-export const MAX_VISIBLE_AGENTS = 600;
+export const MAX_VISIBLE_AGENTS = 1200;
 /** At most this many agents live in one tile. */
-export const MAX_TILE_AGENTS = 300;
+export const MAX_TILE_AGENTS = 600;
 /** A longer frame (a background tab) is simulated as this long, so agents don't jump. */
 export const MAX_STEP_S = 0.1;
 /** Vehicles keep this far right of the road's center line, so two-way traffic passes. */
@@ -42,16 +42,16 @@ export type SpawnRule = {
 
 /** Who is spawned on each line kind. */
 export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
-  [LifeLine.roadMajor]: [{ kind: 'vehicle', spacing: 60, speed: [7, 12] }],
-  [LifeLine.roadMid]: [{ kind: 'vehicle', spacing: 100, speed: [6, 10] }],
+  [LifeLine.roadMajor]: [{ kind: 'vehicle', spacing: 30, speed: [7, 12] }],
+  [LifeLine.roadMid]: [{ kind: 'vehicle', spacing: 50, speed: [6, 10] }],
   // Side streets: tricycles and people on foot.
   [LifeLine.roadMinor]: [
-    { kind: 'vehicle', spacing: 200, speed: [3, 6] },
-    { kind: 'person', spacing: 120, speed: [0.9, 1.5] },
+    { kind: 'vehicle', spacing: 100, speed: [3, 6] },
+    { kind: 'person', spacing: 50, speed: [0.9, 1.5] },
   ],
-  [LifeLine.path]: [{ kind: 'person', spacing: 40, speed: [0.9, 1.4] }],
-  [LifeLine.plaza]: [{ kind: 'person', spacing: 20, speed: [0.6, 1.2] }],
-  [LifeLine.river]: [{ kind: 'boat', spacing: 400, speed: [1, 2.5] }],
+  [LifeLine.path]: [{ kind: 'person', spacing: 20, speed: [0.9, 1.4] }],
+  [LifeLine.plaza]: [{ kind: 'person', spacing: 10, speed: [0.6, 1.2] }],
+  [LifeLine.river]: [{ kind: 'boat', spacing: 200, speed: [1, 2.5] }],
 };
 
 /** People stop for a while (chance per second, and how long in s), or turn back. */
@@ -60,7 +60,7 @@ export const PERSON_TURN_CHANCE = 0.01;
 
 /** Birds: flocks per tile (at most one per roost), birds per flock, and how they fly. */
 export const BIRDS = {
-  flocksPerTile: 3,
+  flocksPerTile: 5,
   flockSize: [3, 7] as const,
   /** m/s */
   speed: 9,

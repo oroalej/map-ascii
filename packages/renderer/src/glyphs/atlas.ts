@@ -3,6 +3,7 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
   "ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, monospace";
@@ -137,6 +138,27 @@ function drawBlock(slot: Slot, glyph: string) {
   }
 }
 
+/** Sextant mask by glyph (theme.ts `sextantGlyphs`), for the partial blocks only. */
+const sextantMasks = new Map<string, number>(
+  sextantGlyphs.flatMap((glyph, mask) => (mask === 0 || mask === 63 ? [] : [[glyph, mask]])),
+);
+
+/**
+ * A sextant: the cell split into 2 columns and 3 rows, each sixth solid or empty. The splits are
+ * rounded the same way in every cell, so neighboring sextants meet without seams or gaps.
+ */
+function drawSextant(slot: Slot, mask: number) {
+  const { w, h } = slot;
+  const xs = [0, Math.round(w / 2), w];
+  const ys = [0, Math.round(h / 3), Math.round((2 * h) / 3), h];
+  for (let bit = 0; bit < 6; bit++) {
+    if (!(mask & (1 << bit))) continue;
+    const col = bit % 2;
+    const row = Math.floor(bit / 2);
+    fill(slot, xs[col]!, ys[row]!, xs[col + 1]!, ys[row + 1]!);
+  }
+}
+
 /** Draw a glyph as shapes into `slot` if it is a box-drawing or block character. */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
@@ -145,6 +167,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (glyph === '╱' || glyph === '╲') drawDiagonal(slot, glyph === '╱');
   else if (glyph === '□') drawSquare(slot);
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);
+  else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
   else return false;
   return true;
 }

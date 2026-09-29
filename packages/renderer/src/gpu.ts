@@ -1,5 +1,6 @@
 /** Small WebGL2 helpers: programs, textures, framebuffers, and per-tile meshes. */
 import * as twgl from 'twgl.js';
+import { SUB } from './glyphs/select';
 import type { GeometryArrays, GroundGeometry, TileGeometry } from './raster/geometry';
 
 export type GL = WebGL2RenderingContext;
@@ -45,6 +46,22 @@ export type CellTargets = {
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
+  /**
+   * The cell pass again at `SUB.cols × SUB.rows` samples per cell (flat views), for sub-cell
+   * edges: class, attributes, and feature id, like the cell-resolution targets.
+   */
+  sub: RasterTargets;
+};
+
+/** Class, attribute, and id textures with a depth buffer, drawn to together by the cell pass. */
+export type RasterTargets = {
+  width: number;
+  height: number;
+  classTex: WebGLTexture;
+  attrTex: WebGLTexture;
+  idTex: WebGLTexture;
+  depth: WebGLRenderbuffer;
+  fbo: WebGLFramebuffer;
 };
 
 function checkComplete(gl: GL, what: string) {
@@ -54,27 +71,39 @@ function checkComplete(gl: GL, what: string) {
   }
 }
 
-export function createCellTargets(gl: GL, cols: number, rows: number): CellTargets {
+function createRasterTargets(gl: GL, width: number, height: number, what: string): RasterTargets {
   // RGBA8 rather than R8 (only red is used): the legend reads it back as RGBA, which then needs
   // no format conversion.
-  const classTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const classTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
+  const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
+  const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
   const depth = gl.createRenderbuffer();
   gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, cols, rows);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
 
-  const cellFbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, cellFbo);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, classTex, 0);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, attrTex, 0);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, idTex, 0);
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
   gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-  checkComplete(gl, 'cell');
+  checkComplete(gl, what);
+  return { width, height, classTex, attrTex, idTex, depth, fbo };
+}
+
+function deleteRasterTargets(gl: GL, t: RasterTargets) {
+  for (const tex of [t.classTex, t.attrTex, t.idTex]) gl.deleteTexture(tex);
+  gl.deleteRenderbuffer(t.depth);
+  gl.deleteFramebuffer(t.fbo);
+}
+
+export function createCellTargets(gl: GL, cols: number, rows: number): CellTargets {
+  const cell = createRasterTargets(gl, cols, rows, 'cell');
+  const sub = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell');
+  const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
 
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
@@ -85,15 +114,16 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   return {
     cols,
     rows,
-    classTex,
-    attrTex,
-    idTex,
+    classTex: cell.classTex,
+    attrTex: cell.attrTex,
+    idTex: cell.idTex,
     glyphTex,
     overlayTex,
     lifeTex,
-    depth,
-    cellFbo,
+    depth: cell.depth,
+    cellFbo: cell.fbo,
     glyphFbo,
+    sub,
   };
 }
 
@@ -104,6 +134,7 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
   gl.deleteRenderbuffer(t.depth);
   gl.deleteFramebuffer(t.cellFbo);
   gl.deleteFramebuffer(t.glyphFbo);
+  deleteRasterTargets(gl, t.sub);
 }
 
 /** Replace the overlay's contents (RGBA8 texels from labels.ts `packOverlay`). */

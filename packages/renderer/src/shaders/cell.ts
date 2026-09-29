@@ -1,5 +1,6 @@
 /**
- * Cell pass: rasterize tile geometry into a framebuffer with one pixel per cell. Three render
+ * Cell pass: rasterize tile geometry into a framebuffer with one pixel per cell (and, for flat
+ * views, again at SUB samples per cell for sub-cell edges, glyphs/select.ts). Three render
  * targets: class id (RGBA8, red only), attributes (RGBA8: height, flags, variant), and packed
  * feature id (RGBA8). Ground features get a depth from their class priority, so the depth test keeps the
  * winning class; 3D building extrusions (tilted cameras) use their real depth in front of all
@@ -77,6 +78,7 @@ flat in float v_vis;
 in float v_ridge;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0) (flat views; 0 when tilted)
+uniform ivec2 u_sub;    // samples per cell: 1 x 1, or SUB for the sub-cell targets
 
 layout(location = 0) out vec4 o_class;
 layout(location = 1) out vec4 o_attr;
@@ -86,7 +88,8 @@ ${cellHashGlsl}
 
 void main() {
   if (v_vis < 1.0) {
-    uint h = cellHash(u_origin + ivec2(gl_FragCoord.xy));
+    // Hashed by cell, so the sub-cell samples keep the same cells as the cell pass.
+    uint h = cellHash(u_origin + ivec2(gl_FragCoord.xy) / u_sub);
     if (float(h >> 8u) / 16777216.0 >= v_vis) discard;
   }
   o_class = vec4(v_meta.x / 255.0, 0.0, 0.0, 1.0);

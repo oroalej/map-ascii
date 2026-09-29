@@ -35,11 +35,11 @@ export const renderClasses: readonly RenderClass[] = [
 ];
 
 /**
- * Size of the per-class uniform arrays and the glyph table's class axis. The table's last three
- * rows hold wall and extrusion glyphs (glyphs/select.ts).
+ * Size of the per-class uniform arrays and the glyph table's class axis. The table's last five
+ * rows hold sextant, extrusion, and wall glyphs (glyphs/select.ts).
  */
 export const MAX_CLASSES = 48;
-if (renderClasses.length >= MAX_CLASSES - 3) throw new Error('too many render classes');
+if (renderClasses.length >= MAX_CLASSES - 5) throw new Error('too many render classes');
 
 const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
 

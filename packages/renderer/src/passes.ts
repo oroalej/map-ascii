@@ -8,7 +8,7 @@ import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
 import { isTilted, multiply, project, TILE_SIZE, viewportFor } from './camera';
 import { classDepths, classId, classVisibility } from './classes';
-import { roadMask, seeThroughMask } from './glyphs/select';
+import { roadMask, seeThroughMask, SUB, subcellMask } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
   drawExtrusions,
@@ -40,6 +40,7 @@ import type { TileId } from './tiles';
 const depths = classDepths();
 const seeThrough = seeThroughMask();
 const roads = roadMask();
+const subcellAreas = subcellMask();
 const lifeCellBits = cellBits();
 
 /** 0xRRGGBB → [r, g, b] in 0–1. */
@@ -170,11 +171,8 @@ export function cellPass(
 ) {
   const { cols, rows } = targets;
   const { camera } = view;
+  const tilted = isTilted(camera);
   const program = programs.cell;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, targets.cellFbo);
-  gl.viewport(0, 0, cols, rows);
-  for (let i = 0; i < 3; i++) gl.clearBufferfv(gl.COLOR, i, [0, 0, 0, 0]);
-  gl.clearBufferfi(gl.DEPTH_STENCIL, 0, 1, 0);
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LESS);
   gl.useProgram(program.program);
@@ -185,20 +183,37 @@ export function cellPass(
     u_roadMask: roads,
     u_origin: [placement.grid.originCol, placement.grid.originRow],
   });
-  for (const { tile, mesh } of layers.region) {
-    twgl.setUniforms(program, { u_matrix: placement.tileMatrix(tile) });
-    drawGround(gl, mesh.region);
-  }
   const matrices = layers.tiles.map(({ tile }) => placement.tileMatrix(tile));
-  layers.tiles.forEach(({ mesh }, i) => {
-    twgl.setUniforms(program, { u_matrix: matrices[i]! });
-    drawGround(gl, mesh);
-  });
-  if (isTilted(camera)) {
+  const drawFlat = () => {
+    for (const { tile, mesh } of layers.region) {
+      twgl.setUniforms(program, { u_matrix: placement.tileMatrix(tile) });
+      drawGround(gl, mesh.region);
+    }
+    layers.tiles.forEach(({ mesh }, i) => {
+      twgl.setUniforms(program, { u_matrix: matrices[i]! });
+      drawGround(gl, mesh);
+    });
+  };
+  const begin = (fbo: WebGLFramebuffer, width: number, height: number, sub: [number, number]) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, width, height);
+    for (let i = 0; i < 3; i++) gl.clearBufferfv(gl.COLOR, i, [0, 0, 0, 0]);
+    gl.clearBufferfi(gl.DEPTH_STENCIL, 0, 1, 0);
+    twgl.setUniforms(program, { u_sub: sub });
+  };
+
+  begin(targets.cellFbo, cols, rows, [1, 1]);
+  drawFlat();
+  if (tilted) {
     layers.tiles.forEach(({ mesh }, i) => {
       twgl.setUniforms(program, { u_matrix: matrices[i]! });
       drawExtrusions(gl, mesh);
     });
+  } else {
+    // The same ground again at SUB samples per cell, for sub-cell edges (select pass).
+    const { sub } = targets;
+    begin(sub.fbo, sub.width, sub.height, [SUB.cols, SUB.rows]);
+    drawFlat();
   }
   gl.bindVertexArray(null);
   gl.disable(gl.DEPTH_TEST);
@@ -292,6 +307,11 @@ export function selectPass(
     u_selected: highlights.selected,
     u_highlight: highlights.highlight,
     u_highlightCount: highlights.highlightCount,
+    u_subcell: !isTilted(view.camera),
+    u_subClass: targets.sub.classTex,
+    u_subAttr: targets.sub.attrTex,
+    u_subId: targets.sub.idTex,
+    u_subcellMask: subcellAreas,
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -355,6 +375,7 @@ export function glyphPass(
     u_height: view.height,
     u_columns: atlas.columns,
     u_colors: tables.colors,
+    u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),

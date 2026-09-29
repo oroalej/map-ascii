@@ -105,7 +105,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Bird | `v` / `-` (wing beat) | flocks of 3–7 circling over parks, woods, and water, moving between them | 13.5 |
 
 - Agents move at real-world speeds (cars about 8 m/s, people about 1.2 m/s), so motion reads the same at any zoom.
-- Each tile's agents start from a seed made of the tile's key, so they are the same for every visitor. At most 600 are drawn, nearest the center first.
+- Each tile's agents start from a seed made of the tile's key, so they are the same for every visitor. At most 1,200 are drawn, nearest the center first.
 - An agent shows only where the cell under it allows: vehicles on roads, boats on water, people off roofs and water. In the tilted view, a building in front hides it.
 - **Time of day.** The map is lit for the real sun over the view (solar altitude from the visitor's clock), or a fixed day, dusk, or night. Dusk warms the colors. Night dims them toward blue, lights some building cells as windows and major roads with streetlights, and turns on vehicles' headlights. Fewer people and vehicles are out at night, and birds roost after dusk.
 
