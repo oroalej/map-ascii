@@ -1,22 +1,27 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Event, Landmark, NameHistory, Tour } from '@atlas/shared';
+import { City, contentSchemas } from '@atlas/shared';
 import type { z } from 'zod';
 
-/** Absolute path of `packages/content`. */
+/** Absolute path of `packages/content`. City packs live in its `cities/` folder. */
 export const contentRoot = fileURLToPath(new URL('..', import.meta.url));
 
+type Schemas = ReturnType<typeof contentSchemas>;
+
 const collections = {
-  landmarks: Landmark,
-  events: Event,
-  'name-history': NameHistory,
-  tours: Tour,
-} as const;
+  landmarks: 'Landmark',
+  events: 'Event',
+  'name-history': 'NameHistory',
+  tours: 'Tour',
+} as const satisfies Record<string, keyof Schemas>;
 
 type Collections = typeof collections;
 
-export type ContentBundle = { [K in keyof Collections]: z.infer<Collections[K]>[] };
+export type ContentBundle = { [K in keyof Collections]: z.infer<Schemas[Collections[K]]>[] };
+
+/** A registered city: its validated config and content. */
+export type CityPack = { city: City; content: ContentBundle };
 
 export type ContentError = { file: string; message: string };
 
@@ -33,45 +38,104 @@ async function listJson(dir: string): Promise<string[]> {
   }
 }
 
-/**
- * Load and validate every content collection under `root`. Returns all records plus every
- * validation error, so callers can report everything at once and then fail.
- */
-export async function loadContent(
-  root: string = contentRoot,
-): Promise<{ content: ContentBundle; errors: ContentError[] }> {
-  const content: ContentBundle = { landmarks: [], events: [], 'name-history': [], tours: [] };
-  const errors: ContentError[] = [];
-  const seenIds = new Map<string, string>();
+async function listDirs(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+}
 
-  for (const [name, schema] of Object.entries(collections) as [keyof Collections, z.ZodType][]) {
-    for (const path of await listJson(join(root, name))) {
-      const file = relative(root, path).split(sep).join('/');
-      let raw: unknown;
-      try {
-        raw = JSON.parse(await readFile(path, 'utf8'));
-      } catch (err) {
-        errors.push({ file, message: `invalid JSON: ${(err as Error).message}` });
-        continue;
-      }
-      const result = schema.safeParse(raw);
-      if (!result.success) {
-        for (const issue of result.error.issues) {
-          errors.push({ file, message: `${issue.path.join('.') || '(root)'}: ${issue.message}` });
-        }
-        continue;
-      }
-      const record = result.data as { id?: string; osm_id?: string };
-      const key = record.id ?? `${name}:${record.osm_id}`;
-      const previous = seenIds.get(key);
-      if (previous) {
-        errors.push({ file, message: `duplicate id "${key}" (also in ${previous})` });
-        continue;
-      }
-      seenIds.set(key, file);
-      (content[name] as unknown[]).push(result.data);
+/** Parse and validate one JSON file, recording every problem in `errors`. */
+async function readValid<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  file: string,
+  errors: ContentError[],
+): Promise<T | undefined> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(path, 'utf8'));
+  } catch (err) {
+    const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
+    errors.push({ file, message: missing ? 'missing' : `invalid JSON: ${(err as Error).message}` });
+    return undefined;
+  }
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      errors.push({ file, message: `${issue.path.join('.') || '(root)'}: ${issue.message}` });
     }
+    return undefined;
+  }
+  return result.data;
+}
+
+/**
+ * Load and validate every city pack under `<root>/cities/` (or only `only`, a city slug).
+ * A pack is its `city.json` plus content collections, whose localized fields may use only the
+ * city's declared languages. Returns the valid packs plus every validation error, so callers
+ * can report everything at once and then fail.
+ */
+export async function loadCityPacks(
+  root: string = contentRoot,
+  { only }: { only?: string } = {},
+): Promise<{ packs: CityPack[]; errors: ContentError[] }> {
+  const packs: CityPack[] = [];
+  const errors: ContentError[] = [];
+  const toFile = (path: string) => relative(root, path).split(sep).join('/');
+  const citiesDir = join(root, 'cities');
+
+  const slugs = (await listDirs(citiesDir)).filter((slug) => only === undefined || slug === only);
+  if (only !== undefined && slugs.length === 0) {
+    errors.push({ file: `cities/${only}`, message: 'no such city pack' });
   }
 
-  return { content, errors };
+  for (const slug of slugs) {
+    const dir = join(citiesDir, slug);
+    const configFile = toFile(join(dir, 'city.json'));
+    const city = await readValid(join(dir, 'city.json'), City, configFile, errors);
+    if (!city) continue;
+    if (city.slug !== slug) {
+      errors.push({
+        file: configFile,
+        message: `slug "${city.slug}" must match its folder "${slug}"`,
+      });
+      continue;
+    }
+
+    const schemas = contentSchemas(city.languages);
+    const content: ContentBundle = { landmarks: [], events: [], 'name-history': [], tours: [] };
+    const seenIds = new Map<string, string>();
+    const before = errors.length;
+
+    for (const [name, schemaName] of Object.entries(collections) as [
+      keyof Collections,
+      Collections[keyof Collections],
+    ][]) {
+      for (const path of await listJson(join(dir, name))) {
+        const file = toFile(path);
+        const record = await readValid(path, schemas[schemaName] as z.ZodType, file, errors);
+        if (record === undefined) continue;
+        const { id, osm_id } = record as { id?: string; osm_id?: string };
+        const key = id ?? `${name}:${osm_id}`;
+        const previous = seenIds.get(key);
+        if (previous) {
+          errors.push({ file, message: `duplicate id "${key}" (also in ${previous})` });
+          continue;
+        }
+        seenIds.set(key, file);
+        (content[name] as unknown[]).push(record);
+      }
+    }
+
+    if (errors.length === before) packs.push({ city, content });
+  }
+
+  return { packs, errors };
 }

@@ -1,0 +1,11 @@
+{
+  "slug": "naga",
+  "name": { "en": "Naga City" },
+  "country": "PH",
+  "boundary": { "name": "Naga City", "admin_level": 6, "within": "Bicol Region" },
+  "detail_buffer_km": 2,
+  "region": { "name": "Bicol Region", "osm_relation": "3561455" },
+  "subdivision": { "admin_level": 10, "label": { "en": "barangay" } },
+  "languages": ["fil", "bcl"],
+  "smoke_landmark": "Naga Metropolitan Cathedral"
+}

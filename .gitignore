@@ -40,7 +40,8 @@ desktop.ini
 packages/data/raw/
 packages/data/build/
 
-# generated tiles and search index (see docs/DATA.md)
+# generated per-city tiles, meta, and search index (see docs/DATA.md)
 apps/web/public/tiles/*.pmtiles
-apps/web/public/tiles/search-index.json
+apps/web/public/tiles/*.meta.json
+apps/web/public/tiles/*.search-index.json
 apps/web/public/tiles/imagery/

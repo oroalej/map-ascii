@@ -1,6 +1,6 @@
-import { loadContent } from './validate';
+import { loadCityPacks } from './validate';
 
-const { content, errors } = await loadContent();
+const { packs, errors } = await loadCityPacks();
 
 if (errors.length > 0) {
   for (const { file, message } of errors) console.error(`✗ ${file}: ${message}`);
@@ -8,7 +8,10 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-const counts = Object.entries(content)
-  .map(([name, records]) => `${records.length} ${name}`)
-  .join(', ');
-console.log(`✓ Content valid (${counts}).`);
+for (const { city, content } of packs) {
+  const counts = Object.entries(content)
+    .map(([name, records]) => `${records.length} ${name}`)
+    .join(', ');
+  console.log(`✓ ${city.slug}: ${counts}`);
+}
+console.log(`Content valid (${packs.length} ${packs.length === 1 ? 'city' : 'cities'}).`);

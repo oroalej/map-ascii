@@ -21,8 +21,8 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 ## Phase 1 — Generic foundation + Naga Centro prototype (prove the look)
 
 **Tasks**
-- [ ] `City` zod schema in `packages/shared`. Switch `LocalizedText` to "`en` + the city's declared languages" (`DATA.md` §4).
-- [ ] City pack layout: move content under `packages/content/cities/<slug>/`, and add `cities/naga/city.json` **(Naga)**. The validator walks every city pack.
+- [x] `City` zod schema in `packages/shared`. Switch `LocalizedText` to "`en` + the city's declared languages" (`DATA.md` §4).
+- [x] City pack layout: move content under `packages/content/cities/<slug>/`, and add `cities/naga/city.json` **(Naga)**. The validator walks every city pack.
 - [ ] Pipeline takes `--city` (default: all registered cities), and writes `raw/<city>/`, `build/<city>/`, `<city>.pmtiles`, and `<city>.meta.json`.
 - [ ] Web app reads the city's meta for bounds and default camera. Remove the hardcoded Naga camera from the store, the hardcoded tiles URL, and the hardcoded canvas `aria-label`.
 - [ ] Data pipeline steps 01–05 for the Naga detail bbox only (no Region layers yet). Output `naga.pmtiles` **(Naga)**.
@@ -132,6 +132,7 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - Which imagery source is allowed for the timeline underlay. This must be settled before Phase 4.
 - Hosting for large tile and imagery files: Vercel or R2.
 - Final product name ("ASCII Atlas" is the working name) and domain name.
+- How to assign subdivisions when a city's subdivision boundaries are incomplete in OSM (Naga: 3 of 27 barangays mapped). Options: leave features without a subdivision, derive approximate areas from `place` nodes (and label them approximate), or map the boundaries in OSM from a license-compatible source. Must be settled before step 03 computes `subdivision`.
 - Which city comes second. It should differ from Naga in at least one of country, admin levels, or languages, to stress the generic model.
 
 ## Log

@@ -1,0 +1,11 @@
+{
+  "slug": "fixture",
+  "name": { "en": "Fixture City" },
+  "country": "XX",
+  "boundary": { "name": "Fixture City", "admin_level": 6 },
+  "detail_buffer_km": 1,
+  "region": { "bbox": [0, 0, 1, 1] },
+  "subdivision": { "admin_level": 10, "label": { "en": "ward" } },
+  "languages": ["xx"],
+  "smoke_landmark": "Fixture Church"
+}

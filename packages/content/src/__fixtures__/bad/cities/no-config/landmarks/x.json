@@ -1,0 +1,8 @@
+{
+  "id": "landmark/undeclared-language",
+  "osm_id": "osm:way/2",
+  "name": { "en": "Wrong language", "de": "Falsche Sprache" },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [{ "title": "Fixture" }]
+}

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CameraState, Event, Landmark, NameHistory, Tour } from './schemas';
+import {
+  CameraState,
+  City,
+  contentSchemas,
+  Event,
+  Landmark,
+  LocalizedText,
+  NameHistory,
+  Tour,
+} from './schemas';
 
 const source = { title: 'Example source', url: 'https://example.org/' };
 
@@ -115,5 +124,53 @@ describe('Tour', () => {
       Tour.safeParse({ id: 'tour/x', title: { en: 'X' }, steps: [{ ...step, duration_ms: 0 }] })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('LocalizedText', () => {
+  it('requires en and accepts any valid language code', () => {
+    expect(LocalizedText.safeParse({ en: 'Hi', fil: 'Kumusta' }).success).toBe(true);
+    expect(LocalizedText.safeParse({ fil: 'Kumusta' }).success).toBe(false);
+    expect(LocalizedText.safeParse({ en: 'Hi', English: 'Hi' }).success).toBe(false);
+  });
+
+  it('limits content to the declared languages', () => {
+    const { Landmark: CityLandmark } = contentSchemas(['fil']);
+    expect(CityLandmark.safeParse({ ...landmark, name: { en: 'X', fil: 'Y' } }).success).toBe(true);
+    const result = CityLandmark.safeParse({ ...landmark, name: { en: 'X', de: 'Y' } });
+    expect(result.error?.issues[0]?.path).toEqual(['name', 'de']);
+  });
+});
+
+describe('City', () => {
+  const city = {
+    slug: 'example',
+    name: { en: 'Example City' },
+    country: 'XX',
+    boundary: { name: 'Example City', admin_level: 6, within: 'Example Region' },
+    detail_buffer_km: 2,
+    region: { name: 'Example Region' },
+    subdivision: { admin_level: 10, label: { en: 'ward', xx: 'wardo' } },
+    languages: ['xx'],
+    smoke_landmark: 'Example Church',
+  };
+
+  it('accepts a valid config', () => {
+    expect(City.safeParse(city).success).toBe(true);
+    expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
+  });
+
+  it('rejects localized fields in undeclared languages', () => {
+    const result = City.safeParse({ ...city, languages: [] });
+    expect(result.error?.issues[0]?.path).toEqual(['subdivision', 'label', 'xx']);
+  });
+
+  it('rejects "en" in languages and unknown keys', () => {
+    expect(City.safeParse({ ...city, languages: ['en', 'xx'] }).success).toBe(false);
+    expect(City.safeParse({ ...city, center: [1, 2] }).success).toBe(false);
+  });
+
+  it('rejects an inverted bbox', () => {
+    expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
   });
 });
