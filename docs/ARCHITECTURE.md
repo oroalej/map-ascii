@@ -63,8 +63,8 @@ const atlas = createAtlas(canvas, {
   year: 2026,
 });
 
-atlas.setCamera(partial, { animate?: boolean });
-atlas.flyTo(target: Partial<CameraState>);
+atlas.setCamera(partial, { animate?: boolean, duration?: number });
+atlas.flyTo(target: Partial<CameraState>, { duration?: number });  // duration overrides 0.8–3 s
 atlas.getCamera(): CameraState;
 atlas.setYear(year: number, { animate?: boolean });
 atlas.setTheme('dark' | 'light');
@@ -72,11 +72,11 @@ atlas.setSelected(featureId | null);
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
-atlas.on('camerachange' | 'hover' | 'click' | 'flyend', handler);
+atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input', handler);
 atlas.destroy();
 ```
 
-`hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom)` and `CLASS_LABELS` for the legend.
+`input` fires when the visitor moves the camera (drag, wheel, pinch, orbit, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom)` and `CLASS_LABELS` for the legend.
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
 

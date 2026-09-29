@@ -209,6 +209,15 @@ describe('flyPath', () => {
     );
   });
 
+  it('takes an explicit duration, which reduced motion still caps', () => {
+    expect(flyPath(from, far, size, { duration: 9000 }).duration).toBe(9000);
+    const near = { ...from, lng: from.lng + 1e-5 };
+    expect(flyPath(from, near, size, { duration: 200 }).duration).toBe(200);
+    expect(
+      flyPath(from, far, size, { duration: 9000, reducedMotion: true }).duration,
+    ).toBeLessThanOrEqual(FLY_REDUCED_MS);
+  });
+
   it('eases in and out', () => {
     expect(easeInOut(0)).toBe(0);
     expect(easeInOut(0.5)).toBeCloseTo(0.5);

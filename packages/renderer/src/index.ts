@@ -114,15 +114,25 @@ export type AtlasEventMap = {
   };
   /** A flight reached its target (not sent when input cancels it). */
   flyend: CameraState;
+  /**
+   * The visitor moved the camera (drag, wheel, pinch, orbit, or keys), which also ends any
+   * flight. Clicks and hover don't count. A tour pauses on it.
+   */
+  input: CameraState;
+};
+
+export type FlyOptions = {
+  /** Flight duration in ms, instead of the 0.8–3 s rule. Reduced motion still caps it. */
+  duration?: number;
 };
 
 export type AtlasEventName = keyof AtlasEventMap;
 
 export type Atlas = {
   /** Move the camera, or fly there with `animate`. */
-  setCamera(partial: Partial<CameraState>, opts?: { animate?: boolean }): void;
+  setCamera(partial: Partial<CameraState>, opts?: { animate?: boolean } & FlyOptions): void;
   /** Fly to a camera (SPEC.md §3): zoom out, travel, zoom in. Any input cancels it. */
-  flyTo(target: Partial<CameraState>): void;
+  flyTo(target: Partial<CameraState>, opts?: FlyOptions): void;
   getCamera(): CameraState;
   setYear(year: number, opts?: { animate?: boolean }): void;
   setTheme(theme: ThemeName): void;
@@ -587,9 +597,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // Flights (SPEC.md §3 "Fly-to").
   let flight: { path: FlyPath; start: number } | null = null;
 
-  const flyTo = (target: Partial<CameraState>) => {
+  const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
     const to = clampCamera({ ...camera, ...target }, limits, cssSize());
-    flight = { path: flyPath(camera, to, cssSize(), { reducedMotion }), start: performance.now() };
+    const path = flyPath(camera, to, cssSize(), { reducedMotion, duration: opts.duration });
+    flight = { path, start: performance.now() };
     lastInput = performance.now();
   };
 
@@ -683,6 +694,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     (...args: A) => {
       flight = null;
       action(...args);
+      emit('input', { ...camera });
     };
 
   const detachInput = attachInput(canvas, {
@@ -713,7 +725,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   return {
     setCamera(partial, opts) {
       if (opts?.animate) {
-        flyTo(partial);
+        flyTo(partial, opts);
         return;
       }
       flight = null;

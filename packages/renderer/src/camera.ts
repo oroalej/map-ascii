@@ -141,7 +141,7 @@ export function flyPath(
   from: CameraState,
   to: CameraState,
   size: Size,
-  opts: { reducedMotion?: boolean } = {},
+  opts: { reducedMotion?: boolean; duration?: number } = {},
 ): FlyPath {
   const z0 = from.zoom;
   const scale = 2 ** (to.zoom - z0);
@@ -171,9 +171,12 @@ export function flyPath(
     along = (s) => (w0 * ((Math.cosh(r0) * Math.tanh(r0 + RHO * s) - Math.sinh(r0)) / rho2)) / u1;
   }
   const ideal = Number.isFinite(length) ? (length / FLY_SPEED) * 1000 : 0;
+  // An explicit duration (e.g. a tour's slow establishing flight) replaces the clamped one;
+  // reduced motion still keeps every flight short.
+  const wanted = opts.duration ?? clamp(ideal, FLY_MIN_MS, FLY_MAX_MS);
   const duration = opts.reducedMotion
     ? Math.min(FLY_REDUCED_MS, clamp(ideal, 0, FLY_MAX_MS))
-    : clamp(ideal, FLY_MIN_MS, FLY_MAX_MS);
+    : Math.max(0, wanted);
   const dBearing = turn(from.bearing, to.bearing);
 
   return {
