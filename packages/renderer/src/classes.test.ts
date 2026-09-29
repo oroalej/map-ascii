@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { classDepths, classId, classVisibility } from './classes';
+import { classDepths, classesIn, classId, classVisibility } from './classes';
+
+describe('classesIn', () => {
+  it('lists the class ids in a class-buffer read, once each, in id order', () => {
+    const texel = (id: number) => [id, 0, 0, 255];
+    const texels = new Uint8Array(
+      [classId('road_major'), 0, classId('marker_school'), classId('road_major'), 250].flatMap(
+        texel,
+      ),
+    );
+    expect(classesIn(texels)).toEqual(['marker_school', 'road_major']);
+  });
+});
 
 describe('classVisibility', () => {
   const at = (zoom: number, cls: string) => classVisibility(zoom)[classId(cls)]!;

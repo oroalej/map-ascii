@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { BBox, City } from '@atlas/shared';
 import { downloadDem } from './lib/dem';
-import { bufferBbox, fromOverpassBounds, toOverpassBbox } from './lib/geo';
+import { bufferBbox, fromOverpassBounds, intersectBbox, toOverpassBbox } from './lib/geo';
 import { writeJson } from './lib/io';
 import {
   onlyRelation,
@@ -153,7 +153,12 @@ export const step: Step = {
     if (!boundary.bounds) throw new Error('Boundary relation came back without bounds');
     console.log(`  boundary: relation/${boundary.id}`);
 
-    const detailBbox = bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km);
+    // Detail outside the region can't be seen (the camera is clamped to it), so don't fetch it.
+    const regionBbox = await regionBounds(city, rawDir, offline);
+    const detailBbox = intersectBbox(
+      bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km),
+      regionBbox,
+    );
     const detail = await overpass(
       detailQuery(city, toOverpassBbox(detailBbox)),
       join(rawDir, files.rawDetail),
@@ -161,7 +166,6 @@ export const step: Step = {
     );
     console.log(`  detail: ${detail.elements.length} elements`);
 
-    const regionBbox = await regionBounds(city, rawDir, offline);
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {
       const cacheFile = join(

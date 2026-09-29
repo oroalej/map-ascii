@@ -3,7 +3,7 @@
  * greedily in priority order, with collision so they never overlap: place names (provinces,
  * cities, subdivisions, smaller places), landmarks, and monuments.
  */
-import type { ZoomBand } from '@atlas/shared';
+import { bandVisibility, type ZoomBand } from '@atlas/shared';
 
 /** Label priority: lower ranks are placed first. */
 export const LabelRank = {
@@ -22,9 +22,24 @@ export type LabelRank = (typeof LabelRank)[keyof typeof LabelRank];
 export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
 export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };
 
-/** Whether a label's band includes `zoom`. Labels switch at the band's edges; they don't fade. */
-export const labelShows = (band: ZoomBand, zoom: number) =>
-  zoom >= band.min && (band.max === undefined || zoom <= band.max);
+/**
+ * How much of a label shows at `zoom`, 0–1. Labels fade in and out over the same half level as
+ * the classes (`bandVisibility`): a partly shown label keeps that share of its cells.
+ */
+export const labelVisibility = (band: ZoomBand, zoom: number) => bandVisibility(band, zoom);
+
+/**
+ * Whether a label's cell `k` (counted across its halo box) shows at visibility `vis`: a fixed
+ * hash of the label and the cell, so the dissolve pattern stays put while the camera moves.
+ */
+export function labelCellShows(id: number, k: number, vis: number): boolean {
+  if (vis >= 1) return true;
+  let h = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 8) / 0x1000000 < vis;
+}
 
 /** Longest line before a label wraps, in cells. */
 export const LABEL_WIDTH = 18;
@@ -85,6 +100,11 @@ export type LabelCandidate = {
   /** The anchor's cell in the grid (may be off-grid). */
   col: number;
   row: number;
+  /**
+   * How much of the label shows, 0–1 (default 1). A partly shown label still takes its whole
+   * box, so its neighbors don't jump as it fades.
+   */
+  vis?: number;
   /**
    * How the text sits: `beside` the anchor (below, above, right, or left), or on one line
    * `along` a horizontal street or `down` a vertical one, over the street's own cells.
@@ -149,14 +169,15 @@ const withHalo = (b: Box, mode: LabelMode): Box =>
  * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
  * one-cell halo; a label whose text fits nowhere inside `area` (e.g. the on-screen cells)
  * without overlapping what is already placed is dropped, and so is one whose text was already
- * placed nearby (a street's other ways).
+ * placed nearby (a street's other ways). Returns the labels placed, in placement order.
  */
 export function placeLabels(
   overlay: Overlay,
   candidates: readonly LabelCandidate[],
   glyphIndex: (char: string) => number | undefined,
   area: LabelArea = fullArea(overlay),
-) {
+): LabelCandidate[] {
+  const out: LabelCandidate[] = [];
   const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
   const question = glyphIndex('?') ?? 0;
   const placed = new Map<string, { col: number; row: number }[]>();
@@ -192,18 +213,28 @@ export function placeLabels(
     const halo = withHalo(box, mode);
     overlay.taken.push(halo);
     placed.set(label.text, [...nearby, { col: label.col, row: label.row }]);
+    out.push(label);
 
+    // A fading label keeps only some of its cells (text and halo alike); the map shows through
+    // the rest.
+    const vis = label.vis ?? 1;
+    const shows = (x: number, y: number) =>
+      labelCellShows(label.id, (y - halo.top) * halo.width + (x - halo.left), vis);
+    const put = (x: number, y: number, glyph: number) => {
+      if (shows(x, y)) write(overlay, x, y, glyph);
+    };
     for (let y = halo.top; y < halo.top + halo.height; y++) {
-      for (let x = halo.left; x < halo.left + halo.width; x++) write(overlay, x, y, OVERLAY_BLANK);
+      for (let x = halo.left; x < halo.left + halo.width; x++) put(x, y, OVERLAY_BLANK);
     }
     if (mode === 'down') {
-      [...lines[0]].forEach((char, j) => write(overlay, box.left, box.top + j, glyphOf(char)));
+      [...lines[0]].forEach((char, j) => put(box.left, box.top + j, glyphOf(char)));
       continue;
     }
     lines.forEach((line, i) => {
       const chars = [...line];
       const start = box.left + Math.floor((width - chars.length) / 2);
-      chars.forEach((char, j) => write(overlay, start + j, box.top + i, glyphOf(char)));
+      chars.forEach((char, j) => put(start + j, box.top + i, glyphOf(char)));
     });
   }
+  return out;
 }

@@ -71,12 +71,14 @@ atlas.setTheme('dark' | 'light');
 atlas.setSelected(featureId | null);
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
+atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
-atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input', handler);
+atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input'
+  | 'classeschange' | 'labelschange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 
-`input` fires when the visitor moves the camera (drag, wheel, pinch, orbit, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom)` and `CLASS_LABELS` for the legend.
+`classeschange` sends the classes drawn in at least one on-screen cell (for the legend), and `labelschange` the places, landmarks, and monuments whose names are on screen (`{ featureId, name, kind, lngLat }`, for the "Places in view" list); both fire only on change. `contextlost` and `contextrestored` bracket a lost WebGL context (see §3). `input` fires when the visitor moves the camera (drag, wheel, pinch, orbit, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom, present?)` and `CLASS_LABELS` for the legend.
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
 
@@ -95,7 +97,7 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
 3. **Cell pass (GPU).**
    - Render geometry into an offscreen framebuffer whose resolution equals the cell grid (e.g. 192×54 for a 1920×972 canvas at 10×18).
    - Uses MRT (multiple render targets):
-     - `classTex` (R8: feature class id)
+     - `classTex` (RGBA8, red only: feature class id; RGBA so the legend's readback needs no conversion)
      - `attrTex` (RGBA8: height, shade, time-visibility, flags)
      - `idTex` (RGBA8: 32-bit feature id packed)
    - Lines are drawn with width in cell units so roads stay 1 cell wide at every zoom.
@@ -111,7 +113,7 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - CPU placement on the cell grid with a greedy, priority-ordered collision grid.
    - Drawn as glyphs in the same pass, so they look native.
 7. **Picking.**
-   - On hover or click, read back a single texel from `idTex` at the pointer cell (`readPixels`, throttled).
+   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below).
 
 Rasterization runs only when the camera, year, or tiles change. When idle, only the glyph pass re-runs, for animation.
 
@@ -127,19 +129,27 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 - **One matrix path.** The cell pass maps tile units (and meters, for heights) to the cell grid with a per-tile 4×4 matrix. Flat north-up cameras use an affine matrix and the world-anchored grid; tilted or rotated cameras (orbit mode) use `WebMercatorViewport`'s view-projection with a screen-anchored grid.
 - **3D buildings.** The tile worker extrudes buildings with a height (a wall quad per footprint edge, the footprint's triangles as the roof); each wall's shade comes from its facing. In the tilted view, ground features keep their class-priority depth in the back of the depth range and extrusions use their real depth in front, so buildings hide what is behind them.
 
+**Module layout.** `index.ts` holds the public API and wires the frame together; `passes.ts` has the cell, overlay, select, and glyph passes; `tile-cache.ts` the loaded tiles and which to draw; `gpu-context.ts` the programs, theme resources, and render targets; `flight.ts` fly-to; `picking.ts` the pointer picker; `readback.ts` asynchronous GPU reads.
+
 **Implementation notes (Phase 2).**
 - **Crossfades.** Each frame the cell pass gets every class's visibility (`bandVisibility` of its `CLASS_ZOOM` band, 0–1). A partly visible class keeps only the cells whose per-world-cell hash falls under its visibility and discards the rest, so it dissolves into the layer beneath and the dither stays put while panning.
 - **Region layers.** The sea, coastline, terrain, and admin boundaries are ordinary classes: terrain bands nest, and the band number in the height byte makes the higher band win (the `ramp` glyph kind picks `. : - = + * # %` from it). Admin lines are see-through for outlines and curbs.
-- **Picking.** The pointer maps to a cell by inverting the glyph pass (`picking.ts`). After a frame is drawn, one texel of `idTex` is read (`readBuffer(COLOR_ATTACHMENT2)` + `readPixels`), at most once per frame. The tile worker sends a `FeatureInfo` for each feature it registers, so an index resolves to a feature without keeping tiles on the main thread.
+- **Picking.** The pointer maps to a cell by inverting the glyph pass (`picking.ts`). After a frame is drawn, one texel of `idTex` is read, at most once per frame, without blocking: `readback.ts` issues `readPixels` into a pixel-pack buffer with a fence, and copies the data out a frame or two later, once the fence has signaled. A read from render targets that were recreated in between (a resize) is dropped. The tile worker sends a `FeatureInfo` for each feature it registers, so an index resolves to a feature without keeping tiles on the main thread.
 - **Selection.** The select pass compares each cell's feature index with the hovered, selected, and highlighted indices and writes a state into the glyph texture's spare channel; the glyph pass brightens hover and draws the accent color (with a shimmer for the selection, unless reduced motion is on).
 - **Fly-to.** Flights follow van Wijk and Nuij's zoom-and-pan path (as MapLibre's `flyTo`), eased, 0.8–3 s (≤0.3 s with reduced motion). Any input cancels one.
 - **Zoom-out limit.** On every resize, the minimum zoom becomes the zoom that fits `regionBounds` in the view, and flat views keep the whole screen over the region.
+
+**Implementation notes (post–Phase 2 hardening).**
+- **Legend of what is on screen.** After a cell pass (at most every 250 ms, and always after the last one), the on-screen part of `classTex` is read back the same asynchronous way, and the set of class ids present is sent as `classeschange`. `legendEntries` drops a zoom-visible class that the cell pass draws but that isn't present.
+- **Labels fade.** Labels use the classes' fade (`bandVisibility`, half a level at each band edge). A partly visible label keeps its whole box for collision, but only the share of its cells (text and halo) whose hash of (label, cell) falls under its visibility, so it dissolves like a class and the pattern holds while panning.
+- **Lines claim their vertices' cells.** GL_LINES skips a segment that never leaves one cell's center diamond, so a river of many short segments broke into dashes at the City level. The tile worker also emits a point at every line vertex, which always covers its cell.
+- **Lost context.** On `webglcontextlost` the renderer calls `preventDefault()`, stops its loop, and forgets every GPU handle without deleting it (the tile cache drops its meshes, and tiles that arrive meanwhile). On `webglcontextrestored` it recompiles the programs, rebuilds the glyph atlas and render targets, and asks for the view's tiles again; feature indices survive, since the worker keeps its id registry.
 
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.
 
-- **Water:** alternates `~`/`≈` using `hash(cell) + time`, unless reduced-motion is on.
+- **Water:** alternates `~`/`≈` using `hash(cell) + time`, unless reduced-motion is on. Rivers and streams (styles with the six stroke glyphs) draw a 1-cell-wide run that isn't horizontal as a stroke instead: `(` and `)` alternating down a vertical run, `╱` / `╲` for a diagonal one, judged from which neighbors are any water class.
 - **Buildings:** luminance from shade × height factor maps onto the `░▒▓█` ramp.
 - **Roads:** connectivity bitmask → box-drawing LUT. Road hierarchy picks a single-line or double-line set.
 - **Area fills** (parks, farmland): patterned by `(x + y) mod n` so fields form rows.
@@ -207,6 +217,8 @@ type AtlasState = {
 | `<city>.pmtiles` size | < 40 MB per city (the city plus its region at low zoom) |
 | Tile decode | off main thread; < 16 ms per tile on desktop |
 
+CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, and each `<city>.pmtiles`). Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
+
 ## 9. Testing
 
 - **Unit (Vitest):**
@@ -221,6 +233,7 @@ type AtlasState = {
   - asserts expected layers and properties
 - **E2E (Playwright):**
   - `/` reaches a city, and the canvas is non-blank
+  - the map redraws after a lost WebGL context is restored; "Places in view" works from the keyboard; `?debug=1` shows stats and stays out of share URLs
   - for each registered city, search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral")
   - timeline scrub changes the rendered cell hash
   - share URL round-trips
@@ -228,6 +241,6 @@ type AtlasState = {
 
 ## 10. Deployment
 
-- `next build` with `output: 'export'` produces a static site on Vercel.
+- `next build` with `output: 'export'` produces a static site on Vercel. The web app's `build` script runs `pnpm data:fetch` first, which downloads each city's published tiles (the GitHub release its `tiles.lock.json` names, DATA.md §9) into `public/tiles/`. The repository is private, so the Vercel project needs a `GITHUB_TOKEN` environment variable with read access to its contents; CI uses the workflow's token.
 - PMTiles and imagery are static files. If they exceed Vercel limits, host them on Cloudflare R2 or similar with CORS and range requests enabled.
 - Set long cache headers on tiles, and add a content hash in the filename (e.g. `<city>.<hash>.pmtiles`) for cache busting.

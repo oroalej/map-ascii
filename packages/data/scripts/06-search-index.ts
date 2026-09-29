@@ -12,7 +12,9 @@ import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
 import type { Feature, Geometry, Position } from 'geojson';
 import MiniSearch from 'minisearch';
+import type { Geography } from './02-convert';
 import type { AtlasFeature, AtlasProperties } from './03-normalize';
+import { inBbox } from './lib/geo';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
@@ -213,6 +215,10 @@ export function buildSearchIndex(entries: SearchEntry[]): SearchIndexFile {
   return SearchIndexFile.parse({ version: 1, entries, index: index.toJSON() });
 }
 
+/** The entries whose point lies inside the region. */
+export const inRegion = (entries: SearchEntry[], region: BBox) =>
+  entries.filter((e) => inBbox(e.lng, e.lat, region));
+
 // Build <city>.search-index.json
 export const step: Step = {
   name: '06-search-index',
@@ -222,7 +228,9 @@ export const step: Step = {
       features.push(f as AtlasFeature);
     }
     const areas = await readJson<SubdivisionArea[]>(join(buildDir, files.subdivisions));
-    const entries = searchEntries(features, areas, content);
+    // Overpass returns whole ways that cross the detail bbox; keep results the camera can reach.
+    const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const entries = inRegion(searchEntries(features, areas, content), regionBounds);
     const counts = new Map<string, number>();
     for (const e of entries) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     await writeJson(join(outDir, `${city.slug}.search-index.json`), buildSearchIndex(entries));

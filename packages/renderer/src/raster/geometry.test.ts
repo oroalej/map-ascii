@@ -112,8 +112,8 @@ describe('buildTileGeometry', () => {
     expect(vertices(fills).every((v) => v.cls === classId('park'))).toBe(true);
   });
 
-  it('turns lines into segment pairs', () => {
-    const { lines } = buildTileGeometry(
+  it('turns lines into segment pairs, plus a point per vertex so short segments still draw', () => {
+    const { lines, points } = buildTileGeometry(
       {
         roads: layer([
           feature(2, { id: 'osm:way/2', class: 'road_major' }, [
@@ -133,6 +133,13 @@ describe('buildTileGeometry', () => {
       [10, 0],
       [10, 10],
     ]);
+    expect(vertices(points).map(({ x, y, cls }) => [x, y, cls])).toEqual(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ].map(([x, y]) => [x, y, classId('road_major')]),
+    );
   });
 
   it('adds building center points and markers for special buildings and landmarks', () => {

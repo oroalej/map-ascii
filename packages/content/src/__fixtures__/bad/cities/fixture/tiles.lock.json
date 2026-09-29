@@ -1,0 +1,5 @@
+{
+  "repo": "owner/name",
+  "tag": "tiles-fixture-20260101-0000",
+  "files": { "fixture.pmtiles": "not-a-hash" }
+}

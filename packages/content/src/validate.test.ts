@@ -27,6 +27,10 @@ describe('loadCityPacks', () => {
         file: 'cities/fixture/tours/verified-placeholder.json',
         message: 'steps.0.narration: a verified tour cannot contain TODO(verify)',
       },
+      {
+        file: 'cities/fixture/tiles.lock.json',
+        message: 'files.fixture.pmtiles: expected a hex sha256',
+      },
       { file: 'cities/no-config/city.json', message: 'missing' },
     ]);
   });

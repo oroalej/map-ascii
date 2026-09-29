@@ -1,10 +1,11 @@
 /**
- * The legend (SPEC.md §5 HUD): what each glyph on screen means. It is built from the theme and
- * the zoom bands, so it always matches the map; nothing in it is written by hand except the
- * class names (`CLASS_LABELS`).
+ * The legend (SPEC.md §5 HUD): what each glyph on screen means. It is built from the theme, the
+ * zoom bands, and the classes the renderer reports on screen (the `classeschange` event), so it
+ * always matches the map; nothing in it is written by hand except the class names
+ * (`CLASS_LABELS`).
  */
 import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
-import { markerClasses, markerFor, type RenderClass } from './classes';
+import { classDepths, classId, markerClasses, markerFor, type RenderClass } from './classes';
 import { CLASS_LABELS, themes, type ClassStyle, type ThemeName } from './theme';
 
 export type LegendEntry = {
@@ -26,6 +27,7 @@ function sample(style: ClassStyle): string {
     case 'ramp':
       return style.glyphs.join('');
     case 'water':
+      return style.glyphs.slice(0, 2).join(''); // the animated pair, not the thin strokes
     case 'diagonal':
     case 'rows':
     case 'scatter':
@@ -53,15 +55,26 @@ function visibleAt(cls: RenderClass, zoom: number): boolean {
   return bandVisibility(CLASS_ZOOM[cls as AtlasClass], zoom) > 0;
 }
 
+const depths = classDepths();
+/** Whether the cell pass draws a class into cells (so a read of the class buffer can see it). */
+const isCellClass = (cls: RenderClass) => depths[classId(cls)]! <= 1;
+
 /**
  * The legend entries for the classes the theme draws at `zoom`, in the theme's order. Classes
- * with the same label (a school marker and school buildings) share an entry.
+ * with the same label (a school marker and school buildings) share an entry. With `present`
+ * (the classes on screen), a class drawn in cells is listed only if it is there.
  */
-export function legendEntries(themeName: ThemeName, zoom: number): LegendEntry[] {
+export function legendEntries(
+  themeName: ThemeName,
+  zoom: number,
+  present?: readonly RenderClass[],
+): LegendEntry[] {
   const theme = themes[themeName];
+  const onScreen = present && new Set(present);
   const byLabel = new Map<string, LegendEntry>();
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
     if (!visibleAt(cls, zoom)) continue;
+    if (onScreen && isCellClass(cls) && !onScreen.has(cls)) continue;
     const label = CLASS_LABELS[cls];
     const glyphs = sample(style);
     const existing = byLabel.get(label);

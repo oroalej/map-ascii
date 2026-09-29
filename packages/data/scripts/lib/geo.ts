@@ -26,3 +26,21 @@ export const fromOverpassBounds = (b: {
 /** [west, south, east, north] → Overpass's "south,west,north,east". */
 export const toOverpassBbox = ([west, south, east, north]: BBox) =>
   [south, west, north, east].map((n) => n.toFixed(6)).join(',');
+
+/** The overlap of two bboxes. Throws when they don't overlap. */
+export function intersectBbox(a: BBox, b: BBox): BBox {
+  const out: BBox = [
+    Math.max(a[0], b[0]),
+    Math.max(a[1], b[1]),
+    Math.min(a[2], b[2]),
+    Math.min(a[3], b[3]),
+  ];
+  if (out[0] >= out[2] || out[1] >= out[3]) {
+    throw new Error(`Bboxes ${a.join(',')} and ${b.join(',')} don't overlap`);
+  }
+  return out;
+}
+
+/** Whether a point lies inside a bbox (edges included). */
+export const inBbox = (lng: number, lat: number, [w, s, e, n]: BBox) =>
+  lng >= w && lng <= e && lat >= s && lat <= n;

@@ -10,6 +10,7 @@ import {
   LandmarkPlan,
   LocalizedText,
   NameHistory,
+  TilesLock,
   Tour,
 } from './schemas';
 
@@ -288,5 +289,26 @@ describe('LandmarkPlan', () => {
     const neither = { kind: 'dome', shape: 'circle', size_m: 5, height_m: 5 };
     expect(LandmarkPlan.safeParse({ ...plan, parts: [both] }).success).toBe(false);
     expect(LandmarkPlan.safeParse({ ...plan, parts: [neither] }).success).toBe(false);
+  });
+});
+
+describe('TilesLock', () => {
+  const sha = 'a'.repeat(64);
+  const lock = {
+    repo: 'owner/name',
+    tag: 'tiles-naga-20260929-1930',
+    files: { 'naga.pmtiles': sha },
+  };
+
+  it('accepts a release tag and hashed files', () => {
+    expect(TilesLock.parse(lock)).toEqual(lock);
+  });
+
+  it('rejects paths, bad hashes, and empty file lists', () => {
+    expect(TilesLock.safeParse({ ...lock, files: { '../x.pmtiles': sha } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: { '..': sha } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: { 'naga.pmtiles': 'abc' } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: {} }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, repo: 'name-only' }).success).toBe(false);
   });
 });

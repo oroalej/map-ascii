@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildingHeight, classify, variantOf, layerFor, roadWidth } from './classify';
 import { parseOsmDate } from './dates';
-import { bufferBbox, toOverpassBbox } from './geo';
+import { bufferBbox, inBbox, intersectBbox, toOverpassBbox } from './geo';
 
 describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);
@@ -173,5 +173,15 @@ describe('geo', () => {
 
   it('formats bboxes in Overpass order (south, west, north, east)', () => {
     expect(toOverpassBbox([123, 13, 124, 14])).toBe('13.000000,123.000000,14.000000,124.000000');
+  });
+
+  it('intersects bboxes, and refuses ones that do not overlap', () => {
+    expect(intersectBbox([0, 0, 2, 2], [1, -1, 3, 1])).toEqual([1, 0, 2, 1]);
+    expect(() => intersectBbox([0, 0, 1, 1], [2, 2, 3, 3])).toThrow(/don't overlap/);
+  });
+
+  it('tests points against a bbox, edges included', () => {
+    expect(inBbox(1, 1, [0, 0, 1, 1])).toBe(true);
+    expect(inBbox(1.1, 0.5, [0, 0, 1, 1])).toBe(false);
   });
 });

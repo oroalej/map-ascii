@@ -180,6 +180,35 @@ describe('water', () => {
   it('holds still with reduced motion (time 0)', () => {
     expect(waterVariant(5, 5, 0)).toBe(cellHash(5, 5) % 2);
   });
+
+  const riverAt = (rows: string[], y = 0, cls: RenderClass = 'water_river') =>
+    selectGlyph(themes.dark, cls, {
+      ...sketch(rows, { w: 'water_river', s: 'water_sea', l: 'water_area' }),
+      y,
+    });
+
+  it('draws a thin river that runs down the screen as a wavy stroke', () => {
+    expect(riverAt(['.w.', '.w.', '.w.'], 0)).toBe('(');
+    expect(riverAt(['.w.', '.w.', '...'], 1)).toBe(')');
+  });
+
+  it('draws a diagonal thin river with slashes', () => {
+    expect(riverAt(['..w', '.w.', 'w..'])).toBe('╱');
+    expect(riverAt(['w..', '.w.', '..w'])).toBe('╲');
+  });
+
+  it('keeps animated water for horizontal runs, areas, and lone cells', () => {
+    const animated = ['~', '≈'];
+    expect(animated).toContain(riverAt(['...', 'www', '...']));
+    expect(animated).toContain(riverAt(['www', 'www', 'www']));
+    expect(animated).toContain(riverAt(['...', '.w.', '...']));
+    // Any water counts as a neighbor: a river meeting the sea is part of it.
+    expect(animated).toContain(riverAt(['.w.', 'sws', '...']));
+  });
+
+  it('draws lakes and the sea as animated water even where they are thin', () => {
+    expect(['≈', '~']).toContain(riverAt(['.l.', '.l.', '.l.'], 0, 'water_area'));
+  });
 });
 
 describe('glyph tables', () => {

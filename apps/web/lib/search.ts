@@ -1,5 +1,6 @@
 import { SearchIndexFile, searchOptions, type SearchEntry, type SearchType } from '@atlas/shared';
-import MiniSearch, { type AsPlainObject } from 'minisearch';
+import type MiniSearch from 'minisearch';
+import type { AsPlainObject } from 'minisearch';
 
 /** A city's search index, loaded (ARCHITECTURE.md §7). */
 export type CitySearch = {
@@ -17,13 +18,17 @@ export function loadSearch(city: string): Promise<CitySearch> {
   let promise = loaded.get(city);
   if (!promise) {
     promise = (async () => {
-      const response = await fetch(`/tiles/${city}.search-index.json`);
+      // MiniSearch loads with the index, so it stays out of the initial bundle.
+      const [response, { default: MiniSearchClass }] = await Promise.all([
+        fetch(`/tiles/${city}.search-index.json`),
+        import('minisearch'),
+      ]);
       if (!response.ok) throw new Error(`search index for ${city}: HTTP ${response.status}`);
       const file = SearchIndexFile.parse(await response.json());
       return {
         entries: new Map(file.entries.map((e) => [e.id, e])),
         // The pipeline serialized it with `toJSON()` and the same shared options.
-        index: MiniSearch.loadJS<SearchEntry>(file.index as AsPlainObject, searchOptions),
+        index: MiniSearchClass.loadJS<SearchEntry>(file.index as AsPlainObject, searchOptions),
       };
     })();
     promise.catch(() => loaded.delete(city));

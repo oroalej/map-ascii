@@ -126,8 +126,9 @@ function makeTheme(background: number, c: Palette): Theme {
     label: c.label,
     accent: c.accent,
     styles: {
-      water_river: { kind: 'water', glyphs: ['~', '≈'], color: c.river },
-      water_stream: { kind: 'water', glyphs: ['~', '≈'], color: c.river },
+      // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
+      water_river: { kind: 'water', glyphs: ['~', '≈', '(', ')', '╱', '╲'], color: c.river },
+      water_stream: { kind: 'water', glyphs: ['~', '≈', '(', ')', '╱', '╲'], color: c.river },
       water_area: { kind: 'water', glyphs: ['≈', '~'], color: c.lake },
       water_sea: { kind: 'water', glyphs: ['≈', '~'], color: c.sea },
       coastline: { kind: 'road', glyphs: singleLine, color: c.coast },

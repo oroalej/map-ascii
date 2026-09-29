@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** A BCP 47-style language code: "fil", "bcl", "pt-BR". */
 export const LanguageCode = z
@@ -475,6 +475,24 @@ export const CityMeta = z.object({
   attribution: z.array(z.string().min(1)),
 });
 export type CityMeta = z.infer<typeof CityMeta>;
+
+const Sha256 = z.string().regex(/^[0-9a-f]{64}$/, 'expected a hex sha256');
+
+/**
+ * A city pack's `tiles.lock.json` (DATA.md §9): which GitHub release holds the city's generated
+ * files, and each file's sha256, so builds fetch exactly the tiles that were published.
+ */
+export const TilesLock = z.object({
+  /** `owner/name` of the GitHub repository with the release. */
+  repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected owner/name'),
+  /** The release tag, e.g. `tiles-naga-20260929-1930`. */
+  tag: z.string().regex(/^tiles-[a-z0-9-]+$/, 'expected tiles-<slug>-<stamp>'),
+  /** Release asset name (a file in `apps/web/public/tiles/`) → its sha256. */
+  files: z
+    .record(z.string().regex(/^\w[\w.-]*$/, 'expected a plain file name'), Sha256)
+    .refine((files) => Object.keys(files).length > 0, 'at least one file'),
+});
+export type TilesLock = z.infer<typeof TilesLock>;
 
 /**
  * A city's generated `<slug>.art.json`: its landmark art, placed. `bbox` is the feature's

@@ -53,7 +53,9 @@ function checkComplete(gl: GL, what: string) {
 }
 
 export function createCellTargets(gl: GL, cols: number, rows: number): CellTargets {
-  const classTex = createTexture(gl, gl.R8, gl.RED, cols, rows);
+  // RGBA8 rather than R8 (only red is used): the legend reads it back as RGBA, which then needs
+  // no format conversion.
+  const classTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);

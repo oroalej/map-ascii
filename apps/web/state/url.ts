@@ -1,5 +1,5 @@
 import { CameraState, Year } from '@atlas/shared';
-import { z } from 'zod';
+import * as z from 'zod';
 import type { AtlasMode } from './store';
 
 /**

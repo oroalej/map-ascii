@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { BBox, GeoJsonGeometry } from './schemas';
 
 /** What a search result is; results are grouped by it (SPEC.md §5). */

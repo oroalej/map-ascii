@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm --filter @atlas/data fetch-tiles && next build",
+    "check:budgets": "tsx scripts/check-budgets.ts",
     "serve": "serve out -l 3100",
     "test:e2e": "playwright test",
     "typecheck": "next typegen && tsc --noEmit"

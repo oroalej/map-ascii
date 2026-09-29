@@ -420,6 +420,7 @@ function addStrip(
 /**
  * Convert a tile's layers into fill triangles, line segments, and points.
  * - Polygons are triangulated with earcut.
+ * - Lines are segments, plus a point at each vertex, so short segments still claim a cell.
  * - Buildings also get a point at their center, so small ones still claim a cell.
  * - Religious, school, and market features, and curated landmarks, get a marker point.
  */
@@ -532,6 +533,10 @@ export function buildTileGeometry(
           }
         }
         for (const line of rings) {
+          // Every vertex's cell too: GL_LINES drops a segment that never leaves one cell's
+          // center diamond, so a line of many short segments (a meandering river at City
+          // zoom) would break into dashes. Points always cover their cell.
+          for (const p of line) points.vertex(p.x, p.y, cls, height, flags, id);
           for (let i = 1; i < line.length; i++) {
             const a = line[i - 1]!;
             const b = line[i]!;

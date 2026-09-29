@@ -29,7 +29,9 @@ Read these before doing substantial work:
 - `pnpm dev` — run the web app
 - `pnpm build` — static export to `apps/web/out`
 - `pnpm data:build [-- --city <slug>]` — run the data pipeline for one city (or all registered cities). For each city it outputs `<city>.pmtiles`, `<city>.meta.json`, and `<city>.search-index.json` in `apps/web/public/tiles/`. Flags: `--offline` (cached downloads only) and `--from <step>`. Step 05 needs tippecanoe, natively or via Docker (`packages/data/README.md`).
+- `pnpm data:publish [-- --city <slug>]` / `pnpm data:fetch` — upload a city's generated tiles as a GitHub release and pin them in its `tiles.lock.json` / download the pinned tiles (the web build runs it first). See `docs/DATA.md` §9.
 - `pnpm test` / `pnpm test:e2e` (e2e builds the static export and serves it on port 3100; set `E2E_PORT` to use another)
+- `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
 

@@ -17,7 +17,14 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { type: 'header'; header: TileHeader }
-  | { type: 'tile'; key: string; geometry: TileGeometry | null; newFeatures: FeatureInfo[] }
+  | {
+      type: 'tile';
+      key: string;
+      geometry: TileGeometry | null;
+      newFeatures: FeatureInfo[];
+      /** Time to decode and triangulate the tile (0 when the archive has none). */
+      decodeMs?: number;
+    }
   | { type: 'error'; key: string | null; message: string };
 
 export const tileKey = ({ z, x, y }: TileId) => `${z}/${x}/${y}`;
@@ -166,6 +173,9 @@ export type TileSourceHandlers = {
   error: (message: string, key: string | null) => void;
 };
 
+/** How many recent tile decodes `decodeMsAverage` covers. */
+const DECODE_SAMPLES = 50;
+
 /** Requests tiles from the worker and tracks the feature id strings it registers. */
 export class TileSource {
   /** Features by index - 1 (the id buffer stores the index; 0 = none). */
@@ -174,6 +184,8 @@ export class TileSource {
   private readonly indices = new Map<string, number>();
   private readonly pending = new Set<string>();
   private readonly worker: Worker;
+  /** Decode times of the most recent tiles, for `decodeMsAverage`. */
+  private readonly decodeTimes: number[] = [];
 
   constructor(url: string, handlers: TileSourceHandlers) {
     this.worker = new Worker(new URL('./tiles.worker.ts', import.meta.url), { type: 'module' });
@@ -183,6 +195,10 @@ export class TileSource {
         handlers.header(message.header);
       } else if (message.type === 'tile') {
         this.pending.delete(message.key);
+        if (message.decodeMs !== undefined) {
+          this.decodeTimes.push(message.decodeMs);
+          if (this.decodeTimes.length > DECODE_SAMPLES) this.decodeTimes.shift();
+        }
         for (const info of message.newFeatures) {
           this.features.push(info);
           this.indices.set(info.id, this.features.length);
@@ -213,6 +229,17 @@ export class TileSource {
 
   isPending(key: string) {
     return this.pending.has(key);
+  }
+
+  /** Tiles requested from the worker and not yet answered. */
+  get pendingCount() {
+    return this.pending.size;
+  }
+
+  /** Mean decode time of the last tiles decoded, in ms (0 before any). */
+  get decodeMsAverage() {
+    const n = this.decodeTimes.length;
+    return n === 0 ? 0 : this.decodeTimes.reduce((a, b) => a + b, 0) / n;
   }
 
   request(tile: TileId) {

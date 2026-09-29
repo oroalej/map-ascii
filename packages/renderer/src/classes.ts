@@ -31,6 +31,18 @@ const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
 /** The cell-buffer id of a class, or 0 if the name is unknown. */
 export const classId = (name: string): number => ids.get(name) ?? 0;
 
+/**
+ * The classes present in a read of the class buffer (RGBA bytes, class id in red), in id order.
+ * Empty cells (id 0) and unknown ids are skipped.
+ */
+export function classesIn(texels: Uint8Array): RenderClass[] {
+  const seen = new Uint8Array(256);
+  for (let i = 0; i < texels.length; i += 4) seen[texels[i]!] = 1;
+  const out: RenderClass[] = [];
+  for (let id = 1; id <= renderClasses.length; id++) if (seen[id]) out.push(renderClasses[id - 1]!);
+  return out;
+}
+
 /** The marker drawn at a feature's center for its class, if any. */
 export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
   building_religious: 'marker_religious',

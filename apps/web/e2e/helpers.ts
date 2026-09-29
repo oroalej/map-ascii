@@ -1,0 +1,69 @@
+/** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { expect, type Page } from '@playwright/test';
+
+/** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */
+const citiesDir = new URL('../../../packages/content/cities/', import.meta.url);
+export const cities = readdirSync(citiesDir)
+  .filter((slug) => existsSync(new URL(`${slug}/city.json`, citiesDir)))
+  .sort()
+  .map((slug) => {
+    const city = JSON.parse(readFileSync(new URL(`${slug}/city.json`, citiesDir), 'utf8')) as {
+      name: { en: string };
+      smoke_landmark: string;
+    };
+    const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
+    const toursDir = new URL(`${slug}/tours/`, citiesDir);
+    const tours = existsSync(toursDir)
+      ? readdirSync(toursDir)
+          .filter((file) => file.endsWith('.json'))
+          .sort()
+          .map((file) => JSON.parse(readFileSync(new URL(file, toursDir), 'utf8')) as TourFile)
+      : [];
+    return { slug, name: city.name.en, smokeLandmark: city.smoke_landmark, hasMeta, tours };
+  });
+
+/** The parts of a city pack's tour file the tests read. */
+export type TourFile = {
+  id: string;
+  title: { en: string };
+  steps: { narration: { en: string } }[];
+};
+
+/**
+ * Share of pixels in a PNG screenshot that differ from the page background. The PNG is decoded
+ * in the page, which avoids an image dependency here.
+ */
+export async function drawnShare(page: Page, png: Buffer): Promise<number> {
+  return page.evaluate(
+    async (src) => {
+      const image = new Image();
+      image.src = src;
+      await image.decode();
+      const ctx = Object.assign(document.createElement('canvas'), {
+        width: image.width,
+        height: image.height,
+      }).getContext('2d')!;
+      ctx.drawImage(image, 0, 0);
+      const { data } = ctx.getImageData(0, 0, image.width, image.height);
+      let drawn = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b] = [data[i]!, data[i + 1]!, data[i + 2]!];
+        if (Math.abs(r - 4) + Math.abs(g - 5) + Math.abs(b - 10) > 24) drawn++;
+      }
+      return drawn / (data.length / 4);
+    },
+    `data:image/png;base64,${png.toString('base64')}`,
+  );
+}
+
+/**
+ * Share of the canvas that must be ink once tiles load. Glyph strokes are thin, more so on
+ * high-DPR phones (~2% of pixels at the default camera), so this only proves drawing happened.
+ */
+export const MIN_DRAWN = 0.01;
+
+/** Wait until the atlas is live (the HUD shows its zoom), so keyboard input reaches the map. */
+export async function mapReady(page: Page) {
+  await expect(page.getByLabel('Zoom')).toHaveText(/^z \d/, { timeout: 20_000 });
+}

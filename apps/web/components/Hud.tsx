@@ -1,6 +1,6 @@
 'use client';
 
-import { legendEntries } from '@atlas/renderer';
+import { legendEntries, type Atlas, type RenderClass } from '@atlas/renderer';
 import { SubdivisionAreas, zoomLevel, type SubdivisionArea } from '@atlas/shared';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
@@ -53,9 +53,17 @@ function useSubdivisionTracking(city: string) {
 function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
   const theme = useAtlasStore((s) => s.theme);
+  const atlas = useAtlasInstance((s) => s.atlas);
+  // The classes on screen, as the renderer last reported them (none reported yet: zoom only).
+  const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
+  useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
+  const onScreen = present?.atlas === atlas ? present.classes : undefined;
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = Math.round(zoom * 20) / 20;
-  const entries = useMemo(() => legendEntries(theme, rounded), [theme, rounded]);
+  const entries = useMemo(
+    () => legendEntries(theme, rounded, onScreen),
+    [theme, rounded, onScreen],
+  );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [toggled, setToggled] = useState<boolean | null>(null);

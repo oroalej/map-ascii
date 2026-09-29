@@ -8,9 +8,11 @@ import { useTourPlayer } from '@/state/useTourPlayer';
 import { useUrlSync } from '@/state/useUrlSync';
 import { AtlasCanvas } from './AtlasCanvas';
 import { Attribution } from './Attribution';
+import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
 import { Hud } from './Hud';
 import { InfoPanel } from './InfoPanel';
+import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
@@ -36,6 +38,7 @@ export function CityAtlas({ slug, name, subdivisionLabel, landmarks, art, tours 
 
   return (
     <>
+      <PlacesInView />
       <AtlasCanvas slug={slug} name={name} subdivisionLabel={subdivisionLabel} />
       <Hud city={slug} subdivisionLabel={subdivisionLabel} />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
@@ -44,6 +47,7 @@ export function CityAtlas({ slug, name, subdivisionLabel, landmarks, art, tours 
       <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
       <TourPlayer />
       <Attribution />
+      <DebugStats />
     </>
   );
 }

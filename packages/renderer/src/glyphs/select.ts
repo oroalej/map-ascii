@@ -247,6 +247,40 @@ export function waterVariant(x: number, y: number, time: number): number {
   return (h + Math.floor(time * WATER_RATE + phase)) % 2;
 }
 
+/**
+ * Thin water: a water style with `WATER_STROKE_GLYPHS` glyphs (rivers and streams) draws a
+ * 1-cell-wide run that isn't horizontal as a stroke, so it reads as a line rather than a trail
+ * of `~`: glyphs 2–3 alternate by row down a vertical run (`(` `)`), 4 and 5 are the rising and
+ * falling diagonals. Horizontal runs and wider water keep the animated glyphs 0–1.
+ */
+export const WATER_STROKE_GLYPHS = 6;
+export const WaterStroke = { vertical: 2, rising: 4, falling: 5 } as const;
+
+/** Classes drawn as water, which a thin run's neighbors are checked against. */
+export const waterClasses: readonly RenderClass[] = [
+  'water_river',
+  'water_stream',
+  'water_area',
+  'water_sea',
+];
+
+/**
+ * The stroke variant of a thin water cell from which neighbors are water, or null when the cell
+ * isn't a stroke (a horizontal run, a wider area, or a lone cell) and animates instead.
+ */
+export function waterStrokeVariant(
+  water: (dx: number, dy: number) => boolean,
+  y: number,
+): number | null {
+  const horizontal = water(1, 0) || water(-1, 0);
+  const vertical = water(0, -1) || water(0, 1);
+  if (vertical && !horizontal) return WaterStroke.vertical + mod(y, 2);
+  if (vertical || horizontal) return null;
+  if (water(1, -1) || water(-1, 1)) return WaterStroke.rising;
+  if (water(-1, -1) || water(1, 1)) return WaterStroke.falling;
+  return null;
+}
+
 /** Area patterns, from world cell coordinates so they stay put while panning. */
 export function patternVariant(
   kind: 'diagonal' | 'rows' | 'scatter',
@@ -290,8 +324,14 @@ export function variantFor(
         (at(-1, 0) ? Dir.W : 0);
       return roadVariant(mask, at(1, -1) || at(-1, 1), at(-1, -1) || at(1, 1));
     }
-    case 'water':
-      return waterVariant(ctx.x, ctx.y, ctx.time);
+    case 'water': {
+      const isWater = (dx: number, dy: number) => {
+        const n = ctx.neighbor(dx, dy);
+        return n !== null && waterClasses.includes(n);
+      };
+      const stroke = count >= WATER_STROKE_GLYPHS ? waterStrokeVariant(isWater, ctx.y) : null;
+      return stroke ?? waterVariant(ctx.x, ctx.y, ctx.time);
+    }
     case 'building':
       return buildingVariant(ctx.height);
     case 'diagonal':

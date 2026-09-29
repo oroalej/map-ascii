@@ -1,77 +1,52 @@
-import { REGION_TILE_MAX_ZOOM, type BBox, type CameraState } from '@atlas/shared';
-import * as twgl from 'twgl.js';
+import type { BBox, CameraState } from '@atlas/shared';
 import {
   clampCamera,
-  easeInOut,
   fitZoom,
-  flyPath,
   isTilted,
   MAX_ZOOM,
   MIN_ZOOM,
-  multiply,
   orbitBy,
   panByView,
-  project,
-  TILE_SIZE,
   viewportFor,
   zoomAround,
   type CameraLimits,
-  type FlyPath,
 } from './camera';
-import { classDepths, classId, classVisibility, MAX_CLASSES } from './classes';
-import { buildGlyphAtlas, DEFAULT_FONT, type GlyphAtlas } from './glyphs/atlas';
+import { classesIn, type RenderClass } from './classes';
+import { DEFAULT_FONT } from './glyphs/atlas';
+import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
-  buildGlyphTables,
-  MAX_VARIANTS,
-  roadMask,
-  seeThroughMask,
-  type GlyphTables,
-} from './glyphs/select';
-import {
-  createCellTargets,
-  createProgram,
-  createTexture,
-  deleteCellTargets,
-  deleteTile,
-  drawExtrusions,
-  drawGround,
-  uploadOverlay,
-  uploadTile,
-  type CellTargets,
-  type TileMesh,
-} from './gpu';
+  createPrograms,
+  createThemeResources,
+  deletePrograms,
+  deleteThemeResources,
+  type Programs,
+  type ThemeResources,
+} from './gpu-context';
+import { startFlight, stepFlight, type Flight } from './flight';
 import { attachInput } from './input';
 import {
-  createOverlay,
-  labelShows,
-  packOverlay,
-  placeLabels,
-  streetMode,
-  type LabelCandidate,
-} from './labels';
-import { MAX_HIGHLIGHT, pointerCell } from './picking';
-import { EXTENT, unpackId, type FeatureInfo, type TileLabel } from './raster/geometry';
-import { cellFragment, cellVertex } from './shaders/cell';
-import { fullscreenVertex } from './shaders/fullscreen';
-import { glyphFragment } from './shaders/glyph';
-import { selectFragment } from './shaders/select';
-import { themeGlyphs, themes, type ThemeName } from './theme';
-import {
-  ancestorAt,
-  boundsTiles,
-  findAncestor,
-  LruCache,
-  tileKey,
-  TileSource,
-  tileZoom,
-  viewTiles,
-  type TileHeader,
-  type TileId,
-} from './tiles';
+  cellPass,
+  glyphPass,
+  overlayPass,
+  placeGrid,
+  screenArea,
+  selectPass,
+  type Grid,
+  type TileDraw,
+  type View,
+} from './passes';
+import { LabelRank } from './labels';
+import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
+import type { FeatureInfo, TileLabel } from './raster/geometry';
+import { Readback } from './readback';
+import { themes, type ThemeName } from './theme';
+import { TileCache } from './tile-cache';
+import type { TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { legendEntries, type LegendEntry } from './legend';
 export type { FeatureInfo } from './raster/geometry';
+export type { RenderClass } from './classes';
 
 export type AtlasOptions = {
   tilesUrl: string;
@@ -119,6 +94,20 @@ export type AtlasEventMap = {
    * flight. Clicks and hover don't count. A tour pauses on it.
    */
   input: CameraState;
+  /** The browser took the WebGL context away (the map stops drawing until it is restored). */
+  contextlost: undefined;
+  /** The WebGL context is back and the map is being rebuilt. */
+  contextrestored: undefined;
+  /**
+   * The classes drawn in at least one on-screen cell changed (for the legend, SPEC.md §5), in
+   * class id order. Checked at most every 250 ms, a frame or two after drawing.
+   */
+  classeschange: RenderClass[];
+  /**
+   * The names of places, landmarks, and monuments on screen changed (street names aren't
+   * included), in placement order: most important first. For a text alternative to the map.
+   */
+  labelschange: LabelInView[];
 };
 
 export type FlyOptions = {
@@ -127,6 +116,28 @@ export type FlyOptions = {
 };
 
 export type AtlasEventName = keyof AtlasEventMap;
+
+/** A place, landmark, or monument whose name is on screen (the `labelschange` event). */
+export type LabelInView = {
+  featureId: string;
+  name: string;
+  kind: 'place' | 'landmark' | 'monument';
+  lngLat: [number, number];
+};
+
+/** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
+export type AtlasStats = {
+  /** Frames drawn in the last second (idle frames that draw nothing don't count). */
+  fps: number;
+  /** Main-thread time of a drawn frame, smoothed, in ms (GPU time isn't included). */
+  frameMs: number;
+  /** Main-thread time of a cell pass (tiles, cells, labels), smoothed, in ms. */
+  cellPassMs: number;
+  tilesLoaded: number;
+  tilesPending: number;
+  /** Worker time to decode a tile, averaged over recent tiles, in ms. */
+  decodeMs: number;
+};
 
 export type Atlas = {
   /** Move the camera, or fly there with `animate`. */
@@ -142,18 +153,12 @@ export type Atlas = {
   setHighlighted(featureIds: readonly string[]): void;
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
+  getStats(): AtlasStats;
   on<K extends AtlasEventName>(event: K, handler: (payload: AtlasEventMap[K]) => void): () => void;
   destroy(): void;
 };
 
 const DEFAULT_CELL = { width: 10, height: 18 };
-
-/** 0xRRGGBB → [r, g, b] in 0–1. */
-const rgb = (hex: number): [number, number, number] => [
-  ((hex >> 16) & 0xff) / 255,
-  ((hex >> 8) & 0xff) / 255,
-  (hex & 0xff) / 255,
-];
 
 const sameCamera = (a: CameraState, b: CameraState) =>
   a.lat === b.lat &&
@@ -161,19 +166,26 @@ const sameCamera = (a: CameraState, b: CameraState) =>
   a.zoom === b.zoom &&
   a.pitch === b.pitch &&
   a.bearing === b.bearing;
-const TILE_CACHE_SIZE = 256;
 /** While idle, animation (water, landmark pulse) redraws at most this often. */
 const IDLE_FRAME_MS = 1000 / 30;
 /** How long after input the loop keeps drawing every frame. */
 const ACTIVE_MS = 500;
+/** The on-screen classes are read back at most this often. */
+const CLASS_READ_MS = 250;
+/** Smoothing for the timing stats: each new sample's weight. */
+const STATS_WEIGHT = 0.1;
+const smooth = (average: number, sample: number) =>
+  average === 0 ? sample : average + (sample - average) * STATS_WEIGHT;
 
 /**
  * Create the ASCII atlas on a canvas (ARCHITECTURE.md §3). Each frame:
- * 1. choose the visible tiles and ask the worker for missing ones
+ * 1. choose the visible tiles and ask the worker for missing ones (tile-cache.ts)
  * 2. cell pass: rasterize tiles into one pixel per cell (class, attributes, feature id)
- * 3. select pass: pick each cell's glyph from its class and neighbors
- * 4. glyph pass: draw the glyphs at full resolution
- * Steps 1–2 run only when the camera or tiles change.
+ * 3. overlay: place labels on the cell grid
+ * 4. select pass: pick each cell's glyph from its class and neighbors
+ * 5. glyph pass: draw the glyphs at full resolution
+ * 6. picking: read the id buffer under the pointer back, asynchronously (picking.ts)
+ * Steps 1–3 run only when the camera or tiles change (passes.ts has the passes).
  */
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
@@ -193,6 +205,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let camera = clampCamera({ ...options.initialCamera }, limits);
   let theme = themes[options.theme ?? 'dark'];
   let destroyed = false;
+  /** The WebGL context is lost: nothing draws, and no GPU handle is valid. */
+  let lost = false;
   const listeners = new Map<AtlasEventName, Set<(payload: never) => void>>();
 
   const emit = <K extends AtlasEventName>(event: K, payload: AtlasEventMap[K]) => {
@@ -201,53 +215,49 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
   };
 
-  // GPU programs
-  const cellProgram = createProgram(gl, cellVertex, cellFragment);
-  const selectProgram = createProgram(gl, fullscreenVertex, selectFragment);
-  const glyphProgram = createProgram(gl, fullscreenVertex, glyphFragment);
-  const emptyVao = gl.createVertexArray();
-  const depths = classDepths();
-  const seeThrough = seeThroughMask();
-  const roads = roadMask();
-
   // Frame state
   let cellDirty = true;
   let drawDirty = true;
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
+  /** Timing stats (`getStats`): when recent frames were drawn, and smoothed durations. */
+  const drawTimes: number[] = [];
+  let frameMs = 0;
+  let cellPassMs = 0;
 
-  // Theme resources depend on the device pixel ratio (glyph atlas resolution).
+  // GPU resources (gpu-context.ts). Theme resources depend on the device pixel ratio (glyph
+  // atlas resolution); the render targets are the cell grid plus a one-cell margin on every side.
+  let programs: Programs | undefined = createPrograms(gl);
   let dpr = 0;
-  let cellDev = { w: 1, h: 1 };
-  let atlas: GlyphAtlas | undefined;
-  let atlasTex: WebGLTexture | undefined;
-  let tables: GlyphTables | undefined;
-  let tableTex: WebGLTexture | undefined;
+  let themeRes: ThemeResources | undefined;
+  let targets: CellTargets | undefined;
+  /** Bumped when the targets are recreated, so reads from the old ones are dropped. */
+  let targetsGeneration = 0;
+  let grid: Grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  const readback = new Readback(gl);
+
+  const cellDev = () => themeRes?.cellDev ?? { w: 1, h: 1 };
+  const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
+  const view = (): View => ({
+    camera,
+    dpr,
+    cellDev: cellDev(),
+    width: canvas.width,
+    height: canvas.height,
+  });
 
   const buildThemeResources = () => {
-    if (atlasTex) gl.deleteTexture(atlasTex);
-    if (tableTex) gl.deleteTexture(tableTex);
-    cellDev = {
-      w: Math.max(1, Math.round(cellCss.width * dpr)),
-      h: Math.max(1, Math.round(cellCss.height * dpr)),
-    };
-    atlas = buildGlyphAtlas(themeGlyphs(theme), cellDev.w, cellDev.h, font);
-    atlasTex = createTexture(gl, gl.R8, gl.RED, atlas.width, atlas.height, atlas.data);
-    tables = buildGlyphTables(theme, atlas.index);
-    tableTex = createTexture(gl, gl.R8, gl.RED, MAX_VARIANTS, MAX_CLASSES, tables.table);
+    if (themeRes) deleteThemeResources(gl, themeRes);
+    themeRes = createThemeResources(gl, theme, cellCss, dpr, font);
     cellDirty = true;
   };
-
-  // Render targets, sized to the cell grid plus a one-cell margin on every side.
-  let targets: CellTargets | undefined;
-  let grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
 
   const resize = () => {
     const nextDpr = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(canvas.clientWidth * nextDpr));
     const height = Math.max(1, Math.round(canvas.clientHeight * nextDpr));
-    if (nextDpr !== dpr) {
+    if (nextDpr !== dpr || !themeRes) {
       dpr = nextDpr;
       buildThemeResources();
     }
@@ -255,11 +265,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       canvas.width = width;
       canvas.height = height;
     }
-    const cols = Math.ceil(width / cellDev.w) + 3;
-    const rows = Math.ceil(height / cellDev.h) + 3;
+    const cols = Math.ceil(width / cellDev().w) + 3;
+    const rows = Math.ceil(height / cellDev().h) + 3;
     if (!targets || targets.cols !== cols || targets.rows !== rows) {
       if (targets) deleteCellTargets(gl, targets);
       targets = createCellTargets(gl, cols, rows);
+      targetsGeneration++;
     }
     // Zooming out stops where the bounds fill the view (SPEC.md §3).
     const size = cssSize();
@@ -273,252 +284,96 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // Tiles
-  let header: TileHeader | null = null;
-  const failed = new Set<string>();
-  /** Loaded tiles: their GPU mesh and label candidates (null = the archive has no tile). */
-  const meshes = new LruCache<{ mesh: TileMesh; labels: TileLabel[] } | null>(
-    TILE_CACHE_SIZE,
-    (tile) => {
-      if (tile) deleteTile(gl, tile.mesh);
+  const tileCache = new TileCache(
+    gl,
+    new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
+    () => {
+      if (!destroyed) cellDirty = true;
     },
   );
-  const source = new TileSource(new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href, {
-    header: (h) => {
-      header = h;
-      cellDirty = true;
-    },
-    tile: (key, geometry) => {
-      if (destroyed) return;
-      meshes.set(
-        key,
-        geometry ? { mesh: uploadTile(gl, geometry), labels: geometry.labels } : null,
-      );
-      cellDirty = true;
-    },
-    error: (message, key) => {
-      if (key) failed.add(key);
-      console.warn(`ASCII Atlas: ${key ? `tile ${key}: ` : ''}${message}`);
-    },
-  });
+  const { source } = tileCache;
 
-  const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
-
-  /** Tiles to draw for the view: loaded ones, else a loaded ancestor or loaded children. */
-  const tilesToDraw = (): TileId[] => {
-    if (!header) return [];
-    const minZoom = header.minZoom;
-    let view: TileId[];
-    if (isTilted(camera)) {
-      // The tilted view's ground footprint (the far edge is where the view reaches the ground).
-      const [[west, south], [east, north]] = viewportFor(camera, cssSize()).getBounds() as [
-        [number, number],
-        [number, number],
-      ];
-      view = boundsTiles([west, south, east, north], tileZoom(camera.zoom, header), header, [
-        camera.lng,
-        camera.lat,
-      ]);
-    } else {
-      view = viewTiles(camera, cssSize(), header);
-    }
-    const out = new Map<string, TileId>();
-    for (const tile of view) {
-      const key = tileKey(tile);
-      if (meshes.has(key)) {
-        out.set(key, tile);
-        continue;
-      }
-      if (!failed.has(key)) source.request(tile);
-      const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
-      if (ancestor) {
-        out.set(tileKey(ancestor), ancestor);
-        continue;
-      }
-      for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
-          const child = { z: tile.z + 1, x: tile.x * 2 + dx, y: tile.y * 2 + dy };
-          if (meshes.has(tileKey(child))) out.set(tileKey(child), child);
-        }
-      }
-    }
-    // Coarser tiles first, so finer ones overwrite them where both exist.
-    return [...out.values()].sort((a, b) => a.z - b.z);
-  };
-
-  /**
-   * Tiles whose region-only features to draw under the view's tiles: each view tile's
-   * ancestor at `REGION_TILE_MAX_ZOOM` (or the tile itself when it is that coarse), else, while
-   * that one loads, its nearest loaded ancestor.
-   */
-  const regionTilesFor = (tiles: readonly TileId[]): TileId[] => {
-    if (!header) return [];
-    const loaded = (key: string) => !!meshes.get(key);
-    const out = new Map<string, TileId>();
-    for (const tile of tiles) {
-      const region = ancestorAt(tile, Math.max(header.minZoom, REGION_TILE_MAX_ZOOM));
-      const key = tileKey(region);
-      if (loaded(key)) {
-        out.set(key, region);
-        continue;
-      }
-      if (!meshes.has(key) && !failed.has(key)) source.request(region);
-      const fallback = findAncestor(region, header.minZoom, loaded);
-      if (fallback) out.set(tileKey(fallback), fallback);
-    }
-    return [...out.values()].sort((a, b) => a.z - b.z);
-  };
-
-  /** Screen position (CSS px) of a point, for the overlay; set by each cell pass. */
-  let screenOf: (lng: number, lat: number) => [number, number] = () => [0, 0];
-
-  const cellPass = () => {
-    if (!targets) return;
-    const { cols, rows } = targets;
-    const tilted = isTilted(camera);
-    const view = viewportFor(camera, cssSize());
-    screenOf = (lng, lat) => view.project([lng, lat]) as [number, number];
-
-    /** Tile units and meters → cell-grid clip space, per tile. */
-    let tileMatrix: (tile: TileId) => number[];
-    if (tilted) {
-      // Perspective: the grid is fixed to the screen, with a one-cell margin on each side.
-      grid = { originCol: 0, originRow: 0, shiftX: cellDev.w, shiftY: cellDev.h };
-      const [w, h] = [canvas.width, canvas.height];
-      // prettier-ignore
-      const screenToGrid = [
-        w / (cellDev.w * cols), 0, 0, 0,
-        0, -h / (cellDev.h * rows), 0, 0,
-        0, 0, 1, 0,
-        (w + 2 * cellDev.w) / (cellDev.w * cols) - 1, (h + 2 * cellDev.h) / (cellDev.h * rows) - 1, 0, 1,
-      ];
-      const toGrid = multiply(screenToGrid, view.viewProjectionMatrix);
-      const unitsPerMeter = view.distanceScales.unitsPerMeter[2]!;
-      tileMatrix = ({ z, x, y }) => {
-        const size = TILE_SIZE / 2 ** z;
-        // prettier-ignore
-        return multiply(toGrid, [
-          size / EXTENT, 0, 0, 0,
-          0, -size / EXTENT, 0, 0,
-          0, 0, unitsPerMeter, 0,
-          x * size, TILE_SIZE - y * size, 0, 1,
-        ]);
-      };
-    } else {
-      // Flat north-up: the grid is anchored to the world, shifted by the sub-cell pan offset.
-      const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
-      const left = Math.round(cx * dpr - canvas.width / 2);
-      const top = Math.round(cy * dpr - canvas.height / 2);
-      const originCol = Math.floor(left / cellDev.w) - 1;
-      const originRow = Math.floor(top / cellDev.h) - 1;
-      grid = {
-        originCol,
-        originRow,
-        shiftX: left - originCol * cellDev.w,
-        shiftY: top - originRow * cellDev.h,
-      };
-      tileMatrix = (tile) => {
-        const tileDev = TILE_SIZE * 2 ** (camera.zoom - tile.z) * dpr;
-        // prettier-ignore
-        return [
-          ((tileDev / EXTENT / cellDev.w) * 2) / cols, 0, 0, 0,
-          0, ((tileDev / EXTENT / cellDev.h) * 2) / rows, 0, 0,
-          0, 0, 1, 0,
-          ((tile.x * tileDev) / cellDev.w - originCol) * (2 / cols) - 1,
-          ((tile.y * tileDev) / cellDev.h - originRow) * (2 / rows) - 1, 0, 1,
-        ];
-      };
-    }
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, targets.cellFbo);
-    gl.viewport(0, 0, cols, rows);
-    for (let i = 0; i < 3; i++) gl.clearBufferfv(gl.COLOR, i, [0, 0, 0, 0]);
-    gl.clearBufferfi(gl.DEPTH_STENCIL, 0, 1, 0);
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LESS);
-    gl.useProgram(cellProgram.program);
-    twgl.setUniforms(cellProgram, {
-      u_depth: depths,
-      u_vis: classVisibility(camera.zoom),
-      u_zoom: camera.zoom,
-      u_roadMask: roads,
-      u_origin: [grid.originCol, grid.originRow],
-    });
-
+  const drawCells = () => {
+    if (!targets || !programs || !themeRes) return;
+    const v = view();
+    const placement = placeGrid(v, targets);
+    grid = placement.grid;
+    const tiles = tileCache.tilesToDraw(camera, cssSize());
     const labels = new Map<number, TileLabel>();
-    const drawn: { mesh: TileMesh; matrix: number[] }[] = [];
-    const tiles = tilesToDraw();
-    // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
-    for (const tile of regionTilesFor(tiles)) {
-      const loaded = meshes.get(tileKey(tile));
-      if (!loaded) continue;
-      for (const label of loaded.labels) labels.set(label.id, label);
-      twgl.setUniforms(cellProgram, { u_matrix: tileMatrix(tile) });
-      drawGround(gl, loaded.mesh.region);
-    }
-    for (const tile of tiles) {
-      const loaded = meshes.get(tileKey(tile));
-      if (!loaded) continue;
-      for (const label of loaded.labels) labels.set(label.id, label);
-      const matrix = tileMatrix(tile);
-      twgl.setUniforms(cellProgram, { u_matrix: matrix });
-      drawGround(gl, loaded.mesh);
-      drawn.push({ mesh: loaded.mesh, matrix });
-    }
-    // 3D buildings stand up only in the tilted view.
-    if (tilted) {
-      for (const { mesh, matrix } of drawn) {
-        twgl.setUniforms(cellProgram, { u_matrix: matrix });
-        drawExtrusions(gl, mesh);
+    const layer = (ids: readonly TileId[]): TileDraw[] => {
+      const out: TileDraw[] = [];
+      for (const tile of ids) {
+        const loaded = tileCache.get(tile);
+        if (!loaded) continue;
+        for (const label of loaded.labels) labels.set(label.id, label);
+        out.push({ tile, mesh: loaded.mesh });
       }
-    }
-    gl.bindVertexArray(null);
-    gl.disable(gl.DEPTH_TEST);
-    uploadOverlay(gl, targets, overlayTexels([...labels.values()]));
+      return out;
+    };
+    // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
+    const region = layer(tileCache.regionTilesFor(tiles));
+    cellPass(gl, programs, targets, v, placement, { region, tiles: layer(tiles) });
+    const placed = overlayPass(gl, targets, themeRes, v, placement, labels.values());
+    reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
+    classesStale = true;
   };
 
-  /** Place the names whose zoom band includes the camera zoom (labels.ts). */
-  const overlayTexels = (labels: TileLabel[]): Uint8Array => {
-    if (!targets || !atlas) return new Uint8Array(0);
-    const overlay = createOverlay(targets.cols, targets.rows);
-    const tilted = isTilted(camera);
-    const toCell = (lng: number, lat: number): [number, number] => {
-      if (tilted) {
-        // The grid starts one cell above and left of the screen.
-        const [x, y] = screenOf(lng, lat);
-        return [(x * dpr) / cellDev.w + 1, (y * dpr) / cellDev.h + 1];
-      }
-      const [x, y] = project(lng, lat, camera.zoom);
-      return [(x * dpr) / cellDev.w - grid.originCol, (y * dpr) / cellDev.h - grid.originRow];
-    };
-    // Only the cells actually on screen (the grid has a margin, and a sub-cell pan shift).
-    const area = {
-      left: Math.ceil(grid.shiftX / cellDev.w),
-      top: Math.ceil(grid.shiftY / cellDev.h),
-      right: Math.floor((grid.shiftX + canvas.width) / cellDev.w),
-      bottom: Math.floor((grid.shiftY + canvas.height) / cellDev.h),
-    };
-    const glyphs = atlas;
-    const glyphIndex = (char: string) => {
-      const index = glyphs.index(char);
-      return index === 0 ? undefined : index;
-    };
-
-    const candidates: LabelCandidate[] = [];
-    for (const label of labels) {
-      if (!labelShows(label.band, camera.zoom)) continue;
-      const [col, row] = toCell(label.lng, label.lat);
-      candidates.push({
-        id: label.id,
-        text: label.text,
-        rank: label.rank,
-        col: Math.floor(col),
-        row: Math.floor(row),
-        // Street names follow the street in flat views; tilted ones keep them beside it.
-        mode: label.angle !== undefined && !tilted ? streetMode(label.angle) : 'beside',
-      });
+  /** The last `labelschange` payload's feature ids, to send it only on change. */
+  let labelsKey = '';
+  const reportLabels = (placed: readonly TileLabel[]) => {
+    const inView: LabelInView[] = [];
+    for (const label of placed) {
+      const kind =
+        label.rank === LabelRank.landmark
+          ? 'landmark'
+          : label.rank === LabelRank.monument
+            ? 'monument'
+            : label.rank === LabelRank.street || label.rank === LabelRank.roadMajor
+              ? null
+              : 'place';
+      const featureId = source.feature(label.id)?.id;
+      if (!kind || !featureId) continue;
+      inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
     }
-    placeLabels(overlay, candidates, glyphIndex, area);
-    return packOverlay(overlay);
+    const key = inView.map((l) => l.featureId).join('|');
+    if (key === labelsKey) return;
+    labelsKey = key;
+    emit('labelschange', inView);
+  };
+
+  // Which classes are on screen (the `classeschange` event): the on-screen part of the class
+  // buffer is read back after cell passes, throttled, so the last one is always read.
+  let classesStale = false;
+  let lastClassRead = -Infinity;
+  let presentKey = '';
+
+  const readClasses = (now: number) => {
+    if (!classesStale || !targets || now - lastClassRead < CLASS_READ_MS) return;
+    classesStale = false;
+    lastClassRead = now;
+    const area = screenArea(view(), grid);
+    const left = Math.max(0, area.left);
+    const top = Math.max(0, area.top);
+    const width = Math.min(targets.cols, area.right) - left;
+    const height = Math.min(targets.rows, area.bottom) - top;
+    if (width <= 0 || height <= 0) return;
+    const generation = targetsGeneration;
+    readback.request(
+      targets.cellFbo,
+      gl.COLOR_ATTACHMENT0,
+      { x: left, y: top, width, height },
+      (texels) => {
+        if (generation !== targetsGeneration) {
+          classesStale = true;
+          return;
+        }
+        const classes = classesIn(texels);
+        const key = classes.join(',');
+        if (key === presentKey) return;
+        presentKey = key;
+        emit('classeschange', classes);
+      },
+    );
   };
 
   // Selection and highlights, by feature id; resolved to id-buffer indices each frame, since a
@@ -528,64 +383,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hoverIndex = 0;
   const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
 
-  const selectPass = (time: number) => {
-    if (!targets || !tables) return;
+  const highlights = () => {
     let highlightCount = 0;
     for (const id of highlightedIds) {
       const index = source.indexOf(id);
       if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
     }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
-    gl.viewport(0, 0, targets.cols, targets.rows);
-    gl.useProgram(selectProgram.program);
-    twgl.setUniforms(selectProgram, {
-      u_class: targets.classTex,
-      u_attr: targets.attrTex,
-      u_id: targets.idTex,
-      u_table: tableTex,
-      u_kind: tables.kinds,
-      u_count: tables.counts,
-      u_connect: tables.connects,
-      u_origin: [grid.originCol, grid.originRow],
-      u_time: reducedMotion ? 0 : time,
-      u_zoom: camera.zoom,
-      u_seeThrough: seeThrough,
-      u_roadMask: roads,
-      u_tilted: isTilted(camera),
-      u_cellAspect: cellDev.h / cellDev.w,
-      u_hover: hoverIndex,
-      u_selected: selectedId ? source.indexOf(selectedId) : 0,
-      u_highlight: highlightIndices,
-      u_highlightCount: highlightCount,
-    });
-    gl.bindVertexArray(emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  };
-
-  const glyphPass = (time: number) => {
-    if (!targets || !tables || !atlas) return;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.useProgram(glyphProgram.program);
-    twgl.setUniforms(glyphProgram, {
-      u_glyphs: targets.glyphTex,
-      u_atlas: atlasTex,
-      u_cell: [cellDev.w, cellDev.h],
-      u_shift: [grid.shiftX, grid.shiftY],
-      u_height: canvas.height,
-      u_columns: atlas.columns,
-      u_colors: tables.colors,
-      u_background: theme.background.slice(0, 3),
-      u_time: time,
-      u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
-      u_overlay: targets.overlayTex,
-      u_labelColor: rgb(theme.label),
-      u_accent: rgb(theme.accent),
-      u_shimmer: !reducedMotion,
-    });
-    gl.bindVertexArray(emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindVertexArray(null);
+    return {
+      hover: hoverIndex,
+      selected: selectedId ? source.indexOf(selectedId) : 0,
+      highlight: highlightIndices,
+      highlightCount,
+    };
   };
 
   let sizeDirty = true;
@@ -595,91 +404,130 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   observer.observe(canvas);
 
   // Flights (SPEC.md §3 "Fly-to").
-  let flight: { path: FlyPath; start: number } | null = null;
+  let flight: Flight | null = null;
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
-    const to = clampCamera({ ...camera, ...target }, limits, cssSize());
-    const path = flyPath(camera, to, cssSize(), { reducedMotion, duration: opts.duration });
-    flight = { path, start: performance.now() };
-    lastInput = performance.now();
+    const now = performance.now();
+    flight = startFlight(camera, target, limits, cssSize(), {
+      reducedMotion,
+      duration: opts.duration,
+      now,
+    });
+    lastInput = now;
   };
 
-  const stepFlight = (now: number) => {
+  const advanceFlight = (now: number) => {
     if (!flight) return;
-    const t = Math.min(1, (now - flight.start) / Math.max(1, flight.path.duration));
-    // Only the zoom is clamped mid-flight; the arc may pass over the edge of the region.
-    camera = clampCamera(flight.path.at(easeInOut(t)), limits);
+    const step = stepFlight(flight, now, limits, cssSize());
+    camera = step.camera;
     cellDirty = true;
     lastInput = now;
     emit('camerachange', { ...camera });
-    if (t >= 1) {
+    if (step.done) {
       flight = null;
-      camera = clampCamera(camera, limits, cssSize());
       emit('flyend', { ...camera });
     }
   };
 
   // Picking: at most one id-buffer read per frame, after drawing (ARCHITECTURE.md §3 step 7).
-  let pick: { point: [number, number]; click: boolean } | null = null;
-  const pixel = new Uint8Array(4);
-
-  const readFeatureIndex = (point: readonly [number, number]): number => {
-    if (!targets) return 0;
-    const [col, row] = pointerCell(point, dpr, {
-      shiftX: grid.shiftX,
-      shiftY: grid.shiftY,
-      cellWidth: cellDev.w,
-      cellHeight: cellDev.h,
-    });
-    if (col < 0 || row < 0 || col >= targets.cols || row >= targets.rows) return 0;
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, targets.cellFbo);
-    gl.readBuffer(gl.COLOR_ATTACHMENT2);
-    gl.readPixels(col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    return unpackId(pixel);
-  };
-
-  const resolvePick = () => {
-    if (!pick) return;
-    const { point, click } = pick;
-    pick = null;
-    const index = readFeatureIndex(point);
-    const feature = source.feature(index) ?? null;
-    const featureId = feature?.id ?? null;
-    if (click) {
-      const [lng, lat] = viewportFor(camera, cssSize()).unproject([...point]) as [number, number];
-      emit('click', { featureId, feature, point, lngLat: [lng, lat] });
-    } else if (index !== hoverIndex) {
-      hoverIndex = index;
-      drawDirty = true;
-      emit('hover', { featureId, feature, point });
-    }
-  };
+  /** Whether the mouse is over the canvas; a hover answered after it left is dropped. */
+  let pointerOver = false;
+  const picker = new Picker(
+    readback,
+    () => targetsGeneration,
+    ({ point, click, index, camera: at, size }: PickResult) => {
+      const feature = source.feature(index) ?? null;
+      const featureId = feature?.id ?? null;
+      if (click) {
+        const [lng, lat] = viewportFor(at, size).unproject([...point]) as [number, number];
+        emit('click', { featureId, feature, point, lngLat: [lng, lat] });
+      } else if (pointerOver && index !== hoverIndex) {
+        hoverIndex = index;
+        drawDirty = true;
+        emit('hover', { featureId, feature, point });
+      }
+    },
+  );
 
   let raf = 0;
   const frame = (now: number) => {
-    if (destroyed) return;
+    if (destroyed || lost) return;
     raf = requestAnimationFrame(frame);
+    readback.poll();
     if (sizeDirty) {
       sizeDirty = false;
       resize();
     }
-    stepFlight(now);
+    advanceFlight(now);
+    if (!targets || !programs || !themeRes) return;
     const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
     const animationDue = !reducedMotion && now - lastDraw >= interval;
-    if (!cellDirty && !drawDirty && !animationDue) return;
-    const time = (now - start) / 1000;
-    if (cellDirty) {
-      cellDirty = false;
-      cellPass();
+    if (cellDirty || drawDirty || animationDue) {
+      const time = (now - start) / 1000;
+      const frameStart = performance.now();
+      if (cellDirty) {
+        cellDirty = false;
+        drawCells();
+        cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
+      }
+      const v = view();
+      selectPass(gl, programs, targets, themeRes, v, grid, reducedMotion ? 0 : time, highlights());
+      glyphPass(gl, programs, targets, themeRes, theme, v, grid, time, reducedMotion);
+      drawDirty = false;
+      lastDraw = now;
+      frameMs = smooth(frameMs, performance.now() - frameStart);
+      drawTimes.push(now);
     }
-    selectPass(time);
-    glyphPass(time);
-    drawDirty = false;
-    lastDraw = now;
-    resolvePick();
+    while (drawTimes.length > 0 && drawTimes[0]! <= now - 1000) drawTimes.shift();
+    // The cell targets keep the last drawn frame, so a pick doesn't need a redraw.
+    picker.issue({
+      fbo: targets.cellFbo,
+      attachment: gl.COLOR_ATTACHMENT2,
+      cols: targets.cols,
+      rows: targets.rows,
+      dpr,
+      grid: {
+        shiftX: grid.shiftX,
+        shiftY: grid.shiftY,
+        cellWidth: cellDev().w,
+        cellHeight: cellDev().h,
+      },
+      camera: { ...camera },
+      size: cssSize(),
+      generation: targetsGeneration,
+    });
+    readClasses(now);
   };
   raf = requestAnimationFrame(frame);
+
+  // A lost context (GPU reset, too many contexts, a backgrounded mobile tab) takes every GPU
+  // handle with it. Ask for it back, then rebuild everything; the tiles are fetched again.
+  const onContextLost = (event: Event) => {
+    event.preventDefault();
+    if (lost) return;
+    lost = true;
+    cancelAnimationFrame(raf);
+    programs = undefined;
+    themeRes = undefined;
+    targets = undefined;
+    targetsGeneration++;
+    readback.reset(true);
+    tileCache.suspend();
+    emit('contextlost', undefined);
+  };
+  const onContextRestored = () => {
+    if (!lost || destroyed) return;
+    lost = false;
+    programs = createPrograms(gl);
+    tileCache.resume();
+    // `resize` rebuilds the theme resources and render targets.
+    sizeDirty = true;
+    cellDirty = true;
+    raf = requestAnimationFrame(frame);
+    emit('contextrestored', undefined);
+  };
+  canvas.addEventListener('webglcontextlost', onContextLost);
+  canvas.addEventListener('webglcontextrestored', onContextRestored);
 
   const applyCamera = (next: CameraState) => {
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
@@ -708,18 +556,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       applyCamera(orbitBy(camera, dBearing, dPitch)),
     ),
     hover: (point) => {
+      pointerOver = point !== null;
       if (point) {
-        if (!pick?.click) pick = { point, click: false };
-      } else if (hoverIndex !== 0) {
-        hoverIndex = 0;
-        drawDirty = true;
-        emit('hover', { featureId: null, feature: null, point: null });
+        picker.hover(point);
+      } else {
+        picker.cancelHover();
+        if (hoverIndex !== 0) {
+          hoverIndex = 0;
+          drawDirty = true;
+          emit('hover', { featureId: null, feature: null, point: null });
+        }
       }
     },
-    tap: (point) => {
-      pick = { point, click: true };
-      drawDirty = true;
-    },
+    tap: (point) => picker.click(point),
   });
 
   return {
@@ -742,12 +591,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawDirty = true;
     },
     getFeature: (featureId) => source.featureById(featureId),
+    getStats: () => ({
+      fps: drawTimes.length,
+      frameMs,
+      cellPassMs,
+      tilesLoaded: tileCache.size,
+      tilesPending: source.pendingCount,
+      decodeMs: source.decodeMsAverage,
+    }),
     setYear() {
       // Phase 4: time filtering.
     },
     setTheme(name) {
       theme = themes[name];
-      buildThemeResources();
+      // While the context is lost, the theme is built on restore.
+      if (!lost) buildThemeResources();
       drawDirty = true;
     },
     on(event, handler) {
@@ -762,14 +620,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       destroyed = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
       detachInput();
-      source.destroy();
-      meshes.clear();
-      if (targets) deleteCellTargets(gl, targets);
-      if (atlasTex) gl.deleteTexture(atlasTex);
-      if (tableTex) gl.deleteTexture(tableTex);
-      for (const p of [cellProgram, selectProgram, glyphProgram]) gl.deleteProgram(p.program);
-      gl.deleteVertexArray(emptyVao);
+      tileCache.destroy();
+      readback.reset(lost);
+      if (!lost) {
+        if (targets) deleteCellTargets(gl, targets);
+        if (themeRes) deleteThemeResources(gl, themeRes);
+        if (programs) deletePrograms(gl, programs);
+      }
       listeners.clear();
     },
   };

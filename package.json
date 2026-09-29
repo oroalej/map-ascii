@@ -9,7 +9,10 @@
   "scripts": {
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",
+    "check:budgets": "pnpm --filter @atlas/web check:budgets",
     "data:build": "pnpm --filter @atlas/data build",
+    "data:fetch": "pnpm --filter @atlas/data fetch-tiles",
+    "data:publish": "pnpm --filter @atlas/data publish-tiles",
     "test": "vitest run",
     "test:e2e": "pnpm --filter @atlas/web test:e2e",
     "lint": "eslint .",

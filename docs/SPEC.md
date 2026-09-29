@@ -51,7 +51,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 | Feature class | Glyphs | Color idea |
 |---|---|---|
-| Water — river/stream | `~ ≈` (slowly animated) | cyan |
+| Water — river/stream | `~ ≈` (slowly animated); a thin run down the screen is `( )`, a diagonal one `╱ ╲` | cyan |
 | Water — lake/sea | `≈ ~ ·` | deep blue |
 | Road — primary/trunk | `═ ║ ╔ ╗ ╚ ╝ ╬ ╠ ╣ ╦ ╩` | warm white |
 | Road — secondary/tertiary | `─ │ ┌ ┐ └ ┘ ┼ ├ ┤ ┬ ┴` | light grey |
@@ -81,7 +81,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Names of major roads show from the District level (z14), other streets from the Street level (z15.5), and paths from z17. One name per street shows in a given stretch of screen.
 - Place names show by what they name: provinces at the Region level, cities and towns until the District level, subdivisions from z10.5 to z16, and smaller places from z13.5.
 - Labels have a 1-cell dark halo.
-- Labels switch on and off at their band's edges. Map layers crossfade instead: over half a zoom level, a layer's cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping.
+- Labels and map layers fade at their band's edges: over half a zoom level, their cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping. A fading label keeps its place, so its neighbors don't jump.
 
 **Place-level detail.** Zooming in adds detail rather than only enlarging cells:
 - Curated landmarks show their name from z16, and statues and monuments from z18.
@@ -125,7 +125,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Loading that URL restores the exact view.
 
 **HUD**
-- Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs visible at the current zoom and what they mean. The legend is built from the theme, so it always matches the map.
+- Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs on screen and what they mean. The legend is built from the theme and lists only the classes the renderer reports in view, so it always matches the map.
 - Scale indicator (the "ruler").
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
@@ -174,6 +174,8 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 - Mobile first-class: touch gestures, bottom-sheet panels, a larger default cell size on small screens.
 - `prefers-reduced-motion`: no water animation, instant cell transitions, shorter fly-to.
 - Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
+- **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there, like a click.
+- **Debug overlay.** `?debug=1` shows the renderer's frame rate, frame and cell-pass times, tile counts, and tile decode time, for checking the performance budgets on real devices. It is not part of the view state, so share URLs leave it out.
 - Text-size setting adjusts the cell size.
 - Languages: English first and always required. Each city declares extra content languages in its config (Naga: `fil` and `bcl`), and names and narration can carry those fields.
 

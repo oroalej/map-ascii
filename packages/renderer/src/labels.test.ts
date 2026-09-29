@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createOverlay,
-  labelShows,
+  labelVisibility,
   LabelRank,
   packOverlay,
   placeLabels,
@@ -50,13 +50,43 @@ const label = (over: Partial<LabelCandidate>): LabelCandidate => ({
   ...over,
 });
 
-describe('labelShows', () => {
-  it('shows a label inside its band, edges included', () => {
-    expect(labelShows({ min: 16 }, 15.9)).toBe(false);
-    expect(labelShows({ min: 16 }, 16)).toBe(true);
-    expect(labelShows({ min: 16 }, 21)).toBe(true);
-    expect(labelShows({ min: 0, max: 9.5 }, 9.5)).toBe(true);
-    expect(labelShows({ min: 0, max: 9.5 }, 9.6)).toBe(false);
+describe('labelVisibility', () => {
+  it('is full inside the band and fades over half a level outside it', () => {
+    expect(labelVisibility({ min: 16 }, 15.4)).toBe(0);
+    expect(labelVisibility({ min: 16 }, 15.75)).toBeCloseTo(0.5);
+    expect(labelVisibility({ min: 16 }, 16)).toBe(1);
+    expect(labelVisibility({ min: 16 }, 21)).toBe(1);
+    expect(labelVisibility({ min: 0, max: 9.5 }, 9.5)).toBe(1);
+    expect(labelVisibility({ min: 0, max: 9.5 }, 9.75)).toBeCloseTo(0.5);
+    expect(labelVisibility({ min: 0, max: 9.5 }, 10)).toBe(0);
+  });
+});
+
+describe('placeLabels while fading', () => {
+  const long = label({ text: 'Plaza Quince Martires Plaza Rizal', col: 20, row: 2 });
+  const place = (vis: number) => {
+    const overlay = createOverlay(40, 8);
+    const placed = placeLabels(overlay, [{ ...long, vis }], index);
+    return { glyphs: [...overlay.glyphs], taken: overlay.taken, placed };
+  };
+  const drawn = (glyphs: number[]) => glyphs.filter((g) => g !== 0).length;
+
+  it('keeps about that share of its cells, the same ones every time', () => {
+    const full = drawn(place(1).glyphs);
+    const half = drawn(place(0.5).glyphs);
+    expect(half).toBeGreaterThan(full * 0.3);
+    expect(half).toBeLessThan(full * 0.7);
+    expect(place(0.5).glyphs).toEqual(place(0.5).glyphs);
+  });
+
+  it('still takes its whole box, so neighbors do not jump', () => {
+    const { taken, placed } = place(0.1);
+    expect(taken).toEqual(place(1).taken);
+    expect(placed).toHaveLength(1);
+  });
+
+  it('draws exactly as before when fully shown', () => {
+    expect(place(1).glyphs).toEqual([...placeLabelsGrid([long], 40, 8, index)]);
   });
 });
 

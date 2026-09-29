@@ -1,7 +1,7 @@
 /**
  * Cell pass: rasterize tile geometry into a framebuffer with one pixel per cell. Three render
- * targets: class id (R8), attributes (RGBA8: height, flags, variant), and packed feature id
- * (RGBA8). Ground features get a depth from their class priority, so the depth test keeps the
+ * targets: class id (RGBA8, red only), attributes (RGBA8: height, flags, variant), and packed
+ * feature id (RGBA8). Ground features get a depth from their class priority, so the depth test keeps the
  * winning class; 3D building extrusions (tilted cameras) use their real depth in front of all
  * ground, so buildings hide what is behind them and each other.
  *

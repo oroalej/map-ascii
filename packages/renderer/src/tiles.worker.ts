@@ -38,10 +38,12 @@ async function handle(request: WorkerRequest) {
     scope.postMessage({ type: 'tile', key, geometry: null, newFeatures: [] });
     return;
   }
+  const start = performance.now();
   const tile = new VectorTile(new PbfReader(new Uint8Array(response.data)));
   const geometry = buildTileGeometry(tile.layers, registry, { z, x, y });
+  const decodeMs = performance.now() - start;
   scope.postMessage(
-    { type: 'tile', key, geometry, newFeatures: registry.takeNew() },
+    { type: 'tile', key, geometry, newFeatures: registry.takeNew(), decodeMs },
     transferables(geometry),
   );
 }

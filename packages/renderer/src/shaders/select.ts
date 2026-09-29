@@ -22,6 +22,8 @@ import {
   WALL_SHADE_STEPS,
   WALL_SINGLE_ROW,
   WATER_RATE,
+  WATER_STROKE_GLYPHS,
+  WaterStroke,
 } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 
@@ -109,6 +111,21 @@ bool joins(int mask, ivec2 p) {
   return ((mask >> classAt(p)) & 1) == 1;
 }
 
+bool isWater(ivec2 p) {
+  return u_kind[classAt(p)] == ${kindCodes.water};
+}
+
+// Thin water drawn as a stroke (glyphs/select.ts waterStrokeVariant), or -1 to animate.
+int waterStroke(ivec2 p, ivec2 w) {
+  bool horizontal = isWater(p + ivec2(1, 0)) || isWater(p + ivec2(-1, 0));
+  bool vertical = isWater(p + ivec2(0, -1)) || isWater(p + ivec2(0, 1));
+  if (vertical && !horizontal) return ${WaterStroke.vertical} + imod(w.y, 2);
+  if (vertical || horizontal) return -1;
+  if (isWater(p + ivec2(1, -1)) || isWater(p + ivec2(-1, 1))) return ${WaterStroke.rising};
+  if (isWater(p + ivec2(-1, -1)) || isWater(p + ivec2(1, 1))) return ${WaterStroke.falling};
+  return -1;
+}
+
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int cls = classAt(p);
@@ -189,9 +206,14 @@ void main() {
     else if (joins(m, p + ivec2(1, -1)) || joins(m, p + ivec2(-1, 1))) v = ${RISING};
     else if (joins(m, p + ivec2(-1, -1)) || joins(m, p + ivec2(1, 1))) v = ${FALLING};
   } else if (kind == ${kindCodes.water}) {
-    uint h = cellHash(w);
-    float phase = float((h >> 8u) & 255u) / 255.0;
-    v = int((h + uint(floor(u_time * ${float(WATER_RATE)} + phase))) & 1u);
+    int stroke = u_count[cls] >= ${WATER_STROKE_GLYPHS} ? waterStroke(p, w) : -1;
+    if (stroke >= 0) {
+      v = stroke;
+    } else {
+      uint h = cellHash(w);
+      float phase = float((h >> 8u) & 255u) / 255.0;
+      v = int((h + uint(floor(u_time * ${float(WATER_RATE)} + phase))) & 1u);
+    }
   } else if (kind == ${kindCodes.building}) {
     float height = attr.r * 255.0;
     v = ${BUILDING_STEPS.map((limit, i) => `height < ${float(limit)} ? ${i} : `).join('')}${BUILDING_STEPS.length};

@@ -11,8 +11,7 @@
   },
   "detail_buffer_km": 2,
   "region": {
-    "name": "Bicol Region",
-    "osm_relation": "3561455"
+    "bbox": [123.17, 13.602, 123.213, 13.64]
   },
   "subdivision": {
     "admin_level": 10,

@@ -215,3 +215,13 @@ Adding a city needs no renderer or web app changes. If it seems to, the engine h
 5. Add at least the smoke landmark and one establishing tour, with sources.
 6. Run `pnpm --filter @atlas/content validate` and `pnpm test:e2e`. The e2e suite picks up every registered city.
 7. Add any extra attribution the city's sources need (§6).
+8. Publish the tiles with `pnpm data:publish -- --city <slug>` and commit the `tiles.lock.json` it writes (§9), so CI and deploys have them.
+
+## 9. Publishing tiles
+
+Generated files are gitignored (never commit tiles), so builds get them from GitHub releases instead:
+
+- `pnpm data:publish [-- --city <slug>]` uploads a city's `apps/web/public/tiles/<slug>.*` (the output of `pnpm data:build`) as a new release `tiles-<slug>-<YYYYMMDD-HHMM>` (not marked latest), then writes `packages/content/cities/<slug>/tiles.lock.json`: the repository, the tag, and each file's sha256. Commit the lock. It needs the GitHub CLI logged in with write access, and does nothing if the files match the current lock.
+- `pnpm data:fetch [-- --city <slug>] [--force]` downloads each locked city's missing files and checks each against its sha256 before writing it. Files that exist but differ from the lock (a local rebuild) are kept with a warning, unless `--force`. A city without a lock only warns. The web app's `build` runs it first, so CI and Vercel fetch the tiles on their own.
+- Downloads use `GITHUB_TOKEN` (or `GH_TOKEN`, or the GitHub CLI's login). A private repository needs one: CI passes the workflow's token, and the Vercel project needs a read-only token in its environment.
+- The lock is validated with the city pack (`TilesLock` in `packages/shared`).

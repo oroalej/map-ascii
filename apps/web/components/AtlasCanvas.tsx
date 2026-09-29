@@ -65,6 +65,7 @@ export function AtlasCanvas({
   const meta = metaState.status === 'ready' ? metaState.meta : null;
   const level = useAtlasStore((s) => (s.camera ? zoomLevel(s.camera.zoom) : null));
   const subdivision = useUiStore((s) => s.subdivision);
+  const [contextLost, setContextLost] = useState(false);
 
   useEffect(() => {
     useUiStore.setState({ meta });
@@ -96,9 +97,14 @@ export function AtlasCanvas({
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas });
-    const off = atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next));
+    const offs = [
+      atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
+      atlas.on('contextlost', () => setContextLost(true)),
+      atlas.on('contextrestored', () => setContextLost(false)),
+    ];
     return () => {
-      off();
+      for (const off of offs) off();
+      setContextLost(false);
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
@@ -128,6 +134,11 @@ export function AtlasCanvas({
         // Focusable so the map's keyboard controls (+/-, arrow keys) work.
         tabIndex={0}
       />
+      {contextLost && (
+        <p role="status" className={styles.notice}>
+          The graphics context was lost. Restoring the map…
+        </p>
+      )}
       {metaState.status === 'missing' && (
         <p role="status" className={styles.notice}>
           No map data for {name} yet. Run <code>pnpm data:build -- --city {slug}</code>.
