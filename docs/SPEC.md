@@ -76,6 +76,10 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 **Road glyphs follow edge direction.** The renderer computes each road cell's orientation and neighbor connectivity, and picks the matching box-drawing character. Straight segments get `─`/`│`, junctions get `┼`/`├` and so on, and diagonals get `╱ ╲` or stair-stepped runs.
 
+**Two colors per cell.** A cell draws its glyph over a background. For areas (buildings, water, parks, woods, farmland, parking, pitches, and carriageways once they are strips of their real width), that background is a faint fill of the class color (the theme's `fill`), so a footprint reads as one shape and adjoining features stay distinct. Lines, markers, and labels keep the plain background, which gives labels their halo. A selected or highlighted feature's fill takes the accent too.
+
+**Edges.** In flat views, where an area's edge crosses a cell, the cell draws the sextant block (`🬀`…`🬻`, `▌ ▐`) of the part inside the area, over the fill of whatever is on the other side. Edges and diagonals then keep their shape at a sixth of a cell (2 × 3 per cell) instead of stepping a whole cell at a time. A building standing in a park or plaza keeps its shape over it. Features drawn with walls at the Place level (§2) keep their walls instead, and the tilted view has no sextant edges.
+
 **Labels** are real text snapped to the cell grid.
 - Placement is by priority and zoom band, with collision detection so labels never overlap.
 - Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Only the key streets are named before the Place level, picked by OSM road class. Major roads (motorway, trunk, primary) show from the District level (z14), and secondary roads from the Street level (z15.5). Tertiary roads show from z17.5, other streets from z18, and paths from z18.5. When names collide, key streets win. One name per street shows in a given stretch of screen.
@@ -107,7 +111,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Agents move at real-world speeds (cars about 8 m/s, people about 1.2 m/s), so motion reads the same at any zoom.
 - Each tile's agents start from a seed made of the tile's key, so they are the same for every visitor. At most 1,200 are drawn, nearest the center first.
 - An agent shows only where the cell under it allows: vehicles on roads, boats on water, people off roofs and water. In the tilted view, a building in front hides it.
-- **Time of day.** The map is lit for the real sun over the view (solar altitude from the visitor's clock), or a fixed day, dusk, or night. Dusk warms the colors. Night dims them toward blue, lights some building cells as windows and major roads with streetlights, and turns on vehicles' headlights. Fewer people and vehicles are out at night, and birds roost after dusk.
+- **Time of day.** The map is lit for the real sun over the view (solar altitude from the visitor's clock), or a fixed day, dusk, or night. Dusk warms the colors. Night dims them toward blue, lights some building cells as windows (in the tilted view, patches of wall that stay put as the camera turns, never roofs) and major roads with streetlights, and turns on vehicles' headlights. Fewer people and vehicles are out at night, and birds roost after dusk.
 
 ## 5. Interactions
 

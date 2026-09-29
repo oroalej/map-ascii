@@ -100,7 +100,7 @@ export const isEdgeMask = (mask: number): boolean => mask !== 0 && mask !== 63;
 export const EDGE_STATE = 4;
 
 /** An edge's sextant is drawn this far from the feature's fill toward its glyph color, 0–1. */
-export const EDGE_INK = 0.6;
+export const EDGE_INK = 0.4;
 
 /** One raster sample: its class (null for none) and feature id. */
 export type Sample = { cls: RenderClass | null; id: number };

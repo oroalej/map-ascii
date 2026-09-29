@@ -30,7 +30,7 @@ import {
   streetMode,
   type LabelCandidate,
 } from './labels';
-import { cellBits } from './life/config';
+import { cellBits, WINDOW } from './life/config';
 import { packLife } from './life/draw';
 import type { VisibleAgent } from './life/simulate';
 import { EXTENT, type TileLabel } from './raster/geometry';
@@ -42,6 +42,8 @@ const seeThrough = seeThroughMask();
 const roads = roadMask();
 const subcellAreas = subcellMask();
 const lifeCellBits = cellBits();
+/** The world's width in mercator meters. */
+const MERCATOR_METERS = 40_075_016.686;
 
 /** 0xRRGGBB → [r, g, b] in 0–1. */
 const rgb = (hex: number): [number, number, number] => [
@@ -157,6 +159,21 @@ export function screenArea(view: View, grid: Grid) {
 /** A tile to draw and its mesh. */
 export type TileDraw = { tile: TileId; mesh: TileMesh };
 
+/** Window bays repeat after this many, so the tile offsets stay exact in float32. */
+export const FACADE_PERIOD = 4096;
+
+/**
+ * Tile units → window bays (life/config.ts `WINDOW`) for the cell pass's `u_facade`: the tile's
+ * origin in bays (modulo `FACADE_PERIOD`, taken here in doubles) and bays per tile unit. Bays
+ * are in mercator meters, so they line up across tiles of every zoom and never move.
+ */
+export function facadeFrame({ z, x, y }: TileId): [number, number, number] {
+  const scale = MERCATOR_METERS / 2 ** z / EXTENT / WINDOW.bay;
+  const wrap = (n: number) =>
+    (((n * EXTENT * scale) % FACADE_PERIOD) + FACADE_PERIOD) % FACADE_PERIOD;
+  return [wrap(x), wrap(y), scale];
+}
+
 /**
  * Rasterize the region's own features (from their coarser tiles) and then the view's tiles into
  * the cell targets; 3D buildings stand up only in the tilted view.
@@ -205,8 +222,8 @@ export function cellPass(
   begin(targets.cellFbo, cols, rows, [1, 1]);
   drawFlat();
   if (tilted) {
-    layers.tiles.forEach(({ mesh }, i) => {
-      twgl.setUniforms(program, { u_matrix: matrices[i]! });
+    layers.tiles.forEach(({ tile, mesh }, i) => {
+      twgl.setUniforms(program, { u_matrix: matrices[i]!, u_facade: facadeFrame(tile) });
       drawExtrusions(gl, mesh);
     });
   } else {
@@ -386,6 +403,8 @@ export function glyphPass(
     u_life: targets.lifeTex,
     u_cellBits: lifeCellBits,
     u_origin: [grid.originCol, grid.originRow],
+    u_attr: targets.attrTex,
+    u_tilted: isTilted(view.camera),
     u_daylight: daylight,
     u_vehicle: classId('life_vehicle'),
   });

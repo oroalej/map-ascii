@@ -9,9 +9,14 @@
  * Zoom crossfades (classes.ts `classVisibility`): a class partly shown keeps only that share of
  * its cells, picked by a per-cell hash of the world cell, so it dissolves into what is under it
  * and the pattern stays put while panning.
+ *
+ * Extrusion walls put a window key (1–255) in the attributes' roof byte, which walls don't use:
+ * a hash of the window-sized patch of wall (life/config.ts `WINDOW`) the cell shows. It is
+ * fixed to the world, so the glyph pass's lit windows stay on their walls as the camera turns.
  */
 import { Flags, MAX_CLASSES, TIER_STEP } from '../classes';
 import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
+import { WINDOW } from '../life/config';
 import { cellHashGlsl } from './hash';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -27,11 +32,13 @@ uniform float u_depth[${MAX_CLASSES}];
 uniform float u_vis[${MAX_CLASSES}]; // 0-1 per class id
 uniform float u_zoom;
 uniform int u_roadMask; // carriageway class ids
+uniform vec3 u_facade;  // extrusions: tile origin in window bays (xy), bays per tile unit (z)
 
 flat out vec4 v_meta;
 flat out uint v_id;
 flat out float v_vis;
 out float v_ridge;
+out vec3 v_facade;      // position in window bays (xy) and storeys (z)
 
 // Depth ranges: extrusions [-1, 0.2), ground [0.2, 1); anything past 1 is clipped.
 const float SPLIT = 0.2;
@@ -65,6 +72,7 @@ void main() {
   v_id = a_id;
   v_vis = vis;
   v_ridge = a_ridge;
+  v_facade = vec3(u_facade.xy + a_pos * u_facade.z, z / ${float(WINDOW.storey)});
 }
 `;
 
@@ -76,6 +84,7 @@ flat in vec4 v_meta;
 flat in uint v_id;
 flat in float v_vis;
 in float v_ridge;
+in vec3 v_facade;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0) (flat views; 0 when tilted)
 uniform ivec2 u_sub;    // samples per cell: 1 x 1, or SUB for the sub-cell targets
@@ -96,9 +105,15 @@ void main() {
   // Pitched roofs: which slope the cell is on, or the ridge if the ridge line crosses the cell
   // (the distance changes by fwidth across one cell). glyphs/select.ts roofCode.
   float roof = 0.0;
-  if ((int(v_meta.z + 0.5) & ${Flags.ridged}) != 0) {
+  int flags = int(v_meta.z + 0.5);
+  if ((flags & ${Flags.ridged}) != 0) {
     roof = abs(v_ridge) <= 0.5 * fwidth(v_ridge) ? ${RoofCode.ridge}.0
       : v_ridge > 0.0 ? ${RoofCode.lit}.0 : ${RoofCode.shaded}.0;
+  }
+  // Walls: the window key of the patch of wall in this cell.
+  if ((flags & ${Flags.extruded}) != 0 && (flags & ${Flags.roof}) == 0) {
+    ivec3 f = ivec3(floor(v_facade));
+    roof = float(1u + cellHash(f.xy + f.z * ivec2(7919, 104729)) % 255u);
   }
   o_attr = vec4(v_meta.y / 255.0, v_meta.z / 255.0, v_meta.w / 255.0, roof / 255.0);
   o_id = vec4(uvec4(v_id, v_id >> 8u, v_id >> 16u, v_id >> 24u) & 255u) / 255.0;

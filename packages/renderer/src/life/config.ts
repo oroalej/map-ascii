@@ -115,6 +115,12 @@ export const CellBit = {
   streetlight: 32,
 } as const;
 
+/**
+ * In the tilted view, windows light up by patch of a building's walls, fixed to the world so
+ * they stay put as the camera turns: a bay this wide (mercator meters) by a storey this tall (m).
+ */
+export const WINDOW = { bay: 3, storey: 3 } as const;
+
 /** The bit an agent needs on the cell under it. */
 export const agentBit: Readonly<Record<AgentKind, number>> = {
   vehicle: CellBit.vehicle,
