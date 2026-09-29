@@ -74,5 +74,5 @@ export async function downloadDem(
 /** Read a cached file into an ArrayBuffer (geotiff's input). */
 export async function readArrayBuffer(path: string): Promise<ArrayBuffer> {
   const bytes = await readFile(path);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }

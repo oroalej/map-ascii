@@ -58,7 +58,8 @@ export const searchOptions = {
   storeFields: [] as string[],
   extractField: (document: Record<string, unknown>, field: string): string => {
     const value = document[field];
-    return Array.isArray(value) ? value.join(' ') : String(value ?? '');
+    if (Array.isArray(value)) return value.join(' ');
+    return typeof value === 'string' ? value : '';
   },
   processTerm: (term: string): string => foldTerm(term),
   searchOptions: { prefix: true, fuzzy: 0.2, boost: { name: 2 }, combineWith: 'AND' as const },
