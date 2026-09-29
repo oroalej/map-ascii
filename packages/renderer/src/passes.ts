@@ -22,6 +22,9 @@ import {
   labelVisibility,
   packOverlay,
   placeLabels,
+  TILT_LABEL_GAP,
+  TILT_LABEL_PITCH,
+  tiltedLabelShows,
   streetMode,
   type LabelCandidate,
 } from './labels';
@@ -223,6 +226,7 @@ export function overlayPass(
     const vis = labelVisibility(label.band, camera.zoom);
     if (vis <= 0) continue;
     const [col, row] = toCell(label.lng, label.lat);
+    if (tilted && !tiltedLabelShows(label.rank, row, targets.rows, camera.pitch)) continue;
     candidates.push({
       id: label.id,
       text: label.text,
@@ -234,7 +238,8 @@ export function overlayPass(
       mode: label.angle !== undefined && !tilted ? streetMode(label.angle) : 'beside',
     });
   }
-  const placed = placeLabels(overlay, candidates, glyphIndex, area);
+  const gap = camera.pitch > TILT_LABEL_PITCH ? TILT_LABEL_GAP : 0;
+  const placed = placeLabels(overlay, candidates, glyphIndex, area, gap);
   uploadOverlay(gl, targets, packOverlay(overlay));
   return placed;
 }

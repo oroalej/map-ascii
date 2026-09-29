@@ -6,6 +6,7 @@ import {
   packOverlay,
   placeLabels,
   streetMode,
+  tiltedLabelShows,
   wrapText,
   type LabelArea,
   type LabelCandidate,
@@ -221,6 +222,46 @@ describe('placeLabels', () => {
       '._Naga_Metropolitan_.',
       '._____Cathedral_____.',
     ]);
+  });
+});
+
+describe('tiltedLabelShows', () => {
+  const rows = 100;
+
+  it('keeps every label up to 15° (map mode)', () => {
+    expect(tiltedLabelShows(LabelRank.street, 0, rows, 15)).toBe(true);
+  });
+
+  it('keeps street names to the nearer part of a 60° view, major roads farther', () => {
+    expect(tiltedLabelShows(LabelRank.street, 50, rows, 60)).toBe(false);
+    expect(tiltedLabelShows(LabelRank.street, 60, rows, 60)).toBe(true);
+    expect(tiltedLabelShows(LabelRank.roadMajor, 30, rows, 60)).toBe(true);
+    expect(tiltedLabelShows(LabelRank.roadMajor, 20, rows, 60)).toBe(false);
+  });
+
+  it('raises the far limit with the pitch', () => {
+    expect(tiltedLabelShows(LabelRank.street, 30, rows, 30)).toBe(true);
+    expect(tiltedLabelShows(LabelRank.street, 30, rows, 50)).toBe(false);
+  });
+
+  it('always keeps landmarks and place names', () => {
+    for (const rank of [LabelRank.landmark, LabelRank.subdivision, LabelRank.city]) {
+      expect(tiltedLabelShows(rank, 0, rows, 60)).toBe(true);
+    }
+  });
+});
+
+describe('placeLabels with a gap', () => {
+  it('keeps rows clear above and below each label', () => {
+    const labels: LabelCandidate[] = [
+      { id: 1, text: 'AB', rank: 0, col: 5, row: 1, mode: 'along' },
+      { id: 2, text: 'CD', rank: 0, col: 5, row: 2, mode: 'along' },
+      { id: 3, text: 'EF', rank: 0, col: 5, row: 3, mode: 'along' },
+    ];
+    const placedIds = (gap: number) =>
+      placeLabels(createOverlay(12, 6), labels, index, undefined, gap).map((l) => l.id);
+    expect(placedIds(0)).toEqual([1, 2, 3]);
+    expect(placedIds(1)).toEqual([1, 3]);
   });
 });
 
