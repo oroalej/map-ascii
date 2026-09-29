@@ -2,6 +2,22 @@
   position: fixed;
   right: 8px;
   bottom: 6px;
+  max-width: min(640px, calc(100vw - 16px));
   font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
   color: var(--fg-dim);
+  z-index: 11;
+}
+
+.extra {
+  font-size: 10px;
+}
+
+/* Phones: full width along the bottom, under the HUD (which sits above it). */
+@media (max-width: 640px) {
+  .attribution {
+    left: 8px;
+    max-width: none;
+  }
 }

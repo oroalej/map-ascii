@@ -6,6 +6,8 @@ const port = Number(process.env.E2E_PORT ?? 3100);
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  // WebGL runs in software in headless Chromium; phone-sized DPRs make that slow.
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
@@ -13,7 +15,11 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Touch, a small screen, and the bottom-sheet panel (SPEC.md §8).
+    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+  ],
   webServer: {
     // Test the static export, which is what ships.
     command: `pnpm build && pnpm exec serve out -l ${port}`,

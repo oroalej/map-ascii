@@ -1,26 +1,18 @@
-import { loadCityPacks } from '@atlas/content';
-import { AtlasCanvas } from '@/components/AtlasCanvas';
-import { Attribution } from '@/components/Attribution';
+import { CityRedirect } from '@/components/CityRedirect';
+import { loadRegistry } from '@/lib/cities';
 
-/** Runs at build time: read the city registry, failing the build on invalid packs. */
-async function firstCity() {
-  const { packs, errors } = await loadCityPacks();
-  if (errors.length > 0) {
-    const lines = errors.map(({ file, message }) => `  ${file}: ${message}`);
-    throw new Error(`Invalid city packs:\n${lines.join('\n')}`);
-  }
-  // Phase 2 adds a route per city (`/<slug>`); until then `/` shows the first city.
-  const city = packs[0]?.city;
-  if (!city) throw new Error('No city packs found in packages/content/cities/');
-  return city;
-}
-
+/**
+ * `/`: while there is one city, it sends the visitor there (SPEC.md §9). A static export can't
+ * redirect on the server, so the page does it on the client and links to the city meanwhile.
+ */
 export default async function HomePage() {
-  const city = await firstCity();
+  const cities = (await loadRegistry()).map(({ city }) => ({
+    slug: city.slug,
+    name: city.name.en,
+  }));
   return (
     <main>
-      <AtlasCanvas slug={city.slug} name={city.name.en} />
-      <Attribution />
+      <CityRedirect cities={cities} />
     </main>
   );
 }

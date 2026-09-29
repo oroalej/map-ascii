@@ -1,0 +1,13 @@
+.tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 260px;
+  padding: 2px 6px;
+  background: rgb(4 5 10 / 92%);
+  border: 1px solid #2a2c36;
+  font-size: 13px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

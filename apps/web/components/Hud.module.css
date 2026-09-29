@@ -1,0 +1,135 @@
+.topRight {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 12;
+  max-width: calc(100vw - 24px);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom {
+  margin: 0;
+  padding: 4px 8px;
+  background: rgb(4 5 10 / 85%);
+  border: 1px solid #2a2c36;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  padding: 6px 10px;
+  background: rgb(4 5 10 / 88%);
+  border: 1px solid #2a2c36;
+  font-size: 12px;
+}
+
+.legend summary {
+  cursor: pointer;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+.legend ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.glyphs {
+  flex: none;
+  width: 9ch;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.bottomLeft {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 12;
+  font-size: 12px;
+}
+
+.scale {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  color: var(--fg-dim);
+}
+
+.bar {
+  display: inline-block;
+  height: 6px;
+  border: 1px solid var(--fg-dim);
+  border-top: none;
+}
+
+.line {
+  margin: 0;
+  padding: 2px 6px;
+  background: rgb(4 5 10 / 85%);
+  width: fit-content;
+}
+
+.button {
+  padding: 4px 8px;
+  background: rgb(4 5 10 / 85%);
+  border: 1px solid #2a2c36;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.button:hover,
+.button:focus-visible {
+  border-color: var(--fg-dim);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Phones: the search box takes the top row, so the zoom and compass sit below it. */
+@media (max-width: 640px) {
+  .topRight {
+    top: 56px;
+  }
+
+  .zoom {
+    font-size: 12px;
+  }
+
+  /* Above the attribution, which wraps to a few lines on phones. */
+  .bottomLeft {
+    bottom: 64px;
+  }
+}
