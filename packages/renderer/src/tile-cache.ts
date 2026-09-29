@@ -6,6 +6,7 @@
 import { REGION_TILE_MAX_ZOOM, type CameraState } from '@atlas/shared';
 import { isTilted, viewportFor, type Size } from './camera';
 import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
+import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
 import {
   ancestorAt,
@@ -23,7 +24,7 @@ import {
 const TILE_CACHE_SIZE = 256;
 
 /** A loaded tile: its GPU mesh and label candidates. */
-export type LoadedTile = { mesh: TileMesh; labels: TileLabel[] };
+export type LoadedTile = { mesh: TileMesh; labels: TileLabel[]; life: LifeGeometry };
 
 export class TileCache {
   readonly source: TileSource;
@@ -50,7 +51,9 @@ export class TileCache {
         if (this.suspended) return;
         this.meshes.set(
           key,
-          geometry ? { mesh: uploadTile(gl, geometry), labels: geometry.labels } : null,
+          geometry
+            ? { mesh: uploadTile(gl, geometry), labels: geometry.labels, life: geometry.life }
+            : null,
         );
         onChange();
       },

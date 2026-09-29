@@ -5,10 +5,12 @@ import {
   REGION_TILE_MAX_ZOOM,
   tileZoomRange,
   type AtlasClass,
+  type BBox,
   type SubdivisionArea,
   type TileLayer,
   type ZoomBand,
 } from '@atlas/shared';
+import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
 import type {
   Feature,
@@ -19,7 +21,7 @@ import type {
   Polygon,
   Position,
 } from 'geojson';
-import type { DerivedProperties } from './02-convert';
+import type { DerivedProperties, Geography } from './02-convert';
 import {
   buildingHeight,
   classify,
@@ -32,6 +34,7 @@ import {
   type Tags,
 } from './lib/classify';
 import { parseOsmDate } from './lib/dates';
+import { bboxesOverlap } from './lib/geo';
 import { readJson, writeFeatures, writeJson } from './lib/io';
 import { areaAt, isSubdivisionPlace, subdivisionAreas, type Area } from './lib/subdivisions';
 import { files, type Step } from './step';
@@ -277,6 +280,15 @@ export const areasFile = (areas: readonly Area[]): SubdivisionArea[] =>
     },
   }));
 
+/**
+ * The features that reach into the region. A saved download can cover more than the region
+ * (DATA.md §2 step 01); what lies wholly outside it can never be seen, so it isn't tiled.
+ */
+export const clipToRegion = (fc: FeatureCollection, region: BBox): FeatureCollection => ({
+  ...fc,
+  features: fc.features.filter((f) => f.geometry && bboxesOverlap(turfBbox(f) as BBox, region)),
+});
+
 const readOptional = <T>(path: string, fallback: T): Promise<T> =>
   readJson<T>(path).catch((err: NodeJS.ErrnoException) => {
     if (err.code === 'ENOENT') return fallback;
@@ -288,11 +300,18 @@ export const step: Step = {
   name: '03-normalize',
   async run({ city, buildDir }) {
     const empty: FeatureCollection = { type: 'FeatureCollection', features: [] };
-    const osm = await readJson<FeatureCollection>(join(buildDir, files.osm));
+    const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const osm = clipToRegion(
+      await readJson<FeatureCollection>(join(buildDir, files.osm)),
+      regionBounds,
+    );
     const boundary = await readJson<Feature<Polygon | MultiPolygon>>(
       join(buildDir, files.boundary),
     );
-    const regionOsm = await readOptional(join(buildDir, files.regionOsm), empty);
+    const regionOsm = clipToRegion(
+      await readOptional(join(buildDir, files.regionOsm), empty),
+      regionBounds,
+    );
     const derived = await readOptional(join(buildDir, files.derived), empty);
     const { features, areas } = normalize(osm, boundary, city.subdivision.admin_level, {
       osm: regionOsm,

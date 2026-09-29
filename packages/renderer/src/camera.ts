@@ -101,15 +101,15 @@ export function clampCamera(camera: CameraState, limits: CameraLimits, size?: Si
 }
 
 /**
- * The zoom at which the bounds just fit the view (SPEC.md §3: zooming out stops there, so the
- * whole region fills the screen at the widest).
+ * The zoom at which the bounds just cover the view (SPEC.md §3: zooming out stops there, so the
+ * region fills the screen at the widest and nothing outside it shows).
  */
 export function fitZoom([west, south, east, north]: BBox, size: Size): number {
   const [x0, y0] = project(west, north, 0);
   const [x1, y1] = project(east, south, 0);
   const zx = Math.log2(Math.max(1, size.width) / Math.max(1e-9, x1 - x0));
   const zy = Math.log2(Math.max(1, size.height) / Math.max(1e-9, y1 - y0));
-  return Math.min(zx, zy);
+  return Math.max(zx, zy);
 }
 
 /** Fly-to duration limits in ms (SPEC.md §3), and the cap with reduced motion. */

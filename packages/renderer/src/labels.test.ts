@@ -235,6 +235,8 @@ describe('tiltedLabelShows', () => {
   it('keeps street names to the nearer part of a 60° view, major roads farther', () => {
     expect(tiltedLabelShows(LabelRank.street, 50, rows, 60)).toBe(false);
     expect(tiltedLabelShows(LabelRank.street, 60, rows, 60)).toBe(true);
+    expect(tiltedLabelShows(LabelRank.streetMinor, 50, rows, 60)).toBe(false);
+    expect(tiltedLabelShows(LabelRank.streetMinor, 60, rows, 60)).toBe(true);
     expect(tiltedLabelShows(LabelRank.roadMajor, 30, rows, 60)).toBe(true);
     expect(tiltedLabelShows(LabelRank.roadMajor, 20, rows, 60)).toBe(false);
   });

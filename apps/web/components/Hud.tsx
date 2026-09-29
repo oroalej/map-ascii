@@ -1,9 +1,11 @@
 'use client';
 
 import { legendEntries, type Atlas, type RenderClass } from '@atlas/renderer';
-import { SubdivisionAreas, zoomLevel, type SubdivisionArea } from '@atlas/shared';
+import { zoomLevel, type SubdivisionArea } from '@atlas/shared';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
+import { isSubdivisionAreas } from '@/lib/guards';
+import { TIME_CHOICES, useLifeStore, type TimeChoice } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import { Compass } from './Compass';
@@ -29,8 +31,7 @@ function useSubdivisionTracking(city: string) {
     fetch(`/tiles/${city}.subdivisions.json`)
       .then((r) => (r.ok ? r.json() : []))
       .then((json: unknown) => {
-        const parsed = SubdivisionAreas.safeParse(json);
-        if (!cancelled && parsed.success) setAreas(parsed.data);
+        if (!cancelled && isSubdivisionAreas(json)) setAreas(json);
       })
       .catch(() => {});
     return () => {
@@ -54,6 +55,7 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
   const theme = useAtlasStore((s) => s.theme);
   const atlas = useAtlasInstance((s) => s.atlas);
+  const life = useLifeShown();
   // The classes on screen, as the renderer last reported them (none reported yet: zoom only).
   const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
   useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
@@ -61,8 +63,8 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = Math.round(zoom * 20) / 20;
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen),
-    [theme, rounded, onScreen],
+    () => legendEntries(theme, rounded, onScreen, { life }),
+    [theme, rounded, onScreen, life],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
@@ -94,6 +96,67 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+const prefersReducedMotion = () => window.matchMedia(REDUCED_MOTION).matches;
+const subscribeReducedMotion = (onChange: () => void) => {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+
+/** Whether the life layer's agents are on screen (never with reduced motion). */
+function useLifeShown() {
+  const enabled = useLifeStore((s) => s.enabled);
+  const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
+  return enabled && !reduced;
+}
+
+const TIME_LABELS: Record<TimeChoice, string> = {
+  live: 'Time: live',
+  day: 'Time: day',
+  dusk: 'Time: dusk',
+  night: 'Time: night',
+};
+
+/**
+ * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds on or
+ * off, and the time of day the map is lit for (cycling live → day → dusk → night).
+ */
+function LifeControls() {
+  const enabled = useLifeStore((s) => s.enabled);
+  const time = useLifeStore((s) => s.time);
+  const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
+  const nextTime = TIME_CHOICES[(TIME_CHOICES.indexOf(time) + 1) % TIME_CHOICES.length]!;
+  return (
+    <>
+      <button
+        type="button"
+        className={`${styles.button} ${styles.toggle}`}
+        aria-pressed={enabled && !reduced}
+        disabled={reduced}
+        title={
+          reduced
+            ? 'Off while your system asks for reduced motion'
+            : 'Simulated traffic, people, boats, and birds'
+        }
+        onClick={() => useLifeStore.setState({ enabled: !enabled })}
+      >
+        Life
+      </button>
+      <button
+        type="button"
+        className={styles.button}
+        title={
+          time === 'live' ? 'Lit for the real time of day in the city' : 'Lit for a fixed time'
+        }
+        onClick={() => useLifeStore.setState({ time: nextTime })}
+      >
+        {TIME_LABELS[time]}
+      </button>
+    </>
   );
 }
 
@@ -175,6 +238,9 @@ export function Hud({ city, subdivisionLabel }: { city: string; subdivisionLabel
             {showCoords ? `${camera.lat.toFixed(5)}, ${camera.lng.toFixed(5)}` : 'Coordinates'}
           </button>
           <ShareButton />
+        </div>
+        <div className={styles.row}>
+          <LifeControls />
         </div>
       </div>
     </>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { foldTerm, SearchEntry } from './search';
+import { SearchEntry } from './search';
+import { foldTerm } from './search-options';
 import { bandVisibility, CLASS_ZOOM, featureZoomBand, tileZoomRange, zoomLevel } from './zoom';
 
 describe('bandVisibility', () => {

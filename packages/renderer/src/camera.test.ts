@@ -156,14 +156,16 @@ describe('clampCamera with a view size', () => {
 });
 
 describe('fitZoom', () => {
-  it('is the zoom at which the bounds just fit the view', () => {
+  it('is the zoom at which the bounds just cover the view', () => {
     const size = { width: 1000, height: 1000 };
     const z = fitZoom(limits.bounds, size);
     const [x0, y0] = project(122, 15, z);
     const [x1, y1] = project(125, 11, z);
-    expect(Math.max(x1 - x0, y1 - y0)).toBeCloseTo(1000, 3);
-    // A wider view fits the same bounds at a higher zoom only if the height allows it.
-    expect(fitZoom(limits.bounds, { width: 2000, height: 1000 })).toBeCloseTo(z, 6);
+    // The bounds are taller than wide, so their width is what fills the square view.
+    expect(Math.min(x1 - x0, y1 - y0)).toBeCloseTo(1000, 3);
+    expect(y1 - y0).toBeGreaterThan(1000);
+    // A view twice as wide needs twice the width covered: one zoom level closer.
+    expect(fitZoom(limits.bounds, { width: 2000, height: 1000 })).toBeCloseTo(z + 1, 6);
   });
 });
 

@@ -4,6 +4,10 @@ import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from 
 /** The view parameters currently in the address bar. */
 const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParams);
 
+/** The Coordinates button once pressed: it shows "lat, lng". */
+const coordsButton = (page: Page) =>
+  page.getByRole('button', { pressed: true, name: /^-?\d+\.\d+, -?\d+\.\d+$/ });
+
 /** A tour's id as the URL has it. */
 const tourSlug = (tour: TourFile) => tour.id.replace(/^tour\//, '');
 
@@ -129,7 +133,7 @@ for (const city of cities) {
         await page.keyboard.press('ArrowRight');
         await page.keyboard.press('ArrowUp');
         await page.getByRole('button', { name: 'Coordinates' }).click();
-        const coords = (await page.getByRole('button', { pressed: true }).textContent())!;
+        const coords = (await coordsButton(page).textContent())!;
         // The URL follows the camera after a short debounce: wait until it shows this view.
         const [lat, lng] = coords.split(', ').map(Number) as [number, number];
         await expect
@@ -148,7 +152,7 @@ for (const city of cities) {
         await other.goto(shared);
         await expect(other.getByLabel('Zoom')).toHaveText(/^z 15\.5 /);
         await other.getByRole('button', { name: 'Coordinates' }).click();
-        await expect(other.getByRole('button', { pressed: true })).toHaveText(coords);
+        await expect(coordsButton(other)).toHaveText(coords);
         await other.close();
       });
 

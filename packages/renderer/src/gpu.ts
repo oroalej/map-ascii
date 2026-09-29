@@ -40,6 +40,8 @@ export type CellTargets = {
   glyphTex: WebGLTexture;
   /** RGBA8 overlay (art and labels): 16-bit glyph code, color index (labels.ts). */
   overlayTex: WebGLTexture;
+  /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
+  lifeTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
@@ -60,6 +62,7 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const depth = gl.createRenderbuffer();
   gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
   gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, cols, rows);
@@ -79,11 +82,23 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   checkComplete(gl, 'glyph');
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  return { cols, rows, classTex, attrTex, idTex, glyphTex, overlayTex, depth, cellFbo, glyphFbo };
+  return {
+    cols,
+    rows,
+    classTex,
+    attrTex,
+    idTex,
+    glyphTex,
+    overlayTex,
+    lifeTex,
+    depth,
+    cellFbo,
+    glyphFbo,
+  };
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
-  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex, t.overlayTex]) {
+  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex, t.overlayTex, t.lifeTex]) {
     gl.deleteTexture(tex);
   }
   gl.deleteRenderbuffer(t.depth);
@@ -94,6 +109,13 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
 /** Replace the overlay's contents (RGBA8 texels from labels.ts `packOverlay`). */
 export function uploadOverlay(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.overlayTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the life layer's contents (RGBA8 texels from passes.ts `lifePass`). */
+export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.lifeTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }

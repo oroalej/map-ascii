@@ -22,8 +22,8 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 | Region | 7–9.5 | Regional coastline, major peaks, major lakes and rivers, terrain shading | Provinces/states, major cities |
 | City | 9.5–13 | City boundary, subdivision outlines, main rivers, highways | City and subdivision names |
 | District | 13–15.5 | All roads, building blocks as solid fill, parks, water | Districts, major roads, key landmarks |
-| Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Street names, POIs |
-| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything; info panel auto-suggests |
+| Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Key street names (primary to secondary roads), POIs |
+| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything, including the other street names; info panel auto-suggests |
 
 **Fixed cell size.** Characters are always the same size on screen (default 10×18 CSS px; configurable). Zooming changes how much ground each cell represents, not the glyph size.
 
@@ -43,7 +43,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 
 **Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom that fits the whole region in the viewport (never below 7), so the visitor can't lose the region in empty space.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom where the region fills the viewport, so no space outside it shows (never below 7). On a screen shaped differently from the region, the widest view crops the region on one axis, and the visitor pans to see the rest.
 
 ## 4. Visual language
 
@@ -78,7 +78,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 **Labels** are real text snapped to the cell grid.
 - Placement is by priority and zoom band, with collision detection so labels never overlap.
-- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Names of major roads show from the District level (z14), other streets from the Street level (z15.5), and paths from z17. One name per street shows in a given stretch of screen.
+- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Only the key streets are named before the Place level, picked by OSM road class. Major roads (motorway, trunk, primary) show from the District level (z14), and secondary roads from the Street level (z15.5). Tertiary roads show from z17.5, other streets from z18, and paths from z18.5. When names collide, key streets win. One name per street shows in a given stretch of screen.
 - Place names show by what they name: provinces at the Region level, cities and towns until the District level, subdivisions from z10.5 to z16, and smaller places from z13.5.
 - Labels have a 1-cell dark halo.
 - Tilted past map mode's 15° (orbit), names thin out so the buildings show: street and small-place names keep to the nearer part of the screen (the nearer 45% at 60°), major roads and monuments to the nearer 72%, with a row kept clear above and below each label. Landmarks and place names of subdivisions and up always show.
@@ -94,6 +94,20 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - The Place level reaches z21, where a cell is about 0.4 × 0.7 m.
 
 **Hover and selection.** Hovering brightens the feature's cells. The selected feature gets an accent color and a slow shimmer.
+
+**Life layer.** The map is inhabited by simulated agents drawn over it. They are decoration, not data, and the legend labels them "(simulated)". They are derived only from the OSM geometry in the tiles, so they work for any city.
+
+| Agent | Glyph | Moves along | From zoom |
+|---|---|---|---|
+| Vehicle | `▬` across the screen, `▮` up or down | major, secondary, and minor roads, keeping right, through junctions | 15 |
+| Person | `☺` | minor roads, paths, and around parks and plazas; pauses and turns back now and then | 17 |
+| Boat | `◊` | rivers | 13.5 |
+| Bird | `v` / `-` (wing beat) | flocks of 3–7 circling over parks, woods, and water, moving between them | 13.5 |
+
+- Agents move at real-world speeds (cars about 8 m/s, people about 1.2 m/s), so motion reads the same at any zoom.
+- Each tile's agents start from a seed made of the tile's key, so they are the same for every visitor. At most 600 are drawn, nearest the center first.
+- An agent shows only where the cell under it allows: vehicles on roads, boats on water, people off roofs and water. In the tilted view, a building in front hides it.
+- **Time of day.** The map is lit for the real sun over the view (solar altitude from the visitor's clock), or a fixed day, dusk, or night. Dusk warms the colors. Night dims them toward blue, lights some building cells as windows and major roads with streetlights, and turns on vehicles' headlights. Fewer people and vehicles are out at night, and birds roost after dusk.
 
 ## 5. Interactions
 
@@ -130,6 +144,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Scale indicator (the "ruler").
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
+- A "Life" toggle for the life layer (§4) and a time chip that cycles live → day → dusk → night. Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
 - Attribution line, always visible.
 
 ## 6. Tours
@@ -173,7 +188,7 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 ## 8. Responsiveness and accessibility
 
 - Mobile first-class: touch gestures, bottom-sheet panels, a larger default cell size on small screens.
-- `prefers-reduced-motion`: no water animation, instant cell transitions, shorter fly-to.
+- `prefers-reduced-motion`: no water animation, instant cell transitions, shorter fly-to, and no life layer agents (the "Life" toggle is disabled). The time-of-day lighting still applies, without the window flicker.
 - Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
 - **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there, like a click.
 - **Debug overlay.** `?debug=1` shows the renderer's frame rate, frame and cell-pass times, tile counts, and tile decode time, for checking the performance budgets on real devices. It is not part of the view state, so share URLs leave it out.

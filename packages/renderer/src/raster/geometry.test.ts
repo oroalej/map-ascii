@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, variantCode } from '../classes';
 import { LabelRank } from '../labels';
+import { LifeLine } from '../life/geometry';
 import {
   buildTileGeometry,
   classifyRings,
@@ -10,6 +11,7 @@ import {
   packId,
   longestRun,
   roofRidge,
+  streetLabel,
   tileToLngLat,
   wallShade,
   ringCentroid,
@@ -235,8 +237,8 @@ describe('buildTileGeometry', () => {
 
   it('labels named streets on their longest run, ranked by road class', () => {
     const tile = { z: 16, x: 55_247, y: 30_252 };
-    const street = (id: string, cls: string, name?: string) =>
-      feature(2, { id, class: cls, ...(name && { name }) }, [
+    const street = (id: string, cls: string, name?: string, kind?: string) =>
+      feature(2, { id, class: cls, ...(name && { name }), ...(kind && { kind }) }, [
         [
           [0, 100],
           [0, 900],
@@ -245,9 +247,11 @@ describe('buildTileGeometry', () => {
     const { labels } = buildTileGeometry(
       {
         roads: layer([
-          street('osm:way/1', 'road_major', 'Magsaysay Avenue'),
-          street('osm:way/2', 'road_minor', 'Elias Angeles Street'),
-          street('osm:way/3', 'road_minor'),
+          street('osm:way/1', 'road_major', 'Magsaysay Avenue', 'highway=primary'),
+          street('osm:way/2', 'road_mid', 'Elias Angeles Street', 'highway=secondary'),
+          street('osm:way/3', 'road_mid', 'Taal Avenue', 'highway=tertiary'),
+          street('osm:way/4', 'road_minor', 'Jade Street', 'highway=residential'),
+          street('osm:way/5', 'road_minor'),
         ]),
       },
       createIdRegistry(),
@@ -256,8 +260,23 @@ describe('buildTileGeometry', () => {
     expect(labels.map(({ text, rank, band }) => ({ text, rank, band }))).toEqual([
       { text: 'Magsaysay Avenue', rank: LabelRank.roadMajor, band: { min: 14 } },
       { text: 'Elias Angeles Street', rank: LabelRank.street, band: { min: 15.5 } },
+      { text: 'Taal Avenue', rank: LabelRank.streetMinor, band: { min: 17.5 } },
+      { text: 'Jade Street', rank: LabelRank.streetMinor, band: { min: 18 } },
     ]);
     expect(labels[0]!.angle).toBeCloseTo(Math.PI / 2); // north–south, y down
+  });
+
+  it('names only the key streets at the Street level', () => {
+    const at = (cls: string, kind?: string) => streetLabel(cls, kind);
+    expect(at('road_major')).toEqual({ rank: LabelRank.roadMajor, band: { min: 14 } });
+    expect(at('road_mid', 'highway=secondary')?.band).toEqual({ min: 15.5 });
+    expect(at('road_mid', 'highway=secondary_link')?.band).toEqual({ min: 15.5 });
+    expect(at('road_mid', 'highway=tertiary')?.band).toEqual({ min: 17.5 });
+    expect(at('road_mid')?.band).toEqual({ min: 17.5 }); // unknown kind: the cautious tier
+    expect(at('road_mid', 'amenity=parking')?.band).toEqual({ min: 17.5 });
+    expect(at('road_minor', 'highway=residential')?.band).toEqual({ min: 18 });
+    expect(at('path', 'highway=footway')?.band).toEqual({ min: 18.5 });
+    expect(at('building')).toBeUndefined();
   });
 
   it('labels places at their point, ranked and banded by what they name', () => {
@@ -507,5 +526,54 @@ describe('buildTileGeometry', () => {
     expect([0, 5, 10].map(ridged)).toEqual([true, false, false]);
     expect([...fills.ridge.slice(0, 5)].some((d) => d !== 0)).toBe(true);
     expect([...fills.ridge.slice(5)].every((d) => d === 0)).toBe(true);
+  });
+});
+
+describe('buildTileGeometry life', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+
+  it('keeps roads, paths, and rivers as life lines, and parks as plazas and roosts', () => {
+    const g = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_major', id: 'r1' }, [
+            [
+              [0, 10],
+              [100, 10],
+            ],
+          ]),
+          feature(2, { class: 'path', id: 'p1' }, [
+            [
+              [0, 20],
+              [50, 20],
+            ],
+          ]),
+          // Region-only features have no life.
+          feature(2, { class: 'road_major', id: 'r2', region: true }, [
+            [
+              [0, 30],
+              [100, 30],
+            ],
+          ]),
+        ]),
+        landuse: layer([feature(3, { class: 'park', id: 'k1' }, [square(1000, 1000, 200)])]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const { life } = g;
+    expect(Array.from(life.kinds)).toEqual([LifeLine.roadMajor, LifeLine.path, LifeLine.plaza]);
+    expect(Array.from(life.starts)).toEqual([0, 2, 4, 9]);
+    expect(Array.from(life.coords.slice(0, 4))).toEqual([0, 10, 100, 10]);
+    expect(Array.from(life.roosts)).toEqual([1100, 1100]);
+  });
+
+  it('skips roosts that fall in the tile buffer', () => {
+    const g = buildTileGeometry(
+      { landuse: layer([feature(3, { class: 'trees', id: 't1' }, [square(-300, 10, 100)])]) },
+      createIdRegistry(),
+      tile,
+    );
+    expect(g.life.roosts).toHaveLength(0);
   });
 });

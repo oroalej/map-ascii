@@ -7,6 +7,7 @@ import {
   onlyRelation,
   overpass,
   quote,
+  type FetchOptions,
   type OsmElement,
   type OverpassResponse,
 } from './lib/overpass';
@@ -116,7 +117,7 @@ export function mergeResponses(responses: readonly OverpassResponse[]): Overpass
 }
 
 /** The region's bounds: its relation's bbox, or the configured bbox. */
-async function regionBounds(city: City, rawDir: string, offline: boolean): Promise<BBox> {
+async function regionBounds(city: City, rawDir: string, cache: FetchOptions): Promise<BBox> {
   if ('bbox' in city.region) return city.region.bbox;
   const { name, osm_relation } = city.region;
   const selector = osm_relation
@@ -127,7 +128,7 @@ async function regionBounds(city: City, rawDir: string, offline: boolean): Promi
 ${selector};
 out tags bb;`,
     join(rawDir, files.rawRegionRelation),
-    { offline },
+    cache,
   );
   const match = osm_relation
     ? onlyRelation(region, 'Region', {})
@@ -141,10 +142,13 @@ out tags bb;`,
 // into raw/<city>/
 export const step: Step = {
   name: '01-fetch',
-  async run({ city, rawDir, offline }) {
-    const boundaryData = await overpass(boundaryQuery(city), join(rawDir, files.rawBoundary), {
-      offline,
-    });
+  async run({ city, rawDir, offline, refresh }) {
+    const cache: FetchOptions = { offline, refresh };
+    const boundaryData = await overpass(
+      boundaryQuery(city),
+      join(rawDir, files.rawBoundary),
+      cache,
+    );
     const boundary = onlyRelation(boundaryData, 'Boundary', {
       boundary: 'administrative',
       name: city.boundary.name,
@@ -154,7 +158,7 @@ export const step: Step = {
     console.log(`  boundary: relation/${boundary.id}`);
 
     // Detail outside the region can't be seen (the camera is clamped to it), so don't fetch it.
-    const regionBbox = await regionBounds(city, rawDir, offline);
+    const regionBbox = await regionBounds(city, rawDir, cache);
     const detailBbox = intersectBbox(
       bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km),
       regionBbox,
@@ -162,7 +166,7 @@ export const step: Step = {
     const detail = await overpass(
       detailQuery(city, toOverpassBbox(detailBbox)),
       join(rawDir, files.rawDetail),
-      { offline },
+      cache,
     );
     console.log(`  detail: ${detail.elements.length} elements`);
 
@@ -172,7 +176,7 @@ export const step: Step = {
         rawDir,
         files.rawRegion.replace('.osm.json', `-part-${i + 1}.osm.json`),
       );
-      parts.push(await overpass(query, cacheFile, { offline }));
+      parts.push(await overpass(query, cacheFile, cache));
     }
     const region = mergeResponses(parts);
     await writeJson(join(rawDir, files.rawRegion), region);

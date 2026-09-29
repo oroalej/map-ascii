@@ -27,26 +27,44 @@ import { attachInput } from './input';
 import {
   cellPass,
   glyphPass,
+  lifePass,
   overlayPass,
   placeGrid,
   screenArea,
   selectPass,
   type Grid,
+  type GridPlacement,
   type TileDraw,
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { LifeWorld, type LifeTile, type VisibleAgent } from './life/simulate';
+import { daylight as daylightAt, solarAltitude } from './life/sun';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import type { FeatureInfo, TileLabel } from './raster/geometry';
 import { Readback } from './readback';
 import { themes, type ThemeName } from './theme';
 import { TileCache } from './tile-cache';
-import type { TileId } from './tiles';
+import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { legendEntries, type LegendEntry } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { RenderClass } from './classes';
+
+/**
+ * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
+ * the time of day the map is lit for.
+ */
+export type LifeSettings = {
+  /** Show the agents (never with reduced motion, which keeps the map still). */
+  enabled: boolean;
+  /**
+   * How much daylight the map is lit with: `'live'` for the real sun over the view now, else a
+   * fixed amount from 0 (night) to 1 (day), e.g. 0.5 for dusk.
+   */
+  daylight: 'live' | number;
+};
 
 export type AtlasOptions = {
   tilesUrl: string;
@@ -70,6 +88,10 @@ export type AtlasOptions = {
   reducedMotion?: boolean;
   /** CSS font family for non-box-drawing glyphs. */
   font?: string;
+  /** Default: enabled, live time of day. */
+  life?: Partial<LifeSettings>;
+  /** The clock for the live time of day (tests pin it). */
+  now?: () => Date;
 };
 
 export type AtlasEventMap = {
@@ -137,6 +159,8 @@ export type AtlasStats = {
   tilesPending: number;
   /** Worker time to decode a tile, averaged over recent tiles, in ms. */
   decodeMs: number;
+  /** Life layer agents on the grid in the last frame. */
+  agents: number;
 };
 
 export type Atlas = {
@@ -154,6 +178,9 @@ export type Atlas = {
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
   getStats(): AtlasStats;
+  /** Turn the life layer on or off, or change the time of day. */
+  setLife(settings: Partial<LifeSettings>): void;
+  getLife(): LifeSettings;
   on<K extends AtlasEventName>(event: K, handler: (payload: AtlasEventMap[K]) => void): () => void;
   destroy(): void;
 };
@@ -172,6 +199,10 @@ const IDLE_FRAME_MS = 1000 / 30;
 const ACTIVE_MS = 500;
 /** The on-screen classes are read back at most this often. */
 const CLASS_READ_MS = 250;
+/** How often the sun's position is worked out again. */
+const SUN_MS = 1000;
+/** Life agents come from tiles at least this deep (the shallowest life zoom band is 13.5). */
+const LIFE_TILE_MIN_ZOOM = 13;
 /** Smoothing for the timing stats: each new sample's weight. */
 const STATS_WEIGHT = 0.1;
 const smooth = (average: number, sample: number) =>
@@ -203,6 +234,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const reducedMotion = options.reducedMotion ?? false;
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
+  let life: LifeSettings = { enabled: true, daylight: 'live', ...options.life };
+  const now = options.now ?? (() => new Date());
   let theme = themes[options.theme ?? 'dark'];
   let destroyed = false;
   /** The WebGL context is lost: nothing draws, and no GPU handle is valid. */
@@ -235,6 +268,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** Bumped when the targets are recreated, so reads from the old ones are dropped. */
   let targetsGeneration = 0;
   let grid: Grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  let placement: GridPlacement | undefined;
   const readback = new Readback(gl);
 
   const cellDev = () => themeRes?.cellDev ?? { w: 1, h: 1 };
@@ -296,9 +330,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const drawCells = () => {
     if (!targets || !programs || !themeRes) return;
     const v = view();
-    const placement = placeGrid(v, targets);
+    placement = placeGrid(v, targets);
     grid = placement.grid;
     const tiles = tileCache.tilesToDraw(camera, cssSize());
+    syncLife(tiles);
     const labels = new Map<number, TileLabel>();
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -328,7 +363,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           ? 'landmark'
           : label.rank === LabelRank.monument
             ? 'monument'
-            : label.rank === LabelRank.street || label.rank === LabelRank.roadMajor
+            : label.rank === LabelRank.street ||
+                label.rank === LabelRank.streetMinor ||
+                label.rank === LabelRank.roadMajor
               ? null
               : 'place';
       const featureId = source.feature(label.id)?.id;
@@ -374,6 +411,56 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         emit('classeschange', classes);
       },
     );
+  };
+
+  // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
+  const world = new LifeWorld();
+  const lifeActive = () => life.enabled && !reducedMotion;
+  let lastLifeStep = -Infinity;
+  /** Whether the life texture holds agents (so turning the layer off clears it once). */
+  let lifeShown = false;
+  let agentsDrawn = 0;
+
+  const syncLife = (tiles: readonly TileId[]) => {
+    const lifeTiles: LifeTile[] = [];
+    if (lifeActive()) {
+      for (const tile of tiles) {
+        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+        const loaded = tileCache.get(tile);
+        if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
+      }
+    }
+    world.sync(lifeTiles);
+  };
+
+  const drawLife = (at: number) => {
+    if (!targets || !themeRes || !placement) return;
+    let agents: VisibleAgent[] = [];
+    if (lifeActive()) {
+      world.step((at - lastLifeStep) / 1000);
+      lastLifeStep = at;
+      agents = world.visible(camera.zoom, daylight, [camera.lng, camera.lat]);
+    } else if (!lifeShown) {
+      return;
+    }
+    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents);
+    lifeShown = agents.length > 0;
+  };
+
+  // The time of day the map is lit for (life/sun.ts), worked out again every `SUN_MS`.
+  let daylight = 1;
+  let lastSun = -Infinity;
+  const updateSun = (at: number) => {
+    if (at - lastSun < SUN_MS) return;
+    lastSun = at;
+    const next =
+      life.daylight === 'live'
+        ? daylightAt(solarAltitude(now(), camera.lng, camera.lat))
+        : Math.min(1, Math.max(0, life.daylight));
+    if (Math.abs(next - daylight) > 0.001) {
+      daylight = next;
+      drawDirty = true;
+    }
   };
 
   // Selection and highlights, by feature id; resolved to id-buffer indices each frame, since a
@@ -459,6 +546,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       resize();
     }
     advanceFlight(now);
+    updateSun(now);
     if (!targets || !programs || !themeRes) return;
     const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
     const animationDue = !reducedMotion && now - lastDraw >= interval;
@@ -472,7 +560,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
       const v = view();
       selectPass(gl, programs, targets, themeRes, v, grid, reducedMotion ? 0 : time, highlights());
-      glyphPass(gl, programs, targets, themeRes, theme, v, grid, time, reducedMotion);
+      drawLife(now);
+      glyphPass(gl, programs, targets, themeRes, theme, v, grid, time, reducedMotion, daylight);
       drawDirty = false;
       lastDraw = now;
       frameMs = smooth(frameMs, performance.now() - frameStart);
@@ -598,7 +687,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       tilesLoaded: tileCache.size,
       tilesPending: source.pendingCount,
       decodeMs: source.decodeMsAverage,
+      agents: agentsDrawn,
     }),
+    setLife(settings) {
+      life = { ...life, ...settings };
+      lastSun = -Infinity;
+      // Spawn or drop agents for the tiles on screen.
+      cellDirty = true;
+    },
+    getLife: () => ({ ...life }),
     setYear() {
       // Phase 4: time filtering.
     },

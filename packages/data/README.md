@@ -8,12 +8,13 @@ The pipeline is city-agnostic. It reads each city pack from `packages/content/ci
 pnpm data:build                              # every registered city
 pnpm data:build -- --city naga               # one city
 pnpm data:build -- --city naga --offline     # cached downloads only
+pnpm data:build -- --city naga --refresh     # download OSM data again (saved copies are otherwise kept)
 pnpm data:build -- --city naga --from 03     # rerun from a step (earlier outputs must exist)
 ```
 
 | Step | Does |
 |---|---|
-| `01-fetch` | Look up the boundary relation (must match exactly one), then download OSM for the buffered boundary bbox, the region's low-detail layers (per region part), and the Copernicus DEM GLO-90 tiles for the region into `raw/<city>/`. Downloads are cached for 7 days. |
+| `01-fetch` | Look up the boundary relation (must match exactly one), then download OSM for the buffered boundary bbox, the region's low-detail layers (per region part), and the Copernicus DEM GLO-90 tiles for the region into `raw/<city>/`, clipped to the region. Downloads are kept until `--refresh`; a saved larger area answers a smaller one. |
 | `02-convert` | OSM → GeoJSON (`osmtogeojson`); derive the sea (from the coastline), province label points, and terrain bands (from the DEM); derive the boundary bbox, region bounds, default view (the `focus` feature, else the boundary centroid), and attribution |
 | `03-normalize` | Map OSM tags to atlas classes, tile layers, and zoom bands, and compute heights, widths, ids, OSM dates, and subdivisions (mapped boundaries, else approximate areas from `place` nodes) |
 | `04-merge-content` | Join the city pack's landmarks onto features by `osm_id`, add plan-view landmark parts from `plans/`, and write `<city>.art.json` from `art/` |

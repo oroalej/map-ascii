@@ -1,8 +1,10 @@
 'use client';
 
 import { createAtlas } from '@atlas/renderer';
-import { CityMeta, zoomLevel } from '@atlas/shared';
+import { zoomLevel, type CityMeta } from '@atlas/shared';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { isCityMeta } from '@/lib/guards';
+import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
@@ -32,10 +34,10 @@ function useCityMeta(slug: string): MetaState {
     const load = async (): Promise<MetaState> => {
       const response = await fetch(`/tiles/${slug}.meta.json`);
       if (!response.ok) return { status: 'missing' };
-      const result = CityMeta.safeParse(await response.json());
-      return result.success
-        ? { status: 'ready', meta: result.data }
-        : { status: 'invalid', message: result.error.message };
+      const json: unknown = await response.json();
+      return isCityMeta(json)
+        ? { status: 'ready', meta: json }
+        : { status: 'invalid', message: 'not a city meta file' };
     };
     void load()
       .catch((err: unknown) => ({ status: 'invalid', message: String(err) }) as const)
@@ -85,6 +87,9 @@ export function AtlasCanvas({
     const cellSize = window.matchMedia(SMALL_SCREEN).matches
       ? Math.max(store.cellSize, SMALL_SCREEN_CELL)
       : store.cellSize;
+    // The life layer's settings are remembered in this browser, not in the URL.
+    const lifePrefs = loadLifePrefs();
+    useLifeStore.setState(lifePrefs);
     const atlas = createAtlas(canvas, {
       tilesUrl: `/tiles/${slug}.pmtiles`,
       theme: store.theme,
@@ -93,6 +98,7 @@ export function AtlasCanvas({
       initialCamera: camera,
       year: store.year,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      life: lifeSettings(lifePrefs),
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
@@ -101,6 +107,10 @@ export function AtlasCanvas({
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('contextlost', () => setContextLost(true)),
       atlas.on('contextrestored', () => setContextLost(false)),
+      useLifeStore.subscribe((prefs) => {
+        atlas.setLife(lifeSettings(prefs));
+        saveLifePrefs(prefs);
+      }),
     ];
     return () => {
       for (const off of offs) off();

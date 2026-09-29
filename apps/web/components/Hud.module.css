@@ -109,6 +109,16 @@
   border-color: var(--fg-dim);
 }
 
+/* A toggle that is off (the life layer). */
+.toggle[aria-pressed='false'] {
+  color: var(--fg-dim);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;

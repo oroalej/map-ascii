@@ -23,6 +23,14 @@ export const fromOverpassBounds = (b: {
   maxlon: number;
 }): BBox => [b.minlon, b.minlat, b.maxlon, b.maxlat];
 
+/** Whether bbox `outer` contains bbox `inner` (edges included). */
+export const bboxContains = (outer: BBox, inner: BBox) =>
+  inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
+
+/** Whether two bboxes overlap (touching counts). */
+export const bboxesOverlap = (a: BBox, b: BBox) =>
+  a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+
 /** [west, south, east, north] → Overpass's "south,west,north,east". */
 export const toOverpassBbox = ([west, south, east, north]: BBox) =>
   [south, west, north, east].map((n) => n.toFixed(6)).join(',');
@@ -44,3 +52,16 @@ export function intersectBbox(a: BBox, b: BBox): BBox {
 /** Whether a point lies inside a bbox (edges included). */
 export const inBbox = (lng: number, lat: number, [w, s, e, n]: BBox) =>
   lng >= w && lng <= e && lat >= s && lat <= n;
+
+const bboxSetting = /\[bbox:([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\]/;
+
+/**
+ * A query's global `[bbox:…]` setting as [west, south, east, north], and the query without it,
+ * or null when it has none.
+ */
+export function splitOverpassBbox(query: string): { bbox: BBox; rest: string } | null {
+  const m = bboxSetting.exec(query);
+  if (!m) return null;
+  const [south, west, north, east] = m.slice(1).map(Number) as [number, number, number, number];
+  return { bbox: [west, south, east, north], rest: query.replace(bboxSetting, '') };
+}

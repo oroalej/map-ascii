@@ -11,10 +11,11 @@ import { cityContext } from './step';
 
 const steps = [fetch, convert, normalize, mergeContent, tiles, searchIndex];
 
-const usage = `Usage: pnpm data:build [-- --city <slug>] [--offline] [--from <step>]
+const usage = `Usage: pnpm data:build [-- --city <slug>] [--offline | --refresh] [--from <step>]
 
   --city <slug>   build one city (default: every registered city)
-  --offline       use cached downloads only; fail if one is missing
+  --offline       use saved downloads only; fail if one is missing
+  --refresh       download OSM data again, replacing the saved copies (otherwise they're kept)
   --from <step>   start at a step, e.g. "03" or "03-normalize" (earlier outputs must exist)`;
 
 const { values } = parseArgs({
@@ -23,6 +24,7 @@ const { values } = parseArgs({
   options: {
     city: { type: 'string' },
     offline: { type: 'boolean', default: false },
+    refresh: { type: 'boolean', default: false },
     from: { type: 'string' },
     help: { type: 'boolean', short: 'h', default: false },
   },
@@ -31,6 +33,11 @@ const { values } = parseArgs({
 if (values.help) {
   console.log(usage);
   process.exit(0);
+}
+
+if (values.offline && values.refresh) {
+  console.error('--offline and --refresh contradict each other; pick one.');
+  process.exit(1);
 }
 
 const fromIndex = values.from ? steps.findIndex((s) => s.name.startsWith(values.from!)) : 0;
@@ -48,7 +55,7 @@ if (errors.length > 0) {
 
 for (const { city, content } of packs) {
   console.log(`\n■ ${city.slug}`);
-  const ctx = cityContext(city, content, values.offline);
+  const ctx = cityContext(city, content, values);
   await mkdir(ctx.rawDir, { recursive: true });
   await mkdir(ctx.buildDir, { recursive: true });
   for (const step of steps.slice(fromIndex)) {

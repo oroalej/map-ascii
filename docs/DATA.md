@@ -23,10 +23,10 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 
 1. **`01-fetch`**
    - Read `city.json`, then download OSM data for two bounding boxes:
-     - **Detail bbox:** the city boundary plus the configured buffer (`detail_buffer_km`). The boundary relation is found via Overpass using the config's `boundary` lookup (name, admin_level, and parent area). Fail loudly if the lookup matches zero relations or more than one.
+     - **Detail bbox:** the city boundary plus the configured buffer (`detail_buffer_km`). The boundary relation is found via Overpass using the config's `boundary` lookup (name, admin_level, and parent area). Fail loudly if the lookup matches zero relations or more than one. The detail bbox is then clipped to the region bounds, because the camera can't leave the region. The search index likewise drops entries outside the region.
      - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`.
    - Download DEM tiles for the Region bbox.
-   - Cache raw downloads in `raw/<city>/`, and skip a download if the file is fresh (under 7 days old, or when `--offline` is set).
+   - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
 2. **`02-convert`**
    - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF).
    - DEM → hillshade/luminance raster (`gdaldem hillshade`) → grayscale PNG tiles.

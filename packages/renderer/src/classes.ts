@@ -1,4 +1,4 @@
-import { AtlasClass, bandVisibility, CLASS_ZOOM } from '@atlas/shared';
+import { ATLAS_CLASSES, bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
 
 /** Point markers the renderer adds on top of features (SPEC.md §4). */
 export const markerClasses = [
@@ -9,15 +9,30 @@ export const markerClasses = [
 ] as const;
 export type MarkerClass = (typeof markerClasses)[number];
 
-/** Everything the cell pass can write into a cell: the pipeline's classes plus markers. */
-export type RenderClass = AtlasClass | MarkerClass;
+/**
+ * The life layer's simulated agents (life/simulate.ts). They are drawn over the map from their
+ * own texture, never into cells, so they can't be picked and never reach the class buffer.
+ */
+export const lifeClasses = ['life_vehicle', 'life_person', 'life_boat', 'life_bird'] as const;
+export type LifeClass = (typeof lifeClasses)[number];
+
+/**
+ * Everything the renderer draws with a class color: the pipeline's classes, markers, and the
+ * life layer's agents.
+ */
+export type RenderClass = AtlasClass | MarkerClass | LifeClass;
 
 /**
  * Id 0 means "empty cell"; classes are numbered from 1 in this order. Markers come first so
  * they, like the road and detail classes early in `AtlasClass`, keep ids that fit the select
- * shader's 32-bit class masks (glyphs/select.ts `classBit`).
+ * shader's 32-bit class masks (glyphs/select.ts `classBit`). Life classes come last; they are
+ * never in a mask.
  */
-export const renderClasses: readonly RenderClass[] = [...markerClasses, ...AtlasClass.options];
+export const renderClasses: readonly RenderClass[] = [
+  ...markerClasses,
+  ...ATLAS_CLASSES,
+  ...lifeClasses,
+];
 
 /**
  * Size of the per-class uniform arrays and the glyph table's class axis. The table's last three
@@ -98,7 +113,7 @@ export function classDepths(): Float32Array {
  */
 export function classVisibility(zoom: number): Float32Array {
   const visibility = new Float32Array(MAX_CLASSES).fill(1);
-  for (const cls of AtlasClass.options) {
+  for (const cls of ATLAS_CLASSES) {
     visibility[classId(cls)] = bandVisibility(CLASS_ZOOM[cls], zoom);
   }
   return visibility;

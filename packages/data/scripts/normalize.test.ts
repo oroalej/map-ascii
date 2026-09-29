@@ -1,7 +1,7 @@
 import { REGION_TILE_MAX_ZOOM } from '@atlas/shared';
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { normalize } from './03-normalize';
+import { clipToRegion, normalize } from './03-normalize';
 
 const square = (w: number, s: number, e: number, n: number): Polygon => ({
   type: 'Polygon',
@@ -66,5 +66,24 @@ describe('normalize: region-only features', () => {
     expect(detail.properties.region).toBeUndefined();
     expect(detail.tippecanoe.maxzoom).toBe(16);
     expect(features.filter((f) => f.properties.id === 'osm:way/1')).toHaveLength(1);
+  });
+});
+
+describe('clipToRegion', () => {
+  it('drops features wholly outside the region and keeps those reaching into it', () => {
+    const inside = road('way/1', 'primary', 0.005);
+    const crossing: Feature = {
+      ...road('way/2', 'primary', 0),
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-1, 0.005],
+          [0.005, 0.005],
+        ],
+      },
+    };
+    const outside = road('way/3', 'primary', 5);
+    const clipped = clipToRegion(collection(inside, crossing, outside), [0, 0, 0.01, 0.01]);
+    expect(clipped.features.map((f) => f.id)).toEqual(['way/1', 'way/2']);
   });
 });

@@ -1,6 +1,6 @@
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CityMeta, type City } from '@atlas/shared';
+import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
 import { readFeatures, readJson, writeJson } from './lib/io';
@@ -58,10 +58,9 @@ export const step: Step = {
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
     await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
-    await copyFile(
-      join(buildDir, files.subdivisions),
-      join(outDir, `${city.slug}.subdivisions.json`),
-    );
+    // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
+    const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    await writeJson(join(outDir, `${city.slug}.subdivisions.json`), areas);
     const mb = (await stat(pmtiles)).size / 1e6;
     console.log(
       `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, and .subdivisions.json to ${outDir}`,

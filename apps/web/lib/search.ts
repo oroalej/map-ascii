@@ -1,6 +1,7 @@
-import { SearchIndexFile, searchOptions, type SearchEntry, type SearchType } from '@atlas/shared';
+import { searchOptions, type SearchEntry, type SearchType } from '@atlas/shared';
 import type MiniSearch from 'minisearch';
 import type { AsPlainObject } from 'minisearch';
+import { isSearchIndexFile } from './guards';
 
 /** A city's search index, loaded (ARCHITECTURE.md §7). */
 export type CitySearch = {
@@ -24,7 +25,8 @@ export function loadSearch(city: string): Promise<CitySearch> {
         import('minisearch'),
       ]);
       if (!response.ok) throw new Error(`search index for ${city}: HTTP ${response.status}`);
-      const file = SearchIndexFile.parse(await response.json());
+      const file: unknown = await response.json();
+      if (!isSearchIndexFile(file)) throw new Error(`search index for ${city}: not an index file`);
       return {
         entries: new Map(file.entries.map((e) => [e.id, e])),
         // The pipeline serialized it with `toJSON()` and the same shared options.

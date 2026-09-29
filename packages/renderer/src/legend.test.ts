@@ -49,3 +49,23 @@ describe('legendEntries', () => {
     );
   });
 });
+
+describe('legendEntries life', () => {
+  const life = (zoom: number, on: boolean) =>
+    legendEntries('dark', zoom, undefined, { life: on }).map((e) => e.label);
+
+  it('lists the simulated agents only while the layer is on, from their zooms', () => {
+    expect(life(18, false)).not.toContain('Traffic (simulated)');
+    expect(life(14, true)).toContain('Birds (simulated)');
+    expect(life(14, true)).not.toContain('Traffic (simulated)');
+    expect(life(16, true)).toContain('Traffic (simulated)');
+    expect(life(16, true)).not.toContain('People (simulated)');
+    expect(life(18, true)).toContain('People (simulated)');
+  });
+
+  it('lists them whatever the class buffer reports, since they are never cells', () => {
+    expect(legendEntries('dark', 16, ['road_major'], { life: true }).map((e) => e.label)).toContain(
+      'Traffic (simulated)',
+    );
+  });
+});

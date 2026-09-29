@@ -15,6 +15,8 @@ export const LabelRank = {
   monument: 5,
   street: 6,
   place: 7,
+  /** Tertiary and smaller streets and paths, named only up close. */
+  streetMinor: 8,
 } as const;
 export type LabelRank = (typeof LabelRank)[keyof typeof LabelRank];
 
@@ -54,6 +56,7 @@ const FAR_SHARE: Partial<Record<LabelRank, number>> = {
   [LabelRank.monument]: 0.28,
   [LabelRank.street]: 0.55,
   [LabelRank.place]: 0.55,
+  [LabelRank.streetMinor]: 0.55,
 };
 
 /**

@@ -9,6 +9,15 @@ import { featureZoomBand, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
 import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
 import { LabelRank, LANDMARK_LABEL_BAND, MONUMENT_LABEL_BAND } from '../labels';
+import {
+  LifeBuilder,
+  LifeLine,
+  lifeLineFor,
+  lifeTransferables,
+  plazaClasses,
+  roostClasses,
+  type LifeGeometry,
+} from '../life/geometry';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
 const FLAT_ROOF = 1;
@@ -44,13 +53,33 @@ export type TileLabel = {
   angle?: number;
 };
 
-/** When street names show: major roads from the District level, others from the Street level. */
-export const STREET_LABEL_BANDS: Readonly<Record<string, ZoomBand>> = {
-  road_major: { min: 14 },
-  road_mid: { min: 15.5 },
-  road_minor: { min: 15.5 },
-  path: { min: 17 },
+const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
+  road_mid: { min: 17.5 },
+  road_minor: { min: 18 },
+  path: { min: 18.5 },
 };
+
+/**
+ * How a street's name ranks and when it shows, from its class and OSM kind (`highway=…`): only
+ * the key streets are named at the Street level. Major roads show from the District level (z14)
+ * and secondary roads from z15.5. Tertiary roads (and middle roads of unknown kind) wait for the
+ * Place level (z17.5), other streets for z18, and paths for z18.5.
+ */
+export function streetLabel(
+  className: string,
+  kind: unknown,
+): { rank: LabelRank; band: ZoomBand } | undefined {
+  if (className === 'road_major') return { rank: LabelRank.roadMajor, band: { min: 14 } };
+  const highway =
+    typeof kind === 'string' && kind.startsWith('highway=')
+      ? kind.slice('highway='.length).replace(/_link$/, '')
+      : undefined;
+  if (className === 'road_mid' && highway === 'secondary') {
+    return { rank: LabelRank.street, band: { min: 15.5 } };
+  }
+  const band = STREET_MINOR_BANDS[className];
+  return band && { rank: LabelRank.streetMinor, band };
+}
 
 /** Segments bending less than this (radians) still count as one straight run. */
 const RUN_BEND = (15 * Math.PI) / 180;
@@ -112,6 +141,8 @@ export type TileGeometry = GroundGeometry & {
    */
   region: GroundGeometry;
   labels: TileLabel[];
+  /** Lines and places for the life layer's agents (life/geometry.ts). */
+  life: LifeGeometry;
 };
 
 /** Structural subset of `@mapbox/vector-tile`, so tests can pass plain objects. */
@@ -435,6 +466,7 @@ export function buildTileGeometry(
   const regional = ground();
   const extrusions = new Builder();
   const labels: TileLabel[] = [];
+  const life = new LifeBuilder();
 
   for (const [name, layer] of Object.entries(layers)) {
     if (skippedLayers.has(name)) continue;
@@ -444,7 +476,8 @@ export function buildTileGeometry(
       const className = String(feature.properties.class ?? '');
       const cls = classId(className);
       if (cls === 0) continue;
-      const { fills, lines, points } = feature.properties.region === true ? regional : main;
+      const isRegion = feature.properties.region === true;
+      const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
       const id = registry.index(featureId, () =>
         featureInfo(featureId, className, feature.properties),
@@ -514,8 +547,8 @@ export function buildTileGeometry(
           }
         }
       } else if (feature.type === 2) {
-        const streetBand = STREET_LABEL_BANDS[className];
-        if (streetBand && tile && typeof text === 'string' && text.trim()) {
+        const street = streetLabel(className, feature.properties.kind);
+        if (street && tile && typeof text === 'string' && text.trim()) {
           const run = rings
             .map(longestRun)
             .reduce((a, b) => (b && (!a || b.length > a.length) ? b : a), null);
@@ -524,10 +557,9 @@ export function buildTileGeometry(
             labels.push({
               id,
               text,
-              rank: className === 'road_major' ? LabelRank.roadMajor : LabelRank.street,
+              ...street,
               lng: slng,
               lat: slat,
-              band: streetBand,
               angle: run.angle,
             });
           }
@@ -549,6 +581,8 @@ export function buildTileGeometry(
             }
           }
         }
+        const lifeLine = isRegion ? undefined : lifeLineFor[className];
+        if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine);
         const first = rings[0];
         if (landmark && first && first.length > 0) addMarkers(first[Math.floor(first.length / 2)]!);
       } else if (feature.type === 3) {
@@ -594,6 +628,7 @@ export function buildTileGeometry(
             );
           }
           const outer = polygon[0]!;
+          if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           const area = Math.abs(signedArea(outer));
           if (!largest || area > largest.area) largest = { ring: outer, area };
         }
@@ -601,6 +636,9 @@ export function buildTileGeometry(
           const center = ringCentroid(largest.ring);
           if (isBuilding(className)) addPoint(center, cls);
           addMarkers(center);
+          // A roost belongs to the tile that holds it, not to its neighbors' buffers.
+          const inside = center.x >= 0 && center.x < EXTENT && center.y >= 0 && center.y < EXTENT;
+          if (!isRegion && inside && roostClasses.has(className)) life.roost(center);
         }
       }
     }
@@ -616,6 +654,7 @@ export function buildTileGeometry(
     extrusions: { ...extrusions.finish(), indices: Uint32Array.from(extrusions.indices) },
     region: finish(regional),
     labels,
+    life: life.finish(),
   };
 }
 
@@ -643,6 +682,7 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
     geometry.fills.indices.buffer as ArrayBuffer,
     geometry.extrusions.indices.buffer as ArrayBuffer,
     region.fills.indices.buffer as ArrayBuffer,
+    ...lifeTransferables(geometry.life),
   );
   return out;
 }

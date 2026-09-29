@@ -4,9 +4,16 @@
  * the glyph atlas, and tints it with the class color over the background. Hovered cells are
  * brighter; highlighted and selected ones take the accent color, the selection with a slow
  * shimmer (SPEC.md §4 "Hover and selection").
+ *
+ * The life layer (SPEC.md §4 "Life layer") draws on top of the map: an agent shows where the
+ * map class under it allows (life/config.ts `cellBits`). The time of day tints everything:
+ * night dims the map toward blue, lights some building cells as windows and major roads with
+ * streetlights, and turns on vehicles' headlights; dusk warms it.
  */
 import { MAX_CLASSES } from '../classes';
+import { CellBit } from '../life/config';
 import { CellState } from '../picking';
+import { cellHashGlsl } from './hash';
 
 export const glyphFragment = /* glsl */ `#version 300 es
 precision highp float;
@@ -27,8 +34,27 @@ uniform sampler2D u_overlay;      // RGBA8: label glyph code (lo, hi; 0 none, 1 
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;            // highlighted and selected features
 uniform bool u_shimmer;           // off with reduced motion
+uniform sampler2D u_life;         // RGBA8: glyph index, life class id, agent kind bit (0 none)
+uniform int u_cellBits[${MAX_CLASSES}]; // per map class: CellBit set
+uniform ivec2 u_origin;           // world cell of texel (0, 0), for window hashes
+uniform float u_daylight;         // 0 night – 1 day
+uniform int u_vehicle;            // the vehicles' class id (headlights)
 
 out vec4 o_color;
+
+${cellHashGlsl}
+
+// How dark it is: none until well into twilight, so dusk reads warm rather than dim.
+float darkness() {
+  return smoothstep(0.3, 1.0, 1.0 - u_daylight);
+}
+
+// The time of day: dim and blue at night, warm at dusk.
+vec3 daylit(vec3 color) {
+  float dusk = 1.0 - abs(u_daylight - 0.5) * 2.0;
+  color = mix(color, color * vec3(1.2, 0.88, 0.68), dusk * 0.45);
+  return mix(color, color * vec3(0.4, 0.48, 0.78), darkness() * 0.85);
+}
 
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
@@ -49,6 +75,22 @@ void main() {
 
   vec4 g = texelFetch(u_glyphs, cell, 0);
   int cls = int(g.g * 255.0 + 0.5);
+  float night = darkness();
+
+  // Agents stand on top where the cell under them allows.
+  vec4 life = texelFetch(u_life, cell, 0);
+  int lifeBit = int(life.b * 255.0 + 0.5);
+  if (lifeBit != 0 && (u_cellBits[cls] & lifeBit) != 0) {
+    int lifeGlyph = int(life.r * 255.0 + 0.5);
+    int lifeClass = int(life.g * 255.0 + 0.5);
+    ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
+    float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
+    vec3 color = daylit(u_colors[lifeClass]);
+    if (lifeClass == u_vehicle) color = mix(color, vec3(1.0, 0.95, 0.8), night * 0.7);
+    o_color = vec4(mix(u_background, color, coverage), 1.0);
+    return;
+  }
+
   if (cls == 0) {
     o_color = vec4(u_background, 1.0);
     return;
@@ -56,8 +98,19 @@ void main() {
   int glyph = int(g.r * 255.0 + 0.5);
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
-  vec3 color = u_colors[cls];
+  vec3 color = daylit(u_colors[cls]);
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
+  int bits = u_cellBits[cls];
+  if ((bits & ${CellBit.streetlight}) != 0) color = mix(color, vec3(1.0, 0.78, 0.45), night * 0.4);
+  if ((bits & ${CellBit.window}) != 0 && night > 0.0) {
+    // More windows light up as the night deepens; each flickers a little on its own beat.
+    uint h = cellHash(u_origin + cell);
+    if (float((h >> 4u) & 255u) / 255.0 < night * 0.12) {
+      float beat = float((h >> 12u) & 7u) + 1.0;
+      float flicker = u_shimmer ? 0.88 + 0.12 * sin(u_time * beat * 0.7) : 1.0;
+      color = mix(color, vec3(1.0, 0.82, 0.48) * flicker, 0.85);
+    }
+  }
   int state = int(g.b * 255.0 + 0.5);
   if (state == ${CellState.hover}) {
     color = mix(color, vec3(1.0), 0.45);

@@ -50,13 +50,11 @@ const now = () => performance.now();
 
 function commit(tour: Tour, run: TourRun, effects: readonly TourEffect[]) {
   useTourStore.setState({ active: { tour, run } });
-  useAtlasStore
-    .getState()
-    .setTour({
-      id: tourSlug(tour.id),
-      step: run.step,
-      paused: run.paused || run.phase === 'ended',
-    });
+  useAtlasStore.getState().setTour({
+    id: tourSlug(tour.id),
+    step: run.step,
+    paused: run.paused || run.phase === 'ended',
+  });
   for (const effect of effects) {
     if (effect.type === 'show') {
       const step = tour.steps[effect.step];

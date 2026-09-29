@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
 import type { City } from '@atlas/shared';
+import type { FetchOptions } from './lib/overpass';
 
 /** Absolute paths shared by pipeline steps. */
 export const paths = {
@@ -20,8 +21,10 @@ export type StepContext = {
   buildDir: string;
   /** Where final outputs go (`apps/web/public/tiles/`). */
   outDir: string;
-  /** Use cached downloads only. */
+  /** Use saved downloads only. */
   offline: boolean;
+  /** Download OSM data again, replacing the saved copies. */
+  refresh: boolean;
 };
 
 export type Step = {
@@ -29,13 +32,18 @@ export type Step = {
   run: (ctx: StepContext) => Promise<void>;
 };
 
-export const cityContext = (city: City, content: ContentBundle, offline: boolean): StepContext => ({
+export const cityContext = (
+  city: City,
+  content: ContentBundle,
+  { offline, refresh }: FetchOptions,
+): StepContext => ({
   city,
   content,
   rawDir: join(paths.raw, city.slug),
   buildDir: join(paths.build, city.slug),
   outDir: paths.webTiles,
   offline,
+  refresh: refresh ?? false,
 });
 
 /** Intermediate files passed between steps, relative to `buildDir` (or `rawDir` for downloads). */

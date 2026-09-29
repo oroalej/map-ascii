@@ -1,7 +1,8 @@
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
- * the glyph pass draws the glyphs at full resolution.
+ * the glyph pass draws the glyphs at full resolution. The life pass puts the life layer's agents
+ * on the grid every frame.
  */
 import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
@@ -12,6 +13,7 @@ import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
   drawExtrusions,
   drawGround,
+  uploadLife,
   uploadOverlay,
   type CellTargets,
   type GL,
@@ -28,6 +30,9 @@ import {
   streetMode,
   type LabelCandidate,
 } from './labels';
+import { cellBits } from './life/config';
+import { packLife } from './life/draw';
+import type { VisibleAgent } from './life/simulate';
 import { EXTENT, type TileLabel } from './raster/geometry';
 import type { Theme } from './theme';
 import type { TileId } from './tiles';
@@ -35,6 +40,7 @@ import type { TileId } from './tiles';
 const depths = classDepths();
 const seeThrough = seeThroughMask();
 const roads = roadMask();
+const lifeCellBits = cellBits();
 
 /** 0xRRGGBB → [r, g, b] in 0–1. */
 const rgb = (hex: number): [number, number, number] => [
@@ -291,7 +297,39 @@ export function selectPass(
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-/** Draw the glyphs at full resolution, with the overlay's labels on top. */
+/** Reused between frames; replaced when the grid's size changes. */
+let lifeTexels = new Uint8Array(0);
+
+/**
+ * Put the agents on the cell grid (life/draw.ts) and upload them to the life texture. Returns
+ * how many landed on the grid.
+ */
+export function lifePass(
+  gl: GL,
+  targets: CellTargets,
+  themeRes: ThemeResources,
+  theme: Theme,
+  view: View,
+  placement: GridPlacement,
+  agents: readonly VisibleAgent[],
+): number {
+  const { cols, rows } = targets;
+  if (lifeTexels.length !== cols * rows * 4) lifeTexels = new Uint8Array(cols * rows * 4);
+  const drawn = packLife(
+    lifeTexels,
+    { cols, rows, cellWidth: view.cellDev.w, cellHeight: view.cellDev.h, toCell: placement.toCell },
+    agents,
+    theme,
+    (glyph) => themeRes.atlas.index(glyph),
+  );
+  uploadLife(gl, targets, lifeTexels);
+  return drawn;
+}
+
+/**
+ * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
+ * overlay's labels on top, all lit for the time of day (`daylight`, 0 night – 1 day).
+ */
 export function glyphPass(
   gl: GL,
   programs: Programs,
@@ -302,6 +340,7 @@ export function glyphPass(
   grid: Grid,
   time: number,
   reducedMotion: boolean,
+  daylight: number,
 ) {
   const { atlas, tables } = themeRes;
   const { cellDev } = view;
@@ -323,6 +362,11 @@ export function glyphPass(
     u_labelColor: rgb(theme.label),
     u_accent: rgb(theme.accent),
     u_shimmer: !reducedMotion,
+    u_life: targets.lifeTex,
+    u_cellBits: lifeCellBits,
+    u_origin: [grid.originCol, grid.originRow],
+    u_daylight: daylight,
+    u_vehicle: classId('life_vehicle'),
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);

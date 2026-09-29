@@ -114,6 +114,10 @@ type Palette = Record<
   | 'furniture'
   | 'parking'
   | 'pitch'
+  | 'vehicle'
+  | 'person'
+  | 'boat'
+  | 'bird'
   | 'label'
   | 'accent',
   number
@@ -160,6 +164,12 @@ function makeTheme(background: number, c: Palette): Theme {
       furniture: { kind: 'variant', glyphs: ['•', '╥', '○', '¶'], color: c.furniture },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking },
       pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch },
+      // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
+      // screen (across, then up or down), a bird by its wing beat.
+      life_vehicle: { kind: 'single', glyphs: ['▬', '▮'], color: c.vehicle },
+      life_person: { kind: 'single', glyphs: ['☺'], color: c.person },
+      life_boat: { kind: 'single', glyphs: ['◊'], color: c.boat },
+      life_bird: { kind: 'single', glyphs: ['v', '-'], color: c.bird },
     },
   };
 }
@@ -192,6 +202,10 @@ export const themes: Record<ThemeName, Theme> = {
     furniture: 0xc9c2b2,
     parking: 0x6d7080,
     pitch: 0x6fa86a,
+    vehicle: 0xff7a5c,
+    person: 0xf2d7a6,
+    boat: 0xe8f4ff,
+    bird: 0xdfe3ea,
     label: 0xf6f1e4,
     accent: 0xffd35c,
   }),
@@ -222,6 +236,10 @@ export const themes: Record<ThemeName, Theme> = {
     furniture: 0x4f4a40,
     parking: 0x8a8d98,
     pitch: 0x4c8a48,
+    vehicle: 0xc2361c,
+    person: 0x7a4a1e,
+    boat: 0x0d4f6e,
+    bird: 0x3a3f4a,
     label: 0x16130e,
     accent: 0xc2410c,
   }),
@@ -264,6 +282,11 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   marker_school: 'School',
   marker_market: 'Market',
   marker_landmark: 'Landmark',
+  // The life layer is decoration, not data; the legend says so.
+  life_vehicle: 'Traffic (simulated)',
+  life_person: 'People (simulated)',
+  life_boat: 'Boat (simulated)',
+  life_bird: 'Birds (simulated)',
 };
 
 /** Characters labels can use: printable ASCII and the Latin-1 letters (e.g. "Peñafrancia"). */

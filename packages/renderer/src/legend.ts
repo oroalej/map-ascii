@@ -5,7 +5,16 @@
  * (`CLASS_LABELS`).
  */
 import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
-import { classDepths, classId, markerClasses, markerFor, type RenderClass } from './classes';
+import {
+  classDepths,
+  classId,
+  lifeClasses,
+  markerClasses,
+  markerFor,
+  type LifeClass,
+  type RenderClass,
+} from './classes';
+import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { CLASS_LABELS, themes, type ClassStyle, type ThemeName } from './theme';
 
 export type LegendEntry = {
@@ -46,8 +55,14 @@ for (const [cls, marker] of Object.entries(markerFor)) {
   markerParents.set(marker, [...(markerParents.get(marker) ?? []), cls as AtlasClass]);
 }
 
+const lifeKinds = new Map(
+  Object.entries(lifeClassFor).map(([kind, cls]) => [cls, kind as AgentKind]),
+);
+
 /** Whether a class shows at all at `zoom` (fading in counts). */
 function visibleAt(cls: RenderClass, zoom: number): boolean {
+  const lifeKind = lifeKinds.get(cls as LifeClass);
+  if (lifeKind) return bandVisibility(LIFE_ZOOM[lifeKind], zoom) >= 1;
   if ((markerClasses as readonly string[]).includes(cls)) {
     const parents = markerParents.get(cls);
     return !parents || parents.some((p) => visibleAt(p, zoom));
@@ -62,17 +77,20 @@ const isCellClass = (cls: RenderClass) => depths[classId(cls)]! <= 1;
 /**
  * The legend entries for the classes the theme draws at `zoom`, in the theme's order. Classes
  * with the same label (a school marker and school buildings) share an entry. With `present`
- * (the classes on screen), a class drawn in cells is listed only if it is there.
+ * (the classes on screen), a class drawn in cells is listed only if it is there. The life
+ * layer's agents are listed only with `life` (the layer is on).
  */
 export function legendEntries(
   themeName: ThemeName,
   zoom: number,
   present?: readonly RenderClass[],
+  { life = false }: { life?: boolean } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
   const byLabel = new Map<string, LegendEntry>();
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
+    if (!life && (lifeClasses as readonly string[]).includes(cls)) continue;
     if (!visibleAt(cls, zoom)) continue;
     if (onScreen && isCellClass(cls) && !onScreen.has(cls)) continue;
     const label = CLASS_LABELS[cls];

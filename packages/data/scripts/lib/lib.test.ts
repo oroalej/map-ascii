@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildingHeight, classify, variantOf, layerFor, roadWidth } from './classify';
 import { parseOsmDate } from './dates';
-import { bufferBbox, inBbox, intersectBbox, toOverpassBbox } from './geo';
+import {
+  bboxContains,
+  bboxesOverlap,
+  bufferBbox,
+  inBbox,
+  intersectBbox,
+  splitOverpassBbox,
+  toOverpassBbox,
+} from './geo';
 
 describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);
@@ -178,6 +186,22 @@ describe('geo', () => {
   it('intersects bboxes, and refuses ones that do not overlap', () => {
     expect(intersectBbox([0, 0, 2, 2], [1, -1, 3, 1])).toEqual([1, 0, 2, 1]);
     expect(() => intersectBbox([0, 0, 1, 1], [2, 2, 3, 3])).toThrow(/don't overlap/);
+  });
+
+  it('reads the bbox setting back out of a query, and the query without it', () => {
+    const query = `[out:json][bbox:${toOverpassBbox([123, 13, 124, 14])}];\nway;`;
+    expect(splitOverpassBbox(query)).toEqual({
+      bbox: [123, 13, 124, 14],
+      rest: '[out:json];\nway;',
+    });
+    expect(splitOverpassBbox('[out:json];\nrel(1);')).toBeNull();
+  });
+
+  it('tests bbox containment and overlap', () => {
+    expect(bboxContains([0, 0, 2, 2], [0.5, 0.5, 2, 2])).toBe(true);
+    expect(bboxContains([0, 0, 2, 2], [1, 1, 3, 3])).toBe(false);
+    expect(bboxesOverlap([0, 0, 1, 1], [1, 1, 2, 2])).toBe(true);
+    expect(bboxesOverlap([0, 0, 1, 1], [1.1, 0, 2, 1])).toBe(false);
   });
 
   it('tests points against a bbox, edges included', () => {

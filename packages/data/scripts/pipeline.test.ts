@@ -77,6 +77,7 @@ beforeAll(async () => {
     buildDir,
     outDir: join(buildDir, 'out'),
     offline: true,
+    refresh: false,
   };
   for (const step of [convert, normalize, mergeContent]) await step.run(ctx);
   features = [];

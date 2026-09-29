@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { artChars, ATLAS_CLASSES, CAMERA_RANGES, YEAR_RANGE } from './constants';
 
 /** A BCP 47-style language code: "fil", "bcl", "pt-BR". */
 export const LanguageCode = z
@@ -49,7 +50,7 @@ export type Certainty = z.infer<typeof Certainty>;
 export const DateCertainty = z.enum(['exact', 'circa']);
 export type DateCertainty = z.infer<typeof DateCertainty>;
 
-export const Year = z.int().min(1000).max(3000);
+export const Year = z.int().min(YEAR_RANGE[0]).max(YEAR_RANGE[1]);
 
 export const OsmId = z.string().regex(/^osm:(node|way|relation)\/\d+$/, 'expected osm:<type>/<id>');
 
@@ -69,12 +70,14 @@ export const GeoJsonGeometry = z.looseObject({
 });
 export type GeoJsonGeometry = z.infer<typeof GeoJsonGeometry>;
 
+const inRange = ([min, max]: readonly [number, number]) => z.number().min(min).max(max);
+
 export const CameraState = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  zoom: z.number().min(0).max(22),
-  pitch: z.number().min(0).max(60),
-  bearing: z.number().min(-180).max(180),
+  lat: inRange(CAMERA_RANGES.lat),
+  lng: inRange(CAMERA_RANGES.lng),
+  zoom: inRange(CAMERA_RANGES.zoom),
+  pitch: inRange(CAMERA_RANGES.pitch),
+  bearing: inRange(CAMERA_RANGES.bearing),
 });
 export type CameraState = z.infer<typeof CameraState>;
 
@@ -138,9 +141,6 @@ export const ArtRole = z.enum([
   'accent',
 ]);
 export type ArtRole = z.infer<typeof ArtRole>;
-
-/** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
-export const artChars = (row: string): string[] => [...row];
 
 /**
  * One size of an art piece. `rows` is the drawing; `colors` has the same shape, each character
@@ -516,37 +516,7 @@ export const CityArt = z.object({
 export type CityArt = z.infer<typeof CityArt>;
 
 /** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
-export const AtlasClass = z.enum([
-  'water_river',
-  'water_area',
-  'water_sea',
-  'coastline',
-  'terrain',
-  'road_major',
-  'road_mid',
-  'road_minor',
-  'path',
-  'building',
-  'building_religious',
-  'building_school',
-  'building_market',
-  'park',
-  'trees',
-  'farmland',
-  'monument',
-  'building_part',
-  'tree',
-  'barrier',
-  'entrance',
-  'furniture',
-  'parking',
-  'pitch',
-  'admin_city',
-  'admin_subdivision',
-  'place_label',
-  // Appended so the classes above keep their renderer ids (glyphs/select.ts class masks).
-  'water_stream',
-]);
+export const AtlasClass = z.enum(ATLAS_CLASSES);
 export type AtlasClass = z.infer<typeof AtlasClass>;
 
 /** Vector tile layers, one per class group. */
