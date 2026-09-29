@@ -1,5 +1,6 @@
 import * as z from 'zod';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
+import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
 import {
   artChars,
   ATLAS_CLASSES,
@@ -106,6 +107,7 @@ export const LandmarkType = z.enum([
   'market',
   'government',
   'bridge',
+  'station',
   'monument',
   'other',
 ]);
@@ -250,6 +252,11 @@ export const CuratedArea = z
   });
 
 /** When a procession runs (the `Procession` schema's `schedule`). */
+/** An IANA time zone, e.g. "Asia/Manila". */
+export const TimeZone = z
+  .string()
+  .regex(/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/, 'expected an IANA time zone');
+
 export const ProcessionSchedule = z.strictObject({
   month: z.int().min(1).max(12),
   /** 0 = Sunday … 6 = Saturday. */
@@ -265,7 +272,7 @@ export const ProcessionSchedule = z.strictObject({
     .positive()
     .max(24 * 60),
   /** IANA time zone the start time is in, e.g. "Asia/Manila". */
-  timezone: z.string().regex(/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/, 'expected an IANA time zone'),
+  timezone: TimeZone,
 });
 export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
 
@@ -567,6 +574,11 @@ export const CityProcessions = z.object({
       /** [lng, lat] points from the start to the landing. */
       route: z.array(z.tuple([z.number(), z.number()])).min(2),
       length_m: z.number().positive(),
+      /**
+       * Per route point, how far the water reaches to its left and right (m, across the
+       * direction of travel); absent where the river is mapped only as a line.
+       */
+      banks: z.array(z.tuple([z.number(), z.number()])).optional(),
       schedule: ProcessionSchedule,
       formation: ProcessionFormation.optional(),
       sources: Sources.optional(),
@@ -635,12 +647,51 @@ export const Climate = z
     });
   }) satisfies z.ZodType<ClimateConfig>;
 
+/** A daily rhythm curve (rhythm.ts): [hour 0–24, share 0–1] points, hours ascending. */
+const RhythmCurve = z
+  .array(z.tuple([z.number().min(0).lt(24), z.number().min(0).max(1)]))
+  .min(1)
+  .refine((points) => points.every(([hour], i) => i === 0 || hour > points[i - 1]![0]), {
+    message: 'hours must be ascending',
+  });
+
+const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
+const Weekdays = z
+  .array(z.int().min(0).max(6))
+  .min(1)
+  .refine((days) => new Set(days).size === days.length, { message: 'duplicate weekday' });
+
+/**
+ * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
+ * (rhythm.ts).
+ */
+export const CityLife = z.strictObject({
+  rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
+  schedules: z
+    .strictObject({
+      /** Services at places of worship: weekdays (0 = Sunday) and local start times. */
+      worship: z
+        .array(z.strictObject({ weekdays: Weekdays, times: z.array(ClockTime).min(1) }))
+        .optional(),
+      /** School days and hours. */
+      school: z
+        .strictObject({ weekdays: Weekdays, in: ClockTime, out: ClockTime })
+        .refine((s) => s.in < s.out, { message: 'classes must end after they start' })
+        .optional(),
+    })
+    .optional(),
+  source: z.string().min(1),
+}) satisfies z.ZodType<CityLifeConfig>;
+export type CityLife = z.infer<typeof CityLife>;
+
 export const Traffic = z.strictObject({
   road_major: VehicleWeights,
   road_mid: VehicleWeights,
   road_minor: VehicleWeights,
   /** Boats on rivers. */
   river: weights(BOAT_TYPES),
+  /** Boats on canals. */
+  canal: weights(BOAT_TYPES),
   /** Vehicles in parking lots and along curbs. */
   parked: VehicleWeights,
 }) satisfies z.ZodType<TrafficMix>;
@@ -697,6 +748,13 @@ export const City = z
     traffic: Traffic.optional(),
     /** The winds by season (default: a breeze from the east all year). */
     climate: Climate.optional(),
+    /**
+     * The city's time zone: the clock its daily rhythm, fixed times of day, and seasons follow
+     * (default: the sun's time at the city's longitude).
+     */
+    timezone: TimeZone.optional(),
+    /** The daily rhythm of the life layer (default: rhythm.ts `DEFAULT_RHYTHM`). */
+    life: CityLife.optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.

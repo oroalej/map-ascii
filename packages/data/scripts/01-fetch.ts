@@ -61,6 +61,24 @@ out body;
 >;
 out skel qt;`;
 
+/**
+ * Railway track and stations in the detail bbox. Asked for on its own, not as part of
+ * `detailQuery`: it is small, so the servers answer it when the big query times out, and adding
+ * it left the saved detail download valid.
+ */
+export const railQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(
+  way["railway"~"^(rail|narrow_gauge|light_rail)$"];
+  nwr["railway"~"^(station|halt)$"];
+  nwr["building"="train_station"];
+);
+out body;
+>;
+out skel qt;`;
+
+/** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
+const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
+
 /** Admin level of the province/state names at Region level, when the city doesn't say. */
 export const DEFAULT_PROVINCE_LEVEL = 4;
 
@@ -98,6 +116,10 @@ export function regionQueries(city: City, bbox: BBox): string[] {
   queries.push(
     `${header(bbox)}\nrel["boundary"="administrative"]["admin_level"="${city.province_admin_level ?? DEFAULT_PROVINCE_LEVEL}"];\nout tags center;`,
   );
+  // Last, so the parts before keep their numbers (and their saved downloads).
+  for (const part of splitBbox(bbox, 2)) {
+    queries.push(`${header(part)}\n${regionRail}\nout body;\n>;\nout skel qt;`);
+  }
   return queries;
 }
 
@@ -171,6 +193,12 @@ export const step: Step = {
       cache,
     );
     console.log(`  detail: ${detail.elements.length} elements`);
+    const rail = await overpass(
+      railQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailRail),
+      cache,
+    );
+    console.log(`  railways: ${rail.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

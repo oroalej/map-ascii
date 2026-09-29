@@ -3,12 +3,33 @@ import { WIND_STRENGTHS } from '@atlas/shared';
 import { create } from 'zustand';
 
 /**
- * The HUD's time-of-day choices: the real sun now, or a fixed amount of daylight (so "Dusk"
- * looks like dusk in every city and season).
+ * The HUD's time-of-day choices: the city's clock now, or a fixed hour in the city today, lit by
+ * the sun at that hour and with the traffic of that hour (the city's daily rhythm).
  */
-export type TimeChoice = 'live' | 'day' | 'dusk' | 'night';
-export const TIME_CHOICES: readonly TimeChoice[] = ['live', 'day', 'dusk', 'night'];
-const DAYLIGHT: Record<Exclude<TimeChoice, 'live'>, number> = { day: 1, dusk: 0.5, night: 0 };
+export type TimeChoice = 'live' | 'dawn' | 'morning' | 'noon' | 'dusk' | 'night';
+export const TIME_CHOICES: readonly TimeChoice[] = [
+  'live',
+  'dawn',
+  'morning',
+  'noon',
+  'dusk',
+  'night',
+];
+/** Each fixed choice's local time, in minutes past midnight. */
+export const TIME_MINUTES: Record<Exclude<TimeChoice, 'live'>, number> = {
+  dawn: 5 * 60 + 30,
+  morning: 8 * 60,
+  noon: 12 * 60,
+  dusk: 18 * 60,
+  night: 22 * 60,
+};
+/** Choices saved before the fixed times were hours (they were amounts of daylight). */
+const RENAMED: Record<string, TimeChoice> = { day: 'noon' };
+
+const timeChoice = (saved: unknown): TimeChoice => {
+  const choice = typeof saved === 'string' ? (RENAMED[saved] ?? saved) : saved;
+  return TIME_CHOICES.includes(choice as TimeChoice) ? (choice as TimeChoice) : 'live';
+};
 
 /** The HUD's wind choices: the season's wind, or a strength (from the season's direction). */
 export const WIND_CHOICES: readonly WindChoice[] = ['live', ...WIND_STRENGTHS];
@@ -32,7 +53,7 @@ export function loadLifePrefs(): LifePrefs {
     const saved = raw ? (JSON.parse(raw) as Partial<LifePrefs>) : {};
     return {
       enabled: typeof saved.enabled === 'boolean' ? saved.enabled : true,
-      time: TIME_CHOICES.includes(saved.time as TimeChoice) ? (saved.time as TimeChoice) : 'live',
+      time: timeChoice(saved.time),
       wind: WIND_CHOICES.includes(saved.wind as WindChoice) ? (saved.wind as WindChoice) : 'live',
     };
   } catch {
@@ -51,6 +72,6 @@ export function saveLifePrefs(prefs: LifePrefs) {
 /** The renderer's settings for the preferences. */
 export const lifeSettings = ({ enabled, time, wind }: LifePrefs): LifeSettings => ({
   enabled,
-  daylight: time === 'live' ? 'live' : DAYLIGHT[time],
+  time: time === 'live' ? 'live' : TIME_MINUTES[time],
   wind,
 });

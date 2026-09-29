@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildingHeight,
   classify,
+  kindOf,
   layerFor,
   roadWidth,
   treeKind,
@@ -50,6 +51,24 @@ describe('classify', () => {
     expect(area({ landuse: 'forest' })).toBe('trees');
     expect(area({ landuse: 'farmland', crop: 'rice' })).toBe('farmland');
     expect(area({ landuse: 'residential' })).toBeNull();
+  });
+
+  it('maps railway track and stations', () => {
+    expect(line({ railway: 'rail' })).toBe('rail');
+    expect(line({ railway: 'rail', service: 'siding' })).toBe('rail');
+    expect(line({ railway: 'narrow_gauge' })).toBe('rail');
+    expect(line({ railway: 'abandoned' })).toBeNull();
+    expect(layerFor('rail', 'line')).toBe('roads');
+    expect(area({ building: 'train_station', railway: 'station' })).toBe('building_station');
+    expect(area({ building: 'yes', public_transport: 'station', train: 'yes' })).toBe(
+      'building_station',
+    );
+    expect(classify({ railway: 'halt', name: 'X' }, 'point', 10)).toBe('building_station');
+    expect(buildingHeight({ building: 'train_station' }, 'building_station')).toBe(8);
+    expect(kindOf({ railway: 'rail' })).toBe('railway=rail');
+    expect(variantOf({ railway: 'rail', service: 'spur' }, 'rail')).toBe('spur');
+    expect(variantOf({ railway: 'rail', service: 'siding' }, 'rail')).toBe('siding');
+    expect(variantOf({ railway: 'rail', usage: 'main' }, 'rail')).toBeUndefined();
   });
 
   it('keeps only the configured subdivision level of admin boundaries', () => {

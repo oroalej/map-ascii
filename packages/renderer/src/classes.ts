@@ -5,6 +5,7 @@ export const markerClasses = [
   'marker_religious',
   'marker_school',
   'marker_market',
+  'marker_station',
   'marker_landmark',
 ] as const;
 export type MarkerClass = (typeof markerClasses)[number];
@@ -21,7 +22,13 @@ export const partOf: Readonly<Record<PartClass, AtlasClass>> = { tree_crown: 'tr
  * The life layer's simulated agents (life/simulate.ts). They are drawn over the map from their
  * own texture, never into cells, so they can't be picked and never reach the class buffer.
  */
-export const lifeClasses = ['life_vehicle', 'life_person', 'life_boat', 'life_bird'] as const;
+export const lifeClasses = [
+  'life_vehicle',
+  'life_person',
+  'life_boat',
+  'life_bird',
+  'life_train',
+] as const;
 export type LifeClass = (typeof lifeClasses)[number];
 
 /**
@@ -72,6 +79,7 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
   building_religious: 'marker_religious',
   building_school: 'marker_school',
   building_market: 'marker_market',
+  building_station: 'marker_station',
 };
 
 /**
@@ -83,14 +91,22 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
  */
 export const priority: readonly (readonly RenderClass[])[] = [
   ['marker_landmark'],
-  ['marker_religious', 'marker_school', 'marker_market', 'monument'],
+  ['marker_religious', 'marker_school', 'marker_market', 'marker_station', 'monument'],
   ['tree', 'furniture', 'entrance'],
   ['road_major'],
   ['road_mid'],
   ['road_minor'],
-  ['path', 'barrier'],
+  // Under the roads, so a level crossing keeps the road's glyph.
+  ['path', 'barrier', 'rail'],
   ['admin_city', 'admin_subdivision'],
-  ['building', 'building_religious', 'building_school', 'building_market', 'building_part'],
+  [
+    'building',
+    'building_religious',
+    'building_school',
+    'building_market',
+    'building_station',
+    'building_part',
+  ],
   ['water_river', 'water_stream'],
   ['coastline'],
   ['water_area', 'water_sea'],
@@ -112,6 +128,7 @@ export const groundClasses: readonly RenderClass[] = [
   'building_religious',
   'building_school',
   'building_market',
+  'building_station',
 ];
 
 /** Clip-space depth between tiers. */
@@ -174,8 +191,8 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
 
 /**
  * The per-vertex variant byte from the pipeline's `variant` property: which furniture glyph to
- * draw, a tree's or wood's kind (`TREE_KINDS` + 1), or a building's roof (1 = flat,
- * 2 = pitched). 0 is unknown.
+ * draw, a tree's or wood's kind (`TREE_KINDS` + 1), a building's roof (1 = flat,
+ * 2 = pitched), or a siding (1: a track's `siding`, `spur`, or `yard`). 0 is unknown.
  */
 export function variantCode(className: string, variant: unknown): number {
   if (typeof variant !== 'string') return 0;
@@ -184,5 +201,7 @@ export function variantCode(className: string, variant: unknown): number {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }
   if (className.startsWith('building')) return variant === 'flat' ? 1 : 2;
+  // A siding, spur, or yard track, where trains stand by.
+  if (className === 'rail') return 1;
   return 0;
 }

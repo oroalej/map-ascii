@@ -11,6 +11,7 @@ import { fromOverpassBounds } from './lib/geo';
 import { readJson, writeJson } from './lib/io';
 import { onlyRelation, type OverpassResponse } from './lib/overpass';
 import { readDemGrid, terrainBands } from './lib/terrain';
+import { mergeResponses } from './01-fetch';
 import { files, type Step } from './step';
 
 /** The city's geography, derived from OSM, that later steps and the meta need. */
@@ -155,8 +156,12 @@ export const step: Step = {
     if (!boundary) throw new Error(`Could not build a polygon for the boundary ${boundaryId}`);
     await writeJson(join(buildDir, files.boundary), boundary);
 
+    // Railways come in their own download (01-fetch.ts `railQuery`); a city fetched before it
+    // existed just has none.
+    const rail = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailRail));
+    const detailRaw = await readJson<OverpassResponse>(join(rawDir, files.rawDetail));
     const detail: FeatureCollection = osmtogeojson(
-      await readJson<OverpassResponse>(join(rawDir, files.rawDetail)),
+      rail ? mergeResponses([detailRaw, rail]) : detailRaw,
     );
     await writeJson(join(buildDir, files.osm), detail);
     console.log(`  ${detail.features.length} GeoJSON features`);

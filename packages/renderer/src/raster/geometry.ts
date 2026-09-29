@@ -10,14 +10,18 @@ import earcut from 'earcut';
 import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
 import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '../labels';
 import {
+  CANAL_KIND,
   LifeBuilder,
   LifeLine,
   lifeLineFor,
   lifeTransferables,
+  placeFor,
   plazaClasses,
   roostClasses,
   type LifeGeometry,
 } from '../life/geometry';
+import { FLOOD } from '../life/config';
+import { placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
 const FLAT_ROOF = 1;
@@ -625,6 +629,8 @@ export function buildTileGeometry(
   const standingCrowns = new Builder();
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
+  const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
+  const litLines: LitLine[] = [];
 
   for (const [name, layer] of Object.entries(layers)) {
     if (skippedLayers.has(name)) continue;
@@ -687,6 +693,7 @@ export function buildTileGeometry(
       const variant = variantCode(className, feature.properties.variant);
       const width = Number(feature.properties.width ?? 0);
       const marker = markerFor[className as keyof typeof markerFor];
+      const place = isRegion ? undefined : placeFor(className, variant);
 
       const addPoint = (p: TilePoint, klass: number) =>
         points.vertex(p.x, p.y, klass, height, flags, id, variant);
@@ -730,10 +737,16 @@ export function buildTileGeometry(
           for (const p of ring) {
             if (marker || landmark) addMarkers(p);
             else addPoint(p, cls);
+            if (landmark && !isRegion && unitMeters && inTileAt(p)) {
+              life.flood(p, FLOOD.pointRadius / 2 / unitMeters);
+            }
             if (isTree) addCrown(p);
             // A tree birds can land in, in the tile that holds it.
             const inTile = p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
             if (isTree && inTile) life.perch(p);
+            if (className === 'building_station' && !isRegion) life.station(p);
+            if (className === 'building_market' && !isRegion) life.market(p);
+            if (place && inTile) life.place(p, place, 0);
           }
         }
       } else if (feature.type === 2) {
@@ -778,8 +791,20 @@ export function buildTileGeometry(
             for (const p of pointsAlong(line, crown / unitMeters)) addCrown(p, index++);
           }
         }
-        const lifeLine = isRegion ? undefined : lifeLineFor[className];
+        const isSiding = className === 'rail' && variant === 1;
+        const isCanal = className === 'water_stream' && feature.properties.kind === CANAL_KIND;
+        const lifeLine = isRegion
+          ? undefined
+          : isSiding
+            ? LifeLine.siding
+            : isCanal
+              ? LifeLine.canal
+              : lifeLineFor[className];
         if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine, width);
+        // Streetlights line major and secondary roads (life/lights.ts), placed once all are in.
+        if (lifeLine === LifeLine.roadMajor || lifeLine === LifeLine.roadMid) {
+          for (const line of rings) litLines.push({ points: line, width });
+        }
         const first = rings[0];
         if (landmark && first && first.length > 0) addMarkers(first[Math.floor(first.length / 2)]!);
       } else if (feature.type === 3) {
@@ -836,12 +861,32 @@ export function buildTileGeometry(
           const center = ringCentroid(largest.ring);
           if (isBuilding(className)) addPoint(center, cls);
           addMarkers(center);
+          // A landmark is floodlit at night, over its whole footprint (life/lights.ts).
+          if (!isRegion && landmark && inTileAt(center)) {
+            const reach = Math.max(
+              ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
+            );
+            life.flood(center, reach);
+          }
           // A roost belongs to the tile that holds it, not to its neighbors' buffers.
           const inside = center.x >= 0 && center.x < EXTENT && center.y >= 0 && center.y < EXTENT;
           if (!isRegion && inside && roostClasses.has(className)) life.roost(center);
+          if (!isRegion && className === 'building_station') life.station(center);
+          if (!isRegion && className === 'building_market') life.market(center);
+          // A place people gather at, owned by the tile that holds its center.
+          if (!isRegion && place && inside) {
+            // `signedArea` is twice the area; the radius of a circle as big.
+            const radius = Math.sqrt(largest.area / 2 / Math.PI);
+            life.place(center, place, radius, isBuilding(className) && height > 0);
+          }
         }
       }
     }
+  }
+
+  if (unitMeters && tile) {
+    const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };
+    life.addLamps(placeTileLamps(litLines, unitMeters, EXTENT, origin));
   }
 
   const finish = (g: ReturnType<typeof ground>): GroundGeometry => ({

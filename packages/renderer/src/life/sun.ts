@@ -49,16 +49,6 @@ export const solarAltitude = (date: Date, lng: number, lat: number): number =>
 export type Sun = { azimuth: number; altitude: number };
 
 /**
- * The sun a fixed amount of daylight is lit as (the HUD's day and dusk): high in the south-east
- * by day, low in the west at dusk, none at night (no shadows).
- */
-export function fixedSun(daylight: number): Sun | null {
-  if (daylight >= 0.75) return { azimuth: 135, altitude: 60 };
-  if (daylight >= 0.25) return { azimuth: 260, altitude: 10 };
-  return null;
-}
-
-/**
  * How much daylight there is, 0 (night) to 1 (day), from the sun's altitude: full above 6°,
  * none below -6° (the end of civil twilight), smooth between.
  */

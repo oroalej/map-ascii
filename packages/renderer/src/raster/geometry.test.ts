@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, variantCode } from '../classes';
 import { LabelRank } from '../labels';
-import { LifeLine } from '../life/geometry';
+import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import {
   buildTileGeometry,
   classifyRings,
@@ -711,6 +711,136 @@ describe('buildTileGeometry life', () => {
     expect(Array.from(life.widths)).toEqual([12, 0, 0]);
     expect(Array.from(life.coords.slice(0, 4))).toEqual([0, 10, 100, 10]);
     expect(Array.from(life.roosts)).toEqual([1100, 1100]);
+  });
+
+  it('lines major and secondary roads with streetlights, not side streets', () => {
+    const road = (cls: string, id: string, y: number) =>
+      feature(2, { class: cls, id }, [
+        [
+          [0, y],
+          [2000, y],
+        ],
+      ]);
+    const lampsOn = (cls: string) =>
+      buildTileGeometry({ roads: layer([road(cls, 'r', 500)]) }, createIdRegistry(), tile).life
+        .lamps.length;
+    expect(lampsOn('road_major')).toBeGreaterThan(0);
+    expect(lampsOn('road_mid')).toBeGreaterThan(0);
+    expect(lampsOn('road_minor')).toBe(0);
+  });
+
+  it('floodlights landmarks over their footprint, in the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building_religious', id: 'c', landmark: true }, [
+            square(1000, 1000, 200),
+          ]),
+          feature(3, { class: 'building', id: 'b' }, [square(2000, 2000, 200)]),
+          // In the neighbor's buffer: that tile floodlights it.
+          feature(3, { class: 'building_religious', id: 'x', landmark: true }, [
+            square(-400, 1000, 200),
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const floods = Array.from(g.life.floods);
+    expect(floods).toHaveLength(3);
+    expect(floods[0]).toBeCloseTo(1100);
+    expect(floods[1]).toBeCloseTo(1100);
+    // Out to its corners.
+    expect(floods[2]).toBeCloseTo(Math.hypot(100, 100));
+  });
+
+  it('marks markets, as areas or points, where street vendors gather', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { id: 'm1', class: 'building_market' }, [square(100, 100, 200)]),
+          feature(3, { id: 'b1', class: 'building' }, [square(600, 600, 100)]),
+        ]),
+        poi: layer([feature(1, { id: 'm2', class: 'building_market' }, [[[900, 40]]])]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.markets).sort((a, b) => a - b)).toEqual([40, 200, 200, 900]);
+  });
+
+  it('marks places people gather at, owned by the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { id: 'c1', class: 'building_religious', height: 12 }, [
+            square(100, 100, 200),
+          ]),
+          // Grounds: no height.
+          feature(3, { id: 's1', class: 'building_school' }, [square(1000, 1000, 400)]),
+          // In the neighbor's buffer: that tile has it.
+          feature(3, { id: 'c2', class: 'building_religious', height: 12 }, [
+            square(-400, 100, 200),
+          ]),
+          feature(3, { id: 'b1', class: 'building', height: 6 }, [square(600, 600, 100)]),
+        ]),
+        landuse: layer([feature(3, { id: 'f1', class: 'farmland' }, [square(2000, 2000, 800)])]),
+        poi: layer([
+          feature(1, { id: 'p1', class: 'furniture', variant: 'bench' }, [[[50, 60]]]),
+          feature(1, { id: 'p2', class: 'furniture', variant: 'fountain' }, [[[70, 80]]]),
+          feature(1, { id: 'p3', class: 'furniture', variant: 'flagpole' }, [[[90, 90]]]),
+          feature(1, { id: 'p4', class: 'monument' }, [[[300, 900]]]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    type Place = {
+      kind: string | undefined;
+      x?: number;
+      y?: number;
+      radius?: number;
+      building?: number;
+    };
+    const places: Place[] = [];
+    for (let i = 0; i < g.life.places.length; i += PLACE_STRIDE) {
+      const [x, y, code, radius, building] = g.life.places.slice(i, i + PLACE_STRIDE);
+      places.push({ kind: PLACE_CODES[code!], x, y, radius, building });
+    }
+    const byKind: Partial<Record<string, Place>> = Object.fromEntries(
+      places.map((p): [string, Place] => [p.kind ?? '', p]),
+    );
+    expect(places.map((p) => p.kind).sort()).toEqual(
+      ['bench', 'farm', 'fountain', 'monument', 'school', 'worship'].sort(),
+    );
+    expect(byKind.worship).toMatchObject({ x: 200, y: 200, building: 1 });
+    expect(byKind.worship!.radius).toBeCloseTo(200 / Math.sqrt(Math.PI));
+    expect(byKind.school).toMatchObject({ x: 1200, y: 1200, building: 0 });
+    expect(byKind.bench).toMatchObject({ x: 50, y: 60, radius: 0 });
+  });
+
+  it('gives canals, not other streams, to boats', () => {
+    const g = buildTileGeometry(
+      {
+        water: layer([
+          feature(2, { id: 'w1', class: 'water_stream', kind: 'waterway=canal' }, [
+            [
+              [0, 100],
+              [4000, 100],
+            ],
+          ]),
+          feature(2, { id: 'w2', class: 'water_stream', kind: 'waterway=stream' }, [
+            [
+              [0, 900],
+              [4000, 900],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.kinds)).toEqual([LifeLine.canal]);
   });
 
   it('skips roosts that fall in the tile buffer', () => {

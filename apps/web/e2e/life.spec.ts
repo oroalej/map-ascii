@@ -38,15 +38,24 @@ for (const city of cities) {
       await page.goto(`/${city.slug}?z=16`);
       await mapReady(page);
       const time = page.getByRole('button', { name: /^Time:/ });
-      // e2e runs are pinned to day (playwright.config.ts).
-      await expect(time).toHaveText('Time: day');
+      // e2e runs are pinned to noon (playwright.config.ts).
+      await expect(time).toHaveText('Time: 12:00');
       await time.click();
-      await expect(time).toHaveText('Time: dusk');
+      await expect(time).toHaveText('Time: 18:00');
       await time.click();
-      await expect(time).toHaveText('Time: night');
+      await expect(time).toHaveText('Time: 22:00');
       await page.reload();
       await mapReady(page);
-      await expect(page.getByRole('button', { name: /^Time:/ })).toHaveText('Time: night');
+      await expect(page.getByRole('button', { name: /^Time:/ })).toHaveText('Time: 22:00');
+    });
+
+    test('moves a time of day saved as daylight to an hour', async ({ page }) => {
+      await page.addInitScript(() => {
+        window.localStorage.setItem('atlas.life', '{"enabled":true,"time":"day"}');
+      });
+      await page.goto(`/${city.slug}?z=16`);
+      await mapReady(page);
+      await expect(page.getByRole('button', { name: /^Time:/ })).toHaveText('Time: 12:00');
     });
 
     for (const procession of city.processions) {

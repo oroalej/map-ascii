@@ -25,6 +25,12 @@ const buildingKind = (tags: Tags): AtlasClass | null => {
   if (tags.amenity === 'marketplace' || oneOf(tags.shop, 'mall', 'supermarket')) {
     return 'building_market';
   }
+  if (tags.building === 'train_station' || oneOf(tags.railway, 'station', 'halt')) {
+    return 'building_station';
+  }
+  if (tags.public_transport === 'station' && (tags.train === 'yes' || tags.railway)) {
+    return 'building_station';
+  }
   return null;
 };
 
@@ -37,6 +43,7 @@ const isMonument = (tags: Tags) =>
 /** Small street furniture, with the kind the renderer draws. */
 const furnitureKinds = ['bench', 'fountain', 'flagpole'] as const;
 const barrierKinds = ['fence', 'wall', 'hedge', 'gate'] as const;
+const sidingKinds = ['siding', 'spur', 'yard'] as const;
 
 /** Tree kinds the renderer draws with their own glyphs (SPEC.md §4). */
 export type TreeKind = 'palm' | 'needleleaved' | 'broadleaved';
@@ -84,7 +91,8 @@ export function treeSize(tags: Tags): { height: number; crown: number } {
 
 /**
  * The renderer's glyph variant for a feature: the kind of `furniture` or `barrier`, a tree's
- * or wood's kind (`treeKind`), or a building's roof shape (`roof:shape`), if any.
+ * or wood's kind (`treeKind`), a building's roof shape (`roof:shape`), or a track's `service`
+ * when it is a siding, spur, or yard, if any.
  */
 export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
@@ -92,6 +100,8 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
     return furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k);
   }
   if (atlasClass === 'barrier') return barrierKinds.find((k) => tags.barrier === k);
+  // Sidings, spurs, and yards, where trains stand by (the renderer's life layer).
+  if (atlasClass === 'rail') return sidingKinds.find((k) => tags.service === k);
   if (atlasClass.startsWith('building') && tags['roof:shape']) return tags['roof:shape'];
   return undefined;
 }
@@ -132,6 +142,7 @@ export function classify(
   if (kind === 'line') {
     if (tags.natural === 'coastline') return 'coastline';
     if (tags.highway) return highwayClass(tags.highway);
+    if (oneOf(tags.railway, 'rail', 'narrow_gauge', 'light_rail')) return 'rail';
     if (tags.waterway === 'river') return 'water_river';
     if (oneOf(tags.waterway, 'stream', 'canal')) return 'water_stream';
     if (tags.natural === 'tree_row') return 'tree';
@@ -184,7 +195,9 @@ export function layerFor(atlasClass: AtlasClass, kind: GeometryKind): TileLayer 
   if (kind === 'point') return 'poi';
   if (atlasClass === 'terrain') return 'terrain';
   if (atlasClass.startsWith('water_') || atlasClass === 'coastline') return 'water';
-  if (atlasClass.startsWith('road_') || atlasClass === 'path') return 'roads';
+  if (atlasClass.startsWith('road_') || atlasClass === 'path' || atlasClass === 'rail') {
+    return 'roads';
+  }
   if (atlasClass.startsWith('building')) return 'buildings';
   if (atlasClass.startsWith('admin_')) return 'admin';
   return 'landuse';
@@ -195,6 +208,7 @@ const defaultHeights: Partial<Record<AtlasClass, number>> = {
   building_religious: 15,
   building_school: 9,
   building_market: 8,
+  building_station: 8,
 };
 
 /**
@@ -222,6 +236,7 @@ const kindKeys = [
   'memorial',
   'tourism',
   'building',
+  'railway',
   'highway',
   'waterway',
   'natural',

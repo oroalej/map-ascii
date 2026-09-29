@@ -17,14 +17,14 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
-    // Lit for the day whatever the clock says, so a night run draws the same map (the life
+    // Noon in the city whatever the clock says, so a night run draws the same map (the life
     // layer's time of day, apps/web/state/life.ts).
     storageState: {
       cookies: [],
       origins: [
         {
           origin: baseURL,
-          localStorage: [{ name: 'atlas.life', value: '{"enabled":true,"time":"day"}' }],
+          localStorage: [{ name: 'atlas.life', value: '{"enabled":true,"time":"noon"}' }],
         },
       ],
     },

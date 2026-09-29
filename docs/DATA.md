@@ -24,11 +24,12 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 1. **`01-fetch`**
    - Read `city.json`, then download OSM data for two bounding boxes:
      - **Detail bbox:** the city boundary plus the configured buffer (`detail_buffer_km`). The boundary relation is found via Overpass using the config's `boundary` lookup (name, admin_level, and parent area). Fail loudly if the lookup matches zero relations or more than one. The detail bbox is then clipped to the region bounds, because the camera can't leave the region. The search index likewise drops entries outside the region.
-     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`.
+     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, railways, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`.
+     - **Railways** (track and stations in the detail bbox) are a small query of their own, saved as `detail-rail.osm.json`, and the region's railway queries come after its other parts. Adding them left the big saved downloads valid, and the servers answer the small query when the big one times out. `overpass()` retries 5xx answers and dropped connections, rotating through three public instances (`OVERPASS_URL` pins one).
    - Download DEM tiles for the Region bbox.
    - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
 2. **`02-convert`**
-   - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF).
+   - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF). The railway download is merged into the detail download first (if there is one).
    - DEM → hillshade/luminance raster (`gdaldem hillshade`) → grayscale PNG tiles.
 3. **`03-normalize`**
    - Map OSM tags to atlas classes (see section 3).
@@ -50,7 +51,8 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 7. **`07-processions`**
-   - For each of the pack's `processions`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 150 m of a river.
+   - For each of the pack's `processions`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 300 m of a river; the route ends at the river point nearest each (an end may be a landmark a short walk from the river).
+   - Resample the route to points at most 10 m apart and measure, at each, how far the water reaches to its left and right (`banks`, from the `water_area` polygons; left out where the river is mapped only as a line).
    - Write `<city>.processions.json` (the `CityProcessions` schema), published with the tiles. Cities without processions get no file.
 
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
@@ -66,10 +68,12 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `road_mid` | `highway=secondary|tertiary` (+ `_link`) |
 | `road_minor` | `highway=residential|unclassified|service|living_street` |
 | `path` | `highway=footway|path|pedestrian|steps|track` |
+| `rail` | `railway=rail|narrow_gauge|light_rail`, sidings and yards included (disused and abandoned track isn't fetched); `service=siding|spur|yard` goes in `variant` (trains stand by there) |
 | `building` | `building=*` |
 | `building_religious` | `building=church|cathedral|chapel` or `amenity=place_of_worship`; `landuse=religious` grounds (no height) |
 | `building_school` | `amenity=school|university|college` (area or building) |
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
+| `building_station` | `building=train_station`, `railway=station|halt`, or `public_transport=station` with `train=yes` or a `railway` tag (area or point) |
 | `park` | `leisure=park|garden|playground`, `place=square` |
 | `trees` | `natural=wood`, `landuse=forest` (kind in `variant`) |
 | `grass` | `landuse=grass|meadow|village_green`, `natural=grassland`, `leisure=recreation_ground` (a park wins if both are tagged) |
@@ -105,13 +109,29 @@ City {                           // cities/<slug>/city.json
   // The life layer's vehicle mix: per road class, relative weights of car, motorcycle,
   // tricycle, jeepney, bus, and truck. A road class left out uses the default mix.
   // `river`: boats (rowboat, motorboat, banca); `parked`: vehicles in lots and along curbs.
-  traffic?: { road_major?: Weights; road_mid?: Weights; road_minor?: Weights; river?: BoatWeights; parked?: Weights };
+  traffic?: { road_major?: Weights; road_mid?: Weights; road_minor?: Weights; river?: BoatWeights; canal?: BoatWeights; parked?: Weights };
   // The wind by season (SPEC.md §4 "Wind"): each season's months (1–12, each in at most one
   // season), where the wind blows from (compass degrees) and how hard; `default` for the other
   // months; `source` for where the seasons come from. Without it: a breeze from the east.
   climate?: {
     wind: { name?: string; months: number[]; from: number; strength: WindStrength }[];
     default: { from: number; strength: WindStrength };
+    source: string;
+  };
+  // The city's IANA time zone, e.g. "Asia/Manila": the life layer's clock, fixed times of day,
+  // and seasons follow it. Without it: the sun's time at the city's longitude.
+  timezone?: string;
+  // The daily rhythm (SPEC.md §4 "Time of day"): per kind (vehicle, person, boat, train), how
+  // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
+  // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
+  life?: {
+    rhythm?: { vehicle?: [number, number][]; person?: ...; boat?: ...; train?: ... };
+    // When places fill up (SPEC.md §4 "Places"). Weekdays 0 = Sunday; times local HH:MM.
+    // Without `worship`, churches only have a few visitors; without `school`, weekdays 07:00–16:00.
+    schedules?: {
+      worship?: { weekdays: number[]; times: string[] }[];
+      school?: { weekdays: number[]; in: string; out: string };
+    };
     source: string;
   };
 }
@@ -127,7 +147,7 @@ Landmark {
   osm_id?: string;               // "osm:way/123456" — join key
   geometry?: GeoJSON;            // only if not in OSM (e.g. demolished)
   name: LocalizedText;
-  type: 'church' | 'school' | 'plaza' | 'market' | 'government' | 'bridge' | 'monument' | 'other';
+  type: 'church' | 'school' | 'plaza' | 'market' | 'government' | 'bridge' | 'station' | 'monument' | 'other';
   start_year?: number;
   end_year?: number;
   certainty: 'exact' | 'circa' | 'unknown';

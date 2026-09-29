@@ -102,11 +102,35 @@ const P = Paint;
 /** Boat paints never use these: they vanish on water. */
 export const BOAT_PAINTS_AVOID: readonly number[] = [P.blue, P.sky, P.teal, P.green];
 
-/** Something the life layer draws from a plan: a vehicle or a boat. */
-export type CraftType = VehicleType | BoatType | ProcessionCraft;
+/** Something the life layer draws from a plan: a vehicle, a boat, or a vendor's cart. */
+export type CraftType =
+  VehicleType | BoatType | ProcessionCraft | RailCraft | StallCraft | AnimalCraft;
+
+/** A farm animal (life/simulate.ts `Gatherer`): a carabao, led along a field by its farmer. */
+export type AnimalCraft = 'carabao';
+
+/** A street vendor's cart (life/simulate.ts `Stall`), which stands where people walk. */
+export type StallCraft = 'cart';
+
+/**
+ * A cart as one glyph: a striped awning, drawn by the glyph atlas (glyphs/atlas.ts). A Private
+ * Use code point, after people's figures (life/people.ts).
+ */
+export const STALL_GLYPH = '';
+
+/** A train's cars (life/simulate.ts): a locomotive at the head, then its coaches. */
+export type RailCraft = 'locomotive' | 'coach';
+
+/** A train's paints: the whole train shares one. */
+export const TRAIN_PAINTS: readonly number[] = [
+  Paint.orange,
+  Paint.orange,
+  Paint.blue,
+  Paint.cream,
+];
 
 /** A river procession's own boats (life/procession.ts). */
-export type ProcessionCraft = 'pagoda' | 'voyador';
+export type ProcessionCraft = 'pagoda' | 'voyador' | 'baroto' | 'sailboat';
 
 export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   car: {
@@ -201,6 +225,25 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     // A slender painted hull under a canopy, with outriggers on booms either side.
     plan: ['..RRRRRRRR..', '...B....B...', 'BAABRRRRBAAH', '...B....B...', '..RRRRRRRR..'],
   },
+  locomotive: {
+    length: 14,
+    width: 2.8,
+    speed: 1,
+    paints: TRAIN_PAINTS,
+    mini: ['▬', '▮'],
+    // A long hood behind the cab: roof vents down the middle, the cab's windows and lamps at
+    // the front.
+    plan: ['TDBBBBBBBBBBGGBH', 'DDRRDDRRDDRRRGBB', 'DDRRDDRRDDRRRGBB', 'TDBBBBBBBBBBGGBH'],
+  },
+  coach: {
+    length: 18,
+    width: 2.8,
+    speed: 1,
+    paints: TRAIN_PAINTS,
+    mini: ['▬', '▮'],
+    // Windows down both sides of a long roof, the couplings at the ends.
+    plan: ['BBGGBGGBGGBGGBGGBB', 'DRRRRRRRRRRRRRRRRD', 'DRRRRRRRRRRRRRRRRD', 'BBGGBGGBGGBGGBGGBB'],
+  },
   pagoda: {
     length: 14,
     width: 7,
@@ -228,11 +271,59 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     // Paddlers down both sides of a long hull, a lamp at the bow.
     plan: ['.BBBBBBBBBBBBBB.', 'RRRRRRRRRRRRRRRH', '.BBBBBBBBBBBBBB.'],
   },
+  baroto: {
+    length: 4.5,
+    width: 0.9,
+    speed: 1,
+    // Wood tones.
+    paints: [P.cream, P.orange, P.maroon],
+    mini: ['◊', '◊'],
+    // A dugout canoe, pointed at both ends, with one paddler.
+    plan: ['RBBBDBBR'],
+  },
+  sailboat: {
+    length: 5,
+    width: 2,
+    speed: 1,
+    paints: [P.white, P.red, P.yellow, P.orange],
+    mini: ['◊', '◊'],
+    // A small hull under a sail in a second color.
+    plan: ['.BBBBBB.', 'BBAAAABB', '.BBBBBB.'],
+  },
+  cart: {
+    length: 1.8,
+    width: 1,
+    speed: 0,
+    paints: [P.red, P.blue, P.yellow, P.orange, P.green, P.white, P.sky],
+    mini: [STALL_GLYPH, STALL_GLYPH],
+    // An awning striped in its paint and a second color, its handles and wheels, and a lantern
+    // that glows from dusk.
+    plan: ['DARARAD', 'DRARARH', 'DARARAD'],
+  },
+  carabao: {
+    length: 2.6,
+    width: 1.3,
+    speed: 0,
+    // Slate grey to near black.
+    paints: [P.graphite, P.graphite, P.silver],
+    mini: ['▪', '▪'],
+    // A broad back, its head in front with horns sweeping out to both sides (trim); no lights.
+    plan: ['......D.', '.BBBBB..', 'BBBBBBBB', '.BBBBB..', '......D.'],
+  },
 };
 
-/** Every glyph vehicles draw with, for the map atlas (theme.ts `mapGlyphs`). */
+/** Lines over the water (ropes, poles), by direction on screen: across, up and down, rising, falling. */
+export const LINE_GLYPHS = { across: '─', upDown: '│', rising: '╱', falling: '╲' } as const;
+/** The pennant at the top of a pole. */
+export const PENNANT_GLYPH = '¶';
+
+/** Every glyph vehicles, boats, and their lines draw with, for the map atlas (theme.ts `mapGlyphs`). */
 export function vehicleGlyphs(): string[] {
-  const out = new Set<string>(Object.values(PART_GLYPHS));
+  const out = new Set<string>([
+    ...Object.values(PART_GLYPHS),
+    ...Object.values(LINE_GLYPHS),
+    PENNANT_GLYPH,
+  ]);
   for (const spec of Object.values(VEHICLES)) for (const g of spec.mini) out.add(g);
   return [...out];
 }
@@ -249,8 +340,8 @@ export function planPart(spec: VehicleSpec, u: number, v: number): VehiclePart |
 export const STAMP_MIN_CELLS = 2;
 
 /** What a traffic mix is set for: road classes, rivers, and parked vehicles. */
-export type MixKey = TrafficRoad | 'river' | 'parked';
-const MIX_KEYS: readonly MixKey[] = [...TRAFFIC_ROADS, 'river', 'parked'];
+export type MixKey = TrafficRoad | 'river' | 'canal' | 'parked';
+const MIX_KEYS: readonly MixKey[] = [...TRAFFIC_ROADS, 'river', 'canal', 'parked'];
 
 /** A city without a traffic mix gets this one, which fits most places. */
 export const DEFAULT_TRAFFIC: Readonly<Record<MixKey, Partial<Record<CraftType, number>>>> = {
@@ -258,6 +349,7 @@ export const DEFAULT_TRAFFIC: Readonly<Record<MixKey, Partial<Record<CraftType, 
   road_mid: { car: 50, motorcycle: 30, truck: 10, bus: 5, bicycle: 5 },
   road_minor: { car: 45, motorcycle: 40, bicycle: 15 },
   river: { motorboat: 60, rowboat: 40 },
+  canal: { rowboat: 60, banca: 40 },
   parked: { car: 85, motorcycle: 15 },
 };
 
@@ -267,6 +359,7 @@ export const trafficRoadFor: Readonly<Partial<Record<LifeLine, MixKey>>> = {
   [LifeLine.roadMid]: 'road_mid',
   [LifeLine.roadMinor]: 'road_minor',
   [LifeLine.river]: 'river',
+  [LifeLine.canal]: 'canal',
 };
 
 /** Per mix key, the types with a weight above 0 and their share of 0–1 (cumulative). */

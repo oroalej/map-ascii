@@ -33,6 +33,8 @@ const features: F[] = [
   point('osm:node/10', [0.0002, 0.0001]),
   point('osm:node/11', [0.0025, -0.0001]),
   point('osm:node/12', [0.0002, 0.01]),
+  // A landmark about 190 m north of the river (and further from the stream).
+  point('osm:node/13', [0.0029, 0.0017]),
 ];
 
 const procession = (route: Procession['route']): Procession => ({
@@ -77,6 +79,47 @@ describe('routeProcessions', () => {
     expect(r.route[0]![0]).toBeCloseTo(0.0025, 5);
     expect(r.route.at(-1)![0]).toBeCloseTo(0.0002, 5);
     expect(r.length_m).toBeCloseTo(0.0023 * 111_320, -1);
+  });
+
+  it('ends at the river point nearest a landmark a short walk away, going upstream', () => {
+    const { routes } = routeProcessions(features, [
+      procession({ from: 'osm:node/10', to: 'osm:node/13' }),
+    ]);
+    const r = routes[0]!;
+    expect(r.route[0]![0]).toBeCloseTo(0.0002, 5);
+    expect(r.route.at(-1)).toEqual([0.0029, 0]);
+  });
+
+  it('measures the banks along the way, where the river is mapped as water', () => {
+    const water: F = {
+      type: 'Feature',
+      properties: { id: 'osm:way/50', class: 'water_area' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-0.001, -0.0001],
+            [0.004, -0.0001],
+            [0.004, 0.00015],
+            [-0.001, 0.00015],
+            [-0.001, -0.0001],
+          ],
+        ],
+      },
+    };
+    const trip = procession({ from: 'osm:node/10', to: 'osm:node/11' });
+    const [r] = routeProcessions([...features, water], [trip]).routes;
+    // Points at most 10 m apart, each with its banks.
+    expect(r!.banks).toHaveLength(r!.route.length);
+    for (let i = 1; i < r!.route.length; i++) {
+      expect(Math.abs(r!.route[i]![0] - r!.route[i - 1]![0]) * 111_320).toBeLessThanOrEqual(10.01);
+    }
+    // Heading east: the north bank (about 16.6 m) on the left, the south (about 11 m) on the right.
+    const [left, right] = r!.banks![5]!;
+    expect(left).toBeCloseTo(16.5, 0);
+    expect(right).toBeCloseTo(11, 0);
+    // Without mapped water, no banks.
+    expect(routeProcessions(features, [trip]).routes[0]!.banks).toBeUndefined();
   });
 
   it('warns when the river ends before the distance upstream', () => {

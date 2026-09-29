@@ -111,6 +111,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(summary).toEqual([
       ['cover:fixture-grounds/tree-1', 'tree', 'poi'],
       ['osm:node/19', 'place_label', 'labels'],
+      ['osm:node/24', 'building_station', 'poi'],
       ['osm:node/90', 'monument', 'poi'],
       ['osm:relation/200', 'admin_city', 'admin'],
       ['osm:relation/201', 'admin_subdivision', 'admin'],
@@ -119,6 +120,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
       ['osm:way/104', 'building_religious', 'buildings'],
       ['osm:way/105', 'park', 'landuse'],
       ['osm:way/106', 'water_river', 'water'],
+      ['osm:way/109', 'rail', 'roads'],
       ['plan:fixture-statue/1', 'building_part', 'buildings'],
     ]);
   });

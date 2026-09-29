@@ -8,8 +8,12 @@ import type { Feature, Geometry, Position } from 'geojson';
 
 type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: string }>;
 
-/** A start or end further than this from any river is an error in the pack, m. */
-export const MAX_SNAP_M = 150;
+/**
+ * A start or end further than this from any river is an error in the pack, m. An end may be a
+ * landmark a short walk from the river (e.g. a basilica); the route ends at the river point
+ * nearest it.
+ */
+export const MAX_SNAP_M = 300;
 
 type Point = [number, number];
 
@@ -177,6 +181,47 @@ export class RiverGraph {
   }
 }
 
+/** The water polygons within reach of `path`, in its meters. */
+function waterNear(
+  features: readonly Feature<Geometry, Record<string, unknown>>[],
+  project: (p: Position) => Point,
+  path: readonly Point[],
+): Point[][][] {
+  const pad = BANK_MAX_M + 10;
+  const xs = path.map((p) => p[0]);
+  const ys = path.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [
+    Math.min(...xs) - pad,
+    Math.max(...xs) + pad,
+    Math.min(...ys) - pad,
+    Math.max(...ys) + pad,
+  ];
+  const out: Point[][][] = [];
+  for (const f of features) {
+    const polygons =
+      f.geometry.type === 'Polygon'
+        ? [f.geometry.coordinates]
+        : f.geometry.type === 'MultiPolygon'
+          ? f.geometry.coordinates
+          : [];
+    for (const polygon of polygons) {
+      const rings = polygon.map((ring) => ring.map(project));
+      // Keep it if its bbox overlaps the route's: a wide river's vertices may all be far off.
+      const rx = rings[0]!.map((p) => p[0]);
+      const ry = rings[0]!.map((p) => p[1]);
+      if (
+        Math.max(...rx) >= x0 &&
+        Math.min(...rx) <= x1 &&
+        Math.max(...ry) >= y0 &&
+        Math.min(...ry) <= y1
+      ) {
+        out.push(rings);
+      }
+    }
+  }
+  return out;
+}
+
 function push(map: Map<number, number[]>, key: number, value: number) {
   const list = map.get(key);
   if (list) list.push(value);
@@ -201,6 +246,77 @@ export function featurePoint(feature: Feature<Geometry, Record<string, unknown>>
   ];
 }
 
+/** Route points are at most this far apart, m, so the banks are known all along it. */
+export const ROUTE_STEP_M = 10;
+/** Banks are found in steps this long, m, up to `BANK_MAX_M` from the route. */
+const BANK_STEP_M = 0.5;
+const BANK_MAX_M = 60;
+
+/** `path` with extra points so that none are more than `step` apart. */
+export function resample(path: readonly Point[], step: number): Point[] {
+  const out: Point[] = [path[0]!];
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!;
+    const b = path[i]!;
+    const n = Math.max(1, Math.ceil(distance(a, b) / step));
+    for (let k = 1; k <= n; k++)
+      out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  }
+  return out;
+}
+
+/** Whether `p` is inside a polygon (outer ring less holes), even–odd. */
+function inside(polygon: readonly Point[][], [x, y]: Point): boolean {
+  let hit = false;
+  for (const ring of polygon) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ax, ay] = ring[i]!;
+      const [bx, by] = ring[j]!;
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) hit = !hit;
+    }
+  }
+  return hit;
+}
+
+/**
+ * How far the water reaches to the left and right of each point of `path` (m, across its
+ * direction), from the water polygons (meters, the same projection). Undefined when the path
+ * doesn't run through mapped water (a river drawn only as a line). A point outside the water
+ * (a gap in the mapping) takes its nearest neighbor's banks.
+ */
+export function measureBanks(
+  path: readonly Point[],
+  water: readonly Point[][][],
+): [number, number][] | undefined {
+  const wet = (p: Point) => water.some((polygon) => inside(polygon, p));
+  const banks: ([number, number] | undefined)[] = path.map((p, i) => {
+    if (!wet(p)) return undefined;
+    const a = path[Math.max(0, i - 1)]!;
+    const b = path[Math.min(path.length - 1, i + 1)]!;
+    const length = distance(a, b) || 1;
+    const [tx, ty] = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+    const reach = (nx: number, ny: number) => {
+      let d = 0;
+      while (
+        d < BANK_MAX_M &&
+        wet([p[0] + nx * (d + BANK_STEP_M), p[1] + ny * (d + BANK_STEP_M)])
+      ) {
+        d += BANK_STEP_M;
+      }
+      return d;
+    };
+    // Left of the direction of travel (y points north), then right.
+    return [reach(-ty, tx), reach(ty, -tx)];
+  });
+  const known = banks.flatMap((b, i) => (b ? [i] : []));
+  if (known.length < path.length / 2) return undefined;
+  return banks.map((b, i) => {
+    if (b) return b;
+    const nearest = known.reduce((best, k) => (Math.abs(k - i) < Math.abs(best - i) ? k : best));
+    return banks[nearest]!;
+  });
+}
+
 /**
  * Resolve each procession's route along the rivers in `features`. Throws when a start or end
  * isn't in the data or isn't near a river, or when no river path joins them.
@@ -211,6 +327,11 @@ export function routeProcessions(
 ): { routes: ProcessionRoute[]; warnings: string[] } {
   const byId = new Map(features.map((f) => [f.properties?.id as string, f]));
   const rivers = features.filter((f) => f.properties?.class === 'water_river') as RiverFeature[];
+  const waterAreas = features.filter(
+    (f) =>
+      (f.properties?.class === 'water_area' || f.properties?.class === 'water_river') &&
+      (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
+  );
   const routes: ProcessionRoute[] = [];
   const warnings: string[] = [];
   for (const p of processions) {
@@ -238,6 +359,8 @@ export function routeProcessions(
     }
     let length = 0;
     for (let i = 1; i < path.length; i++) length += distance(path[i - 1]!, path[i]!);
+    path = resample(path, ROUTE_STEP_M);
+    const banks = measureBanks(path, waterNear(waterAreas, graph.project.to, path));
     if (p.route.upstream_m && length < p.route.upstream_m - 1) {
       warnings.push(
         `${p.id}: the river ends ${Math.round(length)} m upstream, short of ${p.route.upstream_m} m`,
@@ -250,6 +373,9 @@ export function routeProcessions(
       kind: p.kind,
       route: path.map((m) => graph.project.from(m).map((v) => Math.round(v * 1e7) / 1e7) as Point),
       length_m: Math.round(length),
+      ...(banks
+        ? { banks: banks.map(([l, r]) => [Math.round(l * 2) / 2, Math.round(r * 2) / 2]) }
+        : {}),
       schedule: p.schedule,
       ...(p.formation ? { formation: p.formation } : {}),
       ...(p.sources ? { sources: p.sources } : {}),

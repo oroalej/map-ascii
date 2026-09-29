@@ -1,8 +1,11 @@
-/* Bottom center, above the attribution; beside the info panel when it is open. */
+/*
+ * Bottom center, above the attribution (Attribution.tsx publishes its height); beside the info
+ * panel when it is open.
+ */
 .card {
   position: fixed;
   left: 50%;
-  bottom: 52px;
+  bottom: calc(var(--attribution-height, 16px) + 36px);
   transform: translateX(-50%);
   width: min(560px, calc(100vw - 24px));
   padding: 10px 14px 12px;
@@ -155,7 +158,7 @@
 
 /*
  * Phones: a bottom sheet in place of the info panel. It sits under the attribution, which stays
- * readable over its padded bottom edge.
+ * readable over its bottom edge, padded to the attribution's height so the controls stay clear.
  */
 @media (max-width: 640px) {
   .card {
@@ -166,7 +169,7 @@
     width: auto;
     max-height: 50dvh;
     overflow-y: auto;
-    padding-bottom: 52px;
+    padding-bottom: calc(var(--attribution-height, 40px) + 12px);
     border-width: 1px 0 0;
     z-index: 10;
   }

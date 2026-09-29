@@ -1,6 +1,13 @@
 'use client';
 
-import type { ClimateConfig, Landmark, LandmarkArt, TrafficMix, Tour } from '@atlas/shared';
+import type {
+  CityLifeConfig,
+  ClimateConfig,
+  Landmark,
+  LandmarkArt,
+  TrafficMix,
+  Tour,
+} from '@atlas/shared';
 import { useEffect } from 'react';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
@@ -26,6 +33,10 @@ export type CityAtlasProps = {
   traffic?: TrafficMix | undefined;
   /** The winds by season (the city pack's `climate`). */
   climate?: ClimateConfig | undefined;
+  /** The city's IANA time zone (the city pack's `timezone`). */
+  timezone?: string | undefined;
+  /** The daily rhythm of simulated traffic (the city pack's `life`). */
+  cityLife?: CityLifeConfig | undefined;
   landmarks: readonly Landmark[];
   art: readonly LandmarkArt[];
   tours: readonly Tour[];
@@ -38,6 +49,8 @@ export function CityAtlas({
   subdivisionLabel,
   traffic,
   climate,
+  timezone,
+  cityLife,
   landmarks,
   art,
   tours,
@@ -58,8 +71,10 @@ export function CityAtlas({
         subdivisionLabel={subdivisionLabel}
         traffic={traffic}
         climate={climate}
+        timezone={timezone}
+        cityLife={cityLife}
       />
-      <Hud city={slug} subdivisionLabel={subdivisionLabel} climate={climate} />
+      <Hud city={slug} subdivisionLabel={subdivisionLabel} climate={climate} timezone={timezone} />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
       <HoverTooltip />

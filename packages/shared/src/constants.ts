@@ -15,6 +15,9 @@ export const ATLAS_CLASSES = [
   'road_mid',
   'road_minor',
   'path',
+  // Inserted mid-list: a line class needs an id under 32 to join its neighbors (glyphs/select.ts
+  // class masks). `parking` and `pitch`, never in a mask, moved to the end to make room.
+  'rail',
   'building',
   'building_religious',
   'building_school',
@@ -30,13 +33,14 @@ export const ATLAS_CLASSES = [
   'barrier',
   'entrance',
   'furniture',
-  'parking',
-  'pitch',
   'admin_city',
   'admin_subdivision',
   'place_label',
   // Appended so the classes above keep their renderer ids (glyphs/select.ts class masks).
   'water_stream',
+  'parking',
+  'pitch',
+  'building_station',
 ] as const;
 
 /** The valid range of each camera field (the `CameraState` schema). */
@@ -70,13 +74,14 @@ export type TrafficRoad = (typeof TRAFFIC_ROADS)[number];
 
 /**
  * A city's traffic (the `Traffic` schema): per road class, how common each vehicle type is, as
- * relative weights; the same for boats on rivers and for parked vehicles. What it leaves out
+ * relative weights; the same for boats on rivers and canals and for parked vehicles. What it leaves out
  * uses the renderer's default mix.
  */
 export type TrafficMix = Partial<
   Record<TrafficRoad | 'parked', Partial<Record<VehicleType, number>>>
 > & {
   river?: Partial<Record<BoatType, number>>;
+  canal?: Partial<Record<BoatType, number>>;
 };
 
 /** The years the content can name (the `Year` schema). */

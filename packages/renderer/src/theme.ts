@@ -1,4 +1,5 @@
 import type { RenderClass } from './classes';
+import { personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
 export type ThemeName = 'dark' | 'light';
@@ -96,6 +97,14 @@ export const pathLine = [
   '·',
 ] as const;
 
+/**
+ * Railway track: two rails with crossties (`╪` across, `╫` up and down, drawn as shapes in
+ * glyphs/atlas.ts), joined by the double-line corners and junctions, whose strokes line up with
+ * the rails. An isolated diagonal step is `⫽` / `⑊`, a diagonal track.
+ */
+// prettier-ignore
+export const railLine = ['╪', '╫', '╪', '╚', '╫', '╫', '╔', '╠', '╪', '╝', '╪', '╩', '╗', '╣', '╦', '╬', '⫽', '⑊'] as const;
+
 /** Building outlines at close zoom: the line sets with `□` for a one-cell building. */
 export const singleWall = ['□', ...singleLine.slice(1)] as const;
 export const doubleWall = ['□', ...doubleLine.slice(1)] as const;
@@ -123,6 +132,9 @@ export const sextantGlyphs: readonly string[] = Array.from({ length: 64 }, (_, m
 
 /** Rain (life/wind.ts `RAIN`): straight down, then blown right, then blown left. */
 export const rainGlyphs = ['|', '\\', '/'] as const;
+
+/** A streetlight's head (life/lights.ts), lit warm from dusk, grey when it is out. */
+export const streetlightGlyph = '*';
 
 /** Grass and parks: the rest pattern, then leaning right, leaning left, and flat in the wind. */
 export const grassGlyphs = ['"', "'", ',', '/', '\\', '~'] as const;
@@ -153,6 +165,8 @@ type Palette = Record<
   | 'religious'
   | 'school'
   | 'market'
+  | 'rail'
+  | 'station'
   | 'park'
   | 'trees'
   | 'grass'
@@ -169,6 +183,7 @@ type Palette = Record<
   | 'vehicle'
   | 'person'
   | 'boat'
+  | 'train'
   | 'bird'
   | 'label'
   | 'accent',
@@ -205,6 +220,7 @@ function makeTheme(background: number, c: Palette): Theme {
       road_mid: { kind: 'road', glyphs: singleLine, color: c.roadMid, fill: 0.1 },
       road_minor: { kind: 'road', glyphs: singleLine, color: c.roadMinor, fill: 0.1 },
       path: { kind: 'road', glyphs: pathLine, color: c.path },
+      rail: { kind: 'road', glyphs: railLine, color: c.rail },
       building: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
       building_religious: {
         kind: 'building',
@@ -214,6 +230,7 @@ function makeTheme(background: number, c: Palette): Theme {
       },
       building_school: { kind: 'building', glyphs: buildingRamp, color: c.school, fill: 0.22 },
       building_market: { kind: 'building', glyphs: buildingRamp, color: c.market, fill: 0.22 },
+      building_station: { kind: 'building', glyphs: buildingRamp, color: c.station, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
       building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
       park: { kind: 'grass', glyphs: grassGlyphs, color: c.park, fill: 0.12 },
@@ -237,6 +254,7 @@ function makeTheme(background: number, c: Palette): Theme {
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
       marker_school: { kind: 'single', glyphs: ['⌂'], color: c.school },
       marker_market: { kind: 'single', glyphs: ['$'], color: c.market },
+      marker_station: { kind: 'single', glyphs: ['Ħ'], color: c.station },
       marker_landmark: { kind: 'single', glyphs: ['◆'], color: c.landmark },
       monument: { kind: 'single', glyphs: ['▲'], color: c.monument },
       // Variant 0 is an unknown kind; then palm, needleleaved, broadleaved (classes.ts TREE_KINDS).
@@ -249,10 +267,12 @@ function makeTheme(background: number, c: Palette): Theme {
       pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch, fill: 0.12 },
       // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
       // screen (across, then up or down), a bird by its wing beat. Vehicles take their glyphs
-      // and paints from life/vehicles.ts and `vehiclePaints`; these are the legend's.
+      // and paints from life/vehicles.ts and `vehiclePaints`, and people their figures from
+      // life/people.ts; these are the legend's.
       life_vehicle: { kind: 'single', glyphs: ['▬', '▮'], color: c.vehicle },
       life_person: { kind: 'single', glyphs: ['☺'], color: c.person },
       life_boat: { kind: 'single', glyphs: ['◊'], color: c.boat },
+      life_train: { kind: 'single', glyphs: ['▬', '▮'], color: c.train },
       life_bird: { kind: 'single', glyphs: ['v', '-'], color: c.bird },
     },
   };
@@ -275,6 +295,8 @@ export const themes: Record<ThemeName, Theme> = {
     religious: 0xe2b845,
     school: 0x7ea8e0,
     market: 0xe98a45,
+    rail: 0x9a8f86,
+    station: 0xc8685a,
     park: 0x5aad5a,
     trees: 0x3e9150,
     grass: 0x8cbf5e,
@@ -291,6 +313,7 @@ export const themes: Record<ThemeName, Theme> = {
     vehicle: 0xff7a5c,
     person: 0xf2d7a6,
     boat: 0xe8f4ff,
+    train: 0xf08a2c,
     bird: 0xdfe3ea,
     label: 0xf6f1e4,
     accent: 0xffd35c,
@@ -318,6 +341,8 @@ export const themes: Record<ThemeName, Theme> = {
     religious: 0xa87a00,
     school: 0x2f5f9e,
     market: 0xb85418,
+    rail: 0x5e5048,
+    station: 0x9a3a2c,
     park: 0x3d8a3d,
     trees: 0x2a6e38,
     grass: 0x5f8f2c,
@@ -334,6 +359,7 @@ export const themes: Record<ThemeName, Theme> = {
     vehicle: 0xc2361c,
     person: 0x7a4a1e,
     boat: 0x0d4f6e,
+    train: 0xd06a10,
     bird: 0x3a3f4a,
     label: 0x16130e,
     accent: 0xc2410c,
@@ -361,10 +387,12 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   road_mid: 'Secondary road',
   road_minor: 'Street',
   path: 'Path or alley',
+  rail: 'Railway',
   building: 'Building',
   building_religious: 'Place of worship',
   building_school: 'School',
   building_market: 'Market or shop',
+  building_station: 'Train station',
   building_part: 'Landmark part',
   park: 'Park or plaza',
   trees: 'Woods',
@@ -384,11 +412,13 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   marker_religious: 'Place of worship',
   marker_school: 'School',
   marker_market: 'Market',
+  marker_station: 'Train station',
   marker_landmark: 'Landmark',
   // The life layer is decoration, not data; the legend says so.
   life_vehicle: 'Traffic (simulated)',
   life_person: 'People (simulated)',
   life_boat: 'Boat (simulated)',
+  life_train: 'Train (simulated)',
   life_bird: 'Birds (simulated)',
 };
 
@@ -399,8 +429,8 @@ export const labelCharacters: readonly string[] = [
 ];
 
 /**
- * Every glyph a theme draws on the map, deduplicated: class styles, walls, sextants, and
- * vehicles. They
+ * Every glyph a theme draws on the map, deduplicated: class styles, walls, sextants, vehicles,
+ * and people. They
  * share the map atlas, whose indices must fit the byte-sized glyph table. Labels have their own
  * atlas (`labelCharacters`), at the label cell size.
  */
@@ -412,7 +442,9 @@ export function mapGlyphs(theme: Theme): string[] {
     ...doubleWall,
     ...sextantGlyphs,
     ...vehicleGlyphs(),
+    ...personGlyphs(),
     ...rainGlyphs,
+    streetlightGlyph,
   ];
   for (const g of extras) set.add(g);
   return [...set];

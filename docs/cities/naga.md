@@ -19,6 +19,7 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 | Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |
 | Focus | Plaza Quezon (way/201276958) at z17, between Plaza Rizal and Plaza Quince Martires. The boundary centroid is ~9 km east, on the slopes of Mt. Isarog, so the city needs an explicit focus. |
 | Traffic | Jeepneys and cars lead on major roads, tricycles and motorcycles on secondary and side streets, with some bicycles; bancas on the Naga River; parked cars, motorcycles, and tricycles (`traffic` in `city.json`). This sets the look of the simulated life layer only. It is an impression, not traffic data. |
+| Time zone | `Asia/Manila` (UTC+8, no daylight saving). The life layer's clock, fixed times of day, and seasons follow it. The daily rhythm is the engine's default working day until Naga's own (school hours, Mass times, market hours) is sourced. |
 | Climate | The wind follows the monsoons: the amihan from the northeast (45°) November to March, the habagat from the southwest (225°) June to September, a light easterly between (`climate` in `city.json`, from PAGASA's climate notes). It moves the grass, trees, fields, and water; a storm (chosen in the HUD) brings rain. |
 
 Apart from the downtown region bbox, coordinates, bounds, and the default camera are **not** listed here. The pipeline derives them from OSM (see `DATA.md` §2).
@@ -52,9 +53,11 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 - Founding and key dates for the Basilica Minore, the Naga Metropolitan Cathedral, Plaza Quince Martires, Plaza Rizal, the Naga City Hall, the public market, and the major bridges over the Naga River.
 - Street renamings in the Centro.
-- The Peñafrancia Traslación and fluvial procession routes, including how they changed over time. The fluvial procession (`processions/penafrancia-fluvial.json`) is a draft: it lands at Danlugan ni Ina (OSM node 6791580317), but its start (now a placeholder 1.2 km upstream), direction, date rule (now the Saturday before the third Sunday of September), start time (15:00), duration, and formation all need sources before it can be `verified`.
+- The Peñafrancia Traslación and fluvial procession routes, including how they changed over time. The fluvial procession (`processions/penafrancia-fluvial.json`) is a draft: per the project owner, it departs from Danlugan ni Ina (OSM node 6791580317) and goes up the Naga River to the point nearest the Peñafrancia Basilica (way/23670362). That route needs a published source, and the date rule (now the Saturday before the third Sunday of September), start time (15:00), duration, and formation are placeholders, before it can be `verified`.
+- When the railway (the Manila Railroad's line to Legazpi, now the PNR South Main Line) reached Naga, and when Naga Station (`landmarks/naga-station.json`, no date yet) opened and was rebuilt.
 - Growth of the university belt.
 - Major flood and typhoon events affecting the city.
+- The life layer's schedules (`life.schedules` in `city.json`), which are left out until sourced, so Naga uses the defaults. Mass times at the Naga Metropolitan Cathedral and the Peñafrancia Basilica: third-party listings give the Cathedral's Sunday Masses as 04:30, 06:00, 07:30, 09:00, 10:30, 12:00, 15:30, 17:00, 18:30 and 20:00 ([masstimesph.com](https://masstimesph.com/bicol/camarines-sur/naga-city-st-john-the-evangelist-parish-naga-metropolitan-cathedral/), [philmass.com](https://www.philmass.com/Asia/Philippines/Camarines-Sur/Naga-City/Roman-Catholic-Churches/St.-John-the-Evangelist-Parish-(Naga-Metropolitan-Cathedral)/mass-schedule.html)). These need confirming with the parish, and the weekday Masses still need finding. The city's own page covers only the 2023 fiesta novena. The usual start and end of classes at Naga's public schools also need a source. TODO(verify)
 
 ## 5. Data notes
 

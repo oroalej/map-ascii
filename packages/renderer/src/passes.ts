@@ -16,6 +16,7 @@ import {
   drawExtrusions,
   drawGround,
   uploadLife,
+  uploadLights,
   uploadOverlay,
   type CellTargets,
   type GL,
@@ -34,11 +35,12 @@ import {
 } from './labels';
 import { cellBits, WINDOW } from './life/config';
 import { packLife } from './life/draw';
+import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
 import { EXTENT, type TileLabel } from './raster/geometry';
-import { rainGlyphs, type Theme } from './theme';
+import { rainGlyphs, streetlightGlyph, type Theme } from './theme';
 import type { TileId } from './tiles';
 
 const depths = classDepths();
@@ -469,12 +471,49 @@ export function lifePass(
   return drawn;
 }
 
+/** Reused between frames; replaced when the grid's size changes. */
+let lightTexels = new Uint8Array(0);
+/** The streetlights alone, kept while the grid stands still: beams go over a copy each frame. */
+let lampTexels = new Uint8Array(0);
+
+/**
+ * Put the streetlights and floodlights, the moving vehicles' headlight beams, and the candles
+ * people carry on the cell grid (life/lights.ts) and upload them to the light texture. The lamps
+ * are packed again only with `repack` (the grid moved, or they came on or went) or when the
+ * grid's size changed.
+ */
+export function lightPass(
+  gl: GL,
+  targets: CellTargets,
+  view: View,
+  placement: GridPlacement,
+  lamps: readonly VisibleLamp[],
+  agents: readonly VisibleAgent[],
+  repack: boolean,
+) {
+  const { cols, rows } = targets;
+  const grid = { cols, rows, toCell: placement.toCell };
+  if (lampTexels.length !== cols * rows * 4) {
+    lampTexels = new Uint8Array(cols * rows * 4);
+    lightTexels = new Uint8Array(cols * rows * 4);
+    repack = true;
+  }
+  if (repack) packLights(lampTexels, grid, lamps);
+  lightTexels.set(lampTexels);
+  packBeams(lightTexels, grid, agents);
+  // A cell's size in meters at the view's center sizes the candles.
+  const [cellMeters] = sunUniforms(view, null).u_cellMeters;
+  packCandles(lightTexels, grid, agents, 1 / cellMeters!);
+  uploadLights(gl, targets, lightTexels);
+}
+
 /** The weather over the map: how hard it rains (0–1), in which wind. */
 export type Weather = { rain: number; wind: WindNow | null };
 
 /**
  * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
  * overlay's labels on top, all lit for the time of day (`daylight`, 0 night – 1 day).
+ * `lampShow` is how far the streetlights (`lightPass`) have faded in at this zoom, 0–1.
  */
 export function glyphPass(
   gl: GL,
@@ -489,6 +528,8 @@ export function glyphPass(
   reducedMotion: boolean,
   daylight: number,
   weather: Weather = { rain: 0, wind: null },
+  lampShow = 0,
+  moon = 0,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -522,8 +563,13 @@ export function glyphPass(
     u_attr: targets.attrTex,
     u_tilted: isTilted(view.camera),
     u_daylight: daylight,
+    u_light: targets.lightTex,
+    u_lampShow: lampShow,
+    u_moon: moon,
+    u_lampGlyph: atlas.index(streetlightGlyph),
     u_vehicle: classId('life_vehicle'),
     u_boat: classId('life_boat'),
+    u_train: classId('life_train'),
     u_person: classId('life_person'),
     u_paints: theme.vehiclePaints.flatMap((paint) => rgb(paint)),
     u_rain: weather.rain,

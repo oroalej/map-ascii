@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daylight, fixedSun, solarAltitude, solarPosition } from './sun';
+import { daylight, solarAltitude, solarPosition } from './sun';
 
 // Naga City's Centro.
 const lng = 123.19;
@@ -49,14 +49,6 @@ describe('solarPosition', () => {
   it('agrees with solarAltitude', () => {
     const at = new Date('2026-09-29T02:00:00Z');
     expect(solarPosition(at, lng, lat).altitude).toBe(solarAltitude(at, lng, lat));
-  });
-});
-
-describe('fixedSun', () => {
-  it('lights the fixed day and dusk with canonical suns, and night with none', () => {
-    expect(fixedSun(1)).toEqual({ azimuth: 135, altitude: 60 });
-    expect(fixedSun(0.5)).toEqual({ azimuth: 260, altitude: 10 });
-    expect(fixedSun(0)).toBeNull();
   });
 });
 

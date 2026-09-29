@@ -1,6 +1,13 @@
 'use client';
 
-import { legendEntries, type Atlas, type RenderClass, type WindChoice } from '@atlas/renderer';
+import {
+  cityTime,
+  legendEntries,
+  type Atlas,
+  type LegendIcon,
+  type RenderClass,
+  type WindChoice,
+} from '@atlas/renderer';
 import {
   seasonalWind,
   windArrow,
@@ -57,6 +64,32 @@ function useSubdivisionTracking(city: string) {
   }, [areas, center]);
 }
 
+/** A legend picture drawn pixel by pixel, one run of same-colored pixels per rect. */
+function PixelIcon({ icon }: { icon: LegendIcon }) {
+  const { pixels, paint, tone } = icon;
+  const runs: { x: number; y: number; width: number; fill: string }[] = [];
+  pixels.forEach((row, y) => {
+    for (let x = 0; x < row.length;) {
+      const ink = row[x]!;
+      let end = x + 1;
+      while (row[end] === ink) end++;
+      if (ink !== '.') runs.push({ x, y, width: end - x, fill: ink === '#' ? paint : tone });
+      x = end;
+    }
+  });
+  return (
+    <svg
+      className={styles.icon}
+      viewBox={`0 0 ${pixels[0]?.length ?? 0} ${pixels.length}`}
+      shapeRendering="crispEdges"
+    >
+      {runs.map(({ x, y, width, fill }) => (
+        <rect key={`${x},${y}`} x={x} y={y} width={width} height={1} fill={fill} />
+      ))}
+    </svg>
+  );
+}
+
 function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
   const theme = useAtlasStore((s) => s.theme);
@@ -66,11 +99,15 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
   useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
   const onScreen = present?.atlas === atlas ? present.classes : undefined;
+  // Whether the streetlights are lit, as the renderer last reported (none reported yet: not).
+  const [lit, setLit] = useState<{ atlas: Atlas; on: boolean } | null>(null);
+  useEffect(() => atlas?.on('lightschange', (on) => setLit({ atlas, on })), [atlas]);
+  const lights = lit?.atlas === atlas && lit.on;
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = Math.round(zoom * 20) / 20;
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life }),
-    [theme, rounded, onScreen, life],
+    () => legendEntries(theme, rounded, onScreen, { life, lights }),
+    [theme, rounded, onScreen, life, lights],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
@@ -91,7 +128,9 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
         {entries.map((entry) => (
           <li key={entry.label}>
             <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-              {entry.glyphs}
+              {entry.icons
+                ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                : entry.glyphs}
             </span>
             <span>
               {entry.label === 'Subdivision boundary'
@@ -122,9 +161,11 @@ function useLifeShown() {
 
 const TIME_LABELS: Record<TimeChoice, string> = {
   live: 'Time: live',
-  day: 'Time: day',
-  dusk: 'Time: dusk',
-  night: 'Time: night',
+  dawn: 'Time: 05:30',
+  morning: 'Time: 08:00',
+  noon: 'Time: 12:00',
+  dusk: 'Time: 18:00',
+  night: 'Time: 22:00',
 };
 
 const WIND_TITLES: Record<WindChoice, string> = {
@@ -136,25 +177,37 @@ const WIND_TITLES: Record<WindChoice, string> = {
 };
 
 const noSubscription = () => () => {};
-/** This month (1–12) in the browser; none while rendering on the server (static export). */
-const useMonth = () =>
+/**
+ * This month (1–12) in the city, by its time zone (else the sun's time at `lng`); none while
+ * rendering on the server (static export).
+ */
+const useCityMonth = (timezone: string | undefined, lng: number) =>
   useSyncExternalStore(
     noSubscription,
-    () => new Date().getMonth() + 1,
+    () => cityTime(new Date(), { timezone, lng }).month,
     () => null,
   );
 
 /**
  * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds on or
- * off, the time of day the map is lit for (cycling live → day → dusk → night), and the wind
+ * off, the time of day in the city (cycling live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00), and the wind
  * over grass, trees, and water (live → calm → breeze → gusty → storm), with an arrow the way
  * the season's wind blows.
  */
-function LifeControls({ climate }: { climate?: ClimateConfig | undefined }) {
+function LifeControls({
+  climate,
+  timezone,
+}: {
+  climate?: ClimateConfig | undefined;
+  timezone?: string | undefined;
+}) {
   const enabled = useLifeStore((s) => s.enabled);
   const time = useLifeStore((s) => s.time);
   const wind = useLifeStore((s) => s.wind);
-  const month = useMonth();
+  const month = useCityMonth(
+    timezone,
+    useAtlasStore((s) => s.camera?.lng ?? 0),
+  );
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
   const nextTime = TIME_CHOICES[(TIME_CHOICES.indexOf(time) + 1) % TIME_CHOICES.length]!;
   const nextWind = WIND_CHOICES[(WIND_CHOICES.indexOf(wind) + 1) % WIND_CHOICES.length]!;
@@ -179,7 +232,9 @@ function LifeControls({ climate }: { climate?: ClimateConfig | undefined }) {
         type="button"
         className={styles.button}
         title={
-          time === 'live' ? 'Lit for the real time of day in the city' : 'Lit for a fixed time'
+          time === 'live'
+            ? 'The time of day in the city now'
+            : 'A fixed time of day in the city: its light and its traffic'
         }
         onClick={() => useLifeStore.setState({ time: nextTime })}
       >
@@ -281,10 +336,13 @@ export function Hud({
   city,
   subdivisionLabel,
   climate,
+  timezone,
 }: {
   city: string;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
+  /** The city's IANA time zone (its pack's `timezone`). */
+  timezone?: string | undefined;
 }) {
   useSubdivisionTracking(city);
   const camera = useAtlasStore((s) => s.camera);
@@ -335,7 +393,7 @@ export function Hud({
           <ShareButton />
         </div>
         <div className={styles.row}>
-          <LifeControls climate={climate} />
+          <LifeControls climate={climate} timezone={timezone} />
         </div>
         <ProcessionControls />
       </div>

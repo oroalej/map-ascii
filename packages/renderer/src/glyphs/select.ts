@@ -73,6 +73,7 @@ export const subcellClasses: readonly RenderClass[] = [
   'building_religious',
   'building_school',
   'building_market',
+  'building_station',
   'building_part',
   'water_area',
   'water_sea',
@@ -290,6 +291,7 @@ export const seeThrough: readonly RenderClass[] = [
   'marker_religious',
   'marker_school',
   'marker_market',
+  'marker_station',
   'marker_landmark',
   // Admin boundaries cross buildings and roads without being part of either.
   'admin_city',
@@ -325,6 +327,7 @@ const connectsTo: Partial<Record<RenderClass, readonly RenderClass[]>> = {
   road_minor: roadClasses,
   path: [...roadClasses, 'path'],
   barrier: ['barrier'],
+  rail: ['rail'],
   coastline: ['coastline'],
   admin_city: ['admin_city'],
   admin_subdivision: ['admin_subdivision', 'admin_city'],

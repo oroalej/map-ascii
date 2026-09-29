@@ -47,6 +47,7 @@ export const TYPE_ORDER: readonly SearchType[] = [
   'worship',
   'school',
   'market',
+  'station',
   'monument',
   'place',
 ];
@@ -58,6 +59,7 @@ export const TYPE_LABELS: Readonly<Record<SearchType, string>> = {
   worship: 'Places of worship',
   school: 'Schools',
   market: 'Markets',
+  station: 'Stations',
   monument: 'Monuments',
   place: 'Places',
 };

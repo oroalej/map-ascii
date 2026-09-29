@@ -2,15 +2,24 @@
  * The life layer's tuning (SPEC.md §4 "Life layer"): who moves where, how fast, how many, and
  * from which zoom. Everything is in real-world units, so motion reads the same at any zoom.
  */
-import type { ZoomBand } from '@atlas/shared';
-import { classId, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
+import {
+  curveAt,
+  PLACE_KINDS,
+  placeShare,
+  rhythmFor,
+  type CityLifeConfig,
+  type PlaceKind,
+  type ZoomBand,
+} from '@atlas/shared';
+import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
 
-export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird';
+export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train';
 
 /** The zoom band in which each kind shows. */
 export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   boat: { min: 13.5 },
+  train: { min: 13.5 },
   bird: { min: 13.5 },
   vehicle: { min: 15 },
   person: { min: 17 },
@@ -74,8 +83,35 @@ export const PARKED = {
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
   person: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
-  boat: [LifeLine.river],
+  boat: [LifeLine.river, LifeLine.canal],
+  train: [LifeLine.rail],
 };
+
+/** One train per this many meters of track, on average. */
+export const TRAIN_SPACING_M = 3000;
+
+/**
+ * Trains: a locomotive and `coaches` cars (life/vehicles.ts), `coupling` m apart. At a junction a
+ * train keeps to the straightest track. It stops `dwell` seconds at a station it comes within
+ * `stationReach` m of (then not again within `stationGap` m of that stop), and at the end of the
+ * track, where it pulls back out the way it came.
+ */
+export const TRAIN = {
+  coaches: [2, 4] as const,
+  coupling: 1,
+  dwell: [20, 40] as const,
+  stationReach: 25,
+  stationGap: 150,
+  /** Breadcrumbs along the track behind the head, every this many meters (cars sit on them). */
+  crumb: 2,
+  /** Passed to the next tile, a train must land within this many meters of its track there. */
+  handover: 5,
+  /**
+   * A train standing by on each siding, spur, or yard track: `margin` m in from the siding's
+   * start (clear of the switch), with up to this many coaches, as many as fit.
+   */
+  standby: { margin: 15, coaches: [1, 3] as const },
+} as const;
 
 export type SpawnRule = {
   kind: Exclude<AgentKind, 'bird'>;
@@ -97,11 +133,144 @@ export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
   [LifeLine.path]: [{ kind: 'person', spacing: 20, speed: [0.9, 1.4] }],
   [LifeLine.plaza]: [{ kind: 'person', spacing: 10, speed: [0.6, 1.2] }],
   [LifeLine.river]: [{ kind: 'boat', spacing: 200, speed: [1, 2.5] }],
+  // Canals: a few small boats, slowly (the city's `traffic.canal` mix).
+  [LifeLine.canal]: [{ kind: 'boat', spacing: 250, speed: [0.6, 1.4] }],
+  // Sparse: a train every few kilometers of track, at a provincial line's easy pace.
+  [LifeLine.rail]: [{ kind: 'train', spacing: TRAIN_SPACING_M, speed: [8, 14] }],
+  // Trains stand by on sidings (simulate.ts `spawnStandby`); none run there.
+  [LifeLine.siding]: [],
 };
 
 /** People stop for a while (chance per second, and how long in s), or turn back. */
 export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
+
+/**
+ * Who walks together (life/people.ts): of the people spawned on a line, the shares that walk
+ * alone, in twos, threes, and fours (cumulative); the chance each companion is a child (the
+ * first is always an adult); and how far each step goes, m (the figure alternates its stride).
+ */
+export const PEOPLE = { groups: [0.62, 0.88, 0.97, 1] as const, child: 0.4, stride: 0.7 };
+
+/**
+ * Umbrellas (payong): the share of adults carrying one open, at least `base`, `rain` in a storm,
+ * and against the sun from `sunFrom` degrees of solar altitude, up to `sun` by `sunFull`.
+ */
+export const UMBRELLA = { base: 0.02, rain: 0.75, sun: 0.3, sunFrom: 35, sunFull: 65 } as const;
+
+/** The share of adults under an umbrella for `rain` (0–1) and the sun's altitude (degrees). */
+export function umbrellaShare(rain: number, sunAltitude: number): number {
+  const sun = Math.min(
+    1,
+    Math.max(0, (sunAltitude - UMBRELLA.sunFrom) / (UMBRELLA.sunFull - UMBRELLA.sunFrom)),
+  );
+  return Math.max(UMBRELLA.base, rain * UMBRELLA.rain, sun * UMBRELLA.sun);
+}
+
+/**
+ * Street vendors with their carts: one per this many meters of line (`spacing`), `marketBoost`
+ * times as many on lines within `marketReach` m of a market, at most `maxPerTile`. A cart stands
+ * `curb` m in from a road's edge, or `beside` m off a path or a park's edge, facing along it.
+ */
+export const VENDORS = {
+  spacing: {
+    [LifeLine.plaza]: 80,
+    [LifeLine.path]: 250,
+    [LifeLine.roadMinor]: 300,
+  } as Readonly<Partial<Record<LifeLine, number>>>,
+  marketReach: 120,
+  marketBoost: 5,
+  maxPerTile: 40,
+  curb: 0.9,
+  beside: 1.2,
+} as const;
+
+/**
+ * How people use a place (life/simulate.ts `Gatherer`): stand about and mill (`gather`), sit on a
+ * bench (`sit`), run about a pitch (`play`), or walk the rows of a field with a carabao (`work`).
+ */
+export type PlaceBehavior = 'gather' | 'sit' | 'play' | 'work';
+
+export type PlaceRule = {
+  behavior: PlaceBehavior;
+  /** People at the place: `base` plus `perMeter` per meter of its radius, at most `max`. */
+  base: number;
+  perMeter: number;
+  max: number;
+  /** How far from the place people wander, m past its radius (a building's: around it). */
+  wander: number;
+  /** Walking speed, m/s. */
+  speed: readonly [number, number];
+  /** How long people stand still between moves, s. */
+  pause: readonly [number, number];
+};
+
+/**
+ * People at places (SPEC.md §4 "Places"), by the place's kind. How many are out at a time
+ * follows the place's own hours (rhythm.ts `placeShare`). At most `MAX_TILE_GATHERERS` per tile.
+ */
+export const PLACES: Readonly<Record<PlaceKind, PlaceRule>> = {
+  worship: {
+    behavior: 'gather',
+    base: 4,
+    perMeter: 0.6,
+    max: 40,
+    wander: 8,
+    speed: [0.3, 0.8],
+    pause: [5, 20],
+  },
+  school: {
+    behavior: 'gather',
+    base: 4,
+    perMeter: 0.6,
+    max: 40,
+    wander: 8,
+    speed: [0.4, 1.1],
+    pause: [3, 12],
+  },
+  pitch: {
+    behavior: 'play',
+    base: 4,
+    perMeter: 0.3,
+    max: 14,
+    wander: 0,
+    speed: [1.5, 3.5],
+    pause: [0.5, 3],
+  },
+  monument: {
+    behavior: 'gather',
+    base: 2,
+    perMeter: 0.2,
+    max: 8,
+    wander: 5,
+    speed: [0.3, 0.7],
+    pause: [5, 20],
+  },
+  bench: { behavior: 'sit', base: 1, perMeter: 0, max: 2, wander: 0, speed: [0, 0], pause: [0, 0] },
+  fountain: {
+    behavior: 'gather',
+    base: 3,
+    perMeter: 0,
+    max: 6,
+    wander: 5,
+    speed: [0.3, 0.7],
+    pause: [5, 20],
+  },
+  farm: {
+    behavior: 'work',
+    base: 1,
+    perMeter: 0.02,
+    max: 4,
+    wander: 0,
+    speed: [0.3, 0.5],
+    pause: [2, 6],
+  },
+};
+
+/** At most this many people at places per tile. */
+export const MAX_TILE_GATHERERS = 150;
+/** The share of farm workers who lead a carabao. */
+export const CARABAO_SHARE = 0.5;
 
 /** Birds: flocks per tile (at most one per roost), birds per flock, and how they fly. */
 export const BIRDS = {
@@ -142,7 +311,52 @@ export function activity(kind: AgentKind, daylight: number): number {
       return 0.2 + 0.8 * daylight;
     case 'bird':
       return Math.min(1, Math.max(0, (daylight - 0.2) / 0.5));
+    case 'train':
+      return 0.5 + 0.5 * daylight;
   }
+}
+
+/**
+ * How much of each kind is out (0–1), and of the people at each kind of place: each agent shows
+ * while its rank is below its kind's (or its place's).
+ */
+export type Activity = Readonly<Record<AgentKind, number>> & {
+  places: Readonly<Record<PlaceKind, number>>;
+};
+
+/**
+ * How much of each kind is out: by the city's daily rhythm at `clock.minutes` past local
+ * midnight on `clock.weekday` (the pack's `life.rhythm` and `life.schedules`, else the
+ * defaults, rhythm.ts), or without a clock, by the daylight alone (`activity`). Birds always
+ * follow the daylight.
+ */
+export function activityLevels(
+  daylight: number,
+  clock?: { minutes: number; weekday: number; life?: CityLifeConfig | undefined },
+): Activity {
+  const byRhythm = (kind: 'vehicle' | 'person' | 'boat' | 'train') =>
+    clock ? curveAt(rhythmFor(clock.life, kind), clock.minutes) : activity(kind, daylight);
+  const places = {} as Record<PlaceKind, number>;
+  for (const kind of PLACE_KINDS) {
+    places[kind] = clock ? placeShare(kind, clock, clock.life) : activity('person', daylight);
+  }
+  return {
+    vehicle: byRhythm('vehicle'),
+    person: byRhythm('person'),
+    boat: byRhythm('boat'),
+    train: byRhythm('train'),
+    bird: activity('bird', daylight),
+    places,
+  };
+}
+
+/** Whether two activities differ by more than `epsilon` for any kind or place. */
+export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): boolean {
+  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train'];
+  return (
+    kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
+    PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon)
+  );
 }
 
 /** The render class each kind is drawn with (its glyphs and color, theme.ts). */
@@ -151,6 +365,7 @@ export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
   person: 'life_person',
   boat: 'life_boat',
   bird: 'life_bird',
+  train: 'life_train',
 };
 
 /**
@@ -164,8 +379,14 @@ export const CellBit = {
   bird: 8,
   /** Some cells show a lit window at night. */
   window: 16,
-  /** Warm streetlight at night. */
+  /** Major and secondary roads: a warm lit corridor from dusk, until streetlights show. */
   streetlight: 32,
+  train: 64,
+  /**
+   * Grounds classes (classes.ts `groundClasses`): a church's or a school's grounds, where people
+   * may stand on the cells without a height, never on the buildings.
+   */
+  grounds: 128,
 } as const;
 
 /**
@@ -174,22 +395,70 @@ export const CellBit = {
  */
 export const WINDOW = { bay: 3, storey: 3 } as const;
 
+/**
+ * Streetlights (life/lights.ts) along major and secondary roads, always at the roadside: shown
+ * from `zoom`, one every `spacing` m alternating sides, `setback` m in from the carriageway's
+ * edge (so the head lands on the road, not the buildings beside it) but never nearer the center
+ * line than `minSide` of the half-width, each lighting a pool `radius` m across. None stand in a
+ * divided road's median (another carriageway alongside, `minMedian`–`median` m off). `dead` of
+ * them are out and `flicker` of them flicker.
+ */
+export const STREETLIGHT = {
+  zoom: { min: 15 } as ZoomBand,
+  spacing: 30,
+  setback: 0.5,
+  minSide: 0.7,
+  radius: 12,
+  /** How far in over the road a lamp's arm reaches, m: its pool is centered there. */
+  reach: 3,
+  median: 25,
+  minMedian: 2,
+  /** No two lamps stand nearer than this, m (at junctions and where roads meet). */
+  minGap: 12,
+  dead: 0.1,
+  flicker: 0.1,
+} as const;
+
+/**
+ * Headlight beams (life/lights.ts `packBeams`): a moving vehicle's lights reach `length` m ahead,
+ * the cone widening by `spread` m per m, `strength` at its brightest (0–1).
+ */
+export const BEAM = { length: 14, spread: 0.35, strength: 0.8 } as const;
+
+/** A candle (life/lights.ts `packCandles`): a pool `radius` m across, `strength` at its brightest. */
+export const CANDLE = { radius: 6, strength: 0.85 } as const;
+
+/**
+ * Floodlit landmarks (life/lights.ts): the light washes `spill` m past a landmark's footprint,
+ * counted at most `maxRadius` m from its center (a big campus is lit around its heart, not
+ * whole), `strength` at its brightest; a point landmark counts as `pointRadius` m across.
+ */
+export const FLOOD = { spill: 6, maxRadius: 30, pointRadius: 6, strength: 0.55 } as const;
+
 /** The bit an agent needs on the cell under it. */
 export const agentBit: Readonly<Record<AgentKind, number>> = {
   vehicle: CellBit.vehicle,
   person: CellBit.person,
   boat: CellBit.boat,
   bird: CellBit.bird,
+  train: CellBit.train,
 };
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
 const water = ['water_river', 'water_stream', 'water_area', 'water_sea'];
-const lit = ['building', 'building_religious', 'building_school', 'building_market'];
+const lit = [
+  'building',
+  'building_religious',
+  'building_school',
+  'building_market',
+  'building_station',
+];
 /** Where people can't stand: roofs, water, and walls. */
 const noWalking = new Set([...lit, 'building_part', ...water, 'barrier', 'coastline']);
 
 /**
- * Per class id, the `CellBit`s of its cells. Vehicles keep to roads and boats to water; people
+ * Per class id, the `CellBit`s of its cells. Vehicles keep to roads, trains to track (and the
+ * roads it crosses), and boats to water; people
  * stay off roofs and water; birds fly anywhere. Empty cells (id 0) count as open ground. In the
  * tilted view, a building standing in front of an agent hides it.
  */
@@ -200,10 +469,12 @@ export function cellBits(): Int32Array {
     const id = classId(cls);
     let b = CellBit.bird;
     if (!noWalking.has(cls)) b |= CellBit.person;
-    if (roads.includes(cls)) b |= CellBit.vehicle;
-    if (cls === 'road_major') b |= CellBit.streetlight;
+    if (roads.includes(cls)) b |= CellBit.vehicle | CellBit.train;
+    if (cls === 'rail') b |= CellBit.train;
+    if (cls === 'road_major' || cls === 'road_mid') b |= CellBit.streetlight;
     if (water.includes(cls)) b |= CellBit.boat;
     if (lit.includes(cls)) b |= CellBit.window;
+    if (groundClasses.includes(cls)) b |= CellBit.grounds;
     bits[id] = b;
   }
   return bits;

@@ -1,5 +1,12 @@
 import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
-import type { BBox, CameraState, ClimateConfig, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type {
+  BBox,
+  CameraState,
+  CityLifeConfig,
+  ClimateConfig,
+  ProcessionRoute,
+  TrafficMix,
+} from '@atlas/shared';
 import {
   clampCamera,
   fitZoom,
@@ -43,6 +50,7 @@ import {
   glyphPass,
   hasCrowns,
   lifePass,
+  lightPass,
   overlayPass,
   placeGrid,
   screenArea,
@@ -53,10 +61,20 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
+import { activityChanged, activityLevels, FLOOD, STREETLIGHT, type Activity } from './life/config';
+import {
+  FLOOD_STRIDE,
+  LAMP_STRIDE,
+  LampState,
+  type LampState as LampStateValue,
+  type VisibleLamp,
+} from './life/lights';
+import { moonlight } from './life/moon';
 import { liveProgress } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { treeGust } from './glyphs/select';
-import { daylight as daylightAt, fixedSun, solarPosition, type Sun } from './life/sun';
+import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
   onScreen,
   prevailingWind,
@@ -67,7 +85,7 @@ import {
   type WindNow,
 } from './life/wind';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
-import type { FeatureInfo, TileLabel } from './raster/geometry';
+import { metersPerUnit, tileToLngLat, type FeatureInfo, type TileLabel } from './raster/geometry';
 import { Readback } from './readback';
 import { themes, type ThemeName } from './theme';
 import { TileCache } from './tile-cache';
@@ -75,10 +93,11 @@ import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry } from './legend';
+export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { RenderClass } from './classes';
 export type { WindChoice } from './life/wind';
+export { cityTime, type LocalTime } from './life/clock';
 
 /**
  * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
@@ -88,10 +107,11 @@ export type LifeSettings = {
   /** Show the agents (never with reduced motion, which keeps the map still). */
   enabled: boolean;
   /**
-   * How much daylight the map is lit with: `'live'` for the real sun over the view now, else a
-   * fixed amount from 0 (night) to 1 (day), e.g. 0.5 for dusk.
+   * The time of day in the city: `'live'` for its clock now, else a fixed time, in minutes past
+   * local midnight (today, in the city). The sun lights the map for it, and the daily rhythm
+   * sets how much traffic is out (life/config.ts `activityLevels`).
    */
-  daylight: 'live' | number;
+  time: 'live' | number;
   /**
    * How hard the wind blows over grass, trees, and water: `'live'` for the season's (the city's
    * `climate`), else a strength, from the season's direction.
@@ -132,6 +152,13 @@ export type AtlasOptions = {
   traffic?: TrafficMix;
   /** The city's winds by season (its pack's `climate`); default: a breeze from the east. */
   climate?: ClimateConfig;
+  /**
+   * The city's IANA time zone (its pack's `timezone`), which its clock follows; default: the
+   * sun's time at the middle of `bounds`.
+   */
+  timezone?: string;
+  /** The city's daily rhythm (its pack's `life`); default: `DEFAULT_RHYTHM`. */
+  cityLife?: CityLifeConfig;
   /** The clock for the live time of day (tests pin it). */
   now?: () => Date;
   /**
@@ -176,6 +203,8 @@ export type AtlasEventMap = {
   classeschange: RenderClass[];
   /** A procession started, ended, or went from played to live (null: none is under way). */
   procession: ProcessionRun | null;
+  /** The streetlights came on (dusk or night, close enough to see them) or went (for the legend). */
+  lightschange: boolean;
   /**
    * The names of places, landmarks, and monuments on screen changed (street names aren't
    * included), in placement order: most important first. For a text alternative to the map.
@@ -292,21 +321,28 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const reducedMotion = options.reducedMotion ?? false;
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
-  let life: LifeSettings = { enabled: true, daylight: 'live', wind: 'live', ...options.life };
+  let life: LifeSettings = { enabled: true, time: 'live', wind: 'live', ...options.life };
   const now = options.now ?? (() => new Date());
+  /** Where the city's clock is (life/clock.ts). */
+  const zone: ClockZone = {
+    timezone: options.timezone,
+    lng: (options.bounds[0] + options.bounds[2]) / 2,
+  };
+  /** The city's month now (1–12), which the season's wind follows. */
+  const cityMonth = () => cityTime(now(), zone).month;
   /**
    * The wind at `time` seconds, on the grid's cells: the season's (or the chosen strength),
    * veering and breathing; still with reduced motion. Tilted grids are the screen's, so the
    * direction turns with the bearing.
    */
   const currentWind = (time: number): WindNow => {
-    const base = prevailingWind(life.wind, options.climate, now().getMonth() + 1);
+    const base = prevailingWind(life.wind, options.climate, cityMonth());
     const wind = reducedMotion ? stillWind(base) : windAt(time, base);
     return isTilted(camera) ? { ...wind, dir: onScreen(wind.dir, camera.bearing) } : wind;
   };
   /** How hard it rains now: in a storm (the chosen or the season's), never with reduced motion. */
   const currentRain = (): number =>
-    rainFor(prevailingWind(life.wind, options.climate, now().getMonth() + 1), reducedMotion);
+    rainFor(prevailingWind(life.wind, options.climate, cityMonth()), reducedMotion);
   let theme = themes[options.theme ?? 'dark'];
   let destroyed = false;
   /** The WebGL context is lost: nothing draws, and no GPU handle is valid. */
@@ -449,6 +485,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     labelGrid = labelPlacement.grid;
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
+    syncLamps(tiles);
     const labels = new Map<number, TileLabel>();
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -560,6 +597,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     world.sync(lifeTiles);
   };
 
+  /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
+  let lifeAgents: VisibleAgent[] = [];
   const drawLife = (at: number) => {
     if (!targets || !themeRes || !placement) return;
     let agents: VisibleAgent[] = [];
@@ -576,17 +615,104 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         return wind.strength * treeGust(x, y, time, wind.dir);
       });
       lastLifeStep = at;
-      agents = world.visible(camera.zoom, daylight, [camera.lng, camera.lat]);
+      agents = world.visible(camera.zoom, activity, [camera.lng, camera.lat], {
+        rain: currentRain(),
+        sunAltitude: sun?.altitude ?? 0,
+      });
       reportProcession();
     } else if (!lifeShown) {
       return;
     }
     agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents);
     lifeShown = agents.length > 0;
+    lifeAgents = agents;
   };
 
-  // The time of day the map is lit for (life/sun.ts), worked out again every `SUN_MS`.
+  // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
+  // lighting, like windows, so they show with the life layer off and with reduced motion too.
+  let lamps: VisibleLamp[] = [];
+  /** Whether the light texture holds lamps (so it is cleared once when they go). */
+  let lampsShown = false;
+  const lampShow = () => bandVisibility(STREETLIGHT.zoom, camera.zoom);
+  const syncLamps = (tiles: readonly TileId[]) => {
+    lamps = [];
+    if (lampShow() <= 0) return;
+    for (const tile of tiles) {
+      if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      // Floodlit landmarks: a wash of light over each footprint, and a little past it.
+      const floods = tileCache.get(tile)?.life.floods;
+      for (let i = 0; floods && i < floods.length; i += FLOOD_STRIDE) {
+        const x = floods[i]!;
+        const y = floods[i + 1]!;
+        const perMeter = 1 / metersPerUnit(tile);
+        const reach = Math.min(floods[i + 2]!, FLOOD.maxRadius * perMeter) + FLOOD.spill * perMeter;
+        const at = tileToLngLat(tile, { x, y });
+        lamps.push({
+          lng: at[0],
+          lat: at[1],
+          center: at,
+          pool: at,
+          east: tileToLngLat(tile, { x: x + reach, y }),
+          north: tileToLngLat(tile, { x, y: y - reach }),
+          state: LampState.flood,
+          seed: 0,
+        });
+      }
+      const found = tileCache.get(tile)?.life.lamps;
+      if (!found) continue;
+      const radius = STREETLIGHT.radius / metersPerUnit(tile);
+      for (let i = 0; i < found.length; i += LAMP_STRIDE) {
+        const [lng, lat] = tileToLngLat(tile, { x: found[i]!, y: found[i + 1]! });
+        // The pool, centered out over the road.
+        const x = found[i + 4]!;
+        const y = found[i + 5]!;
+        lamps.push({
+          lng,
+          lat,
+          center: tileToLngLat(tile, { x: found[i + 6]!, y: found[i + 7]! }),
+          pool: tileToLngLat(tile, { x, y }),
+          east: tileToLngLat(tile, { x: x + radius, y }),
+          north: tileToLngLat(tile, { x, y: y - radius }),
+          state: found[i + 2]! as LampStateValue,
+          seed: found[i + 3]!,
+        });
+      }
+    }
+  };
+  /** Whether the light texture holds headlight beams (so they are cleared once they go). */
+  let beamsShown = false;
+  /**
+   * Put the lamps on the grid when it moves or they come on, and the moving vehicles' headlight
+   * beams every frame they are out; clear them once they go. Tells the legend when the lamps
+   * come on or go (`lightschange`).
+   */
+  const drawLights = (cellsDrawn: boolean) => {
+    if (!targets || !placement) return;
+    // Lit from dusk (shaders/glyph.ts `lamps()`).
+    const on = lampShow() > 0 && daylight < 0.75;
+    const beams = on && lifeAgents.length > 0;
+    const changed = on !== lampsShown;
+    if (!changed && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    lightPass(
+      gl,
+      targets,
+      view(),
+      placement,
+      on ? lamps : [],
+      beams ? lifeAgents : [],
+      changed || cellsDrawn,
+    );
+    lampsShown = on;
+    beamsShown = beams;
+    if (changed) emit('lightschange', on);
+  };
+
+  // The time of day the map is lit for (life/sun.ts) and how much traffic is out
+  // (life/config.ts), worked out again every `SUN_MS`.
   let daylight = 1;
+  /** How much moonlight falls (life/moon.ts), 0–1. */
+  let moon = 0;
+  let activity: Activity = activityLevels(1);
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
   let lastSun = -Infinity;
@@ -595,7 +721,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lastSun = at;
     // A procession under way by its schedule, when the map follows the real clock.
     let live: { id: string; progress: number } | undefined;
-    if (life.daylight === 'live') {
+    if (life.time === 'live') {
       for (const route of processions) {
         const progress = liveProgress(route.schedule, now());
         if (progress !== undefined) {
@@ -605,19 +731,31 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
     }
     world.setLive(live?.id, live?.progress);
-    const position =
-      life.daylight === 'live' ? solarPosition(now(), camera.lng, camera.lat) : undefined;
-    const next = position
-      ? daylightAt(position.altitude)
-      : Math.min(1, Math.max(0, life.daylight as number));
-    // Shadows follow the real sun while it is up, or the fixed day's and dusk's.
-    const nextSun = position ? (position.altitude > 0 ? position : null) : fixedSun(next);
+    // The moment the map shows: now, or today at the fixed time in the city.
+    const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
+    const position = solarPosition(moment, camera.lng, camera.lat);
+    const next = daylightAt(position.altitude);
+    const nextMoon = moonlight(moment, camera.lng, camera.lat);
+    const local = cityTime(moment, zone);
+    const nextActivity = activityLevels(next, {
+      minutes: local.minutes,
+      weekday: local.weekday,
+      life: options.cityLife,
+    });
+    // Shadows follow the sun while it is up.
+    const nextSun = position.altitude > 0 ? position : null;
+    const moved = activityChanged(nextActivity, activity);
     if (
+      moved ||
       Math.abs(next - daylight) > 0.001 ||
-      nextSun?.azimuth !== sun?.azimuth ||
-      nextSun?.altitude !== sun?.altitude
+      Math.abs(nextMoon - moon) > 0.001 ||
+      Math.abs((nextSun?.azimuth ?? 0) - (sun?.azimuth ?? 0)) > 0.01 ||
+      Math.abs((nextSun?.altitude ?? 0) - (sun?.altitude ?? 0)) > 0.01 ||
+      !nextSun !== !sun
     ) {
       daylight = next;
+      moon = nextMoon;
+      activity = nextActivity;
       sun = nextSun;
       drawDirty = true;
     }
@@ -744,6 +882,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         sun,
       );
       drawLife(now);
+      drawLights(cellsDrawn);
       glyphPass(
         gl,
         programs,
@@ -757,6 +896,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         reducedMotion,
         daylight,
         { rain: currentRain(), wind },
+        lampShow(),
+        moon,
       );
       drawDirty = false;
       lastDraw = now;

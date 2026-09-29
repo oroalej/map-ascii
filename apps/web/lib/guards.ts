@@ -62,6 +62,10 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
         p.route.length >= 2 &&
         p.route.every((q) => isNumbers(q, 2)) &&
         isNumber(p.length_m) &&
+        (p.banks === undefined ||
+          (Array.isArray(p.banks) &&
+            p.banks.length === p.route.length &&
+            p.banks.every((b) => isNumbers(b, 2)))) &&
         isRecord(p.schedule) &&
         isText(p.schedule.timezone) &&
         isText(p.schedule.start),

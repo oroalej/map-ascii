@@ -145,6 +145,24 @@ describe('boundaries and the coast', () => {
   });
 });
 
+describe('railway track', () => {
+  it('joins only other track, so a level crossing does not merge it into the road', () => {
+    expect(connects('rail', 'rail')).toBe(true);
+    expect(connects('rail', 'road_minor')).toBe(false);
+    expect(connects('road_minor', 'rail')).toBe(false);
+    expect(connects('path', 'rail')).toBe(false);
+  });
+
+  it('draws runs with crossties and turns with the double-line joins', () => {
+    const glyphs = themes.dark.styles.rail!.glyphs;
+    expect(glyphs[Dir.E | Dir.W]).toBe('╪');
+    expect(glyphs[Dir.N | Dir.S]).toBe('╫');
+    expect(glyphs[Dir.S | Dir.E]).toBe('╔');
+    expect(glyphs[Dir.N | Dir.E | Dir.S | Dir.W]).toBe('╬');
+    expect(glyphs[FALLING]).toBe('⑊');
+  });
+});
+
 describe('area patterns', () => {
   it('forms diagonals and rows from world cell coordinates', () => {
     expect([0, 1, 2, 3].map((x) => patternVariant('diagonal', x, 0, 3))).toEqual([0, 1, 2, 0]);

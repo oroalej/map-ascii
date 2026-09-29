@@ -3,6 +3,15 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import {
+  FIGURE_SCALES,
+  FIGURE_TONE,
+  figureOf,
+  figurePixels,
+  MIN_FIGURE_PX,
+  type FigureGlyph,
+} from '../life/people';
+import { STALL_GLYPH } from '../life/vehicles';
 import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
@@ -67,6 +76,49 @@ function drawBox(slot: Slot, [n, e, s, w]: Arms) {
     fill(slot, 0, yt, (n ? xl : xr) + t, yt + t);
     fill(slot, 0, yb, (s ? xl : xr) + t, yb + t);
   }
+}
+
+/**
+ * Railway track (theme.ts `railLine`): two rails with two crossties per cell. The rails sit
+ * where a double line's strokes do (`drawBox`), so they join the double-line corners.
+ */
+function drawTrack(slot: Slot, vertical: boolean) {
+  const { w: cw, h: ch } = slot;
+  const t = Math.max(1, Math.floor(cw / 8));
+  const cx = Math.floor(cw / 2) - Math.floor(t / 2);
+  const cy = Math.floor(ch / 2) - Math.floor(t / 2);
+  const d = Math.max(t + 1, Math.round(cw * 0.18));
+  if (vertical) {
+    fill(slot, cx - d, 0, cx - d + t, ch);
+    fill(slot, cx + d, 0, cx + d + t, ch);
+    for (const f of [0.25, 0.75]) {
+      const y = Math.round(ch * f - t / 2);
+      fill(slot, cx - d - t, y, cx + d + 2 * t, y + t);
+    }
+    return;
+  }
+  fill(slot, 0, cy - d, cw, cy - d + t);
+  fill(slot, 0, cy + d, cw, cy + d + t);
+  for (const f of [0.25, 0.75]) {
+    const x = Math.round(cw * f - t / 2);
+    fill(slot, x, cy - d - t, x + t, cy + d + 2 * t);
+  }
+}
+
+/** A diagonal track: two rails corner to corner (`drawDiagonal`), with a tie across the middle. */
+function drawDiagonalTrack(slot: Slot, rising: boolean) {
+  const { w, h } = slot;
+  const t = Math.max(1, Math.floor(w / 8));
+  const d = Math.max(t + 1, Math.round(w * 0.18));
+  for (let y = 0; y < h; y++) {
+    const along = (y + 0.5) / h;
+    const x = Math.round((rising ? 1 - along : along) * w - t / 2);
+    fill(slot, x - d, y, x - d + t, y + 1);
+    fill(slot, x + d, y, x + d + t, y + 1);
+  }
+  const cx = Math.round(w / 2 - t / 2);
+  const cy = Math.round(h / 2 - t / 2);
+  fill(slot, cx - d - t, cy, cx + d + 2 * t, cy + t);
 }
 
 /** Dashed lines by number of dashes per cell: `┄ ┆` (fences) and `╌ ╎` (city boundary). */
@@ -162,15 +214,60 @@ function drawSextant(slot: Slot, mask: number) {
   }
 }
 
-/** Draw a glyph as shapes into `slot` if it is a box-drawing or block character. */
+/**
+ * A person's figure (life/people.ts), pixel for pixel: paint at full coverage, tone at
+ * `FIGURE_TONE`, which the glyph shader tells apart. A 2×2 figure is laid out over four slots
+ * and this slot gets its `slice` of it. The figure is square, centered in its cell (or cells); a
+ * one-cell figure is its `scale` of the cell's width, but no narrower than `MIN_FIGURE_PX`.
+ */
+function drawFigure(slot: Slot, g: FigureGlyph) {
+  const { data, stride, w, h } = slot;
+  const big = g.slice !== undefined;
+  const width = big ? 2 * w : w;
+  const height = big ? 2 * h : h;
+  const scaled = Math.max(Math.min(w, MIN_FIGURE_PX), Math.round(w * FIGURE_SCALES[g.scale ?? 2]));
+  const box = big ? Math.min(width, height) : Math.min(scaled, h);
+  const ox = Math.floor((width - box) / 2) - (big ? (g.slice! & 1) * w : 0);
+  const oy = Math.floor((height - box) / 2) - (big ? (g.slice! >> 1) * h : 0);
+  const pixel = figurePixels(g, box);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [bx, by] = [x - ox, y - oy];
+      if (bx < 0 || by < 0 || bx >= box || by >= box) continue;
+      const ink = pixel(bx, by);
+      if (ink === '.') continue;
+      data[(slot.y0 + y) * stride + slot.x0 + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
+/** A vendor's cart (life/vehicles.ts `STALL_GLYPH`): a square awning in stripes. */
+function drawStall(slot: Slot) {
+  const { w, h } = slot;
+  const size = Math.max(3, Math.round(w * 0.8));
+  const x0 = Math.floor((w - size) / 2);
+  const y0 = Math.floor((h - size) / 2);
+  for (let y = 0; y < size; y++) {
+    if (y % 3 !== 2) fill(slot, x0, y0 + y, x0 + size, y0 + y + 1);
+  }
+}
+
+/**
+ * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
+ * figure, or a vendor's cart.
+ */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
   else if (dashes[glyph]) drawDashes(slot, dashes[glyph]);
   else if (glyph === '╱' || glyph === '╲') drawDiagonal(slot, glyph === '╱');
+  else if (glyph === '╪' || glyph === '╫') drawTrack(slot, glyph === '╫');
+  else if (glyph === '⫽' || glyph === '⑊') drawDiagonalTrack(slot, glyph === '⫽');
   else if (glyph === '□') drawSquare(slot);
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);
   else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
+  else if (figureOf(glyph)) drawFigure(slot, figureOf(glyph)!);
+  else if (glyph === STALL_GLYPH) drawStall(slot);
   else return false;
   return true;
 }

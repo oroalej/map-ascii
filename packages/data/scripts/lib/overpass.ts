@@ -5,7 +5,11 @@ import { bboxContains, splitOverpassBbox } from './geo';
 /** Public instances, tried in turn on retries. `OVERPASS_URL` pins one. */
 const endpoints = process.env.OVERPASS_URL
   ? [process.env.OVERPASS_URL]
-  : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  : [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass.private.coffee/api/interpreter',
+    ];
 const maxAttempts = 6;
 const retryable = new Set([429, 502, 503, 504]);
 
@@ -76,14 +80,28 @@ export async function overpass(
     console.log(
       `  querying ${new URL(endpoint).host}${attempt > 1 ? ` (attempt ${attempt})` : ''}…`,
     );
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        'user-agent': 'ascii-atlas-data-pipeline',
-      },
-      body: new URLSearchParams({ data: query }),
-    });
+    const wait = async (why: string) => {
+      const waitMs = 10_000 * attempt;
+      console.log(`  ${why}; retrying in ${waitMs / 1000} s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    };
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'user-agent': 'ascii-atlas-data-pipeline',
+        },
+        body: new URLSearchParams({ data: query }),
+      });
+    } catch (error) {
+      // A dropped connection (a busy server resetting it) is as retryable as a 504.
+      if (attempt >= maxAttempts) throw error;
+      const cause = (error as { cause?: { code?: string } }).cause?.code;
+      await wait(`Overpass connection failed${cause ? ` (${cause})` : ''}`);
+      continue;
+    }
     if (response.ok) {
       const text = await response.text();
       const data = JSON.parse(text) as OverpassResponse;
@@ -97,9 +115,7 @@ export async function overpass(
     if (!retryable.has(response.status) || attempt >= maxAttempts) {
       throw new Error(`Overpass HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
     }
-    const waitMs = 10_000 * attempt;
-    console.log(`  Overpass HTTP ${response.status}; retrying in ${waitMs / 1000} s`);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await wait(`Overpass HTTP ${response.status}`);
   }
 }
 

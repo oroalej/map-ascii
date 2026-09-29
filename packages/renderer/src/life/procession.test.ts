@@ -1,9 +1,17 @@
 import type { ProcessionRoute } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { LifeLine, LifeBuilder } from './geometry';
-import { liveProgress, PROCESSION, ProcessionScene, scheduledDay } from './procession';
+import {
+  liveProgress,
+  motionProfile,
+  PROCESSION,
+  ProcessionScene,
+  profileAt,
+  scheduledDay,
+} from './procession';
+import { SHIRT_PAINTS } from './people';
 import { LifeWorld } from './simulate';
-import { BOAT_PAINTS_AVOID, VEHICLES } from './vehicles';
+import { BOAT_PAINTS_AVOID, Paint, VEHICLES } from './vehicles';
 
 /** A straight route 1,000 m due east along the equator (0.001° ≈ 111.3 m). */
 const route: ProcessionRoute = {
@@ -31,49 +39,178 @@ const east = (lng: number) => lng * 111_320;
 
 describe('ProcessionScene', () => {
   const scene = new ProcessionScene(route);
-  const boats = (progress: number) => scene.agents(progress, 0, { crowds: false });
+  const boats = (progress: number, time = 0) =>
+    scene.agents(progress, time, { crowds: false }).filter((a) => !a.line);
+  const lines = (progress: number, time = 0) =>
+    scene.agents(progress, time, { crowds: false }).filter((a) => a.line);
+  /** Meters right of the route (it runs east, so right is south). */
+  const right = (lat: number) => -lat * 110_540;
+  const pagodaEast = (progress: number) =>
+    east(boats(progress).find((a) => a.vehicle === 'pagoda')!.lng);
 
-  it('tows the pagoda behind columns of voyadores, downstream', () => {
-    const agents = boats(0.5);
-    const pagoda = agents.find((a) => a.vehicle === 'pagoda')!;
+  it('tows the pagoda behind loose columns of voyadores, heading along the river', () => {
+    const agents = boats(0.5, 7);
+    const pagoda = pagodaEast(0.5);
     const voyadores = agents.filter((a) => a.vehicle === 'voyador');
     expect(voyadores).toHaveLength(PROCESSION.columns * PROCESSION.ranks);
-    // All ahead of the pagoda, facing downstream (east).
-    expect(voyadores.every((v) => east(v.lng) > east(pagoda.lng))).toBe(true);
-    for (const a of agents) expect(east(a.ahead![0]) - east(a.lng)).toBeCloseTo(1, 1);
-    // Three columns across the river.
-    expect(new Set(voyadores.map((v) => Math.round(v.lat * 110_540))).size).toBe(
-      PROCESSION.columns,
-    );
+    expect(voyadores.every((v) => east(v.lng) > pagoda)).toBe(true);
+    // Facing along the river, give or take their sway.
+    for (const a of agents) expect(east(a.ahead![0]) - east(a.lng)).toBeGreaterThan(0.98);
+    // Three columns across the river, but not in straight lines.
+    const across = voyadores.map((v) => right(v.lat));
+    expect(Math.max(...across) - Math.min(...across)).toBeGreaterThan(PROCESSION.columnGap * 1.5);
+    expect(new Set(across.map((x) => x.toFixed(1))).size).toBeGreaterThan(PROCESSION.columns * 3);
   });
 
   it('enters from the start and ends with the pagoda at the landing', () => {
     expect(boats(0).find((a) => a.vehicle === 'pagoda')).toBeUndefined();
-    const end = boats(1).find((a) => a.vehicle === 'pagoda')!;
-    expect(east(end.lng)).toBeCloseTo(1000, 0);
+    expect(pagodaEast(1)).toBeCloseTo(1000, 0);
     // Nothing is drawn past the landing.
     expect(boats(1).every((a) => east(a.lng) <= 1000.5)).toBe(true);
   });
 
+  it('brings a flotilla of small boats behind the pagoda', () => {
+    const pagoda = pagodaEast(0.7);
+    const small = boats(0.7).filter((a) =>
+      ['baroto', 'rowboat', 'motorboat', 'sailboat'].includes(a.vehicle!),
+    );
+    const behind = small.filter((a) => east(a.lng) < pagoda);
+    expect(behind.length).toBeGreaterThanOrEqual(PROCESSION.followers - 1);
+    expect(new Set(behind.map((a) => a.vehicle)).size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('keeps every hull inside the banks, even where the river is narrow', () => {
+    const narrow = new ProcessionScene({
+      ...route,
+      id: 'procession/narrow',
+      banks: [
+        [4, 6],
+        [4, 6],
+      ],
+    });
+    for (let p = 0; p <= 1; p += 0.02) {
+      for (const a of narrow.agents(p, p * 97, { crowds: false }).filter((x) => !x.line)) {
+        const off = right(a.lat);
+        const half = VEHICLES[a.vehicle!].width / 2;
+        expect(off - half).toBeGreaterThanOrEqual(-4 + PROCESSION.bankMargin - 1e-6);
+        expect(off + half).toBeLessThanOrEqual(6 - PROCESSION.bankMargin + 1e-6);
+      }
+    }
+  });
+
   it('lines the banks with crowds, thickest around the pagoda, some with candles', () => {
     const people = scene.agents(0.5, 0, { boats: false });
-    expect(people.length).toBeGreaterThan(0);
     expect(people.every((p) => p.kind === 'person')).toBe(true);
-    const offsets = people.map((p) => Math.abs(p.lat * 110_540));
-    expect(Math.min(...offsets)).toBeGreaterThanOrEqual(PROCESSION.crowdBand[0] - 1);
-    expect(Math.max(...offsets)).toBeLessThanOrEqual(PROCESSION.crowdBand[1] + 1);
+    // From the default banks back into the town.
+    const bank = PROCESSION.defaultBank;
+    const offsets = people.map((p) => Math.abs(right(p.lat)));
+    expect(Math.min(...offsets)).toBeGreaterThanOrEqual(bank + PROCESSION.crowdDepth[0] - 0.5);
+    expect(Math.max(...offsets)).toBeLessThanOrEqual(bank + PROCESSION.crowdDepth[1] + 0.5);
     expect(people.some((p) => p.candle)).toBe(true);
     expect(people.some((p) => !p.candle)).toBe(true);
-    const pagoda = east(boats(0.5).find((a) => a.vehicle === 'pagoda')!.lng);
-    const near = people.filter((p) => Math.abs(east(p.lng) - pagoda) < 100).length;
-    const far = people.filter((p) => Math.abs(east(p.lng) - (pagoda - 350)) < 100).length;
-    expect(near).toBeGreaterThan(far * 2);
+    // Facing the river, in shirts of many colors.
+    for (const p of people) {
+      expect(Math.abs(right(p.ahead![1]))).toBeLessThan(Math.abs(right(p.lat)));
+      expect(SHIRT_PAINTS).toContain(p.paint);
+    }
+    expect(new Set(people.map((p) => p.paint)).size).toBeGreaterThan(3);
+    const pagoda = scene.pagodaAt(0.5);
+    const far = pagoda > 500 ? pagoda - 300 : pagoda + 300;
+    const count = (at: number) => people.filter((p) => Math.abs(east(p.lng) - at) < 100).length;
+    expect(count(pagoda)).toBeGreaterThan(count(far) * 2);
+  });
+
+  it('tows the pagoda with ropes through each column, taut when stretched, slack at rest', () => {
+    // Meters east and north of the start, from lng/lat.
+    const meters = ([lng, lat]: readonly [number, number]) => [east(lng), lat * 110_540] as const;
+    const ropes = (progress: number) =>
+      lines(progress).filter((a) => a.line!.paints.includes(Paint.cream) && !a.line!.tip);
+    const at = 0.5;
+    expect(ropes(at)).toHaveLength(PROCESSION.columns * PROCESSION.ranks);
+    // Each ends at a voyador's stern: 6 m (half its length) behind its center.
+    const sterns = boats(at)
+      .filter((a) => a.vehicle === 'voyador')
+      .map((v) => {
+        const [x, y] = meters([v.lng, v.lat]);
+        const [ax, ay] = meters(v.ahead!);
+        return [x - (ax - x) * 6, y - (ay - y) * 6] as const;
+      });
+    for (const rope of ropes(at)) {
+      const [ex, ey] = meters(rope.line!.points.at(-1)!);
+      const nearest = Math.min(...sterns.map(([x, y]) => Math.hypot(x - ex, y - ey)));
+      expect(nearest).toBeLessThan(0.5);
+    }
+    // How far a rope bows off its chord, at its middle.
+    const bow = (rope: typeof lines extends (...a: never[]) => (infer T)[] ? T : never) => {
+      const pts = rope.line!.points.map(meters);
+      const [a, b, m] = [pts[0]!, pts.at(-1)!, pts[3]!];
+      const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      return Math.abs((b[0] - a[0]) * (a[1] - m[1]) - (a[0] - m[0]) * (b[1] - a[1])) / d;
+    };
+    // Each rope, over the run: pulled straight at times, sagging at others.
+    const sags: number[][] = [];
+    for (let p = 0.2; p <= 0.8; p += 0.01) {
+      ropes(p).forEach((rope, i) => (sags[i] ??= []).push(bow(rope)));
+    }
+    const both = sags.filter((s) => Math.min(...s) < 0.05 && Math.max(...s) > 0.5);
+    expect(both.length).toBeGreaterThan(sags.length / 2);
+  });
+
+  it('raises striped poles with pennants from the pagoda’s sides', () => {
+    const pagoda = boats(0.5).find((a) => a.vehicle === 'pagoda')!;
+    const poles = lines(0.5).filter((a) => a.line!.tip);
+    expect(poles).toHaveLength(PROCESSION.poles);
+    for (const pole of poles) {
+      expect(pole.line!.tip!.glyph).toBe('¶');
+      expect(pole.line!.paints).toEqual([Paint.yellow, Paint.graphite]);
+      const [lng, lat] = pole.line!.points[0]!;
+      const d = Math.hypot(east(lng) - east(pagoda.lng), (lat - pagoda.lat) * 110_540);
+      expect(d).toBeLessThanOrEqual(
+        Math.hypot(VEHICLES.pagoda.length / 2, VEHICLES.pagoda.width / 2) + 0.5,
+      );
+      // Leaning out past the side.
+      const [tl, tt] = pole.line!.points.at(-1)!;
+      expect(Math.abs((tt - pagoda.lat) * 110_540)).toBeGreaterThan(VEHICLES.pagoda.width / 2);
+      void tl;
+    }
   });
 
   it('paints its boats in colors that stand out from the water', () => {
-    for (const craft of ['pagoda', 'voyador'] as const) {
+    for (const craft of ['pagoda', 'voyador', 'baroto', 'sailboat'] as const) {
       for (const paint of VEHICLES[craft].paints) expect(BOAT_PAINTS_AVOID).not.toContain(paint);
     }
+  });
+});
+
+describe('motion', () => {
+  it('surges and halts, from the start to the end', () => {
+    const table = motionProfile(7, 1000);
+    expect(table[0]).toBe(0);
+    expect(table.at(-1)).toBeCloseTo(1, 12);
+    let flat = 0;
+    for (let i = 1; i < table.length; i++) {
+      expect(table[i]!).toBeGreaterThanOrEqual(table[i - 1]!);
+      if (table[i] === table[i - 1]) flat++;
+    }
+    // At least two halts of 3% or more of the run.
+    expect(flat).toBeGreaterThan(0.06 * (table.length - 1) - 2);
+    // Surges: the pace varies between halts.
+    const steps = Array.from(table.slice(1), (v, i) => v - table[i]!).filter((d) => d > 0);
+    expect(Math.max(...steps) / Math.min(...steps)).toBeGreaterThan(1.5);
+    expect(profileAt(table, 2)).toBe(1);
+  });
+
+  it('sets the lead off first, so the gap to the pagoda stretches and closes', () => {
+    const scene = new ProcessionScene(route);
+    const gaps: number[] = [];
+    for (let p = 0.2; p <= 0.8; p += 0.01) {
+      const agents = scene.agents(p, 0, { crowds: false }).filter((a) => !a.line);
+      const lead = Math.max(
+        ...agents.filter((a) => a.vehicle === 'voyador').map((a) => east(a.lng)),
+      );
+      gaps.push(lead - east(agents.find((a) => a.vehicle === 'pagoda')!.lng));
+    }
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeGreaterThan(2);
   });
 });
 
@@ -125,7 +262,7 @@ describe('LifeWorld processions', () => {
     for (let i = 0; i < 900; i++) world.step(0.1);
     expect(world.procession()).toMatchObject({ id: route.id, live: false });
     expect(world.procession()!.progress).toBeCloseTo(0.5, 1);
-    const agents = world.visible(16, 1, center);
+    const agents = world.visible(16, 1, center).filter((a) => !a.line);
     // Its boats come first, and other river traffic is gone.
     expect(agents[0]!.vehicle).toMatch(/pagoda|voyador|banca|motorboat/);
     expect(agents.some((a) => a.vehicle === 'pagoda')).toBe(true);

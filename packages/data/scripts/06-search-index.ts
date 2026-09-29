@@ -36,6 +36,8 @@ const typeOf = (p: AtlasProperties): SearchType | null => {
       return 'worship';
     case 'building_market':
       return 'market';
+    case 'building_station':
+      return 'station';
     case 'monument':
       return 'monument';
     case 'place_label':
@@ -57,6 +59,7 @@ const zoomHints: Record<SearchType, number> = {
   school: 17,
   worship: 17.5,
   market: 17,
+  station: 17,
   monument: 18.5,
   place: 13,
 };

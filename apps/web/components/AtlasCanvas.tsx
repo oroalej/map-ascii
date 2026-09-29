@@ -3,6 +3,7 @@
 import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
+  type CityLifeConfig,
   type CityMeta,
   type ClimateConfig,
   type ProcessionRoute,
@@ -91,12 +92,16 @@ export function AtlasCanvas({
   subdivisionLabel,
   traffic,
   climate,
+  timezone,
+  cityLife,
 }: {
   slug: string;
   name: string;
   subdivisionLabel: string;
   traffic?: TrafficMix | undefined;
   climate?: ClimateConfig | undefined;
+  timezone?: string | undefined;
+  cityLife?: CityLifeConfig | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Static export renders on the server, where we optimistically assume support.
@@ -137,6 +142,8 @@ export function AtlasCanvas({
       life: lifeSettings(lifePrefs),
       traffic,
       climate,
+      timezone,
+      cityLife,
       processions: processions ?? [],
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
@@ -159,7 +166,7 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [supported, meta, processions, slug, traffic, climate]);
+  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife]);
 
   if (!supported) {
     return (

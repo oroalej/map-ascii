@@ -9,6 +9,7 @@ export const SearchType = z.enum([
   'school',
   'worship',
   'market',
+  'station',
   'monument',
   'place',
 ]);

@@ -5,12 +5,19 @@
  * key when it comes into view, so the same tile always starts with the same agents. Pure TS: the
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
-import { bandVisibility, type ProcessionRoute, type TrafficMix } from '@atlas/shared';
+import {
+  bandVisibility,
+  type PlaceKind,
+  type ProcessionRoute,
+  type TrafficMix,
+} from '@atlas/shared';
 import { EXTENT, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import {
-  activity,
+  activityLevels,
+  type Activity,
   BIRDS,
+  CARABAO_SHARE,
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
@@ -18,22 +25,32 @@ import {
   LIFE_ZOOM,
   MAX_STEP_S,
   MAX_TILE_AGENTS,
+  MAX_TILE_GATHERERS,
   MAX_VISIBLE_AGENTS,
   PARKED,
+  PEOPLE,
   PERSON_PAUSE,
   PERSON_TURN_CHANCE,
+  PLACES,
   ROAD_MARGIN_M,
   spawnRules,
+  TRAIN,
+  umbrellaShare,
   usableLines,
+  VENDORS,
   type AgentKind,
+  type PlaceBehavior,
 } from './config';
-import type { LifeGeometry, LifeLine } from './geometry';
+import { LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
   pickVehicle,
   resolveTraffic,
   trafficRoadFor,
+  TRAIN_PAINTS,
   VEHICLES,
   type CraftType,
+  type RailCraft,
   type ResolvedTraffic,
 } from './vehicles';
 import { PROCESSION, ProcessionScene } from './procession';
@@ -69,7 +86,150 @@ export type Mover = {
   y: number;
   hx: number;
   hy: number;
+  /** Trains: their cars and the track behind the head (`Train`). */
+  train?: Train;
+  /** People: who walks together (the first leads), and how far they have walked, m. */
+  group?: Walker[];
+  walked?: number;
 };
+
+/**
+ * One of a group walking together (config.ts `PEOPLE`): an adult or a child, their shirt, their
+ * umbrella (open while `umbrella` is below the share out under one, config.ts `umbrellaShare`),
+ * their slot beside and behind the first, and which foot they lead with.
+ */
+export type Walker = {
+  figure: 'adult' | 'child';
+  shirt: number;
+  umbrella: number;
+  canopy: number;
+  lateral: number;
+  back: number;
+  step: 0 | 1;
+};
+
+/** Slots in a group: the first, beside them on the right, then behind the two. */
+const GROUP_SLOTS: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [1, 0],
+  [0, 1],
+  [1, 1],
+];
+
+/**
+ * A street vendor (config.ts `VENDORS`): their cart's position and heading (tile units), its
+ * paint, the vendor's shirt, which side of the cart they stand (1 right of the heading, -1
+ * left), and their rank (config.ts `activity`).
+ */
+export type Stall = {
+  x: number;
+  y: number;
+  hx: number;
+  hy: number;
+  paint: number;
+  shirt: number;
+  side: 1 | -1;
+  rank: number;
+};
+
+/**
+ * Someone at a place (config.ts `PLACES`): the place's center and the ring they keep to (tile
+ * units, `inner` to `outer` from it; `inner` is past a building's walls), where they are and
+ * which way they face, where they are walking to, how fast (tile units per second), how long
+ * they stand still, how far they have walked (m), how they look, and their rank (config.ts
+ * `activityLevels`, by place). A farm worker walks the field's rows (`rx`, `ry`, turning at each
+ * end: `sign`), leading a carabao in `carabao`'s paint.
+ */
+export type Gatherer = {
+  place: PlaceKind;
+  behavior: PlaceBehavior;
+  cx: number;
+  cy: number;
+  inner: number;
+  outer: number;
+  x: number;
+  y: number;
+  hx: number;
+  hy: number;
+  tx: number;
+  ty: number;
+  speed: number;
+  pause: number;
+  walked: number;
+  rank: number;
+  walker: Walker;
+  rx: number;
+  ry: number;
+  sign: 1 | -1;
+  carabao?: number;
+};
+
+/**
+ * A train (config.ts `TRAIN`): one mover, its head at the front of the locomotive. Its cars sit
+ * on the breadcrumbs the head leaves along the track, so they follow it round curves and
+ * through junctions.
+ */
+export type Train = {
+  /** Front to back. */
+  cars: RailCraft[];
+  /** Breadcrumbs behind the head, most recent first: x, y pairs in tile units. */
+  trail: number[];
+  /** At the end of the track: when its wait is over, it heads back the way it came. */
+  reverse: boolean;
+  /**
+   * At the end of its tile's copy of the track, past the tile's edge: it waits there, hidden,
+   * for `LifeWorld.step` to hand it to the next tile.
+   */
+  edge: boolean;
+  /** Where it last stopped at a station (tile units), or NaN. */
+  stopX: number;
+  stopY: number;
+};
+
+/** A train's length, m: its cars and the couplings between them. */
+export const trainLength = (cars: readonly RailCraft[]): number =>
+  cars.reduce((sum, car) => sum + VEHICLES[car].length, 0) + (cars.length - 1) * TRAIN.coupling;
+
+/**
+ * The point `distance` along a polyline (x, y pairs), and the heading there, pointing back
+ * toward the polyline's start; null past its end.
+ */
+export function alongTrail(
+  points: readonly number[],
+  distance: number,
+): { x: number; y: number; hx: number; hy: number } | null {
+  let left = distance;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const [ax, ay, bx, by] = [points[i]!, points[i + 1]!, points[i + 2]!, points[i + 3]!];
+    const length = Math.hypot(bx - ax, by - ay);
+    if (length === 0) continue;
+    if (left <= length) {
+      const t = left / length;
+      const [hx, hy] = [(ax - bx) / length, (ay - by) / length];
+      return { x: ax + (bx - ax) * t, y: ay + (by - ay) * t, hx, hy };
+    }
+    left -= length;
+  }
+  return null;
+}
+
+/** A polyline (x, y pairs) cut to its first `length`. */
+export function cutTrail(points: readonly number[], length: number): number[] {
+  const out = points.slice(0, 2);
+  let left = length;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const [ax, ay, bx, by] = [points[i]!, points[i + 1]!, points[i + 2]!, points[i + 3]!];
+    const segment = Math.hypot(bx - ax, by - ay);
+    if (segment >= left) {
+      const t = segment === 0 ? 0 : left / segment;
+      out.push(ax + (bx - ax) * t, ay + (by - ay) * t);
+      return out;
+    }
+    out.push(bx, by);
+    left -= segment;
+  }
+  return out;
+}
 
 /** A parked vehicle: its position and heading (a unit vector) in tile units, kind, and paint. */
 export type Parked = {
@@ -108,9 +268,19 @@ export class TileLife {
   readonly movers: Mover[] = [];
   readonly flocks: Flock[] = [];
   readonly parked: Parked[] = [];
+  /** Trains standing by on sidings: one entry per car (`spawnStandby`). */
+  readonly standby: Parked[] = [];
+  /** Street vendors with their carts (`spawnStalls`). */
+  readonly stalls: Stall[] = [];
+  /** People at places: churches, schools, pitches, benches, fields (`spawnGatherers`). */
+  readonly gatherers: Gatherer[] = [];
   /** Tile units per meter. */
   readonly perMeter: number;
   private readonly rng: () => number;
+  /** How people look and where vendors stand: its own stream, so no one else moves for it. */
+  private readonly looks: () => number;
+  /** People at places: their own stream, so no one else moves for them. */
+  private readonly placeRng: () => number;
   /** Road lines with vehicles parked along their curbs; traffic drives on what is left. */
   private readonly parkingLines = new Set<number>();
   /** Per vertex, the distance along its line from the line's first vertex, in tile units. */
@@ -127,6 +297,8 @@ export class TileLife {
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
+    this.looks = random(seed ^ 0xc2b2ae35);
+    this.placeRng = random(seed ^ 0x27d4eb2f);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
     for (let line = 0; line < lines; line++) {
@@ -139,7 +311,10 @@ export class TileLife {
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
     this.spawnParked(random(seed ^ 0x9e3779b9));
+    this.spawnStandby(random(seed ^ 0x85ebca6b));
     for (let line = 0; line < lines; line++) this.spawnOn(line);
+    this.spawnStalls();
+    this.spawnGatherers();
     this.spawnFlocks();
   }
 
@@ -190,6 +365,13 @@ export class TileLife {
         let vehicle: CraftType | undefined;
         let paint = 0;
         let lane = 0;
+        let train: Train | undefined;
+        if (rule.kind === 'train') {
+          const coaches = Math.round(between(rng, TRAIN.coaches));
+          const cars: RailCraft[] = ['locomotive', ...Array<RailCraft>(coaches).fill('coach')];
+          paint = TRAIN_PAINTS[Math.floor(rng() * TRAIN_PAINTS.length)]!;
+          train = { cars, trail: [], reverse: false, edge: false, stopX: NaN, stopY: NaN };
+        }
         if ((rule.kind === 'vehicle' || rule.kind === 'boat') && road) {
           vehicle = pickVehicle(this.traffic[road], rng());
           const spec = VEHICLES[vehicle];
@@ -213,9 +395,20 @@ export class TileLife {
           y: 0,
           hx: 1,
           hy: 0,
+          train,
         };
+        if (rule.kind === 'person') {
+          mover.group = this.spawnGroup();
+          // Somewhere in their stride, so a crowd doesn't step in time.
+          mover.walked = this.looks() * 2 * PEOPLE.stride;
+        }
         // Start somewhere along the line.
         this.advance(mover, rng() * this.lineLength(line), false);
+        // A train pulls in until the track behind it holds all its cars.
+        if (train) {
+          this.moveTrain(mover, trainLength(train.cars) * this.perMeter);
+          mover.pause = 0;
+        }
         this.movers.push(mover);
       }
     }
@@ -246,6 +439,239 @@ export class TileLife {
     return { x: coords[v * 2]! + hx * t, y: coords[v * 2 + 1]! + hy * t, hx, hy };
   }
 
+  /** Who walks together (config.ts `PEOPLE`): one to four, led by an adult. */
+  private spawnGroup(): Walker[] {
+    const { looks } = this;
+    const pick = (paints: readonly number[]) => paints[Math.floor(looks() * paints.length)]!;
+    const r = looks();
+    const size = PEOPLE.groups.findIndex((upTo) => r < upTo) + 1;
+    return GROUP_SLOTS.slice(0, size).map(([lateral, back], i) => ({
+      figure: i > 0 && looks() < PEOPLE.child ? 'child' : 'adult',
+      shirt: pick(SHIRT_PAINTS),
+      umbrella: looks(),
+      canopy: pick(UMBRELLA_PAINTS),
+      lateral,
+      back,
+      step: looks() < 0.5 ? 0 : 1,
+    }));
+  }
+
+  /**
+   * Street vendors (config.ts `VENDORS`): carts along side streets, paths, and around parks,
+   * more of them near markets, each by a road's curb or beside a path, facing along it.
+   */
+  private spawnStalls() {
+    const { geo, looks, perMeter } = this;
+    const reach = VENDORS.marketReach * perMeter;
+    const nearMarket = (x: number, y: number) => {
+      for (let i = 0; i < geo.markets.length; i += 2) {
+        if (Math.hypot(geo.markets[i]! - x, geo.markets[i + 1]! - y) <= reach) return true;
+      }
+      return false;
+    };
+    const paints = VEHICLES.cart.paints;
+    for (let line = 0; line < geo.kinds.length; line++) {
+      const kind = geo.kinds[line]! as LifeLine;
+      const spacing = VENDORS.spacing[kind];
+      const length = this.along[this.last(line)]!;
+      if (!spacing || length === 0) continue;
+      const middle = this.pointAt(line, length / 2);
+      const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
+      const count = Math.floor(((length / perMeter) * boost) / spacing + looks());
+      for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
+        const p = this.pointAt(line, looks() * length);
+        const side = looks() < 0.5 ? 1 : -1;
+        const offset =
+          kind === LifeLine.roadMinor
+            ? (geo.widths[line] || DEFAULT_ROAD_WIDTH_M) / 2 - VENDORS.curb
+            : VENDORS.beside;
+        // Right of the line's direction for `side` 1; the vendor stands on the far side.
+        const o = offset * perMeter * side;
+        this.stalls.push({
+          x: p.x - p.hy * o,
+          y: p.y + p.hx * o,
+          hx: p.hx,
+          hy: p.hy,
+          paint: paints[Math.floor(looks() * paints.length)]!,
+          shirt: SHIRT_PAINTS[Math.floor(looks() * SHIRT_PAINTS.length)]!,
+          side,
+          rank: looks(),
+        });
+      }
+    }
+  }
+
+  /**
+   * People at places (config.ts `PLACES`): around churches and schools (on their grounds, or
+   * around their buildings), running about pitches, at monuments and fountains, on benches, and
+   * working the fields, at most `MAX_TILE_GATHERERS`. At a school, most are children.
+   */
+  private spawnGatherers() {
+    const { geo, perMeter } = this;
+    const rng = this.placeRng;
+    for (let i = 0; i < geo.places.length; i += PLACE_STRIDE) {
+      const place = PLACE_CODES[geo.places[i + 2]!];
+      if (!place) continue;
+      const rule = PLACES[place];
+      const cx = geo.places[i]!;
+      const cy = geo.places[i + 1]!;
+      const radius = geo.places[i + 3]!;
+      // Around a building, a monument, or a fountain, never on it; else anywhere on the area.
+      const around = geo.places[i + 4] === 1 || place === 'monument' || place === 'fountain';
+      const inner = around ? radius + 1.5 * perMeter : 0;
+      const outer = around ? radius + (1.5 + rule.wander) * perMeter : radius * 0.85;
+      const count = Math.min(
+        rule.max,
+        Math.floor(rule.base + (rule.perMeter * radius) / perMeter + rng()),
+      );
+      const row = rng() * Math.PI;
+      for (let n = 0; n < count && this.gatherers.length < MAX_TILE_GATHERERS; n++) {
+        const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
+        const g: Gatherer = {
+          place,
+          behavior: rule.behavior,
+          cx,
+          cy,
+          inner,
+          outer,
+          x: cx,
+          y: cy,
+          hx: 1,
+          hy: 0,
+          tx: cx,
+          ty: cy,
+          speed: between(rng, rule.speed) * perMeter,
+          pause: between(rng, rule.pause),
+          walked: 0,
+          rank: rng(),
+          walker: {
+            figure,
+            shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
+            umbrella: rng(),
+            canopy: UMBRELLA_PAINTS[Math.floor(rng() * UMBRELLA_PAINTS.length)]!,
+            lateral: 0,
+            back: 0,
+            step: rng() < 0.5 ? 0 : 1,
+          },
+          rx: Math.cos(row),
+          ry: Math.sin(row),
+          sign: rng() < 0.5 ? 1 : -1,
+        };
+        if (g.behavior === 'sit') {
+          // Side by side on the bench.
+          g.x = cx + (n - (count - 1) / 2) * 0.5 * perMeter;
+        } else {
+          const a = rng() * Math.PI * 2;
+          const d = Math.sqrt(inner * inner + rng() * (outer * outer - inner * inner));
+          g.x = cx + Math.cos(a) * d;
+          g.y = cy + Math.sin(a) * d;
+          g.hx = -Math.sin(a);
+          g.hy = Math.cos(a);
+          if (g.behavior === 'work') {
+            g.hx = g.rx;
+            g.hy = g.ry;
+            if (rng() < CARABAO_SHARE) {
+              const paints = VEHICLES.carabao.paints;
+              g.carabao = paints[Math.floor(rng() * paints.length)]!;
+            }
+          }
+          this.nextTarget(g);
+        }
+        this.gatherers.push(g);
+      }
+    }
+  }
+
+  /**
+   * Where someone at a place walks next: across the pitch (players); to the end of their row,
+   * then along the next row over, back the other way (farm workers); or a few meters round the
+   * building, monument, or fountain they stand by, or across the grounds they stand on.
+   */
+  private nextTarget(g: Gatherer) {
+    const rng = this.placeRng;
+    const { perMeter } = this;
+    const reach = 8 * perMeter;
+    switch (g.behavior) {
+      case 'sit':
+        return;
+      case 'play': {
+        const a = rng() * Math.PI * 2;
+        const d = Math.sqrt(rng()) * g.outer;
+        g.tx = g.cx + Math.cos(a) * d;
+        g.ty = g.cy + Math.sin(a) * d;
+        return;
+      }
+      case 'work': {
+        // The next row over, then to its end in the new direction (at most 40 m on).
+        g.sign = g.sign === 1 ? -1 : 1;
+        let x = g.x - g.ry * 2 * perMeter;
+        let y = g.y + g.rx * 2 * perMeter;
+        if (Math.hypot(x - g.cx, y - g.cy) > g.outer) {
+          // Out of the field: start again from the middle row.
+          x = g.cx;
+          y = g.cy;
+        }
+        const qx = x - g.cx;
+        const qy = y - g.cy;
+        const b = qx * g.rx + qy * g.ry;
+        const disc = b * b - (qx * qx + qy * qy - g.outer * g.outer);
+        const end = disc > 0 ? -b + g.sign * Math.sqrt(disc) : 0;
+        const t = Math.max(-40 * perMeter, Math.min(40 * perMeter, end));
+        g.tx = x + g.rx * t;
+        g.ty = y + g.ry * t;
+        return;
+      }
+      case 'gather': {
+        if (g.inner > 0) {
+          // A few meters round the ring, at a new distance from the walls.
+          const at = Math.atan2(g.y - g.cy, g.x - g.cx);
+          const a = at + ((rng() * 2 - 1) * reach) / Math.max(g.inner, perMeter);
+          const d = g.inner + rng() * (g.outer - g.inner);
+          g.tx = g.cx + Math.cos(a) * d;
+          g.ty = g.cy + Math.sin(a) * d;
+        } else {
+          // Towards a spot on the grounds, at most `reach` away.
+          const a = rng() * Math.PI * 2;
+          const d = Math.sqrt(rng()) * g.outer;
+          const dx = g.cx + Math.cos(a) * d - g.x;
+          const dy = g.cy + Math.sin(a) * d - g.y;
+          const k = Math.min(1, reach / (Math.hypot(dx, dy) || 1));
+          g.tx = g.x + dx * k;
+          g.ty = g.y + dy * k;
+        }
+        return;
+      }
+    }
+  }
+
+  /** People at places walk to their next spot, and stand there a while (`PLACES` `pause`). */
+  private stepGatherers(dt: number) {
+    const rng = this.placeRng;
+    for (const g of this.gatherers) {
+      if (g.behavior === 'sit') continue;
+      if (g.pause > 0) {
+        g.pause -= dt;
+        continue;
+      }
+      const dx = g.tx - g.x;
+      const dy = g.ty - g.y;
+      const dist = Math.hypot(dx, dy);
+      const move = g.speed * dt;
+      if (dist <= move) {
+        g.x = g.tx;
+        g.y = g.ty;
+        g.pause = between(rng, PLACES[g.place].pause);
+        this.nextTarget(g);
+        continue;
+      }
+      g.hx = dx / dist;
+      g.hy = dy / dist;
+      g.x += g.hx * move;
+      g.y += g.hy * move;
+      g.walked += move / this.perMeter;
+    }
+  }
+
   /**
    * Parked vehicles (config.ts `PARKED`): on parking lots' stalls, and along both curbs of
    * some wide roads, facing the traffic on their side.
@@ -268,7 +694,8 @@ export class TileLife {
     for (let line = 0; line < geo.kinds.length; line++) {
       const road = trafficRoadFor[geo.kinds[line]! as LifeLine];
       const width = geo.widths[line] ?? 0;
-      if (!road || road === 'river' || width < PARKED.minWidth || rng() >= PARKED.chance) continue;
+      const onWater = road === 'river' || road === 'canal';
+      if (!road || onWater || width < PARKED.minWidth || rng() >= PARKED.chance) continue;
       this.parkingLines.add(line);
       const length = this.along[this.last(line)]!;
       for (const side of [1, -1]) {
@@ -284,6 +711,38 @@ export class TileLife {
           // Right of the line's own direction for `side` 1, facing along it; left, facing back.
           park(p.x - p.hy * offset, p.y + p.hx * offset, p.hx * side, p.hy * side, vehicle);
         }
+      }
+    }
+  }
+
+  /**
+   * A train standing by on each siding, spur, or yard track (config.ts `TRAIN.standby`): a
+   * locomotive and as many coaches as fit, from `margin` m in from the siding's start. A siding
+   * belongs to the tile holding its first vertex, so each gets one train, however many tiles'
+   * buffers it reaches into.
+   */
+  private spawnStandby(rng: () => number) {
+    const { geo, perMeter } = this;
+    const { margin, coaches } = TRAIN.standby;
+    for (let line = 0; line < geo.kinds.length; line++) {
+      if (geo.kinds[line] !== LifeLine.siding) continue;
+      const x = geo.coords[this.first(line) * 2]!;
+      const y = geo.coords[this.first(line) * 2 + 1]!;
+      if (x < 0 || x >= EXTENT || y < 0 || y >= EXTENT) continue;
+      const cars: RailCraft[] = [
+        'locomotive',
+        ...Array<RailCraft>(Math.round(between(rng, coaches))).fill('coach'),
+      ];
+      const paint = TRAIN_PAINTS[Math.floor(rng() * TRAIN_PAINTS.length)]!;
+      const room = this.along[this.last(line)]! / perMeter - margin;
+      let at = margin;
+      for (const car of cars) {
+        const { length } = VEHICLES[car];
+        if (at + length > room) break;
+        const p = this.pointAt(line, (at + length / 2) * perMeter);
+        // Facing back toward the siding's start, the way it would pull out.
+        this.standby.push({ x: p.x, y: p.y, hx: -p.hx, hy: -p.hy, vehicle: car, paint });
+        at += length + TRAIN.coupling;
       }
     }
   }
@@ -342,6 +801,8 @@ export class TileLife {
       if (atEnd) {
         if (junctions) this.turn(m);
         else m.dir = m.dir === 1 ? -1 : 1;
+        // A train at the end of the track stops there (`step` turns it round).
+        if (m.train?.reverse || m.train?.edge) break;
       }
     }
     const to = m.from + m.dir;
@@ -365,13 +826,176 @@ export class TileLife {
     );
     if (options.length === 0) {
       m.dir = m.dir === 1 ? -1 : 1;
+      if (m.train) {
+        // A real end of the track: it waits, then heads back. Past the tile's edge, the track
+        // only ends where the tile's copy of it was cut: it runs on in the next tile.
+        const { coords } = this.geo;
+        const x = coords[m.from * 2]!;
+        const y = coords[m.from * 2 + 1]!;
+        if (x >= 0 && x < EXTENT && y >= 0 && y < EXTENT) {
+          m.train.reverse = true;
+          m.pause = between(this.rng, TRAIN.dwell);
+        } else {
+          m.train.edge = true;
+        }
+      }
       return;
     }
-    const code = options[Math.floor(this.rng() * options.length)]!;
+    const code = m.train
+      ? this.straightest(m, options)
+      : options[Math.floor(this.rng() * options.length)]!;
     m.line = code >> 1;
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
     m.dir = fromStart ? 1 : -1;
+  }
+
+  /** Of the line ends meeting at a mover's vertex, the one carrying on straightest. */
+  private straightest(m: Mover, options: readonly number[]): number {
+    const { coords } = this.geo;
+    const back = m.from - m.dir;
+    const inX = coords[m.from * 2]! - coords[back * 2]!;
+    const inY = coords[m.from * 2 + 1]! - coords[back * 2 + 1]!;
+    let best = options[0]!;
+    let bestScore = -Infinity;
+    for (const code of options) {
+      const line = code >> 1;
+      const fromStart = (code & 1) === 0;
+      const a = fromStart ? this.first(line) : this.last(line);
+      const b = fromStart ? a + 1 : a - 1;
+      const outX = coords[b * 2]! - coords[a * 2]!;
+      const outY = coords[b * 2 + 1]! - coords[a * 2 + 1]!;
+      const norm = Math.hypot(inX, inY) * Math.hypot(outX, outY) || 1;
+      const score = (inX * outX + inY * outY) / norm;
+      if (score > bestScore) {
+        bestScore = score;
+        best = code;
+      }
+    }
+    return best;
+  }
+
+  /** Move a train on `distance` tile units, leaving breadcrumbs for its cars. */
+  private moveTrain(m: Mover, distance: number) {
+    const train = m.train!;
+    const crumb = TRAIN.crumb * this.perMeter;
+    for (let left = distance; left > 0 && !train.reverse; left -= crumb) {
+      const [px, py] = [m.x, m.y];
+      this.advance(m, Math.min(left, crumb));
+      const [tx, ty] = train.trail.length ? [train.trail[0]!, train.trail[1]!] : [px, py];
+      if (train.trail.length === 0 || Math.hypot(m.x - tx, m.y - ty) >= crumb) {
+        train.trail.unshift(px, py);
+      }
+    }
+    // Keep only as much track as the cars need.
+    const keep = (trainLength(train.cars) + 2 * TRAIN.crumb) * this.perMeter;
+    const { trail } = train;
+    let length = trail.length ? Math.hypot(m.x - trail[0]!, m.y - trail[1]!) : 0;
+    for (let i = 0; i + 3 < trail.length; i += 2) {
+      if (length > keep) {
+        trail.length = i + 2;
+        break;
+      }
+      length += Math.hypot(trail[i + 2]! - trail[i]!, trail[i + 3]! - trail[i + 1]!);
+    }
+  }
+
+  /**
+   * A train at the end of the track heads back the way it came: its head moves to where its
+   * tail was, and the track it stood on is now behind it.
+   */
+  private reverseTrain(m: Mover) {
+    const train = m.train!;
+    const length = trainLength(train.cars) * this.perMeter;
+    const body = cutTrail([m.x, m.y, ...train.trail], length);
+    train.reverse = false;
+    // `turn` already pointed it back along the line.
+    this.advance(m, length);
+    const back: number[] = [];
+    for (let i = body.length - 2; i >= 0; i -= 2) back.push(body[i]!, body[i + 1]!);
+    train.trail = back.slice(2);
+  }
+
+  /** Take out the trains whose head has left the tile, for `LifeWorld.step` to hand over. */
+  takeLeavers(): Mover[] {
+    const out: Mover[] = [];
+    for (let i = this.movers.length - 1; i >= 0; i--) {
+      const m = this.movers[i]!;
+      if (!m.train || (m.x >= 0 && m.x < EXTENT && m.y >= 0 && m.y < EXTENT)) continue;
+      out.push(m);
+      this.movers.splice(i, 1);
+    }
+    return out;
+  }
+
+  /**
+   * Take over a train from the neighboring tile (`dx`, `dy` tiles over), on this tile's copy of
+   * the track, going the same way. Returns false (and the train is lost) if this tile has no
+   * track near where it arrives.
+   */
+  adopt(m: Mover, dx: number, dy: number): boolean {
+    const train = m.train!;
+    const [ox, oy] = [dx * EXTENT, dy * EXTENT];
+    const hx0 = train.trail.length ? m.x - train.trail[0]! : m.hx;
+    const hy0 = train.trail.length ? m.y - train.trail[1]! : m.hy;
+    const x = m.x - ox;
+    const y = m.y - oy;
+    const { coords, kinds } = this.geo;
+    let best: { v: number; line: number; t: number; distance: number } | undefined;
+    for (let line = 0; line < kinds.length; line++) {
+      if (kinds[line] !== LifeLine.rail) continue;
+      for (let v = this.first(line); v < this.last(line); v++) {
+        const [ax, ay] = [coords[v * 2]!, coords[v * 2 + 1]!];
+        const [sx, sy] = [coords[(v + 1) * 2]! - ax, coords[(v + 1) * 2 + 1]! - ay];
+        const length2 = sx * sx + sy * sy;
+        if (length2 === 0) continue;
+        const t = Math.max(0, Math.min(1, ((x - ax) * sx + (y - ay) * sy) / length2));
+        const distance = Math.hypot(ax + sx * t - x, ay + sy * t - y);
+        if (!best || distance < best.distance) best = { v, line, t, distance };
+      }
+    }
+    if (!best || best.distance > TRAIN.handover * this.perMeter) return false;
+    const { v, line, t } = best;
+    const length = this.segment(v, v + 1);
+    const forward =
+      hx0 * (coords[(v + 1) * 2]! - coords[v * 2]!) +
+        hy0 * (coords[(v + 1) * 2 + 1]! - coords[v * 2 + 1]!) >=
+      0;
+    m.line = line;
+    m.dir = forward ? 1 : -1;
+    m.from = forward ? v : v + 1;
+    m.d = (forward ? t : 1 - t) * length;
+    train.trail = train.trail.map((value, i) => value - (i % 2 === 0 ? ox : oy));
+    train.stopX -= ox;
+    train.stopY -= oy;
+    train.edge = false;
+    train.reverse = false;
+    m.pause = 0;
+    // Places it on the segment and sets its heading.
+    this.advance(m, 0);
+    this.movers.push(m);
+    return true;
+  }
+
+  /** Whether a train has come to a station it hasn't just stopped at (and if so, stops there). */
+  private atStation(m: Mover): boolean {
+    const train = m.train!;
+    const { stations } = this.geo;
+    const reach = TRAIN.stationReach * this.perMeter;
+    // Pulling out of its last stop; once well clear of it, it may stop there again on its way
+    // back.
+    if (Math.hypot(m.x - train.stopX, m.y - train.stopY) < TRAIN.stationGap * this.perMeter) {
+      return false;
+    }
+    train.stopX = train.stopY = NaN;
+    for (let i = 0; i < stations.length; i += 2) {
+      if (Math.hypot(stations[i]! - m.x, stations[i + 1]! - m.y) <= reach) {
+        train.stopX = m.x;
+        train.stopY = m.y;
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -430,6 +1054,20 @@ export class TileLife {
     const { rng } = this;
     const speeds = this.followSpeeds();
     for (const [i, m] of this.movers.entries()) {
+      if (m.train) {
+        if (m.train.edge) continue;
+        if (m.pause > 0) {
+          m.pause -= dt;
+          continue;
+        }
+        if (m.train.reverse) this.reverseTrain(m);
+        if (this.atStation(m)) {
+          m.pause = between(rng, TRAIN.dwell);
+          continue;
+        }
+        this.moveTrain(m, m.speed * dt);
+        continue;
+      }
       if (m.kind === 'person') {
         if (m.pause > 0) {
           m.pause -= dt;
@@ -445,10 +1083,17 @@ export class TileLife {
           m.d = this.segment(m.from, to) - m.d;
           m.from = to;
           m.dir = m.dir === 1 ? -1 : 1;
+          // The group turns round where it stands: the one on the right is now on the left.
+          for (const walker of m.group ?? []) {
+            walker.lateral = -walker.lateral;
+            walker.back = -walker.back;
+          }
         }
+        m.walked = (m.walked ?? 0) + (speeds[i]! * dt) / this.perMeter;
       }
       this.advance(m, speeds[i]! * dt);
     }
+    this.stepGatherers(dt);
     this.stepFlocks(dt, gustAt);
   }
 
@@ -528,6 +1173,32 @@ export class TileLife {
   }
 }
 
+/** A train's cars to draw, front to back, each on the track behind the head. */
+export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
+  const { tile, perMeter } = life;
+  const trail = [m.x, m.y, ...m.train!.trail];
+  const out: VisibleAgent[] = [];
+  let back = 0;
+  for (const car of m.train!.cars) {
+    const { length } = VEHICLES[car];
+    const at = alongTrail(trail, (back + length / 2) * perMeter);
+    back += length + TRAIN.coupling;
+    if (!at) break;
+    const [lng, lat] = tileToLngLat(tile, at);
+    out.push({
+      kind: 'train',
+      lng,
+      lat,
+      ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
+      side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
+      vehicle: car,
+      paint: m.paint,
+      flap: 0,
+    });
+  }
+  return out;
+}
+
 /** An agent to draw. */
 export type VisibleAgent = {
   kind: AgentKind;
@@ -545,13 +1216,33 @@ export type VisibleAgent = {
   parked?: boolean;
   /** People: holding a candle (lit at dusk and night). */
   candle?: boolean;
+  /**
+   * People walking together, or a vendor beside their cart (life/draw.ts `drawPeople`). Without
+   * it, a person is one adult in `paint` (or the theme's person color), stepping with `flap`.
+   */
+  people?: readonly PersonLook[];
+  /**
+   * A line over the water instead of a boat (life/draw.ts `drawLine`): a rope or a pole, as
+   * [lng, lat] points, its cells painted in turn from `paints`, and a glyph at its tip.
+   */
+  line?: LifeLineShape;
   /** Birds: which wing glyph (0 or 1). */
   flap: number;
 };
 
 export type LifeTile = { key: string; tile: TileId; life: LifeGeometry };
 
+/** The weather people react to: how hard it rains (0–1) and the sun's altitude (degrees). */
+export type LifeWeather = { rain: number; sunAltitude: number };
+
 /** Every tile's agents: kept in step with the tiles on screen. */
+/** A line the life layer draws over the water (`VisibleAgent.line`). */
+export type LifeLineShape = {
+  points: readonly [number, number][];
+  paints: readonly number[];
+  tip?: { glyph: string; paint: number };
+};
+
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
@@ -602,6 +1293,18 @@ export class LifeWorld {
         : undefined;
       tile.step(clamped, inTile);
     }
+    // Trains run on from tile to tile; one leaving the tiles on screen is gone.
+    const leaving = [...this.tiles.values()].flatMap((tile) =>
+      tile.takeLeavers().map((m) => ({ from: tile.tile, m })),
+    );
+    for (const { from, m } of leaving) {
+      const dx = m.x < 0 ? -1 : m.x >= EXTENT ? 1 : 0;
+      const dy = m.y < 0 ? -1 : m.y >= EXTENT ? 1 : 0;
+      const next = [...this.tiles.values()].find(
+        ({ tile }) => tile.z === from.z && tile.x === from.x + dx && tile.y === from.y + dy,
+      );
+      next?.adopt(m, dx, dy);
+    }
   }
 
   /** The city's processions (its `<slug>.processions.json`). */
@@ -611,7 +1314,7 @@ export class LifeWorld {
     if (this.played && !this.scenes.has(this.played.id)) this.played = undefined;
   }
 
-  /** Play a procession from its start, as a time-lapse (`PROCESSION.playSeconds`). */
+  /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
   play(id: string): boolean {
     if (!this.scenes.has(id)) return false;
     this.played = { id, start: this.clock };
@@ -630,7 +1333,8 @@ export class LifeWorld {
   /** The procession to show: one being played, else a live one. */
   procession(): ProcessionRun | undefined {
     if (this.played) {
-      const progress = (this.clock - this.played.start) / PROCESSION.playSeconds;
+      const duration = this.scenes.get(this.played.id)!.playDuration;
+      const progress = (this.clock - this.played.start) / duration;
       if (progress < 1) return { id: this.played.id, progress, live: false };
       this.played = undefined;
     }
@@ -643,12 +1347,22 @@ export class LifeWorld {
 
   /**
    * The agents to draw at `zoom` and time of day: those whose kind shows at the zoom and who
-   * are out (config.ts `activity`), movers only inside their own tile (tiles overlap in their
-   * buffers), at most `MAX_VISIBLE_AGENTS`, nearest `center` first.
+   * are out (config.ts `activityLevels`), movers only inside their own tile (tiles overlap in their
+   * buffers), at most `MAX_VISIBLE_AGENTS`, nearest `center` first. The `weather` opens
+   * umbrellas (config.ts `umbrellaShare`).
    */
-  visible(zoom: number, daylight: number, center: [number, number]): VisibleAgent[] {
+  visible(
+    zoom: number,
+    levelsOrDaylight: Activity | number,
+    center: [number, number],
+    weather: LifeWeather = { rain: 0, sunAltitude: 0 },
+  ): VisibleAgent[] {
+    // A bare number is the daylight, with no clock (config.ts `activityLevels`).
+    const levels =
+      typeof levelsOrDaylight === 'number' ? activityLevels(levelsOrDaylight) : levelsOrDaylight;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
     const scene = run && this.scenes.get(run.id)!;
@@ -661,9 +1375,13 @@ export class LifeWorld {
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       for (const m of life.movers) {
-        if (!shows(m.kind) || m.rank >= activity(m.kind, daylight)) continue;
+        if (!shows(m.kind) || m.rank >= levels[m.kind]) continue;
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
+        if (m.train) {
+          out.push(...trainCars(life, m));
+          continue;
+        }
         // Keep right, in a lane that fits the road: offset to the right of the heading (tile y
         // points down).
         const lane = life.offsetOf(m) * perMeter;
@@ -683,8 +1401,76 @@ export class LifeWorld {
             paint: m.paint,
             flap: 0,
           });
+        } else if (m.group) {
+          const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
+          const people = m.group.map((w): PersonLook => ({
+            figure: w.figure === 'adult' && w.umbrella < umbrellas ? 'umbrella' : w.figure,
+            paint: w.figure === 'adult' && w.umbrella < umbrellas ? w.canopy : w.shirt,
+            lateral: w.lateral,
+            back: w.back,
+            // Standing still, feet together.
+            flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+          }));
+          out.push({ kind: m.kind, lng, lat, ahead, flap: 0, people });
         } else {
           out.push({ kind: m.kind, lng, lat, ahead, flap: 0 });
+        }
+      }
+      if (shows('person')) {
+        const vendorsOut = levels.person;
+        for (const s of life.stalls) {
+          if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
+            continue;
+          const [lng, lat] = tileToLngLat(tile, s);
+          out.push({
+            kind: 'person',
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: s.x + s.hx * perMeter, y: s.y + s.hy * perMeter }),
+            side: tileToLngLat(tile, { x: s.x - s.hy * perMeter, y: s.y + s.hx * perMeter }),
+            vehicle: 'cart',
+            paint: s.paint,
+            flap: 0,
+            people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
+          });
+        }
+      }
+      if (shows('person')) {
+        for (const g of life.gatherers) {
+          if (g.rank >= levels.places[g.place]) continue;
+          const w = g.walker;
+          const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
+          const still = g.pause > 0 || g.behavior === 'sit';
+          const look: PersonLook = {
+            figure: shaded ? 'umbrella' : w.figure,
+            paint: shaded ? w.canopy : w.shirt,
+            lateral: 0,
+            back: 0,
+            // Standing still (or sitting), feet together.
+            flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+          };
+          const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
+          if (g.carabao !== undefined) {
+            // The carabao a pace ahead, its farmer walking beside it.
+            const x = g.x + g.hx * 1.8 * perMeter;
+            const y = g.y + g.hy * 1.8 * perMeter;
+            const [lng, lat] = at(x, y);
+            out.push({
+              kind: 'person',
+              lng,
+              lat,
+              ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
+              side: at(x - g.hy * perMeter, y + g.hx * perMeter),
+              vehicle: 'carabao',
+              paint: g.carabao,
+              flap: 0,
+              people: [{ ...look, lateral: 1 }],
+            });
+          } else {
+            const [lng, lat] = at(g.x, g.y);
+            const ahead = at(g.x + g.hx * perMeter, g.y + g.hy * perMeter);
+            out.push({ kind: 'person', lng, lat, ahead, flap: 0, people: [look] });
+          }
         }
       }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
@@ -704,8 +1490,25 @@ export class LifeWorld {
           });
         }
       }
+      // Standby trains: the tile that owns a siding draws its whole train, lamps off.
+      if (shows('train')) {
+        for (const p of life.standby) {
+          const [lng, lat] = tileToLngLat(tile, p);
+          out.push({
+            kind: 'train',
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+            side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+            vehicle: p.vehicle,
+            paint: p.paint,
+            parked: true,
+            flap: 0,
+          });
+        }
+      }
       if (!shows('bird')) continue;
-      const birdsOut = activity('bird', daylight);
+      const birdsOut = levels.bird;
       for (const flock of life.flocks) {
         if (flock.rank >= birdsOut) continue;
         const wobble = life.elapsed * 0.8;

@@ -20,6 +20,7 @@
     }
   },
   "languages": ["fil", "bcl"],
+  "timezone": "Asia/Manila",
   "smoke_landmark": "Naga Metropolitan Cathedral",
   "focus": {
     "osm_id": "osm:way/201276958",

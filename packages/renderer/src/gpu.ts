@@ -46,6 +46,8 @@ export type CellTargets = {
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
   lifeTex: WebGLTexture;
+  /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
+  lightTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
@@ -148,6 +150,10 @@ export function createCellTargets(
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
   const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const lightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
@@ -166,6 +172,7 @@ export function createCellTargets(
     glyphTex,
     overlayTex,
     lifeTex,
+    lightTex,
     depth: cell.depth,
     cellFbo: cell.fbo,
     glyphFbo,
@@ -176,7 +183,15 @@ export function createCellTargets(
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
-  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex, t.overlayTex, t.lifeTex]) {
+  for (const tex of [
+    t.classTex,
+    t.attrTex,
+    t.idTex,
+    t.glyphTex,
+    t.overlayTex,
+    t.lifeTex,
+    t.lightTex,
+  ]) {
     gl.deleteTexture(tex);
   }
   gl.deleteRenderbuffer(t.depth);
@@ -207,6 +222,13 @@ export function uploadOverlay(gl: GL, t: CellTargets, texels: Uint8Array) {
 /** Replace the life layer's contents (RGBA8 texels from passes.ts `lifePass`). */
 export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lifeTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the streetlights' contents (RGBA8 texels from passes.ts `lightPass`). */
+export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.lightTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }

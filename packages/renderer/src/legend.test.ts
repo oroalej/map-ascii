@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { legendEntries } from './legend';
+import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
 
@@ -63,9 +64,38 @@ describe('legendEntries life', () => {
     expect(life(18, true)).toContain('People (simulated)');
   });
 
+  it('pictures people as the map draws them: a figure, an umbrella, and a vendor’s cart', () => {
+    for (const theme of ['dark', 'light'] as const) {
+      const entries = legendEntries(theme, 18, undefined, { life: true });
+      const people = entries.find((e) => e.label === 'People (simulated)')!;
+      expect(people.icons).toHaveLength(3);
+      const [figure, umbrella] = people.icons!;
+      expect(figure!.pixels).toBe(FIGURE_MASTERS.adult[10]);
+      expect(umbrella!.pixels).toBe(FIGURE_MASTERS.umbrella[10]);
+      // The figure's skin is the theme's person color; the umbrella's ribs are darker than it.
+      expect(figure!.tone).toBe(people.color);
+      expect(umbrella!.tone).not.toBe(umbrella!.paint);
+      for (const icon of people.icons!) {
+        expect(new Set(icon.pixels.map((row) => row.length)).size).toBe(1);
+        expect(icon.pixels.join('')).toMatch(/^[#o.]+$/);
+      }
+      // Glyph entries have none.
+      expect(entries.find((e) => e.label === 'Traffic (simulated)')!.icons).toBeUndefined();
+    }
+  });
+
   it('lists them whatever the class buffer reports, since they are never cells', () => {
     expect(legendEntries('dark', 16, ['road_major'], { life: true }).map((e) => e.label)).toContain(
       'Traffic (simulated)',
     );
+  });
+
+  it('lists streetlights while they are lit, where the roads they line are on screen', () => {
+    const lit = (present: readonly string[] | undefined, lights: boolean) =>
+      legendEntries('dark', 17, present as never, { lights }).map((e) => e.label);
+    expect(lit(['road_mid'], true)).toContain('Streetlights');
+    expect(lit(undefined, true)).toContain('Streetlights');
+    expect(lit(['road_mid'], false)).not.toContain('Streetlights');
+    expect(lit(['road_minor', 'building'], true)).not.toContain('Streetlights');
   });
 });

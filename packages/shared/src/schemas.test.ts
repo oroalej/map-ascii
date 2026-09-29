@@ -254,6 +254,24 @@ describe('City', () => {
     expect(City.safeParse({ ...city, focus: { ...focus, lat: 1 } }).success).toBe(false);
   });
 
+  it('takes a time zone and a daily rhythm', () => {
+    const life = { rhythm: { vehicle: [[7, 1]] }, source: 'x' };
+    expect(City.safeParse({ ...city, timezone: 'Asia/Manila', life }).success).toBe(true);
+    expect(City.safeParse({ ...city, timezone: 'Manila' }).success).toBe(false);
+    expect(City.safeParse({ ...city, life: { rhythm: {} } }).success).toBe(false);
+  });
+
+  it('takes when places fill up', () => {
+    const ok = (schedules: unknown) =>
+      City.safeParse({ ...city, life: { schedules, source: 'x' } }).success;
+    expect(ok({ worship: [{ weekdays: [0, 6], times: ['06:00', '18:30'] }] })).toBe(true);
+    expect(ok({ school: { weekdays: [1, 2, 3, 4, 5], in: '07:30', out: '16:30' } })).toBe(true);
+    expect(ok({ worship: [{ weekdays: [7], times: ['06:00'] }] })).toBe(false);
+    expect(ok({ worship: [{ weekdays: [0, 0], times: ['06:00'] }] })).toBe(false);
+    expect(ok({ worship: [{ weekdays: [0], times: ['6am'] }] })).toBe(false);
+    expect(ok({ school: { weekdays: [1], in: '16:30', out: '07:30' } })).toBe(false);
+  });
+
   it('rejects an inverted bbox', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
   });

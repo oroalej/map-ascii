@@ -61,6 +61,14 @@
   overflow: hidden;
 }
 
+/* Pictures of what is drawn pixel by pixel (people), a little taller than the text. */
+.icon {
+  width: 1.4em;
+  height: 1.4em;
+  margin-right: 0.3em;
+  vertical-align: -0.35em;
+}
+
 .bottomLeft {
   position: fixed;
   left: 12px;
@@ -138,9 +146,9 @@
     font-size: 12px;
   }
 
-  /* Above the attribution, which wraps to a few lines on phones. */
+  /* Above the attribution, which wraps to a few lines on phones (Attribution.tsx publishes its height). */
   .bottomLeft {
-    bottom: 64px;
+    bottom: calc(var(--attribution-height, 52px) + 12px);
   }
 
   /* The tour's sheet takes the bottom of the screen. */
