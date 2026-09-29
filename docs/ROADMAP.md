@@ -46,10 +46,10 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 ## Phase 2 — Whole city and core UX
 
 **Tasks**
-- [ ] Region layers (coastline, major roads, water, DEM terrain ramp) and zoom-level crossfades.
+- [ ] Region layers (coastline, major roads, water, DEM terrain ramp) and zoom-level crossfades. *(Started early: the pipeline builds the region layers and the shared `CLASS_ZOOM` table; the renderer still hard-cuts at each class's minimum zoom and ignores `max`, so the crossfades remain.)*
 - [ ] Label placement with collision; subdivision and street names. *(Started early: placement, collision, and landmark/monument names are in; subdivision and street names remain.)*
 - [ ] Picking (hover highlight, click select), plus the info panel populated from OSM tags and content.
-- [ ] Search (pipeline step 06 → `<city>.search-index.json`, MiniSearch, `/` shortcut, fly-to).
+- [ ] Search (pipeline step 06 → `<city>.search-index.json`, MiniSearch, `/` shortcut, fly-to). *(Started early: step 06 and the shared MiniSearch options are in; the web UI, `/` shortcut, and fly-to remain.)*
 - [ ] `app/[city]/` route with static params from the city registry. `/` redirects client-side to the only city.
 - [ ] Fly-to animation; URL state sync; share button; HUD (scale, subdivision with the city's local label, coordinates).
 - [ ] Mobile gestures and bottom-sheet panel; reduced-motion support.
@@ -73,6 +73,7 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - [ ] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
 - [ ] Tours live in the city pack (`cities/<slug>/tours/`).
 - [ ] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
+- [ ] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Landmark visuals are parked until then, except fixes that block an acceptance criterion.
 
 **Accept when**
 - **(Naga)** Tilting to 60° shows the Centro skyline in ASCII.
