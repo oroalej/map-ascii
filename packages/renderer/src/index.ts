@@ -1,4 +1,4 @@
-import type { CameraState } from '@naga/shared';
+import type { CameraState } from '@atlas/shared';
 import { themes, type ThemeName } from './theme';
 
 export type { ThemeName } from './theme';
@@ -35,7 +35,7 @@ export type Atlas = {
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
   if (!gl) {
-    throw new Error('Naga Atlas requires WebGL2, which this browser does not support.');
+    throw new Error('ASCII Atlas requires WebGL2, which this browser does not support.');
   }
 
   let camera: CameraState = { ...options.initialCamera };

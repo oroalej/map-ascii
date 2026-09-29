@@ -1,4 +1,4 @@
-import { CameraState } from '@naga/shared';
+import { CameraState } from '@atlas/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initialAtlasState, useAtlasStore } from './store';
 

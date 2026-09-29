@@ -1,5 +1,5 @@
 {
-  "name": "@naga/content",
+  "name": "@atlas/content",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@naga/shared": "workspace:^",
+    "@atlas/shared": "workspace:^",
     "zod": "^4.6"
   }
 }

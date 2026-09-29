@@ -1,5 +1,5 @@
 {
-  "name": "naga-atlas",
+  "name": "ascii-atlas",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.1",
@@ -7,11 +7,11 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "pnpm --filter @naga/web dev",
-    "build": "pnpm --filter @naga/web build",
-    "data:build": "pnpm --filter @naga/data build",
+    "dev": "pnpm --filter @atlas/web dev",
+    "build": "pnpm --filter @atlas/web build",
+    "data:build": "pnpm --filter @atlas/data build",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @naga/web test:e2e",
+    "test:e2e": "pnpm --filter @atlas/web test:e2e",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",

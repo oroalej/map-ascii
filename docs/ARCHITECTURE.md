@@ -1,20 +1,25 @@
-# Architecture — Naga Atlas
+# Architecture — ASCII Atlas
+
+The engine is city-agnostic. Everything specific to a city lives in its city pack (`packages/content/cities/<slug>/`) or is derived from OSM by the pipeline. Examples below use Naga, the first city.
 
 ## 1. Repository layout
 
 ```
-naga-atlas/
+ascii-atlas/
 ├─ CLAUDE.md
 ├─ docs/                      SPEC, ARCHITECTURE, DATA, ROADMAP
+│  └─ cities/                 one brief per city (naga.md, …)
 ├─ package.json               root scripts (dev, data:build, test, lint, typecheck)
 ├─ pnpm-workspace.yaml
 ├─ tsconfig.base.json
 ├─ apps/
 │  └─ web/                    Next.js App Router, static export
-│     ├─ app/                 layout, page, global styles
+│     ├─ app/                 layout, global styles, `/` landing (redirect or city picker)
+│     │  └─ [city]/           per-city page, static params from the city registry
 │     ├─ components/          AtlasCanvas, SearchBox, InfoPanel, Timeline, TourPlayer, Hud
 │     ├─ state/               Zustand store + URL sync
-│     └─ public/tiles/        naga.pmtiles, search-index.json, imagery/ (generated)
+│     └─ public/tiles/        per city: <city>.pmtiles, <city>.meta.json,
+│                             <city>.search-index.json, imagery/<city>/ (all generated)
 ├─ packages/
 │  ├─ renderer/               WebGL2 ASCII engine (no React)
 │  │  └─ src/
@@ -31,24 +36,29 @@ naga-atlas/
 │  │     └─ theme.ts          glyph + color definitions per class
 │  ├─ data/                   pipeline (Node scripts + CLI tools)
 │  │  ├─ scripts/             01-fetch, 02-convert, 03-normalize, 04-merge-content, 05-tiles, 06-search-index
-│  │  └─ raw/, build/         gitignored
-│  ├─ content/                curated knowledge
-│  │  ├─ landmarks/*.json
-│  │  ├─ events/*.json
-│  │  ├─ name-history/*.json
-│  │  ├─ tours/*.json
-│  │  └─ media/               photos (or references to external hosting)
+│  │  └─ raw/<city>/, build/<city>/   gitignored
+│  ├─ content/                curated knowledge, one city pack per city
+│  │  └─ cities/<slug>/
+│  │     ├─ city.json         city config (boundary lookup, region, subdivision level + label, languages)
+│  │     ├─ landmarks/*.json
+│  │     ├─ events/*.json
+│  │     ├─ name-history/*.json
+│  │     ├─ tours/*.json
+│  │     ├─ historic-maps/*.json
+│  │     └─ media/            photos (or references to external hosting)
 │  └─ shared/                 zod schemas + TS types
 ```
 
 ## 2. Renderer public API
 
 ```ts
+// meta = the city's <city>.meta.json, emitted by the pipeline
 const atlas = createAtlas(canvas, {
-  tilesUrl: '/tiles/naga.pmtiles',
+  tilesUrl: `/tiles/${city}.pmtiles`,      // e.g. /tiles/naga.pmtiles
   theme: 'dark',
   cell: { width: 10, height: 18 },
-  initialCamera: { lat: 13.6218, lng: 123.1948, zoom: 13, pitch: 0, bearing: 0 },
+  bounds: meta.regionBounds,
+  initialCamera: urlCamera ?? meta.defaultCamera,
   year: 2026,
 });
 
@@ -63,7 +73,9 @@ atlas.on('camerachange' | 'hover' | 'click' | 'flyend', handler);
 atlas.destroy();
 ```
 
-The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas.
+The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
+
+**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (the boundary centroid unless the city config overrides it), `yearRange` (earliest year with data to the current year), and `attribution` (extra credits the city's layers need).
 
 ## 3. Rendering pipeline (per frame)
 
@@ -125,6 +137,7 @@ The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be
 
 ```ts
 type AtlasState = {
+  city: string;                 // slug, from the route
   camera: CameraState;          // lat, lng, zoom, pitch, bearing
   mode: 'map' | 'orbit' | 'walk';
   year: number;
@@ -140,16 +153,17 @@ type AtlasState = {
 ```
 
 **URL sync.**
+- The city is the path (`/<city>`), and everything else is in the query string.
 - Debounced (250 ms) `history.replaceState` for camera changes.
 - `pushState` for selections and tour starts, so the back button works.
 - Parameters: `lat, lng, z, pitch, bearing, year, sel, tour, step, mode`.
 
 ## 7. Search
 
-- The pipeline emits `search-index.json`:
-  - one entry per searchable feature: `id, name, altNames, type, barangay, lat, lng, zoomHint`
+- The pipeline emits `<city>.search-index.json` for each city:
+  - one entry per searchable feature: `id, name, altNames, type, subdivision, lat, lng, zoomHint`
   - plus a serialized MiniSearch index
-- The web app lazy-loads the index on the first `/` press.
+- The web app lazy-loads the current city's index on the first `/` press. Search is scoped to the current city.
 - Fuzzy matching with prefix search. Diacritics are folded, so "Penafrancia" matches "Peñafrancia".
 
 ## 8. Performance budgets
@@ -159,7 +173,7 @@ type AtlasState = {
 | Frame rate | 60 fps desktop, ≥30 fps mid-range Android |
 | Initial JS (web app, gzipped) | < 250 KB excluding the renderer worker |
 | First meaningful render | < 2.5 s on 4G |
-| `naga.pmtiles` size | < 40 MB (Naga plus region at low zoom) |
+| `<city>.pmtiles` size | < 40 MB per city (the city plus its region at low zoom) |
 | Tile decode | off main thread; < 16 ms per tile on desktop |
 
 ## 9. Testing
@@ -172,11 +186,11 @@ type AtlasState = {
   - zod schemas
   - camera math (fly-to arcs, bounds clamping)
 - **Pipeline:**
-  - snapshot test on a small fixture OSM extract
+  - snapshot test on a small fixture OSM extract with a fixture city config (not tied to any real city)
   - asserts expected layers and properties
 - **E2E (Playwright):**
-  - app loads and the canvas is non-blank
-  - search flies to "Naga Metropolitan Cathedral"
+  - `/` reaches a city, and the canvas is non-blank
+  - for each registered city, search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral")
   - timeline scrub changes the rendered cell hash
   - share URL round-trips
 - **Visual regression:** screenshot a few fixed camera states per theme, with a tolerance threshold.
@@ -185,4 +199,4 @@ type AtlasState = {
 
 - `next build` with `output: 'export'` produces a static site on Vercel.
 - PMTiles and imagery are static files. If they exceed Vercel limits, host them on Cloudflare R2 or similar with CORS and range requests enabled.
-- Set long cache headers on tiles, and add a content hash in the filename (e.g. `naga.<hash>.pmtiles`) for cache busting.
+- Set long cache headers on tiles, and add a content hash in the filename (e.g. `<city>.<hash>.pmtiles`) for cache busting.

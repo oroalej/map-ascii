@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Naga Atlas',
-  description: 'An explorable ASCII map of Naga City, Camarines Sur, through the years.',
+  title: 'ASCII Atlas',
+  description: 'An explorable ASCII map of cities through the years.',
 };
 
 export const viewport: Viewport = {

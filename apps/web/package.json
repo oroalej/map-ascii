@@ -1,5 +1,5 @@
 {
-  "name": "@naga/web",
+  "name": "@atlas/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@naga/renderer": "workspace:^",
-    "@naga/shared": "workspace:^",
+    "@atlas/renderer": "workspace:^",
+    "@atlas/shared": "workspace:^",
     "next": "16.3.6",
     "react": "^19.3",
     "react-dom": "^19.3",

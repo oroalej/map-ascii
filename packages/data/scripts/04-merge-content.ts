@@ -1,4 +1,4 @@
-import { loadContent } from '@naga/content';
+import { loadContent } from '@atlas/content';
 import type { Step } from './step';
 
 // Validate packages/content and join it onto features

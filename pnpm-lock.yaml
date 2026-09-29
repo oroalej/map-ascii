@@ -44,10 +44,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@naga/renderer':
+      '@atlas/renderer':
         specifier: workspace:^
         version: link:../../packages/renderer
-      '@naga/shared':
+      '@atlas/shared':
         specifier: workspace:^
         version: link:../../packages/shared
       next:
@@ -78,7 +78,7 @@ importers:
 
   packages/content:
     dependencies:
-      '@naga/shared':
+      '@atlas/shared':
         specifier: workspace:^
         version: link:../shared
       zod:
@@ -87,13 +87,13 @@ importers:
 
   packages/data:
     dependencies:
-      '@naga/content':
+      '@atlas/content':
         specifier: workspace:^
         version: link:../content
 
   packages/renderer:
     dependencies:
-      '@naga/shared':
+      '@atlas/shared':
         specifier: workspace:^
         version: link:../shared
       twgl.js:

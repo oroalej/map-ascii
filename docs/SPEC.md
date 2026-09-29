@@ -1,23 +1,26 @@
-# Product spec — Naga Atlas
+# Product spec — ASCII Atlas
+
+ASCII Atlas is a generic engine for explorable, ASCII-rendered city maps. Each city is added as a **city pack** (config and curated content, see §9), and the behavior below applies to every city. City-specific details such as tours and research live in city briefs under `docs/cities/`. Naga City is the first city (`docs/cities/naga.md`), and examples here use it.
 
 ## 1. Experience
 
-The site opens on the Bicol peninsula drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through Camarines Sur and into Naga's barangays, the Centro, and individual streets and buildings. Visitors can:
+A city opens on its surrounding region drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through the region and into the city's subdivisions, its center, and individual streets and buildings. (For Naga: Bicol peninsula → Camarines Sur → barangays → the Centro → streets.) Visitors can:
 
 - drag and orbit around the map
 - tap a place to fly to it
 - search with `/`
 - take a guided tour
 - scrub a year slider to watch the city change
+- switch to another city (once more than one exists; see §9)
 
 ## 2. Zoom levels
 
-Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail change at named levels, and these transitions crossfade over roughly 0.5 zoom units rather than popping.
+Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail change at named levels, and these transitions crossfade over roughly 0.5 zoom units rather than popping. Each city brief describes what these levels show for that city.
 
 | Level | Approx. zoom | Content | Labels |
 |---|---|---|---|
-| Region | 7–9.5 | Bicol coastline, Mt. Isarog, major lakes and rivers, terrain shading | Provinces, major cities |
-| City | 9.5–13 | Naga boundary, barangay outlines, Naga River, highways | City and barangay names |
+| Region | 7–9.5 | Regional coastline, major peaks, major lakes and rivers, terrain shading | Provinces/states, major cities |
+| City | 9.5–13 | City boundary, subdivision outlines, main rivers, highways | City and subdivision names |
 | District | 13–15.5 | All roads, building blocks as solid fill, parks, water | Districts, major roads, key landmarks |
 | Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Street names, POIs |
 | Place | 17.5–19 | Detailed landmark rendering, entrances, plazas | Everything; info panel auto-suggests |
@@ -40,7 +43,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 
 **Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to a Bicol bounding box. Min and max zoom are enforced.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Min and max zoom are enforced.
 
 ## 4. Visual language
 
@@ -90,22 +93,22 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | `Esc` | Close panel, exit walk mode, cancel fly |
 
 **Search**
-- Fuzzy search over landmarks, streets, barangays, schools, churches, and markets.
-- Results are grouped by type and show the barangay.
+- Fuzzy search over the current city's landmarks, streets, subdivisions, schools, places of worship, and markets.
+- Results are grouped by type and show the subdivision.
 - Enter flies to the top result. Arrow keys move through results.
 
 **Info panel**
 - Right side on desktop, bottom sheet on mobile.
-- Contents: name, type, barangay, short story, photo carousel with "then/now" pairs, year built/demolished with certainty badge, sources, and links.
+- Contents: name, type, subdivision, short story, photo carousel with "then/now" pairs, year built/demolished with certainty badge, sources, and links.
 - "Show on timeline" jumps the slider to the feature's key years.
 
 **Share**
-- Copies a URL encoding `lat`, `lng`, `z`, `pitch`, `bearing`, `year`, `tour`, `step`, and `sel` (selected feature id).
+- Copies a URL whose path is the city (`/<city>`) and whose query encodes `lat`, `lng`, `z`, `pitch`, `bearing`, `year`, `tour`, `step`, and `sel` (selected feature id).
 - Loading that URL restores the exact view.
 
 **HUD**
 - Scale indicator (the "ruler").
-- Current barangay name.
+- Current subdivision name.
 - Coordinates, toggleable.
 - Attribution line, always visible.
 
@@ -117,12 +120,7 @@ A tour is an ordered list of steps. Each step has:
 - narration text
 - optional: `year`, `select` (feature id), `audio` clip, `highlight` (feature ids)
 
-Launch set:
-
-1. **Traslación route.** Procession path from the Basilica Minore of Our Lady of Peñafrancia to the Naga Metropolitan Cathedral, then the fluvial procession along the Naga River.
-2. **Heritage Centro walk.** Plaza Quince Martires, Plaza Rizal, the Cathedral, and the old commercial streets.
-3. **Campus belt.** Ateneo de Naga University, the University of Nueva Caceres, and the surrounding streets.
-4. **From Isarog to the river.** Region-level to street-level establishing flight.
+Tours belong to a city and live in its city pack. Each city brief lists that city's launch set (for Naga, see `docs/cities/naga.md` §3). Every city should ship at least one establishing tour that flies from Region level down to street level.
 
 Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`.
 
@@ -156,9 +154,17 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 - `prefers-reduced-motion`: no water animation, instant cell transitions, shorter fly-to.
 - Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
 - Text-size setting adjusts the cell size.
-- Languages: English first. The content schema supports `en`, `fil`, and `bcl` (Bikol) fields for names and narration.
+- Languages: English first and always required. Each city declares extra content languages in its config (Naga: `fil` and `bcl`), and names and narration can carry those fields.
 
-## 9. Non-goals (for now)
+## 9. Cities
+
+- **Registry.** The site hosts several cities. Each is a city pack in `packages/content/cities/<slug>/`: a `city.json` config plus curated content. The pipeline builds tiles, a search index, and meta for each registered city.
+- **Routes.** Each city has its own route, `/<slug>` (e.g. `/naga`). All view state in the URL is relative to that city.
+- **Landing.** While only one city exists, `/` sends the visitor to it. Once there is a second city, `/` becomes a city picker drawn in the same ASCII style.
+- **Terminology.** The generic term is *subdivision*. The UI shows the city's local label (e.g. "barangay" in Naga).
+- **No city-specific code.** Adding a city means adding a city pack and a brief, not changing the renderer or app. See `DATA.md` "Adding a city".
+
+## 10. Non-goals (for now)
 
 - User accounts, user-submitted content, and comments
 - Live data such as traffic or weather

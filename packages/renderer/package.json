@@ -1,5 +1,5 @@
 {
-  "name": "@naga/renderer",
+  "name": "@atlas/renderer",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@naga/shared": "workspace:^",
+    "@atlas/shared": "workspace:^",
     "twgl.js": "^7"
   }
 }

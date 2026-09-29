@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Event, Landmark, NameHistory, Tour } from '@naga/shared';
+import { Event, Landmark, NameHistory, Tour } from '@atlas/shared';
 import type { z } from 'zod';
 
 /** Absolute path of `packages/content`. */

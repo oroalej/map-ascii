@@ -1,4 +1,4 @@
-import type { CameraState } from '@naga/shared';
+import type { CameraState } from '@atlas/shared';
 import { create } from 'zustand';
 
 export type AtlasMode = 'map' | 'orbit' | 'walk';

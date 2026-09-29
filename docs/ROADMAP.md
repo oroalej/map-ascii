@@ -1,4 +1,6 @@
-# Roadmap — Naga Atlas
+# Roadmap — ASCII Atlas
+
+ASCII Atlas is a generic engine for ASCII city maps. **Naga City is the first city.** Phases 1–6 build the engine using Naga as the working example, and Phase 7 proves the engine is generic by onboarding a second city. Naga-specific tasks and acceptance criteria are marked **(Naga)**. Details are in [`docs/cities/naga.md`](cities/naga.md).
 
 Work phase by phase. Each phase ends with its acceptance criteria met, tests green, and a short note appended to the "Log" at the bottom of this file.
 
@@ -16,10 +18,14 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - All scripts run without error.
 - CI is green.
 
-## Phase 1 — Centro prototype (prove the look)
+## Phase 1 — Generic foundation + Naga Centro prototype (prove the look)
 
 **Tasks**
-- [ ] Data pipeline steps 01–05 for the Naga detail bbox only (no Region layers yet). Output `naga.pmtiles`.
+- [ ] `City` zod schema in `packages/shared`. Switch `LocalizedText` to "`en` + the city's declared languages" (`DATA.md` §4).
+- [ ] City pack layout: move content under `packages/content/cities/<slug>/`, and add `cities/naga/city.json` **(Naga)**. The validator walks every city pack.
+- [ ] Pipeline takes `--city` (default: all registered cities), and writes `raw/<city>/`, `build/<city>/`, `<city>.pmtiles`, and `<city>.meta.json`.
+- [ ] Web app reads the city's meta for bounds and default camera. Remove the hardcoded Naga camera from the store, the hardcoded tiles URL, and the hardcoded canvas `aria-label`.
+- [ ] Data pipeline steps 01–05 for the Naga detail bbox only (no Region layers yet). Output `naga.pmtiles` **(Naga)**.
 - [ ] Renderer:
   - [ ] tile loading in a worker
   - [ ] cell pass (class and id buffers)
@@ -32,7 +38,8 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - [ ] Attribution line.
 
 **Accept when**
-- The Centro renders as recognizable ASCII at z14–z18: the river, major roads with correct box-drawing junctions, and buildings.
+- **(Naga)** The Centro renders as recognizable ASCII at z14–z18: the river, major roads with correct box-drawing junctions, and buildings.
+- No city names, coordinates, or tile filenames are hardcoded in `packages/renderer` or `apps/web` (grep check). City specifics come only from the city pack and the generated meta.
 - 60 fps pan and zoom on desktop.
 - Unit tests cover the glyph LUT and camera math.
 
@@ -40,17 +47,18 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 
 **Tasks**
 - [ ] Region layers (coastline, major roads, water, DEM terrain ramp) and zoom-level crossfades.
-- [ ] Label placement with collision; barangay and street names.
+- [ ] Label placement with collision; subdivision and street names.
 - [ ] Picking (hover highlight, click select), plus the info panel populated from OSM tags and content.
-- [ ] Search (pipeline step 06, MiniSearch, `/` shortcut, fly-to).
-- [ ] Fly-to animation; URL state sync; share button; HUD (scale, barangay, coordinates).
+- [ ] Search (pipeline step 06 → `<city>.search-index.json`, MiniSearch, `/` shortcut, fly-to).
+- [ ] `app/[city]/` route with static params from the city registry. `/` redirects client-side to the only city.
+- [ ] Fly-to animation; URL state sync; share button; HUD (scale, subdivision with the city's local label, coordinates).
 - [ ] Mobile gestures and bottom-sheet panel; reduced-motion support.
-- [ ] Seed content: 10 landmarks with sources (see `DATA.md` §7).
+- [ ] **(Naga)** Seed content: 10 landmarks with sources (see `docs/cities/naga.md` §4).
 
 **Accept when**
 - Zooming from the Region level to a single building is smooth.
-- Searching "Cathedral" flies to it and opens the panel.
-- A shared URL reproduces the view.
+- **(Naga)** Searching "Cathedral" flies to the Naga Metropolitan Cathedral and opens the panel.
+- A shared URL (`/<city>?…`) reproduces the view.
 - The Playwright smoke tests pass.
 
 ## Phase 3 — Orbit, 3D buildings, tours
@@ -58,39 +66,41 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 **Tasks**
 - [ ] Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset.
 - [ ] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
-- [ ] Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
+- [ ] Tours live in the city pack (`cities/<slug>/tours/`).
+- [ ] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
 
 **Accept when**
-- Tilting to 60° shows the Centro skyline in ASCII.
+- **(Naga)** Tilting to 60° shows the Centro skyline in ASCII.
 - Both tours play end to end on desktop and mobile.
 
 ## Phase 4 — Timeline v1
 
 **Tasks**
-- [ ] Timeline slider UI with data-driven ticks, play/pause, and a large year indicator; year in the URL.
+- [ ] Timeline slider UI with data-driven ticks (range from the city's meta `yearRange`), play/pause, and a large year indicator; year in the URL.
 - [ ] Renderer time filtering (`u_year`), type-in/dissolve transition masks, and dithering for `circa` dates.
 - [ ] `name_history` resolution in labels.
-- [ ] Imagery underlay: the pipeline bakes grayscale tiles for selected years (Sentinel-2 or Esri Wayback, whichever the licensing allows), and the renderer samples the underlay luminance.
+- [ ] Imagery underlay: the pipeline bakes grayscale tiles per city (`imagery/<city>/`) for selected years (Sentinel-2 or Esri Wayback, whichever the licensing allows), and the renderer samples the underlay luminance.
 - [ ] Events layer and pins.
 - [ ] Legend note about undated features.
 
 **Accept when**
-- Scrubbing from 2015 to the current year visibly changes the underlay.
+- **(Naga)** Scrubbing from 2015 to the current year visibly changes the underlay.
 - Dated landmarks appear and disappear at the right years.
 - Unit tests cover the visibility logic.
 
 ## Phase 5 — Historical depth
 
 **Tasks**
-- [ ] Georeferenced historic map underlays (`content/historic-maps`) with year ranges.
+- [ ] Georeferenced historic map underlays (`cities/<slug>/historic-maps`) with year ranges.
 - [ ] Standalone geometry for demolished landmarks.
-- [ ] Street renaming data for the Centro.
 - [ ] "Then/now" photo pairs in the info panel.
-- [ ] "Traslación route" and "Campus belt" tours, including year-setting steps.
-- [ ] `fil` and `bcl` translations for UI strings and the main landmarks.
+- [ ] UI string translations keyed by language code, loaded per city's declared languages.
+- [ ] **(Naga)** Street renaming data for the Centro.
+- [ ] **(Naga)** "Traslación route" and "Campus belt" tours, including year-setting steps.
+- [ ] **(Naga)** `fil` and `bcl` translations for UI strings and the main landmarks.
 
 **Accept when**
-- At least one pre-2000 era has a coherent historical underlay plus dated features.
+- **(Naga)** At least one pre-2000 era has a coherent historical underlay plus dated features.
 - Every historical claim shows its sources.
 
 ## Phase 6 — Street walk mode
@@ -101,17 +111,32 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - [ ] Pseudo-3D rendering along the road, with building facades on both sides.
 
 **Accept when**
-- A visitor can walk from the Basilica to the Cathedral along real streets at ≥30 fps on mobile.
+- **(Naga)** A visitor can walk from the Basilica to the Cathedral along real streets at ≥30 fps on mobile.
+
+## Phase 7 — Second city
+
+**Tasks**
+- [ ] Choose the second city (see Open decisions), and write its brief at `docs/cities/<slug>.md`.
+- [ ] Onboard it with a city pack only, following `DATA.md` §8 "Adding a city": `city.json`, the smoke landmark, and one establishing tour.
+- [ ] Make `/` a city picker in the same ASCII style, and add a way to switch cities from inside the atlas.
+- [ ] Fix any city-specific assumptions the second city exposes in the engine, e.g. admin levels, languages, scripts in the glyph atlas, or southern-hemisphere or antimeridian bounds.
+
+**Accept when**
+- The second city builds, validates, and passes the e2e smoke test.
+- Adding it needed no changes in `packages/renderer` or `apps/web` except the generic fixes listed above.
+- Both cities share one static deploy, and share URLs for either city round-trip.
 
 ## Open decisions
 
 - Pure ASCII vs hybrid. Default: hybrid (photos and panels render normally).
 - Which imagery source is allowed for the timeline underlay. This must be settled before Phase 4.
 - Hosting for large tile and imagery files: Vercel or R2.
-- Domain name.
+- Final product name ("ASCII Atlas" is the working name) and domain name.
+- Which city comes second. It should differ from Naga in at least one of country, admin levels, or languages, to stress the generic model.
 
 ## Log
 
 <!-- Append one short entry per completed phase: date, what shipped, known issues. -->
 
 - **2026-09-29 — Phase 0 (scaffold).** pnpm monorepo (`apps/web`, `packages/{renderer,data,content,shared}`); Next 16 static export showing a blank dark WebGL2 canvas with OSM attribution; renderer `createAtlas` stub; zod schemas for Landmark, NameHistory, Event, Tour, CameraState; content validator; pipeline step stubs; ESLint/Prettier/Vitest/Playwright; GitHub Actions CI. Known: Node 22.13+ required (Vitest 5), TypeScript pinned to ~6.0 (typescript-eslint), CI green pending first push.
+- **2026-09-29 — Renamed to ASCII Atlas.** Docs made city-generic with Naga City as the first city (`docs/cities/naga.md`); package scope renamed `@naga/*` → `@atlas/*`, root package `ascii-atlas`, product name in UI strings.

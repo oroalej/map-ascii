@@ -1,6 +1,6 @@
 'use client';
 
-import { createAtlas } from '@naga/renderer';
+import { createAtlas } from '@atlas/renderer';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useAtlasStore } from '@/state/store';
 import styles from './AtlasCanvas.module.css';
@@ -31,7 +31,7 @@ export function AtlasCanvas() {
   if (!supported) {
     return (
       <p role="alert" className={styles.error}>
-        Naga Atlas needs WebGL2, which this browser does not support.
+        ASCII Atlas needs WebGL2, which this browser does not support.
       </p>
     );
   }

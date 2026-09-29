@@ -6,7 +6,7 @@ test('loads a full-screen dark canvas with attribution', async ({ page }) => {
 
   await page.goto('/');
 
-  await expect(page).toHaveTitle('Naga Atlas');
+  await expect(page).toHaveTitle('ASCII Atlas');
   const canvas = page.getByLabel('Map of Naga City');
   await expect(canvas).toBeVisible();
 

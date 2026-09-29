@@ -1,5 +1,5 @@
 {
-  "name": "@naga/data",
+  "name": "@atlas/data",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,6 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@naga/content": "workspace:^"
+    "@atlas/content": "workspace:^"
   }
 }
