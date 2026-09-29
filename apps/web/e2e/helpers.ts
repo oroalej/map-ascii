@@ -1,6 +1,6 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */
 const citiesDir = new URL('../../../packages/content/cities/', import.meta.url);
@@ -29,6 +29,13 @@ export type TourFile = {
   title: { en: string };
   steps: { narration: { en: string } }[];
 };
+
+/**
+ * A screenshot of the map alone: the HUD, search, panels, and attribution are hidden while it is
+ * taken, so their text can't pass for drawn glyphs.
+ */
+export const mapShot = (canvas: Locator) =>
+  canvas.screenshot({ style: 'main > :not(canvas) { visibility: hidden !important; }' });
 
 /**
  * Share of pixels in a PNG screenshot that differ from the page background. The PNG is decoded

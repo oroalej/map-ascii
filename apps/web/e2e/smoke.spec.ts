@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cities, drawnShare, mapReady, MIN_DRAWN, type TourFile } from './helpers';
+import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from './helpers';
 
 /** The view parameters currently in the address bar. */
 const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParams);
@@ -64,7 +64,7 @@ for (const city of cities) {
         // The default camera shows the city's focus at street level, so glyphs cover a good
         // share of the screen once tiles arrive.
         await expect
-          .poll(async () => drawnShare(page, await canvas.screenshot()), { timeout: 20_000 })
+          .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
           .toBeGreaterThan(MIN_DRAWN);
         expect(errors).toEqual([]);
       });
@@ -91,7 +91,7 @@ for (const city of cities) {
         await page.goto(`/${city.slug}`);
         const canvas = page.getByLabel(`Map of ${city.name}`);
         await expect
-          .poll(async () => drawnShare(page, await canvas.screenshot()), { timeout: 20_000 })
+          .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
           .toBeGreaterThan(MIN_DRAWN);
         // The default camera centers on the city's focus feature. Its tile may still be on the
         // way when drawing starts, so click again until the panel opens.
@@ -171,7 +171,7 @@ for (const city of cities) {
         await expect(page.getByRole('button', { name: /tilt 60°/ })).toBeVisible();
         const canvas = page.getByLabel(`Map of ${city.name}`);
         await expect
-          .poll(async () => drawnShare(page, await canvas.screenshot()), { timeout: 20_000 })
+          .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
           .toBeGreaterThan(MIN_DRAWN);
         expect(errors).toEqual([]);
       });

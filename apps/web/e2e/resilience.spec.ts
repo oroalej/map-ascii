@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { cities, drawnShare, mapReady, MIN_DRAWN } from './helpers';
+import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN } from './helpers';
 
 for (const city of cities) {
   test.describe(`${city.name}: access and recovery`, () => {
@@ -32,7 +32,7 @@ for (const city of cities) {
       // Generous waits: WebGL runs in software here, and the suite runs in parallel.
       const drawn = { timeout: 40_000 };
       await expect
-        .poll(async () => drawnShare(page, await canvas.screenshot()), drawn)
+        .poll(async () => drawnShare(page, await mapShot(canvas)), drawn)
         .toBeGreaterThan(MIN_DRAWN);
 
       await page.evaluate(() => {
@@ -48,7 +48,7 @@ for (const city of cities) {
       );
       await expect(page.getByText(/Restoring the map/)).toHaveCount(0, drawn);
       await expect
-        .poll(async () => drawnShare(page, await canvas.screenshot()), drawn)
+        .poll(async () => drawnShare(page, await mapShot(canvas)), drawn)
         .toBeGreaterThan(MIN_DRAWN);
       expect(errors).toEqual([]);
     });
