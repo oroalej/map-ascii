@@ -2,21 +2,12 @@
 
 import type { SearchEntry } from '@atlas/shared';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { typingInField } from '@/lib/dom';
 import { loadSearch, search, TYPE_LABELS, type CitySearch } from '@/lib/search';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import styles from './SearchBox.module.css';
 
 type LoadState = { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; data: CitySearch };
-
-/** Whether keyboard focus is in a text field, where `/` types a slash. */
-const typingInField = () => {
-  const el = document.activeElement;
-  return (
-    el instanceof HTMLInputElement ||
-    el instanceof HTMLTextAreaElement ||
-    (el instanceof HTMLElement && el.isContentEditable)
-  );
-};
 
 /** Fly to a search result, select it, and highlight everything it stands for. */
 export function goToEntry(entry: SearchEntry) {

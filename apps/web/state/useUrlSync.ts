@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from './store';
+import { tourControls } from './tour';
 import { parseViewParams, serializeViewParams } from './url';
 
 /** Camera changes settle this long before the URL follows (ARCHITECTURE.md §6). */
@@ -32,8 +33,9 @@ const here = () => `${window.location.pathname}${window.location.search}${window
  * - on load, the selection and year come from the URL (the camera is read when the atlas is
  *   created, since it needs the city's meta as a fallback);
  * - camera, year, and tour changes `replaceState`, debounced;
- * - a new selection `pushState`s, so Back returns to the previous one;
- * - Back and Forward apply the URL to the store and the atlas.
+ * - a new selection or a tour start `pushState`s, so Back returns to the previous one (during a
+ *   tour, its steps' selections replace instead, so a tour is one history entry);
+ * - Back and Forward apply the URL to the store, the tour player, and the atlas.
  */
 export function useUrlSync() {
   useEffect(() => {
@@ -47,13 +49,25 @@ export function useUrlSync() {
     let fromHistory = false;
 
     const unsubscribe = useAtlasStore.subscribe((s, prev) => {
-      if (s.selectedId !== prev.selectedId && !fromHistory) {
+      const tourStarted =
+        s.tour !== null &&
+        s.tour.id !== prev.tour?.id &&
+        // A tour reopened from the URL is already there.
+        new URLSearchParams(window.location.search).get('tour') !== s.tour.id;
+      const newSelection =
+        s.selectedId !== prev.selectedId && s.tour === null && prev.tour === null;
+      if ((tourStarted || newSelection) && !fromHistory) {
         window.clearTimeout(timer);
         const next = currentUrl();
         if (next && next !== here()) window.history.pushState(null, '', next);
         return;
       }
-      if (s.camera !== prev.camera || s.year !== prev.year || s.tour !== prev.tour) {
+      if (
+        s.camera !== prev.camera ||
+        s.year !== prev.year ||
+        s.tour !== prev.tour ||
+        s.selectedId !== prev.selectedId
+      ) {
         window.clearTimeout(timer);
         timer = window.setTimeout(() => {
           const next = currentUrl();
@@ -67,6 +81,11 @@ export function useUrlSync() {
       fromHistory = true;
       try {
         useAtlasStore.getState().setSelected(params.sel ?? null);
+        if (params.tour !== useAtlasStore.getState().tour?.id) {
+          if (!params.tour || !tourControls.restore(params.tour, params.step ?? 0)) {
+            tourControls.exit();
+          }
+        }
         const atlas = useAtlasInstance.getState().atlas;
         if (atlas && Object.keys(params.camera).length > 0) atlas.setCamera(params.camera);
       } finally {

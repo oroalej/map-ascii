@@ -1,9 +1,10 @@
 'use client';
 
-import type { Landmark, LandmarkArt } from '@atlas/shared';
+import type { Landmark, LandmarkArt, Tour } from '@atlas/shared';
 import { useEffect } from 'react';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
+import { useTourPlayer } from '@/state/useTourPlayer';
 import { useUrlSync } from '@/state/useUrlSync';
 import { AtlasCanvas } from './AtlasCanvas';
 import { Attribution } from './Attribution';
@@ -11,6 +12,8 @@ import { HoverTooltip } from './HoverTooltip';
 import { Hud } from './Hud';
 import { InfoPanel } from './InfoPanel';
 import { SearchBox } from './SearchBox';
+import { TourMenu } from './TourMenu';
+import { TourPlayer } from './TourPlayer';
 
 export type CityAtlasProps = {
   slug: string;
@@ -19,23 +22,27 @@ export type CityAtlasProps = {
   subdivisionLabel: string;
   landmarks: readonly Landmark[];
   art: readonly LandmarkArt[];
+  tours: readonly Tour[];
 };
 
 /** One city's atlas: the map and everything around it, with the view mirrored in the URL. */
-export function CityAtlas({ slug, name, subdivisionLabel, landmarks, art }: CityAtlasProps) {
+export function CityAtlas({ slug, name, subdivisionLabel, landmarks, art, tours }: CityAtlasProps) {
   useEffect(() => {
     useAtlasStore.getState().setCity(slug);
   }, [slug]);
   useUrlSync();
   useAtlasEvents();
+  useTourPlayer(tours);
 
   return (
     <>
       <AtlasCanvas slug={slug} name={name} subdivisionLabel={subdivisionLabel} />
       <Hud city={slug} subdivisionLabel={subdivisionLabel} />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
+      <TourMenu />
       <HoverTooltip />
       <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
+      <TourPlayer />
       <Attribution />
     </>
   );

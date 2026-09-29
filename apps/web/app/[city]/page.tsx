@@ -29,6 +29,7 @@ export default async function CityPage({ params }: Props) {
         subdivisionLabel={city.subdivision.label.en}
         landmarks={content.landmarks}
         art={content.art}
+        tours={content.tours}
       />
     </main>
   );

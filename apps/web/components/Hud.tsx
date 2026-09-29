@@ -123,6 +123,7 @@ export function Hud({ city, subdivisionLabel }: { city: string; subdivisionLabel
   useSubdivisionTracking(city);
   const camera = useAtlasStore((s) => s.camera);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
+  const touring = useAtlasStore((s) => s.tour !== null);
   const subdivision = useUiStore((s) => s.subdivision);
   const [showCoords, setShowCoords] = useState(false);
   if (!camera) return null;
@@ -142,7 +143,7 @@ export function Hud({ city, subdivisionLabel }: { city: string; subdivisionLabel
         </div>
         {!panelOpen && <Legend subdivisionLabel={subdivisionLabel} />}
       </div>
-      <div className={styles.bottomLeft}>
+      <div className={styles.bottomLeft} data-touring={touring}>
         <div className={styles.scale} aria-label={`Scale: ${bar.label}`}>
           <span className={styles.bar} style={{ width: `${bar.pixels}px` }} />
           <span>{bar.label}</span>

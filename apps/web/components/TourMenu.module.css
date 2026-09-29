@@ -1,0 +1,96 @@
+/* Under the search box. */
+.menu {
+  position: fixed;
+  top: 56px;
+  left: 12px;
+  width: min(360px, calc(100vw - 24px));
+  z-index: 13;
+  pointer-events: none;
+}
+
+.menu > * {
+  pointer-events: auto;
+}
+
+.toggle {
+  padding: 4px 8px;
+  background: rgb(4 5 10 / 85%);
+  border: 1px solid #2a2c36;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggle:hover,
+.toggle:focus-visible,
+.toggle[aria-expanded='true'] {
+  border-color: var(--fg-dim);
+}
+
+.key {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid #2a2c36;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  background: rgb(4 5 10 / 96%);
+  border: 1px solid #2a2c36;
+}
+
+.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tour:hover,
+.tour:focus-visible {
+  background: #1b1d27;
+  outline: none;
+}
+
+.tour:disabled {
+  color: var(--fg-dim);
+  cursor: wait;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.meta,
+.description {
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+
+.badge {
+  margin-left: 8px;
+  padding: 0 4px;
+  border: 1px solid var(--fg-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+/* Phones: the zoom readout and compass share this row on the right. */
+@media (max-width: 640px) {
+  .menu {
+    width: calc(100vw - 24px);
+  }
+}

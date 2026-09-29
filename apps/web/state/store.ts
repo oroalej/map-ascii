@@ -31,6 +31,8 @@ export type AtlasActions = {
   setYear: (year: number) => void;
   setSelected: (id: string | null) => void;
   setHover: (id: string | null) => void;
+  /** The tour being played, as mirrored in the URL (the player itself is `state/tour.ts`). */
+  setTour: (tour: AtlasState['tour']) => void;
 };
 
 export const initialAtlasState = (): AtlasState => ({
@@ -56,6 +58,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()((set) => ({
   setYear: (year) => set({ year }),
   setSelected: (selectedId) => set({ selectedId }),
   setHover: (hoverId) => set({ hoverId }),
+  setTour: (tour) => set({ tour }),
 }));
 
 /**

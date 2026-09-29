@@ -113,6 +113,11 @@
     max-height: 88dvh;
   }
 
+  /* During a tour, the tour's sheet takes its place; the selection still shows on the map. */
+  .panel[data-touring='true'] {
+    display: none;
+  }
+
   .handle {
     display: block;
     width: 100%;

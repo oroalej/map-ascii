@@ -1,0 +1,179 @@
+/* Bottom center, above the attribution; beside the info panel when it is open. */
+.card {
+  position: fixed;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px));
+  padding: 10px 14px 12px;
+  background: rgb(4 5 10 / 94%);
+  border: 1px solid #2a2c36;
+  font-size: 14px;
+  line-height: 1.5;
+  z-index: 13;
+}
+
+@media (min-width: 641px) {
+  .card[data-panel='true'] {
+    left: calc((100vw - 404px) / 2);
+    width: min(560px, calc(100vw - 428px));
+  }
+}
+
+.chip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  background: rgb(4 5 10 / 96%);
+  border: 1px solid var(--fg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:hover,
+.chip:focus-visible {
+  background: #1b1d27;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kicker {
+  flex: 1;
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.badge {
+  margin-left: 8px;
+  padding: 0 4px;
+  border: 1px solid var(--fg-dim);
+  font-size: 10px;
+}
+
+.count {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #2a2c36;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.title {
+  margin: 2px 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.narration {
+  margin: 0 0 6px;
+}
+
+.sources {
+  margin: 0 0 6px;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+
+.track {
+  height: 3px;
+  margin: 8px 0 10px;
+  background: #1b1d27;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--fg);
+  transform-origin: left;
+  transform: scaleX(var(--from));
+}
+
+.fill[data-running='true'] {
+  animation-name: fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fill {
+  from {
+    transform: scaleX(var(--from));
+  }
+  to {
+    transform: scaleX(var(--to));
+  }
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid #2a2c36;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus-visible,
+.button:hover,
+.button:focus-visible {
+  border-color: var(--fg-dim);
+}
+
+.button:disabled {
+  color: var(--fg-dim);
+  cursor: default;
+}
+
+/*
+ * Phones: a bottom sheet in place of the info panel. It sits under the attribution, which stays
+ * readable over its padded bottom edge.
+ */
+@media (max-width: 640px) {
+  .card {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: auto;
+    max-height: 50dvh;
+    overflow-y: auto;
+    padding-bottom: 52px;
+    border-width: 1px 0 0;
+    z-index: 10;
+  }
+
+  .chip {
+    position: fixed;
+    bottom: auto;
+    top: 100px;
+  }
+}

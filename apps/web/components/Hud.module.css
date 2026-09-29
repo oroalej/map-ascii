@@ -132,4 +132,9 @@
   .bottomLeft {
     bottom: 64px;
   }
+
+  /* The tour's sheet takes the bottom of the screen. */
+  .bottomLeft[data-touring='true'] {
+    display: none;
+  }
 }

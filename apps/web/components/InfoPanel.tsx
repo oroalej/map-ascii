@@ -91,6 +91,7 @@ const SWIPE_CLOSE = 60;
 
 export function InfoPanel({ city, subdivisionLabel, landmarks, art }: InfoPanelProps) {
   const id = useAtlasStore((s) => s.selectedId);
+  const touring = useAtlasStore((s) => s.tour !== null);
   const { feature, entry } = useSelectedDetails(city, id);
   // On phones the panel is a bottom sheet: peeking, or expanded (SPEC.md §8).
   const [expanded, setExpanded] = useState(false);
@@ -119,6 +120,7 @@ export function InfoPanel({ city, subdivisionLabel, landmarks, art }: InfoPanelP
     <aside
       className={styles.panel}
       data-expanded={expanded}
+      data-touring={touring}
       aria-label="Selected place"
       aria-live="polite"
     >
