@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-parochial-school",
+  "osm_id": "osm:way/1315514528",
+  "name": {
+    "en": "Naga Parochial School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/1315514528",
+      "note": "Location and name only."
+    }
+  ]
+}

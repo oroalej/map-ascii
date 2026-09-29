@@ -1,7 +1,11 @@
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
+import turfCentroid from '@turf/centroid';
 import type { AtlasFeature } from './03-normalize';
-import { readFeatures, writeFeatures } from './lib/io';
+import { placeArt } from './lib/art';
+import { planParts } from './lib/plan';
+import { readFeatures, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
 /**
@@ -24,6 +28,7 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     const p = feature.properties;
     p.landmark = true;
     p.landmark_id = landmark.id;
+    if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;
     if (landmark.start_year !== undefined || landmark.end_year !== undefined) {
       delete p.start_year;
@@ -39,18 +44,45 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     const list = missing.map((l) => `${l.id} (${l.osm_id})`).join(', ');
     throw new Error(`Landmarks not found in the OSM data (outside the detail bbox?): ${list}`);
   }
+
+  for (const feature of features) addLabelAnchor(feature);
   return features;
+}
+
+/**
+ * Give named landmarks, monuments, and places a label anchor: a point's own position, or an
+ * area's centroid. It is computed once from the full geometry, before tiling clips it, so the
+ * label lands in the same place whichever tile the renderer reads it from. (Street names follow
+ * their street's geometry instead.)
+ */
+export function addLabelAnchor(feature: AtlasFeature) {
+  const p = feature.properties;
+  if (!p.name || !(p.landmark || p.class === 'monument' || p.class === 'place_label')) return;
+  const [lng, lat] = turfCentroid(feature).geometry.coordinates as [number, number];
+  p.label_lng = Math.round(lng * 1e7) / 1e7;
+  p.label_lat = Math.round(lat * 1e7) / 1e7;
 }
 
 // Join the city pack's curated content onto features
 export const step: Step = {
   name: '04-merge-content',
-  async run({ content, buildDir }) {
+  async run({ city, content, buildDir, outDir }) {
     const features: AtlasFeature[] = [];
     for await (const f of readFeatures(join(buildDir, files.normalized))) {
       features.push(f as AtlasFeature);
     }
-    await writeFeatures(join(buildDir, files.merged), mergeContent(features, content));
-    console.log(`  joined ${content.landmarks.length} landmarks`);
+    const merged = mergeContent(features, content);
+    // Plan-view landmark parts (belfries, domes, tiered bases) as their own small footprints.
+    const { parts, warnings } = planParts(merged, content.plans);
+    for (const warning of warnings) console.warn(`  warning: ${warning}`);
+    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts]);
+    console.log(`  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts`);
+
+    // Landmark art, placed on its features, for the renderer (<city>.art.json).
+    const art = placeArt(features, content.art);
+    await mkdir(outDir, { recursive: true });
+    await writeJson(join(outDir, `${city.slug}.art.json`), art);
+    const drafts = art.pieces.filter((p) => p.status === 'draft').length;
+    console.log(`  placed ${art.pieces.length} art pieces (${drafts} draft)`);
   },
 };

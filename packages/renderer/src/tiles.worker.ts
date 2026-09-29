@@ -39,7 +39,7 @@ async function handle(request: WorkerRequest) {
     return;
   }
   const tile = new VectorTile(new PbfReader(new Uint8Array(response.data)));
-  const geometry = buildTileGeometry(tile.layers, registry);
+  const geometry = buildTileGeometry(tile.layers, registry, { z, y });
   scope.postMessage(
     { type: 'tile', key, geometry, newIds: registry.takeNew() },
     transferables(geometry),

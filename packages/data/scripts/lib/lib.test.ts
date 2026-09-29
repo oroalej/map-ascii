@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingHeight, classify, layerFor } from './classify';
+import { buildingHeight, classify, variantOf, layerFor, roadWidth } from './classify';
 import { parseOsmDate } from './dates';
 import { bufferBbox, toOverpassBbox } from './geo';
 
@@ -49,6 +49,79 @@ describe('classify', () => {
     expect(layerFor('building_school', 'point')).toBe('poi');
     expect(layerFor('building_school', 'area')).toBe('buildings');
     expect(layerFor('park', 'area')).toBe('landuse');
+  });
+});
+
+describe('classify: monuments and grounds', () => {
+  it('classifies statues, memorials, monuments, and artwork as monuments', () => {
+    for (const tags of [
+      { historic: 'memorial', memorial: 'statue' },
+      { historic: 'monument' },
+      { memorial: 'bust' },
+      { tourism: 'artwork' },
+    ]) {
+      expect(classify(tags, 'point', 10)).toBe('monument');
+      expect(classify(tags, 'area', 10)).toBe('monument');
+    }
+    expect(classify({ historic: 'castle' }, 'point', 10)).toBeNull();
+    expect(layerFor('monument', 'point')).toBe('poi');
+  });
+
+  it('classifies church grounds as a height-less religious feature', () => {
+    const tags = { landuse: 'religious', name: 'Cathedral Grounds' };
+    expect(classify(tags, 'area', 10)).toBe('building_religious');
+    expect(buildingHeight(tags, 'building_religious')).toBeUndefined();
+  });
+});
+
+describe('classify: street-level detail', () => {
+  it('classifies trees, furniture, entrances, and barriers', () => {
+    expect(classify({ natural: 'tree' }, 'point', 10)).toBe('tree');
+    expect(classify({ natural: 'tree_row' }, 'line', 10)).toBe('tree');
+    expect(classify({ amenity: 'bench' }, 'point', 10)).toBe('furniture');
+    expect(classify({ man_made: 'flagpole' }, 'point', 10)).toBe('furniture');
+    expect(classify({ amenity: 'fountain' }, 'area', 10)).toBe('furniture');
+    expect(classify({ entrance: 'main' }, 'point', 10)).toBe('entrance');
+    expect(classify({ barrier: 'fence' }, 'line', 10)).toBe('barrier');
+    expect(classify({ barrier: 'gate' }, 'point', 10)).toBe('barrier');
+    expect(classify({ barrier: 'bollard' }, 'point', 10)).toBeNull();
+  });
+
+  it('classifies parking and pitches', () => {
+    expect(classify({ amenity: 'parking' }, 'area', 10)).toBe('parking');
+    expect(classify({ leisure: 'pitch' }, 'area', 10)).toBe('pitch');
+    expect(layerFor('parking', 'area')).toBe('landuse');
+    expect(layerFor('furniture', 'point')).toBe('poi');
+  });
+
+  it('keeps building and monument rules ahead of the new point classes', () => {
+    expect(classify({ amenity: 'place_of_worship', entrance: 'yes' }, 'point', 10)).toBe(
+      'building_religious',
+    );
+    expect(classify({ historic: 'memorial', amenity: 'fountain' }, 'point', 10)).toBe('monument');
+  });
+
+  it('records the kind of furniture, barrier, or roof', () => {
+    expect(variantOf({ amenity: 'bench' }, 'furniture')).toBe('bench');
+    expect(variantOf({ man_made: 'flagpole' }, 'furniture')).toBe('flagpole');
+    expect(variantOf({ barrier: 'hedge' }, 'barrier')).toBe('hedge');
+    expect(variantOf({ building: 'yes', 'roof:shape': 'gabled' }, 'building')).toBe('gabled');
+    expect(variantOf({ building: 'yes' }, 'building')).toBeUndefined();
+    expect(variantOf({ 'roof:shape': 'flat' }, 'park')).toBeUndefined();
+  });
+});
+
+describe('roadWidth', () => {
+  it('prefers width, then lanes × 3.2 m, then a class default', () => {
+    expect(roadWidth({ width: '7.5' }, 'road_mid')).toBe(7.5);
+    expect(roadWidth({ lanes: '4' }, 'road_major')).toBe(12.8);
+    expect(roadWidth({}, 'road_minor')).toBe(6);
+    expect(roadWidth({ width: 'wide' }, 'road_major')).toBe(14);
+  });
+
+  it('gives only carriageways a width', () => {
+    expect(roadWidth({ width: '2' }, 'path')).toBeUndefined();
+    expect(roadWidth({}, 'building')).toBeUndefined();
   });
 });
 

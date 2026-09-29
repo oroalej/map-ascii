@@ -47,12 +47,15 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 
 **Tasks**
 - [ ] Region layers (coastline, major roads, water, DEM terrain ramp) and zoom-level crossfades.
-- [ ] Label placement with collision; subdivision and street names.
+- [ ] Label placement with collision; subdivision and street names. *(Started early: placement, collision, and landmark/monument names are in; subdivision and street names remain.)*
 - [ ] Picking (hover highlight, click select), plus the info panel populated from OSM tags and content.
 - [ ] Search (pipeline step 06 → `<city>.search-index.json`, MiniSearch, `/` shortcut, fly-to).
 - [ ] `app/[city]/` route with static params from the city registry. `/` redirects client-side to the only city.
 - [ ] Fly-to animation; URL state sync; share button; HUD (scale, subdivision with the city's local label, coordinates).
 - [ ] Mobile gestures and bottom-sheet panel; reduced-motion support.
+- [ ] Zoom-out limit: the minimum zoom is the one that fits the city's `regionBounds` in the viewport (recomputed on resize), and the view stays over the region.
+- [ ] Top-right corner: a legend of what each glyph means, listing the classes visible at the current zoom (derived from the theme, never hardcoded).
+- [ ] Top-right corner: the current zoom value and its level name (e.g. `z 15.3 · District`).
 - [ ] **(Naga)** Seed content: 10 landmarks with sources (see `docs/cities/naga.md` §4).
 
 **Accept when**
@@ -60,11 +63,13 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - **(Naga)** Searching "Cathedral" flies to the Naga Metropolitan Cathedral and opens the panel.
 - A shared URL (`/<city>?…`) reproduces the view.
 - The Playwright smoke tests pass.
+- Zooming out stops at the view that fits the whole region.
+- The legend lists what is on screen, and the zoom readout tracks the camera.
 
 ## Phase 3 — Orbit, 3D buildings, tours
 
 **Tasks**
-- [ ] Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset.
+- [ ] Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset. *(Started early: right-drag / Ctrl+drag / two-finger twist, extrusions with shaded walls and solid roofs, and the compass reset are in; the skyline acceptance check is still to do.)*
 - [ ] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
 - [ ] Tours live in the city pack (`cities/<slug>/tours/`).
 - [ ] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced).
@@ -132,7 +137,7 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - Which imagery source is allowed for the timeline underlay. This must be settled before Phase 4.
 - Hosting for large tile and imagery files: Vercel or R2.
 - Final product name ("ASCII Atlas" is the working name) and domain name.
-- How to assign subdivisions when a city's subdivision boundaries are incomplete in OSM (Naga: 3 of 27 barangays mapped). Options: leave features without a subdivision, derive approximate areas from `place` nodes (and label them approximate), or map the boundaries in OSM from a license-compatible source. Must be settled before step 03 computes `subdivision`.
+- ~~How to assign subdivisions when a city's subdivision boundaries are incomplete in OSM.~~ **Settled in Phase 2:** mapped boundaries win; elsewhere, features get the nearest subdivision `place` node inside the city (Voronoi areas clipped to the city boundary), flagged `approximate`. The UI marks these with "≈", and approximate borders are never drawn. Mapping the real boundaries in OSM remains the long-term fix.
 - Which city comes second. It should differ from Naga in at least one of country, admin levels, or languages, to stress the generic model.
 
 ## Log
@@ -142,3 +147,6 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - **2026-09-29 — Phase 0 (scaffold).** pnpm monorepo (`apps/web`, `packages/{renderer,data,content,shared}`); Next 16 static export showing a blank dark WebGL2 canvas with OSM attribution; renderer `createAtlas` stub; zod schemas for Landmark, NameHistory, Event, Tour, CameraState; content validator; pipeline step stubs; ESLint/Prettier/Vitest/Playwright; GitHub Actions CI. Known: Node 22.13+ required (Vitest 5), TypeScript pinned to ~6.0 (typescript-eslint), CI green pending first push.
 - **2026-09-29 — Renamed to ASCII Atlas.** Docs made city-generic with Naga City as the first city (`docs/cities/naga.md`); package scope renamed `@naga/*` → `@atlas/*`, root package `ascii-atlas`, product name in UI strings.
 - **2026-09-29 — Phase 1 (generic foundation + Naga Centro prototype).** WebGL2 ASCII renderer in `packages/renderer`: a tile worker (PMTiles range requests → vector-tile decode → earcut, Int16 tile-local positions), a cell pass with MRT class/attribute/id buffers and depth-based class priority, a select pass (road connectivity LUT, water animation, building ramp, area patterns), and a full-screen glyph pass over a canvas-generated glyph atlas (box-drawing and block glyphs drawn as shapes so lines join). Map camera with drag, cursor-anchored wheel and pinch zoom, keyboard `+`/`-`/arrows, zoom 7–19, and region bounds. Theme with the `SPEC.md` §4 classes. The pipeline now gives heights only to features with `building=*`, so school/church/market grounds render as `░` under their buildings. Tests: glyph LUT and rules, glyph atlas, camera math, tile selection and cache, tile geometry, a no-hardcoded-city guard, and an e2e check that the canvas draws. Measured 60 fps pan/zoom on a GTX 1650 SUPER. Known: labels, admin outlines, picking, and fly-to are Phase 2; `setYear` is still a stub (Phase 4); e2e port is overridable with `E2E_PORT`.
+- **2026-09-29 — Place-level detail (early Phase 2 work).** Zooming in now adds detail: curated landmark names from z16 and monument names from z18 (greedy placement with collision and halos, a first cut of the Phase 2 label system); double-line walls on landmark buildings and borders on landmark plazas from z17; single-line walls on every building from z18 (traced from the id buffer, with correct concave corners); statues, memorials, and monuments (`▲`, new `monument` class) from z17 via per-class minimum zoom; `landuse=religious` grounds rendered as ground. The Overpass cache is now keyed by query, so changing a query re-downloads. Still 60 fps at z19 on a GTX 1650 SUPER. Known: zoom-level changes pop rather than crossfade.
+- **2026-09-29 — Deeper detail up close.** Zoom now reaches z21. Place level adds: roads as real-width strips with curbs (z18), roof texture (z19), trees, fences, entrances, and street furniture from OSM, and hand-drawn landmark ASCII art (11 drafts: the Metropolitan Cathedral, San Francisco Parish, the Quince Martires and Rizal monuments, three Cathedral Grounds statues, the Robredo Coliseum, the Archbishop's Residence, USI, and Naga Parochial School) placed by footprint size with names underneath. Orbit mode (from Phase 3) is in: right-drag tilts and rotates, buildings extrude with shaded walls, and a compass resets the view. Known: the art is draft until reviewed; the Freedom Monument is an OSM plaque with no reference photo, so it has no drawing; patterns are screen-anchored while tilted.
+- **2026-09-29 — Top-down only.** The front-view landmark drawings made the map mix perspectives, so they came off the map (kept in the city pack for the Phase 2 info panel). Instead, pitched roofs show a ridge and lit/shaded slopes (z19+, from each footprint's long axis), and landmarks get plan-view parts from the city pack's `plans/`: the Cathedral's belfries, crossing dome, and cupolas; San Francisco Parish's dome and tower; the Quince Martires and Rizal monuments' tiered bases; the Coliseum's crown; the Cathedral Grounds statues' pedestals. All plans are drafts. Known: generic ridges follow the principal axis, so L-shaped roofs get one straight ridge.

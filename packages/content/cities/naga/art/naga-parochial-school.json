@@ -1,0 +1,75 @@
+{
+  "id": "art/naga-parochial-school",
+  "osm_id": "osm:way/1315514528",
+  "title": "Naga Parochial School",
+  "priority": 4,
+  "variants": [
+    {
+      "rows": ["▄▄▄▄       ", "█╱═█▄▄▄▄▄▄▄", "█═╱█ N P S ", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": ["rrrr       ", "assarrrrrrr", "assa a a a ", "rrrrrrrrrrr"]
+    },
+    {
+      "rows": [
+        " ▄▄▄▄▄▄              ",
+        " █○▀▀▀█              ",
+        " █╱═══█              ",
+        " █═══╱█▄▄▄▄▄▄▄▄▄▄▄▄▄ ",
+        " █╱═══█   PAROCHIAL  ",
+        " █═══╱█     ○        ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        " rrrrrr              ",
+        " aarrra              ",
+        " assssa              ",
+        " assssarrrrrrrrrrrrr ",
+        " assssa   aaaaaaaaa  ",
+        " assssa     a        ",
+        "rrrrrrrrrrrrrrrrrrrrr"
+      ]
+    },
+    {
+      "rows": [
+        "  ▄▄▄▄▄▄▄▄▄                              ",
+        " ▐█○▀▀▀▀▀▀█▌                             ",
+        " ▐█╱══════█▌                             ",
+        " ▐█══════╱█▌                             ",
+        " ▐█╱══════█▌▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ",
+        " ▐█══════╱█▌            ○                ",
+        " ▐█╱══════█▌  NAGA PAROCHIAL SCHOOL      ",
+        " ▐█▒▒▒▒▒▒▒█▌                             ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "  rrrrrrrrr                              ",
+        " aaarrrrrraa                             ",
+        " aasssssssaa                             ",
+        " aasssssssaa                             ",
+        " aasssssssaarrrrrrrrrrrrrrrrrrrrrrrrrrr  ",
+        " aasssssssaa            a                ",
+        " aasssssssaa  aaaa aaaaaaaaa aaaaaa      ",
+        " aalllllllaa                             ",
+        "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      ]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "a": "accent",
+    "r": "roof",
+    "s": "stone",
+    "l": "glass"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Naga Parochial School, Apr 2024.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_Parochial_School%2C_Apr_2024.jpg",
+      "note": "Red-framed open stair tower under a curved roof beside a cream wall with the school name and seal."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/1315514528"
+    }
+  ]
+}

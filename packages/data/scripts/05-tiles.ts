@@ -1,8 +1,8 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
-import type { AtlasProperties } from './03-normalize';
+import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
@@ -29,7 +29,7 @@ export function buildMeta(city: City, geography: Geography, years: [number, numb
     regionBounds: geography.regionBounds,
     defaultCamera: { ...geography.center, zoom: geography.zoom, pitch: 0, bearing: 0 },
     yearRange: years,
-    attribution: [],
+    attribution: geography.attribution ?? [],
   });
 }
 
@@ -47,8 +47,8 @@ export const step: Step = {
       '{out}',
       '--force',
       '--read-parallel',
-      '--minimum-zoom=12',
-      '--maximum-zoom=16',
+      `--minimum-zoom=${TILE_ZOOMS.min}`,
+      `--maximum-zoom=${TILE_ZOOMS.max}`,
       '--drop-densest-as-needed',
       `--name=${city.name.en}`,
       '--attribution=© OpenStreetMap contributors',
@@ -58,6 +58,11 @@ export const step: Step = {
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
     await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
-    console.log(`  wrote ${city.slug}.pmtiles and ${city.slug}.meta.json to ${outDir}`);
+    await copyFile(join(buildDir, files.subdivisions), join(outDir, `${city.slug}.subdivisions.json`));
+    const mb = (await stat(pmtiles)).size / 1e6;
+    console.log(
+      `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, and .subdivisions.json to ${outDir}`,
+    );
+    if (mb > 40) console.warn(`  ! ${city.slug}.pmtiles is over the 40 MB budget (ARCHITECTURE.md §8)`);
   },
 };

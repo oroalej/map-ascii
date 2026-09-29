@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ART_CHARACTERS,
   CameraState,
   City,
   contentSchemas,
   Event,
   Landmark,
+  LandmarkArt,
+  LandmarkPlan,
   LocalizedText,
   NameHistory,
   Tour,
@@ -179,5 +182,90 @@ describe('City', () => {
 
   it('rejects an inverted bbox', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
+  });
+});
+
+describe('LandmarkArt', () => {
+  const art = {
+    id: 'art/test-church',
+    osm_id: 'osm:way/1',
+    title: 'Test church',
+    variants: [
+      { rows: [' † ', '▐█▌'], colors: [' g ', '   '] },
+      { rows: ['  †  ', ' ╱○╲ ', '▐▓∩▓▌'], colors: ['  g  ', '     ', '     '] },
+    ],
+    palette: { s: 'stone', g: 'gold' },
+    status: 'draft',
+    sources: [{ title: 'A reference photo' }],
+  };
+  const issues = (value: unknown) =>
+    LandmarkArt.safeParse(value).error?.issues.map((i) => i.message) ?? [];
+
+  it('accepts a valid piece', () => {
+    expect(issues(art)).toEqual([]);
+  });
+
+  it('rejects ragged rows and color rows of another shape', () => {
+    const ragged = { ...art, variants: [{ rows: [' † ', '▐█'], colors: ['   ', '  '] }] };
+    expect(issues(ragged)).toContainEqual(expect.stringContaining('not 3 wide'));
+    const colors = { ...art, variants: [{ rows: [' † '], colors: ['   ', '   '] }] };
+    expect(issues(colors)).toContainEqual(expect.stringContaining('one row per row'));
+  });
+
+  it('rejects characters outside the art set and unknown color keys', () => {
+    expect(ART_CHARACTERS.has('╬')).toBe(true);
+    expect(ART_CHARACTERS.has('😀')).toBe(false);
+    const emoji = { ...art, variants: [{ rows: ['😀'], colors: [' '] }] };
+    expect(issues(emoji)).toContainEqual(expect.stringContaining('not allowed'));
+    const key = { ...art, variants: [{ rows: ['█'], colors: ['x'] }] };
+    expect(issues(key)).toContainEqual(expect.stringContaining('not in the palette'));
+  });
+
+  it('needs sources and variants that grow in width', () => {
+    expect(issues({ ...art, sources: [] }).length).toBeGreaterThan(0);
+    const shrinking = { ...art, variants: [...art.variants].reverse() };
+    expect(issues(shrinking)).toContainEqual(expect.stringContaining('grow in width'));
+  });
+
+  it('is part of the per-city content schemas', () => {
+    expect(contentSchemas(['fil']).LandmarkArt.safeParse(art).success).toBe(true);
+  });
+});
+
+describe('LandmarkPlan', () => {
+  const plan = {
+    id: 'plan/test-church',
+    osm_id: 'osm:way/1',
+    title: 'Test church',
+    front: 'sw',
+    parts: [
+      {
+        kind: 'belfry',
+        shape: 'hexagon',
+        size_m: 7,
+        height_m: 24,
+        at: { along: 0.9, across: -0.8 },
+      },
+      { kind: 'tier', shape: 'circle', size_m: 5, height_m: 1, offset_m: [0, 0] },
+    ],
+    status: 'draft',
+    sources: [{ title: 'Reference' }],
+  };
+
+  it('accepts a valid plan', () => {
+    expect(LandmarkPlan.safeParse(plan).success).toBe(true);
+  });
+
+  it('needs sources, and positions within the footprint', () => {
+    expect(LandmarkPlan.safeParse({ ...plan, sources: [] }).success).toBe(false);
+    const outside = { ...plan.parts[0], at: { along: 1.5, across: 0 } };
+    expect(LandmarkPlan.safeParse({ ...plan, parts: [outside] }).success).toBe(false);
+  });
+
+  it('needs exactly one of at or offset_m per part', () => {
+    const both = { ...plan.parts[0], offset_m: [0, 0] };
+    const neither = { kind: 'dome', shape: 'circle', size_m: 5, height_m: 5 };
+    expect(LandmarkPlan.safeParse({ ...plan, parts: [both] }).success).toBe(false);
+    expect(LandmarkPlan.safeParse({ ...plan, parts: [neither] }).success).toBe(false);
   });
 });

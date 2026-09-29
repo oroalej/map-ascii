@@ -2,10 +2,18 @@ import type { CameraState } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import {
   clampCamera,
+  isTilted,
+  MAX_PITCH,
+  MAX_ZOOM,
+  multiply,
+  orbitBy,
   panBy,
+  panByView,
   project,
   TILE_SIZE,
   unproject,
+  viewportFor,
+  wrapBearing,
   zoomAround,
   zoomAroundClamped,
   type CameraLimits,
@@ -35,6 +43,25 @@ describe('project / unproject', () => {
     const [lng, lat] = unproject(x, y, 18);
     expect(lng).toBeCloseTo(camera.lng, 9);
     expect(lat).toBeCloseTo(camera.lat, 9);
+  });
+});
+
+describe('deep zoom', () => {
+  it('keeps world cell indices within 32-bit ints at the maximum zoom', () => {
+    // The select shader works in world cells (ivec2); the grid origin is world px / cell px.
+    // Device px and cell size both scale with the pixel ratio, so it cancels out.
+    const [x, y] = project(179.99, -85, MAX_ZOOM);
+    const cellWidth = 10;
+    expect(x / cellWidth).toBeLessThan(2 ** 31);
+    expect(y / cellWidth).toBeLessThan(2 ** 31);
+  });
+
+  it('round-trips positions at the maximum zoom to within a centimeter', () => {
+    const [x, y] = project(camera.lng, camera.lat, MAX_ZOOM);
+    const [lng, lat] = unproject(x + 0.5, y + 0.5, MAX_ZOOM);
+    // Half a pixel at z21 is under 2 cm.
+    expect(Math.abs(lng - camera.lng) * 111_000).toBeLessThan(0.02);
+    expect(Math.abs(lat - camera.lat) * 111_000).toBeLessThan(0.02);
   });
 });
 
@@ -92,5 +119,42 @@ describe('clampCamera', () => {
     const anchored = groundAt(out, [200, 0]);
     const before = groundAt(camera, [200, 0]);
     expect(anchored[0]).toBeCloseTo(before[0], 9);
+  });
+});
+
+describe('orbit (pitch and bearing)', () => {
+  it('wraps bearings into (-180, 180] and clamps pitch to 0–60°', () => {
+    expect([0, 180, 181, -180, 360, -190].map(wrapBearing)).toEqual([0, 180, -179, 180, 0, 170]);
+    const out = clampCamera({ ...camera, pitch: 80, bearing: 270 }, limits);
+    expect(out).toMatchObject({ pitch: MAX_PITCH, bearing: -90 });
+    expect(orbitBy(camera, 30, -10)).toMatchObject({ bearing: 30, pitch: 0 });
+  });
+
+  it('knows when the view is tilted or rotated', () => {
+    expect(isTilted(camera)).toBe(false);
+    expect(isTilted({ ...camera, pitch: 20 })).toBe(true);
+    expect(isTilted({ ...camera, bearing: -45 })).toBe(true);
+  });
+
+  it('pans flat views exactly as panBy, and tilted views by the ground under the center', () => {
+    const size = { width: 800, height: 600 };
+    expect(panByView(camera, 40, -25, size)).toEqual(panBy(camera, 40, -25));
+    // Rotated 90°: dragging right moves the view along a north–south line instead.
+    const rotated = { ...camera, bearing: 90 };
+    const moved = panByView(rotated, 100, 0, size);
+    expect(Math.abs(moved.lat - camera.lat)).toBeGreaterThan(Math.abs(moved.lng - camera.lng));
+    expect(viewportFor(rotated, size).project([moved.lng, moved.lat])[0]).toBeCloseTo(300, 0);
+  });
+
+  it('multiplies column-major matrices', () => {
+    // prettier-ignore
+    const translate = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1];
+    // prettier-ignore
+    const scale = [2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1];
+    // Scale then translate: a point (1, 1, 1) lands at (7, 9, 11).
+    const m = multiply(translate, scale);
+    const apply = (p: number[]) =>
+      [0, 1, 2].map((r) => m[r]! * p[0]! + m[4 + r]! * p[1]! + m[8 + r]! * p[2]! + m[12 + r]!);
+    expect(apply([1, 1, 1])).toEqual([7, 9, 11]);
   });
 });

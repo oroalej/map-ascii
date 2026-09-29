@@ -1,0 +1,34 @@
+.compass {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--fg-dim);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 11px/1 var(--font-mono);
+  cursor: pointer;
+}
+
+.compass[data-flat='true'] {
+  opacity: 0.6;
+}
+
+.compass:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.needle {
+  display: inline-block;
+  transition: transform 0.15s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .needle {
+    transition: none;
+  }
+}

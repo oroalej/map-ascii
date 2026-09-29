@@ -1,0 +1,94 @@
+{
+  "id": "art/san-francisco-parish",
+  "osm_id": "osm:way/23662997",
+  "title": "San Francisco Parish",
+  "priority": 10,
+  "variants": [
+    {
+      "rows": [" †       ♦ ", "▄▀▄ ╱▔╲ ▐█▌", "▐█▐╱ ○ ╲█▌ ", "▐█▓▓▓∩▓▓▓█▌", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": [" g       r ", "rsr sss sss", "ssss l sss ", "ssdddldddss", "sssssssssss"]
+    },
+    {
+      "rows": [
+        "  †               ♦  ",
+        " ▄█▄             ▐█▌ ",
+        " ▀▀▀ ╱▔▔▔▔▔▔▔▔▔╲ ▐█▌ ",
+        "    ╱  ░░▒▒▒░░  ╲▐█▌ ",
+        " ═══════════════════ ",
+        " ║ ∩ ║║   ○   ║║ ∩ ║ ",
+        " ╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫ ",
+        " ║ ∩ ║║  ╭─╮  ║║ ∩ ║ ",
+        " ║ ▲ ║║  │▓│  ║║ ▲ ║ ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "  g               r  ",
+        " rsr             sss ",
+        " sss sssssssssss sss ",
+        "    s  sslllss  ssss ",
+        " sssssssssssssssssss ",
+        " s l ss   l   ss l s ",
+        " sssssssssssssssssss ",
+        " s l ss  dsd  ss l s ",
+        " s w ss  ddd  ss w s ",
+        "sssssssssssssssssssss"
+      ]
+    },
+    {
+      "rows": [
+        "     †                           ♦     ",
+        "    ▄█▄                         ▄█▄    ",
+        "   ▐███▌                       ▐█∩█▌   ",
+        "   ▀▀▀▀▀  ╱▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔╲  ▐███▌   ",
+        "         ╱   ░░▒▒ ▲ ▒▒░░     ╲ ▐█∩█▌   ",
+        "  ▄▄▄▄▄▄╱▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄╲▄▄▄▄▄▄  ",
+        "  ║ ╭─╮ ║║ ╭─╮   ╭───╮   ╭─╮ ║║ ╭─╮ ║  ",
+        "  ║ │▒│ ║║ │▒│   │ ○ │   │▒│ ║║ │▒│ ║  ",
+        "  ╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫  ",
+        "  ║ ╭─╮ ║║ ╭─╮   ╭───╮   ╭─╮ ║║ ╭─╮ ║  ",
+        "  ║ │▲│ ║║ │▲│   │▓▓▓│   │▲│ ║║ │▲│ ║  ",
+        "  ║ │ │ ║║ │ │   │▓▓▓│   │ │ ║║ │ │ ║  ",
+        " ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ "
+      ],
+      "colors": [
+        "     g                           r     ",
+        "    rsr                         rsr    ",
+        "   sssss                       sslss   ",
+        "   sssss  sssssssssssssssssss  sssss   ",
+        "         s   ssll w llss     s sslss   ",
+        "  rrrrrrsrrrrrrrrrrrrrrrrrrrrrsrrrrrr  ",
+        "  s dsd ss dsd   dsssd   dsd ss dsd s  ",
+        "  s dld ss dld   d l d   dld ss dld s  ",
+        "  sssssssssssssssssssssssssssssssssss  ",
+        "  s dsd ss dsd   dsssd   dsd ss dsd s  ",
+        "  s dwd ss dwd   ddddd   dwd ss dwd s  ",
+        "  s d d ss d d   ddddd   d d ss d d s  ",
+        " sssssssssssssssssssssssssssssssssssss "
+      ]
+    }
+  ],
+  "palette": {
+    "s": "stone",
+    "g": "gold",
+    "l": "glass",
+    "w": "wall",
+    "d": "wood",
+    "r": "roof"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: San Francisco Church Front View.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:San_Francisco_Church_Front_View.jpg",
+      "note": "Neoclassical façade: relief pediment, rose window, balcony balustrade, statue niches; small dome and a spired tower behind."
+    },
+    {
+      "title": "Lakad Pilipinas: San Francisco Church in Naga City",
+      "url": "https://www.lakadpilipinas.com/2011/08/naga-city-san-francisco-church.html"
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23662997"
+    }
+  ]
+}

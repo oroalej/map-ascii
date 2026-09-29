@@ -1,0 +1,16 @@
+{
+  "id": "landmark/archbishops-residence",
+  "osm_id": "osm:way/23664929",
+  "name": {
+    "en": "Archbishop's Residence"
+  },
+  "type": "church",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23664929",
+      "note": "Location and name only."
+    }
+  ]
+}

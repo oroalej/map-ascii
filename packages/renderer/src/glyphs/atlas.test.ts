@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { doubleLine, singleLine } from '../theme';
+import { doubleLine, doubleWall, singleLine, singleWall, themeGlyphs, themes } from '../theme';
 import { drawProcedural, shadeCoverage } from './atlas';
 
 const W = 10;
@@ -51,5 +51,31 @@ describe('procedural glyphs', () => {
     expect(draw('█').at(W - 1, H - 1)).toBe(255);
     expect(draw('▓').at(3, 3)).toBe(shadeCoverage['▓']);
     expect(draw('░').at(3, 3)).toBeLessThan(draw('▒').at(3, 3));
+  });
+
+  it('draws a one-cell building as a closed square', () => {
+    const square = draw('□');
+    expect(square.drawn).toBe(true);
+    expect(square.edges).toEqual({ n: false, s: false, w: false, e: false });
+    expect(square.at(5, 9)).toBe(0); // hollow
+  });
+});
+
+describe('glyph set', () => {
+  it('puts every map glyph (styles and walls) in the first 256 atlas slots', () => {
+    for (const theme of Object.values(themes)) {
+      const glyphs = themeGlyphs(theme);
+      const mapGlyphs = new Set([
+        ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
+        ...singleWall,
+        ...doubleWall,
+      ]);
+      for (const g of mapGlyphs) expect(glyphs.indexOf(g) + 1, g).toBeLessThan(256);
+    }
+  });
+
+  it('includes the label text characters', () => {
+    const glyphs = new Set(themeGlyphs(themes.dark));
+    for (const g of ['A', 'z', 'ñ', '?']) expect(glyphs.has(g), g).toBe(true);
   });
 });

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import type { City } from '@atlas/shared';
+import type { City, CityArt } from '@atlas/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
@@ -41,18 +41,41 @@ const content: ContentBundle = {
   events: [],
   'name-history': [],
   tours: [],
+  plans: [
+    {
+      id: 'plan/fixture-statue',
+      osm_id: 'osm:node/90',
+      title: 'Fixture Statue base',
+      parts: [{ kind: 'tier', shape: 'circle', size_m: 6, height_m: 1, offset_m: [0, 0] }],
+      status: 'draft',
+      sources: [{ title: 'Fixture source' }],
+    },
+  ],
+  art: [
+    {
+      id: 'art/fixture-statue',
+      osm_id: 'osm:node/90',
+      title: 'Fixture Statue',
+      footprint_m: 4,
+      variants: [{ rows: [' o ', '▐█▌'], colors: ['   ', '   '] }],
+      palette: { w: 'wall' },
+      status: 'draft',
+      sources: [{ title: 'Fixture source' }],
+    },
+  ],
 };
 
 let ctx: StepContext;
 let features: AtlasFeature[];
 
 beforeAll(async () => {
+  const buildDir = await mkdtemp(join(tmpdir(), 'atlas-pipeline-'));
   ctx = {
     city,
     content,
     rawDir: fileURLToPath(new URL('./__fixtures__/raw/', import.meta.url)),
-    buildDir: await mkdtemp(join(tmpdir(), 'atlas-pipeline-')),
-    outDir: '',
+    buildDir,
+    outDir: join(buildDir, 'out'),
     offline: true,
   };
   for (const step of [convert, normalize, mergeContent]) await step.run(ctx);
@@ -73,6 +96,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
       .sort(([a], [b]) => String(a).localeCompare(String(b)));
     expect(summary).toEqual([
       ['osm:node/19', 'place_label', 'labels'],
+      ['osm:node/90', 'monument', 'poi'],
       ['osm:relation/200', 'admin_city', 'admin'],
       ['osm:relation/201', 'admin_subdivision', 'admin'],
       ['osm:way/101', 'road_major', 'roads'],
@@ -80,6 +104,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
       ['osm:way/104', 'building_religious', 'buildings'],
       ['osm:way/105', 'park', 'landuse'],
       ['osm:way/106', 'water_river', 'water'],
+      ['plan:fixture-statue/1', 'building_part', 'buildings'],
     ]);
   });
 
@@ -104,6 +129,33 @@ describe('pipeline (02–04) on the fixture extract', () => {
       start_year: 1890,
       certainty: 'circa',
     });
+  });
+
+  it('gives roads a carriageway width, and nothing else one', () => {
+    const byId = new Map(features.map((f) => [f.properties.id, f.properties]));
+    expect(byId.get('osm:way/101')?.width).toEqual(expect.any(Number));
+    expect(byId.get('osm:way/102')?.width).toEqual(expect.any(Number));
+    expect(byId.get('osm:way/104')).not.toHaveProperty('width');
+  });
+
+  it('anchors labels for named landmarks and monuments only', () => {
+    const byId = new Map(features.map((f) => [f.properties.id, f.properties]));
+    expect(byId.get('osm:node/90')).toMatchObject({ label_lng: 0.0035, label_lat: 0.0065 });
+    const plaza = byId.get('osm:way/105')!;
+    expect(plaza.label_lng).toEqual(expect.any(Number));
+    expect(plaza.label_lat).toEqual(expect.any(Number));
+    expect(byId.get('osm:way/104')).not.toHaveProperty('label_lng');
+  });
+
+  it('writes the city landmark art, placed on its features', async () => {
+    const art = await readJson<CityArt>(join(ctx.outDir, 'fixture.art.json'));
+    expect(art.pieces).toHaveLength(1);
+    const [statue] = art.pieces;
+    expect(statue).toMatchObject({ id: 'art/fixture-statue', anchor: [0.0035, 0.0065] });
+    const [w, s, e, n] = statue!.bbox;
+    expect(w).toBeLessThan(0.0035);
+    expect(e).toBeGreaterThan(0.0035);
+    expect((n - s) * 111_320).toBeCloseTo(4, 1);
   });
 
   it('derives bounds and the default camera from OSM and the focus feature', async () => {

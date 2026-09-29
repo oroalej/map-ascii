@@ -28,6 +28,33 @@ const buildingKind = (tags: Tags): AtlasClass | null => {
   return null;
 };
 
+/** Statues, memorials, monuments, and public art. */
+const isMonument = (tags: Tags) =>
+  oneOf(tags.historic, 'monument', 'memorial') ||
+  oneOf(tags.memorial, 'statue', 'bust') ||
+  tags.tourism === 'artwork';
+
+/** Small street furniture, with the kind the renderer draws. */
+const furnitureKinds = ['bench', 'fountain', 'flagpole'] as const;
+const barrierKinds = ['fence', 'wall', 'hedge', 'gate'] as const;
+
+/**
+ * The renderer's glyph variant for a feature: the kind of `furniture` or `barrier`, or a
+ * building's roof shape (`roof:shape`), if any.
+ */
+export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
+  if (atlasClass === 'furniture') {
+    return furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k);
+  }
+  if (atlasClass === 'barrier') return barrierKinds.find((k) => tags.barrier === k);
+  if (atlasClass.startsWith('building') && tags['roof:shape']) return tags['roof:shape'];
+  return undefined;
+}
+
+const isFurniture = (tags: Tags) =>
+  oneOf(tags.amenity, 'bench', 'fountain') || tags.man_made === 'flagpole';
+const isBarrier = (tags: Tags) => oneOf(tags.barrier, ...barrierKinds);
+
 const placeLabels = ['city', 'town', 'village', 'suburb', 'quarter', 'neighbourhood'];
 
 /**
@@ -47,12 +74,22 @@ export function classify(
 
   if (kind === 'point') {
     if (oneOf(tags.place, ...placeLabels) && tags.name) return 'place_label';
-    return buildingKind(tags);
+    const building = buildingKind(tags);
+    if (building) return building;
+    if (isMonument(tags)) return 'monument';
+    if (tags.natural === 'tree') return 'tree';
+    if (isFurniture(tags)) return 'furniture';
+    if (tags.entrance !== undefined) return 'entrance';
+    if (isBarrier(tags)) return 'barrier';
+    return null;
   }
 
   if (kind === 'line') {
+    if (tags.natural === 'coastline') return 'coastline';
     if (tags.highway) return highwayClass(tags.highway);
     if (oneOf(tags.waterway, 'river', 'stream', 'canal')) return 'water_river';
+    if (tags.natural === 'tree_row') return 'tree';
+    if (isBarrier(tags)) return 'barrier';
     return null;
   }
 
@@ -60,19 +97,45 @@ export function classify(
   if (tags.building && tags.building !== 'no') return buildingKind(tags) ?? 'building';
   const kindOfBuilding = buildingKind(tags);
   if (kindOfBuilding) return kindOfBuilding;
+  // Church grounds (e.g. "Cathedral Grounds"); without building=* they get no height.
+  if (tags.landuse === 'religious') return 'building_religious';
+  if (isMonument(tags)) return 'monument';
   if (tags.natural === 'water' || tags.water !== undefined) return 'water_area';
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
   if (tags.natural === 'wood' || tags.landuse === 'forest') return 'trees';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';
+  if (tags.amenity === 'parking') return 'parking';
+  if (tags.leisure === 'pitch') return 'pitch';
+  if (tags.amenity === 'fountain') return 'furniture';
+  if (isBarrier(tags)) return 'barrier';
   return null;
+}
+
+/** Typical carriageway widths in meters, when OSM gives neither `width` nor `lanes`. */
+const defaultRoadWidths: Partial<Record<AtlasClass, number>> = {
+  road_major: 14,
+  road_mid: 10,
+  road_minor: 6,
+};
+
+/** Road width in meters: `width`, else `lanes` × 3.2, else a class default. */
+export function roadWidth(tags: Tags, atlasClass: AtlasClass): number | undefined {
+  const fallback = defaultRoadWidths[atlasClass];
+  if (fallback === undefined) return undefined;
+  const width = Number.parseFloat(tags.width ?? '');
+  if (Number.isFinite(width) && width > 0) return Math.round(width * 10) / 10;
+  const lanes = Number.parseFloat(tags.lanes ?? '');
+  if (Number.isFinite(lanes) && lanes > 0) return Math.round(lanes * 3.2 * 10) / 10;
+  return fallback;
 }
 
 /** The tile layer a class is written to. Point features other than labels go to `poi`. */
 export function layerFor(atlasClass: AtlasClass, kind: GeometryKind): TileLayer {
   if (atlasClass === 'place_label') return 'labels';
   if (kind === 'point') return 'poi';
-  if (atlasClass.startsWith('water_')) return 'water';
+  if (atlasClass === 'terrain') return 'terrain';
+  if (atlasClass.startsWith('water_') || atlasClass === 'coastline') return 'water';
   if (atlasClass.startsWith('road_') || atlasClass === 'path') return 'roads';
   if (atlasClass.startsWith('building')) return 'buildings';
   if (atlasClass.startsWith('admin_')) return 'admin';
@@ -101,3 +164,44 @@ export function buildingHeight(tags: Tags, atlasClass: AtlasClass): number | und
   if (Number.isFinite(levels) && levels > 0) return levels * 3;
   return defaultHeights[atlasClass];
 }
+
+/** Tags whose value says what a feature is, most telling first. */
+const kindKeys = [
+  'amenity',
+  'shop',
+  'leisure',
+  'historic',
+  'memorial',
+  'tourism',
+  'building',
+  'highway',
+  'waterway',
+  'natural',
+  'water',
+  'landuse',
+  'place',
+  'boundary',
+];
+
+/** The tag that defines what a feature is, e.g. `amenity=university`, for the info panel. */
+export function kindOf(tags: Tags): string | undefined {
+  for (const key of kindKeys) {
+    const value = tags[key];
+    if (value && value !== 'yes') return `${key}=${value}`;
+  }
+  return tags.building ? 'building=yes' : undefined;
+}
+
+/** OSM tags copied into the tiles as-is, for the info panel (keep this short: tile size). */
+export const detailTags = [
+  'alt_name',
+  'old_name',
+  'official_name',
+  'addr:street',
+  'website',
+  'wikipedia',
+  'wikidata',
+  'denomination',
+  'operator',
+  'building:levels',
+] as const;

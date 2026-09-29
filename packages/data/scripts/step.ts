@@ -42,10 +42,19 @@ export const cityContext = (city: City, content: ContentBundle, offline: boolean
 export const files = {
   rawBoundary: 'boundary.osm.json',
   rawDetail: 'detail.osm.json',
+  /** The region relation lookup (tags and bounds only). */
+  rawRegionRelation: 'region-relation.osm.json',
+  /** Region-wide low-detail layers: coastline, major roads, rivers, lakes, places. */
   rawRegion: 'region.osm.json',
+  /** Copernicus DEM tiles for the region. */
+  rawDem: 'dem',
   boundary: 'boundary.geojson',
   osm: 'osm.geojson',
+  regionOsm: 'region-osm.geojson',
+  /** Features built from other data, already classified: sea, terrain, province labels. */
+  derived: 'derived.geojson',
   geography: 'geography.json',
   normalized: 'normalized.geojsonl',
+  subdivisions: 'subdivisions.json',
   merged: 'merged.geojsonl',
 };

@@ -106,6 +106,94 @@ export const NameHistoryEntry = z
   });
 export type NameHistoryEntry = z.infer<typeof NameHistoryEntry>;
 
+const range = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => String.fromCodePoint(from + i));
+
+/**
+ * Characters landmark art may use: printable ASCII, the box-drawing and block-element ranges,
+ * and a few symbols. The renderer's glyph atlas includes all of them.
+ */
+export const ART_CHARACTERS: ReadonlySet<string> = new Set([
+  ...range(0x20, 0x7e),
+  ...range(0x2500, 0x257f),
+  ...range(0x2580, 0x259f),
+  ...'◆◇▲△▼▽○●◦•·†‡¶°∩≡≈♣♠♦☼',
+]);
+
+/** Colors an art piece can use; each theme defines them. */
+export const ArtRole = z.enum([
+  'stone',
+  'wall',
+  'roof',
+  'wood',
+  'gold',
+  'glass',
+  'foliage',
+  'accent',
+]);
+export type ArtRole = z.infer<typeof ArtRole>;
+
+/** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
+export const artChars = (row: string): string[] => [...row];
+
+/**
+ * One size of an art piece. `rows` is the drawing; `colors` has the same shape, each character
+ * a key into the piece's palette, or a space for the first palette role.
+ */
+export const ArtVariant = z
+  .object({
+    rows: z.array(z.string()).min(1),
+    colors: z.array(z.string()).min(1),
+  })
+  .superRefine((v, ctx) => {
+    const width = artChars(v.rows[0]!).length;
+    if (width === 0) ctx.addIssue({ code: 'custom', path: ['rows', 0], message: 'empty row' });
+    v.rows.forEach((row, i) => {
+      if (artChars(row).length !== width) {
+        ctx.addIssue({ code: 'custom', path: ['rows', i], message: `row is not ${width} wide` });
+      }
+      const bad = artChars(row).filter((c) => !ART_CHARACTERS.has(c));
+      if (bad.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['rows', i],
+          message: `characters not allowed in art: ${[...new Set(bad)].join(' ')}`,
+        });
+      }
+    });
+    if (v.colors.length !== v.rows.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['colors'],
+        message: 'colors must have one row per row',
+      });
+    }
+    v.colors.forEach((row, i) => {
+      if (artChars(row).length !== width) {
+        ctx.addIssue({ code: 'custom', path: ['colors', i], message: `row is not ${width} wide` });
+      }
+    });
+  });
+export type ArtVariant = z.infer<typeof ArtVariant>;
+
+/** One plan-view part of a landmark (see `LandmarkPlan`). */
+export const PlanPart = z.object({
+  kind: z.enum(['dome', 'cupola', 'belfry', 'tower', 'tier', 'pedestal']),
+  shape: z.enum(['circle', 'hexagon', 'square']),
+  /** Width across, in meters. */
+  size_m: z.number().positive().max(200),
+  height_m: z.number().positive().max(255),
+  /**
+   * Area features: `along` runs from the back (-1) to the front (+1) of the footprint's long
+   * axis; `across` from the left (-1) to the right (+1) edge of the footprint at that point, as
+   * seen by someone looking at the front.
+   */
+  at: z.object({ along: z.number().min(-1).max(1), across: z.number().min(-1).max(1) }).optional(),
+  /** Point features: meters east and north of the point. */
+  offset_m: z.tuple([z.number(), z.number()]).optional(),
+});
+export type PlanPart = z.infer<typeof PlanPart>;
+
 /**
  * Schemas for a city pack's content. Pass the city's declared `languages` to reject localized
  * fields in any other language; omit it for language-agnostic validation.
@@ -169,10 +257,89 @@ export function contentSchemas(languages?: readonly string[]) {
     steps: z.array(TourStep).min(1),
   });
 
-  return { Landmark, NameHistory, Event, TourStep, Tour };
+  /**
+   * An ASCII drawing of a landmark or monument, shown on the map at close zoom in place of its
+   * outline. Drawings are stylized from the reference images in `sources`; `status` stays
+   * `draft` until someone who knows the place has checked it.
+   */
+  const LandmarkArt = z
+    .object({
+      id: z.string().regex(/^art\/[a-z0-9-]+$/, 'expected art/<slug>'),
+      osm_id: OsmId,
+      title: z.string().min(1),
+      /** From smallest to largest; the renderer picks the largest that fits the footprint. */
+      variants: z.array(ArtVariant).min(1),
+      /**
+       * Approximate width in meters, for point features (statues, monuments) whose OSM
+       * geometry has no size. Areas use their mapped footprint instead.
+       */
+      footprint_m: z.number().positive().max(500).optional(),
+      /** When drawings would overlap, the higher priority is drawn (default 0). */
+      priority: z.int().min(0).max(100).optional(),
+      /** Color keys used in `colors`, each mapped to a theme role. The first is the default. */
+      palette: z.record(z.string().length(1), ArtRole),
+      status: z.enum(['draft', 'verified']),
+      sources: Sources,
+    })
+    .superRefine((art, ctx) => {
+      const keys = new Set(Object.keys(art.palette));
+      if (keys.size === 0) ctx.addIssue({ code: 'custom', path: ['palette'], message: 'empty' });
+      let previous = 0;
+      art.variants.forEach((variant, v) => {
+        const width = artChars(variant.rows[0] ?? '').length;
+        if (width <= previous) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['variants', v],
+            message: 'variants must grow in width, smallest first',
+          });
+        }
+        previous = width;
+        variant.colors.forEach((row, i) => {
+          const unknown = artChars(row).filter((c) => c !== ' ' && !keys.has(c));
+          if (unknown.length > 0) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['variants', v, 'colors', i],
+              message: `color keys not in the palette: ${[...new Set(unknown)].join(' ')}`,
+            });
+          }
+        });
+      });
+    });
+
+  /**
+   * Plan-view parts of a landmark, drawn on the map from above: belfries, domes, a monument's
+   * tiered base. The pipeline turns each part into a `building_part` footprint. Parts of an
+   * area feature are placed with `at`, relative to its long axis pointing to `front`; parts of
+   * a point feature with `offset_m`.
+   */
+  const LandmarkPlan = z
+    .object({
+      id: z.string().regex(/^plan\/[a-z0-9-]+$/, 'expected plan/<slug>'),
+      osm_id: OsmId,
+      title: z.string().min(1),
+      /** Which way the front faces, for area features. */
+      front: z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']).optional(),
+      parts: z.array(PlanPart).min(1),
+      status: z.enum(['draft', 'verified']),
+      sources: Sources,
+    })
+    .refine(
+      (plan) => plan.parts.every((p) => (p.at === undefined) !== (p.offset_m === undefined)),
+      {
+        message: 'each part needs exactly one of at or offset_m',
+        path: ['parts'],
+      },
+    );
+
+  return { Landmark, NameHistory, Event, TourStep, Tour, LandmarkArt, LandmarkPlan };
 }
 
-export const { Landmark, NameHistory, Event, TourStep, Tour } = contentSchemas();
+export const { Landmark, NameHistory, Event, TourStep, Tour, LandmarkArt, LandmarkPlan } =
+  contentSchemas();
+export type LandmarkPlan = z.infer<typeof LandmarkPlan>;
+export type LandmarkArt = z.infer<typeof LandmarkArt>;
 export type Landmark = z.infer<typeof Landmark>;
 export type NameHistory = z.infer<typeof NameHistory>;
 export type Event = z.infer<typeof Event>;
@@ -232,6 +399,11 @@ export const City = z
      * resolves into the meta's default camera. Without it, the boundary centroid is used.
      */
     focus: z.strictObject({ osm_id: OsmId, zoom: CameraState.shape.zoom }).optional(),
+    /**
+     * Admin level of the provinces or states named at Region level (default 4, which fits most
+     * countries).
+     */
+    province_admin_level: z.int().min(2).max(11).optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.
@@ -266,10 +438,34 @@ export const CityMeta = z.object({
 });
 export type CityMeta = z.infer<typeof CityMeta>;
 
+/**
+ * A city's generated `<slug>.art.json`: its landmark art, placed. `bbox` is the feature's
+ * footprint (or, for a point, its `footprint_m` around it) and `anchor` its label anchor.
+ */
+export const CityArt = z.object({
+  pieces: z.array(
+    z.object({
+      id: z.string().min(1),
+      osm_id: OsmId,
+      title: z.string().min(1),
+      status: z.enum(['draft', 'verified']),
+      priority: z.int().min(0).max(100),
+      bbox: BBox,
+      anchor: z.tuple([z.number(), z.number()]),
+      palette: z.record(z.string().length(1), ArtRole),
+      variants: z.array(ArtVariant).min(1),
+    }),
+  ),
+});
+export type CityArt = z.infer<typeof CityArt>;
+
 /** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
 export const AtlasClass = z.enum([
   'water_river',
   'water_area',
+  'water_sea',
+  'coastline',
+  'terrain',
   'road_major',
   'road_mid',
   'road_minor',
@@ -281,6 +477,14 @@ export const AtlasClass = z.enum([
   'park',
   'trees',
   'farmland',
+  'monument',
+  'building_part',
+  'tree',
+  'barrier',
+  'entrance',
+  'furniture',
+  'parking',
+  'pitch',
   'admin_city',
   'admin_subdivision',
   'place_label',
@@ -293,6 +497,7 @@ export const TileLayer = z.enum([
   'roads',
   'buildings',
   'landuse',
+  'terrain',
   'poi',
   'admin',
   'labels',

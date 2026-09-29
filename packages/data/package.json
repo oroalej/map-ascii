@@ -13,10 +13,18 @@
     "@turf/bbox": "^7.4",
     "@turf/boolean-point-in-polygon": "^7.4",
     "@turf/centroid": "^7.4",
+    "@turf/helpers": "^7.4.0",
+    "@turf/simplify": "^7.4.0",
+    "@turf/voronoi": "^7.4.0",
+    "d3-contour": "^4.0.2",
+    "geotiff": "^3.0.5",
+    "minisearch": "^7.2.0",
     "osmtogeojson": "3.0.0-beta.5",
+    "polyclip-ts": "^0.16.8",
     "zod": "^4.6"
   },
   "devDependencies": {
+    "@types/d3-contour": "^3.0.6",
     "@types/geojson": "^7946"
   }
 }

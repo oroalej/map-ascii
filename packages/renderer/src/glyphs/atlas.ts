@@ -15,6 +15,8 @@ const boxArms: Record<string, Arms> = {
   '─': [0, 1, 0, 1], '│': [1, 0, 1, 0], '┌': [0, 1, 1, 0], '┐': [0, 0, 1, 1],
   '└': [1, 1, 0, 0], '┘': [1, 0, 0, 1], '├': [1, 1, 1, 0], '┤': [1, 0, 1, 1],
   '┬': [0, 1, 1, 1], '┴': [1, 1, 0, 1], '┼': [1, 1, 1, 1],
+  // Rounded corners (landmark art) are drawn square, so they join the lines around them.
+  '╭': [0, 1, 1, 0], '╮': [0, 0, 1, 1], '╰': [1, 1, 0, 0], '╯': [1, 0, 0, 1],
   '═': [0, 2, 0, 2], '║': [2, 0, 2, 0], '╔': [0, 2, 2, 0], '╗': [0, 0, 2, 2],
   '╚': [2, 2, 0, 0], '╝': [2, 0, 0, 2], '╠': [2, 2, 2, 0], '╣': [2, 0, 2, 2],
   '╦': [0, 2, 2, 2], '╩': [2, 2, 0, 2], '╬': [2, 2, 2, 2],
@@ -77,6 +79,19 @@ function drawDiagonal(slot: Slot, rising: boolean) {
   }
 }
 
+/** A small square outline centered in the cell: a building that fits in one cell. */
+function drawSquare(slot: Slot) {
+  const { w, h } = slot;
+  const t = Math.max(1, Math.floor(w / 8));
+  const size = Math.max(3, Math.round(w * 0.7));
+  const x0 = Math.floor((w - size) / 2);
+  const y0 = Math.floor((h - size) / 2);
+  fill(slot, x0, y0, x0 + size, y0 + t);
+  fill(slot, x0, y0 + size - t, x0 + size, y0 + size);
+  fill(slot, x0, y0, x0 + t, y0 + size);
+  fill(slot, x0 + size - t, y0, x0 + size, y0 + size);
+}
+
 /** Coverage of the shade blocks (0–255). */
 export const shadeCoverage: Readonly<Record<string, number>> = { '░': 80, '▒': 130, '▓': 185 };
 
@@ -100,6 +115,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
   else if (glyph === '╱' || glyph === '╲') drawDiagonal(slot, glyph === '╱');
+  else if (glyph === '□') drawSquare(slot);
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);
   else return false;
   return true;
@@ -138,6 +154,8 @@ export function buildGlyphAtlas(
   font = DEFAULT_FONT,
 ): GlyphAtlas {
   const all = [' ', ...glyphs.filter((g) => g !== ' ')];
+  // The overlay stores glyph index + 1 in 16 bits.
+  if (all.length >= 0xffff) throw new Error(`too many glyphs for the atlas: ${all.length}`);
   const indices = new Map(all.map((g, i) => [g, i]));
   const rows = Math.ceil(all.length / ATLAS_COLUMNS);
   const width = ATLAS_COLUMNS * cellWidth;

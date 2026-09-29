@@ -131,6 +131,17 @@
       }
     },
     {
+      "type": "node",
+      "id": 90,
+      "lat": 0.0065,
+      "lon": 0.0035,
+      "tags": {
+        "historic": "memorial",
+        "memorial": "statue",
+        "name": "Fixture Statue"
+      }
+    },
+    {
       "type": "way",
       "id": 101,
       "nodes": [5, 6],

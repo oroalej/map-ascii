@@ -1,0 +1,41 @@
+{
+  "id": "plan/san-francisco-parish",
+  "osm_id": "osm:way/23662997",
+  "title": "San Francisco Parish",
+  "front": "nw",
+  "parts": [
+    {
+      "kind": "dome",
+      "shape": "circle",
+      "size_m": 6,
+      "height_m": 16,
+      "at": {
+        "along": -0.7,
+        "across": -0.6
+      }
+    },
+    {
+      "kind": "tower",
+      "shape": "square",
+      "size_m": 5,
+      "height_m": 20,
+      "at": {
+        "along": -0.7,
+        "across": 0.6
+      }
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikimedia Commons: San Francisco Church Front View.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:San_Francisco_Church_Front_View.jpg",
+      "note": "Seen from the front: a small dome with a cross behind the façade on the left, and a spired tower behind it on the right."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23662997",
+      "note": "Footprint; its north-west end is on Peñafrancia Avenue, which the façade faces. The exact positions of the dome and tower on the roof are estimated."
+    }
+  ],
+  "status": "draft"
+}

@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { foldTerm, SearchEntry } from './search';
+import { bandVisibility, CLASS_ZOOM, tileZoomRange, zoomLevel } from './zoom';
+
+describe('bandVisibility', () => {
+  it('fades in over the half zoom before min', () => {
+    const band = { min: 13 };
+    expect(bandVisibility(band, 12.4)).toBe(0);
+    expect(bandVisibility(band, 12.75)).toBeCloseTo(0.5);
+    expect(bandVisibility(band, 13)).toBe(1);
+    expect(bandVisibility(band, 19)).toBe(1);
+  });
+
+  it('fades out over the half zoom after max', () => {
+    const band = { min: 0, max: 9.5 };
+    expect(bandVisibility(band, 9.5)).toBe(1);
+    expect(bandVisibility(band, 9.75)).toBeCloseTo(0.5);
+    expect(bandVisibility(band, 10)).toBe(0);
+  });
+});
+
+describe('tileZoomRange', () => {
+  const tiles = { min: 6, max: 16 };
+
+  it('puts a class in the tiles from which it starts fading in', () => {
+    expect(tileZoomRange({ min: 13 }, tiles)).toEqual({ minzoom: 12, maxzoom: 16 });
+    expect(tileZoomRange({ min: 12.5 }, tiles)).toEqual({ minzoom: 12, maxzoom: 16 });
+    expect(tileZoomRange({ min: 0 }, tiles)).toEqual({ minzoom: 6, maxzoom: 16 });
+  });
+
+  it('keeps a class in tiles until it has faded out', () => {
+    expect(tileZoomRange(CLASS_ZOOM.terrain, tiles)).toEqual({ minzoom: 6, maxzoom: 10 });
+  });
+});
+
+describe('zoomLevel', () => {
+  it('names the SPEC §2 levels', () => {
+    expect(zoomLevel(7)).toBe('Region');
+    expect(zoomLevel(9.5)).toBe('City');
+    expect(zoomLevel(14)).toBe('District');
+    expect(zoomLevel(16)).toBe('Street');
+    expect(zoomLevel(18.2)).toBe('Place');
+  });
+});
+
+describe('search', () => {
+  it('folds diacritics and case', () => {
+    expect(foldTerm('Peñafrancia')).toBe('penafrancia');
+    expect(foldTerm('Santo Niño')).toBe(foldTerm('SANTO NINO'));
+  });
+
+  it('validates entries', () => {
+    const entry = {
+      id: 'osm:way/1',
+      name: 'Example',
+      altNames: [],
+      type: 'landmark',
+      lat: 1,
+      lng: 2,
+      zoomHint: 17,
+    };
+    expect(SearchEntry.safeParse(entry).success).toBe(true);
+    expect(SearchEntry.safeParse({ ...entry, type: 'airport' }).success).toBe(false);
+  });
+});

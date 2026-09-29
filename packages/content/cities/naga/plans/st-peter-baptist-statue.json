@@ -1,0 +1,22 @@
+{
+  "id": "plan/st-peter-baptist-statue",
+  "osm_id": "osm:node/11152417400",
+  "title": "St. Peter Baptist statue",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    }
+  ],
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/11152417400",
+      "note": "Location only; the pedestal size is a generic estimate."
+    }
+  ],
+  "status": "draft"
+}

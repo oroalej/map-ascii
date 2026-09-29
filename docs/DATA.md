@@ -24,7 +24,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 1. **`01-fetch`**
    - Read `city.json`, then download OSM data for two bounding boxes:
      - **Detail bbox:** the city boundary plus the configured buffer (`detail_buffer_km`). The boundary relation is found via Overpass using the config's `boundary` lookup (name, admin_level, and parent area). Fail loudly if the lookup matches zero relations or more than one.
-     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, water, place nodes).
+     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`.
    - Download DEM tiles for the Region bbox.
    - Cache raw downloads in `raw/<city>/`, and skip a download if the file is fresh (under 7 days old, or when `--offline` is set).
 2. **`02-convert`**
@@ -40,6 +40,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
+   - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
 5. **`05-tiles`**
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
    - Zoom ranges: Region layers z6–z11; detail layers z12–z16 (overzoom to z19 in the client).
@@ -61,12 +62,22 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `road_minor` | `highway=residential|unclassified|service|living_street` |
 | `path` | `highway=footway|path|pedestrian|steps|track` |
 | `building` | `building=*` |
-| `building_religious` | `building=church|cathedral|chapel` or `amenity=place_of_worship` |
+| `building_religious` | `building=church|cathedral|chapel` or `amenity=place_of_worship`; `landuse=religious` grounds (no height) |
 | `building_school` | `amenity=school|university|college` (area or building) |
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
 | `park` | `leisure=park|garden|playground`, `place=square` |
 | `trees` | `natural=wood`, `landuse=forest` |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
+| `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
+| `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
+| `tree` | `natural=tree` (points), `natural=tree_row` (lines) |
+| `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
+| `entrance` | `entrance=*` |
+| `furniture` | `amenity=bench|fountain`, `man_made=flagpole` (kind in `variant`) |
+| `parking` | `amenity=parking` |
+| `pitch` | `leisure=pitch` |
+
+Roads also carry `width` (meters: the `width` tag, else `lanes` × 3.2, else 14 / 10 / 6 m for major / mid / minor), and buildings with `roof:shape` carry it as `variant`.
 | `admin_city` | the city's boundary relation (from `city.json`; admin_level 6 for Naga) |
 | `admin_subdivision` | boundaries at the city's `subdivision.admin_level` (10 for Naga's barangays) |
 | `place_label` | named `place=city|town|village|suburb|quarter|neighbourhood` nodes |
@@ -134,8 +145,37 @@ Tour {
 }
 ```
 
+LandmarkPlan {                   // cities/<slug>/plans/*.json — drawn on the map, from above
+  id: string;                    // "plan/<slug>"
+  osm_id: string;                // the landmark or monument
+  title: string;
+  front?: 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';   // area features
+  parts: {
+    kind: 'dome' | 'cupola' | 'belfry' | 'tower' | 'tier' | 'pedestal';
+    shape: 'circle' | 'hexagon' | 'square';
+    size_m: number; height_m: number;
+    at?: { along: number; across: number };  // areas: -1 back … +1 front; -1 left … +1 right seen from the front
+    offset_m?: [number, number];              // points: meters east, north
+  }[];
+  status: 'draft' | 'verified';
+  sources: Source[];
+}
+
+LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
+  id: string;                    // "art/<slug>"
+  osm_id: string;                // the landmark or monument it draws
+  title: string;
+  variants: { rows: string[]; colors: string[] }[];  // smallest first; colors: palette keys per character
+  palette: Record<string, 'stone' | 'wall' | 'roof' | 'wood' | 'gold' | 'glass' | 'foliage' | 'accent'>;
+  footprint_m?: number;          // width in meters, for point features
+  priority?: number;             // wins when drawings would overlap
+  status: 'draft' | 'verified';  // draft until someone who knows the place has checked it
+  sources: Source[];             // the reference photos and pages it was drawn from
+}
+
 Validation rules:
-- `sources` is non-empty for any record with a year or story.
+- `sources` is non-empty for any record with a year or story, and for every art piece.
+- Art rows in a variant have equal widths, use only `ART_CHARACTERS`, and have a color row of the same shape whose keys are in the palette. Pipeline step 04 checks that each art piece's `osm_id` is in the data and writes `<city>.art.json`.
 - Localized fields contain `en` and only the languages listed in the city's `languages`.
 - A `region` bbox is the only coordinate data allowed in a city config, and only when the region has no usable OSM relation. The boundary and camera always come from OSM: the default camera is centered on the `focus` feature, or on the boundary centroid when there is no `focus`.
 - `end_year > start_year`.

@@ -1,0 +1,81 @@
+{
+  "id": "art/rizal-monument",
+  "osm_id": "osm:node/642910590",
+  "title": "Rizal monument, Plaza Rizal",
+  "footprint_m": 7,
+  "priority": 8,
+  "variants": [
+    {
+      "rows": ["  o  ", " ▐█▌ ", " ▐ ▌ ", "▄███▄", "▀▀▀▀▀"],
+      "colors": ["  w  ", " www ", " w w ", "swwws", "sssss"]
+    },
+    {
+      "rows": [
+        "    o    ",
+        "   ▐█▌   ",
+        "  ╲▐█▌╱  ",
+        "   ▐ ▌   ",
+        " i ▐ ▌ i ",
+        " █▄███▄█ ",
+        "▐███████▌",
+        "▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "    w    ",
+        "   www   ",
+        "  wwwww  ",
+        "   w w   ",
+        " w w w w ",
+        " wswwwsw ",
+        "wwwwwwwww",
+        "sssssssss"
+      ]
+    },
+    {
+      "rows": [
+        "      o      ",
+        "     ▐█▌     ",
+        "     ▐█▌     ",
+        "   ▄▄███▄▄   ",
+        "  ╲╲▐   ▌    ",
+        "   ╲▐ ○ ▌    ",
+        "    ▐   ▌    ",
+        "  o ▐   ▌ o  ",
+        " /█\\▐   ▌/█\\ ",
+        " ▐█▄█▄▄▄█▄█▌ ",
+        "▐███████████▌",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "      w      ",
+        "     www     ",
+        "     www     ",
+        "   sswwwss   ",
+        "  www   w    ",
+        "   ww w w    ",
+        "    w   w    ",
+        "  w w   w w  ",
+        " wwww   wwww ",
+        " wwswssswsww ",
+        "wwwwwwwwwwwww",
+        "sssssssssssss"
+      ]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "s": "stone"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Rizal Monument in Naga, Camarines Sur, Philippines.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Rizal_Monument_in_Naga%2C_Camarines_Sur%2C_Philippines.jpg",
+      "note": "White pedestal: Rizal statue on top, a winged figure on the shaft, two figures at the base, stepped plinth."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/642910590"
+    }
+  ]
+}

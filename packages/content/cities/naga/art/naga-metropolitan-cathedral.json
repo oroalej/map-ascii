@@ -1,0 +1,99 @@
+{
+  "id": "art/naga-metropolitan-cathedral",
+  "osm_id": "osm:way/23666715",
+  "title": "Naga Metropolitan Cathedral",
+  "priority": 10,
+  "variants": [
+    {
+      "rows": ["     †     ", " ▄  ╓╨╖  ▄ ", "▐█▌ ╱○╲ ▐█▌", "▐█▌▓▓∩▓▓▐█▌", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": ["     g     ", " s  sss  s ", "sss sls sss", "sssddlddsss", "sssssssssss"]
+    },
+    {
+      "rows": [
+        "          †          ",
+        "         ╓╨╖         ",
+        "  ▄█▄    ║║║    ▄█▄  ",
+        " ▐███▌ ╱▔▔▔▔▔╲ ▐███▌ ",
+        " ▐▓∩▓▌╱ ▲ ○ ▲ ╲▐▓∩▓▌ ",
+        " █████▀▀▀▀▀▀▀▀▀█████ ",
+        " █ ║ █ ║║ ∩ ║║ █ ║ █ ",
+        " █ ║ █ ║║ ◆ ║║ █ ║ █ ",
+        " █ ∩ █ ║║╭─╮║║ █ ∩ █ ",
+        " █ ║ █ ║║│▓│║║ █ ║ █ ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "          g          ",
+        "         sss         ",
+        "  sss    sss    sss  ",
+        " sssss sssssss sssss ",
+        " sdldss w l w ssdlds ",
+        " sssssssssssssssssss ",
+        " s s s ss l ss s s s ",
+        " s s s ss g ss s s s ",
+        " s l s ssdsdss s l s ",
+        " s s s ssdddss s s s ",
+        "sssssssssssssssssssss"
+      ]
+    },
+    {
+      "rows": [
+        "                  †                  ",
+        "                 ╓╨╖                 ",
+        "                 ║║║                 ",
+        "    ▄███▄       ▄███▄       ▄███▄    ",
+        "   ▐█████▌    ╱▔▔▔▔▔▔▔╲    ▐█████▌   ",
+        "   ▐█▓∩▓█▌   ╱  ▲ ○ ▲  ╲   ▐█▓∩▓█▌   ",
+        "   ▐█████▌▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▐█████▌   ",
+        "   █ ║ ║ █ ║║ ║║ ╭─╮ ║║ ║║ █ ║ ║ █   ",
+        "   █ ║ ║ █ ║║ ║║ │▒│ ║║ ║║ █ ║ ║ █   ",
+        "  ▄█▄▄▄▄▄█▄══════╧═╧══════▄█▄▄▄▄▄█▄  ",
+        "  █ ║ ∩ ║ █║║ ║║  ◆  ║║ ║║█ ║ ∩ ║ █  ",
+        "  █ ║ ▲ ║ █║║ ║║ ╭─╮ ║║ ║║█ ║ ▲ ║ █  ",
+        "  █ ║ ║ ║ █║║ ║║ │▓│ ║║ ║║█ ║ ║ ║ █  ",
+        "  █ ║ ║ ║ █║║ ║║ │▓│ ║║ ║║█ ║ ║ ║ █  ",
+        " ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ "
+      ],
+      "colors": [
+        "                  g                  ",
+        "                 sss                 ",
+        "                 sss                 ",
+        "    sssss       sssss       sssss    ",
+        "   sssssss    sssssssss    sssssss   ",
+        "   ssdldss   s  w l w  s   ssdldss   ",
+        "   sssssssssssssssssssssssssssssss   ",
+        "   s s s s ss ss dsd ss ss s s s s   ",
+        "   s s s s ss ss dld ss ss s s s s   ",
+        "  sssssssssssssssssssssssssssssssss  ",
+        "  s s l s sss ss  g  ss sss s l s s  ",
+        "  s s w s sss ss dsd ss sss s w s s  ",
+        "  s s s s sss ss ddd ss sss s s s s  ",
+        "  s s s s sss ss ddd ss sss s s s s  ",
+        " sssssssssssssssssssssssssssssssssss "
+      ]
+    }
+  ],
+  "palette": {
+    "s": "stone",
+    "g": "gold",
+    "l": "glass",
+    "w": "wall",
+    "d": "wood"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: CATHEDRAL.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:CATHEDRAL.jpg",
+      "note": "Front façade: grey two-level façade, central pediment with clock and cupola, hexagonal belfries on both ends."
+    },
+    {
+      "title": "Wikipedia: Naga Metropolitan Cathedral",
+      "url": "https://en.wikipedia.org/wiki/Naga_Metropolitan_Cathedral"
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23666715"
+    }
+  ]
+}

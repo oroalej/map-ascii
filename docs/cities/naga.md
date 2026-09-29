@@ -31,7 +31,7 @@ Seed landmarks (location and name only, sourced to OSM; dates and stories wait f
 | City | Naga boundary, barangay outlines, Naga River, highways |
 | District | The Centro, all roads, building blocks, parks |
 | Street | Individual buildings and street names in the Centro and the barangays |
-| Place | Detailed landmarks such as the Basilica, the Cathedral, and the plazas |
+| Place | Detailed landmarks such as the Basilica, the Cathedral, and the plazas: landmark names and walls, building outlines, and the named statues and memorials from OSM (e.g. Jose Rizal and Quince Martires in the plazas; St. John the Evangelist, St. Pedro Calungsod, and St. Peter Baptist in the Cathedral Grounds); roof ridges on pitched roofs; and draft plan-view parts (`packages/content/cities/naga/plans/`): the Cathedral's two front belfries, crossing dome, and cupolas, San Francisco Parish's dome and tower, the Quince Martires and Rizal monuments' tiered bases, the Coliseum's crown, and the Cathedral Grounds statues' pedestals |
 
 ## 3. Tours (launch set)
 

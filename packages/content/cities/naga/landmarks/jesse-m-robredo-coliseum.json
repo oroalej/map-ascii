@@ -1,0 +1,16 @@
+{
+  "id": "landmark/jesse-m-robredo-coliseum",
+  "osm_id": "osm:way/425056186",
+  "name": {
+    "en": "Jesse M. Robredo Coliseum"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/425056186",
+      "note": "Location and name only."
+    }
+  ]
+}

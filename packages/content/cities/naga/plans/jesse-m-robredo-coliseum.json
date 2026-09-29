@@ -1,0 +1,30 @@
+{
+  "id": "plan/jesse-m-robredo-coliseum",
+  "osm_id": "osm:way/425056186",
+  "title": "Jesse M. Robredo Coliseum",
+  "front": "nw",
+  "parts": [
+    {
+      "kind": "dome",
+      "shape": "circle",
+      "size_m": 12,
+      "height_m": 24,
+      "at": {
+        "along": 0,
+        "across": 0
+      }
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Jesse M. Robredo Coliseum.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Jesse_M._Robredo_Coliseum.jpg",
+      "note": "A wide low dome with a small round crown at its top."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/425056186"
+    }
+  ],
+  "status": "draft"
+}

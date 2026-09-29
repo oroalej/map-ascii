@@ -1,0 +1,69 @@
+{
+  "id": "art/archbishops-residence",
+  "osm_id": "osm:way/23664929",
+  "title": "Archbishop's Residence (Archdiocese of Cáceres)",
+  "priority": 6,
+  "variants": [
+    {
+      "rows": ["▄▀▄  ▄  ▄▀▄", "▐▒▌▄▀◆▀▄▐▒▌", "▐▒▒▒║▒║▒▒▒▌", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": ["rrr  r  rrr", "wlwrrgrrwlw", "wlllwlwlllw", "rrrrrrrrrrr"]
+    },
+    {
+      "rows": [
+        " ▄▀▀▀▄         ▄▀▀▀▄ ",
+        " █▒▒▒█  ▄▀▀▀▄  █▒▒▒█ ",
+        " █▀▀▀█▄▀  ◆  ▀▄█▀▀▀█ ",
+        " █▒▒▒█▒▒║▒ ▒║▒▒█▒▒▒█ ",
+        " █▒▒▒█▒▒║ ▒ ║▒▒█▒▒▒█ ",
+        "♣♣♣♣♣♣♣♣▀▀▀▀▀♣♣♣♣♣♣♣♣"
+      ],
+      "colors": [
+        " rrrrr         rrrrr ",
+        " wlllw  rrrrr  wlllw ",
+        " wrrrwrr  g  rrwrrrw ",
+        " wlllwllwl lwllwlllw ",
+        " wlllwllw l wllwlllw ",
+        "ffffffffrrrrrffffffff"
+      ]
+    },
+    {
+      "rows": [
+        "  ▄▄▀▀▀▀▀▄▄                   ▄▄▀▀▀▀▀▄▄  ",
+        " █ ╭╮ ╭╮ ╭╮█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█╭╮ ╭╮ ╭╮ █ ",
+        " █ │▒ │▒ │▒█ ╭─╮ ▄▄▀◆▀▄▄ ╭─╮ █▒│ ▒│ ▒│ █ ",
+        " █╫┼╫┼╫┼╫┼╫█ │▒│▀▀▀▀▀▀▀▀▀│▒│ █╫┼╫┼╫┼╫┼╫█ ",
+        " █ ▒▒ ▒▒ ▒▒█ ▒▒▒ ║  ▒  ║ ▒▒▒ █▒▒ ▒▒ ▒▒ █ ",
+        " █ ▒▒ ▒▒ ▒▒█ ▒▒▒ ║ ▒▒▒ ║ ▒▒▒ █▒▒ ▒▒ ▒▒ █ ",
+        "♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣▀▀▀▀▀▀▀♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣"
+      ],
+      "colors": [
+        "  rrrrrrrrr                   rrrrrrrrr  ",
+        " w ww ww wwwrrrrrrrrrrrrrrrrrwww ww ww w ",
+        " w wl wl wlw www rrrgrrr www wlw lw lw w ",
+        " wwwwwwwwwww wlwrrrrrrrrrwlw wwwwwwwwwww ",
+        " w ll ll llw lll w  l  w lll wll ll ll w ",
+        " w ll ll llw lll w lll w lll wll ll ll w ",
+        "ffffffffffffffffrrrrrrrffffffffffffffffff"
+      ]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "r": "roof",
+    "l": "glass",
+    "g": "gold",
+    "f": "foliage"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Archbishop's Palace, Naga City, Apr 2024.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Archbishop's_Palace%2C_Naga_City%2C_Apr_2024.jpg",
+      "note": "Symmetric two-storey palace: end wings with triple arched windows and balustrades, central portico with a pediment and coat of arms."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23664929"
+    }
+  ]
+}

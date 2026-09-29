@@ -1,10 +1,11 @@
 'use client';
 
-import { createAtlas } from '@atlas/renderer';
+import { createAtlas, type Atlas } from '@atlas/renderer';
 import { CityMeta } from '@atlas/shared';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAtlasStore } from '@/state/store';
 import styles from './AtlasCanvas.module.css';
+import { Compass } from './Compass';
 
 let webgl2Supported: boolean | undefined;
 const detectWebGL2 = () =>
@@ -46,6 +47,7 @@ function useCityMeta(slug: string): MetaState {
 
 export function AtlasCanvas({ slug, name }: { slug: string; name: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const atlasRef = useRef<Atlas | null>(null);
   // Static export renders on the server, where we optimistically assume support.
   const supported = useSyncExternalStore(subscribeNoop, detectWebGL2, () => true);
   const metaState = useCityMeta(slug);
@@ -66,10 +68,12 @@ export function AtlasCanvas({ slug, name }: { slug: string; name: string }) {
       year: store.year,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     });
+    atlasRef.current = atlas;
     const off = atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next));
     return () => {
       off();
       atlas.destroy();
+      atlasRef.current = null;
     };
   }, [supported, meta, slug]);
 
@@ -90,6 +94,7 @@ export function AtlasCanvas({ slug, name }: { slug: string; name: string }) {
         // Focusable so the map's keyboard controls (+/-, arrow keys) work.
         tabIndex={0}
       />
+      {meta && <Compass onReset={() => atlasRef.current?.setCamera({ pitch: 0, bearing: 0 })} />}
       {metaState.status === 'missing' && (
         <p role="status" className={styles.notice}>
           No map data for {name} yet. Run <code>pnpm data:build -- --city {slug}</code>.

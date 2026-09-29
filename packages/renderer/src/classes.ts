@@ -1,4 +1,4 @@
-import { AtlasClass } from '@atlas/shared';
+import { AtlasClass, CLASS_ZOOM } from '@atlas/shared';
 
 /** Point markers the renderer adds on top of features (SPEC.md §4). */
 export const markerClasses = [
@@ -12,12 +12,19 @@ export type MarkerClass = (typeof markerClasses)[number];
 /** Everything the cell pass can write into a cell: the pipeline's classes plus markers. */
 export type RenderClass = AtlasClass | MarkerClass;
 
-/** Id 0 means "empty cell"; classes are numbered from 1 in this order. */
-export const renderClasses: readonly RenderClass[] = [...AtlasClass.options, ...markerClasses];
+/**
+ * Id 0 means "empty cell"; classes are numbered from 1 in this order. Markers come first so
+ * they, like the road and detail classes early in `AtlasClass`, keep ids that fit the select
+ * shader's 32-bit class masks (glyphs/select.ts `classBit`).
+ */
+export const renderClasses: readonly RenderClass[] = [...markerClasses, ...AtlasClass.options];
 
-/** Size of the per-class uniform arrays and the glyph table's class axis. */
-export const MAX_CLASSES = 32;
-if (renderClasses.length >= MAX_CLASSES) throw new Error('too many render classes');
+/**
+ * Size of the per-class uniform arrays and the glyph table's class axis. The table's last three
+ * rows hold wall and extrusion glyphs (glyphs/select.ts).
+ */
+export const MAX_CLASSES = 48;
+if (renderClasses.length >= MAX_CLASSES - 3) throw new Error('too many render classes');
 
 const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
 
@@ -39,15 +46,16 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
  */
 export const priority: readonly (readonly RenderClass[])[] = [
   ['marker_landmark'],
-  ['marker_religious', 'marker_school', 'marker_market'],
+  ['marker_religious', 'marker_school', 'marker_market', 'monument'],
+  ['tree', 'furniture', 'entrance'],
   ['road_major'],
   ['road_mid'],
   ['road_minor'],
-  ['path'],
-  ['building', 'building_religious', 'building_school', 'building_market'],
+  ['path', 'barrier'],
+  ['building', 'building_religious', 'building_school', 'building_market', 'building_part'],
   ['water_river'],
   ['water_area'],
-  ['park', 'trees', 'farmland'],
+  ['park', 'trees', 'farmland', 'parking', 'pitch'],
 ];
 
 /** Clip-space depth between tiers. */
@@ -66,5 +74,38 @@ export function classDepths(): Float32Array {
   return depths;
 }
 
+/**
+ * Zoom below which each class is not drawn, from the shared `CLASS_ZOOM` table (SPEC.md §2
+ * levels), so small details only appear once there is room for them. Markers have no limit.
+ */
+export function classMinZooms(): Float32Array {
+  const zooms = new Float32Array(MAX_CLASSES);
+  for (const cls of AtlasClass.options) zooms[classId(cls)] = CLASS_ZOOM[cls].min;
+  return zooms;
+}
+
 /** Per-feature flag bits, stored in the cell pass's attribute buffer. */
-export const Flags = { landmark: 1 } as const;
+export const Flags = {
+  landmark: 1,
+  /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
+  corridor: 2,
+  /** Part of a building's 3D extrusion (drawn only when the camera is tilted). */
+  extruded: 4,
+  /** An extrusion's roof (else a wall). */
+  roof: 8,
+  /** An extrusion vertex at the building's height (else at the ground). */
+  top: 16,
+  /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
+  ridged: 32,
+} as const;
+
+/**
+ * The per-vertex variant byte from the pipeline's `variant` property: which furniture glyph to
+ * draw, or a building's roof (1 = flat, 2 = pitched, 0 = unknown).
+ */
+export function variantCode(className: string, variant: unknown): number {
+  if (typeof variant !== 'string') return 0;
+  if (className === 'furniture') return ['bench', 'fountain', 'flagpole'].indexOf(variant) + 1;
+  if (className.startsWith('building')) return variant === 'flat' ? 1 : 2;
+  return 0;
+}

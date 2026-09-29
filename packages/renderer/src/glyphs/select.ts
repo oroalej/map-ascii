@@ -3,7 +3,7 @@
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
 import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
-import type { GlyphKind, Theme } from '../theme';
+import { buildingRamp, doubleWall, singleWall, type GlyphKind, type Theme } from '../theme';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {
@@ -14,6 +14,7 @@ export const kindCodes: Record<GlyphKind, number> = {
   rows: 5,
   scatter: 6,
   single: 7,
+  variant: 8,
 };
 
 /** Width of the glyph table: the most variants any class can have. */
@@ -25,17 +26,171 @@ export const Dir = { N: 1, E: 2, S: 4, W: 8 } as const;
 export const RISING = 16; // ╱ (neighbor to the NE or SW)
 export const FALLING = 17; // ╲ (neighbor to the NW or SE)
 
+/**
+ * Outlines at close zoom (SPEC.md §2 Place level): curated landmarks get walls from
+ * `landmark`, every other building from `building`.
+ */
+export const OUTLINE_ZOOM = { landmark: 17, building: 18 } as const;
+
+/** Glyph-table rows past the classes that hold the wall glyphs (indexed by wall mask). */
+export const WALL_SINGLE_ROW = MAX_CLASSES - 2;
+export const WALL_DOUBLE_ROW = MAX_CLASSES - 1;
+/**
+ * Glyph-table row for building extras: the `░▒▓█` ramp for 3D buildings (variants 0–3), then
+ * roof ridges `─ ╲ │ ╱` (variants 4–7).
+ */
+export const EXTRUDE_ROW = MAX_CLASSES - 3;
+export const RIDGE_VARIANT = 4;
+export const ridgeGlyphs = ['─', '╲', '│', '╱'] as const;
+
+/** Roof code per cell (the attribute buffer's alpha): which slope, or the ridge. */
+export const RoofCode = { none: 0, lit: 1, shaded: 2, ridge: 3 } as const;
+
+/**
+ * A pitched-roof cell: on the ridge if the ridge line passes through it (|distance| within half
+ * the distance's change across one cell), else the lit or shaded slope. The cell shader does
+ * the same with `fwidth`.
+ */
+export function roofCode(distance: number, changePerCell: number): number {
+  if (Math.abs(distance) <= 0.5 * changePerCell) return RoofCode.ridge;
+  return distance > 0 ? RoofCode.lit : RoofCode.shaded;
+}
+
+/**
+ * Which of `─ ╲ │ ╱` draws a ridge at `angleByte` (0–255 over 0–180°, y down), judged in cell
+ * units (`aspect` = cell height ÷ width), since the diagonals run corner to corner of a cell.
+ */
+export function ridgeVariant(angleByte: number, aspect: number): number {
+  const theta = (angleByte / 255) * Math.PI;
+  const phi = Math.atan2(Math.sin(theta) / aspect, Math.cos(theta)); // 0..π
+  const bin = Math.round(phi / (Math.PI / 4)) % 4;
+  return RIDGE_VARIANT + bin;
+}
+
+/**
+ * A roof cell's glyph variant in the building row (lit ▓, shaded ▒, ridge by angle), or null
+ * where there is no ridge (flat roofs, landmark parts) and the height ramp stays.
+ */
+export function roofVariant(code: number, angleByte: number, aspect: number): number | null {
+  if (code === RoofCode.none) return null;
+  if (code === RoofCode.ridge) return ridgeVariant(angleByte, aspect);
+  return code === RoofCode.shaded ? 1 : 2;
+}
+
+/** Wall shade thresholds (0–255) between `░`, `▒`, and `▓`. */
+export const WALL_SHADE_STEPS = [85, 170] as const;
+
+/**
+ * A 3D building cell's glyph in the extrusion row: roofs are solid `█`; walls step `░▒▓`
+ * with how directly they face the light (the shade byte).
+ */
+export function extrusionVariant(shade: number, roof: boolean): number {
+  if (roof) return 3;
+  const step = WALL_SHADE_STEPS.findIndex((limit) => shade < limit);
+  return step === -1 ? WALL_SHADE_STEPS.length : step;
+}
+
+export type WallStyle = 'single' | 'double';
+
+/**
+ * Which wall set a cell uses, if any, from its kind, landmark flag, height, and the zoom.
+ * Grounds (building classes without a height, e.g. a campus) are never outlined: everything
+ * inside them would get a ring of wall around it.
+ */
+export function wallStyle(
+  kind: GlyphKind,
+  landmark: boolean,
+  height: number,
+  zoom: number,
+): WallStyle | null {
+  if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
+  if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
+  return null;
+}
+
+/**
+ * The wall mask of a cell in a feature, or null if the cell is inside (not on the outline).
+ * `outside(dx, dy)` says whether the neighbor at that offset belongs to another feature (one
+ * not in `seeThrough`).
+ *
+ * A cell is on the outline if any of its 8 neighbors is outside. It joins its neighbor in a
+ * direction when that neighbor is in the feature and a cell touching both is outside: the two
+ * share a stretch of edge. That draws straight walls, convex and concave corners, and no false
+ * junctions where a feature is only two cells thick.
+ */
+export function wallMask(outside: (dx: number, dy: number) => boolean): number | null {
+  let edge = false;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && outside(dx, dy)) edge = true;
+  }
+  if (!edge) return null;
+  const joins = (dx: number, dy: number, sides: [number, number][]) =>
+    !outside(dx, dy) && sides.some(([sx, sy]) => outside(sx, sy));
+  // prettier-ignore
+  return (
+    (joins(0, -1, [[-1, 0], [-1, -1], [1, 0], [1, -1]]) ? Dir.N : 0) |
+    (joins(1, 0, [[0, -1], [1, -1], [0, 1], [1, 1]]) ? Dir.E : 0) |
+    (joins(0, 1, [[-1, 0], [-1, 1], [1, 0], [1, 1]]) ? Dir.S : 0) |
+    (joins(-1, 0, [[0, -1], [-1, -1], [0, 1], [-1, 1]]) ? Dir.W : 0)
+  );
+}
+
+/**
+ * Classes an outline looks through: footpaths, statues, and markers usually sit inside a plaza
+ * or grounds, so they don't count as "outside" when tracing its walls.
+ */
+export const seeThrough: readonly RenderClass[] = [
+  'path',
+  'barrier',
+  'tree',
+  'furniture',
+  'entrance',
+  'monument',
+  'marker_religious',
+  'marker_school',
+  'marker_market',
+  'marker_landmark',
+];
+
+/** A class's bit in the shader's 32-bit class masks (connectivity, see-through). */
+function classBit(cls: RenderClass): number {
+  const id = classId(cls);
+  if (id > 31) throw new Error(`class ${cls} (id ${id}) does not fit a 32-bit class mask`);
+  return 1 << id; // bit 31 is the sign bit; masks are tested with shifts, so it still works
+}
+
+/** Bitmask of the carriageway class ids, for the cell and select shaders. */
+export const roadMask = (): number => roadClasses.reduce((mask, cls) => mask | classBit(cls), 0);
+
+/** Bitmask of `seeThrough` class ids, for the select shader. */
+export const seeThroughMask = (): number =>
+  seeThrough.reduce((mask, cls) => mask | classBit(cls), 0);
+
+/** The wall glyph for a mask (`□` for a lone cell). */
+export const wallGlyph = (style: WallStyle, mask: number): string =>
+  (style === 'double' ? doubleWall : singleWall)[mask]!;
+
 /** How fast each water cell flips between its glyphs, in flips per second. */
 export const WATER_RATE = 0.5;
 
-/** Road classes connect to each other; paths also connect to roads. */
-const roadClasses: readonly RenderClass[] = ['road_major', 'road_mid', 'road_minor'];
+/** Carriageways: they connect to each other, and become strips with curbs at Place level. */
+export const roadClasses: readonly RenderClass[] = ['road_major', 'road_mid', 'road_minor'];
 const connectsTo: Partial<Record<RenderClass, readonly RenderClass[]>> = {
   road_major: roadClasses,
   road_mid: roadClasses,
   road_minor: roadClasses,
   path: [...roadClasses, 'path'],
+  barrier: ['barrier'],
 };
+
+/**
+ * From this zoom, carriageways are drawn at their real width with curbs (`wallMask` where
+ * "outside" is anything but road), instead of as 1-cell box-drawing lines.
+ */
+export const ROAD_AREA_ZOOM = 18;
+
+/** From this zoom, pitched roofs show their ridge and lit/shaded slopes (flat roofs stay solid). */
+export const ROOF_ZOOM = 19;
 
 export const connects = (cls: RenderClass, neighbor: RenderClass | null): boolean =>
   neighbor !== null && (connectsTo[cls]?.includes(neighbor) ?? false);
@@ -100,6 +255,8 @@ export type CellContext = {
   neighbor: (dx: number, dy: number) => RenderClass | null;
   /** Seconds, for water. */
   time: number;
+  /** The feature's variant byte (classes.ts `variantCode`). */
+  variant?: number;
 };
 
 /** The variant a class with `count` glyphs shows in a cell: the CPU twin of the select shader. */
@@ -129,6 +286,8 @@ export function variantFor(
       return patternVariant(kind, ctx.x, ctx.y, count);
     case 'single':
       return 0;
+    case 'variant':
+      return Math.min(ctx.variant ?? 0, count - 1);
   }
 }
 
@@ -154,7 +313,13 @@ export type GlyphTables = {
 };
 
 /** Build the select shader's lookup tables from a theme and the glyph atlas's index. */
-export function buildGlyphTables(theme: Theme, glyphIndex: (glyph: string) => number): GlyphTables {
+export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => number): GlyphTables {
+  // The table is a byte texture, so map glyphs must come first in the atlas (theme.ts).
+  const glyphIndex = (glyph: string) => {
+    const index = atlasIndex(glyph);
+    if (index > 255) throw new Error(`map glyph ${glyph} has atlas index ${index}, over 255`);
+    return index;
+  };
   const table = new Uint8Array(MAX_VARIANTS * MAX_CLASSES);
   const kinds = new Int32Array(MAX_CLASSES);
   const counts = new Int32Array(MAX_CLASSES);
@@ -171,10 +336,20 @@ export function buildGlyphTables(theme: Theme, glyphIndex: (glyph: string) => nu
       const glyph = style.glyphs[Math.min(v, style.glyphs.length - 1)]!;
       table[id * MAX_VARIANTS + v] = glyphIndex(glyph);
     }
-    for (const other of connectsTo[cls] ?? []) connectMasks[id]! |= 1 << classId(other);
+    for (const other of connectsTo[cls] ?? []) connectMasks[id]! |= classBit(other);
     colors[id * 3] = ((style.color >> 16) & 0xff) / 255;
     colors[id * 3 + 1] = ((style.color >> 8) & 0xff) / 255;
     colors[id * 3 + 2] = (style.color & 0xff) / 255;
+  }
+  buildingRamp.forEach((glyph, v) => {
+    table[EXTRUDE_ROW * MAX_VARIANTS + v] = glyphIndex(glyph);
+  });
+  ridgeGlyphs.forEach((glyph, i) => {
+    table[EXTRUDE_ROW * MAX_VARIANTS + RIDGE_VARIANT + i] = glyphIndex(glyph);
+  });
+  for (let mask = 0; mask < 16; mask++) {
+    table[WALL_SINGLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('single', mask));
+    table[WALL_DOUBLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('double', mask));
   }
   return { table, kinds, counts, connects: connectMasks, colors };
 }

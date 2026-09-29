@@ -1,0 +1,90 @@
+{
+  "id": "art/quince-martires-monument",
+  "osm_id": "osm:node/642912170",
+  "title": "Quince Martires monument",
+  "footprint_m": 9,
+  "priority": 8,
+  "variants": [
+    {
+      "rows": ["  o/ ", " /█\\ ", " ▐█▌ ", "▄▄▄▄▄", "▀▀▀▀▀"],
+      "colors": ["  gg ", " gwg ", " www ", "ddddd", "ddddd"]
+    },
+    {
+      "rows": [
+        "    o/   ",
+        "   /█\\   ",
+        "   ▄█▄   ",
+        "  ▐○○○▌  ",
+        " i ▐█▌ i ",
+        "  ╲▓▓▓╱  ",
+        "▄▄▄▄▄▄▄▄▄",
+        "█○█○█○█○█",
+        "▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "    gg   ",
+        "   gwg   ",
+        "   dwd   ",
+        "  wgggw  ",
+        " g www g ",
+        "  ddddd  ",
+        "ddddddddd",
+        "wgwgwgwgw",
+        "ddddddddd"
+      ]
+    },
+    {
+      "rows": [
+        "      o/     ",
+        "     /█\\     ",
+        "     /▀\\     ",
+        "    ▄███▄    ",
+        "   ▐○○○○○▌   ",
+        "  i ▐███▌ i  ",
+        " /█\\▐███▌/█\\ ",
+        "   ╲╲▓▓▓╱╱   ",
+        "  ▄▄▄▄▄▄▄▄▄  ",
+        " █○█○█○█○█○█ ",
+        " █║█║█║█║█║█ ",
+        "▄▄▄▄▄▄▄▄▄▄▄▄▄",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "      gg     ",
+        "     gwg     ",
+        "     gdg     ",
+        "    dwwwd    ",
+        "   wgggggw   ",
+        "  g wwwww g  ",
+        " gwgwwwwwgwg ",
+        "   ddddddd   ",
+        "  ddddddddd  ",
+        " wgwgwgwgwgw ",
+        " wwwwwwwwwww ",
+        "ddddddddddddd",
+        "ddddddddddddd"
+      ]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "g": "gold",
+    "d": "wood"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Naga City Tourism: Plaza Quince Martires",
+      "url": "https://tourism.naga.gov.ph/metro-naga/plaza-quince-martires/",
+      "note": "Photo: round tiered brown base, gold-framed portrait medallions, white column with an eagle and flanking gold figures, crowned by a figure with a raised arm."
+    },
+    {
+      "title": "Wikipedia: Fifteen Martyrs of Bicol",
+      "url": "https://en.wikipedia.org/wiki/Fifteen_Martyrs_of_Bicol"
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/642912170"
+    }
+  ]
+}

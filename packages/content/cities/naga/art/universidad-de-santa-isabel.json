@@ -1,0 +1,80 @@
+{
+  "id": "art/universidad-de-santa-isabel",
+  "osm_id": "osm:way/276457427",
+  "title": "Universidad de Santa Isabel",
+  "priority": 4,
+  "variants": [
+    {
+      "rows": ["        †  ", "▄▄▄▄▄▄▄╱▓╲ ", "▒█▒█▒█▒║▓║ ", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": ["        g  ", "rrrrrrrsds ", "lwlwlwlsds ", "rrrrrrrrrrr"]
+    },
+    {
+      "rows": [
+        "                †    ",
+        "               ╱ ╲   ",
+        "▄▄▄▄▄▄▄▄▄▄▄▄▄▄╱╭─╮╲  ",
+        "█▒█▒█▒█▒█▒█▒█▒│▓▓▓│▒ ",
+        "█▀█▀█▀█▀█▀█▀█▀│▓▓▓│▀ ",
+        "█▒█▒█▒█▒█▒█▒█▒│▓▓▓│▒ ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "                g    ",
+        "               s s   ",
+        "rrrrrrrrrrrrrrsswss  ",
+        "wlwlwlwlwlwlwlsdddsl ",
+        "wrwrwrwrwrwrwrsdddsr ",
+        "wlwlwlwlwlwlwlsdddsl ",
+        "rrrrrrrrrrrrrrrrrrrrr"
+      ]
+    },
+    {
+      "rows": [
+        "                                 †       ",
+        "                                ╱ ╲      ",
+        "                               ╱   ╲     ",
+        "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄╱ ╭─╮ ╲▄▄▄ ",
+        "█ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ║╭╯▓╰╮║ ▒ █",
+        "█╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼╫┼█║│▓▓▓│║╫┼╫█",
+        "█ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ║│▓▓▓│║ ▒ █",
+        "█ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ▒ █ ║│▓▓▓│║ ▒ █",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "                                 g       ",
+        "                                s s      ",
+        "                               s   s     ",
+        "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrs sws srrr ",
+        "w l w l w l w l w l w l w l w sswdwss l w",
+        "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwssdddsswwww",
+        "w l w l w l w l w l w l w l w ssdddss l w",
+        "w l w l w l w l w l w l w l w ssdddss l w",
+        "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      ]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "r": "roof",
+    "l": "glass",
+    "g": "gold",
+    "s": "stone",
+    "d": "wood"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Universidad de Santa Isabel, Naga City, Apr 2024.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Universidad_de_Santa_Isabel%2C_Naga_City%2C_Apr_2024.jpg",
+      "note": "Long two-storey colonial building with balconied windows, ending in a gabled chapel front with a cross, a tall arched brick recess and arched side windows."
+    },
+    {
+      "title": "Wikipedia: Universidad de Sta. Isabel de Naga",
+      "url": "https://en.wikipedia.org/wiki/Universidad_de_Sta._Isabel_de_Naga"
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/276457427"
+    }
+  ]
+}

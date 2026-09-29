@@ -23,7 +23,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 | City | 9.5–13 | City boundary, subdivision outlines, main rivers, highways | City and subdivision names |
 | District | 13–15.5 | All roads, building blocks as solid fill, parks, water | Districts, major roads, key landmarks |
 | Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Street names, POIs |
-| Place | 17.5–19 | Detailed landmark rendering, entrances, plazas | Everything; info panel auto-suggests |
+| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything; info panel auto-suggests |
 
 **Fixed cell size.** Characters are always the same size on screen (default 10×18 CSS px; configurable). Zooming changes how much ground each cell represents, not the glyph size.
 
@@ -43,7 +43,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 
 **Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Min and max zoom are enforced.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 19. Zooming out stops at the zoom that fits the whole region in the viewport (never below 7), so the visitor can't lose the region in empty space.
 
 ## 4. Visual language
 
@@ -66,6 +66,13 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Farmland/rice fields | `≡ '` in rows | yellow-green |
 | Terrain (Region level) | `. : - = + * # %` luminance ramp | brown-grey |
 | Landmark (curated) | `◆` pulsing glow | accent color |
+| Monument / statue / memorial | `▲` (from the Place level) | stone |
+| Tree (OSM `natural=tree`, tree rows) | `♣` (from z17) | green |
+| Fence / wall / hedge | `┄ ┆` dashed | grey-brown |
+| Street furniture | bench `╥`, fountain `○`, flagpole `¶` (from z18) | light grey |
+| Entrance | `▪` (from z18) | stone |
+| Parking / sports pitch | `▫ ·` / `─` in rows | grey / green |
+| Church, school, or market grounds | the class's lightest `░` fill, under its buildings | class color, dim |
 
 **Road glyphs follow edge direction.** The renderer computes each road cell's orientation and neighbor connectivity, and picks the matching box-drawing character. Straight segments get `─`/`│`, junctions get `┼`/`├` and so on, and diagonals get `╱ ╲` or stair-stepped runs.
 
@@ -73,6 +80,15 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Placement is by priority and zoom band, with collision detection so labels never overlap.
 - Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street.
 - Labels have a 1-cell dark halo.
+
+**Place-level detail.** Zooming in adds detail rather than only enlarging cells:
+- Curated landmarks show their name from z16, and statues and monuments from z18.
+- From z17, landmark buildings are drawn with double-line walls (`╔═╗`) and landmark plazas with a single-line border. From z18, every building gets single-line walls (`┌─┐`) around its shaded interior. Grounds are never outlined.
+- Statues, memorials, and monuments (`▲`) appear from z17, and trees, benches, fountains, flagpoles, fences, and entrances wherever OSM maps them.
+- From z18, roads are drawn at their real width (the OSM `width`, else `lanes` × 3.2 m, else a class default) as strips with curbs, instead of 1-cell lines.
+- From z19, pitched roofs show their ridge (`─ │ ╱ ╲`, along the footprint's long axis) between a lit slope `▓` and a shaded slope `▒`; flat roofs and landmark parts keep the height shading. The ridge is derived from the footprint shape, so it is a stylized reading of the roof.
+- **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings and rise in the tilted 3D view. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong in the info panel (Phase 2).
+- The Place level reaches z21, where a cell is about 0.4 × 0.7 m.
 
 **Hover and selection.** Hovering brightens the feature's cells. The selected feature gets an accent color and a slow shimmer.
 
@@ -107,8 +123,9 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Loading that URL restores the exact view.
 
 **HUD**
+- Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs visible at the current zoom and what they mean. The legend is built from the theme, so it always matches the map.
 - Scale indicator (the "ruler").
-- Current subdivision name.
+- Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
 - Attribution line, always visible.
 

@@ -1,0 +1,40 @@
+{
+  "id": "plan/rizal-monument",
+  "osm_id": "osm:node/642910590",
+  "title": "Rizal monument, Plaza Rizal",
+  "parts": [
+    {
+      "kind": "tier",
+      "shape": "square",
+      "size_m": 7,
+      "height_m": 1,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "tier",
+      "shape": "square",
+      "size_m": 5,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2.5,
+      "height_m": 6,
+      "offset_m": [0, 0]
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Rizal Monument in Naga, Camarines Sur, Philippines.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Rizal_Monument_in_Naga%2C_Camarines_Sur%2C_Philippines.jpg",
+      "note": "A square, stepped white plinth under a tall square pedestal. Sizes are estimated from the photo."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/642910590"
+    }
+  ],
+  "status": "draft"
+}

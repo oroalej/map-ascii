@@ -1,0 +1,40 @@
+{
+  "id": "plan/quince-martires-monument",
+  "osm_id": "osm:node/642912170",
+  "title": "Quince Martires monument",
+  "parts": [
+    {
+      "kind": "tier",
+      "shape": "circle",
+      "size_m": 9.5,
+      "height_m": 1,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "tier",
+      "shape": "circle",
+      "size_m": 7,
+      "height_m": 2.5,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "pedestal",
+      "shape": "circle",
+      "size_m": 4,
+      "height_m": 6,
+      "offset_m": [0, 0]
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Plaza Quince Martires",
+      "url": "https://tourism.naga.gov.ph/metro-naga/plaza-quince-martires/",
+      "note": "Photo: a round, tiered base with portrait medallions, under a round white column. Sizes are estimated from the photo."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/642912170"
+    }
+  ],
+  "status": "draft"
+}

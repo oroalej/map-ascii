@@ -1,0 +1,76 @@
+{
+  "id": "plan/naga-metropolitan-cathedral",
+  "osm_id": "osm:way/23666715",
+  "title": "Naga Metropolitan Cathedral",
+  "front": "sw",
+  "parts": [
+    {
+      "kind": "belfry",
+      "shape": "hexagon",
+      "size_m": 7,
+      "height_m": 24,
+      "at": {
+        "along": 0.86,
+        "across": -0.8
+      }
+    },
+    {
+      "kind": "belfry",
+      "shape": "hexagon",
+      "size_m": 7,
+      "height_m": 24,
+      "at": {
+        "along": 0.86,
+        "across": 0.8
+      }
+    },
+    {
+      "kind": "cupola",
+      "shape": "circle",
+      "size_m": 3,
+      "height_m": 20,
+      "at": {
+        "along": 0.95,
+        "across": 0
+      }
+    },
+    {
+      "kind": "dome",
+      "shape": "square",
+      "size_m": 14,
+      "height_m": 22,
+      "at": {
+        "along": -0.55,
+        "across": 0
+      }
+    },
+    {
+      "kind": "cupola",
+      "shape": "circle",
+      "size_m": 5,
+      "height_m": 27,
+      "at": {
+        "along": -0.55,
+        "across": 0
+      }
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikipedia: Naga Metropolitan Cathedral",
+      "url": "https://en.wikipedia.org/wiki/Naga_Metropolitan_Cathedral",
+      "note": "\"Two short, symmetric hexagonal belfries on both ends\" of the façade; \"a pediment surmounted by a round cupola\"; \"above the crossing is a rectangular dome topped by a cupola\"."
+    },
+    {
+      "title": "Wikimedia Commons: CATHEDRAL.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:CATHEDRAL.jpg",
+      "note": "Front view: belfries at both front corners, cupola above the pediment."
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23666715",
+      "note": "Footprint: the nave runs south-west to north-east, with the transept (the crossing) about 55% of the way back from the south-west front, which faces the Cathedral Grounds."
+    }
+  ],
+  "status": "draft"
+}

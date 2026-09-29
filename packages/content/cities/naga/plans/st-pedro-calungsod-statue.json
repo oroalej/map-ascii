@@ -1,0 +1,22 @@
+{
+  "id": "plan/st-pedro-calungsod-statue",
+  "osm_id": "osm:node/11152417397",
+  "title": "St. Pedro Calungsod statue",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    }
+  ],
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/11152417397",
+      "note": "Location only; the pedestal size is a generic estimate."
+    }
+  ],
+  "status": "draft"
+}

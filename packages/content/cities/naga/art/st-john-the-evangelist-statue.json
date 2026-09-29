@@ -1,0 +1,29 @@
+{
+  "id": "art/st-john-the-evangelist-statue",
+  "osm_id": "osm:node/11152417399",
+  "title": "St. John the Evangelist statue",
+  "footprint_m": 2,
+  "priority": 2,
+  "variants": [
+    {
+      "rows": [" o ", "/█\\", "▐█▌", "▀▀▀"],
+      "colors": [" w ", "www", "www", "sss"]
+    },
+    {
+      "rows": ["  o  ", " /█\\ ", " ▐█▌ ", " ▐█▌ ", "▄███▄", "▀▀▀▀▀"],
+      "colors": ["  w  ", " www ", " www ", " www ", "swwws", "sssss"]
+    }
+  ],
+  "palette": {
+    "w": "wall",
+    "s": "stone"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/11152417399",
+      "note": "Location only. No reference photo found: drawn as a generic statue on a pedestal."
+    }
+  ]
+}

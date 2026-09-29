@@ -1,0 +1,74 @@
+{
+  "id": "art/jesse-m-robredo-coliseum",
+  "osm_id": "osm:way/425056186",
+  "title": "Jesse M. Robredo Coliseum",
+  "priority": 6,
+  "variants": [
+    {
+      "rows": ["    ▄▄▄    ", " ▄▀▀   ▀▀▄ ", "▐▓▓▓▓▓▓▓▓▓▌", "▀▀▀▀▀▀▀▀▀▀▀"],
+      "colors": ["    rrr    ", " rrr   rrr ", "sllllllllls", "rrrrrrrrrrr"]
+    },
+    {
+      "rows": [
+        "         ▄▄▄         ",
+        "    ▄▄▀▀▀   ▀▀▀▄▄    ",
+        " ▄▀▀             ▀▀▄ ",
+        "▐▓▓▓▓ COLISEUM ▓▓▓▓▓▌",
+        "▐▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▌",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "         rrr         ",
+        "    rrrrr   rrrrr    ",
+        " rrr             rrr ",
+        "sllll aaaaaaaa llllls",
+        "sllllllllllllllllllls",
+        "rrrrrrrrrrrrrrrrrrrrr"
+      ]
+    },
+    {
+      "rows": [
+        "                 ▄▄▄▄▄                 ",
+        "          ▄▄▄▀▀▀▀     ▀▀▀▀▄▄▄          ",
+        "     ▄▄▀▀▀                   ▀▀▀▄▄     ",
+        "  ▄▀▀                             ▀▀▄  ",
+        " ▐▓▓▓▓▓▓▓▓ ROBREDO COLISEUM ▓▓▓▓▓▓▓▓▓▌ ",
+        " ▐▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓▌ ",
+        " ▐▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▌ ",
+        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+      ],
+      "colors": [
+        "                 rrrrr                 ",
+        "          rrrrrrr     rrrrrrr          ",
+        "     rrrrr                   rrrrr     ",
+        "  rrr                             rrr  ",
+        " sllllllll aaaaaaa aaaaaaaa llllllllls ",
+        " sll ll ll ll ll ll ll ll ll ll ll lls ",
+        " sllllllllllllllllllllllllllllllllllls ",
+        "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      ]
+    }
+  ],
+  "palette": {
+    "s": "stone",
+    "r": "roof",
+    "l": "glass",
+    "a": "accent"
+  },
+  "status": "draft",
+  "sources": [
+    {
+      "title": "Wikimedia Commons: Jesse M. Robredo Coliseum.jpg",
+      "url": "https://commons.wikimedia.org/wiki/File:Jesse_M._Robredo_Coliseum.jpg",
+      "note": "Wide low dome with a small round crown, a band of windows, \"ROBREDO COLISEUM\" sign."
+    },
+    {
+      "title": "Wikipedia: Jesse M. Robredo Coliseum",
+      "url": "https://en.wikipedia.org/wiki/Jesse_M._Robredo_Coliseum"
+    },
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/425056186"
+    }
+  ]
+}

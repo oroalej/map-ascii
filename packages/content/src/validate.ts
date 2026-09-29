@@ -17,6 +17,8 @@ const collections = {
   events: 'Event',
   'name-history': 'NameHistory',
   tours: 'Tour',
+  art: 'LandmarkArt',
+  plans: 'LandmarkPlan',
 } as const satisfies Record<string, keyof Schemas>;
 
 type Collections = typeof collections;
@@ -113,7 +115,14 @@ export async function loadCityPacks(
     }
 
     const schemas = contentSchemas(city.languages);
-    const content: ContentBundle = { landmarks: [], events: [], 'name-history': [], tours: [] };
+    const content: ContentBundle = {
+      landmarks: [],
+      events: [],
+      'name-history': [],
+      tours: [],
+      art: [],
+      plans: [],
+    };
     const seenIds = new Map<string, string>();
     const before = errors.length;
 

@@ -38,6 +38,8 @@ export type CellTargets = {
   attrTex: WebGLTexture;
   idTex: WebGLTexture;
   glyphTex: WebGLTexture;
+  /** RGBA8 overlay (art and labels): 16-bit glyph code, color index (labels.ts). */
+  overlayTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
@@ -55,6 +57,7 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const depth = gl.createRenderbuffer();
   gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
   gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, cols, rows);
@@ -74,20 +77,29 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   checkComplete(gl, 'glyph');
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  return { cols, rows, classTex, attrTex, idTex, glyphTex, depth, cellFbo, glyphFbo };
+  return { cols, rows, classTex, attrTex, idTex, glyphTex, overlayTex, depth, cellFbo, glyphFbo };
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
-  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex]) gl.deleteTexture(tex);
+  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex, t.overlayTex]) {
+    gl.deleteTexture(tex);
+  }
   gl.deleteRenderbuffer(t.depth);
   gl.deleteFramebuffer(t.cellFbo);
   gl.deleteFramebuffer(t.glyphFbo);
 }
 
+/** Replace the overlay's contents (RGBA8 texels from labels.ts `packOverlay`). */
+export function uploadOverlay(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.overlayTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
 type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number };
 
 /** A tile's geometry on the GPU. */
-export type TileMesh = { fills: Mesh; lines: Mesh; points: Mesh };
+export type TileMesh = { fills: Mesh; extrusions: Mesh; lines: Mesh; points: Mesh };
 
 function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
   const vao = gl.createVertexArray();
@@ -102,6 +114,7 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
     buffer(gl.ARRAY_BUFFER, arrays.positions),
     buffer(gl.ARRAY_BUFFER, arrays.meta),
     buffer(gl.ARRAY_BUFFER, arrays.ids),
+    buffer(gl.ARRAY_BUFFER, arrays.ridge),
   ];
   gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0]!);
   gl.enableVertexAttribArray(0);
@@ -112,6 +125,9 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
   gl.bindBuffer(gl.ARRAY_BUFFER, buffers[2]!);
   gl.enableVertexAttribArray(2);
   gl.vertexAttribIPointer(2, 1, gl.UNSIGNED_INT, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffers[3]!);
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribPointer(3, 1, gl.SHORT, false, 0, 0);
   if (indices) buffers.push(buffer(gl.ELEMENT_ARRAY_BUFFER, indices));
   gl.bindVertexArray(null);
   return { vao, buffers, count: indices ? indices.length : arrays.ids.length };
@@ -120,18 +136,27 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
 export function uploadTile(gl: GL, geometry: TileGeometry): TileMesh {
   return {
     fills: uploadMesh(gl, geometry.fills, geometry.fills.indices),
+    extrusions: uploadMesh(gl, geometry.extrusions, geometry.extrusions.indices),
     lines: uploadMesh(gl, geometry.lines),
     points: uploadMesh(gl, geometry.points),
   };
 }
 
 export function deleteTile(gl: GL, mesh: TileMesh) {
-  for (const m of [mesh.fills, mesh.lines, mesh.points]) {
+  for (const m of [mesh.fills, mesh.extrusions, mesh.lines, mesh.points]) {
     gl.deleteVertexArray(m.vao);
     for (const b of m.buffers) gl.deleteBuffer(b);
   }
 }
 
+/** Draw a tile's 3D buildings (tilted cameras only). */
+export function drawExtrusions(gl: GL, mesh: TileMesh) {
+  if (mesh.extrusions.count === 0) return;
+  gl.bindVertexArray(mesh.extrusions.vao);
+  gl.drawElements(gl.TRIANGLES, mesh.extrusions.count, gl.UNSIGNED_INT, 0);
+}
+
+/** Draw a tile's ground features: areas, lines, and points. */
 export function drawTile(gl: GL, mesh: TileMesh) {
   if (mesh.fills.count > 0) {
     gl.bindVertexArray(mesh.fills.vao);

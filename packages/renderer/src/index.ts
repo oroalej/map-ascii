@@ -2,38 +2,61 @@ import type { BBox, CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
 import {
   clampCamera,
-  panBy,
+  isTilted,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  multiply,
+  orbitBy,
+  panByView,
   project,
   TILE_SIZE,
+  viewportFor,
   zoomAroundClamped,
   type CameraLimits,
 } from './camera';
-import { classDepths, classId, MAX_CLASSES } from './classes';
+import { classDepths, classId, classMinZooms, MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, DEFAULT_FONT, type GlyphAtlas } from './glyphs/atlas';
-import { buildGlyphTables, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
+import {
+  buildGlyphTables,
+  MAX_VARIANTS,
+  roadMask,
+  seeThroughMask,
+  type GlyphTables,
+} from './glyphs/select';
 import {
   createCellTargets,
   createProgram,
   createTexture,
   deleteCellTargets,
   deleteTile,
+  drawExtrusions,
   drawTile,
+  uploadOverlay,
   uploadTile,
   type CellTargets,
   type TileMesh,
 } from './gpu';
 import { attachInput } from './input';
-import { EXTENT } from './raster/geometry';
+import {
+  createOverlay,
+  LABEL_MIN_ZOOM,
+  packOverlay,
+  placeLabels,
+  type LabelCandidate,
+} from './labels';
+import { EXTENT, type TileLabel } from './raster/geometry';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragment } from './shaders/glyph';
 import { selectFragment } from './shaders/select';
 import { themeGlyphs, themes, type ThemeName } from './theme';
 import {
+  boundsTiles,
   findAncestor,
   LruCache,
   tileKey,
   TileSource,
+  tileZoom,
   viewTiles,
   type TileHeader,
   type TileId,
@@ -50,7 +73,7 @@ export type AtlasOptions = {
   bounds: BBox;
   initialCamera: CameraState;
   year: number;
-  /** Zoom limits (default 7–19, SPEC.md §2). */
+  /** Zoom limits (default 7–21, SPEC.md §2). */
   minZoom?: number;
   maxZoom?: number;
   /** Disables the water animation and the landmark pulse (`prefers-reduced-motion`). */
@@ -100,8 +123,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const cellCss = options.cell ?? DEFAULT_CELL;
   const limits: CameraLimits = {
     bounds: options.bounds,
-    minZoom: options.minZoom ?? 7,
-    maxZoom: options.maxZoom ?? 19,
+    minZoom: options.minZoom ?? MIN_ZOOM,
+    maxZoom: options.maxZoom ?? MAX_ZOOM,
   };
   const reducedMotion = options.reducedMotion ?? false;
   const font = options.font ?? DEFAULT_FONT;
@@ -122,6 +145,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const glyphProgram = createProgram(gl, fullscreenVertex, glyphFragment);
   const emptyVao = gl.createVertexArray();
   const depths = classDepths();
+  const minZooms = classMinZooms();
+  const seeThrough = seeThroughMask();
+  const roads = roadMask();
 
   // Frame state
   let cellDirty = true;
@@ -180,9 +206,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // Tiles
   let header: TileHeader | null = null;
   const failed = new Set<string>();
-  const meshes = new LruCache<TileMesh | null>(TILE_CACHE_SIZE, (mesh) => {
-    if (mesh) deleteTile(gl, mesh);
-  });
+  /** Loaded tiles: their GPU mesh and label candidates (null = the archive has no tile). */
+  const meshes = new LruCache<{ mesh: TileMesh; labels: TileLabel[] } | null>(
+    TILE_CACHE_SIZE,
+    (tile) => {
+      if (tile) deleteTile(gl, tile.mesh);
+    },
+  );
   const source = new TileSource(new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href, {
     header: (h) => {
       header = h;
@@ -190,7 +220,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     tile: (key, geometry) => {
       if (destroyed) return;
-      meshes.set(key, geometry ? uploadTile(gl, geometry) : null);
+      meshes.set(
+        key,
+        geometry ? { mesh: uploadTile(gl, geometry), labels: geometry.labels } : null,
+      );
       cellDirty = true;
     },
     error: (message, key) => {
@@ -199,15 +232,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
   });
 
+  const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
+
   /** Tiles to draw for the view: loaded ones, else a loaded ancestor or loaded children. */
   const tilesToDraw = (): TileId[] => {
     if (!header) return [];
     const minZoom = header.minZoom;
-    const view = viewTiles(
-      camera,
-      { width: canvas.width / dpr, height: canvas.height / dpr },
-      header,
-    );
+    let view: TileId[];
+    if (isTilted(camera)) {
+      // The tilted view's ground footprint (the far edge is where the view reaches the ground).
+      const [[west, south], [east, north]] = viewportFor(camera, cssSize()).getBounds() as [
+        [number, number],
+        [number, number],
+      ];
+      view = boundsTiles([west, south, east, north], tileZoom(camera.zoom, header), header, [
+        camera.lng,
+        camera.lat,
+      ]);
+    } else {
+      view = viewTiles(camera, cssSize(), header);
+    }
     const out = new Map<string, TileId>();
     for (const tile of view) {
       const key = tileKey(tile);
@@ -232,20 +276,66 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return [...out.values()].sort((a, b) => a.z - b.z);
   };
 
+  /** Screen position (CSS px) of a point, for the overlay; set by each cell pass. */
+  let screenOf: (lng: number, lat: number) => [number, number] = () => [0, 0];
+
   const cellPass = () => {
     if (!targets) return;
     const { cols, rows } = targets;
-    const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
-    const left = Math.round(cx * dpr - canvas.width / 2);
-    const top = Math.round(cy * dpr - canvas.height / 2);
-    const originCol = Math.floor(left / cellDev.w) - 1;
-    const originRow = Math.floor(top / cellDev.h) - 1;
-    grid = {
-      originCol,
-      originRow,
-      shiftX: left - originCol * cellDev.w,
-      shiftY: top - originRow * cellDev.h,
-    };
+    const tilted = isTilted(camera);
+    const view = viewportFor(camera, cssSize());
+    screenOf = (lng, lat) => view.project([lng, lat]) as [number, number];
+
+    /** Tile units and meters → cell-grid clip space, per tile. */
+    let tileMatrix: (tile: TileId) => number[];
+    if (tilted) {
+      // Perspective: the grid is fixed to the screen, with a one-cell margin on each side.
+      grid = { originCol: 0, originRow: 0, shiftX: cellDev.w, shiftY: cellDev.h };
+      const [w, h] = [canvas.width, canvas.height];
+      // prettier-ignore
+      const screenToGrid = [
+        w / (cellDev.w * cols), 0, 0, 0,
+        0, -h / (cellDev.h * rows), 0, 0,
+        0, 0, 1, 0,
+        (w + 2 * cellDev.w) / (cellDev.w * cols) - 1, (h + 2 * cellDev.h) / (cellDev.h * rows) - 1, 0, 1,
+      ];
+      const toGrid = multiply(screenToGrid, view.viewProjectionMatrix);
+      const unitsPerMeter = view.distanceScales.unitsPerMeter[2]!;
+      tileMatrix = ({ z, x, y }) => {
+        const size = TILE_SIZE / 2 ** z;
+        // prettier-ignore
+        return multiply(toGrid, [
+          size / EXTENT, 0, 0, 0,
+          0, -size / EXTENT, 0, 0,
+          0, 0, unitsPerMeter, 0,
+          x * size, TILE_SIZE - y * size, 0, 1,
+        ]);
+      };
+    } else {
+      // Flat north-up: the grid is anchored to the world, shifted by the sub-cell pan offset.
+      const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
+      const left = Math.round(cx * dpr - canvas.width / 2);
+      const top = Math.round(cy * dpr - canvas.height / 2);
+      const originCol = Math.floor(left / cellDev.w) - 1;
+      const originRow = Math.floor(top / cellDev.h) - 1;
+      grid = {
+        originCol,
+        originRow,
+        shiftX: left - originCol * cellDev.w,
+        shiftY: top - originRow * cellDev.h,
+      };
+      tileMatrix = (tile) => {
+        const tileDev = TILE_SIZE * 2 ** (camera.zoom - tile.z) * dpr;
+        // prettier-ignore
+        return [
+          ((tileDev / EXTENT / cellDev.w) * 2) / cols, 0, 0, 0,
+          0, ((tileDev / EXTENT / cellDev.h) * 2) / rows, 0, 0,
+          0, 0, 1, 0,
+          ((tile.x * tileDev) / cellDev.w - originCol) * (2 / cols) - 1,
+          ((tile.y * tileDev) / cellDev.h - originRow) * (2 / rows) - 1, 0, 1,
+        ];
+      };
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, targets.cellFbo);
     gl.viewport(0, 0, cols, rows);
@@ -254,26 +344,77 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LESS);
     gl.useProgram(cellProgram.program);
-    twgl.setUniforms(cellProgram, { u_depth: depths });
+    twgl.setUniforms(cellProgram, {
+      u_depth: depths,
+      u_minZoom: minZooms,
+      u_zoom: camera.zoom,
+      u_roadMask: roads,
+    });
 
+    const labels = new Map<number, TileLabel>();
+    const drawn: { mesh: TileMesh; matrix: number[] }[] = [];
     for (const tile of tilesToDraw()) {
-      const mesh = meshes.get(tileKey(tile));
-      if (!mesh) continue;
-      const tileDev = TILE_SIZE * 2 ** (camera.zoom - tile.z) * dpr;
-      twgl.setUniforms(cellProgram, {
-        u_scale: [
-          ((tileDev / EXTENT / cellDev.w) * 2) / cols,
-          ((tileDev / EXTENT / cellDev.h) * 2) / rows,
-        ],
-        u_offset: [
-          ((tile.x * tileDev) / cellDev.w - originCol) * (2 / cols) - 1,
-          ((tile.y * tileDev) / cellDev.h - originRow) * (2 / rows) - 1,
-        ],
-      });
-      drawTile(gl, mesh);
+      const loaded = meshes.get(tileKey(tile));
+      if (!loaded) continue;
+      for (const label of loaded.labels) labels.set(label.id, label);
+      const matrix = tileMatrix(tile);
+      twgl.setUniforms(cellProgram, { u_matrix: matrix });
+      drawTile(gl, loaded.mesh);
+      drawn.push({ mesh: loaded.mesh, matrix });
+    }
+    // 3D buildings stand up only in the tilted view.
+    if (tilted) {
+      for (const { mesh, matrix } of drawn) {
+        twgl.setUniforms(cellProgram, { u_matrix: matrix });
+        drawExtrusions(gl, mesh);
+      }
     }
     gl.bindVertexArray(null);
     gl.disable(gl.DEPTH_TEST);
+    uploadOverlay(gl, targets, overlayTexels([...labels.values()]));
+  };
+
+  /** Place the names whose zoom band includes the camera zoom (labels.ts). */
+  const overlayTexels = (labels: TileLabel[]): Uint8Array => {
+    if (!targets || !atlas) return new Uint8Array(0);
+    const overlay = createOverlay(targets.cols, targets.rows);
+    const tilted = isTilted(camera);
+    const toCell = (lng: number, lat: number): [number, number] => {
+      if (tilted) {
+        // The grid starts one cell above and left of the screen.
+        const [x, y] = screenOf(lng, lat);
+        return [(x * dpr) / cellDev.w + 1, (y * dpr) / cellDev.h + 1];
+      }
+      const [x, y] = project(lng, lat, camera.zoom);
+      return [(x * dpr) / cellDev.w - grid.originCol, (y * dpr) / cellDev.h - grid.originRow];
+    };
+    // Only the cells actually on screen (the grid has a margin, and a sub-cell pan shift).
+    const area = {
+      left: Math.ceil(grid.shiftX / cellDev.w),
+      top: Math.ceil(grid.shiftY / cellDev.h),
+      right: Math.floor((grid.shiftX + canvas.width) / cellDev.w),
+      bottom: Math.floor((grid.shiftY + canvas.height) / cellDev.h),
+    };
+    const glyphs = atlas;
+    const glyphIndex = (char: string) => {
+      const index = glyphs.index(char);
+      return index === 0 ? undefined : index;
+    };
+
+    const candidates: LabelCandidate[] = [];
+    for (const label of labels) {
+      if (camera.zoom < (LABEL_MIN_ZOOM[label.rank] ?? Infinity)) continue;
+      const [col, row] = toCell(label.lng, label.lat);
+      candidates.push({
+        id: label.id,
+        text: label.text,
+        rank: label.rank,
+        col: Math.floor(col),
+        row: Math.floor(row),
+      });
+    }
+    placeLabels(overlay, candidates, glyphIndex, area);
+    return packOverlay(overlay);
   };
 
   const selectPass = (time: number) => {
@@ -284,12 +425,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     twgl.setUniforms(selectProgram, {
       u_class: targets.classTex,
       u_attr: targets.attrTex,
+      u_id: targets.idTex,
       u_table: tableTex,
       u_kind: tables.kinds,
       u_count: tables.counts,
       u_connect: tables.connects,
       u_origin: [grid.originCol, grid.originRow],
       u_time: reducedMotion ? 0 : time,
+      u_zoom: camera.zoom,
+      u_seeThrough: seeThrough,
+      u_roadMask: roads,
+      u_tilted: isTilted(camera),
+      u_cellAspect: cellDev.h / cellDev.w,
     });
     gl.bindVertexArray(emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -311,6 +458,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       u_background: theme.background.slice(0, 3),
       u_time: time,
       u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+      u_overlay: targets.overlayTex,
+      u_labelColor: [
+        ((theme.label >> 16) & 0xff) / 255,
+        ((theme.label >> 8) & 0xff) / 255,
+        (theme.label & 0xff) / 255,
+      ],
     });
     gl.bindVertexArray(emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -354,9 +507,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const detachInput = attachInput(canvas, {
-    pan: (dx, dy) => applyCamera(panBy(camera, dx, dy)),
+    pan: (dx, dy) => applyCamera(panByView(camera, dx, dy, cssSize())),
+    // Tilted views zoom around the center (the cursor anchor math is for flat views).
     zoom: (delta, anchor) =>
-      applyCamera(zoomAroundClamped(camera, camera.zoom + delta, anchor, limits)),
+      applyCamera(
+        zoomAroundClamped(camera, camera.zoom + delta, isTilted(camera) ? [0, 0] : anchor, limits),
+      ),
+    orbit: (dBearing, dPitch) => applyCamera(orbitBy(camera, dBearing, dPitch)),
   });
 
   return {

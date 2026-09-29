@@ -1,0 +1,22 @@
+{
+  "id": "plan/st-john-the-evangelist-statue",
+  "osm_id": "osm:node/11152417399",
+  "title": "St. John the Evangelist statue",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    }
+  ],
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/11152417399",
+      "note": "Location only; the pedestal size is a generic estimate."
+    }
+  ],
+  "status": "draft"
+}

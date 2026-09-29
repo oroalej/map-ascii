@@ -14,6 +14,13 @@ export type OsmElement = {
   id: number;
   tags?: Record<string, string>;
   bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number };
+  /** Way node ids (`out body`). */
+  nodes?: number[];
+  /** Node position. */
+  lat?: number;
+  lon?: number;
+  /** Center of a way or relation (`out center`). */
+  center?: { lat: number; lon: number };
 };
 
 export type OverpassResponse = { elements: OsmElement[]; remark?: string };
@@ -21,17 +28,37 @@ export type OverpassResponse = { elements: OsmElement[]; remark?: string };
 /** Quote a string for Overpass QL (it accepts JSON-style escapes). */
 export const quote = (value: string) => JSON.stringify(value);
 
+/** The query a cache file was downloaded with is kept next to it. */
+const queryFile = (cacheFile: string) => `${cacheFile}.query`;
+
 /**
- * Run an Overpass query, caching the response at `cacheFile`. A cached file is reused while it
- * is under 7 days old, or always when `offline` is set.
+ * Whether a cached download can be reused: always when offline; otherwise only if it is under
+ * 7 days old and was made with the same query (so changing a query triggers a new download).
  */
+export function cacheIsFresh(
+  cached: { mtimeMs: number; query: string | undefined },
+  query: string,
+  { offline, now }: { offline: boolean; now: number },
+): boolean {
+  if (offline) return true;
+  return cached.query === query && now - cached.mtimeMs < maxAgeMs;
+}
+
+/** Run an Overpass query, caching the response at `cacheFile` (see `cacheIsFresh`). */
 export async function overpass(
   query: string,
   cacheFile: string,
   { offline }: { offline: boolean },
 ): Promise<OverpassResponse> {
   const cached = await stat(cacheFile).catch(() => undefined);
-  if (cached && (offline || Date.now() - cached.mtimeMs < maxAgeMs)) {
+  const cachedQuery = await readFile(queryFile(cacheFile), 'utf8').catch(() => undefined);
+  if (
+    cached &&
+    cacheIsFresh({ mtimeMs: cached.mtimeMs, query: cachedQuery }, query, {
+      offline,
+      now: Date.now(),
+    })
+  ) {
     console.log(`  cached ${cacheFile}`);
     return JSON.parse(await readFile(cacheFile, 'utf8')) as OverpassResponse;
   }
@@ -57,6 +84,7 @@ export async function overpass(
       if (data.remark?.includes('error')) throw new Error(`Overpass: ${data.remark}`);
       await mkdir(dirname(cacheFile), { recursive: true });
       await writeFile(cacheFile, text);
+      await writeFile(queryFile(cacheFile), query);
       return data;
     }
     if (!retryable.has(response.status) || attempt >= maxAttempts) {

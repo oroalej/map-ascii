@@ -116,6 +116,12 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 - The cell grid is anchored to the world, and the glyph pass shifts it by the sub-cell pan offset, so panning scrolls smoothly instead of re-quantizing.
 - Zoom follows the 512-px tile convention (`@math.gl/web-mercator`, MapLibre).
 
+**Implementation notes (Place-level detail and orbit).**
+- **Overlay.** Labels are drawn from an RGBA8 overlay texture on the cell grid (a 16-bit glyph code per cell), over the map in the glyph pass. Map glyphs come first in the glyph atlas so their indices fit the byte-sized glyph table; label characters follow.
+- **Top-down only.** The map never mixes in front views: landmark detail comes from plan-view `building_part` footprints (pipeline step 04, from the city pack's `plans/`), which the renderer treats like any building (outlines, priority by height, 3D extrusion).
+- **One matrix path.** The cell pass maps tile units (and meters, for heights) to the cell grid with a per-tile 4×4 matrix. Flat north-up cameras use an affine matrix and the world-anchored grid; tilted or rotated cameras (orbit mode) use `WebMercatorViewport`'s view-projection with a screen-anchored grid.
+- **3D buildings.** The tile worker extrudes buildings with a height (a wall quad per footprint edge, the footprint's triangles as the roof); each wall's shade comes from its facing. In the tilted view, ground features keep their class-priority depth in the back of the depth range and extrusions use their real depth in front, so buildings hide what is behind them.
+
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.
@@ -126,6 +132,12 @@ The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be
 - **Area fills** (parks, farmland): patterned by `(x + y) mod n` so fields form rows.
 - **Terrain:** DEM luminance → `. : - = + * # %` ramp (Region level only).
 - **Priority:** when several classes fall in one cell, a fixed priority order decides (label > landmark > road > building > water > area > terrain).
+- **Road strips (Place level):** from `ROAD_AREA_ZOOM`, carriageways are drawn as strips of their real width (built in the worker) instead of lines; road cells next to a non-road cell become curbs via the same wall mask, with "outside" meaning any class that is neither road nor see-through.
+- **Roof ridges:** the tile worker gives each pitched-roof polygon a ridge along its principal axis, and each vertex its signed distance to it (positive on the lit slope). The cell pass marks a cell as ridge when `|d| ≤ fwidth(d) / 2` (the ridge line crosses it), else lit or shaded slope. From `ROOF_ZOOM`, interior cells draw `▓` / `▒` and the ridge as `─ ╲ │ ╱`, chosen from its angle in cell units (cells are 1.8× taller than wide). Flat roofs and landmark parts keep the height ramp.
+- **3D:** in the tilted view, extruded walls step `░▒▓` by shade and roofs are `█`; outlines and ridges are off.
+- **Outlines (Place level):** from `OUTLINE_ZOOM`, a cell of an outlined feature is a wall if any of its 8 neighbors belongs to another feature (per `idTex`; paths, statues, and markers are looked through). A wall joins its neighbor in a direction when that neighbor is in the same feature and a cell touching both is outside, which draws corners and concave corners correctly without false junctions in thin buildings. The join mask indexes the single- or double-line wall set. Grounds (no height) are never outlined.
+- **Classes by zoom:** a class can have a minimum zoom (e.g. `monument` from z17); the cell pass clips it below that.
+- **Labels:** curated landmarks (from z16) and monuments (from z18) are placed greedily by rank, then feature id: below, above, right, or left of the anchor, wrapped at 18 characters, with a one-cell halo, inside the on-screen cells, never overlapping. The result is a per-cell label texture drawn over the map in the glyph pass.
 
 ## 5. Time model
 
