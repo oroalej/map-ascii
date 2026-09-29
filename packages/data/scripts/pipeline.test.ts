@@ -7,7 +7,7 @@ import type { City, CityArt } from '@atlas/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
-import { step as mergeContent } from './04-merge-content';
+import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
 import { files, type StepContext } from './step';
@@ -166,5 +166,27 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(meta.defaultCamera.lat).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera.lng).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera).toMatchObject({ zoom: 16, pitch: 0, bearing: 0 });
+  });
+
+  it('checks that tours point at features in the data and stay in the region', () => {
+    const step = (camera: { lat: number; lng: number }, extra = {}) => ({
+      camera: { ...camera, zoom: 16, pitch: 0, bearing: 0 },
+      duration_ms: 4000,
+      narration: { en: 'TODO(verify)' },
+      ...extra,
+    });
+    const tour = {
+      id: 'tour/fixture',
+      title: { en: 'Fixture tour' },
+      status: 'draft' as const,
+      steps: [
+        step({ lat: 0.005, lng: 0.005 }, { select: 'osm:way/104' }),
+        step({ lat: 5, lng: 0.005 }, { highlight: ['osm:way/104', 'osm:way/999999'] }),
+      ],
+    };
+    expect(checkTours(features, [tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
+      'tour/fixture step 2: camera 5, 0.005 is outside the region',
+      'tour/fixture step 2: osm:way/999999 is not in the data',
+    ]);
   });
 });
