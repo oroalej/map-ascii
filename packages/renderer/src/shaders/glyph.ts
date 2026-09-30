@@ -16,7 +16,7 @@
  */
 import { Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
-import { CellBit } from '../life/config';
+import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
@@ -366,6 +366,10 @@ void main() {
   // or a school's) where no building stands (height 0).
   vec4 life = texelFetch(u_life, cell, 0);
   int lifeBit = int(life.b * 255.0 + 0.5);
+  // A flying bird's shadow on the ground (life/draw.ts drawShadows).
+  if (lifeBit == 0 && int(life.a * 255.0 + 0.5) == ${LIFE_SHADOW}) {
+    back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
+  }
   bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[cls] & ${CellBit.grounds}) != 0 &&
     texelFetch(u_attr, cell, 0).r == 0.0;
   if (lifeBit != 0 && ((u_cellBits[cls] & lifeBit) != 0 || onGrounds)) {

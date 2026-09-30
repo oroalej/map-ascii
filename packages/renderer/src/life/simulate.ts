@@ -16,8 +16,10 @@ import type { TileId } from '../tiles';
 import {
   activityLevels,
   type Activity,
+  BIRD_WEATHER,
   BIRDS,
   CARABAO_SHARE,
+  DOG,
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
@@ -50,6 +52,7 @@ import {
   type BirdSpecies,
 } from './birds';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import { DOG_PAINTS } from './dogs';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
   pickVehicle,
@@ -93,7 +96,7 @@ function viewIn(tile: TileId, bounds: LngLatBounds | undefined, margin: number) 
 
 const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo + (hi - lo) * rng();
 
-/** Something that moves along lines: a vehicle, a person, or a boat. */
+/** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
   kind: Exclude<AgentKind, 'bird'>;
   line: number;
@@ -110,8 +113,11 @@ export type Mover = {
   paint: number;
   /** Vehicles: which of the lanes on its side of the road it keeps to, 0–1 (`laneOffset`). */
   lane: number;
-  /** Seconds left standing still (people). */
+  /** Seconds left standing still (people and dogs). */
   pause: number;
+  /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
+  trot?: number;
+  lying?: boolean;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -124,6 +130,17 @@ export type Mover = {
   /** People: who walks together (the first leads), and how far they have walked, m. */
   group?: Walker[];
   walked?: number;
+};
+
+/**
+ * What the flocks react to (`LifeWorld.step`): who is out (config.ts `activityLevels`), how hard
+ * it rains (0–1), and the wind, its direction a unit vector in world axes (x east, y south, like
+ * tile units) and its strength 0–1 (life/wind.ts).
+ */
+export type LifeEnv = {
+  levels?: Activity;
+  rain: number;
+  wind?: { dir: readonly [number, number]; strength: number };
 };
 
 /**
@@ -290,6 +307,9 @@ export type Flock = {
   perch: number;
   /** Sitting in that tree. */
   perched: boolean;
+  /** Flying down to its roost to settle on the ground there, and settled (life/birds.ts `ground`). */
+  landing: boolean;
+  landed: boolean;
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -322,8 +342,10 @@ export class TileLife {
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
   private readonly placeRng: () => number;
-  /** Birds' species: their own stream, so no one else moves for them. */
+  /** Birds' species, landings, and bats: their own stream, so no one else moves for them. */
   private readonly birdRng: () => number;
+  /** Dogs: their own stream, so no one else moves for them. */
+  private readonly dogRng: () => number;
   /** Road lines with vehicles parked along their curbs; traffic drives on what is left. */
   private readonly parkingLines = new Set<number>();
   /** Per vertex, the distance along its line from the line's first vertex, in tile units. */
@@ -343,6 +365,7 @@ export class TileLife {
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
     this.birdRng = random(seed ^ 0x165667b1);
+    this.dogRng = random(seed ^ 0xd3a2646c);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
     for (let line = 0; line < lines; line++) {
@@ -357,6 +380,8 @@ export class TileLife {
     this.spawnParked(random(seed ^ 0x9e3779b9));
     this.spawnStandby(random(seed ^ 0x85ebca6b));
     for (let line = 0; line < lines; line++) this.spawnOn(line);
+    // Dogs last, on their own stream: they don't change who else is out.
+    for (let line = 0; line < lines; line++) this.spawnOn(line, true);
     this.spawnStalls();
     this.spawnGatherers();
     this.spawnFlocks();
@@ -394,14 +419,16 @@ export class TileLife {
     return length;
   }
 
-  private spawnOn(line: number) {
+  /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
+  private spawnOn(line: number, dogs = false) {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
     const meters = this.lineLength(line) / this.perMeter;
     if (!rules || meters === 0) return;
-    const { rng } = this;
+    const rng = dogs ? this.dogRng : this.rng;
     for (const rule of rules) {
+      if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
       for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
         const dir = rng() < 0.5 ? 1 : -1;
@@ -423,6 +450,7 @@ export class TileLife {
           paint = spec.paints[Math.floor(rng() * spec.paints.length)]!;
           if (rule.kind === 'vehicle') lane = rng();
         }
+        if (rule.kind === 'dog') paint = DOG_PAINTS[Math.floor(rng() * DOG_PAINTS.length)]!;
         const mover: Mover = {
           kind: rule.kind,
           line,
@@ -446,6 +474,7 @@ export class TileLife {
           // Somewhere in their stride, so a crowd doesn't step in time.
           mover.walked = this.looks() * 2 * PEOPLE.stride;
         }
+        if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
         // Start somewhere along the line.
         this.advance(mover, rng() * this.lineLength(line), false);
         // A train pulls in until the track behind it holds all its cars.
@@ -823,11 +852,47 @@ export class TileLife {
         roost,
         perch,
         perched: inTree,
+        landing: false,
+        landed: false,
         scatter: 0,
         angle: rng() * 2 * Math.PI,
         radius: between(rng, spec.orbit) * this.perMeter,
         stay: between(rng, BIRDS.stay),
         rank: rng(),
+        birds,
+      });
+    }
+    // By night, bats: a few flocks over the tile's roosts (the trees and water they favor), on
+    // their own stream.
+    if (roosts === 0) return;
+    const brng = this.birdRng;
+    const bats = Math.floor(brng() * 3);
+    const spec = BIRD_SPECIES.bat;
+    for (let f = 0; f < bats; f++) {
+      const roost = this.pickRoost('bat', brng);
+      const birds: Bird[] = [];
+      const size = Math.round(between(brng, spec.flockSize));
+      for (let b = 0; b < size; b++) {
+        const angle = brng() * 2 * Math.PI;
+        const spread = between(brng, spec.spread) * this.perMeter;
+        birds.push({ ox: Math.cos(angle) * spread, oy: Math.sin(angle) * spread, phase: brng() });
+      }
+      this.flocks.push({
+        species: 'bat',
+        x: geo.roosts[roost * 2]!,
+        y: geo.roosts[roost * 2 + 1]!,
+        hx: 0,
+        hy: -1,
+        roost,
+        perch: -1,
+        perched: false,
+        landing: false,
+        landed: false,
+        scatter: 0,
+        angle: brng() * 2 * Math.PI,
+        radius: between(brng, spec.orbit) * this.perMeter,
+        stay: between(brng, BIRDS.stay),
+        rank: brng(),
         birds,
       });
     }
@@ -1116,6 +1181,7 @@ export class TileLife {
     gustAt?: (x: number, y: number) => number,
     shows?: (kind: AgentKind) => boolean,
     near?: (x: number, y: number) => boolean,
+    env?: LifeEnv,
   ) {
     this.time += dt;
     const { rng } = this;
@@ -1137,6 +1203,10 @@ export class TileLife {
         this.moveTrain(m, m.speed * dt);
         continue;
       }
+      if (m.kind === 'dog') {
+        this.stepDog(m, dt);
+        continue;
+      }
       if (m.kind === 'person') {
         if (m.pause > 0) {
           m.pause -= dt;
@@ -1147,11 +1217,7 @@ export class TileLife {
           continue;
         }
         if (rng() < PERSON_TURN_CHANCE * dt) {
-          // Turn back: now heading for the vertex it was walking away from.
-          const to = m.from + m.dir;
-          m.d = this.segment(m.from, to) - m.d;
-          m.from = to;
-          m.dir = m.dir === 1 ? -1 : 1;
+          this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
             walker.lateral = -walker.lateral;
@@ -1163,7 +1229,43 @@ export class TileLife {
       this.advance(m, speeds[i]! * dt);
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near);
-    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+  }
+
+  /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
+  private turnBack(m: Mover) {
+    const to = m.from + m.dir;
+    m.d = this.segment(m.from, to) - m.d;
+    m.from = to;
+    m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /**
+   * A street dog (config.ts `DOG`): it stops to sniff, now and then lies down a long while,
+   * turns back, and trots in short bursts.
+   */
+  private stepDog(m: Mover, dt: number) {
+    const rng = this.dogRng;
+    if (m.pause > 0) {
+      m.pause -= dt;
+      if (m.pause <= 0) m.lying = false;
+      return;
+    }
+    if (rng() < DOG.lie.chance * dt) {
+      m.pause = between(rng, DOG.lie.seconds);
+      m.lying = true;
+      return;
+    }
+    if (rng() < DOG.pause.chance * dt) {
+      m.pause = between(rng, DOG.pause.seconds);
+      return;
+    }
+    if (rng() < DOG.turnChance * dt) this.turnBack(m);
+    if ((m.trot ?? 0) > 0) m.trot = m.trot! - dt;
+    else if (rng() < DOG.trot.chance * dt) m.trot = between(rng, DOG.trot.seconds);
+    const speed = (m.trot ?? 0) > 0 ? Math.max(m.speed, DOG.trot.speed * this.perMeter) : m.speed;
+    m.walked = (m.walked ?? 0) + (speed * dt) / this.perMeter;
+    this.advance(m, speed * dt);
   }
 
   /**
@@ -1176,16 +1278,43 @@ export class TileLife {
     const perches = this.geo.perches.length / 2;
     const spec = BIRD_SPECIES[flock.species];
     flock.stay = between(this.rng, BIRDS.stay);
-    if (perches > 0 && (roosts === 0 || this.rng() < spec.perch)) {
+    flock.landing = false;
+    if (perches > 0 && !spec.nocturnal && (roosts === 0 || this.rng() < spec.perch)) {
       flock.perch = Math.floor(this.rng() * perches);
     } else {
       flock.perch = -1;
-      if (roosts > 1) flock.roost = this.pickRoost(flock.species);
+      if (roosts > 1) flock.roost = this.pickRoost(flock.species, this.rng);
+      // Some settle on the ground there: pigeons in a park, egrets at the water's edge.
+      if (roosts > 0 && spec.ground > 0 && this.birdRng() < spec.ground) flock.landing = true;
     }
   }
 
+  /**
+   * Whether someone out (below their kind's `levels`, if given) comes within a sitting flock's
+   * `wary` distance (life/birds.ts): walking or driving by, a dog twice as far. People standing
+   * still, sitting, and dogs lying down leave it be.
+   */
+  private disturbed(flock: Flock, levels?: Activity): boolean {
+    const { wary } = BIRD_SPECIES[flock.species];
+    if (wary <= 0) return false;
+    const reach = wary * this.perMeter;
+    const within = (x: number, y: number, r: number) =>
+      (x - flock.x) ** 2 + (y - flock.y) ** 2 < r * r;
+    for (const m of this.movers) {
+      if (levels && m.rank >= levels[m.kind]) continue;
+      if (m.pause > 0 && m.kind !== 'train') continue;
+      if (within(m.x, m.y, m.kind === 'dog' ? 2 * reach : reach)) return true;
+    }
+    for (const g of this.gatherers) {
+      if (g.behavior === 'sit' || g.pause > 0) continue;
+      if (levels && g.rank >= levels.places[g.place]) continue;
+      if (within(g.x, g.y, reach)) return true;
+    }
+    return false;
+  }
+
   /** A roost for a flock of `species`, weighted by how much it favors each one's habitat. */
-  private pickRoost(species: BirdSpecies): number {
+  private pickRoost(species: BirdSpecies, rng: () => number): number {
     const { habitats } = BIRD_SPECIES[species];
     const kinds = this.geo.roostHabitats;
     const weight = (i: number) =>
@@ -1193,7 +1322,7 @@ export class TileLife {
       0.1 + habitats[HABITAT_NAMES[kinds[i] ?? Habitat.park]!];
     let total = 0;
     for (let i = 0; i < kinds.length; i++) total += weight(i);
-    let pick = this.rng() * total;
+    let pick = rng() * total;
     for (let i = 0; i < kinds.length; i++) {
       pick -= weight(i);
       if (pick < 0) return i;
@@ -1201,55 +1330,107 @@ export class TileLife {
     return kinds.length - 1;
   }
 
+  /**
+   * Move the flocks on. A sitting flock (in a tree, or on the ground) stays its while, unless a
+   * gust through the crown or someone coming near flushes it; in the rain (`env`) it sits it out,
+   * and flying flocks that perch head for the trees, those that land settle at their roost. The
+   * wind pushes circling flocks downwind, and faster round the downwind side. Bats flit.
+   */
   private stepFlocks(
     dt: number,
     gustAt?: (x: number, y: number) => number,
     near?: (x: number, y: number) => boolean,
+    env?: LifeEnv,
   ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
+    const sheltering = (env?.rain ?? 0) >= BIRD_WEATHER.shelter;
+    // The wind, scaled by its strength, in tile axes.
+    const wind = env?.wind;
+    const wx = wind ? wind.dir[0] * wind.strength : 0;
+    const wy = wind ? wind.dir[1] * wind.strength : 0;
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
-      const speed = BIRD_SPECIES[flock.species].speed * this.perMeter;
+      const spec = BIRD_SPECIES[flock.species];
+      const speed = spec.speed * this.perMeter;
+      const sitting = flock.perched || flock.landed;
       flock.scatter = Math.max(0, flock.scatter - dt);
-      flock.stay -= dt;
-      // In a tree: stay a while, unless a gust through the crown flushes the flock out.
-      if (flock.perched) {
-        const flushed = (gustAt?.(flock.x, flock.y) ?? 0) >= PERCH.flush;
+      // Sitting out the rain, a flock doesn't count down its stay.
+      if (!(sheltering && sitting)) flock.stay -= dt;
+      if (sitting) {
+        const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
+        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels);
         if (flushed || flock.stay <= 0) {
           flock.perched = false;
+          flock.landed = false;
           if (flushed) flock.scatter = PERCH.scatter;
           this.pickDestination(flock);
-          // Flushed, it keeps clear of the trees a while (circling a roost, or hovering where
-          // it is if the tile has none) before landing again.
-          if (flushed) flock.perch = -1;
+          // Flushed, it keeps clear a while (circling a roost, or hovering where it is if the
+          // tile has none) before settling again.
+          if (flushed) {
+            flock.perch = -1;
+            flock.landing = false;
+          }
         }
         continue;
       }
-      if (flock.stay <= 0 && (count > 1 || perches.length > 0)) this.pickDestination(flock);
-      // Flying to a tree: straight there, then land.
-      if (flock.perch >= 0) {
-        const dx = perches[flock.perch * 2]! - flock.x;
-        const dy = perches[flock.perch * 2 + 1]! - flock.y;
+      if (flock.stay <= 0 && (count > 1 || perches.length > 0 || (spec.ground > 0 && count > 0))) {
+        this.pickDestination(flock);
+      }
+      // Rain: those that perch head for the trees, those that land settle at their roost.
+      if (sheltering && flock.scatter === 0 && flock.perch < 0 && !flock.landing) {
+        if (spec.perch > 0 && perches.length > 0) {
+          flock.perch = Math.floor(this.birdRng() * (perches.length / 2));
+        } else if (spec.ground > 0 && count > 0) {
+          flock.landing = true;
+        }
+      }
+      // Flying to a tree, or down to its roost: straight there, nudged downwind, then settle.
+      const to =
+        flock.perch >= 0
+          ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
+          : flock.landing && count > 0
+            ? { x: roosts[flock.roost * 2]!, y: roosts[flock.roost * 2 + 1]! }
+            : undefined;
+      if (to) {
+        const dx = to.x - flock.x;
+        const dy = to.y - flock.y;
         const distance = Math.hypot(dx, dy);
         const step = speed * 1.4 * dt;
         if (distance <= step) {
-          flock.x += dx;
-          flock.y += dy;
-          flock.perched = true;
+          flock.x = to.x;
+          flock.y = to.y;
+          if (flock.perch >= 0) flock.perched = true;
+          else {
+            flock.landed = true;
+            flock.landing = false;
+          }
         } else {
-          flock.x += (dx / distance) * step;
-          flock.y += (dy / distance) * step;
+          // Less as it comes in, so it still arrives.
+          const nudge = speed * 0.2 * dt * Math.min(1, distance / (20 * this.perMeter));
+          flock.x += (dx / distance) * step + wx * nudge;
+          flock.y += (dy / distance) * step + wy * nudge;
         }
         if (distance > 0) [flock.hx, flock.hy] = [dx / distance, dy / distance];
         continue;
       }
       if (count === 0) continue;
-      // Circle the roost; the flock's center chases the point on the circle a little faster
-      // than it moves, so it catches up after moving on to another roost.
-      flock.angle += (speed / flock.radius) * dt;
-      const tx = roosts[flock.roost * 2]! + Math.cos(flock.angle) * flock.radius;
-      const ty = roosts[flock.roost * 2 + 1]! + Math.sin(flock.angle) * flock.radius;
+      // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
+      // circle a little faster than it moves, so it catches up after moving on to another roost.
+      const drift = BIRD_WEATHER.drift * this.perMeter;
+      const along = -Math.sin(flock.angle) * wx + Math.cos(flock.angle) * wy;
+      flock.angle += (speed / flock.radius) * dt * (1 + BIRD_WEATHER.push * Math.max(0, along));
+      let radius = flock.radius;
+      let jx = 0;
+      let jy = 0;
+      if (spec.nocturnal) {
+        // Bats flit: the circle breathes, and they jink side to side.
+        radius *= 1 + 0.3 * Math.sin(this.time * 2.3 + flock.rank * 17);
+        jx = Math.sin(this.time * 7 + flock.rank * 31) * 2 * this.perMeter;
+        jy = Math.cos(this.time * 5 + flock.rank * 23) * 2 * this.perMeter;
+      }
+      const tx = roosts[flock.roost * 2]! + wx * drift + Math.cos(flock.angle) * radius + jx;
+      const ty = roosts[flock.roost * 2 + 1]! + wy * drift + Math.sin(flock.angle) * radius + jy;
       const dx = tx - flock.x;
       const dy = ty - flock.y;
       const distance = Math.hypot(dx, dy);
@@ -1355,6 +1536,9 @@ export class LifeWorld {
   private clock = 0;
   private played: { id: string; start: number } | undefined;
   private live: { id: string; progress: number } | undefined;
+  /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
+  private lastLevels: Activity | undefined;
+  private lastRain = 0;
 
   /** `traffic`: the city's vehicle mix (its pack's `traffic`), over the default. */
   constructor(traffic?: TrafficMix) {
@@ -1384,13 +1568,16 @@ export class LifeWorld {
    * in a tree's crown there (life/wind.ts strength × glyphs/select.ts treeGust); a strong gust
    * flushes birds out of the tree. With `zoom`, only the kinds that show at it move (config.ts
    * `LIFE_ZOOM`): the others wait, unseen, until they show. With `bounds` (the view's), only
-   * those near it move (`STEP_MARGIN_M`), trains aside.
+   * those near it move (`STEP_MARGIN_M`), trains aside. With `wind` (in world axes, x east and
+   * y south), circling flocks drift with it; they also shelter from the rain, and take off
+   * from whoever comes near, as last drawn (`visible`).
    */
   step(
     dt: number,
     gustAt?: (lng: number, lat: number) => number,
     zoom?: number,
     bounds?: LngLatBounds,
+    wind?: LifeEnv['wind'],
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
@@ -1399,12 +1586,13 @@ export class LifeWorld {
       zoom === undefined
         ? undefined
         : (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
+    const env: LifeEnv = { levels: this.lastLevels, rain: this.lastRain, wind };
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
         : undefined;
       const near = bounds && viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
-      tile.step(clamped, inTile, shows, near);
+      tile.step(clamped, inTile, shows, near, env);
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileId; m: Mover }[] | undefined;
@@ -1479,6 +1667,8 @@ export class LifeWorld {
     // A bare number is the daylight, with no clock (config.ts `activityLevels`).
     const levels =
       typeof levelsOrDaylight === 'number' ? activityLevels(levelsOrDaylight) : levelsOrDaylight;
+    this.lastLevels = levels;
+    this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -1536,6 +1726,10 @@ export class LifeWorld {
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
           }));
           out.push({ kind: m.kind, lng, lat, ahead, flap: 0, people });
+        } else if (m.kind === 'dog') {
+          // Standing, sniffing, or lying down, it keeps still.
+          const flap = m.pause > 0 ? 0 : Math.floor((m.walked ?? 0) / DOG.stride) & 1;
+          out.push({ kind: 'dog', lng, lat, ahead, paint: m.paint, flap });
         } else {
           out.push({ kind: m.kind, lng, lat, ahead, flap: 0 });
         }
@@ -1633,34 +1827,32 @@ export class LifeWorld {
         }
       }
       if (!shows('bird')) continue;
-      const birdsOut = levels.bird;
       for (const flock of life.flocks) {
-        if (flock.rank >= birdsOut || !inView(flock.x, flock.y)) continue;
-        const wobble = life.elapsed * 0.8;
         const spec = BIRD_SPECIES[flock.species];
+        const out_ = spec.nocturnal ? levels.night : levels.bird;
+        if (flock.rank >= out_ || !inView(flock.x, flock.y)) continue;
+        const wobble = life.elapsed * 0.8;
+        const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
-        // Perched, the birds sit still and close in the crown; flushed, they scatter outward.
+        // Perched, the birds sit still and close in the crown; on the ground, still and spread
+        // out; flushed, they scatter outward.
         const perchSpread = PERCH.spread / spec.spread[1];
-        const spread = flock.perched ? perchSpread : 1 + (3 * flock.scatter) / PERCH.scatter;
+        const spread = flock.perched
+          ? perchSpread
+          : flock.landed
+            ? 1
+            : 1 + (3 * flock.scatter) / PERCH.scatter;
         for (const bird of flock.birds) {
-          const turn = flock.perched ? bird.phase * 6 : wobble + bird.phase * 6;
+          const turn = sitting ? bird.phase * 6 : wobble + bird.phase * 6;
           const cos = Math.cos(turn) * spread;
           const sin = Math.sin(turn) * spread;
           const x = flock.x + bird.ox * cos - bird.oy * sin;
           const y = flock.y + bird.ox * sin + bird.oy * cos;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const flap = flock.perched
-            ? 0
-            : Math.floor(life.elapsed * spec.flap + bird.phase * 2) & 1;
-          const pose = flock.perched
-            ? BirdPose.perched
-            : flap === 1
-              ? BirdPose.raised
-              : BirdPose.spread;
+          const flap = sitting ? 0 : Math.floor(life.elapsed * spec.flap + bird.phase * 2) & 1;
+          const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
-          const face = flock.perched
-            ? bird.phase * 2 * Math.PI
-            : heading + (bird.phase - 0.5) * 0.6;
+          const face = sitting ? bird.phase * 2 * Math.PI : heading + (bird.phase - 0.5) * 0.6;
           const ahead = tileToLngLat(tile, {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,

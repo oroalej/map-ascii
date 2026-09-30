@@ -4,6 +4,7 @@
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
+import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX, type DogGlyph } from '../life/dogs';
 import {
   FIGURE_SCALES,
   FIGURE_TONE,
@@ -261,6 +262,25 @@ function drawBird(slot: Slot, g: BirdGlyph) {
   }
 }
 
+/**
+ * A dog in its cell (life/dogs.ts `dogPixels`): square, centered, `DOG_SCALE` of the cell's
+ * width but no narrower than `MIN_DOG_PX`, in the same two inks as a figure.
+ */
+function drawDog(slot: Slot, g: DogGlyph) {
+  const { data, stride, w, h } = slot;
+  const box = Math.min(h, Math.max(Math.min(w, MIN_DOG_PX), Math.round(w * DOG_SCALE)));
+  const ox = Math.floor((w - box) / 2);
+  const oy = Math.floor((h - box) / 2);
+  const pixel = dogPixels(g, box);
+  for (let y = 0; y < box; y++) {
+    for (let x = 0; x < box; x++) {
+      const ink = pixel(x, y);
+      if (ink === '.') continue;
+      data[(slot.y0 + oy + y) * stride + slot.x0 + ox + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
 /** A vendor's cart (life/vehicles.ts `STALL_GLYPH`): a square awning in stripes. */
 function drawStall(slot: Slot) {
   const { w, h } = slot;
@@ -274,7 +294,7 @@ function drawStall(slot: Slot) {
 
 /**
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
- * figure, a bird, or a vendor's cart.
+ * figure, a bird, a dog, or a vendor's cart.
  */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
@@ -288,6 +308,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
   else if (figureOf(glyph)) drawFigure(slot, figureOf(glyph)!);
   else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
+  else if (dogOf(glyph)) drawDog(slot, dogOf(glyph)!);
   else if (glyph === STALL_GLYPH) drawStall(slot);
   else return false;
   return true;

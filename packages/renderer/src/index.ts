@@ -359,9 +359,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
    * direction turns with the bearing.
    */
   const currentWind = (time: number): WindNow => {
-    const base = prevailingWind(life.wind, options.climate, cityMonth);
-    const wind = reducedMotion ? stillWind(base) : windAt(time, base);
+    const wind = worldWind(time);
     return isTilted(camera) ? { ...wind, dir: onScreen(wind.dir, camera.bearing) } : wind;
+  };
+  /** The wind at `time` seconds in world axes (x east, y south), whatever the view. */
+  const worldWind = (time: number): WindNow => {
+    const base = prevailingWind(life.wind, options.climate, cityMonth);
+    return reducedMotion ? stillWind(base) : windAt(time, base);
   };
   /** How hard it rains now: in a storm (the chosen or the season's), never with reduced motion. */
   const currentRain = (): number =>
@@ -706,6 +710,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         },
         camera.zoom,
         viewBounds(),
+        // Circling flocks drift with it (in world axes, like the tiles).
+        worldWind(time),
       );
       lastLifeStep = at;
       agents = world.visible(
@@ -725,7 +731,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeAgents = agents;
       return;
     }
-    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents);
+    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents, sun);
     lifeShown = agents.length > 0;
     lifeAgents = agents;
   };

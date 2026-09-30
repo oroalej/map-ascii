@@ -14,7 +14,7 @@ import {
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
 
-export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train';
+export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog';
 
 /** The zoom band in which each kind shows. */
 export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
@@ -23,6 +23,7 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   bird: { min: 13.5 },
   vehicle: { min: 15 },
   person: { min: 17 },
+  dog: { min: 17 },
 };
 
 /** At most this many agents are drawn, those nearest the view's center first. */
@@ -83,6 +84,7 @@ export const PARKED = {
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
   person: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
+  dog: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
   boat: [LifeLine.river, LifeLine.canal],
   train: [LifeLine.rail],
 };
@@ -125,12 +127,16 @@ export type SpawnRule = {
 export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
   [LifeLine.roadMajor]: [{ kind: 'vehicle', spacing: 30, speed: [7, 12] }],
   [LifeLine.roadMid]: [{ kind: 'vehicle', spacing: 50, speed: [6, 10] }],
-  // Side streets: tricycles and people on foot.
+  // Side streets: tricycles, people on foot, and street dogs.
   [LifeLine.roadMinor]: [
     { kind: 'vehicle', spacing: 100, speed: [3, 6] },
     { kind: 'person', spacing: 50, speed: [0.9, 1.5] },
+    { kind: 'dog', spacing: 150, speed: [0.9, 1.5] },
   ],
-  [LifeLine.path]: [{ kind: 'person', spacing: 20, speed: [0.9, 1.4] }],
+  [LifeLine.path]: [
+    { kind: 'person', spacing: 20, speed: [0.9, 1.4] },
+    { kind: 'dog', spacing: 180, speed: [0.8, 1.3] },
+  ],
   [LifeLine.plaza]: [{ kind: 'person', spacing: 10, speed: [0.6, 1.2] }],
   [LifeLine.river]: [{ kind: 'boat', spacing: 200, speed: [1, 2.5] }],
   // Canals: a few small boats, slowly (the city's `traffic.canal` mix).
@@ -144,6 +150,19 @@ export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
 /** People stop for a while (chance per second, and how long in s), or turn back. */
 export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
+
+/**
+ * Street dogs (askals): they stop to sniff often (chance per second, and how long in s), turn
+ * back more than people do, now and then trot at `trot.speed` m/s for `trot.seconds`, and some
+ * lie down a long while (`lie`). Each step of their gait goes `stride` m.
+ */
+export const DOG = {
+  pause: { chance: 0.12, seconds: [1.5, 6] as const },
+  turnChance: 0.03,
+  trot: { chance: 0.02, speed: 2.6, seconds: [2, 5] as const },
+  lie: { chance: 0.004, seconds: [30, 120] as const },
+  stride: 0.35,
+} as const;
 
 /**
  * Who walks together (life/people.ts): of the people spawned on a line, the shares that walk
@@ -291,6 +310,26 @@ export const BIRDS = {
 export const PERCH = { spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
 
 /**
+ * Birds and the weather: from `shelter` rain (0–1) flocks that perch head for the trees and sit
+ * it out; a flock's circle drifts `drift` m downwind at full wind strength, and circling it
+ * speeds up by up to `push` on the downwind side.
+ */
+export const BIRD_WEATHER = { shelter: 0.5, drift: 12, push: 0.5 } as const;
+
+/**
+ * A flying bird's shadow (life/draw.ts): it flies `altitude` m up, so its shadow falls that
+ * height over the tangent of the sun's altitude away from the sun, but never more than `reach`
+ * m off; it darkens the ground by `dark`.
+ */
+export const BIRD_SHADOW = { altitude: 8, reach: 40, dark: 0.3 } as const;
+
+/**
+ * A life texel with no agent (kind bits 0) whose last byte is this marks a flying bird's shadow:
+ * the glyph shader darkens the map there by `BIRD_SHADOW.dark` (shaders/glyph.ts).
+ */
+export const LIFE_SHADOW = 1;
+
+/**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):
  * fewer people and cars at night, and birds roost after dusk. Each agent has a fixed rank in
  * 0–1 and shows while its rank is below this.
@@ -307,22 +346,30 @@ export function activity(kind: AgentKind, daylight: number): number {
       return Math.min(1, Math.max(0, (daylight - 0.2) / 0.5));
     case 'train':
       return 0.5 + 0.5 * daylight;
+    case 'dog':
+      return 0.5 + 0.5 * daylight;
   }
 }
+
+/** How much of the night creatures (bats) are out: from dusk, all of them by full night. */
+export const nightActivity = (daylight: number) =>
+  Math.min(1, Math.max(0, (0.45 - daylight) / 0.3));
 
 /**
  * How much of each kind is out (0–1), and of the people at each kind of place: each agent shows
  * while its rank is below its kind's (or its place's).
  */
 export type Activity = Readonly<Record<AgentKind, number>> & {
+  /** Night creatures (bats, life/birds.ts `nocturnal`): `nightActivity`. */
+  night: number;
   places: Readonly<Record<PlaceKind, number>>;
 };
 
 /**
  * How much of each kind is out: by the city's daily rhythm at `clock.minutes` past local
  * midnight on `clock.weekday` (the pack's `life.rhythm` and `life.schedules`, else the
- * defaults, rhythm.ts), or without a clock, by the daylight alone (`activity`). Birds always
- * follow the daylight.
+ * defaults, rhythm.ts), or without a clock, by the daylight alone (`activity`). Birds and bats
+ * always follow the daylight; dogs keep to people's hours, but some are always out.
  */
 export function activityLevels(
   daylight: number,
@@ -340,15 +387,18 @@ export function activityLevels(
     boat: byRhythm('boat'),
     train: byRhythm('train'),
     bird: activity('bird', daylight),
+    dog: Math.max(byRhythm('person'), activity('dog', 0)),
+    night: nightActivity(daylight),
     places,
   };
 }
 
 /** Whether two activities differ by more than `epsilon` for any kind or place. */
 export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): boolean {
-  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train'];
+  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train', 'dog'];
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
+    Math.abs(a.night - b.night) > epsilon ||
     PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon)
   );
 }
@@ -356,6 +406,9 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
 /** The render class each kind is drawn with (its glyphs and color, theme.ts). */
 export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
   vehicle: 'life_vehicle',
+  // Dogs are drawn as people are (their own figures, life/dogs.ts): the classes are all taken.
+  // Listed before people, so a lookup from the class finds people.
+  dog: 'life_person',
   person: 'life_person',
   boat: 'life_boat',
   bird: 'life_bird',
@@ -446,6 +499,8 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
   boat: CellBit.boat,
   bird: CellBit.bird,
   train: CellBit.train,
+  // Dogs go where people go.
+  dog: CellBit.person,
 };
 
 const roads = ['road_major', 'road_mid', 'road_minor'];

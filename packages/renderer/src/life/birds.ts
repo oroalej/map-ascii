@@ -8,11 +8,17 @@
  * `FIGURE_TONE` for the accent (a beak, a cap, a throat), in the species' colors (theme.ts
  * `birdPaints`, shaders/glyph.ts `birdColor`).
  */
-import { doubled } from './masters';
+import { doubled, Heading, inkAt, turnedPixels } from './masters';
 
-export type BirdSpecies = 'maya' | 'swallow' | 'pigeon' | 'egret';
+export type BirdSpecies = 'maya' | 'swallow' | 'pigeon' | 'egret' | 'bat';
 /** In theme.ts `birdPaints` order; a bird texel holds its index. */
-export const BIRD_SPECIES_ORDER: readonly BirdSpecies[] = ['maya', 'swallow', 'pigeon', 'egret'];
+export const BIRD_SPECIES_ORDER: readonly BirdSpecies[] = [
+  'maya',
+  'swallow',
+  'pigeon',
+  'egret',
+  'bat',
+];
 
 /** What a roost is: open water, a field (grass or farmland), a park, or trees. */
 export const Habitat = { water: 0, field: 1, park: 2, trees: 3 } as const;
@@ -51,14 +57,25 @@ export type BirdSpec = {
   flap: number;
   /** The chance a flock picking where to go next lands in a tree (config.ts `PERCH`). */
   perch: number;
-  /** How likely a roost of each habitat is to have this species, relative to the others. */
+  /** The chance it lands on the ground at its roost instead of circling it (not in trees). */
+  ground: number;
+  /** A sitting flock takes off when someone comes within this many meters (a dog, twice). */
+  wary: number;
+  /**
+   * How likely a roost of each habitat is to have this species, relative to the others; for
+   * night creatures, which roosts they favor (they fly besides the day's flocks).
+   */
   habitats: Readonly<Record<keyof typeof Habitat, number>>;
+  /** Out at night instead of by day (config.ts `nightActivity`). */
+  nocturnal?: boolean;
 };
 
 /**
  * The species: maya (tree sparrows) in small quick flocks around trees and parks, swallows
  * sweeping wide over water and fields, pigeons over parks and plazas, and egrets, large and
- * slow, over water and rice fields (they never land in the trees here).
+ * slow, over water and rice fields (they never land in the trees here). Pigeons and egrets
+ * also settle on the ground, and take off when someone comes near. By night, bats: small fruit
+ * bats flitting over trees and water.
  */
 export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
   maya: {
@@ -69,6 +86,8 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     spread: [1, 4],
     flap: 5,
     perch: 0.7,
+    ground: 0,
+    wary: 4,
     habitats: { water: 0.3, field: 2, park: 3, trees: 3 },
   },
   swallow: {
@@ -79,6 +98,8 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     spread: [3, 10],
     flap: 4,
     perch: 0.1,
+    ground: 0,
+    wary: 0,
     habitats: { water: 3, field: 2, park: 1, trees: 0.5 },
   },
   pigeon: {
@@ -89,6 +110,8 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     spread: [2, 6],
     flap: 3,
     perch: 0.3,
+    ground: 0.4,
+    wary: 3,
     habitats: { water: 0.3, field: 1, park: 3, trees: 0.5 },
   },
   egret: {
@@ -99,17 +122,37 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     spread: [4, 10],
     flap: 1.5,
     perch: 0,
+    ground: 0.5,
+    wary: 8,
     habitats: { water: 3, field: 3, park: 0.5, trees: 0 },
+  },
+  bat: {
+    wingspan: 0.35,
+    flockSize: [2, 6],
+    speed: 10,
+    orbit: [10, 25],
+    spread: [2, 8],
+    flap: 6,
+    perch: 0,
+    ground: 0,
+    wary: 0,
+    habitats: { water: 2, field: 0.5, park: 1, trees: 3 },
+    nocturnal: true,
   },
 };
 
 /** `Habitat` codes' names, for species' `habitats` weights. */
 export const HABITAT_NAMES = ['water', 'field', 'park', 'trees'] as const;
 
-/** A species for a flock over a roost of `habitat`, by the species' weights for it. */
+/**
+ * A day species for a flock over a roost of `habitat`, by the species' weights for it (night
+ * creatures are spawned apart, simulate.ts `spawnFlocks`).
+ */
 export function pickSpecies(habitat: Habitat, rng: () => number): BirdSpecies {
   const key = HABITAT_NAMES[habitat];
-  const weights = BIRD_SPECIES_ORDER.map((s) => BIRD_SPECIES[s].habitats[key]);
+  const weights = BIRD_SPECIES_ORDER.map((s) =>
+    BIRD_SPECIES[s].nocturnal ? 0 : BIRD_SPECIES[s].habitats[key],
+  );
   let pick = rng() * weights.reduce((a, b) => a + b, 0);
   let last = 0;
   for (let i = 0; i < weights.length; i++) {
@@ -331,6 +374,46 @@ const MASTERS_10: Readonly<Record<BirdSpecies, readonly (readonly string[])[]>> 
       '..........',
     ],
   ],
+  // Scalloped wings (the fingers between), a small head, no tail. Seen only in flight: sitting
+  // (by day) they are out of sight, so it is the raised pose.
+  bat: [
+    [
+      '..........',
+      '..........',
+      '#...oo...#',
+      '##..##..##',
+      '##########',
+      '.########.',
+      '.#.####.#.',
+      '....##....',
+      '..........',
+      '..........',
+    ],
+    [
+      '..........',
+      '..........',
+      '....oo....',
+      '...####...',
+      '..######..',
+      '..#.##.#..',
+      '....##....',
+      '....##....',
+      '..........',
+      '..........',
+    ],
+    [
+      '..........',
+      '..........',
+      '....oo....',
+      '...####...',
+      '..######..',
+      '..#.##.#..',
+      '....##....',
+      '....##....',
+      '..........',
+      '..........',
+    ],
+  ],
 };
 
 /** A species' masters for a pose, by size. */
@@ -345,7 +428,6 @@ const mastersOf = (
 const MASTERS = Object.fromEntries(
   BIRD_SPECIES_ORDER.map((s) => [s, [0, 1, 2].map((p) => mastersOf(s, p as BirdPose))]),
 ) as Record<BirdSpecies, Readonly<Record<number, readonly string[]>>[]>;
-const SIZES = [5, 10, 20] as const;
 
 /**
  * A stamped bird's ink at (`u` forward, `v` to the right), both 0–1 over its wingspan square:
@@ -358,16 +440,12 @@ export function birdInk(
   v: number,
   detail: number,
 ): string {
-  let size: number = SIZES[0];
-  for (const s of SIZES) if (s <= detail) size = s;
-  const master = MASTERS[species][pose]![size]!;
-  const at = (t: number) => Math.min(size - 1, Math.max(0, Math.floor(t * size)));
-  return master[at(1 - u)]![at(v)]!;
+  return inkAt(MASTERS[species][pose]!, u, v, detail);
 }
 
 /** Which way a one-cell bird faces on screen. */
-export const BirdHeading = { up: 0, right: 1, down: 2, left: 3 } as const;
-export type BirdHeading = (typeof BirdHeading)[keyof typeof BirdHeading];
+export const BirdHeading = Heading;
+export type BirdHeading = Heading;
 
 /** A one-cell bird glyph: shared by the species (their colors tell them apart). */
 export type BirdGlyph = { pose: BirdPose; heading: BirdHeading };
@@ -395,21 +473,5 @@ export function birdGlyphs(): string[] {
  * pigeon's smallest master at least `box` wide is sampled down to it, then turned to its heading.
  */
 export function birdPixels(g: BirdGlyph, box: number): (x: number, y: number) => string {
-  const masters = MASTERS.pigeon[g.pose]!;
-  const size: number = SIZES.find((s) => s >= box) ?? 20;
-  const master = masters[size]!;
-  const n = box - 1;
-  return (x, y) => {
-    // Turned clockwise from heading up.
-    const [mx, my] =
-      g.heading === BirdHeading.up
-        ? [x, y]
-        : g.heading === BirdHeading.right
-          ? [y, n - x]
-          : g.heading === BirdHeading.down
-            ? [n - x, n - y]
-            : [n - y, x];
-    const row = master[Math.floor(((my + 0.5) * size) / box)];
-    return row?.[Math.floor(((mx + 0.5) * size) / box)] ?? '.';
-  };
+  return turnedPixels(MASTERS.pigeon[g.pose]!, box, g.heading);
 }

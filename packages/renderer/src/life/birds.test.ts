@@ -36,6 +36,15 @@ describe('bird species', () => {
     expect(BIRD_SPECIES.egret.perch).toBe(0);
   });
 
+  it('keeps bats to the night: never picked for a day flock, never perching', () => {
+    const rng = random(3);
+    for (const h of [Habitat.water, Habitat.field, Habitat.park, Habitat.trees]) {
+      for (let i = 0; i < 500; i++) expect(pickSpecies(h, rng)).not.toBe('bat');
+    }
+    expect(BIRD_SPECIES.bat.nocturnal).toBe(true);
+    expect(BIRD_SPECIES.bat.perch).toBe(0);
+  });
+
   it('reads the habitat from a roost’s map class', () => {
     expect(habitatOf('water_area')).toBe(Habitat.water);
     expect(habitatOf('farmland')).toBe(Habitat.field);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import {
   activityLevels,
+  type AgentKind,
   DEFAULT_ROAD_WIDTH_M,
   MAX_TILE_GATHERERS,
   PLACES,
@@ -15,6 +16,7 @@ import {
   VENDORS,
 } from './config';
 import { BirdPose, Habitat } from './birds';
+import { DOG_PAINTS } from './dogs';
 import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
 import {
   alongTrail,
@@ -284,9 +286,11 @@ describe('TileLife', () => {
   it('keeps flocks of birds circling near their roost', () => {
     const park = geometry([], [[2048, 2048]]);
     const life = new TileLife(tile, park, 3);
-    expect(life.flocks).toHaveLength(1);
-    const flock = life.flocks[0]!;
-    expect(flock.birds.length).toBeGreaterThanOrEqual(3);
+    // One flock by day (bats, if any, come out at night).
+    const day = life.flocks.filter((f) => f.species !== 'bat');
+    expect(day).toHaveLength(1);
+    const flock = day[0]!;
+    expect(flock.birds.length).toBeGreaterThanOrEqual(2);
     for (let i = 0; i < 300; i++) life.step(0.1);
     const reach = (40 * 1.5 + 10) * perMeter;
     expect(Math.hypot(flock.x - 2048, flock.y - 2048)).toBeLessThan(reach);
@@ -369,6 +373,148 @@ describe('birds in trees', () => {
     const life = new TileLife(tile, geometry([], [[2048, 2048]]), 3);
     for (let i = 0; i < 600; i++) life.step(0.5);
     expect(life.flocks.every((f) => f.perch === -1 && !f.perched)).toBe(true);
+  });
+});
+
+describe('birds and the world', () => {
+  const park: [number, number] = [2048, 2048];
+  const tree: [number, number] = [1000, 1200];
+  /** A tile with one day flock of `species` over a park (and a tree, with `trees`), no bats. */
+  const withFlock = (species: 'pigeon' | 'maya' | 'egret', trees = false) => {
+    const life = new TileLife(tile, geometry([], [park], trees ? [tree] : []), 3);
+    life.movers.length = 0;
+    life.flocks.splice(1);
+    const flock = life.flocks[0]!;
+    Object.assign(flock, { species, perch: -1, perched: false, landing: false, landed: false });
+    return { life, flock };
+  };
+  const onlyBirds = (kind: AgentKind) => kind === 'bird';
+  const person = (x: number, y: number, rank = 0): Mover => ({
+    kind: 'person',
+    line: 0,
+    from: 0,
+    dir: 1,
+    d: 0,
+    speed: 1,
+    paint: 0,
+    lane: 0,
+    pause: 0,
+    rank,
+    x,
+    y,
+    hx: 1,
+    hy: 0,
+  });
+
+  it('lands pigeons on the ground, and flushes them when someone walks by', () => {
+    const { life, flock } = withFlock('pigeon');
+    Object.assign(flock, { landed: true, x: park[0], y: park[1], stay: 1000 });
+    const levels = activityLevels(1);
+    life.step(0.1, undefined, onlyBirds, undefined, { levels, rain: 0 });
+    expect(flock.landed).toBe(true);
+    // Someone out of sight (ranked out) doesn't count.
+    life.movers.push(person(park[0] + perMeter, park[1], 0.99));
+    life.step(0.1, undefined, onlyBirds, undefined, {
+      levels: { ...levels, person: 0.5 },
+      rain: 0,
+    });
+    expect(flock.landed).toBe(true);
+    // One walking past does.
+    life.movers.push(person(park[0] + 2 * perMeter, park[1]));
+    life.step(0.1, undefined, onlyBirds, undefined, { levels, rain: 0 });
+    expect(flock.landed).toBe(false);
+    expect(flock.scatter).toBeGreaterThan(0);
+  });
+
+  it('sends flocks that perch to the trees in the rain, and keeps them there', () => {
+    const { life, flock } = withFlock('maya', true);
+    const env = { rain: 1 };
+    for (let i = 0; i < 600 && !flock.perched; i++) {
+      life.step(0.1, undefined, onlyBirds, undefined, env);
+    }
+    expect(flock.perched).toBe(true);
+    expect([flock.x, flock.y]).toEqual(tree);
+    // Its stay runs out, but it sits out the rain.
+    flock.stay = 0;
+    for (let i = 0; i < 50; i++) life.step(0.1, undefined, onlyBirds, undefined, env);
+    expect(flock.perched).toBe(true);
+  });
+
+  it('drifts circling flocks downwind', () => {
+    const meanX = (wind?: { dir: [number, number]; strength: number }) => {
+      const { life, flock } = withFlock('egret');
+      flock.stay = 1e6;
+      let sum = 0;
+      for (let i = 0; i < 1200; i++) {
+        life.step(0.05, undefined, onlyBirds, undefined, { rain: 0, wind });
+        if (i >= 600) sum += flock.x;
+      }
+      return sum / 600;
+    };
+    const drift = (meanX({ dir: [1, 0], strength: 1 }) - meanX()) / perMeter;
+    expect(drift).toBeGreaterThan(5);
+  });
+
+  it('brings bats out at night only', () => {
+    // A tile that has bats.
+    let seed = 1;
+    while (
+      !new TileLife(tile, geometry([], [park], [tree]), hashString(`${seed}`)).flocks.some(
+        (f) => f.species === 'bat',
+      )
+    ) {
+      seed++;
+    }
+    const world = new LifeWorld();
+    world.sync([{ key: `${seed}`, tile, life: geometry([], [park], [tree]) }]);
+    const at = tileToLngLat(tile, { x: park[0], y: park[1] });
+    const bats = (daylight: number) =>
+      world.visible(18, daylight, at).filter((a) => a.bird?.species === 'bat').length;
+    expect(bats(0)).toBeGreaterThan(0);
+    expect(bats(1)).toBe(0);
+    for (let i = 0; i < 200; i++) world.step(0.5);
+    expect(bats(0)).toBeGreaterThan(0);
+  });
+});
+
+describe('street dogs', () => {
+  const street = geometry([
+    [
+      LifeLine.roadMinor,
+      [
+        [0, 2048],
+        [4095, 2048],
+      ],
+    ],
+  ]);
+
+  it('roam minor roads in their coats, sniffing and turning', () => {
+    const life = new TileLife(tile, street, 11);
+    const dogs = life.movers.filter((m) => m.kind === 'dog');
+    expect(dogs.length).toBeGreaterThan(0);
+    for (const d of dogs) expect(DOG_PAINTS).toContain(d.paint);
+    const start = dogs.map((d) => d.x);
+    let paused = false;
+    for (let i = 0; i < 600; i++) {
+      life.step(0.1);
+      if (dogs.some((d) => d.pause > 0)) paused = true;
+    }
+    expect(paused).toBe(true);
+    expect(dogs.some((d, i) => d.x !== start[i])).toBe(true);
+    for (const d of dogs) expect(d.y).toBeCloseTo(2048, 0);
+  });
+
+  it('show from street zoom, with a heading and a stride', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'd', tile, life: street }]);
+    const at = tileToLngLat(tile, { x: 2048, y: 2048 });
+    const dogs = world.visible(18, 1, at).filter((a) => a.kind === 'dog');
+    expect(dogs.length).toBeGreaterThan(0);
+    for (const d of dogs) {
+      expect(d.ahead).toBeDefined();
+      expect([0, 1]).toContain(d.flap);
+    }
+    expect(world.visible(16, 1, at).some((a) => a.kind === 'dog')).toBe(false);
   });
 });
 
@@ -457,7 +603,7 @@ describe('LifeWorld', () => {
     expect(kinds(12)).toEqual(new Set());
     expect(kinds(14)).toEqual(new Set(['boat']));
     expect(kinds(16)).toEqual(new Set(['boat', 'vehicle']));
-    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person']));
+    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person', 'dog']));
   });
 
   it('has fewer people and vehicles out at night', () => {
@@ -478,14 +624,14 @@ describe('LifeWorld', () => {
         .filter((a) => a.kind !== 'boat').length;
     expect(count(3)).toBeLessThan(count(8));
     expect(count(3)).toBeGreaterThan(0);
-    // A city's own rhythm replaces the default.
+    // A city's own rhythm replaces the default (street dogs roam at any hour).
     const empty = { rhythm: { vehicle: [[0, 0]], person: [[0, 0]] } as const, source: 'test' };
     const none = world.visible(
       18,
       activityLevels(1, { minutes: 480, weekday: 1, life: empty }),
       center,
     );
-    expect(none.filter((a) => a.kind !== 'boat')).toHaveLength(0);
+    expect(none.filter((a) => a.kind !== 'boat' && a.kind !== 'dog')).toHaveLength(0);
   });
 
   it('clamps a long frame so agents do not jump', () => {

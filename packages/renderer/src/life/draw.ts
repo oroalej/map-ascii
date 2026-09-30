@@ -5,16 +5,17 @@
  */
 import { classId } from '../classes';
 import { sextantGlyphs, type Theme } from '../theme';
+import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
 import {
-  birdByte,
-  birdFit,
-  birdGlyph,
-  BirdHeading,
-  birdInk,
-  BirdPose,
-  BIRD_SPECIES,
-} from './birds';
-import { agentBit, CellBit, lifeClassFor, type AgentKind } from './config';
+  agentBit,
+  BIRD_SHADOW,
+  CellBit,
+  LIFE_SHADOW,
+  lifeClassFor,
+  type AgentKind,
+} from './config';
+import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
+import { headingOf } from './masters';
 import {
   FIGURE_SIZE_M,
   figureFit,
@@ -26,6 +27,7 @@ import {
   type PersonLook,
 } from './people';
 import type { LifeLineShape, VisibleAgent } from './simulate';
+import type { Sun } from './sun';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -72,9 +74,11 @@ const MAX_STAMP_CELLS = 20_000;
  * than `STAMP_MIN_CELLS` along its length is one glyph that follows its heading on screen (the
  * first glyph across, the second up or down); a bigger one is drawn at its real size from its
  * plan. People are figures (`drawPeople`); a vendor's cart is drawn like a vehicle, but stands
- * only where people may. A bird is drawn at its real size too (`drawBird`); one without a
- * species takes the theme's glyph for its wing beat. Later agents win a shared cell.
- * Returns how many agents (each person in a group) landed on the grid.
+ * only where people may. Birds and dogs are drawn at their real size too (`drawBird`,
+ * `drawDog`); a bird without a species takes the theme's glyph for its wing beat. With the `sun`
+ * up (flat views only; the caller passes none when tilted), each flying bird first casts a
+ * shadow on the ground away from it (`LIFE_SHADOW` texels, config.ts `BIRD_SHADOW`). Later
+ * agents win a shared cell. Returns how many agents (each person in a group) landed on the grid.
  */
 export function packLife(
   out: Uint8Array,
@@ -82,8 +86,10 @@ export function packLife(
   agents: readonly VisibleAgent[],
   theme: Theme,
   glyphIndex: (glyph: string) => number,
+  sun?: Sun | null,
 ): number {
   out.fill(0);
+  if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
   const { cols, rows, toCell } = grid;
   const partGlyphs = Object.fromEntries(
     Object.entries(PART_GLYPHS).map(([part, glyph]) => [part, glyphIndex(glyph)]),
@@ -100,6 +106,10 @@ export function packLife(
     const spec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
     if (agent.kind === 'person' && !spec) {
       drawn += drawPeople(out, grid, agent, [col, row], glyphIndex);
+      continue;
+    }
+    if (agent.kind === 'dog' && agent.ahead) {
+      if (drawDog(out, grid, agent, [col, row], glyphIndex)) drawn++;
       continue;
     }
     // A vendor's cart is painted as a vehicle.
@@ -422,11 +432,13 @@ function drawBird(
   [col, row]: [number, number],
   theme: Theme,
   glyphIndex: (glyph: string) => number,
+  shadow = false,
 ): boolean {
   const { cols, rows, toCell, cellWidth, cellHeight } = grid;
   const { species, pose } = agent.bird!;
-  const cls = classId(lifeClassFor.bird);
-  const bits = agentBit.bird;
+  // Its shadow: the cells it covers, marked for the shader to darken, with no agent in them.
+  const cls = shadow ? 0 : classId(lifeClassFor.bird);
+  const bits = shadow ? 0 : agentBit.bird;
   const [aheadCol, aheadRow] = toCell(agent.ahead![0], agent.ahead![1]);
   const along: [number, number] = [aheadCol - col, aheadRow - row];
   const x = along[0] * cellWidth;
@@ -445,23 +457,21 @@ function drawBird(
       (u, v, detail) => birdInk(species, pose, u, v, detail),
       1 / 2,
       glyphIndex,
-      (tone) => [cls, bits, birdByte(species, tone)],
+      (tone) => [cls, bits, shadow ? LIFE_SHADOW : birdByte(species, tone)],
     );
   }
   const c = Math.floor(col);
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
+  if (shadow) {
+    const at = (r * cols + c) * 4;
+    // Never over an agent (shadows are drawn first, but a stamped shadow may reach another's).
+    if (out[at + 2] === 0) out[at + 3] = LIFE_SHADOW;
+    return true;
+  }
   let glyph: string | undefined;
   if (fit === 'cell') {
-    const heading =
-      Math.abs(x) >= Math.abs(y)
-        ? x >= 0
-          ? BirdHeading.right
-          : BirdHeading.left
-        : y > 0
-          ? BirdHeading.down
-          : BirdHeading.up;
-    glyph = birdGlyph(pose, heading);
+    glyph = birdGlyph(pose, headingOf(x, y));
   } else {
     // The theme's: wings spread, raised, and sitting.
     const glyphs = theme.styles[lifeClassFor.bird]?.glyphs ?? [];
@@ -474,6 +484,92 @@ function drawBird(
   out[at + 1] = cls;
   out[at + 2] = bits;
   out[at + 3] = birdByte(species, false, fit === 'cell');
+  return true;
+}
+
+/**
+ * The flying birds' shadows (config.ts `BIRD_SHADOW`): each bird's shape, as big as it is drawn,
+ * on the ground `altitude` over the tangent of the sun's altitude away from it (at most
+ * `reach`), in `LIFE_SHADOW` texels the glyph shader darkens the map under (shaders/glyph.ts).
+ */
+function drawShadows(
+  out: Uint8Array,
+  grid: LifeGrid,
+  agents: readonly VisibleAgent[],
+  sun: Sun,
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+) {
+  const tan = Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180);
+  const meters = Math.min(BIRD_SHADOW.reach, BIRD_SHADOW.altitude / tan);
+  const az = (sun.azimuth * Math.PI) / 180;
+  // Away from the sun: east and north, m.
+  const east = -Math.sin(az) * meters;
+  const north = -Math.cos(az) * meters;
+  const metersPerDegree = 111_320;
+  for (const agent of agents) {
+    if (!agent.bird || !agent.ahead || agent.bird.pose === BirdPose.perched) continue;
+    const dLat = north / metersPerDegree;
+    const dLng = east / (metersPerDegree * Math.cos((agent.lat * Math.PI) / 180));
+    const moved: VisibleAgent = {
+      ...agent,
+      lng: agent.lng + dLng,
+      lat: agent.lat + dLat,
+      ahead: [agent.ahead[0] + dLng, agent.ahead[1] + dLat],
+    };
+    const at = grid.toCell(moved.lng, moved.lat);
+    drawBird(out, grid, moved, at, theme, glyphIndex, true);
+  }
+}
+
+/**
+ * Draw a dog (life/dogs.ts) at its real size, like a bird: in one cell turned to its heading on
+ * screen and stepping with `flap`, and closest up stamped over the cells it covers, in its
+ * coat's paint (the people's class, `personColor`; its nose and ears the darker ink). Returns
+ * whether it landed on the grid.
+ */
+function drawDog(
+  out: Uint8Array,
+  grid: LifeGrid,
+  agent: VisibleAgent,
+  [col, row]: [number, number],
+  glyphIndex: (glyph: string) => number,
+): boolean {
+  const { cols, rows, toCell, cellWidth, cellHeight } = grid;
+  const cls = classId(lifeClassFor.dog);
+  const bits = agentBit.dog;
+  const paint = agent.paint ?? PAINT_NONE;
+  const frame = agent.flap === 1 ? 1 : 0;
+  const [aheadCol, aheadRow] = toCell(agent.ahead![0], agent.ahead![1]);
+  const along: [number, number] = [aheadCol - col, aheadRow - row];
+  const x = along[0] * cellWidth;
+  const y = along[1] * cellHeight;
+  if (dogFit((DOG_LENGTH_M * Math.hypot(x, y)) / cellWidth) === 'stamp') {
+    const right: [number, number] = [-y / cellWidth, x / cellHeight];
+    return stampMaster(
+      out,
+      grid,
+      [col, row],
+      along,
+      right,
+      DOG_LENGTH_M,
+      (u, v, detail) => dogInk(frame, u, v, detail),
+      1 / 2,
+      glyphIndex,
+      (tone) => [cls, bits, personByte(paint, tone ? PersonPart.rib : PersonPart.canopy)],
+    );
+  }
+  const c = Math.floor(col);
+  const r = Math.floor(row);
+  if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
+  const index = glyphIndex(dogGlyph(frame, headingOf(x, y)));
+  if (index <= 0 || index > 255) return false;
+  const at = (r * cols + c) * 4;
+  out[at] = index;
+  out[at + 1] = cls;
+  out[at + 2] = bits;
+  // Drawn like a canopy: the full ink its paint, the tone ink darker (shaders/glyph.ts).
+  out[at + 3] = personByte(paint, PersonPart.canopy);
   return true;
 }
 

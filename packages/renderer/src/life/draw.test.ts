@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
-import { agentBit, CellBit } from './config';
+import { agentBit, CellBit, LIFE_SHADOW } from './config';
+import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
+import { Heading } from './masters';
 import { packLife, vehicleByte, type LifeGrid } from './draw';
 import {
   CANDLE_BIT,
@@ -32,6 +34,7 @@ const glyphs = [
   '·',
   ...personGlyphs(),
   ...birdGlyphs(),
+  ...dogGlyphs(),
   STALL_GLYPH,
   ...sextantGlyphs.slice(1),
 ];
@@ -166,6 +169,87 @@ describe('packLife birds', () => {
     expect(texels.every(([g]) => sextantGlyphs.includes(glyphs[g!]!))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret', true))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret'))).toBe(true);
+  });
+});
+
+describe('packLife dogs and shadows', () => {
+  const big: LifeGrid = { ...grid, cols: 40, rows: 30 };
+  const cellOf = (out: Uint8Array, col: number, row: number) =>
+    Array.from(out.subarray((row * big.cols + col) * 4, (row * big.cols + col) * 4 + 4));
+  const inked = (out: Uint8Array) => {
+    let n = 0;
+    for (let i = 2; i < out.length; i += 4) if (out[i]) n++;
+    return n;
+  };
+  /** A dog at (20, 15) heading along (`dx`, `dy`), `scale` cells per meter. */
+  const dog = (scale: number, [dx, dy]: [number, number] = [1, 0]): VisibleAgent => ({
+    kind: 'dog',
+    lng: 20,
+    lat: 15,
+    ahead: [20 + dx * scale, 15 + dy * scale],
+    paint: Paint.orange,
+    flap: 1,
+  });
+
+  it('draws a dog in one cell turned to its heading, in its coat, as people are', () => {
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    expect(packLife(out, big, [dog(0.5, [0, 1])], themes.dark, glyphIndex)).toBe(1);
+    expect(cellOf(out, 20, 15)).toEqual([
+      glyphIndex(dogGlyph(1, Heading.down)),
+      classId('life_person'),
+      CellBit.person,
+      personByte(Paint.orange, PersonPart.canopy),
+    ]);
+  });
+
+  it('stamps a dog at its real size up close', () => {
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    packLife(out, big, [dog(8 / DOG_LENGTH_M)], themes.dark, glyphIndex);
+    expect(inked(out)).toBeGreaterThan(4);
+  });
+
+  /** One cell per 2 m (1 m of latitude or longitude near the equator is 1/111320°). */
+  const metric: LifeGrid = {
+    ...big,
+    toCell: (lng, lat) => [20 + (lng * 111_320) / 2, 15 - (lat * 111_320) / 2],
+  };
+  const flying = (pose: BirdPose): VisibleAgent => ({
+    kind: 'bird',
+    lng: 0,
+    lat: 0,
+    ahead: [0, 1 / 111_320],
+    flap: 0,
+    bird: { species: 'pigeon', pose },
+  });
+
+  it('casts a flying bird’s shadow away from the sun, under whoever is there', () => {
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    // The sun due south, 45° up: the shadow falls 8 m north (4 cells up the grid).
+    const sun = { azimuth: 180, altitude: 45 };
+    packLife(out, metric, [flying(BirdPose.spread)], themes.dark, glyphIndex, sun);
+    expect(cellOf(out, 20, 11)).toEqual([0, 0, 0, LIFE_SHADOW]);
+    expect(cellOf(out, 20, 15)[2]).toBe(agentBit.bird);
+    // A bird sitting, the sun down, or none given: no shadow.
+    for (const [pose, s] of [
+      [BirdPose.perched, sun],
+      [BirdPose.spread, { azimuth: 180, altitude: -5 }],
+      [BirdPose.spread, undefined],
+    ] as const) {
+      const none = new Uint8Array(big.cols * big.rows * 4);
+      packLife(none, metric, [flying(pose)], themes.dark, glyphIndex, s);
+      expect(none.some((v, i) => i % 4 === 3 && v === LIFE_SHADOW && none[i - 1] === 0)).toBe(
+        false,
+      );
+    }
+  });
+
+  it('never casts a shadow over an agent', () => {
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    const sun = { azimuth: 180, altitude: 45 };
+    // A boat right where the shadow falls.
+    const boat: VisibleAgent = { kind: 'boat', lng: 0, lat: 8 / 111_320, flap: 0 };
+    packLife(out, metric, [flying(BirdPose.spread), boat], themes.dark, glyphIndex, sun);
+    expect(cellOf(out, 20, 11)[2]).toBe(agentBit.boat);
   });
 });
 

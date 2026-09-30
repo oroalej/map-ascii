@@ -471,8 +471,8 @@ const texels = (targets: CellTargets): Texels => {
 };
 
 /**
- * Put the agents on the cell grid (life/draw.ts) and upload them to the life texture. Returns
- * how many landed on the grid.
+ * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
+ * is up, and upload them to the life texture. Returns how many landed on the grid.
  */
 export function lifePass(
   gl: GL,
@@ -482,6 +482,7 @@ export function lifePass(
   view: View,
   placement: GridPlacement,
   agents: readonly VisibleAgent[],
+  sun?: Sun | null,
 ): number {
   const { cols, rows } = targets;
   const lifeTexels = texels(targets).life;
@@ -491,6 +492,8 @@ export function lifePass(
     agents,
     theme,
     (glyph) => themeRes.map.atlas.index(glyph),
+    // Birds' shadows, flat views only (like the map's, glyphs/select.ts inShadow).
+    isTilted(view.camera) ? null : sun,
   );
   uploadLife(gl, targets, lifeTexels);
   return drawn;
