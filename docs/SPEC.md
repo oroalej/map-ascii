@@ -207,6 +207,7 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 
 - Mobile first-class: touch gestures, bottom-sheet panels, a larger minimum map cell size on small screens.
 - `prefers-reduced-motion`: no water animation, no wind (the Wind chip is disabled) and no rain, instant cell transitions, shorter fly-to, and no life layer agents (the "Life" toggle is disabled). The time-of-day lighting still applies, without the window flicker.
+- While the tab is hidden or not focused, or the map is scrolled off screen, nothing on it moves on its own: water, wind, rain, and the life layer's agents pause, and pick up where they were when it is watched again. The map still redraws for anything new (tiles arriving, the camera, the time of day).
 - Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
 - **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there, like a click.
 - **Debug overlay.** `?debug=1` shows the renderer's frame rate, frame and cell-pass times, tile counts, and tile decode time, for checking the performance budgets on real devices. It is not part of the view state, so share URLs leave it out.

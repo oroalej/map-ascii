@@ -93,6 +93,7 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
+import { animationDue, watchVisibility } from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -304,10 +305,6 @@ const sameCamera = (a: CameraState, b: CameraState) =>
   a.zoom === b.zoom &&
   a.pitch === b.pitch &&
   a.bearing === b.bearing;
-/** While idle, animation (water, landmark pulse) redraws at most this often. */
-const IDLE_FRAME_MS = 1000 / 30;
-/** How long after input the loop keeps drawing every frame. */
-const ACTIVE_MS = 500;
 /** The on-screen classes are read back at most this often. */
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
@@ -699,12 +696,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const wind = currentWind(time);
       const grid = placement.grid;
       const toCell = placement.toCell;
-      world.step((at - lastLifeStep) / 1000, (lng, lat) => {
-        const [col, row] = toCell(lng, lat);
-        const x = grid.originCol + Math.floor(col);
-        const y = grid.originRow + Math.floor(row);
-        return wind.strength * treeGust(x, y, time, wind.dir);
-      }, camera.zoom, viewBounds());
+      world.step(
+        (at - lastLifeStep) / 1000,
+        (lng, lat) => {
+          const [col, row] = toCell(lng, lat);
+          const x = grid.originCol + Math.floor(col);
+          const y = grid.originRow + Math.floor(row);
+          return wind.strength * treeGust(x, y, time, wind.dir);
+        },
+        camera.zoom,
+        viewBounds(),
+      );
       lastLifeStep = at;
       agents = world.visible(
         camera.zoom,
@@ -773,8 +775,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const x = shopsHere[i]!;
       const y = shopsHere[i + 1]!;
       const perMeter = 1 / metersPerUnit(tile);
-      const reach =
-        Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
+      const reach = Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
       const at = tileToLngLat(tile, { x, y });
       const seed = placeSeed((tile.x * EXTENT + x) / perMeter, (tile.y * EXTENT + y) / perMeter);
       tileShops.push({
@@ -1028,9 +1029,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     updateSun(now);
     if (!targets || !programs || !themeRes) return;
-    const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
-    const animationDue = !reducedMotion && now - lastDraw >= interval;
-    if (cellDirty || drawDirty || animationDue) {
+    const animating = animationDue(now, lastDraw, lastInput, {
+      reducedMotion,
+      watched: watch.watched(),
+    });
+    if (cellDirty || drawDirty || animating) {
       const time = (now - start) / 1000;
       const frameStart = performance.now();
       let cellsDrawn = false;
@@ -1139,6 +1142,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   canvas.addEventListener('webglcontextlost', onContextLost);
   canvas.addEventListener('webglcontextrestored', onContextRestored);
+
+  // The map moves on its own only while someone can watch it (pacing.ts); back in view, the
+  // agents carry on from where they stood.
+  const watch = watchVisibility(canvas, (watched) => {
+    if (watched) lastLifeStep = performance.now();
+  });
 
   /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
   let cameraMoved = false;
@@ -1260,6 +1269,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       observer.disconnect();
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      watch.detach();
       detachInput();
       tileCache.destroy();
       readback.reset(lost);
