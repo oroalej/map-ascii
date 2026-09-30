@@ -1,7 +1,9 @@
 /**
  * `pnpm check:budgets`: check the static export against the size budgets in ARCHITECTURE.md §8,
  * after `pnpm build`. Initial JS is the gzipped scripts each city page loads (the tile worker
- * loads later, so it isn't counted); each city's `<slug>.pmtiles` must stay under its cap.
+ * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted); each
+ * city's `<slug>.pmtiles` must stay under its cap. The page's own HTML, with the content inlined
+ * in it, is reported alongside.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,13 +28,21 @@ const slugs = readdirSync(citiesDir).filter((slug) =>
   existsSync(join(citiesDir, slug, 'city.json')),
 );
 const rows: { what: string; size: number; budget: number }[] = [];
+const notes: string[] = [];
+const human = (n: number) => (n >= MB ? `${(n / MB).toFixed(1)} MB` : `${(n / KB).toFixed(0)} KB`);
 
 for (const slug of slugs) {
   const html = readFileSync(join(out, `${slug}.html`), 'utf8');
-  const scripts = new Set([...html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((m) => m[1]!));
+  const scripts = new Set(
+    [...html.matchAll(/<script\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => !/\snomodule\b/i.test(tag))
+      .flatMap((tag) => /\ssrc="([^"]+)"/.exec(tag)?.[1] ?? []),
+  );
   let js = 0;
   for (const src of scripts) js += gzipSync(readFileSync(join(out, src))).length;
   rows.push({ what: `/${slug} initial JS (gzipped)`, size: js, budget: BUDGETS.initialJs });
+  notes.push(`/${slug} HTML (gzipped): ${human(gzipSync(html).length)}`);
 
   const pmtiles = join(tiles, `${slug}.pmtiles`);
   if (existsSync(pmtiles)) {
@@ -42,11 +52,11 @@ for (const slug of slugs) {
   }
 }
 
-const human = (n: number) => (n >= MB ? `${(n / MB).toFixed(1)} MB` : `${(n / KB).toFixed(0)} KB`);
 let over = false;
 for (const { what, size, budget } of rows) {
   const ok = size < budget;
   over ||= !ok;
   console.log(`${ok ? '✓' : '✗'} ${what}: ${human(size)} of ${human(budget)}`);
 }
+for (const note of notes) console.log(`· ${note}`);
 if (over) process.exit(1);

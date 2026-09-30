@@ -441,6 +441,26 @@ describe('buildTileGeometry', () => {
     ).toHaveLength(0);
   });
 
+  it('leaves strips out of tiles too coarse to be drawn at Place level', () => {
+    const road = () =>
+      feature(2, { id: 'osm:way/23', class: 'road_mid', width: 10 }, [
+        [
+          [100, 100],
+          [300, 100],
+        ],
+      ]);
+    const strips = (z: number) =>
+      buildTileGeometry(
+        { roads: layer([road()]) },
+        createIdRegistry(),
+        { z, x: 55_247 >> (16 - z), y: 30_252 >> (16 - z) },
+        16,
+      ).fills.ids.length;
+    expect(strips(16)).toBeGreaterThan(0);
+    expect(strips(15)).toBeGreaterThan(0); // the parent stands in while a tile loads
+    expect(strips(14)).toBe(0);
+  });
+
   it('carries the variant byte for furniture and roofs', () => {
     expect(variantCode('furniture', 'fountain')).toBe(2);
     expect(variantCode('furniture', 'swing')).toBe(0);

@@ -20,6 +20,7 @@ import {
   roostClasses,
   type LifeGeometry,
 } from '../life/geometry';
+import { ROAD_AREA_ZOOM, ROOF_ZOOM } from '../glyphs/select';
 import { FLOOD, SHOP } from '../life/config';
 import { placeTileLamps, type LitLine } from '../life/lights';
 
@@ -613,13 +614,21 @@ function addStrip(
  * - Lines are segments, plus a point at each vertex, so short segments still claim a cell.
  * - Buildings also get a point at their center, so small ones still claim a cell.
  * - Religious, school, and market features, and curated landmarks, get a marker point.
+ * - Road strips and roof ridges, which only show zoomed far in, are left out of tiles too coarse
+ *   to be drawn there (below the archive's `maxZoom`, or its parent, which stands in while a
+ *   tile loads).
  */
 export function buildTileGeometry(
   layers: Readonly<Record<string, TileLayerLike>>,
   registry: IdRegistry,
   tile?: TileAddress,
+  maxZoom?: number,
 ): TileGeometry {
   const unitMeters = tile ? metersPerUnit(tile) : undefined;
+  const drawnAt = (zoom: number) =>
+    !tile || maxZoom === undefined || tile.z >= Math.min(zoom, maxZoom) - 1;
+  const strips = drawnAt(ROAD_AREA_ZOOM);
+  const ridges = drawnAt(ROOF_ZOOM);
   const ground = () => ({ fills: new Builder(), lines: new Builder(), points: new Builder() });
   const main = ground();
   const regional = ground();
@@ -780,7 +789,7 @@ export function buildTileGeometry(
             const b = line[i]!;
             lines.vertex(a.x, a.y, cls, height, flags, id);
             lines.vertex(b.x, b.y, cls, height, flags, id);
-            if (unitMeters && width > 0) {
+            if (strips && unitMeters && width > 0) {
               addStrip(fills, a, b, width / 2 / unitMeters, (p) =>
                 fills.vertex(p.x, p.y, cls, 0, flags | Flags.corridor, id),
               );
@@ -819,6 +828,7 @@ export function buildTileGeometry(
           // Pitched roofs (buildings with a height, unless tagged flat) get a ridge; landmark
           // parts (domes, belfries, tiered bases) are round or small, so they don't.
           const ridge =
+            ridges &&
             isBuilding(className) &&
             className !== 'building_part' &&
             height > 0 &&

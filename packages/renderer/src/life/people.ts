@@ -234,6 +234,18 @@ export const FIGURE_MASTERS: Readonly<
   Record<PersonFigure, Readonly<Record<number, readonly string[]>>>
 > = { adult: ADULT, child: CHILD, umbrella: UMBRELLA, rower: ROWER };
 
+/** Each figure's master sizes, smallest first. */
+const sizesOf = (figure: PersonFigure) =>
+  Object.keys(FIGURE_MASTERS[figure])
+    .map(Number)
+    .sort((a, b) => a - b);
+const MASTER_SIZES: Readonly<Record<PersonFigure, readonly number[]>> = {
+  adult: sizesOf('adult'),
+  child: sizesOf('child'),
+  umbrella: sizesOf('umbrella'),
+  rower: sizesOf('rower'),
+};
+
 /**
  * A figure glyph: which figure, turned across the screen or not, and which step; then for a
  * one-cell figure its `scale` (`FIGURE_SCALES`), or for a 2×2 figure which cell of it (`slice`:
@@ -321,9 +333,7 @@ export function personGlyphs(): string[] {
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
   const masters = FIGURE_MASTERS[g.figure];
-  const sizes = Object.keys(masters)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const sizes = MASTER_SIZES[g.figure];
   const size = sizes.find((s) => s >= box) ?? sizes[sizes.length - 1]!;
   const master = masters[size]!;
   return (x, y) => {
@@ -351,10 +361,9 @@ export function figureInk(
   stroke: 0 | 1 = 0,
 ): string {
   const masters = FIGURE_MASTERS[figure];
-  const sizes = Object.keys(masters)
-    .map(Number)
-    .sort((a, b) => a - b);
-  const size = sizes.filter((s) => s <= detail).pop() ?? sizes[0]!;
+  const sizes = MASTER_SIZES[figure];
+  let size = sizes[0]!;
+  for (const s of sizes) if (s <= detail) size = s;
   const at = (t: number) => Math.min(size - 1, Math.max(0, Math.floor(t * size)));
   const x = at(v);
   const y = at(1 - u);

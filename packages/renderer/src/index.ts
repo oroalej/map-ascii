@@ -352,21 +352,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     timezone: options.timezone,
     lng: (options.bounds[0] + options.bounds[2]) / 2,
   };
-  /** The city's month now (1–12), which the season's wind follows. */
-  const cityMonth = () => cityTime(now(), zone).month;
+  /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
+  let cityMonth = cityTime(now(), zone).month;
   /**
    * The wind at `time` seconds, on the grid's cells: the season's (or the chosen strength),
    * veering and breathing; still with reduced motion. Tilted grids are the screen's, so the
    * direction turns with the bearing.
    */
   const currentWind = (time: number): WindNow => {
-    const base = prevailingWind(life.wind, options.climate, cityMonth());
+    const base = prevailingWind(life.wind, options.climate, cityMonth);
     const wind = reducedMotion ? stillWind(base) : windAt(time, base);
     return isTilted(camera) ? { ...wind, dir: onScreen(wind.dir, camera.bearing) } : wind;
   };
   /** How hard it rains now: in a storm (the chosen or the season's), never with reduced motion. */
   const currentRain = (): number =>
-    rainFor(prevailingWind(life.wind, options.climate, cityMonth()), reducedMotion);
+    rainFor(prevailingWind(life.wind, options.climate, cityMonth), reducedMotion);
   let theme = themes[options.theme ?? 'dark'];
   let destroyed = false;
   /** The WebGL context is lost: nothing draws, and no GPU handle is valid. */
@@ -647,6 +647,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     } else if (!lifeShown) {
       return;
     }
+    // Nothing out, and the texture already empty: nothing to upload.
+    if (agents.length === 0 && !lifeShown) {
+      agentsDrawn = 0;
+      lifeAgents = agents;
+      return;
+    }
     agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents);
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -660,9 +666,24 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let shopsKey = '';
   /** The city's local time, minutes past midnight (`updateSun`), for shops' hours. */
   let cityMinutes = 12 * 60;
-  const openShops = () => shops.filter((s) => shopOpen(s.hours, cityMinutes)).map((s) => s.lamp);
-  const openShopsKey = () =>
-    shops.map((s) => (shopOpen(s.hours, cityMinutes) ? '1' : '0')).join('');
+  /**
+   * The lamps lit now (street and flood lamps, and the open shops) and which shops are open, as
+   * a key; worked out again only when the lamps or the city's minute change.
+   */
+  let lit = { lamps, shops, minutes: NaN, all: [] as VisibleLamp[], key: '' };
+  const litNow = () => {
+    if (lit.lamps !== lamps || lit.shops !== shops || lit.minutes !== cityMinutes) {
+      const open = shops.map((s) => shopOpen(s.hours, cityMinutes));
+      lit = {
+        lamps,
+        shops,
+        minutes: cityMinutes,
+        all: [...lamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
+        key: open.map((o) => (o ? '1' : '0')).join(''),
+      };
+    }
+    return lit;
+  };
   /** Whether the light texture holds lamps (so it is cleared once when they go). */
   let lampsShown = false;
   const lampShow = () => bandVisibility(STREETLIGHT.zoom, camera.zoom);
@@ -751,7 +772,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const beams = on && lifeAgents.length > 0;
     const changed = on !== lampsShown;
     // A shop opening or closing packs the lamps again.
-    const key = on ? openShopsKey() : '';
+    const key = on ? litNow().key : '';
     const shopsChanged = key !== shopsKey;
     shopsKey = key;
     if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
@@ -760,7 +781,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       targets,
       view(),
       placement,
-      on ? [...lamps, ...openShops()] : [],
+      on ? litNow().all : [],
       beams ? lifeAgents : [],
       changed || shopsChanged || cellsDrawn,
     );
@@ -800,6 +821,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const nextMoon = moonlight(moment, camera.lng, camera.lat);
     const local = cityTime(moment, zone);
     cityMinutes = local.minutes;
+    cityMonth = cityTime(now(), zone).month;
     const nextActivity = activityLevels(next, {
       minutes: local.minutes,
       weekday: local.weekday,

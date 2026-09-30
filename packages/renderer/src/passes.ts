@@ -442,8 +442,22 @@ function sunUniforms(view: View, sun: Sun | null) {
   };
 }
 
-/** Reused between frames; replaced when the grid's size changes. */
-let lifeTexels = new Uint8Array(0);
+/**
+ * Each grid's texel buffers, reused between frames: the agents; the lights; and the streetlights
+ * alone, kept while the grid stands still (beams go over a copy each frame). Kept per targets,
+ * so they are the grid's size and never shared between two maps.
+ */
+type Texels = { life: Uint8Array; light: Uint8Array; lamps: Uint8Array | null };
+const texelsOf = new WeakMap<CellTargets, Texels>();
+const texels = (targets: CellTargets): Texels => {
+  let found = texelsOf.get(targets);
+  if (!found) {
+    const size = targets.cols * targets.rows * 4;
+    found = { life: new Uint8Array(size), light: new Uint8Array(size), lamps: null };
+    texelsOf.set(targets, found);
+  }
+  return found;
+};
 
 /**
  * Put the agents on the cell grid (life/draw.ts) and upload them to the life texture. Returns
@@ -459,7 +473,7 @@ export function lifePass(
   agents: readonly VisibleAgent[],
 ): number {
   const { cols, rows } = targets;
-  if (lifeTexels.length !== cols * rows * 4) lifeTexels = new Uint8Array(cols * rows * 4);
+  const lifeTexels = texels(targets).life;
   const drawn = packLife(
     lifeTexels,
     { cols, rows, cellWidth: view.cellDev.w, cellHeight: view.cellDev.h, toCell: placement.toCell },
@@ -470,11 +484,6 @@ export function lifePass(
   uploadLife(gl, targets, lifeTexels);
   return drawn;
 }
-
-/** Reused between frames; replaced when the grid's size changes. */
-let lightTexels = new Uint8Array(0);
-/** The streetlights alone, kept while the grid stands still: beams go over a copy each frame. */
-let lampTexels = new Uint8Array(0);
 
 /**
  * Put the streetlights and floodlights, the moving vehicles' headlight beams, and the candles
@@ -493,11 +502,13 @@ export function lightPass(
 ) {
   const { cols, rows } = targets;
   const grid = { cols, rows, toCell: placement.toCell };
-  if (lampTexels.length !== cols * rows * 4) {
-    lampTexels = new Uint8Array(cols * rows * 4);
-    lightTexels = new Uint8Array(cols * rows * 4);
+  const buffers = texels(targets);
+  const lightTexels = buffers.light;
+  if (!buffers.lamps) {
+    buffers.lamps = new Uint8Array(cols * rows * 4);
     repack = true;
   }
+  const lampTexels = buffers.lamps;
   if (repack) packLights(lampTexels, grid, lamps);
   lightTexels.set(lampTexels);
   packBeams(lightTexels, grid, agents);

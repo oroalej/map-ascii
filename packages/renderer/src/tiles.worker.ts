@@ -15,12 +15,14 @@ const scope = self as unknown as {
 };
 
 let archive: PMTiles | undefined;
+let maxZoom: number | undefined;
 const registry = createIdRegistry();
 
 async function handle(request: WorkerRequest) {
   if (request.type === 'init') {
     archive = new PMTiles(request.url);
     const h = await archive.getHeader();
+    maxZoom = h.maxZoom;
     scope.postMessage({
       type: 'header',
       header: {
@@ -40,7 +42,7 @@ async function handle(request: WorkerRequest) {
   }
   const start = performance.now();
   const tile = new VectorTile(new PbfReader(new Uint8Array(response.data)));
-  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y });
+  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y }, maxZoom);
   const decodeMs = performance.now() - start;
   scope.postMessage(
     { type: 'tile', key, geometry, newFeatures: registry.takeNew(), decodeMs },
