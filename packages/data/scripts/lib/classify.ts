@@ -96,8 +96,12 @@ export function treeSize(tags: Tags): { height: number; crown: number } {
  * when it is a siding, spur, or yard, if any.
  */
 export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
+  if (atlasClass === 'path' && tags.footway === 'crossing' && tags.crossing !== 'unmarked')
+    return 'crossing';
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
+    if (tags.highway === 'traffic_signals') return 'signals';
+    if (markedCrossing(tags)) return 'crossing';
     return (
       siteOfTags(tags)?.kind ??
       furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k)
@@ -112,6 +116,9 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
 
 const isFurniture = (tags: Tags) =>
   oneOf(tags.amenity, 'bench', 'fountain') || tags.man_made === 'flagpole';
+export const markedCrossing = (tags: Tags) =>
+  oneOf(tags.crossing, 'zebra', 'marked', 'uncontrolled', 'traffic_signals') ||
+  (tags['crossing:markings'] !== undefined && tags['crossing:markings'] !== 'no');
 const isBarrier = (tags: Tags) => oneOf(tags.barrier, ...barrierKinds);
 
 const placeLabels = ['city', 'town', 'village', 'suburb', 'quarter', 'neighbourhood'];
@@ -136,6 +143,7 @@ export function classify(
   }
 
   if (kind === 'point') {
+    if (tags.highway === 'traffic_signals' || markedCrossing(tags)) return 'furniture';
     if (oneOf(tags.place, ...placeLabels) && tags.name) return 'place_label';
     const building = buildingKind(tags);
     if (building) return building;

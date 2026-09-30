@@ -1,6 +1,6 @@
 import type { City } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
-import { mergeResponses, railQuery, regionQueries, splitBbox } from './01-fetch';
+import { mergeResponses, railQuery, regionQueries, splitBbox, trafficQuery } from './01-fetch';
 
 const city = {
   slug: 'fixture',
@@ -52,6 +52,16 @@ describe('railQuery', () => {
 });
 
 describe('mergeResponses', () => {
+  it('keeps tagged traffic nodes in either download order', () => {
+    const bare = { type: 'node' as const, id: 3, lat: 13, lon: 123 };
+    const tagged = { ...bare, tags: { highway: 'traffic_signals' } };
+    for (const pair of [
+      [bare, tagged],
+      [tagged, bare],
+    ])
+      expect(mergeResponses(pair.map((node) => ({ elements: [node] }))).elements).toEqual([tagged]);
+    expect(trafficQuery('1,2,3,4')).toContain('node["crossing:markings"]');
+  });
   it('keeps each element once, preferring the copy with the most data', () => {
     const merged = mergeResponses([
       {

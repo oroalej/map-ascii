@@ -693,6 +693,41 @@ export const LifeSite = z
  * (rhythm.ts).
  */
 export const CityLife = z.strictObject({
+  signals: z
+    .strictObject({
+      derive: z.boolean().optional(),
+      add: z
+        .array(
+          z.strictObject({
+            id: z.string().min(1),
+            position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+            source: z.string().min(1),
+          }),
+        )
+        .refine(
+          (items) => new Set(items.map((i) => i.id)).size === items.length,
+          'duplicate signal id',
+        )
+        .optional(),
+      remove: z
+        .array(
+          z
+            .strictObject({
+              id: z.string().min(1),
+              osm_id: z.int().positive().optional(),
+              position: z
+                .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+                .optional(),
+              source: z.string().min(1),
+            })
+            .refine(
+              (item) => !!item.osm_id !== !!item.position,
+              'provide either osm_id or position',
+            ),
+        )
+        .optional(),
+    })
+    .optional(),
   sites: z
     .array(LifeSite)
     .refine((sites) => new Set(sites.map((s) => s.id)).size === sites.length, {

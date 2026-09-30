@@ -92,6 +92,11 @@ out body;
 >;
 out skel qt;`;
 
+/** Tagged traffic nodes, queried separately to preserve the detail download cache. */
+export const trafficQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(node["highway"~"^(traffic_signals|crossing)$"]; node["crossing"]; node["crossing:markings"];);
+out body;`;
+
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
@@ -221,6 +226,12 @@ export const step: Step = {
       cache,
     );
     console.log(`  life sites: ${sites.elements.length} elements`);
+    const traffic = await overpass(
+      trafficQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailTraffic),
+      cache,
+    );
+    console.log(`  traffic nodes: ${traffic.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

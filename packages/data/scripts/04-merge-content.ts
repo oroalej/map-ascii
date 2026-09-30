@@ -9,6 +9,7 @@ import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
 import { landcoverFeatures } from './lib/landcover';
 import { mergeLifeSites } from './lib/life-sites';
+import { mergeTraffic } from './lib/traffic';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
@@ -102,7 +103,10 @@ export const step: Step = {
       features.push(f as AtlasFeature);
     }
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
-    const merged = mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds);
+    const merged = mergeTraffic(
+      mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+      city.life?.signals,
+    );
     const tourProblems = checkTours(merged, content.tours, regionBounds);
     if (tourProblems.length > 0) {
       throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);

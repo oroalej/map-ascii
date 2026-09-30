@@ -47,6 +47,14 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  crossing_bearing?: number;
+  crossing_width?: number;
+  crossing_road?: AtlasClass;
+  life_signal?: 'mapped' | 'derived';
+  signal_a?: number;
+  signal_b?: number;
+  signal_radius?: number;
+  source?: string;
   life_site?: 'stop' | 'terminal' | 'shelter';
   life_modes?: number;
   life_covered?: boolean;

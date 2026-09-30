@@ -160,9 +160,15 @@ export const step: Step = {
     // existed just has none.
     const rail = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailRail));
     const sites = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailLife));
+    const traffic = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailTraffic));
     const detailRaw = await readJson<OverpassResponse>(join(rawDir, files.rawDetail));
     const detail: FeatureCollection = osmtogeojson(
-      mergeResponses([detailRaw, ...(rail ? [rail] : []), ...(sites ? [sites] : [])]),
+      mergeResponses([
+        detailRaw,
+        ...(rail ? [rail] : []),
+        ...(sites ? [sites] : []),
+        ...(traffic ? [traffic] : []),
+      ]),
     );
     await writeJson(join(buildDir, files.osm), detail);
     console.log(`  ${detail.features.length} GeoJSON features`);
