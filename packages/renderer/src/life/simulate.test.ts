@@ -840,6 +840,34 @@ describe('vehicles and boats', () => {
     expect(gap()).toBeLessThan(FOLLOW.minGap + 2 * FOLLOW.headway + 0.5);
   });
 
+  it('accelerates from rest and records only clearance-accepted path distance', () => {
+    const life = road({ v: 0 });
+    const m = life.movers[0]!;
+    for (let i = 0; i < 50; i++) {
+      const previous = m.v!;
+      life.step(0.1);
+      expect(m.v! - previous).toBeLessThanOrEqual(2 * perMeter * 0.1 + 1e-9);
+    }
+    expect(m.v! / perMeter).toBeCloseTo(10);
+    const before = m.d;
+    let tries = 0;
+    life.step(0.1, undefined, undefined, undefined, undefined, () => ++tries === 3);
+    expect(m.v! / perMeter).toBeCloseTo(2.5);
+    expect(m.v!).toBeCloseTo((m.d - before) / 0.1);
+    life.step(0.1, undefined, undefined, undefined, undefined, () => false);
+    expect(m.v).toBe(0);
+  });
+
+  it('ignores inactive leaders using each craft kind activity', () => {
+    const life = road({ d: 30, rank: 0.9, speed: 0 }, { d: 0 });
+    life.step(0.1, undefined, undefined, undefined, {
+      rain: 0,
+      levels: { ...activityLevels(1), vehicle: 0.5 },
+    });
+    expect(life.movers[1]!.v! / perMeter).toBeCloseTo(10);
+    expect(life.movers[0]!.d).toBe(30);
+  });
+
   it('passes a bicycle riding by the curb', () => {
     const life = road({ vehicle: 'bicycle', d: 1000, speed: 3 * perMeter }, { d: 990 });
     const car = life.movers[1]!;

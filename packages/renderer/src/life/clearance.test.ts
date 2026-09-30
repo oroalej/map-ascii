@@ -271,7 +271,22 @@ describe('traffic clearance', () => {
     life.movers.push(m);
     next.parked.push({ x: 2, y: 2000 + 1.5 * pm, hx: 1, hy: 0, vehicle: 'car', paint: 0 });
     for (let i = 0; i < 20; i++) world.step(0.1, undefined, 18);
-    expect(m.x).toBeLessThan(4096 - 4.4 * pm);
+    // Slower retries can use the full available space up to the parked body's actual centre.
+    expect(m.x).toBeLessThan(4096 + 2 - 4.4 * pm);
+    expect(
+      bodiesOverlap(
+        life.groundBodies(m)[0]!,
+        {
+          x: (4096 + 2) / pm,
+          y: 2000 / pm + 1.5,
+          hx: 1,
+          hy: 0,
+          length: 4.4,
+          width: 1.8,
+        },
+        0,
+      ),
+    ).toBe(false);
   });
 });
 

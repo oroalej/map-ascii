@@ -153,6 +153,7 @@ describe('turn indicators', () => {
     expect(m.line).toBe(0);
     // Reject full and half steps, accepting the quarter step after the same endpoint.
     let attempts = 0;
+    m.v = m.speed;
     life.step(0.1, undefined, undefined, undefined, undefined, () => ++attempts === 3);
     expect(attempts).toBe(3);
     expect(m.line).toBe(before!.plan!.exit >> 1);
@@ -162,7 +163,7 @@ describe('turn indicators', () => {
     const after = m.routing;
     life.step(0.1, undefined, undefined, undefined, undefined, () => false);
     expect(m.routing).toBe(after);
-    for (let i = 0; i < 12; i++) life.step(0.1);
+    for (let i = 0; i < 50; i++) life.step(0.1);
     expect(m.routing?.signal).toBeUndefined();
   });
 

@@ -33,6 +33,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  kinematicsOf,
   laneOffset,
   LIFE_ZOOM,
   MAX_STEP_S,
@@ -67,6 +68,7 @@ import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
 import { SignalControl } from './signals';
+import { approach, nextSpeed } from './motion';
 import { YieldControl } from './yield';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -155,6 +157,8 @@ export type Mover = {
   d: number;
   /** Tile units per second. */
   speed: number;
+  /** Accepted path velocity; undefined until the first controlled step. */
+  v?: number;
   /** Vehicles and boats: which kind, and its paint (vehicles.ts `Paint`). */
   vehicle?: CraftType;
   paint: number;
@@ -420,6 +424,7 @@ export class TileLife {
   private readonly routingSeed: number;
   /** Scratch for `followSpeeds`, by mover: its speed, progress along its line, and offset. */
   private speeds = new Float64Array(0);
+  private caps = new Float64Array(0);
   private progress = new Float64Array(0);
   private offsets = new Float64Array(0);
   /** How people look and where vendors stand: its own stream, so no one else moves for it. */
@@ -1472,11 +1477,13 @@ export class TileLife {
   private advance(m: Mover, distance: number, junctions = true) {
     const { coords } = this.geo;
     let left = distance;
+    let moved = 0;
     // Bounded, so zero-length segments can't loop forever.
     for (let guard = 0; guard < 256; guard++) {
       const to = m.from + m.dir;
       const length = this.segment(m.from, to);
       const traveled = Math.min(left, Math.max(0, length - m.d));
+      moved += traveled;
       if (m.routing?.signal && traveled > 0) {
         const remaining = m.routing.signal.remaining - traveled / this.perMeter;
         m.routing = {
@@ -1509,6 +1516,7 @@ export class TileLife {
     }
     m.x = ax + m.hx * m.d;
     m.y = ay + m.hy * m.d;
+    return moved;
   }
 
   private exitOptions(m: Mover, vertex: number): number[] {
@@ -1799,15 +1807,18 @@ export class TileLife {
    * the nearest one ahead on its line, going its way, that it can't pass side by side. Queues
    * across junctions, cross traffic, and tile borders are not looked at.
    */
-  private followSpeeds(
+  private followLimits(
+    dt: number,
     shows?: (kind: AgentKind) => boolean,
     near?: (x: number, y: number) => boolean,
+    levels?: Activity,
   ): Float64Array {
     const { movers, perMeter } = this;
     // Reused between steps; grown when there are more movers.
     if (this.speeds.length < movers.length) {
       const size = Math.max(movers.length, 2 * this.speeds.length);
       this.speeds = new Float64Array(size);
+      this.caps = new Float64Array(size);
       this.progress = new Float64Array(size);
       this.offsets = new Float64Array(size);
     }
@@ -1816,7 +1827,9 @@ export class TileLife {
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = m.speed;
+      this.caps[i] = Infinity;
       if (!m.vehicle || (shows && !shows(m.kind))) continue;
+      if (levels && m.rank >= levels[m.kind]) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
       const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
       const group = groups.get(key);
@@ -1842,7 +1855,17 @@ export class TileLife {
           if (apart >= (me.width + them.width) / 2 - FOLLOW.squeeze) continue;
           const gap = progress[j]! - progress[i]! - (me.length + them.length) / 2;
           const fits = Math.max(0, (gap - FOLLOW.minGap) / FOLLOW.headway) * perMeter;
-          speeds[i] = Math.min(speeds[i]!, fits);
+          const room = Math.max(0, gap - FOLLOW.minGap) * perMeter;
+          speeds[i] = Math.min(
+            speeds[i]!,
+            fits,
+            approach(
+              room,
+              movers[j]!.v ?? movers[j]!.speed,
+              kinematicsOf(movers[i]!.vehicle).brake * perMeter,
+            ),
+          );
+          this.caps[i] = Math.min(this.caps[i]!, room / dt);
           break;
         }
       }
@@ -1865,6 +1888,7 @@ export class TileLife {
     guard?: GroundGuard,
     busy: ReadonlyMap<string, number> = new Map(),
   ) {
+    if (dt <= 0) return;
     this.time += dt;
     const { rng } = this;
     const clock = env?.clock ?? this.time;
@@ -1878,7 +1902,8 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
     );
-    const speeds = this.followSpeeds(shows, near);
+    const speeds = this.followLimits(dt, shows, near, env?.levels);
+    const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movers
       .map((m, i) => ({ m, i }))
@@ -1891,16 +1916,28 @@ export class TileLife {
     for (const { i, m } of order) {
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
+      if (env?.levels && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
       if (m.kind === 'vehicle') {
         this.prepareTurn(m, i);
-        speeds[i] = Math.min(
-          speeds[i]!,
-          this.scenes.speed(m, dt),
-          this.signals.vehicleSpeed(m, dt, clock),
-          this.yielding.speed(m, dt, busy),
-        );
-        if (this.scenes.held(m)) continue;
+        if (m.vehicle) {
+          limit.target = speeds[i]!;
+          limit.cap = this.caps[i]!;
+          this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
+          this.signals.vehicleLimit(m, dt, clock, limit);
+          speeds[i] = limit.target;
+          this.caps[i] = Math.min(limit.cap, this.yielding.speed(m, dt, busy));
+        } else
+          speeds[i] = Math.min(
+            speeds[i]!,
+            this.scenes.speed(m, dt),
+            this.signals.vehicleSpeed(m, dt, clock),
+            this.yielding.speed(m, dt, busy),
+          );
+        if (this.scenes.held(m)) {
+          if (m.vehicle) m.v = 0;
+          continue;
+        }
       }
       if (m.train) {
         if (m.train.edge) continue;
@@ -1969,12 +2006,21 @@ export class TileLife {
           ) / dt;
       }
       const before = { ...m };
+      if (m.vehicle)
+        speeds[i] = nextSpeed(
+          m.v ?? m.speed,
+          speeds[i]!,
+          this.caps[i]!,
+          kinematicsOf(m.vehicle),
+          this.perMeter,
+          dt,
+        );
       const distance = speeds[i]! * dt;
       if (walking) {
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
-      this.advance(m, distance);
+      let moved = this.advance(m, distance);
       // Standalone animal callers still enforce terrain without a world guard.
       const fitsGround =
         guard ??
@@ -2011,17 +2057,21 @@ export class TileLife {
               m.avoid = Math.max(-limit, Math.min(limit, (before.avoid ?? 0) + side! * dt * 1.5));
               m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             }
-            this.advance(m, distance * share!);
+            moved = this.advance(m, distance * share!);
             if ((fits = fitsGround(m, before))) break;
           }
         }
-        if (!fits) Object.assign(m, before);
+        if (!fits) {
+          Object.assign(m, before);
+          moved = 0;
+        }
         m.waiting = fits ? 0 : (before.waiting ?? 0) + dt;
         if (!fits && m.kind === 'cat') {
           m.pause = CAT.blockedPause;
           this.turnBack(m);
         }
       }
+      if (m.vehicle) m.v = moved / dt;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);

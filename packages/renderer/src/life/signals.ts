@@ -1,6 +1,7 @@
 import type { TileId } from '../tiles';
 import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
-import { SIGNAL } from './config';
+import { SIGNAL, kinematicsOf } from './config';
+import { approach, type MotionLimit } from './motion';
 import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
 import { placeSeed } from './lights';
 import type { Mover } from './simulate';
@@ -101,7 +102,11 @@ export class SignalControl {
     }
   }
   vehicleSpeed(m: Mover, dt: number, clock: number): number {
-    let speed = m.speed;
+    const out = { target: m.speed, cap: Infinity };
+    this.vehicleLimit(m, dt, clock, out);
+    return Math.min(out.target, out.cap);
+  }
+  vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit): void {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       const ahead =
@@ -110,11 +115,13 @@ export class SignalControl {
           this.perMeter;
       if (ahead < -0.5 * this.perMeter || ahead >= SIGNAL.lookahead * this.perMeter) continue;
       const state = signalState(stop.signal.seed, clock, stop.signal.a < 0)[stop.group];
-      const brake = SIGNAL.brake * this.perMeter;
-      if (state === 'red' || (state === 'amber' && (m.speed * m.speed) / (2 * brake) <= ahead))
-        speed = Math.min(speed, Math.sqrt(2 * brake * Math.max(0, ahead)), Math.max(0, ahead) / dt);
+      const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
+      const v = m.v ?? m.speed;
+      if (state === 'red' || (state === 'amber' && (v * v) / (2 * brake) <= ahead)) {
+        out.target = Math.min(out.target, approach(ahead, 0, brake));
+        out.cap = Math.min(out.cap, Math.max(0, ahead) / dt);
+      }
     }
-    return speed;
   }
   /** Clamp new crossing entries; someone inside the crossing always clears it. */
   walkDistance(from: Point, toward: Point, distance: number, clock: number): number {

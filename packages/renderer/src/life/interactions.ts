@@ -13,6 +13,7 @@ import { VEHICLES } from './vehicles';
 import { isWalker, usableLines, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
+import { approach, type MotionLimit } from './motion';
 
 export const INTERACTIONS = {
   stopQueue: 6,
@@ -524,6 +525,13 @@ export class LocalScenes {
 
   held(m: Mover): boolean {
     return this.services.has(m) && !this.services.get(m)!.arriving;
+  }
+  limit(m: Mover, dt: number, brake: number, out: MotionLimit): void {
+    const service = this.services.get(m);
+    if (!service) return;
+    const distance = service.arriving ? Math.max(0, ahead(service.site, m)) : 0;
+    out.target = Math.min(out.target, approach(distance, 0, brake));
+    out.cap = Math.min(out.cap, distance / Math.max(dt, 0.001));
   }
   walkable(from: WalkPoint, to: WalkPoint): boolean {
     return this.graph.clear(from, to);
