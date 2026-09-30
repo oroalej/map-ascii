@@ -575,6 +575,14 @@ export function tileToLngLat({ z, x, y }: TileAddress, p: TilePoint): [number, n
   return [wx * 360 - 180, lat];
 }
 
+/** A place's position in a tile's units (the inverse of `tileToLngLat`). */
+export function lngLatToTile({ z, x, y }: TileAddress, lng: number, lat: number): TilePoint {
+  const n = 2 ** z;
+  const phi = (lat * Math.PI) / 180;
+  const wy = (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2;
+  return { x: (((lng + 180) / 360) * n - x) * EXTENT, y: (wy * n - y) * EXTENT };
+}
+
 /** Meters per tile unit (EXTENT per tile) at the tile's center latitude. */
 export function metersPerUnit({ z, y }: TileAddress): number {
   const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;

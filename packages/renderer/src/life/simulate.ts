@@ -11,7 +11,7 @@ import {
   type ProcessionRoute,
   type TrafficMix,
 } from '@atlas/shared';
-import { EXTENT, metersPerUnit, tileToLngLat } from '../raster/geometry';
+import { EXTENT, lngLatToTile, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import {
   activityLevels,
@@ -53,10 +53,32 @@ import {
   type RailCraft,
   type ResolvedTraffic,
 } from './vehicles';
-import { PROCESSION, ProcessionScene } from './procession';
+import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 
 export { hashString, random } from './random';
+
+const NO_MOVERS: readonly Mover[] = [];
+
+/** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
+const VIEW_MARGIN_M = 30;
+
+/**
+ * Whether a point in `tile`'s units is inside `bounds` (none: everywhere), `margin` tile units
+ * around them. The bounds' corners are enough: mercator keeps lines of longitude and latitude
+ * straight.
+ */
+function viewIn(tile: TileId, bounds: LngLatBounds | undefined, margin: number) {
+  if (!bounds) return () => true;
+  const [west, south, east, north] = bounds;
+  const nw = lngLatToTile(tile, west, north);
+  const se = lngLatToTile(tile, east, south);
+  const x0 = nw.x - margin;
+  const x1 = se.x + margin;
+  const y0 = nw.y - margin;
+  const y1 = se.y + margin;
+  return (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+}
 
 const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo + (hi - lo) * rng();
 
@@ -277,6 +299,10 @@ export class TileLife {
   /** Tile units per meter. */
   readonly perMeter: number;
   private readonly rng: () => number;
+  /** Scratch for `followSpeeds`, by mover: its speed, progress along its line, and offset. */
+  private speeds = new Float64Array(0);
+  private progress = new Float64Array(0);
+  private offsets = new Float64Array(0);
   /** How people look and where vendors stand: its own stream, so no one else moves for it. */
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
@@ -917,15 +943,15 @@ export class TileLife {
   }
 
   /** Take out the trains whose head has left the tile, for `LifeWorld.step` to hand over. */
-  takeLeavers(): Mover[] {
-    const out: Mover[] = [];
+  takeLeavers(): readonly Mover[] {
+    let out: Mover[] | undefined;
     for (let i = this.movers.length - 1; i >= 0; i--) {
       const m = this.movers[i]!;
       if (!m.train || (m.x >= 0 && m.x < EXTENT && m.y >= 0 && m.y < EXTENT)) continue;
-      out.push(m);
+      (out ??= []).push(m);
       this.movers.splice(i, 1);
     }
-    return out;
+    return out ?? NO_MOVERS;
   }
 
   /**
@@ -1003,14 +1029,21 @@ export class TileLife {
    * the nearest one ahead on its line, going its way, that it can't pass side by side. Queues
    * across junctions, cross traffic, and tile borders are not looked at.
    */
-  private followSpeeds(): Float64Array {
+  private followSpeeds(shows?: (kind: AgentKind) => boolean): Float64Array {
     const { movers, perMeter } = this;
-    const speeds = new Float64Array(movers.length);
+    // Reused between steps; grown when there are more movers.
+    if (this.speeds.length < movers.length) {
+      const size = Math.max(movers.length, 2 * this.speeds.length);
+      this.speeds = new Float64Array(size);
+      this.progress = new Float64Array(size);
+      this.offsets = new Float64Array(size);
+    }
+    const { speeds, progress, offsets } = this;
     const groups = new Map<number, number[]>();
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = m.speed;
-      if (!m.vehicle) continue;
+      if (!m.vehicle || (shows && !shows(m.kind))) continue;
       const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
       const group = groups.get(key);
       if (group) group.push(i);
@@ -1019,23 +1052,21 @@ export class TileLife {
     for (const group of groups.values()) {
       if (group.length < 2) continue;
       // Meters along the line in the direction of travel, and each one's lateral offset.
-      const progress = new Map<number, number>();
-      const offsets = new Map<number, number>();
       for (const i of group) {
         const m = movers[i]!;
-        progress.set(i, (m.dir * this.along[m.from]! + m.d) / perMeter);
-        offsets.set(i, this.offsetOf(m));
+        progress[i] = (m.dir * this.along[m.from]! + m.d) / perMeter;
+        offsets[i] = this.offsetOf(m);
       }
-      group.sort((a, b) => progress.get(a)! - progress.get(b)! || a - b);
+      group.sort((a, b) => progress[a]! - progress[b]! || a - b);
       for (let k = 0; k < group.length - 1; k++) {
         const i = group[k]!;
         const me = VEHICLES[movers[i]!.vehicle!];
         for (let l = k + 1; l < group.length; l++) {
           const j = group[l]!;
           const them = VEHICLES[movers[j]!.vehicle!];
-          const apart = Math.abs(offsets.get(i)! - offsets.get(j)!);
+          const apart = Math.abs(offsets[i]! - offsets[j]!);
           if (apart >= (me.width + them.width) / 2 - FOLLOW.squeeze) continue;
-          const gap = progress.get(j)! - progress.get(i)! - (me.length + them.length) / 2;
+          const gap = progress[j]! - progress[i]! - (me.length + them.length) / 2;
           const fits = Math.max(0, (gap - FOLLOW.minGap) / FOLLOW.headway) * perMeter;
           speeds[i] = Math.min(speeds[i]!, fits);
           break;
@@ -1047,13 +1078,19 @@ export class TileLife {
 
   /**
    * Move everything on by `dt` seconds. `gustAt` is how hard the wind blows in a tree's crown at
-   * a point (tile units), which can flush birds out of it.
+   * a point (tile units), which can flush birds out of it. With `shows`, only the kinds it shows
+   * move (the others wait where they are, unseen).
    */
-  step(dt: number, gustAt?: (x: number, y: number) => number) {
+  step(
+    dt: number,
+    gustAt?: (x: number, y: number) => number,
+    shows?: (kind: AgentKind) => boolean,
+  ) {
     this.time += dt;
     const { rng } = this;
-    const speeds = this.followSpeeds();
+    const speeds = this.followSpeeds(shows);
     for (const [i, m] of this.movers.entries()) {
+      if (shows && !shows(m.kind)) continue;
       if (m.train) {
         if (m.train.edge) continue;
         if (m.pause > 0) {
@@ -1093,8 +1130,8 @@ export class TileLife {
       }
       this.advance(m, speeds[i]! * dt);
     }
-    this.stepGatherers(dt);
-    this.stepFlocks(dt, gustAt);
+    if (!shows || shows('person')) this.stepGatherers(dt);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt);
   }
 
   /**
@@ -1285,29 +1322,38 @@ export class LifeWorld {
   /**
    * Move every tile's agents on by `dt` seconds. `gustAt(lng, lat)` is how hard the wind blows
    * in a tree's crown there (life/wind.ts strength × glyphs/select.ts treeGust); a strong gust
-   * flushes birds out of the tree.
+   * flushes birds out of the tree. With `zoom`, only the kinds that show at it move (config.ts
+   * `LIFE_ZOOM`): the others wait, unseen, until they show.
    */
-  step(dt: number, gustAt?: (lng: number, lat: number) => number) {
+  step(dt: number, gustAt?: (lng: number, lat: number) => number, zoom?: number) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
     this.clock += clamped;
+    const shows =
+      zoom === undefined
+        ? undefined
+        : (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
         : undefined;
-      tile.step(clamped, inTile);
+      tile.step(clamped, inTile, shows);
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
-    const leaving = [...this.tiles.values()].flatMap((tile) =>
-      tile.takeLeavers().map((m) => ({ from: tile.tile, m })),
-    );
-    for (const { from, m } of leaving) {
+    let leaving: { from: TileId; m: Mover }[] | undefined;
+    for (const tile of this.tiles.values()) {
+      for (const m of tile.takeLeavers()) (leaving ??= []).push({ from: tile.tile, m });
+    }
+    for (const { from, m } of leaving ?? []) {
       const dx = m.x < 0 ? -1 : m.x >= EXTENT ? 1 : 0;
       const dy = m.y < 0 ? -1 : m.y >= EXTENT ? 1 : 0;
-      const next = [...this.tiles.values()].find(
-        ({ tile }) => tile.z === from.z && tile.x === from.x + dx && tile.y === from.y + dy,
-      );
-      next?.adopt(m, dx, dy);
+      for (const next of this.tiles.values()) {
+        const { tile } = next;
+        if (tile.z === from.z && tile.x === from.x + dx && tile.y === from.y + dy) {
+          next.adopt(m, dx, dy);
+          break;
+        }
+      }
     }
   }
 
@@ -1353,13 +1399,15 @@ export class LifeWorld {
    * The agents to draw at `zoom` and time of day: those whose kind shows at the zoom and who
    * are out (config.ts `activityLevels`), movers only inside their own tile (tiles overlap in their
    * buffers), at most `MAX_VISIBLE_AGENTS`, nearest `center` first. The `weather` opens
-   * umbrellas (config.ts `umbrellaShare`).
+   * umbrellas (config.ts `umbrellaShare`). With `bounds` (the view's), those well outside them
+   * are left out before any are placed.
    */
   visible(
     zoom: number,
     levelsOrDaylight: Activity | number,
     center: [number, number],
     weather: LifeWeather = { rain: 0, sunAltitude: 0 },
+    bounds?: LngLatBounds,
   ): VisibleAgent[] {
     // A bare number is the daylight, with no clock (config.ts `activityLevels`).
     const levels =
@@ -1375,18 +1423,22 @@ export class LifeWorld {
           boats: shows('boat'),
           crowds: zoom >= PROCESSION.crowdZoom,
           crews: zoom >= PROCESSION.crewZoom,
+          bounds,
         })
       : [];
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
+      const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!shows(m.kind) || m.rank >= levels[m.kind]) continue;
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
-          out.push(...trainCars(life, m));
+          // A train is long, and there are few: all its cars, wherever its head is.
+          for (const car of trainCars(life, m)) out.push(car);
           continue;
         }
+        if (!inView(m.x, m.y)) continue;
         // Keep right, in a lane that fits the road: offset to the right of the heading (tile y
         // points down).
         const lane = life.offsetOf(m) * perMeter;
@@ -1426,6 +1478,7 @@ export class LifeWorld {
         for (const s of life.stalls) {
           if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
             continue;
+          if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
           out.push({
             kind: 'person',
@@ -1442,7 +1495,7 @@ export class LifeWorld {
       }
       if (shows('person')) {
         for (const g of life.gatherers) {
-          if (g.rank >= levels.places[g.place]) continue;
+          if (g.rank >= levels.places[g.place] || !inView(g.x, g.y)) continue;
           const w = g.walker;
           const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
           const still = g.pause > 0 || g.behavior === 'sit';
@@ -1480,7 +1533,7 @@ export class LifeWorld {
       }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
-          if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT) continue;
+          if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
           out.push({
             kind: 'vehicle',
@@ -1515,7 +1568,7 @@ export class LifeWorld {
       if (!shows('bird')) continue;
       const birdsOut = levels.bird;
       for (const flock of life.flocks) {
-        if (flock.rank >= birdsOut) continue;
+        if (flock.rank >= birdsOut || !inView(flock.x, flock.y)) continue;
         const wobble = life.elapsed * 0.8;
         // Perched, the birds sit still and close in the crown; flushed, they scatter outward.
         const perchSpread = PERCH.spread / BIRDS.spread[1];
@@ -1537,10 +1590,12 @@ export class LifeWorld {
     }
     if (out.length <= MAX_VISIBLE_AGENTS) return [...staged, ...out];
     const [cx, cy] = center;
-    const distance = (a: VisibleAgent) => (a.lng - cx) ** 2 + (a.lat - cy) ** 2;
-    return [
-      ...staged,
-      ...out.sort((a, b) => distance(a) - distance(b)).slice(0, MAX_VISIBLE_AGENTS),
-    ];
+    // Each one's distance worked out once, not in every comparison.
+    const nearest = out
+      .map((agent) => ({ agent, d: (agent.lng - cx) ** 2 + (agent.lat - cy) ** 2 }))
+      .sort((a, b) => a.d - b.d);
+    const kept = staged.slice();
+    for (let i = 0; i < MAX_VISIBLE_AGENTS; i++) kept.push(nearest[i]!.agent);
+    return kept;
   }
 }

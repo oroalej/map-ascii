@@ -120,6 +120,23 @@ describe('ProcessionScene', () => {
     expect(count(pagoda)).toBeGreaterThan(count(far) * 2);
   });
 
+  it('leaves out the crowds outside the view', () => {
+    const people = scene.agents(0.5, 0, { boats: false });
+    const lngs = people.map((p) => p.lng).sort((a, b) => a - b);
+    const middle = lngs[Math.floor(lngs.length / 2)]!;
+    const lats = people.map((p) => p.lat);
+    const bounds = [lngs[0]! - 1, Math.min(...lats) - 1, middle, Math.max(...lats) + 1] as const;
+    const inView = scene.agents(0.5, 0, { boats: false, bounds });
+    expect(inView.length).toBeGreaterThan(0);
+    expect(inView.length).toBeLessThan(people.length);
+    // Everyone in view, where they stand without bounds, and no one far outside it.
+    const at = (p: { lng: number; lat: number }) => `${p.lng},${p.lat}`;
+    const shown = new Set(inView.map(at));
+    expect(people.filter((p) => p.lng <= middle).every((p) => shown.has(at(p)))).toBe(true);
+    const margin = (2 * VEHICLES.voyador.length) / 111_320;
+    expect(inView.every((p) => p.lng <= middle + margin)).toBe(true);
+  });
+
   it('tows the pagoda with ropes through each column, taut when stretched, slack at rest', () => {
     // Meters east and north of the start, from lng/lat.
     const meters = ([lng, lat]: readonly [number, number]) => [east(lng), lat * 110_540] as const;

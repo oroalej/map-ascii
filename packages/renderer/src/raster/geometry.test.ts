@@ -12,6 +12,7 @@ import {
   hashString,
   ringTriangles,
   EXTENT,
+  lngLatToTile,
   metersPerUnit,
   packId,
   parkingStalls,
@@ -439,6 +440,20 @@ describe('buildTileGeometry', () => {
     expect(
       buildTileGeometry({ roads: layer([path]) }, createIdRegistry(), tile).fills.ids,
     ).toHaveLength(0);
+  });
+
+  it('finds a place in a tile, the inverse of tileToLngLat', () => {
+    const tile = { z: 16, x: 55_247, y: 30_252 };
+    for (const p of [
+      { x: 0, y: 0 },
+      { x: 1234, y: 3210 },
+      { x: -500, y: 4600 },
+    ]) {
+      const [lng, lat] = tileToLngLat(tile, p);
+      const back = lngLatToTile(tile, lng, lat);
+      expect(back.x).toBeCloseTo(p.x, 6);
+      expect(back.y).toBeCloseTo(p.y, 6);
+    }
   });
 
   it('leaves strips out of tiles too coarse to be drawn at Place level', () => {

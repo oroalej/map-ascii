@@ -495,6 +495,45 @@ describe('LifeWorld', () => {
     const agents = world.visible(18, 1, center);
     expect(agents.length).toBe(MAX_VISIBLE_AGENTS);
   });
+
+  it('leaves out agents outside the view', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'v', tile, life: road }]);
+    const all = world.visible(18, 1, center).filter((a) => a.kind !== 'train');
+    expect(all.length).toBeGreaterThan(0);
+    // The tile's western half only (a view, with no margin to speak of at this size).
+    const [west, north] = tileToLngLat(tile, { x: 0, y: 0 });
+    const [east, south] = tileToLngLat(tile, { x: 1024, y: 4096 });
+    const inHalf = world
+      .visible(18, 1, center, undefined, [west, south, east, north])
+      .filter((a) => a.kind !== 'train');
+    expect(inHalf.length).toBeGreaterThan(0);
+    expect(inHalf.length).toBeLessThan(all.length);
+    const [edge] = tileToLngLat(tile, { x: 1024 + 31 * perMeter, y: 0 });
+    expect(inHalf.every((a) => a.lng <= edge)).toBe(true);
+    // Far away: none.
+    expect(
+      world
+        .visible(18, 1, center, undefined, [0, 0, 1, 1])
+        .filter((a) => a.kind !== 'train'),
+    ).toHaveLength(0);
+  });
+
+  it("doesn't move the kinds that don't show at the zoom", () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'z', tile, life: road }]);
+    const where = () =>
+      world
+        .visible(18, 1, center)
+        .filter((a) => a.kind === 'vehicle' && !a.parked)
+        .map((a) => a.lng);
+    const before = where();
+    expect(before.length).toBeGreaterThan(0);
+    for (let i = 0; i < 10; i++) world.step(0.1, undefined, 14); // vehicles show from 15
+    expect(where()).toEqual(before);
+    for (let i = 0; i < 10; i++) world.step(0.1, undefined, 16);
+    expect(where()).not.toEqual(before);
+  });
 });
 
 describe('vehicles and boats', () => {

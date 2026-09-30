@@ -76,7 +76,17 @@ type Person = {
   rank: number;
   candle: boolean;
   phase: number;
+  /** Where they stand (m), and the route's direction there; they only sway in place. */
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  /** How far right of the route's line they stand, m (negative: on the left bank). */
+  off: number;
 };
+
+/** A view's bounds, [west, south, east, north] in degrees. */
+export type LngLatBounds = readonly [number, number, number, number];
 
 /** How a boat sways on its own: across (m), along (m), and its heading (radians). */
 type Sway = { wander: number; period: number; surge: number; yaw: number; phase: number };
@@ -282,14 +292,14 @@ export class ProcessionScene {
     const count = Math.floor(this.length * PROCESSION.crowdPerMeter);
     for (const side of [-1, 1]) {
       for (let i = 0; i < count; i++) {
-        this.people.push({
-          s: rng() * this.length,
-          side,
-          back: between(rng, ...PROCESSION.crowdDepth),
-          rank: rng(),
-          candle: rng() < PROCESSION.candles,
-          phase: rng() * 6.28,
-        });
+        const s = rng() * this.length;
+        const back = between(rng, ...PROCESSION.crowdDepth);
+        const rank = rng();
+        const candle = rng() < PROCESSION.candles;
+        const phase = rng() * 6.28;
+        const { x, y, tx, ty, left, right } = this.at(s);
+        const off = side > 0 ? right + back : -(left + back);
+        this.people.push({ s, side, back, rank, candle, phase, x, y, tx, ty, off });
       }
     }
   }
@@ -316,8 +326,14 @@ export class ProcessionScene {
   /** The point `s` m along the route, its direction (a unit vector), and the banks there. */
   private at(s: number) {
     const { points, along } = this;
+    // The first point at least `s` along (the last, past the end): `along` only grows.
     let i = 1;
-    while (i < points.length - 1 && along[i]! < s) i++;
+    let hi = points.length - 1;
+    while (i < hi) {
+      const mid = (i + hi) >> 1;
+      if (along[mid]! < s) i = mid + 1;
+      else hi = mid;
+    }
     const [ax, ay] = points[i - 1]!;
     const [bx, by] = points[i]!;
     const length = along[i]! - along[i - 1]! || 1;
@@ -339,6 +355,17 @@ export class ProcessionScene {
     return [this.origin[0] + x / this.kx, this.origin[1] + y / this.ky];
   }
 
+  /** Whether a point (m) is inside `bounds` (none: everywhere), `margin` m around them. */
+  private inside(bounds: LngLatBounds | undefined, margin: number) {
+    if (!bounds) return () => true;
+    const [west, south, east, north] = bounds;
+    const x0 = (west - this.origin[0]) * this.kx - margin;
+    const x1 = (east - this.origin[0]) * this.kx + margin;
+    const y0 = (south - this.origin[1]) * this.ky - margin;
+    const y1 = (north - this.origin[1]) * this.ky + margin;
+    return (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  }
+
   /** The distance along the route of something `lag` behind the lead, `progress` into the run. */
   private travelled(progress: number, lag: number) {
     const lead = this.formationLength();
@@ -355,8 +382,14 @@ export class ProcessionScene {
    * A boat `s` m along the route, `off` m right of the channel's middle (kept `width` inside
    * its banks), turned `yaw` from the direction of travel.
    */
-  private place(s: number, off: number, vehicle: CraftType, yaw: number): Placed {
-    const { x, y, tx, ty, left, right } = this.at(s);
+  private place(
+    s: number,
+    off: number,
+    vehicle: CraftType,
+    yaw: number,
+    here = this.at(s),
+  ): Placed {
+    const { x, y, tx, ty, left, right } = here;
     const { width, length } = VEHICLES[vehicle];
     const room = width / 2 + PROCESSION.bankMargin;
     const middle = (right - left) / 2;
@@ -463,13 +496,21 @@ export class ProcessionScene {
   /**
    * What to draw `progress` (0–1) of the way through, `time` s into it (for sway and jitter):
    * the boats between the start and the landing (with `crews`, the voyadores' paddlers), and,
-   * from `PROCESSION.crowdZoom`, the crowds.
+   * from `PROCESSION.crowdZoom`, the crowds. With `bounds`, the crowds and crews outside the view
+   * are left out.
    */
   agents(
     progress: number,
     time: number,
-    { boats = true, crowds = true, crews = false } = {},
+    {
+      boats = true,
+      crowds = true,
+      crews = false,
+      bounds,
+    }: { boats?: boolean; crowds?: boolean; crews?: boolean; bounds?: LngLatBounds } = {},
   ): VisibleAgent[] {
+    // A voyador's length, so a crew half in view still shows.
+    const inView = this.inside(bounds, VEHICLES.voyador.length);
     const out: VisibleAgent[] = [];
     const ropes: VisibleAgent[] = [];
     const poles: VisibleAgent[] = [];
@@ -489,7 +530,8 @@ export class ProcessionScene {
           this.length,
           Math.max(0, base + sway.surge * Math.sin(time * 2.1 + sway.phase)),
         );
-        const { left, right } = this.at(s);
+        const here = this.at(s);
+        const { left, right } = here;
         const water = left + right - 2 * PROCESSION.bankMargin;
         let off = b.across + sway.wander * Math.sin(beat);
         if (b.column !== undefined) {
@@ -502,10 +544,12 @@ export class ProcessionScene {
         } else if (b.lane !== 0) {
           off += b.lane * (water / 2 - VEHICLES[b.vehicle].width / 2);
         }
-        const at = this.place(s, off, b.vehicle, sway.yaw * Math.cos(beat));
+        const at = this.place(s, off, b.vehicle, sway.yaw * Math.cos(beat), here);
         placed.set(b, at);
         out.push(this.boatAgent(at, b));
-        if (crews && b.vehicle === 'voyador') this.crewOf(at, b, time, out);
+        if (crews && b.vehicle === 'voyador' && inView(at.x, at.y)) {
+          this.crewOf(at, b, time, out);
+        }
       }
       this.towRopes(placed, ropes);
       const pagodaAt = placed.get(this.boats[0]!);
@@ -519,8 +563,8 @@ export class ProcessionScene {
           p.s < PROCESSION.crowdNear ||
           landing - p.s < PROCESSION.crowdNear;
         if (!near && p.rank >= PROCESSION.crowdShare) continue;
-        const { x, y, tx, ty, left, right } = this.at(p.s);
-        const off = p.side > 0 ? right + p.back : -(left + p.back);
+        const { x, y, tx, ty, off } = p;
+        if (!inView(x + ty * off, y - tx * off)) continue;
         const sway = Math.sin(time * 1.3 + p.phase) * 0.3;
         const [lng, lat] = this.lngLat(x + ty * off + tx * sway, y - tx * off + ty * sway);
         // Facing the river, a meter nearer it.

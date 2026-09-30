@@ -80,7 +80,7 @@ import {
   type VisibleLamp,
 } from './life/lights';
 import { moonlight } from './life/moon';
-import { liveProgress } from './life/procession';
+import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { treeGust } from './glyphs/select';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
@@ -260,6 +260,8 @@ export type AtlasStats = {
   cellPassMs: number;
   /** Main-thread time of a crown pass (the swaying tree crowns), smoothed, in ms. */
   crownPassMs: number;
+  /** Main-thread time of the life layer (moving, placing, and packing its agents), smoothed, in ms. */
+  lifeMs: number;
   tilesLoaded: number;
   tilesPending: number;
   /** Worker time to decode a tile, averaged over recent tiles, in ms. */
@@ -390,6 +392,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let frameMs = 0;
   let cellPassMs = 0;
   let crownPassMs = 0;
+  let lifeMs = 0;
 
   // GPU resources (gpu-context.ts). Glyphs depend on the device pixel ratio (atlas resolution)
   // and, for the map's, on the cell size step (density.ts), so each step's are kept once built.
@@ -621,6 +624,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     world.sync(lifeTiles);
   };
 
+  /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */
+  let bounds: { camera: CameraState; width: number; height: number; at: LngLatBounds } | null =
+    null;
+  const viewBounds = (): LngLatBounds => {
+    const { width, height } = cssSize();
+    if (bounds?.camera !== camera || bounds.width !== width || bounds.height !== height) {
+      const [[west, south], [east, north]] = viewportFor(camera, { width, height }).getBounds() as [
+        [number, number],
+        [number, number],
+      ];
+      bounds = { camera, width, height, at: [west, south, east, north] };
+    }
+    return bounds.at;
+  };
+
   /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
   let lifeAgents: VisibleAgent[] = [];
   const drawLife = (at: number) => {
@@ -637,12 +655,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         const x = grid.originCol + Math.floor(col);
         const y = grid.originRow + Math.floor(row);
         return wind.strength * treeGust(x, y, time, wind.dir);
-      });
+      }, camera.zoom);
       lastLifeStep = at;
-      agents = world.visible(camera.zoom, activity, [camera.lng, camera.lat], {
-        rain: currentRain(),
-        sunAltitude: sun?.altitude ?? 0,
-      });
+      agents = world.visible(
+        camera.zoom,
+        activity,
+        [camera.lng, camera.lat],
+        { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+        viewBounds(),
+      );
       reportProcession();
     } else if (!lifeShown) {
       return;
@@ -969,7 +990,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         wind,
         sun,
       );
+      const lifeStart = performance.now();
       drawLife(now);
+      lifeMs = smooth(lifeMs, performance.now() - lifeStart);
       drawLights(cellsDrawn);
       glyphPass(
         gl,
@@ -1110,6 +1133,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       frameMs,
       cellPassMs,
       crownPassMs,
+      lifeMs,
       tilesLoaded: tileCache.size,
       tilesPending: source.pendingCount,
       decodeMs: source.decodeMsAverage,

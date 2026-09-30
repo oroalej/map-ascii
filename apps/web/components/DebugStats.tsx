@@ -37,6 +37,7 @@ export function DebugStats() {
         `frame  ${ms(stats.frameMs)} ms`,
         `cells  ${ms(stats.cellPassMs)} ms`,
         `crowns ${ms(stats.crownPassMs)} ms`,
+        `life   ${ms(stats.lifeMs)} ms`,
         `decode ${ms(stats.decodeMs)} ms`,
         `tiles  ${String(stats.tilesLoaded).padStart(5)} (+${stats.tilesPending})`,
         `agents ${String(stats.agents).padStart(5)}`,
