@@ -6,7 +6,7 @@
  * stamped over as many cells as it covers (life/draw.ts). It is drawn in the people's class
  * (life/config.ts `lifeClassFor`), in its coat's paint, with its nose and ears the darker ink.
  */
-import type { Heading} from './masters';
+import type { Heading } from './masters';
 import { doubled, inkAt, turnedPixels } from './masters';
 import { Paint } from './vehicles';
 
