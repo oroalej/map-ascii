@@ -718,6 +718,44 @@ export function buildTileGeometry(
       if (feature.type === 1) {
         for (const ring of rings) {
           for (const p of ring) {
+            if (className === 'furniture' && variant === 7) {
+              if (strips && unitMeters) {
+                const bearing = Number(feature.properties.crossing_bearing ?? 0);
+                const theta = (bearing * Math.PI) / 180;
+                const reach = 1.5 / unitMeters;
+                const a = { x: p.x - Math.sin(theta) * reach, y: p.y + Math.cos(theta) * reach };
+                const b = { x: p.x + Math.sin(theta) * reach, y: p.y - Math.cos(theta) * reach };
+                const road = classId(String(feature.properties.crossing_road ?? 'road_minor'));
+                addStrip(
+                  fills,
+                  a,
+                  b,
+                  Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters,
+                  (q) =>
+                    fills.vertex(
+                      q.x,
+                      q.y,
+                      road,
+                      0,
+                      Flags.corridor | Flags.crossing,
+                      id,
+                      Math.round((bearing / 180) * 255),
+                    ),
+                );
+              }
+              continue;
+            }
+            if (className === 'furniture' && variant === 8) {
+              if (!isRegion)
+                life.signal(
+                  p,
+                  Number(feature.properties.signal_radius ?? 4),
+                  Number(feature.properties.signal_a ?? -1),
+                  Number(feature.properties.signal_b ?? 90),
+                  feature.properties.life_signal === 'mapped',
+                );
+              continue;
+            }
             if (marker || landmark) addMarkers(p);
             else addPoint(p, cls);
             if (landmark && !isRegion && unitMeters && inTileAt(p)) {

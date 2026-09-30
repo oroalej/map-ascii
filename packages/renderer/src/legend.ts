@@ -5,6 +5,7 @@
  * (`CLASS_LABELS`).
  */
 import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
+import { ROAD_AREA_ZOOM } from './glyphs/select';
 import {
   classDepths,
   classId,
@@ -260,5 +261,22 @@ export function legendEntries(
   if (lights && (!onScreen || litRoads.some((cls) => onScreen.has(cls)))) {
     entries.push({ ...STREETLIGHTS_ENTRY, classes: [] });
   }
+  const roads =
+    !onScreen ||
+    ['road_major', 'road_mid', 'road_minor'].some((c) => onScreen.has(c as RenderClass));
+  if (roads && zoom >= ROAD_AREA_ZOOM)
+    entries.push({
+      classes: [],
+      label: 'Crosswalks (mapped or simulated)',
+      glyphs: '═ ║',
+      color: css(theme.styles.road_mid!.color),
+    });
+  if (roads && life && zoom >= 17)
+    entries.push({
+      classes: [],
+      label: 'Traffic signals (simulated phases)',
+      glyphs: '•',
+      color: css(theme.vehiclePaints[Paint.green]!),
+    });
   return entries;
 }

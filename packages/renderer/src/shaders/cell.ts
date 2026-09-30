@@ -64,6 +64,7 @@ void main() {
   }
   // Taller features win within a tier (a_meta.y is height in meters, 0–255).
   float depth = u_depth[cls] - a_meta.y / 255.0 * ${TIER_STEP * 0.9};
+  if ((int(a_meta.z + 0.5) & ${Flags.crossing}) != 0) depth -= ${TIER_STEP * 0.01};
   // Grounds (no height) go under the grass, parks, and water on them.
   if (((u_groundMask >> cls) & 1) == 1 && a_meta.y == 0.0) depth = u_groundDepth;
   // Classes outside their zoom band are pushed out of the depth range (clipped).

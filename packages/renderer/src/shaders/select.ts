@@ -290,6 +290,12 @@ void main() {
   if (((u_roadMask >> cls) & 1) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     int curb = wallMask(p, CURBS);
     float glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).r : 0.0;
+    if (curb < 0 && (int(attr.g * 255.0 + 0.5) & ${Flags.crossing}) != 0) {
+      bool vertical = variant < 64 || variant >= 191;
+      int parity = vertical ? w.y : w.x;
+      bool stripe = min(u_cellMeters.x, u_cellMeters.y) >= 1.2 || (parity & 1) == 0;
+      glyph = stripe ? texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_DOUBLE_ROW}), 0).r : 0.0;
+    }
     emit(glyph, cls);
     return;
   }

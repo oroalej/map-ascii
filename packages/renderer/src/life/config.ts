@@ -540,3 +540,14 @@ export function cellBits(): Int32Array {
   }
   return bits;
 }
+export const SIGNAL = {
+  greenA: [20, 35],
+  greenB: [15, 30],
+  amber: 3,
+  allRed: 2,
+  midBlock: { green: 40, walk: 12 },
+  gap: 1.5,
+  lookahead: 40,
+  brake: 3,
+  walkMin: 5,
+} as const;

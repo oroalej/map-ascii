@@ -63,6 +63,9 @@ import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from '
 import { DOG_PAINTS } from './dogs';
 import { CAT, CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { SignalControl, signalState } from './signals';
+import { YieldControl } from './yield';
+import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
   pickVehicle,
@@ -164,6 +167,7 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  clock?: number;
   minutes?: number;
   cityLife?: CityLifeConfig;
   levels?: Activity;
@@ -368,6 +372,8 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  readonly yielding: YieldControl;
+  readonly signals: SignalControl;
   readonly scenes: LocalScenes;
   private readonly catRng: () => number;
   readonly movers: Mover[] = [];
@@ -425,6 +431,8 @@ export class TileLife {
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
       }
     }
+    this.signals = new SignalControl(tile, geo, this.perMeter, this.along);
+    this.yielding = new YieldControl(tile, geo, this.perMeter, this.along);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
     this.findJunctions();
@@ -1471,10 +1479,21 @@ export class TileLife {
     near?: (x: number, y: number) => boolean,
     env?: LifeEnv,
     guard?: GroundGuard,
+    busy: ReadonlyMap<string, number> = new Map(),
   ) {
     this.time += dt;
     const { rng } = this;
-    this.scenes.step(dt, this.movers, env ?? {}, near, shows, guard, (m) => this.offsetOf(m));
+    const clock = env?.clock ?? this.time;
+    this.scenes.step(
+      dt,
+      this.movers,
+      env ?? {},
+      near,
+      shows,
+      guard,
+      (m) => this.offsetOf(m),
+      (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
+    );
     const speeds = this.followSpeeds(shows, near);
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movers
@@ -1490,7 +1509,12 @@ export class TileLife {
       if (near && !m.train && !near(m.x, m.y)) continue;
       if (this.scenes.visits.has(m)) continue;
       if (m.kind === 'vehicle') {
-        speeds[i] = Math.min(speeds[i]!, this.scenes.speed(m, dt));
+        speeds[i] = Math.min(
+          speeds[i]!,
+          this.scenes.speed(m, dt),
+          this.signals.vehicleSpeed(m, dt, clock),
+          this.yielding.speed(m, dt, busy),
+        );
         if (this.scenes.held(m)) continue;
       }
       if (m.train) {
@@ -1549,6 +1573,13 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+        speeds[i] =
+          this.signals.walkDistance(
+            m,
+            { x: m.x + m.hx * speeds[i]! * dt, y: m.y + m.hy * speeds[i]! * dt },
+            speeds[i]! * dt,
+            clock,
+          ) / dt;
         m.walked = (m.walked ?? 0) + (speeds[i]! * dt) / this.perMeter;
       }
       const before = { ...m };
@@ -1840,6 +1871,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
   covered?: boolean;
@@ -2144,14 +2176,35 @@ export class LifeWorld {
       zoom === undefined
         ? undefined
         : (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
-    const env: LifeEnv = { levels: this.lastLevels, rain: this.lastRain, wind, ...weather };
+    const env: LifeEnv = {
+      clock: this.clock,
+      levels: this.lastLevels,
+      rain: this.lastRain,
+      wind,
+      ...weather,
+    };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
+    const busy = new Map<string, number>();
+    for (const tile of this.tiles.values())
+      tile.yielding.markBusy(
+        tile.movers,
+        busy,
+        (m) => (!shows || shows(m.kind)) && (!env.levels || m.rank < env.levels[m.kind]),
+      );
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
         : undefined;
       const near = bounds && viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
-      tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before));
+      tile.step(
+        clamped,
+        inTile,
+        shows,
+        near,
+        env,
+        (owner, before) => guard(tile, owner, before),
+        busy,
+      );
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileId; m: Mover }[] | undefined;
@@ -2337,6 +2390,35 @@ export class LifeWorld {
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
+      if (zoom >= 17)
+        for (const s of life.signals.signals) {
+          if (!inTile(s) || !inView(s.x, s.y)) continue;
+          const state = signalState(s.seed, this.clock, s.a < 0);
+          for (const [bearing, color] of [
+            [s.a < 0 ? 0 : s.a, state.a],
+            [s.b, state.b],
+          ] as const) {
+            const theta = (bearing * Math.PI) / 180,
+              hx = Math.sin(theta),
+              hy = -Math.cos(theta);
+            for (const sign of [-1, 1]) {
+              const [lng, lat] = tileToLngLat(tile, {
+                x: s.x + sign * (hx * s.radius - hy * (s.radius - 1.5)) * perMeter,
+                y: s.y + sign * (hy * s.radius + hx * (s.radius - 1.5)) * perMeter,
+              });
+              out.push({
+                kind: 'vehicle',
+                glyph: '•',
+                lng,
+                lat,
+                paint:
+                  color === 'green' ? Paint.green : color === 'amber' ? Paint.yellow : Paint.red,
+                parked: true,
+                flap: 0,
+              });
+            }
+          }
+        }
       for (const m of life.movers) {
         if (life.scenes.hidden(m)) continue;
         if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;

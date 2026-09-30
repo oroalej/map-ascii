@@ -27,6 +27,11 @@ export const MAX_VARIANTS = 32;
 
 /** Connectivity bits, with north toward the top of the screen. */
 export const Dir = { N: 1, E: 2, S: 4, W: 8 } as const;
+/** Stripe orientation and fine-scale alternation, matching the select shader. */
+export function crossingGlyph(bearingByte: number, cellMeters: number, parity: number): string {
+  if (cellMeters < 1.2 && parity & 1) return ' ';
+  return bearingByte < 64 || bearingByte >= 191 ? '═' : '║';
+}
 /** Road variants past the 16 masks: an isolated diagonal step. */
 export const RISING = 16; // ╱ (neighbor to the NE or SW)
 export const FALLING = 17; // ╲ (neighbor to the NW or SE)

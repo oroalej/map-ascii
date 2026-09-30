@@ -450,7 +450,17 @@ describe('Place-level ground detail', () => {
   it('picks furniture glyphs by variant, falling back to a dot', () => {
     const at = (variant: number) =>
       selectGlyph(themes.dark, 'furniture', { ...sketch(['.'], {}), variant });
-    expect([0, 1, 2, 3, 4, 5, 6, 9].map(at)).toEqual(['•', '╥', '○', '¶', '┬', '▤', '⌂', '⌂']);
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(at)).toEqual([
+      '•',
+      '╥',
+      '○',
+      '¶',
+      '┬',
+      '▤',
+      '⌂',
+      '═',
+      '•',
+    ]);
   });
 
   it('dashes barriers and joins them only to each other', () => {

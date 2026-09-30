@@ -199,6 +199,38 @@ describe('local interaction scenes', () => {
     scene.step(0.1, [p], {}, undefined, undefined, () => true);
     expect(scene.visits.size).toBe(0);
   });
+  it('keeps a signal-delayed visit reserved until its walking phase resumes', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    for (let i = 0; i < 120; i++)
+      scene.step(
+        0.1,
+        [p],
+        {},
+        undefined,
+        undefined,
+        () => true,
+        undefined,
+        () => 0,
+      );
+    expect(p.x).toBe(40);
+    expect(scene.visits.get(p)!.state).toBe('approach');
+    expect(scene.visits.get(p)!.blocked).toBe(0);
+    expect(scene.sites[0]!.queue).toContain(p);
+    for (let i = 0; i < 100; i++)
+      scene.step(
+        0.1,
+        [p],
+        {},
+        undefined,
+        undefined,
+        () => true,
+        undefined,
+        (_m, _target, distance) => distance,
+      );
+    expect(p.x).toBeGreaterThan(40);
+  });
 
   it('limits a terminal to three vehicles and only one active boarding group', () => {
     const scene = setup(1);

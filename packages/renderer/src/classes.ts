@@ -174,6 +174,7 @@ export const Flags = {
   landmark: 1,
   /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
   corridor: 2,
+  crossing: 4,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
 } as const;
@@ -189,7 +190,18 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
 export function variantCode(className: string, variant: unknown): number {
   if (typeof variant !== 'string') return 0;
   if (className === 'furniture')
-    return ['bench', 'fountain', 'flagpole', 'stop', 'terminal', 'shelter'].indexOf(variant) + 1;
+    return (
+      [
+        'bench',
+        'fountain',
+        'flagpole',
+        'stop',
+        'terminal',
+        'shelter',
+        'crossing',
+        'signals',
+      ].indexOf(variant) + 1
+    );
   if (className === 'tree' || className === 'trees') {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }

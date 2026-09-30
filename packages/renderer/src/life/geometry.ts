@@ -86,6 +86,8 @@ export const roostClasses: ReadonlySet<string> = new Set([
 ]);
 
 export type LifeGeometry = {
+  /** Buffered signal centers, radius in meters, two bearings, mapped flag. */
+  signals?: Float32Array;
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
   /** Lot boundaries and solid ground obstacles, including polygon holes. */
@@ -134,6 +136,7 @@ export type LifeArea = { kind: 'parking' | 'blocked'; rings: TilePoint[][]; wate
 
 export const PLACE_STRIDE = 5;
 export const SITE_STRIDE = 5;
+export const SIGNAL_STRIDE = 6;
 
 /** A tile's own extent in tile units (raster/geometry.ts `EXTENT`). */
 const TILE_EXTENT = 4096;
@@ -149,6 +152,10 @@ export const MAX_TILE_PERCHES = 24;
 export const MAX_TILE_PLACES = 40;
 
 export class LifeBuilder {
+  private signals: number[] = [];
+  signal(p: TilePoint, radius: number, axisA: number, axisB: number, mapped: boolean) {
+    this.signals.push(p.x, p.y, radius, axisA, axisB, mapped ? 1 : 0);
+  }
   private lineIds: number[] = [];
   private areas: LifeArea[] = [];
   private sites: number[] = [];
@@ -247,6 +254,7 @@ export class LifeBuilder {
 
   finish(): LifeGeometry {
     return {
+      signals: Float32Array.from(this.signals),
       lineIds: Uint32Array.from(this.lineIds),
       areas: this.areas,
       sites: Float32Array.from(this.sites),
@@ -272,6 +280,7 @@ export class LifeBuilder {
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
   g.sites.buffer as ArrayBuffer,
   g.obstacles.buffer as ArrayBuffer,

@@ -187,7 +187,7 @@ function drawAgent(
   const c = Math.floor(col);
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return people;
-  const mini = spec?.mini ?? theme.styles[cls]?.glyphs;
+  const mini = agent.glyph ? [agent.glyph] : (spec?.mini ?? theme.styles[cls]?.glyphs);
   if (!mini || mini.length === 0) return people;
   let variant = 0;
   if (agent.kind === 'bird') {

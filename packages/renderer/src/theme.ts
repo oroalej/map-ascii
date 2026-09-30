@@ -280,7 +280,7 @@ function makeTheme(background: number, c: Palette): Theme {
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
       furniture: {
         kind: 'variant',
-        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂'],
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•'],
         color: c.furniture,
       },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },

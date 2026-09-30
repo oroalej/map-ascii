@@ -65,6 +65,50 @@ const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
   }));
 
 describe('classifyRings', () => {
+  it('rasterizes crossing anchors as road quads and transfers buffered signals without point glyphs', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const result = buildTileGeometry(
+      {
+        poi: layer([
+          feature(
+            1,
+            {
+              id: 'cross',
+              class: 'furniture',
+              variant: 'crossing',
+              crossing_bearing: 90,
+              crossing_width: 10,
+              crossing_road: 'road_mid',
+            },
+            [[[2048, 2048]]],
+          ),
+          feature(
+            1,
+            {
+              id: 'signal',
+              class: 'furniture',
+              variant: 'signals',
+              signal_radius: 6,
+              signal_a: 0,
+              signal_b: 90,
+              life_signal: 'mapped',
+            },
+            [[[-10, 2048]]],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(result.points.positions).toHaveLength(0);
+    expect(
+      vertices(result.fills).every(
+        (v) => v.cls === classId('road_mid') && v.flags === (Flags.corridor | Flags.crossing),
+      ),
+    ).toBe(true);
+    expect(result.fills.positions.length).toBeGreaterThan(0);
+    expect(Array.from(result.life.signals!)).toEqual([-10, 2048, 6, 0, 90, 1]);
+  });
   const pts = (ring: [number, number][]): TilePoint[] => ring.map(([x, y]) => ({ x, y }));
 
   it('groups holes with their outer ring and starts a polygon per outer ring', () => {

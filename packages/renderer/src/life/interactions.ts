@@ -218,7 +218,13 @@ export class LocalScenes {
     m.pause = 0;
   }
 
-  private move(m: Mover, visit: Visit, dt: number, guard?: MoveGuard) {
+  private move(
+    m: Mover,
+    visit: Visit,
+    dt: number,
+    guard?: MoveGuard,
+    walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
+  ) {
     const before = guard && m.kind === 'person' ? { ...m } : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
@@ -230,7 +236,9 @@ export class LocalScenes {
         m.hx = (target.x - m.x) / d;
         m.hy = (target.y - m.y) / d;
       }
-      const step = Math.min(d, left);
+      let step = Math.min(d, left);
+      if (m.kind === 'person' && walkLimit) step = walkLimit(m, target, step);
+      if (step <= 0 && d > 0.001) break;
       m.x += m.hx * step;
       m.y += m.hy * step;
       m.walked = (m.walked ?? 0) + step / this.perMeter;
@@ -263,6 +271,7 @@ export class LocalScenes {
     shows?: (kind: Mover['kind']) => boolean,
     guard?: MoveGuard,
     vehicleOffset?: (mover: Mover) => number,
+    walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
   ) {
     const rain = env.rain ?? 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
@@ -297,7 +306,7 @@ export class LocalScenes {
       )
         this.returning(m, visit);
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
-        if (!this.move(m, visit, dt, guard)) continue;
+        if (!this.move(m, visit, dt, guard, walkLimit)) continue;
         if (visit.state === 'return') {
           m.x = visit.trail[0]!.x;
           m.y = visit.trail[0]!.y;
