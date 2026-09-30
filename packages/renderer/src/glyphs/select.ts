@@ -4,7 +4,6 @@
  */
 import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
 import {
-  buildingRamp,
   doubleWall,
   sextantGlyphs,
   singleWall,
@@ -48,14 +47,12 @@ export const OUTLINE_ZOOM = { landmark: 17, building: 18 } as const;
 export const WALL_SINGLE_ROW = MAX_CLASSES - 2;
 export const WALL_DOUBLE_ROW = MAX_CLASSES - 1;
 /**
- * Glyph-table row for 3D extras: the `░▒▓█` ramp for 3D buildings (variants 0–3), then roof
- * ridges `─ ╲ │ ╱` (variants 4–7), then a tree's trunk (variant 8).
+ * Glyph-table row for roof ridges `─ ╲ │ ╱` (variants 4–7, so a ridge variant never collides
+ * with the lit ▓ and shaded ▒ slopes, variants 1–2 of the building's own row).
  */
-export const EXTRUDE_ROW = MAX_CLASSES - 3;
+export const ROOF_ROW = MAX_CLASSES - 3;
 export const RIDGE_VARIANT = 4;
 export const ridgeGlyphs = ['─', '╲', '│', '╱'] as const;
-export const TRUNK_VARIANT = 8;
-export const trunkGlyph = '│';
 
 /** Glyph-table rows for the sextants (two rows of 32, indexed by mask). */
 export const SEXTANT_ROW = MAX_CLASSES - 5;
@@ -249,19 +246,6 @@ export function roofVariant(code: number, angleByte: number, aspect: number): nu
   if (code === RoofCode.none) return null;
   if (code === RoofCode.ridge) return ridgeVariant(angleByte, aspect);
   return code === RoofCode.shaded ? 1 : 2;
-}
-
-/** Wall shade thresholds (0–255) between `░`, `▒`, and `▓`. */
-export const WALL_SHADE_STEPS = [85, 170] as const;
-
-/**
- * A 3D building cell's glyph in the extrusion row: roofs are solid `█`; walls step `░▒▓`
- * with how directly they face the light (the shade byte).
- */
-export function extrusionVariant(shade: number, roof: boolean): number {
-  if (roof) return 3;
-  const step = WALL_SHADE_STEPS.findIndex((limit) => shade < limit);
-  return step === -1 ? WALL_SHADE_STEPS.length : step;
 }
 
 export type WallStyle = 'single' | 'double';
@@ -693,15 +677,13 @@ export const treeGust = (
  * by `bend` × its reach from the trunk (so the tips swing most), at most `max`, and a flutter
  * of `flutter` across the wind at `rate` radians per second, each vertex at its own phase. In
  * the wake behind a gust the branches spring back: upwind of rest by up to `recoil` of the
- * swing, rocking at `bounce` radians per second as they settle. A standing crown swings fully at
- * its top and by `standingBase` at its bottom.
+ * swing, rocking at `bounce` radians per second as they settle.
  */
 export const SWAY = {
   bend: 0.3,
   max: 3,
   flutter: 0.5,
   rate: 7,
-  standingBase: 0.4,
   recoil: 0.45,
   bounce: 4,
 } as const;
@@ -1032,13 +1014,9 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     colors[id * 3 + 2] = (style.color & 0xff) / 255;
     fills[id] = style.fill ?? 0;
   }
-  buildingRamp.forEach((glyph, v) => {
-    table[EXTRUDE_ROW * MAX_VARIANTS + v] = glyphIndex(glyph);
-  });
   ridgeGlyphs.forEach((glyph, i) => {
-    table[EXTRUDE_ROW * MAX_VARIANTS + RIDGE_VARIANT + i] = glyphIndex(glyph);
+    table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i] = glyphIndex(glyph);
   });
-  table[EXTRUDE_ROW * MAX_VARIANTS + TRUNK_VARIANT] = glyphIndex(trunkGlyph);
   for (let mask = 0; mask < 16; mask++) {
     table[WALL_SINGLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('single', mask));
     table[WALL_DOUBLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('double', mask));

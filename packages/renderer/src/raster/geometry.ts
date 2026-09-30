@@ -36,7 +36,7 @@ export const skippedLayers: ReadonlySet<string> = new Set(['events']);
 export type GeometryArrays = {
   /** x, y per vertex. */
   positions: Int16Array;
-  /** class id, height (m, 0–255), flags, variant (or wall shade, or ridge angle) per vertex. */
+  /** class id, height (m, 0–255), flags, variant (or ridge angle) per vertex. */
   meta: Uint8Array;
   /** Feature index (1-based; 0 = none) per vertex. */
   ids: Uint32Array;
@@ -138,18 +138,12 @@ export type GroundGeometry = {
 };
 
 export type TileGeometry = GroundGeometry & {
-  /** Buildings as 3D walls and roofs (the variant byte holds the face's shade). */
-  extrusions: GeometryArrays & { indices: Uint32Array };
-  /** Tree trunks, as vertical lines from the ground to the crown (`Flags.trunk`). */
-  trunks: GeometryArrays;
   /**
    * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
    * trunk in tile units, how far it swings.
    */
   crowns: GeometryArrays & { indices: Uint32Array };
-  /** Tree crowns standing on their trunks (tilted views), with the same `ridge`. */
-  standingCrowns: GeometryArrays & { indices: Uint32Array };
   /**
    * Region-only features (the pipeline's `region` flag), kept apart: they are tiled only to
    * `REGION_TILE_MAX_ZOOM`, and deeper views draw them from that zoom's tile under the
@@ -340,61 +334,8 @@ const isBuilding = (cls: string) => cls.startsWith('building');
 /** Direction the light comes from, in tile coordinates (y down): from the south-east. */
 const LIGHT = { x: 0.45, y: 0.89 };
 
-/** A wall's shade byte (0–255) from its outward normal: lit faces are brighter. */
-export function wallShade(nx: number, ny: number): number {
-  const length = Math.hypot(nx, ny) || 1;
-  const lit = (nx * LIGHT.x + ny * LIGHT.y) / length;
-  return Math.round((0.5 + 0.5 * lit) * 254);
-}
-
-/** Twice the ring's area with the standard shoelace sign (positive: interior on the left). */
-const shoelace = (ring: readonly TilePoint[]) => {
-  let a = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const p = ring[i]!;
-    const q = ring[(i + 1) % ring.length]!;
-    a += p.x * q.y - q.x * p.y;
-  }
-  return a;
-};
-
-/**
- * Add a building's walls (a quad per ring edge, from the ground to its height) and its roof
- * (the footprint's triangles at its height) to `out`.
- */
-function addExtrusion(
-  out: Builder,
-  polygon: readonly TilePoint[][],
-  roof: readonly number[],
-  vertex: (p: TilePoint, flags: number, shade: number) => void,
-) {
-  for (const ring of polygon) {
-    const outwardLeft = shoelace(ring) < 0;
-    for (let i = 0; i < ring.length - 1; i++) {
-      const a = ring[i]!;
-      const b = ring[i + 1]!;
-      const [dx, dy] = [b.x - a.x, b.y - a.y];
-      if (dx === 0 && dy === 0) continue;
-      const shade = outwardLeft ? wallShade(-dy, dx) : wallShade(dy, -dx);
-      const base = out.count;
-      vertex(a, Flags.extruded, shade);
-      vertex(b, Flags.extruded, shade);
-      vertex(b, Flags.extruded | Flags.top, shade);
-      vertex(a, Flags.extruded | Flags.top, shade);
-      out.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-    }
-  }
-  const base = out.count;
-  for (const ring of polygon) {
-    for (const p of ring) vertex(p, Flags.extruded | Flags.top | Flags.roof, 255);
-  }
-  for (const i of roof) out.indices.push(base + i);
-}
-
 /** Sides of the polygon a tree's crown is drawn as. */
 export const CROWN_SIDES = 24;
-/** A standing tree's crown starts this far up its height; the trunk is below it. */
-export const CROWN_BASE = 0.45;
 
 /** A 32-bit FNV-1a hash of a string: a feature's seed, the same in every tile. */
 export function hashString(text: string): number {
@@ -641,10 +582,7 @@ export function buildTileGeometry(
   const ground = () => ({ fills: new Builder(), lines: new Builder(), points: new Builder() });
   const main = ground();
   const regional = ground();
-  const extrusions = new Builder();
-  const trunks = new Builder();
   const crowns = new Builder();
-  const standingCrowns = new Builder();
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
@@ -719,8 +657,8 @@ export function buildTileGeometry(
         if (marker) addPoint(p, classId(marker));
         if (landmark) addPoint(p, classId('marker_landmark' satisfies RenderClass));
       };
-      // A tree's crown, flat on the ground and standing on its trunk (tilted views), sized by
-      // the pipeline's `crown` diameter in meters. Its trunk's own cell is the `tree` point.
+      // A tree's crown, sized by the pipeline's `crown` diameter in meters. Its trunk's own cell
+      // is the `tree` point.
       const crown = Number(feature.properties.crown ?? 0);
       // Shaped by the tree's id (and its place along a tree row), so it is the same tree in
       // every tile that holds it.
@@ -735,14 +673,6 @@ export function buildTileGeometry(
         for (const q of ring)
           crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, reach(q));
         for (const i of triangles) crowns.indices.push(first + i);
-        // Standing, the crown starts at CROWN_BASE × its height (the cell shader).
-        addExtrusion(standingCrowns, [ring], triangles, (q, extra, shade) =>
-          standingCrowns.vertex(q.x, q.y, crownCls, height, flags | extra, id, shade, reach(q)),
-        );
-        const base = Math.round(height * CROWN_BASE);
-        const trunk = flags | Flags.extruded | Flags.trunk;
-        trunks.vertex(p.x, p.y, cls, base, trunk, id, variant);
-        trunks.vertex(p.x, p.y, cls, base, trunk | Flags.top, id, variant);
       };
       const isTree = className === 'tree' && !isRegion;
 
@@ -866,11 +796,6 @@ export function buildTileGeometry(
           }
           const triangles = earcut(coords, holes.length > 0 ? holes : null, 2);
           for (const i of triangles) fills.indices.push(base + i);
-          if (isBuilding(className) && height > 0) {
-            addExtrusion(extrusions, polygon, triangles, (p, extra, shade) =>
-              extrusions.vertex(p.x, p.y, cls, height, flags | extra, id, shade),
-            );
-          }
           const outer = polygon[0]!;
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           if (!isRegion && className === 'parking' && unitMeters) {
@@ -927,13 +852,7 @@ export function buildTileGeometry(
   });
   return {
     ...finish(main),
-    extrusions: { ...extrusions.finish(), indices: Uint32Array.from(extrusions.indices) },
-    trunks: trunks.finish(),
     crowns: { ...crowns.finish(), indices: Uint32Array.from(crowns.indices) },
-    standingCrowns: {
-      ...standingCrowns.finish(),
-      indices: Uint32Array.from(standingCrowns.indices),
-    },
     region: finish(regional),
     labels,
     life: life.finish(),
@@ -946,10 +865,7 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   const { region } = geometry;
   for (const g of [
     geometry.fills,
-    geometry.extrusions,
-    geometry.trunks,
     geometry.crowns,
-    geometry.standingCrowns,
     geometry.lines,
     geometry.points,
     region.fills,
@@ -965,9 +881,7 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   }
   out.push(
     geometry.fills.indices.buffer as ArrayBuffer,
-    geometry.extrusions.indices.buffer as ArrayBuffer,
     geometry.crowns.indices.buffer as ArrayBuffer,
-    geometry.standingCrowns.indices.buffer as ArrayBuffer,
     region.fills.indices.buffer as ArrayBuffer,
     ...lifeTransferables(geometry.life),
   );

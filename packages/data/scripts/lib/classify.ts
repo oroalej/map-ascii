@@ -77,8 +77,8 @@ const positive = (value: string | undefined) => {
 };
 
 /**
- * A tree's height and crown diameter in meters (the renderer draws its crown, and stands it up
- * in tilted views): `height` and `diameter_crown`, else typical values for its kind. Heights are
+ * A tree's height and crown diameter in meters (the renderer draws its crown, and the height
+ * casts its shadow): `height` and `diameter_crown`, else typical values for its kind. Heights are
  * capped at 255, the renderer's height byte.
  */
 export function treeSize(tags: Tags): { height: number; crown: number } {

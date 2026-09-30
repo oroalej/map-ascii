@@ -82,12 +82,11 @@ export type GeoJsonGeometry = z.infer<typeof GeoJsonGeometry>;
 
 const inRange = ([min, max]: readonly [number, number]) => z.number().min(min).max(max);
 
-export const CameraState = z.object({
+/** The map is always flat and north-up (SPEC.md §3), so a camera is just where and how close. */
+export const CameraState = z.strictObject({
   lat: inRange(CAMERA_RANGES.lat),
   lng: inRange(CAMERA_RANGES.lng),
   zoom: inRange(CAMERA_RANGES.zoom),
-  pitch: inRange(CAMERA_RANGES.pitch),
-  bearing: inRange(CAMERA_RANGES.bearing),
 });
 export type CameraState = z.infer<typeof CameraState>;
 

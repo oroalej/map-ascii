@@ -8,7 +8,7 @@
  *
  * The life layer (SPEC.md §4 "Life layer") draws on top of the map: an agent shows where the
  * map class under it allows (life/config.ts `cellBits`). The time of day tints everything:
- * night dims the map toward blue, lights some building cells as windows (tilted, only walls),
+ * night dims the map toward blue, lights some building cells as windows,
  * and turns on vehicles' head- and taillights; dusk warms it. From dusk, streetlights along major
  * and secondary roads cast pools of light (life/lights.ts); some are out and some flicker. Zoomed
  * out, those roads read as a lit corridor instead.
@@ -64,9 +64,8 @@ uniform bool u_shimmer;           // off with reduced motion
 uniform sampler2D u_life;         // RGBA8: glyph index, life class id, agent kind bits (0 none),
                                   // vehicles' and people's paint (low 4 bits) and part (high 4)
 uniform int u_cellBits[${MAX_CLASSES}]; // per map class: CellBit set
-uniform ivec2 u_origin;           // world cell of texel (0, 0), for window hashes (flat views)
-uniform bool u_tilted;            // perspective camera: windows by the cell pass's window key
-uniform sampler2D u_attr;         // cell pass attributes (flags; walls' window key)
+uniform ivec2 u_origin;           // world cell of texel (0, 0), for window hashes
+uniform sampler2D u_attr;         // cell pass attributes (flags: landmarks are floodlit)
 uniform float u_daylight;         // 0 night – 1 day
 uniform int u_vehicle;            // the vehicles' class id (paints, lights)
 uniform int u_boat;               // the boats' class id (paints, lights)
@@ -445,16 +444,9 @@ void main() {
     if ((landmarkFlags & ${Flags.landmark}) != 0) color = mix(color, LAMP_WHITE, 0.3 * floodOn);
   }
   if ((bits & ${CellBit.window}) != 0 && night > 0.0) {
-    // More windows light up as the night deepens; each flickers a little on its own beat.
-    // Flat views hash the world cell. Tilted, the grid is fixed to the screen, so windows go by
-    // the patch of wall the cell shows (cell.ts window key); roofs have none.
+    // More windows light up as the night deepens; each flickers a little on its own beat. The
+    // world cell's hash picks them, so they stay put as the map pans.
     uint h = cellHash(u_origin + cell);
-    if (u_tilted) {
-      vec4 attr = texelFetch(u_attr, cell, 0);
-      int flags = int(attr.g * 255.0 + 0.5);
-      bool wall = (flags & ${Flags.extruded}) != 0 && (flags & ${Flags.roof}) == 0;
-      h = wall ? cellHash(ivec2(int(attr.a * 255.0 + 0.5), 0)) : 0xffffffffu;
-    }
     if (float((h >> 4u) & 255u) / 255.0 < night * 0.12) {
       float beat = float((h >> 12u) & 7u) + 1.0;
       float flicker = u_shimmer ? 0.88 + 0.12 * sin(u_time * beat * 0.7) : 1.0;

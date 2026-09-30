@@ -19,9 +19,7 @@ import {
   DEFAULT_SUN,
   GUST_STEPS,
   TONE_SHIFT,
-  TREE_WIND,
   WIND_SHIFT,
-  EXTRUDE_ROW,
   FALLING,
   kindCodes,
   OUTLINE_ZOOM,
@@ -29,12 +27,11 @@ import {
   RISING,
   ROAD_AREA_ZOOM,
   RoofCode,
+  ROOF_ROW,
   ROOF_ZOOM,
   SEXTANT_ROW,
   SUB,
-  TRUNK_VARIANT,
   WALL_DOUBLE_ROW,
-  WALL_SHADE_STEPS,
   WALL_SINGLE_ROW,
   WATER_RATE,
   WATER_STROKE_GLYPHS,
@@ -63,13 +60,11 @@ uniform float u_wind;             // wind over grass: 1, or 0 with reduced motio
 uniform float u_zoom;
 uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
-uniform bool u_tilted;            // perspective camera: no outlines, 3D buildings
 uniform float u_cellAspect;       // cell height / width, for ridge directions
 uniform uint u_hover;             // feature index under the pointer (0 = none)
 uniform uint u_selected;          // selected feature index (0 = none)
 uniform uint u_highlight[${MAX_HIGHLIGHT}];
 uniform int u_highlightCount;
-uniform bool u_subcell;           // sub-cell edges (flat views)
 uniform sampler2D u_subClass;     // the cell pass at SUB samples per cell
 uniform sampler2D u_subAttr;
 uniform sampler2D u_subId;
@@ -112,10 +107,8 @@ uint unpackId(vec4 id) {
   return b.r | (b.g << 8u) | (b.b << 16u) | (b.a << 24u);
 }
 
-// The way toward the sun on the grid (x east, y south), or a fixed northwest at night; zero when
-// tilted, where the grid is the screen's and no side is lit.
+// The way toward the sun on the grid (x east, y south), or a fixed northwest at night.
 vec2 sunDir() {
-  if (u_tilted) return vec2(0.0);
   return u_sun.z > 0.0 ? normalize(u_sun.xy) : vec2(${float(DEFAULT_SUN[0])}, ${float(DEFAULT_SUN[1])});
 }
 
@@ -198,15 +191,9 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
 // A neighbor is outside if it is another feature, unless its class is see-through.
 // o[] holds "outside" for the 3x3 neighborhood: 0 NW, 1 N, 2 NE, 3 W, 5 E, 6 SW, 7 S, 8 SE.
 // With byRoad, "outside" means any class that is neither a carriageway nor see-through (curbs).
-// Wall modes: a feature's outline, a carriageway's curbs, or a 3D roof's rim.
+// Wall modes: a feature's outline, or a carriageway's curbs.
 const int OUTLINE = 0;
 const int CURBS = 1;
-const int ROOF_RIM = 2;
-
-bool isRoofAt(ivec2 q) {
-  q = clamp(q, ivec2(0), textureSize(u_attr, 0) - 1);
-  return (int(texelFetch(u_attr, q, 0).g * 255.0 + 0.5) & ${Flags.roof}) != 0;
-}
 
 int wallMask(ivec2 p, int mode) {
   vec4 id = idAt(p);
@@ -217,12 +204,9 @@ int wallMask(ivec2 p, int mode) {
       ivec2 q = p + ivec2(dx, dy);
       int c = classAt(q);
       bool seeThrough = ((u_seeThrough >> c) & 1) == 1;
-      // A roof's rim also runs where its own front wall shows (same id, not roof).
       bool outside = mode == CURBS
         ? ((u_roadMask >> c) & 1) == 0 && !seeThrough
-        : mode == ROOF_RIM
-          ? idAt(q) != id || !isRoofAt(q)
-          : idAt(q) != id && !seeThrough;
+        : idAt(q) != id && !seeThrough;
       o[(dy + 1) * 3 + dx + 1] = outside;
       edge = edge || outside;
     }
@@ -271,7 +255,7 @@ float castsAt(ivec2 q) {
 // Whether the cell is in shadow (glyphs/select.ts inShadow): looking toward the sun a cell
 // width at a time, something stands taller than the sun rises over that distance.
 bool inShadow(ivec2 p) {
-  if (u_tilted || u_sun.z <= 0.0) return false;
+  if (u_sun.z <= 0.0) return false;
   float self = castsAt(p);
   vec2 perStep = u_sun.xy * u_cellMeters.x / u_cellMeters;
   for (int k = 1; k <= ${SHADOW.steps}; k++) {
@@ -289,7 +273,7 @@ void main() {
   g_shadow = inShadow(p) ? ${SHADOW_STATE}.0 : 0.0;
   if (cls == 0 || kind == 0) {
     // An empty cell may still hold part of an area's edge, or a shadow on the ground.
-    if (!(u_subcell && subcellEdge(p, 0, vec4(0.0)))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
+    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
     return;
   }
   vec4 id = idAt(p);
@@ -308,41 +292,9 @@ void main() {
     return;
   }
 
-  int flags = int(attr.g * 255.0 + 0.5);
-
-  // 3D buildings (glyphs/select.ts extrusionVariant): solid roofs, walls shaded by facing.
-  // Standing trees: a trunk, and crowns in their own glyphs, darkest walls first, then the top.
-  if ((flags & ${Flags.extruded}) != 0) {
-    if ((flags & ${Flags.trunk}) != 0) {
-      emit(texelFetch(u_table, ivec2(${TRUNK_VARIANT}, ${EXTRUDE_ROW}), 0).r, cls);
-      return;
-    }
-    // A roof's rim, at the zoom flat views outline the building, so neighbors read apart.
-    int rimRow = wallRowFor(kind, attr);
-    if ((flags & ${Flags.roof}) != 0 && kind == ${kindCodes.building} && rimRow >= 0) {
-      int rim = wallMask(p, ROOF_RIM);
-      if (rim >= 0) {
-        emit(texelFetch(u_table, ivec2(rim, rimRow), 0).r, cls);
-        return;
-      }
-    }
-    int step = (flags & ${Flags.roof}) != 0 ? 3
-      : variant < ${WALL_SHADE_STEPS[0]} ? 0 : variant < ${WALL_SHADE_STEPS[1]} ? 1 : 2;
-    // A standing crown's leaves flutter in a gust, like a flat one's.
-    if (kind == ${kindCodes.foliage}) {
-      float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
-      if (gust >= ${float(TREE_WIND.step)}) step = foliageVariant(w, u_time, gust, false);
-    }
-    float glyph = kind == ${kindCodes.building}
-      ? texelFetch(u_table, ivec2(step, ${EXTRUDE_ROW}), 0).r
-      : texelFetch(u_table, ivec2(min(step, u_count[cls] - 1), cls), 0).r;
-    emit(glyph, cls);
-    return;
-  }
-
-  // Outlines at close zoom (glyphs/select.ts wallStyle); the tilted view shows 3D instead.
+  // Outlines at close zoom (glyphs/select.ts wallStyle).
   int wallRow = wallRowFor(kind, attr);
-  if (wallRow >= 0 && !u_tilted) {
+  if (wallRow >= 0) {
     int mask = wallMask(p, OUTLINE);
     if (mask >= 0) {
       float wall = texelFetch(u_table, ivec2(mask, wallRow), 0).r;
@@ -352,7 +304,7 @@ void main() {
   }
 
   // Areas' edges at a sixth of a cell.
-  if (u_subcell && isArea(cls) && subcellEdge(p, cls, id)) return;
+  if (isArea(cls) && subcellEdge(p, cls, id)) return;
 
   int v = 0;
   if (kind == ${kindCodes.road}) {
@@ -382,13 +334,13 @@ void main() {
     v = ${BUILDING_STEPS.map((limit, i) => `height < ${float(limit)} ? ${i} : `).join('')}${BUILDING_STEPS.length};
     // Roofs from above (glyphs/select.ts roofVariant): the ridge, and lit and shaded slopes;
     // flat roofs are solid. The ridge angle is in the variant byte.
-    if (height > 0.0 && !u_tilted && u_zoom >= ${float(ROOF_ZOOM)}) {
+    if (height > 0.0 && u_zoom >= ${float(ROOF_ZOOM)}) {
       int roof = int(attr.a * 255.0 + 0.5);
       if (roof == ${RoofCode.ridge}) {
         float theta = float(variant) / 255.0 * ${Math.PI};
         float phi = atan(sin(theta) / u_cellAspect, cos(theta));
         int bin = int(floor(phi / ${Math.PI / 4} + 0.5)) % 4;
-        float ridge = texelFetch(u_table, ivec2(${RIDGE_VARIANT} + bin, ${EXTRUDE_ROW}), 0).r;
+        float ridge = texelFetch(u_table, ivec2(${RIDGE_VARIANT} + bin, ${ROOF_ROW}), 0).r;
         emit(ridge, cls);
         return;
       }

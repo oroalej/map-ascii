@@ -61,36 +61,6 @@ export function labelCellShows(id: number, k: number, vis: number): boolean {
   return (h >>> 8) / 0x1000000 < vis;
 }
 
-/**
- * Tilted views (orbit mode, SPEC.md §3): past map mode's 15°, names thin out so the buildings
- * show. At 60°, street and small-place names keep to the nearer 45% of the screen, and major
- * roads and monuments to the nearer 72%; landmarks and place names of subdivisions and up
- * always show. In between, the far limit rises with the pitch.
- */
-export const TILT_LABEL_PITCH = 15;
-const TILT_FULL_PITCH = 60;
-const FAR_SHARE: Partial<Record<LabelRank, number>> = {
-  [LabelRank.roadMajor]: 0.28,
-  [LabelRank.monument]: 0.28,
-  [LabelRank.street]: 0.55,
-  [LabelRank.place]: 0.55,
-  [LabelRank.streetMinor]: 0.55,
-};
-
-/**
- * Whether a label anchored at `row` (0 = top, the far edge of a tilted view) of `rows` shows at
- * `pitch` degrees.
- */
-export function tiltedLabelShows(rank: number, row: number, rows: number, pitch: number): boolean {
-  const share = FAR_SHARE[rank as LabelRank];
-  if (share === undefined || pitch <= TILT_LABEL_PITCH || rows <= 0) return true;
-  const t = Math.min(1, (pitch - TILT_LABEL_PITCH) / (TILT_FULL_PITCH - TILT_LABEL_PITCH));
-  return row >= rows * share * t;
-}
-
-/** Extra rows kept clear above and below each label in tilted views, so fewer fit. */
-export const TILT_LABEL_GAP = 1;
-
 /** Longest line before a label wraps, in cells. */
 export const LABEL_WIDTH = 18;
 
@@ -114,7 +84,7 @@ export type Overlay = {
   takenCells?: Uint8Array;
 };
 
-/** How far past the grid's edges `takenCells` reaches (a halo, and a tilted view's gap). */
+/** How far past the grid's edges `takenCells` reaches (at least a label's halo). */
 const TAKEN_PAD = 4;
 
 export const createOverlay = (cols: number, rows: number): Overlay => ({
@@ -274,22 +244,17 @@ const withHalo = (b: Box, mode: LabelMode): Box =>
     ? { ...b, top: b.top - 1, height: b.height + 2 }
     : { ...b, left: b.left - 1, width: b.width + 2 };
 
-const spaced = (b: Box, gap: number): Box =>
-  gap > 0 ? { ...b, top: b.top - gap, height: b.height + 2 * gap } : b;
-
 /**
  * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
  * one-cell halo; a label whose text fits nowhere inside `area` (e.g. the on-screen cells)
  * without overlapping what is already placed is dropped, and so is one whose text was already
- * placed nearby (a street's other ways). `gap` keeps that many more rows clear above and below
- * each label (not drawn). Returns the labels placed, in placement order.
+ * placed nearby (a street's other ways). Returns the labels placed, in placement order.
  */
 export function placeLabels(
   overlay: Overlay,
   candidates: readonly LabelCandidate[],
   glyphIndex: (char: string) => number | undefined,
   area: LabelArea = fullArea(overlay),
-  gap = 0,
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
@@ -322,8 +287,7 @@ export function placeLabels(
         b.top >= area.top &&
         b.left + b.width <= area.right &&
         b.top + b.height <= area.bottom;
-      const clear = spaced(withHalo(b, mode), gap);
-      return inside && !isTaken(overlay, clear);
+      return inside && !isTaken(overlay, withHalo(b, mode));
     });
     if (!box) continue;
     const halo = withHalo(box, mode);

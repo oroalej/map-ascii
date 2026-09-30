@@ -4,7 +4,7 @@ import { createAtlas } from './index';
 const options = {
   tilesUrl: '/tiles/example.pmtiles',
   bounds: [-1, -1, 1, 1] as [number, number, number, number],
-  initialCamera: { lat: 0, lng: 0, zoom: 13, pitch: 0, bearing: 0 },
+  initialCamera: { lat: 0, lng: 0, zoom: 13 },
   year: 2026,
 };
 

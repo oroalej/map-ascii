@@ -8,24 +8,17 @@ import {
   FLY_MIN_MS,
   FLY_REDUCED_MS,
   flyPath,
-  isTilted,
-  MAX_PITCH,
   MAX_ZOOM,
-  multiply,
-  orbitBy,
   panBy,
-  panByView,
   project,
   TILE_SIZE,
   unproject,
-  viewportFor,
-  wrapBearing,
   zoomAround,
   zoomAroundClamped,
   type CameraLimits,
 } from './camera';
 
-const camera: CameraState = { lat: 13.62, lng: 123.19, zoom: 15, pitch: 0, bearing: 0 };
+const camera: CameraState = { lat: 13.62, lng: 123.19, zoom: 15 };
 const limits: CameraLimits = { bounds: [122, 11, 125, 15], minZoom: 7, maxZoom: 19 };
 
 /** The ground point under a screen offset (from the view center). */
@@ -171,8 +164,8 @@ describe('fitZoom', () => {
 
 describe('flyPath', () => {
   const size = { width: 1200, height: 800 };
-  const from: CameraState = { lat: 13.62, lng: 123.19, zoom: 17, pitch: 0, bearing: 10 };
-  const far: CameraState = { lat: 12.5, lng: 124.0, zoom: 16, pitch: 30, bearing: -170 };
+  const from: CameraState = { lat: 13.62, lng: 123.19, zoom: 17 };
+  const far: CameraState = { lat: 12.5, lng: 124.0, zoom: 16 };
 
   it('starts and ends at the two cameras', () => {
     const path = flyPath(from, far, size);
@@ -193,12 +186,6 @@ describe('flyPath', () => {
       expect(d).toBeLessThanOrEqual(last + 1e-9);
       last = d;
     }
-  });
-
-  it('turns the short way round', () => {
-    // 10° → -170°: through ±180, not through 0.
-    const mid = flyPath(from, far, size).at(0.5).bearing;
-    expect(Math.abs(mid)).toBeGreaterThan(90);
   });
 
   it('clamps the duration, and keeps it short with reduced motion', () => {
@@ -225,42 +212,5 @@ describe('flyPath', () => {
     expect(easeInOut(0.5)).toBeCloseTo(0.5);
     expect(easeInOut(1)).toBe(1);
     expect(easeInOut(0.1)).toBeLessThan(0.1);
-  });
-});
-
-describe('orbit (pitch and bearing)', () => {
-  it('wraps bearings into (-180, 180] and clamps pitch to 0–60°', () => {
-    expect([0, 180, 181, -180, 360, -190].map(wrapBearing)).toEqual([0, 180, -179, 180, 0, 170]);
-    const out = clampCamera({ ...camera, pitch: 80, bearing: 270 }, limits);
-    expect(out).toMatchObject({ pitch: MAX_PITCH, bearing: -90 });
-    expect(orbitBy(camera, 30, -10)).toMatchObject({ bearing: 30, pitch: 0 });
-  });
-
-  it('knows when the view is tilted or rotated', () => {
-    expect(isTilted(camera)).toBe(false);
-    expect(isTilted({ ...camera, pitch: 20 })).toBe(true);
-    expect(isTilted({ ...camera, bearing: -45 })).toBe(true);
-  });
-
-  it('pans flat views exactly as panBy, and tilted views by the ground under the center', () => {
-    const size = { width: 800, height: 600 };
-    expect(panByView(camera, 40, -25, size)).toEqual(panBy(camera, 40, -25));
-    // Rotated 90°: dragging right moves the view along a north–south line instead.
-    const rotated = { ...camera, bearing: 90 };
-    const moved = panByView(rotated, 100, 0, size);
-    expect(Math.abs(moved.lat - camera.lat)).toBeGreaterThan(Math.abs(moved.lng - camera.lng));
-    expect(viewportFor(rotated, size).project([moved.lng, moved.lat])[0]).toBeCloseTo(300, 0);
-  });
-
-  it('multiplies column-major matrices', () => {
-    // prettier-ignore
-    const translate = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1];
-    // prettier-ignore
-    const scale = [2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1];
-    // Scale then translate: a point (1, 1, 1) lands at (7, 9, 11).
-    const m = multiply(translate, scale);
-    const apply = (p: number[]) =>
-      [0, 1, 2].map((r) => m[r]! * p[0]! + m[4 + r]! * p[1]! + m[8 + r]! * p[2]! + m[12 + r]!);
-    expect(apply([1, 1, 1])).toEqual([7, 9, 11]);
   });
 });

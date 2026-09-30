@@ -52,7 +52,7 @@ export type CellTargets = {
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
   /**
-   * The cell pass again at `SUB.cols × SUB.rows` samples per cell (flat views), for sub-cell
+   * The cell pass again at `SUB.cols × SUB.rows` samples per cell, for sub-cell
    * edges: class, attributes, and feature id, like the cell-resolution targets.
    */
   sub: RasterTargets;
@@ -239,10 +239,7 @@ type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
 
 /** A tile's geometry on the GPU; `region` holds its region-only features. */
 export type TileMesh = GroundMesh & {
-  extrusions: Mesh;
-  trunks: Mesh;
   crowns: Mesh;
-  standingCrowns: Mesh;
   region: GroundMesh;
 };
 
@@ -287,10 +284,7 @@ const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({
 export function uploadTile(gl: GL, geometry: TileGeometry): TileMesh {
   return {
     ...uploadGround(gl, geometry),
-    extrusions: uploadMesh(gl, geometry.extrusions, geometry.extrusions.indices),
-    trunks: uploadMesh(gl, geometry.trunks),
     crowns: uploadMesh(gl, geometry.crowns, geometry.crowns.indices),
-    standingCrowns: uploadMesh(gl, geometry.standingCrowns, geometry.standingCrowns.indices),
     region: uploadGround(gl, geometry.region),
   };
 }
@@ -299,10 +293,7 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
   const { region } = mesh;
   for (const m of [
     mesh.fills,
-    mesh.extrusions,
-    mesh.trunks,
     mesh.crowns,
-    mesh.standingCrowns,
     mesh.lines,
     mesh.points,
     region.fills,
@@ -314,25 +305,12 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
   }
 }
 
-/** Draw a tile's tree crowns: flat, or standing on their trunks (tilted cameras). */
-export function drawCrowns(gl: GL, mesh: TileMesh, standing: boolean) {
-  const crowns = standing ? mesh.standingCrowns : mesh.crowns;
+/** Draw a tile's tree crowns. */
+export function drawCrowns(gl: GL, mesh: TileMesh) {
+  const { crowns } = mesh;
   if (crowns.count === 0) return;
   gl.bindVertexArray(crowns.vao);
   gl.drawElements(gl.TRIANGLES, crowns.count, gl.UNSIGNED_INT, 0);
-}
-
-/** Draw a tile's 3D buildings and tree trunks (tilted cameras only). */
-export function drawExtrusions(gl: GL, mesh: TileMesh) {
-  if (mesh.extrusions.count > 0) {
-    gl.bindVertexArray(mesh.extrusions.vao);
-    gl.drawElements(gl.TRIANGLES, mesh.extrusions.count, gl.UNSIGNED_INT, 0);
-  }
-  // Trunks are lines, so they cover a cell however thin they are.
-  if (mesh.trunks.count > 0) {
-    gl.bindVertexArray(mesh.trunks.vao);
-    gl.drawArrays(gl.LINES, 0, mesh.trunks.count);
-  }
 }
 
 /**

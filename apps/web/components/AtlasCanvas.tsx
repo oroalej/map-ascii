@@ -122,9 +122,13 @@ export function AtlasCanvas({
     if (!canvas || !supported || !meta) return;
     const store = useAtlasStore.getState();
     // A camera already in the store (e.g. after a remount) wins; else the URL's, over the
-    // city's default view.
+    // city's default view. Only lat, lng, and zoom are taken from the meta: meta files built
+    // before the map went flat also carry pitch and bearing.
+    const { lat, lng, zoom } = meta.defaultCamera;
     const camera = store.camera ?? {
-      ...meta.defaultCamera,
+      lat,
+      lng,
+      zoom,
       ...parseViewParams(window.location.search).camera,
     };
     store.initCamera(camera);

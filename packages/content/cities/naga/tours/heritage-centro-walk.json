@@ -7,14 +7,14 @@
   "status": "draft",
   "steps": [
     {
-      "camera": { "lat": 13.6255, "lng": 123.1862, "zoom": 16, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6255, "lng": 123.1862, "zoom": 16 },
       "duration_ms": 6000,
       "narration": {
         "en": "TODO(verify) The Centro, Naga's historic core, between the Naga River and the Cathedral."
       }
     },
     {
-      "camera": { "lat": 13.6245, "lng": 123.1859, "zoom": 18.2, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6245, "lng": 123.1859, "zoom": 18.2 },
       "duration_ms": 8000,
       "narration": {
         "en": "TODO(verify) Plaza Quince Martires, named for fifteen Bicolanos executed during the Philippine Revolution. Its monument stands at the center."
@@ -28,7 +28,7 @@
       ]
     },
     {
-      "camera": { "lat": 13.6234, "lng": 123.1849, "zoom": 18.2, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6234, "lng": 123.1849, "zoom": 18.2 },
       "duration_ms": 7000,
       "narration": {
         "en": "TODO(verify) Plaza Rizal, with its monument to José Rizal."
@@ -42,7 +42,7 @@
       ]
     },
     {
-      "camera": { "lat": 13.624, "lng": 123.1851, "zoom": 18.4, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.624, "lng": 123.1851, "zoom": 18.4 },
       "duration_ms": 6000,
       "narration": {
         "en": "TODO(verify) Plaza Quezon, between the two, the city's main gathering place."
@@ -56,7 +56,7 @@
       ]
     },
     {
-      "camera": { "lat": 13.6245, "lng": 123.1863, "zoom": 18.2, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6245, "lng": 123.1863, "zoom": 18.2 },
       "duration_ms": 7000,
       "narration": {
         "en": "TODO(verify) San Francisco Parish, the Parish of St. Francis of Assisi, facing the plazas."
@@ -70,7 +70,7 @@
       ]
     },
     {
-      "camera": { "lat": 13.6262, "lng": 123.1862, "zoom": 16.8, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6262, "lng": 123.1862, "zoom": 16.8 },
       "duration_ms": 8000,
       "narration": {
         "en": "TODO(verify) General Luna, P. Burgos, and Elias Angeles streets: the old commercial streets of the Centro."
@@ -106,7 +106,7 @@
       ]
     },
     {
-      "camera": { "lat": 13.6283, "lng": 123.1873, "zoom": 17.8, "pitch": 0, "bearing": 0 },
+      "camera": { "lat": 13.6283, "lng": 123.1873, "zoom": 17.8 },
       "duration_ms": 8000,
       "narration": {
         "en": "TODO(verify) The Naga Metropolitan Cathedral, seat of the Archdiocese of Caceres, with its belfries at the front."
@@ -120,11 +120,11 @@
       ]
     },
     {
-      "camera": { "lat": 13.6245, "lng": 123.186, "zoom": 17, "pitch": 60, "bearing": 15 },
+      "camera": { "lat": 13.6262, "lng": 123.1866, "zoom": 16 },
       "fly_ms": 5000,
       "duration_ms": 9000,
       "narration": {
-        "en": "TODO(verify) Looking north across the Centro's rooftops, from the plazas toward the Cathedral."
+        "en": "TODO(verify) The Centro from above: the plazas to the south, the Cathedral to the north."
       }
     }
   ]

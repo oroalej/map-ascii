@@ -6,14 +6,13 @@
  */
 import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
-import { isTilted, multiply, project, TILE_SIZE, viewportFor } from './camera';
+import { project, TILE_SIZE } from './camera';
 import { classDepths, classId, classVisibility, groundClasses, groundDepth } from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
   copyRaster,
   drawCrowns,
-  drawExtrusions,
   drawGround,
   uploadLife,
   uploadLights,
@@ -27,13 +26,10 @@ import {
   labelVisibility,
   packOverlay,
   placeLabels,
-  TILT_LABEL_GAP,
-  TILT_LABEL_PITCH,
-  tiltedLabelShows,
   streetMode,
   type LabelCandidate,
 } from './labels';
-import { cellBits, WINDOW } from './life/config';
+import { cellBits } from './life/config';
 import { packLife } from './life/draw';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
@@ -80,15 +76,15 @@ export type View = {
 };
 
 /**
- * Where the cell grid sits: the world cell of texel (0, 0) (flat views; 0 when tilted), and the
- * device-pixel offset of the screen's top-left corner inside the grid.
+ * Where the cell grid sits: the world cell of texel (0, 0), and the device-pixel offset of the
+ * screen's top-left corner inside the grid.
  */
 export type Grid = { originCol: number; originRow: number; shiftX: number; shiftY: number };
 
 /** The grid for a view, and how tiles and points map onto it. */
 export type GridPlacement = {
   grid: Grid;
-  /** Tile units and meters → cell-grid clip space. */
+  /** Tile units → cell-grid clip space. */
   tileMatrix: (tile: TileId) => number[];
   /** A point's position on the grid, in (fractional) cells. */
   toCell: (lng: number, lat: number) => [number, number];
@@ -101,38 +97,8 @@ export function placeGrid(
   rows: number,
 ): GridPlacement {
   const { camera, dpr, width: w, height: h } = view;
-  if (isTilted(camera)) {
-    const viewport = viewportFor(camera, { width: w / dpr, height: h / dpr });
-    // Perspective: the grid is fixed to the screen, with a one-cell margin on each side.
-    // prettier-ignore
-    const screenToGrid = [
-      w / (cellDev.w * cols), 0, 0, 0,
-      0, -h / (cellDev.h * rows), 0, 0,
-      0, 0, 1, 0,
-      (w + 2 * cellDev.w) / (cellDev.w * cols) - 1, (h + 2 * cellDev.h) / (cellDev.h * rows) - 1, 0, 1,
-    ];
-    const toGrid = multiply(screenToGrid, viewport.viewProjectionMatrix);
-    const unitsPerMeter = viewport.distanceScales.unitsPerMeter[2]!;
-    return {
-      grid: { originCol: 0, originRow: 0, shiftX: cellDev.w, shiftY: cellDev.h },
-      tileMatrix: ({ z, x, y }) => {
-        const size = TILE_SIZE / 2 ** z;
-        // prettier-ignore
-        return multiply(toGrid, [
-          size / EXTENT, 0, 0, 0,
-          0, -size / EXTENT, 0, 0,
-          0, 0, unitsPerMeter, 0,
-          x * size, TILE_SIZE - y * size, 0, 1,
-        ]);
-      },
-      toCell: (lng, lat) => {
-        // The grid starts one cell above and left of the screen.
-        const [x, y] = viewport.project([lng, lat]) as [number, number];
-        return [(x * dpr) / cellDev.w + 1, (y * dpr) / cellDev.h + 1];
-      },
-    };
-  }
-  // Flat north-up: the grid is anchored to the world, shifted by the sub-cell pan offset.
+  // The map is flat and north-up (SPEC.md §3): the grid is anchored to the world, shifted by the
+  // sub-cell pan offset.
   const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
   const left = Math.round(cx * dpr - w / 2);
   const top = Math.round(cy * dpr - h / 2);
@@ -179,24 +145,9 @@ export function screenArea(view: View, grid: Grid, cellDev: CellSize = view.cell
 /** A tile to draw and its mesh. */
 export type TileDraw = { tile: TileId; mesh: TileMesh };
 
-/** Window bays repeat after this many, so the tile offsets stay exact in float32. */
-export const FACADE_PERIOD = 4096;
-
-/**
- * Tile units → window bays (life/config.ts `WINDOW`) for the cell pass's `u_facade`: the tile's
- * origin in bays (modulo `FACADE_PERIOD`, taken here in doubles) and bays per tile unit. Bays
- * are in mercator meters, so they line up across tiles of every zoom and never move.
- */
-export function facadeFrame({ z, x, y }: TileId): [number, number, number] {
-  const scale = MERCATOR_METERS / 2 ** z / EXTENT / WINDOW.bay;
-  const wrap = (n: number) =>
-    (((n * EXTENT * scale) % FACADE_PERIOD) + FACADE_PERIOD) % FACADE_PERIOD;
-  return [wrap(x), wrap(y), scale];
-}
-
 /**
  * Rasterize the region's own features (from their coarser tiles) and then the view's tiles into
- * the cell targets; 3D buildings stand up only in the tilted view.
+ * the cell targets, once per cell and once at `SUB` samples per cell.
  */
 export function cellPass(
   gl: GL,
@@ -208,7 +159,6 @@ export function cellPass(
 ) {
   const { cols, rows } = targets;
   const { camera } = view;
-  const tilted = isTilted(camera);
   const program = programs.cell;
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LESS);
@@ -247,17 +197,10 @@ export function cellPass(
   // Everything but the tree crowns, which the crown pass adds (and moves) over this base.
   begin(targets.base.fbo, cols, rows, [1, 1]);
   drawFlat();
-  if (tilted) {
-    layers.tiles.forEach(({ tile, mesh }, i) => {
-      twgl.setUniforms(program, { u_matrix: matrices[i]!, u_facade: facadeFrame(tile) });
-      drawExtrusions(gl, mesh);
-    });
-  } else {
-    // The same ground again at SUB samples per cell, for sub-cell edges (select pass).
-    const { subBase } = targets;
-    begin(subBase.fbo, subBase.width, subBase.height, [SUB.cols, SUB.rows]);
-    drawFlat();
-  }
+  // The same ground again at SUB samples per cell, for sub-cell edges (select pass).
+  const { subBase } = targets;
+  begin(subBase.fbo, subBase.width, subBase.height, [SUB.cols, SUB.rows]);
+  drawFlat();
   gl.bindVertexArray(null);
   gl.disable(gl.DEPTH_TEST);
 }
@@ -280,10 +223,9 @@ export function crownPass(
   wind: WindNow,
 ) {
   const { cols, rows, base, subBase, sub } = targets;
-  const tilted = isTilted(view.camera);
   const program = programs.cell;
   copyRaster(gl, base.fbo, targets.cellFbo, cols, rows);
-  if (!tilted) copyRaster(gl, subBase.fbo, sub.fbo, sub.width, sub.height);
+  copyRaster(gl, subBase.fbo, sub.fbo, sub.width, sub.height);
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LESS);
   gl.useProgram(program.program);
@@ -303,7 +245,7 @@ export function crownPass(
   });
   // Only the tiles with crowns are drawn, and their matrices are worked out once for both grids.
   const drawn = tiles
-    .filter(({ mesh }) => (tilted ? mesh.standingCrowns : mesh.crowns).count > 0)
+    .filter(({ mesh }) => mesh.crowns.count > 0)
     .map(({ tile, mesh }) => ({ mesh, matrix: placement.tileMatrix(tile) }));
   const draw = (fbo: WebGLFramebuffer, width: number, height: number, sample: [number, number]) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -311,11 +253,11 @@ export function crownPass(
     twgl.setUniforms(program, { u_sub: sample });
     for (const { mesh, matrix } of drawn) {
       twgl.setUniforms(program, { u_matrix: matrix });
-      drawCrowns(gl, mesh, tilted);
+      drawCrowns(gl, mesh);
     }
   };
   draw(targets.cellFbo, cols, rows, [1, 1]);
-  if (!tilted) draw(sub.fbo, sub.width, sub.height, [SUB.cols, SUB.rows]);
+  draw(sub.fbo, sub.width, sub.height, [SUB.cols, SUB.rows]);
   gl.bindVertexArray(null);
   gl.disable(gl.DEPTH_TEST);
 }
@@ -339,7 +281,6 @@ export function overlayPass(
   const { camera } = view;
   const { toCell } = placement;
   const overlay = createOverlay(targets.labelCols, targets.labelRows);
-  const tilted = isTilted(camera);
   const area = screenArea(view, placement.grid, view.labelDev);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
@@ -363,7 +304,6 @@ export function overlayPass(
     ) {
       continue;
     }
-    if (tilted && !tiltedLabelShows(label.rank, row, targets.labelRows, camera.pitch)) continue;
     candidates.push({
       id: label.id,
       text: label.text,
@@ -371,12 +311,11 @@ export function overlayPass(
       vis,
       col: Math.floor(col),
       row: Math.floor(row),
-      // Street names follow the street in flat views; tilted ones keep them beside it.
-      mode: label.angle !== undefined && !tilted ? streetMode(label.angle) : 'beside',
+      // Street names follow the street.
+      mode: label.angle !== undefined ? streetMode(label.angle) : 'beside',
     });
   }
-  const gap = camera.pitch > TILT_LABEL_PITCH ? TILT_LABEL_GAP : 0;
-  const placed = placeLabels(overlay, candidates, glyphIndex, area, gap);
+  const placed = placeLabels(overlay, candidates, glyphIndex, area);
   uploadOverlay(gl, targets, packOverlay(overlay));
   return placed;
 }
@@ -424,13 +363,11 @@ export function selectPass(
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
     u_roadMask: roads,
-    u_tilted: isTilted(view.camera),
     u_cellAspect: view.cellDev.h / view.cellDev.w,
     u_hover: highlights.hover,
     u_selected: highlights.selected,
     u_highlight: highlights.highlight,
     u_highlightCount: highlights.highlightCount,
-    u_subcell: !isTilted(view.camera),
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_subId: targets.sub.idTex,
@@ -497,8 +434,8 @@ export function lifePass(
     agents,
     theme,
     (glyph) => themeRes.map.atlas.index(glyph),
-    // Birds' shadows, flat views only (like the map's, glyphs/select.ts inShadow).
-    isTilted(view.camera) ? null : sun,
+    // Birds' shadows (like the map's, glyphs/select.ts inShadow).
+    sun,
   );
   uploadLife(gl, targets, lifeTexels);
   return drawn;
@@ -591,7 +528,6 @@ export function glyphPass(
     u_cellBits: lifeCellBits,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
-    u_tilted: isTilted(view.camera),
     u_daylight: daylight,
     u_light: targets.lightTex,
     u_lampShow: lampShow,

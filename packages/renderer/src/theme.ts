@@ -25,8 +25,8 @@ export type RGBA = readonly [number, number, number, number];
  *   of wind, the pattern leans downwind and the foliage flutters to 8
  * - `crop`: rows by `y` (0–1) at rest; in a gust, the rows lean right (2) or left (3) and the
  *   furrows ripple flat (4)
- * - `foliage`: a tree's crown: its rim (0), its inside (1, and a dense 4 here and there); standing
- *   (by shade, darkest first, then the top: 0–3); in a gust, the leaves flutter between 0 and 1
+ * - `foliage`: a tree's crown: its rim (0), its inside (1, and a dense 4 here and there); in a
+ *   gust, the leaves flutter between 0 and 1
  */
 export type GlyphKind =
   | 'road'
@@ -256,9 +256,8 @@ function makeTheme(background: number, c: Palette): Theme {
         color: c.trees,
         fill: 0.1,
       },
-      // A tree's crown around its trunk; standing (tilted views), its walls darkest first, then
-      // its top (glyphs/select.ts extrusionVariant). Flat, its rim is `%` and its inside `&`, with
-      // a dense `@` here and there (glyphs/select.ts `CrownGlyph`). In the wind it sways (the
+      // A tree's crown around its trunk: its rim is `%` and its inside `&`, with a dense `@` here
+      // and there (glyphs/select.ts `CrownGlyph`). In the wind it sways (the
       // cell shader) and its leaves flutter between `%` and `&`.
       tree_crown: {
         kind: 'foliage',

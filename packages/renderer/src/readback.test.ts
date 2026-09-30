@@ -114,7 +114,7 @@ describe('Picker', () => {
     rows: 10,
     dpr: 1,
     grid: { shiftX: 0, shiftY: 0, cellWidth: 10, cellHeight: 10 },
-    camera: { lat: 0, lng: 0, zoom: 14, pitch: 0, bearing: 0 },
+    camera: { lat: 0, lng: 0, zoom: 14 },
     size: { width: 100, height: 100 },
     generation,
   });

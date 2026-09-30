@@ -6,7 +6,6 @@ import {
   buildTileGeometry,
   classifyRings,
   createIdRegistry,
-  CROWN_BASE,
   CROWN_SIDES,
   crownRing,
   hashString,
@@ -22,7 +21,6 @@ import {
   roofRidge,
   streetLabel,
   tileToLngLat,
-  wallShade,
   ringCentroid,
   unpackId,
   type TileFeatureLike,
@@ -494,25 +492,6 @@ describe('buildTileGeometry', () => {
     expect(meta[3]).toBe(3);
   });
 
-  it('extrudes buildings with a height: a wall quad per edge and a roof', () => {
-    const building = feature(3, { id: 'osm:way/30', class: 'building', height: 9 }, [
-      square(0, 0, 100),
-    ]);
-    const ground = feature(3, { id: 'osm:way/31', class: 'building_school' }, [square(200, 0, 50)]);
-    const { extrusions } = buildTileGeometry(
-      { buildings: layer([building, ground]) },
-      createIdRegistry(),
-    );
-    const v = vertices(extrusions);
-    // 4 edges × 4 wall vertices + 5 roof vertices (the closed ring); nothing for the ground.
-    expect(v).toHaveLength(4 * 4 + 5);
-    expect(extrusions.indices.length).toBe(4 * 6 + 2 * 3);
-    expect(v.every((p) => (p.flags! & Flags.extruded) !== 0 && p.height === 9)).toBe(true);
-    const tops = v.filter((p) => (p.flags! & Flags.top) !== 0);
-    expect(tops).toHaveLength(4 * 2 + 5);
-    expect(v.filter((p) => (p.flags! & Flags.roof) !== 0)).toHaveLength(5);
-  });
-
   describe('trees', () => {
     const tile = { z: 16, x: 55_194, y: 30_268 };
     const units = (meters: number) => meters / metersPerUnit(tile);
@@ -543,25 +522,6 @@ describe('buildTileGeometry', () => {
       expect(vertices(points)).toEqual([expect.objectContaining({ cls: classId('tree') })]);
     });
 
-    it('stands the crown on a trunk: a line from the ground to the crown', () => {
-      const { extrusions, standingCrowns, trunks } = build(tree({ height: 20 }));
-      expect(extrusions.positions).toHaveLength(0);
-      const walls = vertices(standingCrowns);
-      expect(walls.length).toBeGreaterThan(0);
-      expect(walls.every((v) => v.cls === classId('tree_crown') && v.height === 20)).toBe(true);
-      // Walls from the crown's base (the cell shader: CROWN_BASE × height) to its top.
-      expect(walls.some((v) => (v.flags! & Flags.top) === 0)).toBe(true);
-      expect(Array.from(standingCrowns.ridge).every((reach) => reach > 0)).toBe(true);
-      const base = Math.round(20 * CROWN_BASE);
-      const trunk = vertices(trunks);
-      expect(trunk).toHaveLength(2);
-      for (const v of trunk) {
-        expect(v).toMatchObject({ x: 2000, y: 2000, cls: classId('tree'), height: base });
-        expect(v.flags! & (Flags.extruded | Flags.trunk)).toBe(Flags.extruded | Flags.trunk);
-      }
-      expect(trunk.map((v) => (v.flags! & Flags.top) !== 0)).toEqual([false, true]);
-    });
-
     it('draws no crown without a size or a tile to measure it in', () => {
       expect(build(tree({ crown: undefined })).crowns.positions).toHaveLength(0);
       const { crowns } = buildTileGeometry({ poi: layer([tree()]) }, createIdRegistry());
@@ -575,8 +535,9 @@ describe('buildTileGeometry', () => {
           [1000 + Math.round(units(40)), 1000],
         ],
       ]);
-      const { trunks } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
-      expect(vertices(trunks)).toHaveLength(6 * 2); // at 0, 8, 16, 24, 32, and 40 m
+      const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
+      // At 0, 8, 16, 24, 32, and 40 m.
+      expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
     });
 
     it('gives each tree its own lumpy crown, the same wherever it is built', () => {
@@ -646,12 +607,6 @@ describe('buildTileGeometry', () => {
       expect(variantCode('trees', 'broadleaved')).toBe(3);
       expect(variantCode('tree', 'baobab')).toBe(0);
     });
-  });
-
-  it('shades walls by how directly they face the light (from the south-east)', () => {
-    expect(wallShade(0, 1)).toBeGreaterThan(wallShade(1, 0)); // south-facing brighter than east
-    expect(wallShade(0, 1)).toBeGreaterThan(wallShade(0, -1)); // than north-facing
-    expect(wallShade(0, -1)).toBeLessThan(40);
   });
 
   it('puts a pitched roof ridge along the footprint long axis, lit side positive', () => {

@@ -1,9 +1,8 @@
 import type { CameraState } from '@atlas/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { project, TILE_SIZE, viewportFor } from './camera';
+import { project, TILE_SIZE } from './camera';
 import {
   ancestorAt,
-  boundsTiles,
   findAncestor,
   LruCache,
   parentOf,
@@ -16,7 +15,7 @@ import {
 
 const header: TileHeader = { minZoom: 12, maxZoom: 16, bounds: [123.1, 13.5, 123.4, 13.8] };
 const size = { width: 1280, height: 800 };
-const at = (zoom: number): CameraState => ({ lat: 13.62, lng: 123.19, zoom, pitch: 0, bearing: 0 });
+const at = (zoom: number): CameraState => ({ lat: 13.62, lng: 123.19, zoom });
 
 describe('tileZoom', () => {
   it('uses the archive level for the zoom, overzooming past max and underzooming below min', () => {
@@ -95,32 +94,6 @@ describe('LruCache', () => {
     cache.set('a', 'A2');
     expect(evicted).toHaveBeenCalledWith('A1');
     expect(cache.get('a')).toBe('A2');
-  });
-});
-
-describe('boundsTiles (tilted views)', () => {
-  it('covers a tilted view, which reaches farther than the flat one', () => {
-    const flat = viewTiles(at(15), size, header);
-    const tilted = { ...at(15), pitch: 55 };
-    const [[w, s], [e, n]] = viewportFor(tilted, size).getBounds() as [
-      [number, number],
-      [number, number],
-    ];
-    const [[, fs], [, fn]] = viewportFor(at(15), size).getBounds() as [
-      [number, number],
-      [number, number],
-    ];
-    expect(n - s).toBeGreaterThan(fn - fs); // the tilted view sees farther toward the horizon
-    const tiles = boundsTiles([w, s, e, n], 15, header, [tilted.lng, tilted.lat]);
-    expect(tiles.length).toBeGreaterThan(flat.length);
-    // Nearest to the center first.
-    const [cx, cy] = project(tilted.lng, tilted.lat, 15).map((v) => Math.floor(v / TILE_SIZE));
-    expect(tiles[0]).toEqual({ z: 15, x: cx, y: cy });
-  });
-
-  it('stays within the archive data and the cap', () => {
-    expect(boundsTiles([0, 0, 1, 1], 14, header, [0.5, 0.5])).toEqual([]);
-    expect(boundsTiles([-180, -85, 180, 85], 14, header, [123.2, 13.6], 10)).toHaveLength(10);
   });
 });
 

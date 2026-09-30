@@ -17,7 +17,6 @@ import {
   crownIsDry,
   crownTone,
   DEFAULT_SUN,
-  EXTRUDE_ROW,
   foliageVariant,
   GRASS,
   GUST_STEPS,
@@ -25,7 +24,6 @@ import {
   grassCell,
   grassVariant,
   kindCodes,
-  MAX_VARIANTS,
   selectGlyph,
   STIR,
   subcellAreas,
@@ -37,8 +35,6 @@ import {
   toneColor,
   TREE_WIND,
   treeGust,
-  TRUNK_VARIANT,
-  trunkGlyph,
   valueNoise,
   waterVariant,
   WIND,
@@ -489,8 +485,6 @@ describe('wind levels and tones', () => {
 });
 
 describe('trees', () => {
-  const tables = buildGlyphTables(themes.dark, (g) => g.codePointAt(0)! % 256);
-
   it('draws a tree by its kind (tree variant byte)', () => {
     const glyph = (variant: number) =>
       selectGlyph(themes.dark, 'tree', {
@@ -502,11 +496,6 @@ describe('trees', () => {
         variant,
       });
     expect([glyph(0), glyph(1), glyph(2), glyph(3)]).toEqual(['♣', 'Ψ', '↑', '♣']);
-  });
-
-  it('keeps the trunk glyph in the 3D row', () => {
-    const at = tables.table[EXTRUDE_ROW * MAX_VARIANTS + TRUNK_VARIANT];
-    expect(at).toBe(trunkGlyph.codePointAt(0)! % 256);
   });
 
   it('draws grass and crowns with sub-cell edges, whatever their id', () => {

@@ -52,7 +52,7 @@ export const renderClasses: readonly RenderClass[] = [
 
 /**
  * Size of the per-class uniform arrays and the glyph table's class axis. The table's last five
- * rows hold sextant, extrusion, and wall glyphs (glyphs/select.ts).
+ * rows hold sextant, roof-ridge, and wall glyphs (glyphs/select.ts).
  */
 export const MAX_CLASSES = 48;
 if (renderClasses.length >= MAX_CLASSES - 5) throw new Error('too many render classes');
@@ -174,16 +174,8 @@ export const Flags = {
   landmark: 1,
   /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
   corridor: 2,
-  /** Part of a building's 3D extrusion (drawn only when the camera is tilted). */
-  extruded: 4,
-  /** An extrusion's roof (else a wall). */
-  roof: 8,
-  /** An extrusion vertex at the building's height (else at the ground). */
-  top: 16,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
-  /** A tree's trunk: a vertical line from the ground to its crown (tilted views). */
-  trunk: 64,
 } as const;
 
 /** Tree kinds by variant byte (the pipeline's `variant`); 0 is unknown. */

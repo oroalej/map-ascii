@@ -136,7 +136,7 @@
   white-space: nowrap;
 }
 
-/* Phones: the search box takes the top row, so the zoom and compass sit below it. */
+/* Phones: the search box takes the top row, so the zoom readout sits below it. */
 @media (max-width: 640px) {
   .topRight {
     top: 56px;

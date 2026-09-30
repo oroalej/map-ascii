@@ -10,11 +10,9 @@ import type {
 import {
   clampCamera,
   fitZoom,
-  isTilted,
   MAX_ZOOM,
   MIN_ZOOM,
-  orbitBy,
-  panByView,
+  panBy,
   viewportFor,
   zoomAround,
   type CameraLimits,
@@ -85,7 +83,6 @@ import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from 
 import { treeGust } from './glyphs/select';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
-  onScreen,
   prevailingWind,
   rainFor,
   stillWind,
@@ -212,7 +209,7 @@ export type AtlasEventMap = {
   /** A flight reached its target (not sent when input cancels it). */
   flyend: CameraState;
   /**
-   * The visitor moved the camera (drag, wheel, pinch, orbit, or keys), which also ends any
+   * The visitor moved the camera (drag, wheel, pinch, or keys), which also ends any
    * flight. Clicks and hover don't count. A tour pauses on it.
    */
   input: CameraState;
@@ -300,11 +297,7 @@ export type Atlas = {
 };
 
 const sameCamera = (a: CameraState, b: CameraState) =>
-  a.lat === b.lat &&
-  a.lng === b.lng &&
-  a.zoom === b.zoom &&
-  a.pitch === b.pitch &&
-  a.bearing === b.bearing;
+  a.lat === b.lat && a.lng === b.lng && a.zoom === b.zoom;
 /** The on-screen classes are read back at most this often. */
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
@@ -354,15 +347,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
   /**
-   * The wind at `time` seconds, on the grid's cells: the season's (or the chosen strength),
-   * veering and breathing; still with reduced motion. Tilted grids are the screen's, so the
-   * direction turns with the bearing.
+   * The wind at `time` seconds in world axes (x east, y south), which are the grid's (the map is
+   * north-up): the season's (or the chosen strength), veering and breathing; still with reduced
+   * motion.
    */
-  const currentWind = (time: number): WindNow => {
-    const wind = worldWind(time);
-    return isTilted(camera) ? { ...wind, dir: onScreen(wind.dir, camera.bearing) } : wind;
-  };
-  /** The wind at `time` seconds in world axes (x east, y south), whatever the view. */
   const worldWind = (time: number): WindNow => {
     const base = prevailingWind(life.wind, options.climate, cityMonth);
     return reducedMotion ? stillWind(base) : windAt(time, base);
@@ -536,9 +524,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** Shift the cells for a pan within a cell, if that is all it takes; whether it was. */
   const shiftCells = (): boolean => {
-    if (!targets || cellsFor === null || cellsTargets !== targets || isTilted(camera)) {
-      return false;
-    }
+    if (!targets || cellsFor === null || cellsTargets !== targets) return false;
     const v = view();
     const next = placeGrid(v, v.cellDev, targets.cols, targets.rows);
     const nextLabels = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
@@ -558,7 +544,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     grid = placement.grid;
     const labelPlacement = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
     labelGrid = labelPlacement.grid;
-    cellsFor = isTilted(camera) ? null : cellsKey(v, placement, labelPlacement);
+    cellsFor = cellsKey(v, placement, labelPlacement);
     cellsTargets = targets;
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
@@ -1052,7 +1038,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
       const v = view();
-      const wind = currentWind(time);
+      const wind = worldWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
         !reducedMotion &&
@@ -1179,17 +1165,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     };
 
   const detachInput = attachInput(canvas, {
-    pan: byUser((dx: number, dy: number) =>
-      applyCamera(panByView(camera, dx, dy, cssSize()), true),
-    ),
-    // Tilted views zoom around the center (the cursor anchor math is for flat views).
+    pan: byUser((dx: number, dy: number) => applyCamera(panBy(camera, dx, dy), true)),
     zoom: byUser((delta: number, anchor: [number, number]) => {
       const zoom = Math.min(limits.maxZoom, Math.max(limits.minZoom, camera.zoom + delta));
-      applyCamera(zoomAround(camera, zoom, isTilted(camera) ? [0, 0] : anchor), true);
+      applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
-    orbit: byUser((dBearing: number, dPitch: number) =>
-      applyCamera(orbitBy(camera, dBearing, dPitch), true),
-    ),
     hover: (point) => {
       pointerOver = point !== null;
       if (point) {

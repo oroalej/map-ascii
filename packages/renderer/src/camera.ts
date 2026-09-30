@@ -12,9 +12,6 @@ export const MIN_ZOOM = 7;
 export const MAX_ZOOM = 21;
 const MAX_LAT = 85.051129;
 
-/** Orbit limits (SPEC.md §3): pitch 0–60°, bearing in (-180, 180]. */
-export const MAX_PITCH = 60;
-
 export type Size = { width: number; height: number };
 
 export type CameraLimits = {
@@ -63,17 +60,11 @@ export function zoomAround(
   return { ...camera, lng, lat, zoom };
 }
 
-/** Bearing wrapped into (-180, 180]. */
-export const wrapBearing = (bearing: number) => {
-  const b = ((((bearing + 180) % 360) + 360) % 360) - 180;
-  return b === -180 ? 180 : b;
-};
-
 /**
- * Clamp zoom to the limits, the pitch to 0–60°, and the view to the bounds. Given the view
- * `size`, a flat view keeps the bounds under the whole screen where it can (the edges of the
- * view stay inside; a view larger than the bounds centers on them), so the visitor can't drift
- * off into empty space. Without a size, or in a tilted view, only the center is kept inside.
+ * Clamp zoom to the limits and the view to the bounds. Given the view `size`, the bounds stay
+ * under the whole screen where they can (the edges of the view stay inside; a view larger than
+ * the bounds centers on them), so the visitor can't drift off into empty space. Without a size,
+ * only the center is kept inside.
  */
 export function clampCamera(camera: CameraState, limits: CameraLimits, size?: Size): CameraState {
   const [west, south, east, north] = limits.bounds;
@@ -82,10 +73,8 @@ export function clampCamera(camera: CameraState, limits: CameraLimits, size?: Si
     zoom: clamp(camera.zoom, limits.minZoom, limits.maxZoom),
     lng: clamp(camera.lng, west, east),
     lat: clamp(camera.lat, south, north),
-    pitch: clamp(camera.pitch, 0, MAX_PITCH),
-    bearing: wrapBearing(camera.bearing),
   };
-  if (!size || isTilted(clamped)) return clamped;
+  if (!size) return clamped;
   const { zoom } = clamped;
   const [x0, y0] = project(west, north, zoom);
   const [x1, y1] = project(east, south, zoom);
@@ -128,9 +117,6 @@ export type FlyPath = {
   /** The camera at progress `t` (0–1, eased by the caller). */
   at: (t: number) => CameraState;
 };
-
-/** Shortest turn from one bearing to another, in degrees. */
-const turn = (from: number, to: number) => wrapBearing(to - from);
 
 /**
  * An eased flight between two cameras (SPEC.md §3 "Fly-to"): zoom out, travel, zoom in, along
@@ -177,7 +163,6 @@ export function flyPath(
   const duration = opts.reducedMotion
     ? Math.min(FLY_REDUCED_MS, clamp(ideal, 0, FLY_MAX_MS))
     : Math.max(0, wanted);
-  const dBearing = turn(from.bearing, to.bearing);
 
   return {
     duration,
@@ -192,8 +177,6 @@ export function flyPath(
         lng,
         lat,
         zoom: Number.isFinite(zoom) ? zoom : to.zoom,
-        pitch: from.pitch + (to.pitch - from.pitch) * t,
-        bearing: wrapBearing(from.bearing + dBearing * t),
       };
     },
   };
@@ -202,11 +185,10 @@ export function flyPath(
 /** Ease-in-out for flights (cubic). */
 export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-/** Whether the camera is tilted or rotated (the perspective path) rather than flat north-up. */
-export const isTilted = (camera: CameraState) =>
-  Math.abs(camera.pitch) > 0.01 || Math.abs(camera.bearing) > 0.01;
-
-/** The `@math.gl/web-mercator` viewport for a camera and a CSS-pixel view size. */
+/**
+ * The `@math.gl/web-mercator` viewport for a camera and a CSS-pixel view size. The map is
+ * always flat and north-up (SPEC.md §3).
+ */
 export const viewportFor = (camera: CameraState, size: Size) =>
   new WebMercatorViewport({
     width: Math.max(1, size.width),
@@ -214,27 +196,7 @@ export const viewportFor = (camera: CameraState, size: Size) =>
     longitude: camera.lng,
     latitude: camera.lat,
     zoom: camera.zoom,
-    pitch: camera.pitch,
-    bearing: camera.bearing,
   });
-
-/**
- * Pan by (dx, dy) screen pixels in any camera: the ground point under the screen center moves
- * with the pointer. Flat north-up cameras use the exact mercator math of `panBy`.
- */
-export function panByView(camera: CameraState, dx: number, dy: number, size: Size): CameraState {
-  if (!isTilted(camera)) return panBy(camera, dx, dy);
-  const view = viewportFor(camera, size);
-  const [lng, lat] = view.unproject([size.width / 2 - dx, size.height / 2 - dy]);
-  return { ...camera, lng: lng!, lat: lat! };
-}
-
-/** Rotate and tilt, as a right-drag does: degrees of bearing and pitch. */
-export const orbitBy = (camera: CameraState, dBearing: number, dPitch: number): CameraState => ({
-  ...camera,
-  bearing: wrapBearing(camera.bearing + dBearing),
-  pitch: clamp(camera.pitch + dPitch, 0, MAX_PITCH),
-});
 
 /** Zoom-anchored variant that also clamps, for input handlers. */
 export function zoomAroundClamped(
@@ -247,15 +209,3 @@ export function zoomAroundClamped(
   return clampCamera(zoomAround(camera, target, anchor), limits);
 }
 
-/** Column-major 4×4 matrix product `a · b` (in float64). */
-export function multiply(a: ArrayLike<number>, b: ArrayLike<number>): number[] {
-  const out = new Array<number>(16).fill(0);
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) sum += a[k * 4 + row]! * b[col * 4 + k]!;
-      out[col * 4 + row] = sum;
-    }
-  }
-  return out;
-}

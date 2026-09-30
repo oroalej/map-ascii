@@ -2,7 +2,6 @@ import type { ClimateConfig } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { windFrom } from '../glyphs/select';
 import {
-  onScreen,
   prevailingWind,
   RAIN,
   rainDrop,
@@ -65,12 +64,6 @@ describe('windAt', () => {
   it('stills the wind for reduced motion, keeping its direction', () => {
     expect(stillWind(base).strength).toBe(0);
     expect(stillWind(base).dir).toEqual(windFrom(45));
-  });
-
-  it('turns the direction with a tilted view', () => {
-    const [x, y] = onScreen(windFrom(270), 90); // blowing east, the map turned to face east
-    expect(x).toBeCloseTo(0);
-    expect(y).toBeCloseTo(-1); // up the screen
   });
 });
 

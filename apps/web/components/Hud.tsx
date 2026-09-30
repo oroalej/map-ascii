@@ -21,7 +21,6 @@ import { isSubdivisionAreas } from '@/lib/guards';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
-import { Compass } from './Compass';
 import styles from './Hud.module.css';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -378,7 +377,7 @@ function ShareButton() {
 }
 
 /**
- * The HUD (SPEC.md §5): the zoom and its level, the compass, and the legend top right; the
+ * The HUD (SPEC.md §5): the zoom and its level, and the legend top right; the
  * scale bar, the subdivision under the center, coordinates, and sharing bottom left.
  */
 export function Hud({
@@ -400,15 +399,11 @@ export function Hud({
   const subdivision = useUiStore((s) => s.subdivision);
   if (!hasCamera) return null;
 
-  const resetView = () =>
-    useAtlasInstance.getState().atlas?.setCamera({ pitch: 0, bearing: 0 }, { animate: true });
-
   return (
     <>
       <div className={styles.topRight}>
         <div className={styles.row}>
           <ZoomReadout />
-          <Compass onReset={resetView} />
         </div>
         {!panelOpen && <Legend subdivisionLabel={subdivisionLabel} />}
       </div>

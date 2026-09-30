@@ -9,7 +9,7 @@ const meta = {
   languages: ['fil'],
   bounds: [1, 2, 3, 4],
   regionBounds: [0, 1, 4, 5],
-  defaultCamera: { lat: 3, lng: 2, zoom: 14, pitch: 0, bearing: 0 },
+  defaultCamera: { lat: 3, lng: 2, zoom: 14 },
   yearRange: [1900, 2026],
   attribution: ['A credit'],
 };

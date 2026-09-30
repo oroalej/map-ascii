@@ -2,7 +2,6 @@ import type { Atlas } from '@atlas/renderer';
 import type { CameraState } from '@atlas/shared';
 import { create } from 'zustand';
 
-export type AtlasMode = 'map' | 'orbit' | 'walk';
 export type Underlay = { kind: 'imagery' | 'historic-map'; id: string };
 
 export type AtlasState = {
@@ -10,7 +9,6 @@ export type AtlasState = {
   city: string | null;
   /** Null until the URL or the city's meta provides a camera. */
   camera: CameraState | null;
-  mode: AtlasMode;
   year: number;
   timelineOpen: boolean;
   playing: boolean;
@@ -37,7 +35,6 @@ export type AtlasActions = {
 export const initialAtlasState = (): AtlasState => ({
   city: null,
   camera: null,
-  mode: 'map',
   year: new Date().getFullYear(),
   timelineOpen: false,
   playing: false,

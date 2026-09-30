@@ -37,7 +37,7 @@ export function buildMeta(
     languages: city.languages,
     bounds: geography.bounds,
     regionBounds: geography.regionBounds,
-    defaultCamera: { ...geography.center, zoom: geography.zoom, pitch: 0, bearing: 0 },
+    defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
     attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
   });

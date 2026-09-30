@@ -88,7 +88,7 @@
   text-transform: uppercase;
 }
 
-/* Phones: the zoom readout and compass share this row on the right. */
+/* Phones: the zoom readout shares this row on the right. */
 @media (max-width: 640px) {
   .menu {
     width: calc(100vw - 24px);

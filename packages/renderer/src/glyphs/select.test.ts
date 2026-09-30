@@ -7,8 +7,6 @@ import {
   cellHash,
   connects,
   Dir,
-  EXTRUDE_ROW,
-  extrusionVariant,
   FALLING,
   kindCodes,
   MAX_VARIANTS,
@@ -16,6 +14,7 @@ import {
   patternVariant,
   rampVariant,
   RIDGE_VARIANT,
+  ROOF_ROW,
   ridgeGlyphs,
   ridgeVariant,
   RISING,
@@ -274,7 +273,7 @@ describe('glyph tables', () => {
     const at = (mask: number) =>
       tables.table[(SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31)];
     for (const mask of [1, 21, 31, 32, 42, 62]) expect(at(mask)).toBe(index(sextantGlyphs[mask]!));
-    expect(SEXTANT_ROW + 1).toBeLessThan(EXTRUDE_ROW);
+    expect(SEXTANT_ROW + 1).toBeLessThan(ROOF_ROW);
   });
 });
 
@@ -438,14 +437,14 @@ describe('Place-level ground detail', () => {
     expect(ridgeGlyphs[ridgeVariant(Math.round(0.25 * 255), 1) - RIDGE_VARIANT]).toBe('╲');
   });
 
-  it('puts the ridge glyphs after the ramp in the building row', () => {
+  it('puts the ridge glyphs in the roof row', () => {
     const glyphs = new Map<string, number>();
     const index = (g: string) => {
       if (!glyphs.has(g)) glyphs.set(g, glyphs.size + 1);
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[EXTRUDE_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
+    expect(table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
   });
 
   it('picks furniture glyphs by variant, falling back to a dot', () => {
@@ -460,16 +459,5 @@ describe('Place-level ground detail', () => {
     expect(at(['.b.', '.b.', '.b.'])).toBe('┆');
     expect(at(['...', 'bbb', '...'])).toBe('┄');
     expect(connects('barrier', 'road_minor')).toBe(false);
-  });
-});
-
-describe('3D buildings', () => {
-  it('draws roofs solid and shades walls ░▒▓ by facing', () => {
-    expect(buildingRamp[extrusionVariant(0, true)]).toBe('█');
-    expect([10, 100, 200].map((shade) => buildingRamp[extrusionVariant(shade, false)])).toEqual([
-      '░',
-      '▒',
-      '▓',
-    ]);
   });
 });

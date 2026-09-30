@@ -28,7 +28,7 @@ const landmark = {
   sources: [source],
 };
 
-const camera = { lat: 13.6218, lng: 123.1948, zoom: 13, pitch: 0, bearing: 0 };
+const camera = { lat: 13.6218, lng: 123.1948, zoom: 13 };
 
 describe('Landmark', () => {
   it('accepts a valid landmark', () => {
@@ -108,9 +108,10 @@ describe('Event', () => {
 });
 
 describe('CameraState', () => {
-  it('limits pitch to 0-60', () => {
+  it('is flat and north-up: rejects pitch and bearing', () => {
     expect(CameraState.safeParse(camera).success).toBe(true);
-    expect(CameraState.safeParse({ ...camera, pitch: 61 }).success).toBe(false);
+    expect(CameraState.safeParse({ ...camera, pitch: 60 }).success).toBe(false);
+    expect(CameraState.safeParse({ ...camera, bearing: 15 }).success).toBe(false);
   });
 });
 

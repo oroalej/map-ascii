@@ -80,16 +80,6 @@ export const stillWind = (base: PrevailingWind): WindNow => ({
 });
 
 /**
- * A world direction as it points on a screen turned to `bearing` degrees (tilted views, whose
- * cells are the screen's): turned back by the bearing.
- */
-export function onScreen(dir: WindDir, bearing: number): WindDir {
-  const b = (bearing * Math.PI) / 180;
-  const [x, y] = dir;
-  return [x * Math.cos(b) + y * Math.sin(b), -x * Math.sin(b) + y * Math.cos(b)];
-}
-
-/**
  * Rain (SPEC.md §4, with a storm): drops fall `speed` cells a second, `length` cells long, one
  * every `spacing` cells down a column; `density` of the columns carry rain at full strength.
  * They draw at `ink` over the map, which dims by `dim`. Their glyph leans with the wind.

@@ -366,8 +366,7 @@ function pool(
  * `lightByte`), 255 in B under a streetlight's head, which stands at least `SIDE_CELLS` from its
  * road's center line, and 255 in A where a light claims the cell (its pool, a cell's ring around
  * it, since the glyph pass filters the pool across cells, and its head). A lamp that is out casts
- * no pool; a floodlight has no head. Pools are ellipses on screen, so a tilted view's perspective
- * squashes them. Returns how many heads landed on the grid.
+ * no pool; a floodlight has no head. Returns how many heads landed on the grid.
  */
 export function packLights(
   out: Uint8Array,

@@ -182,7 +182,8 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(meta.regionBounds).toEqual([-0.1, -0.1, 0.1, 0.1]);
     expect(meta.defaultCamera.lat).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera.lng).toBeCloseTo(0.007, 6);
-    expect(meta.defaultCamera).toMatchObject({ zoom: 16, pitch: 0, bearing: 0 });
+    expect(Object.keys(meta.defaultCamera).sort()).toEqual(['lat', 'lng', 'zoom']);
+    expect(meta.defaultCamera.zoom).toBe(16);
     const credited = buildMeta(
       city,
       { ...geography, attribution: ['DEM'] },
@@ -194,7 +195,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
 
   it('checks that tours point at features in the data and stay in the region', () => {
     const step = (camera: { lat: number; lng: number }, extra = {}) => ({
-      camera: { ...camera, zoom: 16, pitch: 0, bearing: 0 },
+      camera: { ...camera, zoom: 16 },
       duration_ms: 4000,
       narration: { en: 'TODO(verify)' },
       ...extra,

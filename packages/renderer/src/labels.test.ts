@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   packOverlay,
   createOverlay,
-  tiltedLabelShows,
   type LabelArea,
   type LabelCandidate,
   LabelRank,
@@ -241,48 +240,6 @@ describe('placeLabels', () => {
   });
 });
 
-describe('tiltedLabelShows', () => {
-  const rows = 100;
-
-  it('keeps every label up to 15° (map mode)', () => {
-    expect(tiltedLabelShows(LabelRank.street, 0, rows, 15)).toBe(true);
-  });
-
-  it('keeps street names to the nearer part of a 60° view, major roads farther', () => {
-    expect(tiltedLabelShows(LabelRank.street, 50, rows, 60)).toBe(false);
-    expect(tiltedLabelShows(LabelRank.street, 60, rows, 60)).toBe(true);
-    expect(tiltedLabelShows(LabelRank.streetMinor, 50, rows, 60)).toBe(false);
-    expect(tiltedLabelShows(LabelRank.streetMinor, 60, rows, 60)).toBe(true);
-    expect(tiltedLabelShows(LabelRank.roadMajor, 30, rows, 60)).toBe(true);
-    expect(tiltedLabelShows(LabelRank.roadMajor, 20, rows, 60)).toBe(false);
-  });
-
-  it('raises the far limit with the pitch', () => {
-    expect(tiltedLabelShows(LabelRank.street, 30, rows, 30)).toBe(true);
-    expect(tiltedLabelShows(LabelRank.street, 30, rows, 50)).toBe(false);
-  });
-
-  it('always keeps landmarks and place names', () => {
-    for (const rank of [LabelRank.landmark, LabelRank.subdivision, LabelRank.city]) {
-      expect(tiltedLabelShows(rank, 0, rows, 60)).toBe(true);
-    }
-  });
-});
-
-describe('placeLabels with a gap', () => {
-  it('keeps rows clear above and below each label', () => {
-    const labels: LabelCandidate[] = [
-      { id: 1, text: 'AB', rank: 0, col: 5, row: 1, mode: 'along' },
-      { id: 2, text: 'CD', rank: 0, col: 5, row: 2, mode: 'along' },
-      { id: 3, text: 'EF', rank: 0, col: 5, row: 3, mode: 'along' },
-    ];
-    const placedIds = (gap: number) =>
-      placeLabels(createOverlay(12, 6), labels, index, undefined, gap).map((l) => l.id);
-    expect(placedIds(0)).toEqual([1, 2, 3]);
-    expect(placedIds(1)).toEqual([1, 3]);
-  });
-});
-
 describe('placeLabels by taken cells', () => {
   it('places the same labels as checking every box taken', () => {
     // A seeded mix of modes, lengths, and anchors, some off the grid, packed tight.
@@ -298,16 +255,14 @@ describe('placeLabels by taken cells', () => {
       row: Math.floor(rng() * 30) - 5,
       mode: modes[Math.floor(rng() * modes.length)]!,
     }));
-    for (const gap of [0, 1]) {
-      const byCells = createOverlay(60, 20);
-      const byBoxes = { ...createOverlay(60, 20), takenCells: undefined };
-      const area = { left: 1, top: 1, right: 59, bottom: 19 };
-      const a = placeLabels(byCells, labels, index, area, gap).map((l) => l.id);
-      const b = placeLabels(byBoxes, labels, index, area, gap).map((l) => l.id);
-      expect(a.length).toBeGreaterThan(10);
-      expect(a).toEqual(b);
-      expect([...byCells.glyphs]).toEqual([...byBoxes.glyphs]);
-    }
+    const byCells = createOverlay(60, 20);
+    const byBoxes = { ...createOverlay(60, 20), takenCells: undefined };
+    const area = { left: 1, top: 1, right: 59, bottom: 19 };
+    const a = placeLabels(byCells, labels, index, area).map((l) => l.id);
+    const b = placeLabels(byBoxes, labels, index, area).map((l) => l.id);
+    expect(a.length).toBeGreaterThan(10);
+    expect(a).toEqual(b);
+    expect([...byCells.glyphs]).toEqual([...byBoxes.glyphs]);
   });
 });
 

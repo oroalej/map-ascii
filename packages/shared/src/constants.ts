@@ -48,8 +48,6 @@ export const CAMERA_RANGES = {
   lat: [-90, 90],
   lng: [-180, 180],
   zoom: [0, 22],
-  pitch: [0, 60],
-  bearing: [-180, 180],
 } as const satisfies Record<string, readonly [number, number]>;
 
 /** The kinds of vehicle the life layer draws (SPEC.md §4 "Life layer"). */

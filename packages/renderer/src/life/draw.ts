@@ -76,7 +76,7 @@ const MAX_STAMP_CELLS = 20_000;
  * plan. People are figures (`drawPeople`); a vendor's cart is drawn like a vehicle, but stands
  * only where people may. Birds and dogs are drawn at their real size too (`drawBird`,
  * `drawDog`); a bird without a species takes the theme's glyph for its wing beat. With the `sun`
- * up (flat views only; the caller passes none when tilted), each flying bird first casts a
+ * up, each flying bird first casts a
  * shadow on the ground away from it (`LIFE_SHADOW` texels, config.ts `BIRD_SHADOW`). Later
  * agents win a shared cell. Returns how many agents (each person in a group) landed on the grid.
  */
@@ -576,8 +576,7 @@ function drawDog(
 /**
  * Draw a vehicle from its plan: every cell whose center falls inside its footprint, which is
  * centered on `center` with `along` and `across` the screen vectors (in cells) of a meter
- * forward and a meter to the right. A tilted view's perspective is taken as even over one
- * vehicle. Returns whether any cell landed on the grid.
+ * forward and a meter to the right. Returns whether any cell landed on the grid.
  */
 function stamp(
   out: Uint8Array,

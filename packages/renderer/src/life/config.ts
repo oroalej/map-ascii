@@ -437,12 +437,6 @@ export const CellBit = {
 } as const;
 
 /**
- * In the tilted view, windows light up by patch of a building's walls, fixed to the world so
- * they stay put as the camera turns: a bay this wide (mercator meters) by a storey this tall (m).
- */
-export const WINDOW = { bay: 3, storey: 3 } as const;
-
-/**
  * Streetlights (life/lights.ts) along major and secondary roads, always at the roadside: shown
  * from `zoom`, one every `spacing` m alternating sides, `setback` m in from the carriageway's
  * edge (so the head lands on the road, not the buildings beside it) but never nearer the center
@@ -518,8 +512,7 @@ const noWalking = new Set([...lit, 'building_part', ...water, 'barrier', 'coastl
 /**
  * Per class id, the `CellBit`s of its cells. Vehicles keep to roads, trains to track (and the
  * roads it crosses), and boats to water; people
- * stay off roofs and water; birds fly anywhere. Empty cells (id 0) count as open ground. In the
- * tilted view, a building standing in front of an agent hides it.
+ * stay off roofs and water; birds fly anywhere. Empty cells (id 0) count as open ground.
  */
 export function cellBits(): Int32Array {
   const bits = new Int32Array(MAX_CLASSES);

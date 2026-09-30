@@ -4,18 +4,16 @@
  * the region-only features (DATA.md §2 step 05).
  */
 import { REGION_TILE_MAX_ZOOM, type CameraState } from '@atlas/shared';
-import { isTilted, viewportFor, type Size } from './camera';
+import type { Size } from './camera';
 import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
 import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
 import {
   ancestorAt,
-  boundsTiles,
   findAncestor,
   LruCache,
   tileKey,
   TileSource,
-  tileZoom,
   viewTiles,
   type TileHeader,
   type TileId,
@@ -124,20 +122,7 @@ export class TileCache {
     const { header, meshes } = this;
     if (!header || this.suspended) return [];
     const minZoom = header.minZoom;
-    let view: TileId[];
-    if (isTilted(camera)) {
-      // The tilted view's ground footprint (the far edge is where the view reaches the ground).
-      const [[west, south], [east, north]] = viewportFor(camera, size).getBounds() as [
-        [number, number],
-        [number, number],
-      ];
-      view = boundsTiles([west, south, east, north], tileZoom(camera.zoom, header), header, [
-        camera.lng,
-        camera.lat,
-      ]);
-    } else {
-      view = viewTiles(camera, size, header);
-    }
+    const view = viewTiles(camera, size, header);
     const out = new Map<string, TileId>();
     const missing: TileId[] = [];
     for (const tile of view) {

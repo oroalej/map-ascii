@@ -28,7 +28,7 @@ vi.mock('./gpu', () => ({
 
 const { RETRY_MS, TileCache } = await import('./tile-cache');
 
-const camera = { lat: 13.62, lng: 123.19, zoom: 14.5, pitch: 0, bearing: 0 };
+const camera = { lat: 13.62, lng: 123.19, zoom: 14.5 };
 const size = { width: 400, height: 300 };
 const header = { minZoom: 7, maxZoom: 16, bounds: [123, 13.5, 123.4, 13.8] as const };
 const geometry = { labels: [] } as never;

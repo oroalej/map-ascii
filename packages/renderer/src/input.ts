@@ -8,8 +8,6 @@ export type InputIntents = {
   pan: (dx: number, dy: number) => void;
   /** Change zoom by `delta` around `anchor`, the offset from the canvas center in CSS pixels. */
   zoom: (delta: number, anchor: [number, number]) => void;
-  /** Rotate by `dBearing` and tilt by `dPitch` degrees (orbit mode, SPEC.md §3). */
-  orbit: (dBearing: number, dPitch: number) => void;
   /** The mouse is over (x, y) CSS pixels from the canvas's top left, or has left (null). */
   hover: (point: [number, number] | null) => void;
   /** A click or tap at (x, y): a press and release that barely moved. */
@@ -26,9 +24,6 @@ const DOUBLE_TAP_SLOP = 20;
 /** Whether a press was a tap: short, and barely moved. */
 export const isTap = (moved: number, ms: number) => moved < TAP_SLOP && ms < TAP_MS;
 
-/** Degrees of bearing and pitch per pixel of orbit drag. */
-const ORBIT_PER_PIXEL = 0.35;
-
 /** Zoom change per wheel pixel, and the cap per event (a mouse notch is ~100 px). */
 const WHEEL_ZOOM_PER_PIXEL = 1 / 300;
 const WHEEL_MAX = 1;
@@ -36,8 +31,6 @@ const KEY_PAN = 100;
 
 export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): () => void {
   const pointers = new Map<number, { x: number; y: number }>();
-  /** Whether the current single-pointer drag orbits (right button or Ctrl) instead of panning. */
-  let orbiting = false;
   /** The current press, while it may still be a tap. */
   let press: { id: number; x: number; y: number; time: number; moved: number } | null = null;
   let lastTap: { x: number; y: number; time: number } | null = null;
@@ -59,22 +52,17 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
     };
     const [a, b] = ps;
     const spread = a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
-    const angle = a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
-    return { mid, spread, angle };
+    return { mid, spread };
   };
 
   const onPointerDown = (e: PointerEvent) => {
-    const orbitButton =
-      e.pointerType === 'mouse' && (e.button === 2 || (e.button === 0 && e.ctrlKey));
-    if (e.button !== 0 && !orbitButton && e.pointerType === 'mouse') return;
+    // Only the main mouse button drags; the map never tilts or rotates (SPEC.md §3).
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     canvas.setPointerCapture(e.pointerId);
     const p = local(e);
     pointers.set(e.pointerId, p);
-    orbiting = orbitButton && pointers.size === 1;
     press =
-      pointers.size === 1 && !orbitButton
-        ? { id: e.pointerId, x: p.x, y: p.y, time: e.timeStamp, moved: 0 }
-        : null;
+      pointers.size === 1 ? { id: e.pointerId, x: p.x, y: p.y, time: e.timeStamp, moved: 0 } : null;
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -93,25 +81,14 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
     pointers.set(e.pointerId, p);
     const after = gesture();
     const [dx, dy] = [after.mid.x - before.mid.x, after.mid.y - before.mid.y];
-    if (orbiting) {
-      // Drag right turns the map clockwise; drag up tilts toward the horizon.
-      intents.orbit(-dx * ORBIT_PER_PIXEL, -dy * ORBIT_PER_PIXEL);
-      return;
-    }
     intents.pan(dx, dy);
     if (pointers.size === 2 && before.spread > 0 && after.spread > 0) {
       intents.zoom(Math.log2(after.spread / before.spread), fromCenter(after.mid));
-      // Two-finger twist rotates.
-      let turn = after.angle - before.angle;
-      if (turn > Math.PI) turn -= 2 * Math.PI;
-      if (turn < -Math.PI) turn += 2 * Math.PI;
-      if (turn !== 0) intents.orbit((-turn * 180) / Math.PI, 0);
     }
   };
 
   const onPointerUp = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
-    if (pointers.size === 0) orbiting = false;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
     if (e.type === 'pointerup' && press?.id === e.pointerId) {
       const { x, y, time, moved } = press;
@@ -173,11 +150,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   canvas.addEventListener('pointerleave', onPointerLeave);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('keydown', onKeyDown);
-  // Right-drag orbits, so the canvas has no context menu.
-  const onContextMenu = (e: Event) => e.preventDefault();
-  canvas.addEventListener('contextmenu', onContextMenu);
   return () => {
-    canvas.removeEventListener('contextmenu', onContextMenu);
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
