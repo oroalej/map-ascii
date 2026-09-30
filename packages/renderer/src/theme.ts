@@ -58,6 +58,7 @@ export type ClassStyle = {
 };
 
 export type Theme = {
+  awningPaints: readonly number[];
   /** Canvas background as linear 0–1 RGBA. */
   background: RGBA;
   /** Label text, 0xRRGGBB (drawn over the background, which doubles as its halo). */
@@ -216,6 +217,10 @@ function makeTheme(background: number, c: Palette): Theme {
     label: c.label,
     accent: c.accent,
     vehiclePaints: c.vehiclePaints,
+    awningPaints:
+      background > 0x7fffff
+        ? [0x9f382d, 0x746344, 0x17695a, 0x746344, 0x315e9d, 0x746344, 0x87611d, 0x746344]
+        : [0xeb8876, 0xf2deb5, 0x71b6a2, 0xf2deb5, 0x85a8e0, 0xf2deb5, 0xd8b56b, 0xf2deb5],
     birdPaints: c.birdPaints,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
@@ -280,7 +285,7 @@ function makeTheme(background: number, c: Palette): Theme {
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
       furniture: {
         kind: 'variant',
-        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•'],
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤'],
         color: c.furniture,
       },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },

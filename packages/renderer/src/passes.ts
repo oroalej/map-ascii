@@ -401,6 +401,7 @@ export function selectPass(
   wind: WindNow,
   sun: Sun | null = null,
   shadows = true,
+  awnings = true,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -409,6 +410,7 @@ export function selectPass(
   twgl.setUniforms(programs.select, {
     u_class: targets.classTex,
     u_shadows: shadows,
+    u_awnings: awnings,
     u_attr: targets.attrTex,
     u_id: targets.idTex,
     u_table: themeRes.map.tableTex,
@@ -611,6 +613,8 @@ export function glyphPass(
     u_person: classId('life_person'),
     u_bird: classId('life_bird'),
     u_paints: themeRes.uniforms.paints,
+    u_awningPaints: themeRes.uniforms.awnings,
+    u_frontageMask: themeRes.uniforms.frontageMask,
     u_birdPaints: themeRes.uniforms.birds,
     u_rain: weather.rain,
     u_rainSlant: weather.wind?.dir[0] ?? 0,

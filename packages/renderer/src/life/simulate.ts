@@ -48,6 +48,7 @@ import {
   umbrellaShare,
   usableLines,
   VENDORS,
+  COMMERCE,
   type AgentKind,
   type PlaceBehavior,
 } from './config';
@@ -92,7 +93,7 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
-type GroundAgent = Mover | Gatherer;
+type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
@@ -372,6 +373,9 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private readonly commerceStallsRng: () => number;
+  private readonly commercePeopleRng: () => number;
+  private commerceAdmitted = false;
   readonly yielding: YieldControl;
   readonly signals: SignalControl;
   readonly scenes: LocalScenes;
@@ -422,6 +426,8 @@ export class TileLife {
     this.birdRng = random(seed ^ 0x165667b1);
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
+    this.commerceStallsRng = random(seed ^ 0xa24baed5);
+    this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
     for (let line = 0; line < lines; line++) {
@@ -565,6 +571,30 @@ export class TileLife {
 
   /** The same meters and group slots used by the life drawing pass. */
   groundBodies(a: GroundAgent, minimum = 0, out: Body[] = []): Body[] {
+    if (!('kind' in a) && !('walker' in a)) {
+      const cart = VEHICLES.cart;
+      const put = (i: number, x: number, y: number, length: number, width: number) => {
+        const b = out[i] ?? (out[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+        Object.assign(b, {
+          x,
+          y,
+          hx: a.hx,
+          hy: a.hy,
+          length: Math.max(length, minimum),
+          width: Math.max(width, minimum),
+        });
+      };
+      put(0, a.x / this.perMeter, a.y / this.perMeter, cart.length, cart.width);
+      put(
+        1,
+        a.x / this.perMeter - a.hy * a.side * 1.3,
+        a.y / this.perMeter + a.hx * a.side * 1.3,
+        0.9,
+        1,
+      );
+      out.length = 2;
+      return out;
+    }
     const mover = 'kind' in a;
     const lane = mover ? this.offsetOf(a) : 0;
     const x = a.x / this.perMeter - a.hy * lane;
@@ -619,6 +649,125 @@ export class TileLife {
         fits = guard(g);
       }
       if (!fits) this.gatherers.splice(i, 1);
+    }
+  }
+
+  /** Legacy actors settle first. New streams only append candidates that fit the reserved scene. */
+  admitCommerce(guard: GroundGuard) {
+    if (this.commerceAdmitted) return;
+    this.commerceAdmitted = true;
+    const commerce = this.geo.commerce ?? [];
+    if (!commerce.length) return;
+    for (const shoppers of [false, true]) {
+      const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
+      for (let line = 0; line < this.geo.kinds.length; line++) {
+        const kind = this.geo.kinds[line];
+        if (kind !== LifeLine.roadMinor && kind !== LifeLine.path && kind !== LifeLine.plaza)
+          continue;
+        const length = this.lineLength(line),
+          meters = length / this.perMeter;
+        if (!length) continue;
+        let shops = 0;
+        for (let i = 0; i < commerce.length; i += 2) {
+          const p = { x: commerce[i]!, y: commerce[i + 1]! };
+          for (let v = this.first(line); v < this.last(line); v++) {
+            const x = this.geo.coords[v * 2]!,
+              y = this.geo.coords[v * 2 + 1]!,
+              dx = this.geo.coords[(v + 1) * 2]! - x,
+              dy = this.geo.coords[(v + 1) * 2 + 1]! - y;
+            const t = Math.max(
+              0,
+              Math.min(1, ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy || 1)),
+            );
+            if (Math.hypot(p.x - x - dx * t, p.y - y - dy * t) <= COMMERCE.reach * this.perMeter) {
+              shops++;
+              break;
+            }
+          }
+        }
+        const count = Math.min(
+          shoppers ? 40 : 20,
+          Math.floor((meters / 100) * Math.min(COMMERCE.max, shops * COMMERCE.perShop) + rng()),
+        );
+        for (let i = 0; i < count; i++) {
+          if (
+            shoppers
+              ? this.movers.length >= MAX_TILE_AGENTS
+              : this.stalls.length >= VENDORS.maxPerTile
+          )
+            break;
+          const dir = rng() < 0.5 ? 1 : -1;
+          const m: Mover = {
+            kind: 'person',
+            line,
+            from: dir === 1 ? this.first(line) : this.last(line),
+            dir,
+            d: 0,
+            speed: (1 + rng() * 0.5) * this.perMeter,
+            paint: 0,
+            lane: 0,
+            pause: 0,
+            rank: rng(),
+            x: 0,
+            y: 0,
+            hx: 1,
+            hy: 0,
+            walked: rng() * 2 * PEOPLE.stride,
+          };
+          this.advance(m, rng() * length, false);
+          if (!inTile(m)) continue;
+          let close = false;
+          for (let j = 0; j < commerce.length; j += 2)
+            if (
+              Math.hypot(m.x - commerce[j]!, m.y - commerce[j + 1]!) <
+              COMMERCE.reach * this.perMeter
+            )
+              close = true;
+          if (!close) continue;
+          if (shoppers) {
+            m.group = [
+              {
+                figure: 'adult',
+                shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
+                umbrella: rng(),
+                canopy: UMBRELLA_PAINTS[Math.floor(rng() * UMBRELLA_PAINTS.length)]!,
+                lateral: 0,
+                back: 0,
+                step: rng() < 0.5 ? 0 : 1,
+              },
+            ];
+            if (guard(m)) this.movers.push(m);
+          } else {
+            let market = false;
+            for (let j = 0; j < this.geo.markets.length; j += 2)
+              if (
+                Math.hypot(m.x - this.geo.markets[j]!, m.y - this.geo.markets[j + 1]!) <
+                VENDORS.marketReach * this.perMeter
+              )
+                market = true;
+            if (market) continue;
+            const side = dir,
+              offset =
+                this.geo.kinds[line] === LifeLine.roadMinor
+                  ? Math.max(0, (this.geo.widths[line] || 6) / 2 - VENDORS.curb)
+                  : VENDORS.beside;
+            const stall: Stall = {
+              x: m.x - m.hy * offset * this.perMeter,
+              y: m.y + m.hx * offset * this.perMeter,
+              hx: m.hx,
+              hy: m.hy,
+              paint: Paint.cream,
+              shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
+              side,
+              rank: rng(),
+            };
+            if (guard(stall)) {
+              this.stalls.push(stall);
+              this.scenes.addStall(stall);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1580,7 +1729,7 @@ export class TileLife {
             speeds[i]! * dt,
             clock,
           ) / dt;
-        m.walked = (m.walked ?? 0) + (speeds[i]! * dt) / this.perMeter;
+        m.walked = (m.walked ?? 0) + (speeds[i] * dt) / this.perMeter;
       }
       const before = { ...m };
       const distance = speeds[i]! * dt;
@@ -1993,6 +2142,11 @@ export class LifeWorld {
     if (added.size) {
       const guard = this.groundGuard(0, added);
       for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
+      if ([...added].some((tile) => tile.geo.commerce?.length)) {
+        const commerceGuard = this.groundGuard();
+        for (const tile of added)
+          tile.admitCommerce((owner, before) => commerceGuard(tile, owner, before));
+      }
     }
   }
 

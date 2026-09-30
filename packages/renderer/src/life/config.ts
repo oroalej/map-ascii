@@ -207,6 +207,7 @@ export const VENDORS = {
   curb: 0.9,
   beside: 1.2,
 } as const;
+export const COMMERCE = { reach: 60, perShop: 0.5, max: 2 } as const;
 
 /**
  * How people use a place (life/simulate.ts `Gatherer`): stand about and mill (`gather`), sit on a

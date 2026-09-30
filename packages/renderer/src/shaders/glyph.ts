@@ -90,6 +90,8 @@ uniform int u_person;
 uniform int u_bird;
 uniform vec3 u_birdPaints[${BIRD_SPECIES_ORDER.length * 2}];
 uniform vec3 u_paints[${PAINT_COUNT}];
+uniform vec3 u_awningPaints[8];
+uniform int u_frontageMask;
 uniform float u_rain;
 uniform float u_rainSlant;
 uniform int u_rainGlyph;
@@ -333,6 +335,7 @@ void main() {
   bool edge = (rawState & ${EDGE_STATE}) != 0;
   int windLevel = (rawState >> ${WIND_SHIFT}) & 3;
   int tone = (rawState >> ${TONE_SHIFT}) & 3;
+  int awning = ((u_frontageMask >> cls) & 1) != 0 ? (rawState >> ${WIND_SHIFT}) & 15 : 0;
   bool shaded = (rawState & ${SHADOW_STATE}) != 0;
   int state = rawState & ${EDGE_STATE - 1};
   int bgClass = int(g.a * 255.0 + 0.5);
@@ -436,7 +439,7 @@ void main() {
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
-  vec3 color = toned(daylit(u_colors[cls]), tone, night);
+  vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
   if (cls == u_crownClass) {
     vec2 local = texelFetch(u_attr, cell, 0).gb * 2.0 - 1.0;
     vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
@@ -473,7 +476,7 @@ void main() {
   }
   // Blades caught by a gust show their pale sides, more as it strengthens (glyphs/select.ts
   // WIND_LIGHT by wind level).
-  if (windLevel > 0) {
+  if (awning == 0 && windLevel > 0) {
     color = mix(color, vec3(1.0), windLevel == 3 ? ${float(WIND_LIGHT[3])}
       : windLevel == 2 ? ${float(WIND_LIGHT[2])} : ${float(WIND_LIGHT[1])});
   }

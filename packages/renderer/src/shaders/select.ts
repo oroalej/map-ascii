@@ -8,7 +8,7 @@
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
  */
-import { Flags, MAX_CLASSES } from '../classes';
+import { classId, Flags, MAX_CLASSES } from '../classes';
 import { CellState, MAX_HIGHLIGHT } from '../picking';
 import {
   BUILDING_STEPS,
@@ -60,6 +60,7 @@ uniform float u_time;             // seconds; 0 with reduced motion
 uniform float u_wind;             // wind over grass: 1, or 0 with reduced motion
 uniform float u_zoom;
 uniform bool u_shadows;
+uniform bool u_awnings;
 uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
 uniform float u_cellAspect;       // cell height / width, for ridge directions
@@ -194,6 +195,19 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
 // o[] holds "outside" for the 3x3 neighborhood: 0 NW, 1 N, 2 NE, 3 W, 5 E, 6 SW, 7 S, 8 SE.
 // With byRoad, "outside" means any class that is neither a carriageway nor see-through (curbs).
 // Wall modes: a feature's outline, or a carriageway's curbs.
+int awningSide(ivec2 p, vec4 id) {
+  for (int side = 0; side < 4; side++) {
+    ivec2 dir = side == 0 ? ivec2(0, -1) : side == 1 ? ivec2(1, 0) : side == 2 ? ivec2(0, 1) : ivec2(-1, 0);
+    if (idAt(p + dir) == id) continue;
+    for (int step = 1; step <= 3; step++) {
+      int c = classAt(p + dir * step);
+      if (((u_roadMask >> c) & 1) != 0 || c == ${classId('path')}) return side;
+      if (u_kind[c] == ${kindCodes.building} || u_kind[c] == ${kindCodes.water}) break;
+    }
+  }
+  return -1;
+}
+
 const int OUTLINE = 0;
 const int CURBS = 1;
 
@@ -305,6 +319,19 @@ void main() {
   if (wallRow >= 0) {
     int mask = wallMask(p, OUTLINE);
     if (mask >= 0) {
+      int flags = int(attr.g * 255.0 + 0.5);
+      if (u_awnings && kind == ${kindCodes.building} && (flags & ${Flags.frontage}) != 0) {
+        int side = awningSide(p, id);
+        if (side >= 0) {
+          int shape = side == 0 ? 3 : side == 1 ? 42 : side == 2 ? 48 : 21;
+          int shopKind = ((flags & ${Flags.frontageLow}) != 0 ? 1 : 0) + ((flags & ${Flags.frontageHigh}) != 0 ? 2 : 0);
+          int code = 1 + shopKind * 2 + ((side == 0 || side == 2 ? w.x : w.y) & 1);
+          g_wind = code & 3;
+          g_tone = code >> 2;
+          emit(texelFetch(u_table, ivec2(shape % 32, ${SEXTANT_ROW} + shape / 32), 0).r, cls);
+          return;
+        }
+      }
       float wall = texelFetch(u_table, ivec2(mask, wallRow), 0).r;
       emit(wall, cls);
       return;
@@ -356,6 +383,11 @@ void main() {
       if (roof != ${RoofCode.none}) v = roof == ${RoofCode.shaded} ? 1 : 2;
     }
   } else if (kind == ${kindCodes.variant}) {
+    if (cls == ${classId('furniture')} && variant >= 9 && variant <= 11) {
+      int code = 1 + (variant - 9) * 2;
+      g_wind = code & 3;
+      g_tone = code >> 2;
+    }
     v = min(variant, u_count[cls] - 1);
   } else if (kind == ${kindCodes.ramp}) {
     v = clamp(int(attr.r * 255.0 + 0.5) - 1, 0, u_count[cls] - 1);

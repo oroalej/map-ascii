@@ -175,6 +175,9 @@ export const Flags = {
   /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
   corridor: 2,
   crossing: 4,
+  frontage: 8,
+  frontageLow: 16,
+  frontageHigh: 64,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
 } as const;
@@ -200,6 +203,9 @@ export function variantCode(className: string, variant: unknown): number {
         'shelter',
         'crossing',
         'signals',
+        'shop_food',
+        'shop_retail',
+        'shop_service',
       ].indexOf(variant) + 1
     );
   if (className === 'tree' || className === 'trees') {

@@ -106,33 +106,36 @@ export class LocalScenes {
       this.attachRoad(site, geo);
       this.sites.push(site);
     }
-    for (const stall of stalls) {
-      if (!inTile(stall)) continue;
-      const site: Site = {
-        x: stall.x - stall.hy * stall.side * 1.3 * perMeter,
-        y: stall.y + stall.hx * stall.side * 1.3 * perMeter,
-        kind: 'vendor',
-        modes: 0,
-        covered: false,
-        queue: [],
-        capacity: INTERACTIONS.vendorQueue,
-        hx: stall.hx,
-        hy: stall.hy,
-        road: -1,
-        roadWidth: 6,
-        direction: 1,
-        stall,
-      };
-      this.sites.push(site);
-      this.sites.push({
-        ...site,
-        kind: 'rest',
-        queue: [],
-        capacity: 1,
-        x: site.x - site.hx * 2 * perMeter,
-        y: site.y - site.hy * 2 * perMeter,
-      });
-    }
+    for (const stall of stalls) this.addStall(stall);
+  }
+
+  addStall(stall: Stall) {
+    const { perMeter } = this;
+    if (!inTile(stall)) return;
+    const site: Site = {
+      x: stall.x - stall.hy * stall.side * 1.3 * perMeter,
+      y: stall.y + stall.hx * stall.side * 1.3 * perMeter,
+      kind: 'vendor',
+      modes: 0,
+      covered: false,
+      queue: [],
+      capacity: INTERACTIONS.vendorQueue,
+      hx: stall.hx,
+      hy: stall.hy,
+      road: -1,
+      roadWidth: 6,
+      direction: 1,
+      stall,
+    };
+    this.sites.push(site);
+    this.sites.push({
+      ...site,
+      kind: 'rest',
+      queue: [],
+      capacity: 1,
+      x: site.x - site.hx * 2 * perMeter,
+      y: site.y - site.hy * 2 * perMeter,
+    });
   }
 
   private attachRoad(site: Site, geo: LifeGeometry) {

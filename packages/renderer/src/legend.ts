@@ -73,7 +73,9 @@ function sample(style: ClassStyle): string {
       return style.glyphs.slice(0, 2).join(''); // at rest
     case 'single':
     case 'variant':
-      return style.glyphs.slice(style.kind === 'variant' ? 1 : 0).join(' ');
+      return style.glyphs
+        .slice(style.kind === 'variant' ? 1 : 0, style.kind === 'variant' ? 7 : undefined)
+        .join(' ');
   }
 }
 
@@ -230,6 +232,8 @@ export function legendEntries(
     }
   }
   const entries = [...byLabel.values()];
+  if ((!onScreen || onScreen.has('furniture')) && visibleAt('furniture', zoom))
+    entries.push({ classes: [], label: 'Shops', glyphs: '¤', color: css(theme.awningPaints[0]!) });
   // Vendors show wherever people do, from the same zoom.
   const people = entries.findIndex((e) => e.classes.includes('life_person'));
   if (people >= 0) entries.splice(people + 1, 0, vendorsEntry(theme));

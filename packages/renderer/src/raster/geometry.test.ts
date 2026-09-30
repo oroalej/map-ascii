@@ -65,6 +65,42 @@ const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
   }));
 
 describe('classifyRings', () => {
+  it('packs frontage kind bits on flat and ridged buildings and retains commerce in the buffer', () => {
+    const result = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(
+            3,
+            { id: 'flat-shop', class: 'building', height: 5, variant: 'flat', frontage: 'retail' },
+            [square(1000, 1000, 100)],
+          ),
+          feature(
+            3,
+            {
+              id: 'pitched-shop',
+              class: 'building',
+              height: 5,
+              variant: 'gabled',
+              frontage: 'service',
+            },
+            [square(1300, 1000, 100)],
+          ),
+        ]),
+        poi: layer([
+          feature(1, { id: 'buffer-shop', class: 'furniture', variant: 'shop_food' }, [
+            [[-10, 1000]],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+    const flags = vertices(result.fills).map((v) => v.flags!);
+    expect(flags).toContain(Flags.frontage | Flags.frontageLow);
+    expect(flags).toContain(Flags.frontage | Flags.frontageHigh | Flags.ridged);
+    expect(Array.from(result.life.commerce!)).toContain(-10);
+    expect(result.life.shops.length).toBe(6);
+  });
   it('rasterizes crossing anchors as road quads and transfers buffered signals without point glyphs', () => {
     const tile = { z: 16, x: 55192, y: 30266 };
     const result = buildTileGeometry(

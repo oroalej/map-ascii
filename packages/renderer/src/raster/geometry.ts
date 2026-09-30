@@ -655,7 +655,15 @@ export function buildTileGeometry(
       ) {
         labels.push({ id, text, lng, lat, ...curated });
       }
-      const flags = landmark ? Flags.landmark : 0;
+      let flags = landmark ? Flags.landmark : 0;
+      const frontage = ['food', 'retail', 'service', 'commercial'].indexOf(
+        String(feature.properties.frontage),
+      );
+      if (frontage >= 0 && isBuilding(className))
+        flags |=
+          Flags.frontage |
+          (frontage & 1 ? Flags.frontageLow : 0) |
+          (frontage & 2 ? Flags.frontageHigh : 0);
       const variant = variantCode(className, feature.properties.variant);
       const width = Number(feature.properties.width ?? 0);
       const marker = markerFor[className as keyof typeof markerFor];
@@ -767,6 +775,16 @@ export function buildTileGeometry(
             if (isTree && inTile) life.perch(p);
             if (className === 'building_station' && !isRegion) life.station(p);
             if (className === 'building_market' && !isRegion) life.market(p);
+            if (
+              !isRegion &&
+              className === 'furniture' &&
+              variant >= 9 &&
+              variant <= 11 &&
+              unitMeters
+            ) {
+              life.commerceAt(p);
+              life.shop(p, SHOP.pointRadius / 2 / unitMeters);
+            }
             if (className === 'building_market' && !isRegion && unitMeters && inTile) {
               life.shop(p, SHOP.pointRadius / 2 / unitMeters);
             }
@@ -911,7 +929,8 @@ export function buildTileGeometry(
             life.flood(center, reach);
           }
           // A shop or market glows while it is open (life/lights.ts), from its tile.
-          if (!isRegion && className === 'building_market' && inTileAt(center)) {
+          if (!isRegion && (className === 'building_market' || frontage >= 0)) {
+            life.commerceAt(center);
             const reach = Math.max(
               ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
             );

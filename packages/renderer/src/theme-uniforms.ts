@@ -1,4 +1,5 @@
 import type { Theme } from './theme';
+import { classId, renderClasses } from './classes';
 
 const rgb = (hex: number): [number, number, number] => [
   ((hex >> 16) & 255) / 255,
@@ -13,6 +14,12 @@ export function themeUniforms(theme: Theme) {
     accent: rgb(theme.accent),
     rain: label.map((c, i) => c * [0.82, 0.9, 1][i]!),
     paints: theme.vehiclePaints.flatMap(rgb),
+    awnings: theme.awningPaints.flatMap(rgb),
+    frontageMask: renderClasses.reduce(
+      (mask, cls) =>
+        cls.startsWith('building') || cls === 'furniture' ? mask | (1 << classId(cls)) : mask,
+      0,
+    ),
     birds: theme.birdPaints.flatMap((pair) => pair.flatMap(rgb)),
   };
 }

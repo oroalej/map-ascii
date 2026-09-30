@@ -27,6 +27,21 @@ export const MAX_VARIANTS = 32;
 
 /** Connectivity bits, with north toward the top of the screen. */
 export const Dir = { N: 1, E: 2, S: 4, W: 8 } as const;
+/** First outside side with mapped street/path adjacency within three cells, N/E/S/W order. */
+export function awningSide(
+  outside: readonly boolean[],
+  streetAt: (side: number, distance: number) => boolean,
+  blockedAt: (side: number, distance: number) => boolean = () => false,
+): number {
+  for (let side = 0; side < 4; side++)
+    if (outside[side])
+      for (let distance = 1; distance <= 3; distance++) {
+        if (streetAt(side, distance)) return side;
+        if (blockedAt(side, distance)) break;
+      }
+  return -1;
+}
+export const awningCode = (kind: number, parity: number) => 1 + kind * 2 + (parity & 1);
 /** Stripe orientation and fine-scale alternation, matching the select shader. */
 export function crossingGlyph(bearingByte: number, cellMeters: number, parity: number): string {
   if (cellMeters < 1.2 && parity & 1) return ' ';
