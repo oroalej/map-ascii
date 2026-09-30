@@ -129,6 +129,10 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 Mapped marked crossings and crossings derived at signalized junctions show transverse stripes from Place detail, including with Life off. Crossing ways remain walking paths. With Life on from z17, signal heads cycle through deterministic simulated phases. Vehicles brake before red stop lines and queue; walkers wait at the curb, including on routes to local activity sites. Those already crossing clear the junction. At unsignalized shared road vertices, lower-ranked traffic yields to approaching higher-ranked traffic for up to eight seconds; collision protection remains active. Geometric crossings without shared vertices do not acquire junction priority.
 
+### Shopfronts and neighborhood activity
+
+Mapped food, retail, service and commercial frontages receive kind-colored striped awnings on building walls facing a street or path within three cells, from wall-outline zoom. Standalone mapped shops and amenities use `¤` in their kind's paint; points inside building footprints annotate that building instead. Shops glow while open using the existing shop-hour lighting. Separate commerce streams add vendors and walkers near mapped shops, within the existing tile caps; legacy actors settle and reserve their positions before new candidates are admitted. Scrub, heath, plant nurseries and cemeteries use grass cover, orchards use tree cover, and mapped palm orchards retain their palm kind. Commercial land-use zones receive no special fill.
+
 ## 5. Interactions
 
 | Input | Action |

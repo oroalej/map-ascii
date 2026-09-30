@@ -68,3 +68,5 @@ Record each item in `packages/content/cities/naga/` with its sources:
 - Copernicus DEM is used for the Mt. Isarog relief at Region level (not visible while the map is limited to downtown).
 - Possible archive sources: local libraries, universities (Ateneo de Naga, UNC), the Archdiocese of Caceres and parish archives, and private collections. Written permission is required for anything that isn't public domain.
 Traffic research: the pack currently supplies no signal overrides. Verify which junctions have operating signals before adding sourced overrides; the renderer's phases and derived signal locations are simulated. The September 30 local rebuild resolved 6 mapped and 30 derived signals, plus 88 mapped crossing anchors and 93 derived crossings.
+
+Shop research: OSM shop coverage remains uneven; survey and map missing Centro shops before treating the decorative activity as evidence of real commerce. The local neighborhood rebuild identifies 98 food, 73 retail, 53 service and 18 generic commercial frontage buildings, plus 57 food, 79 retail and 46 service standalone markers.
