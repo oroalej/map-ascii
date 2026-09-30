@@ -1,10 +1,17 @@
 /** Ground-agent clearance, in meters, shared across loaded tile boundaries. */
 import type { PersonFigure } from './people';
+import { CAT_LENGTH_M } from './cats';
+import { DOG_LENGTH_M } from './dogs';
 
 const ADULT_BODY = { length: 0.9, width: 1 } as const;
 const CHILD_BODY = { length: 0.5, width: 0.5 } as const;
 /** Physical clearance dimensions; umbrellas and rowers use the adult footprint. */
 export const memberSize = (figure: PersonFigure) => (figure === 'child' ? CHILD_BODY : ADULT_BODY);
+
+const DOG_BODY = { length: DOG_LENGTH_M, width: DOG_LENGTH_M } as const;
+const CAT_BODY = { length: CAT_LENGTH_M, width: CAT_LENGTH_M } as const;
+/** Conservative bounds of the square sprite masters, including every pose and heading. */
+export const animalSize = (kind: 'cat' | 'dog') => (kind === 'cat' ? CAT_BODY : DOG_BODY);
 
 export type Body = {
   x: number;

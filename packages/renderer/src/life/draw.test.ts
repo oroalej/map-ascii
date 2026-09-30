@@ -11,6 +11,7 @@ import { buildLifeGlyphs, packLife, vehicleByte, type LifeGrid } from './draw';
 import {
   CANDLE_BIT,
   figureGlyph,
+  figureOf,
   PAINT_NONE,
   PersonPart,
   personByte,
@@ -255,7 +256,7 @@ describe('packLife dogs and shadows', () => {
     ]);
   });
 
-  it('keeps ground agents apart, but never hides one under a dog or cat', () => {
+  it('reserves whole ground agents including dogs and cats in either drawing order', () => {
     const car = (lng: number): VisibleAgent => ({
       kind: 'vehicle',
       vehicle: 'car',
@@ -266,7 +267,9 @@ describe('packLife dogs and shadows', () => {
     });
     const out = new Uint8Array(big.cols * big.rows * 4);
     for (const pet of [dog(0.5), { ...dog(0.5), kind: 'cat' as const }]) {
-      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(2);
+      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(1);
+      expect(cellOf(out, 20, 15)[1]).toBe(classId('life_person'));
+      expect(packLife(out, big, [car(20), pet], themes.dark, glyphIndex)).toBe(1);
       expect(cellOf(out, 20, 15)[1]).toBe(classId('life_vehicle'));
     }
     expect(packLife(out, big, [car(20), car(20.2)], themes.dark, glyphIndex)).toBe(1);
@@ -648,6 +651,50 @@ describe('packLife people', () => {
     const { cells } = pack(person(1, 0, 0.2, { people: [look({ figure: 'umbrella' })] }));
     expect(cells[0]!.texel[0]).toBe(glyphIndex(figureGlyph('umbrella', false, 0, { scale: 0 })));
     expect(cells[0]!.texel[3]).toBe(personByte(Paint.red, PersonPart.canopy));
+  });
+
+  it('draws static seated people at every size and heading, retaining whole-agent rollback', () => {
+    for (const theme of Object.values(themes))
+      for (const scale of [0.2, 3, 8])
+        for (const [dx, dy, heading] of [
+          [0, -1, 0],
+          [1, 0, 1],
+          [0, 1, 2],
+          [-1, 0, 3],
+        ] as const) {
+          const [g, m] = person(dx, dy, scale, { people: [look({ figure: 'seated' })] });
+          const out = new Uint8Array(g.cols * g.rows * 4);
+          expect(packLife(out, g, [m], theme, glyphIndex)).toBe(1);
+          const cells = Array.from({ length: g.cols * g.rows }, (_, i) => i).filter(
+            (i) => out[i * 4 + 2],
+          );
+          expect(cells.length).toBeGreaterThan(0);
+          if (scale * (dx === 0 ? 1.8 : 1) * 0.6 < 3) {
+            for (const i of cells) {
+              const { glyph } = unpackGlyph(out[i * 4]!, out[i * 4 + 1]!);
+              expect(figureOf(glyphs[glyph]!)!).toMatchObject({
+                figure: 'seated',
+                heading,
+                frame: 0,
+              });
+            }
+          } else {
+            expect(new Set(cells.map((i) => (out[i * 4 + 3]! >> 4) & 7))).toEqual(
+              new Set([PersonPart.figure, PersonPart.skin]),
+            );
+          }
+          const denied = cells[cells.length - 1]!;
+          expect(
+            packLife(
+              out,
+              { ...g, allowsGroundCell: (_a, c, r) => r * g.cols + c !== denied },
+              [m],
+              theme,
+              glyphIndex,
+            ),
+          ).toBe(0);
+          expect(out.every((v) => v === 0)).toBe(true);
+        }
   });
 
   it('draws a figure at its real size: part of a cell, a whole one, then 2×2 cells', () => {

@@ -33,7 +33,7 @@ import { stripRing } from '../life/terrain';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import { DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP } from '../life/config';
 import { habitatOf } from '../life/birds';
-import { placeTileLamps, type LitLine } from '../life/lights';
+import { LampState, placeSeed, placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
 const FLAT_ROOF = 1;
@@ -706,7 +706,7 @@ export function buildTileGeometry(
       );
       const rawHeight = Number(feature.properties.height ?? 0);
       const height = Number.isFinite(rawHeight)
-        ? Math.max(0, Math.min(255, Math.round(rawHeight)))
+        ? Math.max(rawHeight > 0 ? 1 : 0, Math.min(255, Math.round(rawHeight)))
         : 0;
       const landmark = feature.properties.landmark === true;
       const { name: featureName, label_lng: lng, label_lat: lat } = feature.properties;
@@ -825,9 +825,37 @@ export function buildTileGeometry(
         .loadGeometry()
         .map((ring) => ring.map((p) => ({ x: p.x * scale, y: p.y * scale })));
 
+      if (!isRegion && feature.properties.detail_route) {
+        for (const line of rings) life.line(line, LifeLine.path, width, id);
+        continue;
+      }
+
       if (feature.type === 1) {
         for (const ring of rings) {
           for (const p of ring) {
+            if (className === 'furniture' && variant === 14 && unitMeters && tile) {
+              if (!isRegion && inTileAt(p)) {
+                const heads = Math.max(1, Math.min(4, Number(feature.properties.lamp_heads ?? 1)));
+                const reach = Number(feature.properties.lamp_reach ?? 0.7) / unitMeters;
+                const worldScale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
+                const seed =
+                  (placeSeed(
+                    (tile.x * EXTENT + p.x) * worldScale,
+                    (tile.y * EXTENT + p.y) * worldScale,
+                  ) >>>
+                    8) &
+                  31;
+                for (let h = 0; h < heads; h++) {
+                  const angle =
+                    ((Number(feature.properties.lamp_bearing ?? 0) + (h * 360) / heads) * Math.PI) /
+                    180;
+                  const x = p.x + Math.sin(angle) * reach,
+                    y = p.y - Math.cos(angle) * reach;
+                  life.addLamps([p.x, p.y, LampState.working, seed, x, y, p.x, p.y], true);
+                }
+              }
+              continue;
+            }
             if (className === 'furniture' && (variant === 12 || variant === 13)) {
               if (strips && unitMeters && !isRegion) {
                 const stop = variant === 12;
@@ -919,7 +947,7 @@ export function buildTileGeometry(
               continue;
             }
             if (marker || landmark) addMarkers(p);
-            else addPoint(p, cls);
+            else if (!Number.isFinite(Number(feature.properties.seat_bearing))) addPoint(p, cls);
             if (landmark && !isRegion && unitMeters && inTileAt(p)) {
               life.flood(p, FLOOD.pointRadius / 2 / unitMeters);
             }
@@ -942,7 +970,8 @@ export function buildTileGeometry(
             if (className === 'building_market' && !isRegion && unitMeters && inTile) {
               life.shop(p, SHOP.pointRadius / 2 / unitMeters);
             }
-            if (place && inTile) life.place(p, place, 0);
+            if (place && inTile)
+              life.place(p, place, 0, false, Number(feature.properties.seat_bearing ?? NaN));
           }
         }
       } else if (feature.type === 2) {
@@ -1079,6 +1108,7 @@ export function buildTileGeometry(
         const solid = isBuilding(className) && height > 0;
         const standingWater = className === 'water_area' || className === 'water_sea';
         const obstacle =
+          !!feature.properties.detail_blocked ||
           solid ||
           standingWater ||
           className === 'building_part' ||
@@ -1087,7 +1117,8 @@ export function buildTileGeometry(
         for (const polygon of classifyRings(rings)) {
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
-            else if (solid || standingWater) life.area('blocked', polygon, standingWater);
+            else if (solid || standingWater || feature.properties.detail_blocked)
+              life.area('blocked', polygon, standingWater);
             else if (className === 'trees') life.area('parking-exclusion', polygon);
           }
           const base = fills.count;

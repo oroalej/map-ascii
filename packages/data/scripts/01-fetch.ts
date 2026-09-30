@@ -53,6 +53,7 @@ const detailQuery = (
   node["entrance"];
   nwr["amenity"~"^(bench|fountain|parking)$"];
   node["man_made"="flagpole"];
+  node["highway"="street_lamp"];
   nwr["leisure"="pitch"];
   node["place"];
   relation["boundary"="administrative"]["admin_level"="${city.subdivision.admin_level}"];

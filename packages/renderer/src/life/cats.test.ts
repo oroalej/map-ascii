@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { mapGlyphs, themes } from '../theme';
 import { drawProcedural } from '../glyphs/atlas';
-import { MAX_GLYPHS } from '../glyphs/select';
+import { MAX_GLYPHS, unpackGlyph } from '../glyphs/select';
 import { metersPerUnit } from '../raster/geometry';
-import { CAT, CAT_PAINTS, catGlyph, catGlyphs } from './cats';
-import { CellBit, LIFE_ZOOM, MAX_TILE_AGENTS } from './config';
+import { CAT_PAINTS, catGlyph, catGlyphs } from './cats';
+import { CAT, CellBit, LIFE_ZOOM, MAX_TILE_AGENTS } from './config';
 import { packLife, type LifeGrid } from './draw';
 import { LifeBuilder, LifeLine } from './geometry';
 import { Heading } from './masters';
@@ -48,7 +48,8 @@ describe('cats', () => {
       return out;
     };
     const small = render(0.5, 1);
-    expect(small[(15 * 40 + 20) * 4]).toBe(lookup(catGlyph(1, Heading.right)));
+    const at = (15 * 40 + 20) * 4;
+    expect(unpackGlyph(small[at]!, small[at + 1]!).glyph).toBe(lookup(catGlyph(1, Heading.right)));
     expect(small[(15 * 40 + 20) * 4 + 2]).toBe(CellBit.person);
     const rest = render(12, 2),
       groom = render(12, 3);

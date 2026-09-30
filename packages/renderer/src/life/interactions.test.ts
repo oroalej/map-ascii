@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { activityLevels } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LocalScenes } from './interactions';
+import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
@@ -53,6 +54,192 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  const crossingScene = (siteX = 110) => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 30 },
+        { x: 200, y: 30 },
+      ],
+      LifeLine.path,
+      2,
+    );
+    b.line(
+      [
+        { x: 80, y: 0 },
+        { x: 80, y: 200 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
+    b.area('crossing', [stripRing({ x: 76, y: 30 }, { x: 84, y: 30 }, 2)]);
+    b.site({ x: siteX, y: 30 }, 2, 0, true);
+    return new LocalScenes(b.finish(), 1, 8, []);
+  };
+
+  it('rejects stationary crossing sites and visits that would start inside the road', () => {
+    const unsafe = crossingScene(80);
+    const safe = crossingScene();
+    for (const kind of ['person', 'cat', 'dog'] as const) {
+      expect(unsafe.reserve(person(40, kind), 0)).toBe(false);
+      expect(safe.reserve(person(80, kind), 0)).toBe(false);
+    }
+    const group = person(40);
+    group.group = [{ ...walker }, { ...walker, back: 28 }];
+    // The first person fits at x110, but the trailing person's queue position lies on the road.
+    expect(safe.reserve(group, 0)).toBe(false);
+    expect(safe.sites[0]!.queue).toHaveLength(0);
+  });
+
+  it('releases a canceled reservation and finishes crossing before reversing', () => {
+    for (const kind of ['person', 'cat', 'dog'] as const) {
+      const scene = crossingScene();
+      scene.step(0, [], { rain: 1 });
+      const m = person(40, kind);
+      m.group = kind === 'person' ? [{ ...walker }, { ...walker, back: 2 }] : undefined;
+      expect(scene.reserve(m, 0)).toBe(true);
+      const visit = scene.visits.get(m)!;
+      while (m.x < 80) scene.step(0.1, [m], { rain: 1 });
+      const x = m.x;
+      scene.step(0.1, [m], { rain: 0 });
+      expect(visit.site.queue).toHaveLength(0);
+      expect(visit.returnPending).toBe(true);
+      expect(visit.state).toBe('approach');
+      expect(m.x).toBeGreaterThan(x);
+      expect(m.hx).toBe(1);
+      for (let i = 0; visit.returnPending && i < 100; i++) {
+        const x = m.x;
+        scene.step(0.1, [m], { rain: 0 });
+        expect(m.x).toBeGreaterThan(x);
+      }
+      expect(visit.returnPending).toBe(false);
+      expect(visit.state).toBe('return');
+      expect(m.x).toBeGreaterThan(83 + (kind === 'person' ? 2.45 : kind === 'dog' ? 0.45 : 0.325));
+      run(scene, [m], 60);
+      expect(scene.visits.has(m)).toBe(false);
+      expect(visit.site.queue).toHaveLength(0);
+    }
+  });
+
+  it('removes a stall immediately while its crossing visitor continues to safe ground', () => {
+    const scene = crossingScene();
+    scene.sites.length = 0;
+    const stall: Stall = { x: 110, y: 28.7, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    scene.addStall(stall);
+    const m = person(40);
+    expect(scene.reserve(m, 0)).toBe(true);
+    const visit = scene.visits.get(m)!;
+    while (m.x < 80) scene.step(0.1, [m], {});
+    scene.removeStall(stall);
+    expect(scene.sites).toHaveLength(0);
+    expect(visit.site.queue).toHaveLength(0);
+    expect(visit.returnPending).toBe(true);
+    const x = m.x;
+    scene.step(0.1, [m], {});
+    expect(m.x).toBeGreaterThan(x);
+    expect(m.hx).toBe(1);
+    run(scene, [m], 60);
+    expect(scene.visits.has(m)).toBe(false);
+  });
+
+  for (const kind of ['dog', 'cat'] as const) {
+    it(`guards the ${kind}'s shelter approach, arrival, and return and releases its reservation`, () => {
+      const scene = setup(2);
+      scene.step(0, [], { rain: 1 });
+      const m = person(40, kind);
+      expect(scene.reserve(m, 0)).toBe(true);
+      const visit = scene.visits.get(m)!;
+      const start = { ...m };
+      let limited = 0;
+      scene.step(
+        0.1,
+        [m],
+        { rain: 1 },
+        undefined,
+        undefined,
+        () => true,
+        undefined,
+        (_m, _to, d) => {
+          limited++;
+          return Math.min(d, 0.1);
+        },
+      );
+      expect(limited).toBeGreaterThan(0);
+      expect(m.x - start.x).toBeCloseTo(0.1);
+      const next = visit.next;
+      const trail = [...visit.trail];
+      const before = { ...m };
+      scene.step(0.1, [m], { rain: 1 }, undefined, undefined, () => false);
+      expect(m).toEqual(before);
+      expect(visit.next).toBe(next);
+      expect(visit.trail).toEqual(trail);
+      let checked = 0;
+      const allow = () => {
+        checked++;
+        return true;
+      };
+      for (let i = 0; i < 70; i++) scene.step(0.1, [m], { rain: 1 }, undefined, undefined, allow);
+      expect(visit.state).toBe('shelter');
+      expect(checked).toBeGreaterThan(1);
+      expect(visit.site.queue).toContain(m);
+      const approachChecks = checked;
+      for (let i = 0; i < 100; i++) scene.step(0.1, [m], { rain: 0 }, undefined, undefined, allow);
+      expect(checked).toBeGreaterThan(approachChecks);
+      expect(scene.visits.has(m)).toBe(false);
+      expect(visit.site.queue).toHaveLength(0);
+      expect([m.x, m.y]).toEqual([start.x, start.y]);
+    });
+
+    it(`rejects a ${kind}'s shelter seat whose center is clear but body overlaps a road`, () => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 30 },
+          { x: 200, y: 30 },
+        ],
+        LifeLine.path,
+      );
+      b.line(
+        [
+          { x: 0, y: 20 },
+          { x: 200, y: 20 },
+        ],
+        LifeLine.roadMinor,
+        6,
+      );
+      b.site({ x: 50, y: 23.1 }, 2, 0, true);
+      const scene = new LocalScenes(b.finish(), 1, 8, []);
+      expect(scene.sites).toHaveLength(1);
+      const m = person(40, kind);
+      expect(scene.reserve(m, 0)).toBe(false);
+      expect(scene.sites[0]!.queue).toHaveLength(0);
+    });
+
+    it(`validates the ${kind}'s orientation when it settles at a rest site`, () => {
+      const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+      const scene = setup(0, [stall]);
+      const m = person(40, kind);
+      expect(scene.reserve(m, 2)).toBe(true);
+      const visit = scene.visits.get(m)!;
+      const arrivalHeading = visit.site.hx;
+      let rejected = false;
+      for (let i = 0; i < 100 && !rejected; i++)
+        scene.step(0.1, [m], {}, undefined, undefined, (_next, _before) => {
+          if (visit.state === 'rest') {
+            rejected = true;
+            return false;
+          }
+          return true;
+        });
+      expect(arrivalHeading).toBe(1);
+      expect(rejected).toBe(true);
+      expect(visit.state).toBe('return');
+      expect(visit.site.queue).toHaveLength(0);
+      run(scene, [m], 10);
+      expect(scene.visits.has(m)).toBe(false);
+    });
+  }
+
   it('releases a removed vendor queue and returns active customers along their approach', () => {
     const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
     const scene = setup(0, [stall]),

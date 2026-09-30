@@ -190,7 +190,7 @@ export class WalkingGraph {
     return true;
   }
 
-  allowsBodies(bodies: readonly Body[]): boolean {
+  allowsBodies(bodies: readonly Body[], crossing = true): boolean {
     return this.roadAccess.allows(
       bodies.map((b) => ({
         ...b,
@@ -199,6 +199,7 @@ export class WalkingGraph {
         length: b.length / this.perMeter,
         width: b.width / this.perMeter,
       })),
+      crossing,
     );
   }
 

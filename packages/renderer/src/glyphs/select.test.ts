@@ -356,6 +356,47 @@ describe('sub-cell edges', () => {
     const outlined = (s: Sample) => s.cls === 'building';
     expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
   });
+
+  it('shows crowns reaching into road cells without promoting unrelated ground areas', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    expect(subcellEdge(R, [crown, R, crown, R, crown, R], never)).toEqual({
+      fg: crown,
+      mask: 21,
+      bg: 'road_mid',
+    });
+    expect(subcellEdge(R, [P, R, P, R, P, R], never)).toBeNull();
+  });
+
+  it('picks foliage over lower roofs and ground, but preserves taller and equal-height roofs', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    const roof = (height: number): Sample => ({ cls: 'building_part', id: 11, height });
+    for (const height of [6, 10, 15]) {
+      const building = roof(height);
+      const samples = [crown, building, crown, building, crown, building];
+      for (const center of [crown, building])
+        expect(subcellEdge(center, samples, never)).toEqual(
+          height < 10
+            ? { fg: crown, mask: 21, bg: 'building_part' }
+            : { fg: building, mask: 42, bg: 'tree_crown' },
+        );
+    }
+    expect(subcellEdge(P, [P, crown, P, crown, P, crown], never)).toEqual({
+      fg: crown,
+      mask: 42,
+      bg: 'park',
+    });
+    const lower = { ...crown, height: 6, id: 12 };
+    expect(subcellEdge(lower, [lower, crown, lower, crown, lower, crown], never)?.fg).toEqual(
+      crown,
+    );
+    const outlined = (sample: Sample) => sample.cls === 'building_part';
+    expect(
+      subcellEdge(roof(6), [crown, roof(6), crown, roof(6), crown, roof(6)], outlined)?.fg,
+    ).toEqual(crown);
+    expect(
+      subcellEdge(roof(10), [crown, roof(10), crown, roof(10), crown, roof(10)], outlined),
+    ).toBeNull();
+  });
 });
 
 /** Wall glyph for the cell marked `@` in a sketch where `#` and `@` are the feature. */

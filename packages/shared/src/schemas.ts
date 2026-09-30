@@ -241,7 +241,13 @@ export type LandCover = z.infer<typeof LandCover>;
  * it. Only woods have a tree `kind`.
  */
 export const CuratedArea = z
-  .strictObject({ ring: z.array(LngLat).min(4), cover: LandCover, kind: TreeKind.optional() })
+  .strictObject({
+    ring: z.array(LngLat).min(4),
+    cover: LandCover,
+    kind: TreeKind.optional(),
+    /** A raised planting bed, inaccessible to ground agents. */
+    raised: z.boolean().optional(),
+  })
   .refine(({ ring }) => ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1], {
     message: 'the ring must end where it starts',
     path: ['ring'],
@@ -250,6 +256,66 @@ export const CuratedArea = z
     message: 'only woods have a tree kind',
     path: ['kind'],
   });
+
+const DetailKey = z.string().regex(/^[a-z0-9-]+$/);
+const DetailLine = z
+  .array(LngLat)
+  .min(2)
+  .refine(
+    (line) => line.slice(1).every((p, i) => p[0] !== line[i]![0] || p[1] !== line[i]![1]),
+    'consecutive positions must differ',
+  );
+
+/** Sourced outdoor detail, anchored to an existing OSM area; coordinates are GeoJSON order. */
+export const SiteDetail = z
+  .strictObject({
+    id: z.string().regex(/^detail\/[a-z0-9-]+$/),
+    osm_id: OsmId,
+    title: z.string().min(1),
+    surface: z.literal('paving'),
+    walks: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          line: DetailLine,
+          width_m: z.number().positive().max(20),
+        }),
+      )
+      .default([]),
+    seating: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          line: DetailLine,
+          width_m: z.number().positive().max(3),
+          height_m: z.number().positive().max(2),
+          /** Which side of the directed seating line faces accessible paving. */
+          facing: z.enum(['left', 'right']),
+        }),
+      )
+      .default([]),
+    lamps: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          at: LngLat,
+          bearing: z.number().min(0).lt(360),
+          reach_m: z.number().positive().max(3),
+          heads: z.int().min(1).max(4),
+        }),
+      )
+      .default([]),
+    status: z.enum(['draft', 'verified']),
+    credit: z.string().min(1),
+    sources: Sources,
+  })
+  .superRefine((v, ctx) => {
+    for (const key of ['walks', 'seating', 'lamps'] as const) {
+      if (new Set(v[key].map((item) => item.id)).size !== v[key].length)
+        ctx.addIssue({ code: 'custom', path: [key], message: 'duplicate detail id' });
+    }
+  });
+export type SiteDetail = z.infer<typeof SiteDetail>;
 
 /** When a procession runs (the `Procession` schema's `schedule`). */
 /** An IANA time zone, e.g. "Asia/Manila". */
@@ -535,6 +601,7 @@ export function contentSchemas(languages?: readonly string[]) {
     LandmarkArt,
     LandmarkPlan,
     Landcover,
+    SiteDetail,
     Procession,
   };
 }

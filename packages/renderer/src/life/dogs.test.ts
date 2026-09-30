@@ -10,7 +10,7 @@ describe('dogs', () => {
   });
 
   it('has a glyph for each step and heading', () => {
-    expect(dogGlyphs()).toHaveLength(8);
+    expect(dogGlyphs()).toHaveLength(12);
     const g = dogGlyph(1, Heading.left);
     expect(dogOf(g)).toEqual({ frame: 1, heading: Heading.left });
     expect(dogOf('x')).toBeUndefined();
@@ -34,5 +34,29 @@ describe('dogs', () => {
       return false;
     });
     expect(differ).toBe(true);
+  });
+
+  it('appends a distinct resting pose, with four headings and matching stamped ink', () => {
+    expect(dogGlyph(0, Heading.up).charCodeAt(0)).toBe(0xe200);
+    expect(dogGlyph(1, Heading.left).charCodeAt(0)).toBe(0xe207);
+    expect(new Set(dogGlyphs()).size).toBe(12);
+    for (const box of [5, 10, 20]) {
+      const rows = (frame: 0 | 1 | 2, heading: Heading) => {
+        const at = dogPixels({ frame, heading }, box);
+        return Array.from({ length: box }, (_, y) =>
+          Array.from({ length: box }, (_, x) => at(x, y)).join(''),
+        );
+      };
+      const up = rows(2, Heading.up);
+      expect(up).not.toEqual(rows(0, Heading.up));
+      expect(up).not.toEqual(rows(1, Heading.up));
+      expect(rows(2, Heading.down)).toEqual(
+        [...up].reverse().map((r) => [...r].reverse().join('')),
+      );
+      expect(new Set([0, 1, 2, 3].map((h) => rows(2, h as Heading).join(''))).size).toBe(4);
+      for (let y = 0; y < box; y++)
+        for (let x = 0; x < box; x++)
+          expect(dogInk(2, 1 - (y + 0.5) / box, (x + 0.5) / box, box)).toBe(up[y]![x]);
+    }
   });
 });

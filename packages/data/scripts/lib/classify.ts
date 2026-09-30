@@ -108,6 +108,7 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
     return 'crossing';
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
+    if (tags.highway === 'street_lamp') return 'lamp';
     if (tags.highway === 'stop') return 'traffic_stop';
     if (tags.highway === 'traffic_signals') return 'signals';
     if (markedCrossing(tags)) return 'crossing';
@@ -126,7 +127,9 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
 }
 
 const isFurniture = (tags: Tags) =>
-  oneOf(tags.amenity, 'bench', 'fountain') || tags.man_made === 'flagpole';
+  oneOf(tags.amenity, 'bench', 'fountain') ||
+  tags.man_made === 'flagpole' ||
+  tags.highway === 'street_lamp';
 export const markedCrossing = (tags: Tags) =>
   oneOf(tags.crossing, 'zebra', 'marked', 'uncontrolled', 'traffic_signals') ||
   (tags['crossing:markings'] !== undefined && tags['crossing:markings'] !== 'no');

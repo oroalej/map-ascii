@@ -493,7 +493,7 @@ describe('birds and the world', () => {
 describe('street dogs', () => {
   const street = geometry([
     [
-      LifeLine.roadMinor,
+      LifeLine.path,
       [
         [0, 2048],
         [4095, 2048],
@@ -501,8 +501,9 @@ describe('street dogs', () => {
     ],
   ]);
 
-  it('roam minor roads in their coats, sniffing and turning', () => {
+  it('roam walking paths in their coats, sniffing and turning', () => {
     const life = new TileLife(tile, street, 11);
+    life.scenes.sites.length = 0;
     const dogs = life.movers.filter((m) => m.kind === 'dog');
     expect(dogs.length).toBeGreaterThan(0);
     for (const d of dogs) expect(DOG_PAINTS).toContain(d.paint);

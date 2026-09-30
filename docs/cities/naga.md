@@ -62,6 +62,8 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 ## 5. Data notes
 
+- **Plaza Quince Martires detail (draft).** `details/plaza-quince-martires.json` overrides the OSM plaza's ground with paving and adds four pedestrian routes, four curved seating edges, and six three-head lamp posts. `landcover/plaza-quince-martires.json` adds six individually sized broadleaved crowns and four raised lawn islands. These are illustrative estimates fitted to the OSM boundary from independently photographed Wikimedia Commons views by Patrick Roque (April 2023) and Ralff Nestor Nacor (August 2023), adapted under CC BY-SA 4.0 with credits in the map attribution. The monument plan adds an outer stepped apron and circular capital, confirmed by Nacor's December 2025 photograph. No Google screenshots were traced; the mapped flagpole stays at its OSM position. This is not a measured 2026 survey. Verify tree/fixture positions and dimensions on the ground before marking the records verified.
+
 - Local life scenes use mapped bus stops, jeepney terminals, and gazebos. The pack identifies the mapped Milaor, Dinaga, Carolina/Panicuason, and Pacol terminals as jeepney sites, with links to their OSM nodes. Tricycle stands, covered entrances near the Centro, and terminal curb positions still need sourced surveys; unmapped sites are not guessed. Terminal service and animal presence are illustrative, not live transport or wildlife data.
 
 - Check OpenHistoricalMap coverage for Naga, and contribute back.

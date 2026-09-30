@@ -13,6 +13,7 @@ import {
   CellBit,
   LIFE_SHADOW,
   lifeClassFor,
+  isWalker,
   type AgentKind,
 } from './config';
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
@@ -30,6 +31,7 @@ import {
 } from './people';
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
+import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -130,7 +132,7 @@ export function packLife(
   for (const parked of [true, false])
     for (const agent of agents) {
       if (!!agent.parked !== parked) continue;
-      const ground = !agent.aboard && (agent.kind === 'vehicle' || agent.kind === 'person');
+      const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
       journal = ground ? { before: new Map(), denied: false } : undefined;
       const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
       if (journal && grid.allowsGroundCell)
@@ -176,13 +178,30 @@ function drawAgent(
     const across: [number, number] = [sideCol - col, sideRow - row];
     if (Math.hypot(...along) * spec.length >= STAMP_MIN_CELLS) {
       const bits = STAMP_BITS[agent.kind] ?? agentBit[agent.kind];
-      const stamped = stamp(out, grid, [col, row], along, across, spec, (part) => [
-        // Boats are drawn solid, so the water doesn't show through them.
-        parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
-        classId(cls),
-        bits,
-        vehicleByte(agent.paint ?? 0, part, agent.parked),
-      ]);
+      const indicator =
+        agent.kind === 'vehicle' &&
+        !agent.parked &&
+        hasTurnSignals(agent.vehicle) &&
+        agent.turnSignal?.on &&
+        Math.hypot(...across) * spec.width >= 2
+          ? { side: agent.turnSignal.side, glyph: parts[VehiclePart.headlight]! }
+          : undefined;
+      const stamped = stamp(
+        out,
+        grid,
+        [col, row],
+        along,
+        across,
+        spec,
+        (part) => [
+          // Boats are drawn solid, so the water doesn't show through them.
+          parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
+          classId(cls),
+          bits,
+          vehicleByte(agent.paint ?? 0, part, agent.parked),
+        ],
+        indicator,
+      );
       // The vendor stands clear of the cart's side.
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
@@ -300,7 +319,7 @@ function drawPeople(
     const pull = (stroke ^ swap) as 0 | 1;
     let any = false;
     for (const slice of [0, 1, 2, 3] as const) {
-      const glyph = figureGlyph(look.figure, across, frame, { slice }, pull);
+      const glyph = figureGlyph(look.figure, across, frame, { slice }, pull, headingOf(fx, fy));
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
@@ -330,7 +349,7 @@ function drawPeople(
       } else if (fit === 'big') {
         any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
       } else {
-        const glyph = figureGlyph(look.figure, across, frame, { scale: fit });
+        const glyph = figureGlyph(look.figure, across, frame, { scale: fit }, 0, headingOf(fx, fy));
         any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
       }
       if (any) drawn++;
@@ -358,9 +377,14 @@ function drawPeople(
     if (fit === 'big') {
       any = putBig(look, c, r);
     } else {
-      const glyph = figureGlyph(look.figure, across, look.flap === 1 ? 1 : 0, {
-        scale: fit === 'stamp' ? 2 : fit,
-      });
+      const glyph = figureGlyph(
+        look.figure,
+        across,
+        look.flap === 1 ? 1 : 0,
+        { scale: fit === 'stamp' ? 2 : fit },
+        0,
+        headingOf(fx, fy),
+      );
       // In a 2×2 slot: its cell nearest the first of the group.
       const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
       any = put(c + dc, r + dr, glyph, byteOf(look));
@@ -590,7 +614,7 @@ function drawPet(
   const bits = agentBit.dog;
   const paint = agent.paint ?? PAINT_NONE;
   const catFrame = Math.min(3, agent.flap);
-  const dogFrame = agent.flap === 1 ? 1 : 0;
+  const dogFrame = agent.flap === 2 ? 2 : agent.flap === 1 ? 1 : 0;
   const art =
     agent.kind === 'cat'
       ? {
@@ -628,6 +652,7 @@ function drawPet(
   const index = glyphIndex(art.glyph(headingOf(x, y)));
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
+  rememberGroundCell(out, at);
   [out[at], out[at + 1]] = packGlyph(index, cls);
   out[at + 2] = bits;
   // Drawn like a canopy: the full ink its paint, the tone ink darker (shaders/glyph.ts).
@@ -648,6 +673,7 @@ function stamp(
   across: [number, number],
   spec: VehicleSpec,
   texel: (part: VehiclePart) => [number, number, number, number],
+  indicator?: { side: TurnSide; glyph: number },
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -668,6 +694,14 @@ function stamp(
   const r1 = Math.min(rows - 1, Math.floor(cy + extentY));
   if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_STAMP_CELLS) return false;
   let any = false;
+  // Nearest existing cells to front/rear corners: never enlarge the vehicle's footprint.
+  const lamps = indicator
+    ? [
+        { at: -1, score: Infinity, forward: -length * 0.4 },
+        { at: -1, score: Infinity, forward: length * 0.4 },
+      ]
+    : undefined;
+  const lampRight = indicator?.side === 'left' ? -spec.width * 0.4 : spec.width * 0.4;
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       // The cell's center in meters forward and to the right of the vehicle's center.
@@ -685,9 +719,26 @@ function stamp(
       [out[at], out[at + 1]] = packGlyph(glyph, cls);
       out[at + 2] = bits;
       out[at + 3] = byte;
+      if (lamps && (indicator!.side === 'left' ? right < 0 : right > 0))
+        for (const lamp of lamps) {
+          // Keep front and rear lamps on their own half, even when viewport clipping hides one.
+          if (forward * lamp.forward <= 0) continue;
+          const score = (forward - lamp.forward) ** 2 + (right - lampRight) ** 2;
+          if (score < lamp.score) {
+            lamp.at = at;
+            lamp.score = score;
+          }
+        }
       any = true;
     }
   }
+  if (lamps && indicator && indicator.glyph > 0 && indicator.glyph <= MAX_GLYPHS)
+    for (const lamp of lamps) {
+      if (lamp.at < 0) continue;
+      const cls = out[lamp.at + 1]! & 63;
+      [out[lamp.at], out[lamp.at + 1]] = packGlyph(indicator.glyph, cls);
+      out[lamp.at + 2] = out[lamp.at + 2]! | TURN_SIGNAL_BIT;
+    }
   return any;
 }
 

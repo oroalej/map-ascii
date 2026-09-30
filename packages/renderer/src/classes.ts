@@ -54,7 +54,7 @@ export const renderClasses: readonly RenderClass[] = [
  * Size of the per-class uniform arrays and the glyph table's class axis. The table's last five
  * rows hold sextant, roof-ridge, and wall glyphs (glyphs/select.ts).
  */
-export const MAX_CLASSES = 48;
+export const MAX_CLASSES = 56;
 if (renderClasses.length >= MAX_CLASSES - 5) throw new Error('too many render classes');
 
 const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
@@ -110,11 +110,12 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['water_river', 'water_stream'],
   ['coastline'],
   ['water_area', 'water_sea'],
-  // Crowns over the parks and grounds they stand in, under roads and buildings.
+  // Baseline crown depth. The crown pass overrides it over roads and lower roofs.
   ['tree_crown'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
   // Under the parks, woods, and fields drawn on it.
   ['grass'],
+  ['paving'],
   ['terrain'],
 ];
 
@@ -130,6 +131,14 @@ export const groundClasses: readonly RenderClass[] = [
   'building_market',
   'building_station',
 ];
+
+/** Surfaces crowns may cover: roads (1), or roofs only when the crown is taller (2). */
+export function crownSurfaces(): Int32Array {
+  const surfaces = new Int32Array(MAX_CLASSES);
+  for (const cls of ['road_major', 'road_mid', 'road_minor']) surfaces[classId(cls)] = 1;
+  for (const cls of [...groundClasses, 'building_part']) surfaces[classId(cls)] = 2;
+  return surfaces;
+}
 
 /** Clip-space depth between tiers. */
 export const TIER_STEP = 2 / (priority.length + 1);
@@ -150,7 +159,7 @@ export function classDepths(): Float32Array {
 /** The cell pass's depth for grounds: under grass, above terrain. */
 export function groundDepth(): number {
   const depths = classDepths();
-  return (depths[classId('grass')]! + depths[classId('terrain')]!) / 2;
+  return (depths[classId('paving')]! + depths[classId('terrain')]!) / 2;
 }
 
 /**
@@ -231,6 +240,7 @@ export function variantCode(className: string, variant: unknown): number {
         'shop_service',
         'stop_line',
         'oneway_arrow',
+        'lamp',
       ].indexOf(variant) + 1
     );
   if (className === 'tree' || className === 'trees') {

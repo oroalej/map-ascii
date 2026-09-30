@@ -52,6 +52,9 @@ precision highp sampler2D;
 uniform sampler2D u_class;
 uniform sampler2D u_attr;
 uniform sampler2D u_id;           // packed feature ids
+uniform sampler2D u_baseClass;    // underlying geometry before animated crowns
+uniform sampler2D u_baseAttr;
+uniform sampler2D u_baseId;
 uniform sampler2D u_table;        // MAX_VARIANTS x MAX_CLASSES glyph indices (+ wall rows)
 uniform int u_kind[${MAX_CLASSES}];
 uniform int u_count[${MAX_CLASSES}];
@@ -106,6 +109,21 @@ vec4 idAt(ivec2 p) {
   return texelFetch(u_id, p, 0);
 }
 
+// Crowns cover geometry, without making new road curbs or roof walls along their rims.
+bool crownAt(ivec2 p) { return classAt(p) == ${classId('tree_crown')}; }
+int groundClassAt(ivec2 p) {
+  p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
+  return crownAt(p) ? int(texelFetch(u_baseClass, p, 0).r * 255.0 + 0.5) : classAt(p);
+}
+vec4 groundAttrAt(ivec2 p) {
+  p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
+  return crownAt(p) ? texelFetch(u_baseAttr, p, 0) : texelFetch(u_attr, p, 0);
+}
+vec4 groundIdAt(ivec2 p) {
+  p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
+  return crownAt(p) ? texelFetch(u_baseId, p, 0) : idAt(p);
+}
+
 uint unpackId(vec4 id) {
   uvec4 b = uvec4(id * 255.0 + 0.5);
   return b.r | (b.g << 8u) | (b.b << 16u) | (b.a << 24u);
@@ -127,14 +145,18 @@ float stateOf(uint fid) {
   return fid == u_hover ? ${CellState.hover}.0 : 0.0;
 }
 
+int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
+
 // The class whose fill shows under a cell: its own, except carriageways drawn as 1-cell lines.
 int fillClass(int cls) {
-  bool line = ((u_roadMask >> cls) & 1) == 1 && u_zoom < ${float(ROAD_AREA_ZOOM)};
+  bool line = maskBit(u_roadMask, cls) == 1 && u_zoom < ${float(ROAD_AREA_ZOOM)};
   return line ? 0 : cls;
 }
 
 // The wall row a feature's outline uses at this zoom, or -1 (glyphs/select.ts wallStyle).
 int wallRowFor(int kind, vec4 attr) {
+  // Crown gb attributes encode the local surface, rather than feature flags.
+  if (kind == ${kindCodes.foliage}) return -1;
   int flags = int(attr.g * 255.0 + 0.5);
   if ((flags & ${Flags.landmark}) != 0 && u_zoom >= ${float(OUTLINE_ZOOM.landmark)}) {
     return kind == ${kindCodes.building} ? ${WALL_DOUBLE_ROW} : ${WALL_SINGLE_ROW};
@@ -154,6 +176,17 @@ bool isBuilding(int c) {
   return u_kind[c] == ${kindCodes.building};
 }
 
+// CPU twin: glyphs/select.ts edgeForegroundWins.
+bool edgeForegroundWins(int c, vec4 attr, int fg, vec4 fgAttr) {
+  bool crown = c == ${classId('tree_crown')};
+  bool underCrown = fg == ${classId('tree_crown')};
+  bool standing = isBuilding(c) && attr.r > 0.0;
+  bool underRoof = isBuilding(fg) && fgAttr.r > 0.0;
+  if (crown && (underRoof || underCrown)) return attr.r > fgAttr.r;
+  if (underCrown && standing) return attr.r >= fgAttr.r;
+  return crown || (!underRoof && standing);
+}
+
 int subClassAt(ivec2 q) {
   return int(texelFetch(u_subClass, q, 0).r * 255.0 + 0.5);
 }
@@ -168,12 +201,12 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
     ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
     int c = subClassAt(q);
-    // A building (with a height, not grounds) wins over the area it stands in.
-    bool standing = isBuilding(c) && texelFetch(u_subAttr, q, 0).r > 0.0;
-    if (isArea(c) && (fg == 0 || (!(isBuilding(fg) && fgAttr.r > 0.0) && standing))) {
+    if (cls != 0 && !isArea(cls) && c != ${classId('tree_crown')}) continue;
+    vec4 sampleAttr = texelFetch(u_subAttr, q, 0);
+    if (isArea(c) && (fg == 0 || edgeForegroundWins(c, sampleAttr, fg, fgAttr))) {
       fg = c;
       fgId = texelFetch(u_subId, q, 0);
-      fgAttr = texelFetch(u_subAttr, q, 0);
+      fgAttr = sampleAttr;
     }
   }
   if (fg == 0 || wallRowFor(u_kind[fg], fgAttr) >= 0) return false;
@@ -202,7 +235,7 @@ int awningSide(ivec2 p, vec4 id) {
     if (idAt(p + dir) == id) continue;
     for (int step = 1; step <= 3; step++) {
       int c = classAt(p + dir * step);
-      if (((u_roadMask >> c) & 1) != 0 || c == ${classId('path')}) return side;
+      if (maskBit(u_roadMask, c) != 0 || c == ${classId('path')}) return side;
       if (u_kind[c] == ${kindCodes.building} || u_kind[c] == ${kindCodes.water}) break;
     }
   }
@@ -213,18 +246,18 @@ const int OUTLINE = 0;
 const int CURBS = 1;
 
 int wallMask(ivec2 p, int mode) {
-  vec4 id = idAt(p);
+  vec4 id = groundIdAt(p);
   bool o[9];
   bool edge = false;
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       ivec2 q = p + ivec2(dx, dy);
-      int c = classAt(q);
-      bool seeThrough = ((u_seeThrough >> c) & 1) == 1;
-      bool sidewalk = (int(texelFetch(u_attr, clamp(q, ivec2(0), textureSize(u_attr, 0) - 1), 0).g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0;
+      int c = groundClassAt(q);
+      bool seeThrough = maskBit(u_seeThrough, c) == 1;
+      bool sidewalk = (int(groundAttrAt(q).g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0;
       bool outside = mode == CURBS
-        ? sidewalk || (((u_roadMask >> c) & 1) == 0 && !seeThrough)
-        : idAt(q) != id && !seeThrough;
+        ? sidewalk || (maskBit(u_roadMask, c) == 0 && !seeThrough)
+        : groundIdAt(q) != id && !seeThrough;
       o[(dy + 1) * 3 + dx + 1] = outside;
       edge = edge || outside;
     }
@@ -243,7 +276,8 @@ int imod(int a, int n) {
 }
 
 bool joins(int mask, ivec2 p) {
-  return ((mask >> classAt(p)) & 1) == 1;
+  int c = (mask & u_roadMask) != 0 ? groundClassAt(p) : classAt(p);
+  return maskBit(mask, c) == 1;
 }
 
 bool isWater(ivec2 p) {
@@ -316,8 +350,11 @@ void main() {
   vec4 attr = texelFetch(u_attr, p, 0);
   int variant = int(attr.b * 255.0 + 0.5);
 
+  // Test crown edges before road curbs and roof walls, including centers outside the crown.
+  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls)) && subcellEdge(p, cls, id)) return;
+
   // Carriageways at Place level: strips with curbs, blank road surface inside.
-  if (((u_roadMask >> cls) & 1) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
+  if (maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     int curb = wallMask(p, CURBS);
     vec2 glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).rg : vec2(0.0);
     if (curb < 0 && (int(attr.g * 255.0 + 0.5) & ${Flags.crossing}) != 0) {

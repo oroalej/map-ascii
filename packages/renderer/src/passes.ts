@@ -7,7 +7,15 @@
 import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
 import { project, TILE_SIZE } from './camera';
-import { classDepths, classId, classVisibility, groundClasses, groundDepth } from './classes';
+import {
+  classDepths,
+  classId,
+  classVisibility,
+  crownSurfaces,
+  groundClasses,
+  groundDepth,
+  TIER_STEP,
+} from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
@@ -15,6 +23,8 @@ import {
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadFixtures,
+  uploadSignalLights,
   uploadLights,
   uploadOverlay,
   type CellTargets,
@@ -39,13 +49,23 @@ import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
 import { EXTENT, MERCATOR_METERS, type TileLabel } from './raster/geometry';
-import { rainGlyphs, streetlightGlyph, type Theme } from './theme';
+import { rainGlyphs, type Theme } from './theme';
+import {
+  packFixtures,
+  packSignalLights,
+  updateFixtureSignals,
+  type PackedFixtures,
+  type StreetFixture,
+  type FixtureVisibility,
+} from './life/fixtures';
 import type { TileId } from './tiles';
 
 const depths = classDepths();
 const grounds = groundClasses.reduce((mask, cls) => mask | (1 << classId(cls)), 0);
 const groundsDepth = groundDepth();
 const crownClass = classId('tree_crown');
+const crownSurfaceClasses = crownSurfaces();
+const crownOverDepth = depths[classId('road_major')]! - TIER_STEP * 0.05;
 /** The water fish swim in: rivers and ponds. */
 const fishWater = [classId('water_river'), classId('water_area')];
 const seeThrough = seeThroughMask();
@@ -216,6 +236,9 @@ export function cellPass(
     u_origin: [placement.grid.originCol, placement.grid.originRow],
     u_crownClass: crownClass,
     u_wind: 0,
+    // Bind separate cached textures even during the base draw: no framebuffer feedback.
+    u_crownBaseClass: targets.classTex,
+    u_crownBaseAttr: targets.attrTex,
   });
   const matrices = layers.tiles.map(({ tile }) => placement.tileMatrix(tile));
   const regionMatrices = layers.region.map(({ tile }) => placement.tileMatrix(tile));
@@ -282,6 +305,8 @@ export function crownPass(
     u_origin: [placement.grid.originCol, placement.grid.originRow],
     u_crownClass: crownClass,
     u_time: time,
+    u_crownSurfaces: crownSurfaceClasses,
+    u_crownOverDepth: crownOverDepth,
     u_wind: wind.strength,
     u_windDir: wind.dir,
     u_grid: [cols, rows],
@@ -291,7 +316,12 @@ export function crownPass(
   const draw = (fbo: WebGLFramebuffer, width: number, height: number, sample: [number, number]) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.viewport(0, 0, width, height);
-    twgl.setUniforms(program, { u_sub: sample });
+    const underlying = fbo === targets.cellFbo ? base : subBase;
+    twgl.setUniforms(program, {
+      u_sub: sample,
+      u_crownBaseClass: underlying.classTex,
+      u_crownBaseAttr: underlying.attrTex,
+    });
     for (const { mesh, matrix } of drawn) {
       twgl.setUniforms(program, { u_matrix: matrix });
       drawCrowns(gl, mesh);
@@ -409,6 +439,9 @@ export function selectPass(
   gl.useProgram(programs.select.program);
   twgl.setUniforms(programs.select, {
     u_class: targets.classTex,
+    u_baseClass: targets.base.classTex,
+    u_baseAttr: targets.base.attrTex,
+    u_baseId: targets.base.idTex,
     u_shadows: shadows,
     u_awnings: awnings,
     u_attr: targets.attrTex,
@@ -551,6 +584,95 @@ export function lightPass(
 /** The weather over the map: how hard it rains (0–1), in which wind. */
 export type Weather = { rain: number; wind: WindNow | null; fish?: boolean; detail?: boolean };
 
+const fixturesOf = new WeakMap<
+  CellTargets,
+  {
+    packed: PackedFixtures;
+    fixtures: readonly StreetFixture[];
+    atlas: ThemeResources['map']['atlas'];
+    zoom: number;
+    dpr: number;
+    cellWidth: number;
+    cellHeight: number;
+    lightTexels: Uint8Array;
+    lightScores: Float32Array;
+  }
+>();
+
+/** Reproject hardware only when geometry/grid changes; upload phase changes independently. */
+export function fixturePass(
+  gl: GL,
+  targets: CellTargets,
+  resources: ThemeResources,
+  view: View,
+  placement: GridPlacement,
+  fixtures: readonly StreetFixture[],
+  clock: number,
+  repack: boolean,
+): FixtureVisibility {
+  let cache = fixturesOf.get(targets);
+  let changed = false;
+  if (
+    repack ||
+    !cache ||
+    cache.fixtures !== fixtures ||
+    cache.atlas !== resources.map.atlas ||
+    cache.zoom !== view.camera.zoom ||
+    cache.dpr !== view.dpr ||
+    cache.cellWidth !== view.cellDev.w ||
+    cache.cellHeight !== view.cellDev.h
+  ) {
+    const area = screenArea(view, placement.grid, view.cellDev);
+    const packed = packFixtures(
+      cache?.packed.texels ?? new Uint8Array(targets.cols * targets.rows * 4),
+      {
+        cols: targets.cols,
+        rows: targets.rows,
+        cellWidth: view.cellDev.w,
+        cellHeight: view.cellDev.h,
+        toCell: placement.toCell,
+        visible: (c, r) => c >= area.left && c <= area.right && r >= area.top && r <= area.bottom,
+      },
+      fixtures,
+      view.camera.zoom,
+      (glyph) => resources.map.atlas.index(glyph),
+      clock,
+    );
+    cache = {
+      packed,
+      fixtures,
+      atlas: resources.map.atlas,
+      zoom: view.camera.zoom,
+      dpr: view.dpr,
+      cellWidth: view.cellDev.w,
+      cellHeight: view.cellDev.h,
+      lightTexels: cache?.lightTexels ?? new Uint8Array(targets.cols * targets.rows * 4),
+      lightScores: cache?.lightScores ?? new Float32Array(targets.cols * targets.rows),
+    };
+    fixturesOf.set(targets, cache);
+    changed = true;
+  } else {
+    changed = updateFixtureSignals(cache.packed, clock);
+  }
+  if (changed) {
+    uploadFixtures(gl, targets, cache.packed.texels);
+    packSignalLights(
+      cache.lightTexels,
+      cache.packed,
+      {
+        cols: targets.cols,
+        rows: targets.rows,
+        cellWidth: view.cellDev.w,
+        cellHeight: view.cellDev.h,
+        dpr: view.dpr,
+      },
+      cache.lightScores,
+    );
+    uploadSignalLights(gl, targets, cache.lightTexels);
+  }
+  return cache.packed.visibility;
+}
+
 /**
  * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
  * overlay's labels on top, all lit for the time of day (`daylight`, 0 night – 1 day).
@@ -604,17 +726,23 @@ export function glyphPass(
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_subClass: targets.sub.classTex,
+    u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_daylight: daylight,
     u_light: targets.lightTex,
+    u_fixtures: targets.fixtureTex,
+    u_fixturePaints: themeRes.uniforms.fixtures,
+    u_signalGlow: (fixturesOf.get(targets)?.packed.signals.length ?? 0) > 0,
+    u_signalLight: targets.signalLightTex,
+    u_dpr: view.dpr,
     u_lampShow: lampShow,
     u_moon: moon,
     u_crownClass: classId('tree_crown'),
     u_crownSun:
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
-    u_lampGlyph: atlas.index(streetlightGlyph),
     u_vehicle: classId('life_vehicle'),
     u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
     u_boat: classId('life_boat'),

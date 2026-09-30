@@ -9,7 +9,6 @@ export const CAT_PAINTS = [
   Paint.white,
   Paint.maroon,
 ] as const;
-export const CAT = { spacing: 300, stride: 0.25, maxPerTile: 6 } as const;
 // prettier-ignore
 const frames = [
   ['..o..o....','..####....','...##.....','..####....','.#.###....','...###....','...###.#..','....##....','.....#....','......##..'],

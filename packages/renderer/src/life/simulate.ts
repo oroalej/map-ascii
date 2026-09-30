@@ -27,7 +27,9 @@ import {
   BIRD_WEATHER,
   BIRDS,
   CARABAO_SHARE,
+  CAT,
   DOG,
+  isWalker,
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
@@ -62,9 +64,9 @@ import {
 } from './birds';
 import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
 import { DOG_PAINTS } from './dogs';
-import { CAT, CAT_PAINTS } from './cats';
+import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
-import { SignalControl, signalState } from './signals';
+import { SignalControl } from './signals';
 import { YieldControl } from './yield';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -81,12 +83,22 @@ import {
 import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import {
+  hasTurnSignals,
+  TURN_SIGNAL,
+  turnSide,
+  visibleTurnSignal,
+  type TurnSignal,
+  type VehicleRouting,
+  type VehicleTurnPlan,
+} from './turn-signals';
+import {
   bodyInside,
   bodiesOverlap,
   segmentCrossing,
   Occupancy,
   PolygonIndex,
   memberSize,
+  animalSize,
   type Body,
   type Polygon,
 } from './occupancy';
@@ -168,6 +180,8 @@ export type Mover = {
   /** Local detour from the walking line, meters; relaxes back after an obstacle. */
   avoid?: number;
   waiting?: number;
+  /** Motor vehicles: immutable exit intent and rear-clearance state for turn indicators. */
+  routing?: VehicleRouting;
 };
 
 /**
@@ -400,7 +414,10 @@ export class TileLife {
   /** Tile units per meter. */
   readonly perMeter: number;
   readonly roadTerrain: PreparedRoadTerrain;
+  private idleGuard?: (owner: GroundAgent) => boolean;
+  private readonly idleBodies: Body[] = [];
   private readonly rng: () => number;
+  private readonly routingSeed: number;
   /** Scratch for `followSpeeds`, by mover: its speed, progress along its line, and offset. */
   private speeds = new Float64Array(0);
   private progress = new Float64Array(0);
@@ -431,6 +448,7 @@ export class TileLife {
     this.perMeter = 1 / metersPerUnit(tile);
     this.roadTerrain = prepareRoadTerrain(geo, this.perMeter);
     this.rng = random(seed);
+    this.routingSeed = seed;
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
     this.birdRng = random(seed ^ 0x165667b1);
@@ -460,7 +478,7 @@ export class TileLife {
     this.spawnStalls();
     this.spawnGatherers();
     this.spawnFlocks();
-    this.scenes = new LocalScenes(geo, this.perMeter, seed, this.stalls);
+    this.scenes = new LocalScenes(geo, this.perMeter, seed, this.stalls, (m) => this.canIdle(m));
     this.spawnCats();
   }
 
@@ -504,6 +522,8 @@ export class TileLife {
     if (!rules || meters === 0) return;
     const rng = dogs ? this.dogRng : this.rng;
     for (const rule of rules) {
+      // Cats spawn last on their own stream and with their own tile cap.
+      if (rule.kind === 'cat') continue;
       if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
       for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
@@ -544,6 +564,8 @@ export class TileLife {
           hy: 0,
           train,
         };
+        if (mover.kind === 'vehicle' && hasTurnSignals(vehicle))
+          mover.routing = this.newRouting(this.movers.length);
         if (rule.kind === 'person') {
           mover.group = this.spawnGroup();
           // Somewhere in their stride, so a crowd doesn't step in time.
@@ -570,7 +592,7 @@ export class TileLife {
 
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
   offsetOf(m: Mover): number {
-    if (m.kind === 'person') return this.scenes.visits.has(m) ? 0 : (m.avoid ?? 0);
+    if (isWalker(m.kind)) return this.scenes.visits.has(m) ? 0 : (m.avoid ?? 0);
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
@@ -609,6 +631,20 @@ export class TileLife {
     const lane = mover ? this.offsetOf(a) : 0;
     const x = a.x / this.perMeter - a.hy * lane;
     const y = a.y / this.perMeter + a.hx * lane;
+    if (mover && (a.kind === 'dog' || a.kind === 'cat')) {
+      const size = animalSize(a.kind);
+      const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+      Object.assign(b, {
+        x,
+        y,
+        hx: a.hx,
+        hy: a.hy,
+        length: Math.max(size.length, minimum),
+        width: Math.max(size.width, minimum),
+      });
+      out.length = 1;
+      return out;
+    }
     if (mover && a.vehicle) {
       const s = VEHICLES[a.vehicle];
       const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
@@ -637,6 +673,18 @@ export class TileLife {
     return out;
   }
 
+  /** World terrain supplies neighboring carriageways; standalone tiles use their own roads. */
+  setIdleGuard(guard: (owner: GroundAgent) => boolean) {
+    this.idleGuard = guard;
+  }
+
+  /** Idle opportunities require every physical body to be entirely off the carriageway. */
+  canIdle(owner: GroundAgent): boolean {
+    return this.idleGuard
+      ? this.idleGuard(owner)
+      : this.roadTerrain.access.allows(this.groundBodies(owner, 0, this.idleBodies), false);
+  }
+
   /** Resolve invalid initial positions instead of leaving an overlapping agent stuck. */
   settleGround(guard: GroundGuard) {
     for (let i = this.stalls.length - 1; i >= 0; i--)
@@ -656,14 +704,28 @@ export class TileLife {
     }
     for (let i = this.gatherers.length - 1; i >= 0; i--) {
       const g = this.gatherers[i]!;
-      let fits = guard(g);
+      let fits = this.canIdle(g) && guard(g);
       for (let attempt = 0; !fits && g.behavior !== 'sit' && attempt < 24; attempt++) {
         this.nextTarget(g);
         g.x = g.tx;
         g.y = g.ty;
-        fits = guard(g);
+        fits = this.canIdle(g) && guard(g);
       }
       if (!fits) this.gatherers.splice(i, 1);
+    }
+  }
+
+  /** Animals reserve only the space left after all legacy ground actors settle. */
+  settleAnimals(guard: GroundGuard) {
+    for (let i = this.movers.length - 1; i >= 0; i--) {
+      const m = this.movers[i]!;
+      if (m.kind !== 'cat' && m.kind !== 'dog') continue;
+      let fits = inTile(m) && guard(m);
+      for (let attempt = 0; !fits && attempt < 24; attempt++) {
+        this.advance(m, (3 + attempt) * this.perMeter, false);
+        fits = inTile(m) && guard(m);
+      }
+      if (!fits) this.movers.splice(i, 1);
     }
   }
 
@@ -786,8 +848,10 @@ export class TileLife {
     let count = 0;
     for (let line = 0; line < this.geo.kinds.length && count < CAT.maxPerTile; line++) {
       if (!usableLines.cat.includes(this.geo.kinds[line]! as LifeLine)) continue;
+      const rule = spawnRules[this.geo.kinds[line]! as LifeLine].find((r) => r.kind === 'cat');
+      if (!rule) continue;
       const length = this.lineLength(line);
-      const cats = Math.floor(length / this.perMeter / CAT.spacing + rng());
+      const cats = Math.floor(length / this.perMeter / rule.spacing + rng());
       for (
         let i = 0;
         i < cats && count < CAT.maxPerTile && this.movers.length < MAX_TILE_AGENTS;
@@ -800,10 +864,10 @@ export class TileLife {
           from: dir === 1 ? this.first(line) : this.last(line),
           dir,
           d: 0,
-          speed: (0.5 + rng() * 0.4) * this.perMeter,
+          speed: between(rng, rule.speed) * this.perMeter,
           paint: CAT_PAINTS[Math.floor(rng() * CAT_PAINTS.length)]!,
           lane: 0,
-          pause: 15 + rng() * 25,
+          pause: between(rng, CAT.initialPause),
           rank: rng(),
           x: 0,
           y: 0,
@@ -812,7 +876,12 @@ export class TileLife {
           walked: 0,
         };
         this.advance(m, rng() * length, false);
-        if (!inTile(m) || !this.scenes.walkable(m, m)) continue;
+        if (
+          !inTile(m) ||
+          !this.scenes.walkable(m, m) ||
+          !this.roadTerrain.access.allows(this.groundBodies(m))
+        )
+          continue;
         this.movers.push(m);
         count++;
       }
@@ -952,7 +1021,15 @@ export class TileLife {
         };
         if (g.behavior === 'sit') {
           // Side by side on the bench.
-          g.x = cx + (n - (count - 1) / 2) * 0.5 * perMeter;
+          const bearing = geo.seatBearings?.[i / PLACE_STRIDE];
+          const offset = (n - (count - 1) / 2) * 0.5 * perMeter;
+          if (bearing !== undefined && Number.isFinite(bearing)) {
+            const angle = (bearing * Math.PI) / 180;
+            g.hx = Math.sin(angle);
+            g.hy = -Math.cos(angle);
+            g.x = cx - g.hy * offset;
+            g.y = cy + g.hx * offset;
+          } else g.x = cx + offset;
         } else {
           const a = rng() * Math.PI * 2;
           const d = Math.sqrt(inner * inner + rng() * (outer * outer - inner * inner));
@@ -970,7 +1047,7 @@ export class TileLife {
           }
           this.nextTarget(g);
         }
-        this.gatherers.push(g);
+        if (this.canIdle(g)) this.gatherers.push(g);
       }
     }
   }
@@ -981,6 +1058,31 @@ export class TileLife {
    * building, monument, or fountain they stand by, or across the grounds they stand on.
    */
   private nextTarget(g: Gatherer) {
+    const previous = { tx: g.tx, ty: g.ty, sign: g.sign };
+    this.chooseTarget(g);
+    if (!this.canIdle(this.targetBody(g))) {
+      Object.assign(g, previous);
+      if (!this.canIdle(this.targetBody(g))) {
+        g.tx = g.x;
+        g.ty = g.y;
+      }
+    }
+  }
+
+  private targetBody(g: Gatherer): Gatherer {
+    const dx = g.tx - g.x,
+      dy = g.ty - g.y;
+    const length = Math.hypot(dx, dy);
+    return {
+      ...g,
+      x: g.tx,
+      y: g.ty,
+      hx: length > 0 ? dx / length : g.hx,
+      hy: length > 0 ? dy / length : g.hy,
+    };
+  }
+
+  private chooseTarget(g: Gatherer) {
     const rng = this.placeRng;
     const { perMeter } = this;
     const reach = 8 * perMeter;
@@ -1042,6 +1144,7 @@ export class TileLife {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
+      if (!this.canIdle(g)) g.pause = 0;
       if (g.pause > 0) {
         g.pause -= dt;
         continue;
@@ -1054,7 +1157,7 @@ export class TileLife {
       if (dist <= move) {
         g.x = g.tx;
         g.y = g.ty;
-        g.pause = between(rng, PLACES[g.place].pause);
+        g.pause = this.canIdle(g) ? between(rng, PLACES[g.place].pause) : 0;
         this.nextTarget(g);
       } else {
         g.hx = dx / dist;
@@ -1373,6 +1476,14 @@ export class TileLife {
     for (let guard = 0; guard < 256; guard++) {
       const to = m.from + m.dir;
       const length = this.segment(m.from, to);
+      const traveled = Math.min(left, Math.max(0, length - m.d));
+      if (m.routing?.signal && traveled > 0) {
+        const remaining = m.routing.signal.remaining - traveled / this.perMeter;
+        m.routing = {
+          ...m.routing,
+          signal: remaining > 0 ? { ...m.routing.signal, remaining } : undefined,
+        };
+      }
       if (m.d + left < length) {
         m.d += left;
         break;
@@ -1400,13 +1511,108 @@ export class TileLife {
     m.y = ay + m.hy * m.d;
   }
 
-  /** At a line's end: carry on along another usable line that starts or ends here, else U-turn. */
-  private turn(m: Mover) {
+  private exitOptions(m: Mover, vertex: number): number[] {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const usable = usableLines[m.kind];
-    const options = (this.ends.get(this.endKey(m.from)) ?? []).filter(
+    return (this.ends.get(this.endKey(vertex)) ?? []).filter(
       (code) => code !== arrived && usable.includes(this.geo.kinds[code >> 1]! as LifeLine),
     );
+  }
+
+  private newRouting(index: number): VehicleRouting {
+    return { seed: hashString(`${this.routingSeed}/turns/${index}`), turns: 0 };
+  }
+
+  /** Heading from a line end into that line, skipping repeated endpoint coordinates. */
+  private endHeading(code: number): readonly [number, number] {
+    const line = code >> 1;
+    const dir = (code & 1) === 0 ? 1 : -1;
+    const end = dir === 1 ? this.first(line) : this.last(line);
+    const opposite = dir === 1 ? this.last(line) : this.first(line);
+    for (let v = end + dir; dir === 1 ? v <= opposite : v >= opposite; v += dir) {
+      const dx = this.geo.coords[v * 2]! - this.geo.coords[end * 2]!;
+      const dy = this.geo.coords[v * 2 + 1]! - this.geo.coords[end * 2 + 1]!;
+      const length = Math.hypot(dx, dy);
+      if (length > 0) return [dx / length, dy / length];
+    }
+    return [0, 0];
+  }
+
+  private plannedExit(
+    m: Mover,
+    vertex: number,
+    options: readonly number[],
+  ): VehicleTurnPlan | undefined {
+    if (!options.length || !m.routing) return;
+    const pick = hashString(`${m.routing.seed}/${m.routing.turns}/${this.endKey(vertex)}`);
+    const exit = options[Math.floor((pick / 0x1_0000_0000) * options.length)]!;
+    const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
+    const back = this.endHeading(arrived);
+    const outward = [arrived, ...options].map((code) => this.endHeading(code));
+    const arms = new Set(
+      outward
+        .filter(([x, y]) => x !== 0 || y !== 0)
+        .map(([x, y]) => Math.round((Math.atan2(y, x) + Math.PI) / (Math.PI / 16)) % 32),
+    );
+    const radius = Math.max(
+      ...[arrived, ...options].map(
+        (code) => (this.geo.widths[code >> 1] || DEFAULT_ROAD_WIDTH_M) / 2,
+      ),
+    );
+    return {
+      line: m.line,
+      dir: m.dir,
+      vertex,
+      exit,
+      radius,
+      side: arms.size >= 3 ? turnSide([-back[0], -back[1]], this.endHeading(exit)) : undefined,
+    };
+  }
+
+  /** Plan before speed restrictions, so waiting traffic keeps its original intention. */
+  private prepareTurn(m: Mover, index: number) {
+    if (!hasTurnSignals(m.vehicle)) return;
+    m.routing ??= this.newRouting(index);
+    const plan = m.routing.plan;
+    if (plan && (plan.line !== m.line || plan.dir !== m.dir))
+      m.routing = { ...m.routing, plan: undefined, signal: undefined };
+    const vertex = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+    const progress = this.along[m.from]! + m.dir * m.d;
+    const remaining = m.dir * (this.along[vertex]! - progress);
+    const lead = Math.max(
+      TURN_SIGNAL.leadMeters * this.perMeter,
+      TURN_SIGNAL.leadSeconds * m.speed,
+    );
+    if (remaining <= lead && !m.routing.plan)
+      m.routing = { ...m.routing, plan: this.plannedExit(m, vertex, this.exitOptions(m, vertex)) };
+  }
+
+  /** At a line's end: consume a remembered exit, else keep the existing non-motor routing. */
+  private turn(m: Mover) {
+    const options = this.exitOptions(m, m.from);
+    const motor = m.kind === 'vehicle' && hasTurnSignals(m.vehicle);
+    const planned = m.routing?.plan;
+    const plan = motor
+      ? planned &&
+        planned.line === m.line &&
+        planned.dir === m.dir &&
+        planned.vertex === m.from &&
+        options.includes(planned.exit)
+        ? planned
+        : this.plannedExit(m, m.from, options)
+      : undefined;
+    if (motor && m.routing)
+      m.routing = {
+        ...m.routing,
+        turns: m.routing.turns + 1,
+        plan: undefined,
+        signal: plan?.side
+          ? {
+              side: plan.side,
+              remaining: plan.radius + VEHICLES[m.vehicle!].length / 2 + TURN_SIGNAL.gap,
+            }
+          : undefined,
+      };
     if (options.length === 0) {
       m.dir = m.dir === 1 ? -1 : 1;
       if (m.train) {
@@ -1424,9 +1630,16 @@ export class TileLife {
       }
       return;
     }
-    const code = m.train
-      ? this.straightest(m, options)
-      : options[Math.floor((m.kind === 'cat' ? this.catRng() : this.rng()) * options.length)]!;
+    const code = plan
+      ? plan.exit
+      : m.train
+        ? this.straightest(m, options)
+        : options[
+            Math.floor(
+              (m.kind === 'cat' ? this.catRng() : m.kind === 'dog' ? this.dogRng() : this.rng()) *
+                options.length,
+            )
+          ]!;
     m.line = code >> 1;
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
@@ -1671,7 +1884,7 @@ export class TileLife {
       .map((m, i) => ({ m, i }))
       .sort(
         (a, b) =>
-          Number(b.m.kind === 'person') - Number(a.m.kind === 'person') ||
+          Number(isWalker(b.m.kind)) - Number(isWalker(a.m.kind)) ||
           (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
           a.i - b.i,
       );
@@ -1680,6 +1893,7 @@ export class TileLife {
       if (near && !m.train && !near(m.x, m.y)) continue;
       if (this.scenes.visits.has(m)) continue;
       if (m.kind === 'vehicle') {
+        this.prepareTurn(m, i);
         speeds[i] = Math.min(
           speeds[i]!,
           this.scenes.speed(m, dt),
@@ -1703,40 +1917,39 @@ export class TileLife {
         continue;
       }
       if (m.kind === 'dog') {
-        this.stepDog(m, dt);
-        continue;
+        const speed = this.dogSpeed(m, dt, this.canIdle(m));
+        if (speed === undefined) continue;
+        speeds[i] = speed;
       }
       if (m.kind === 'cat') {
+        const idle = this.canIdle(m);
+        if (!idle) {
+          m.pause = 0;
+          m.grooming = false;
+        }
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
         m.grooming = false;
-        if (this.catRng() < 0.08 * dt) {
-          m.pause = 10 + this.catRng() * 35;
-          m.grooming = this.catRng() < 0.4;
+        if (idle && this.catRng() < CAT.pause.chance * dt) {
+          m.pause = between(this.catRng, CAT.pause.seconds);
+          m.grooming = this.catRng() < CAT.groomChance;
           continue;
         }
-        const before = { ...m };
-        m.walked = (m.walked ?? 0) + (m.speed * dt) / this.perMeter;
-        this.advance(m, m.speed * dt);
-        if (!this.scenes.walkable(before, m)) {
-          Object.assign(m, before);
-          m.pause = 2;
-          this.turnBack(m);
-        }
-        continue;
       }
       if (m.kind === 'person') {
+        const idle = this.canIdle(m);
+        if (!idle) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
-        if (rng() < PERSON_PAUSE.chance * dt) {
+        if (idle && rng() < PERSON_PAUSE.chance * dt) {
           m.pause = between(rng, PERSON_PAUSE.seconds);
           continue;
         }
-        if (rng() < PERSON_TURN_CHANCE * dt) {
+        if (idle && rng() < PERSON_TURN_CHANCE * dt) {
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -1744,6 +1957,9 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+      }
+      const walking = isWalker(m.kind);
+      if (walking) {
         speeds[i] =
           this.signals.walkDistance(
             m,
@@ -1751,14 +1967,24 @@ export class TileLife {
             speeds[i]! * dt,
             clock,
           ) / dt;
-        m.walked = (m.walked ?? 0) + (speeds[i] * dt) / this.perMeter;
       }
       const before = { ...m };
       const distance = speeds[i]! * dt;
-      if (m.kind === 'person') m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
+      if (walking) {
+        m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
+        m.walked = (m.walked ?? 0) + distance / this.perMeter;
+      }
       this.advance(m, distance);
-      if (guard && (m.kind === 'vehicle' || m.kind === 'person')) {
-        let fits = guard(m, before);
+      // Standalone animal callers still enforce terrain without a world guard.
+      const fitsGround =
+        guard ??
+        ((next: GroundAgent, previous?: GroundAgent) =>
+          !('kind' in next) ||
+          (next.kind !== 'cat' && next.kind !== 'dog') ||
+          (this.scenes.walkable(previous ?? next, next) &&
+            this.roadTerrain.access.allows(this.groundBodies(next))));
+      if (m.kind === 'vehicle' || walking) {
+        let fits = fitsGround(m, before);
         if (!fits) {
           // Vehicles creep; walkers also step aside, preferring the same side on successive
           // steps so detours don't oscillate. Each try is [side, share of the step].
@@ -1767,9 +1993,10 @@ export class TileLife {
             [0, 0.25],
           ];
           let limit = 0;
-          if (m.kind === 'person') {
+          if (walking) {
             // Mapped sidewalk/path widths bound detours; unmeasured paths retain 1.5 m.
-            limit = Math.max(0, (this.geo.widths[m.line] || 4) / 2 - 0.5);
+            const width = m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind).width : 1;
+            limit = Math.max(0, (this.geo.widths[m.line] || 4) / 2 - width / 2);
             const side = Math.sign(before.avoid ?? 0) || (i % 2 ? -1 : 1);
             tries = [
               [side, 0.5],
@@ -1780,16 +2007,20 @@ export class TileLife {
           }
           for (const [side, share] of tries) {
             Object.assign(m, before);
-            if (m.kind === 'person')
+            if (walking) {
               m.avoid = Math.max(-limit, Math.min(limit, (before.avoid ?? 0) + side! * dt * 1.5));
+              m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
+            }
             this.advance(m, distance * share!);
-            if ((fits = guard(m, before))) break;
+            if ((fits = fitsGround(m, before))) break;
           }
         }
         if (!fits) Object.assign(m, before);
         m.waiting = fits ? 0 : (before.waiting ?? 0) + dt;
-        if (m.kind === 'person' && !fits)
-          m.walked = Math.max(0, (m.walked ?? 0) - distance / this.perMeter);
+        if (!fits && m.kind === 'cat') {
+          m.pause = CAT.blockedPause;
+          this.turnBack(m);
+        }
       }
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
@@ -1808,28 +2039,30 @@ export class TileLife {
    * A street dog (config.ts `DOG`): it stops to sniff, now and then lies down a long while,
    * turns back, and trots in short bursts.
    */
-  private stepDog(m: Mover, dt: number) {
+  private dogSpeed(m: Mover, dt: number, idle: boolean): number | undefined {
     const rng = this.dogRng;
+    if (!idle) {
+      m.pause = 0;
+      m.lying = false;
+    }
     if (m.pause > 0) {
       m.pause -= dt;
       if (m.pause <= 0) m.lying = false;
       return;
     }
-    if (rng() < DOG.lie.chance * dt) {
+    if (idle && rng() < DOG.lie.chance * dt) {
       m.pause = between(rng, DOG.lie.seconds);
       m.lying = true;
       return;
     }
-    if (rng() < DOG.pause.chance * dt) {
+    if (idle && rng() < DOG.pause.chance * dt) {
       m.pause = between(rng, DOG.pause.seconds);
       return;
     }
-    if (rng() < DOG.turnChance * dt) this.turnBack(m);
+    if (idle && rng() < DOG.turnChance * dt) this.turnBack(m);
     if ((m.trot ?? 0) > 0) m.trot = m.trot! - dt;
     else if (rng() < DOG.trot.chance * dt) m.trot = between(rng, DOG.trot.seconds);
-    const speed = (m.trot ?? 0) > 0 ? Math.max(m.speed, DOG.trot.speed * this.perMeter) : m.speed;
-    m.walked = (m.walked ?? 0) + (speed * dt) / this.perMeter;
-    this.advance(m, speed * dt);
+    return (m.trot ?? 0) > 0 ? Math.max(m.speed, DOG.trot.speed * this.perMeter) : m.speed;
   }
 
   /**
@@ -2058,6 +2291,8 @@ export type VisibleAgent = {
   vehicle?: CraftType;
   paint?: number;
   parked?: boolean;
+  /** Detailed motor vehicles only: local side and simulation-clock blink phase. */
+  turnSignal?: TurnSignal;
   /** People: holding a candle (lit at dusk and night). */
   candle?: boolean;
   /**
@@ -2114,6 +2349,23 @@ export class LifeWorld {
     trees: PolygonIndex;
     origins: Map<TileLife, { x: number; y: number; scale: number }>;
   };
+  private readonly idleSample: Body[] = [];
+
+  private canIdle(life: TileLife, owner: GroundAgent): boolean {
+    // Eviction releases cached origins immediately; rebuild before using surviving visitors.
+    if (!this.groundTerrain) this.groundGuard();
+    const terrain = this.groundTerrain!;
+    const o = terrain.origins.get(life);
+    if (!o) return life.roadTerrain.access.allows(life.groundBodies(owner), false);
+    const bodies = life.groundBodies(owner, 0, this.idleSample);
+    for (const b of bodies) {
+      b.x = o.x + b.x * o.scale;
+      b.y = o.y + b.y * o.scale;
+      b.length *= o.scale;
+      b.width *= o.scale;
+    }
+    return terrain.roadAccess.allows(bodies, false);
+  }
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
   private readonly tiles = new Map<string, TileLife>();
   private traffic: ResolvedTraffic;
@@ -2166,6 +2418,7 @@ export class LifeWorld {
     if (added.size) {
       const guard = this.groundGuard(0, added);
       for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
+      for (const tile of added) tile.settleAnimals((owner, before) => guard(tile, owner, before));
       if ([...added].some((tile) => tile.geo.commerce?.length)) {
         const commerceGuard = this.groundGuard();
         for (const tile of added)
@@ -2238,9 +2491,14 @@ export class LifeWorld {
         }
       }
       this.groundTerrain!.roadAccess = this.roadCache.build(contributions);
+      for (const life of this.tiles.values())
+        life.setIdleGuard((owner) => this.canIdle(life, owner));
       // A neighboring buffered crown can invalidate an already admitted parking placement.
       for (const life of this.tiles.values()) {
         const o = origin(life);
+        for (let i = life.gatherers.length - 1; i >= 0; i--)
+          if (life.gatherers[i]!.behavior === 'sit' && !life.canIdle(life.gatherers[i]!))
+            life.gatherers.splice(i, 1);
         for (let i = life.parked.length - 1; i >= 0; i--) {
           const p = life.parked[i]!,
             spec = VEHICLES[p.vehicle];
@@ -2307,7 +2565,7 @@ export class LifeWorld {
         if (
           inView(m) &&
           !life.scenes.hidden(m) &&
-          (m.kind === 'vehicle' || m.kind === 'person') &&
+          (m.kind === 'vehicle' || isWalker(m.kind)) &&
           (!this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
           occupied.set(m, bodies(life, m, buffer(m).live));
@@ -2318,7 +2576,7 @@ export class LifeWorld {
     if (buildStart !== undefined)
       this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
     const check = (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
-      const onFoot = !('kind' in owner) || owner.kind === 'person';
+      const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
       const previous = before ? bodies(life, before, this.groundPrevious) : next;
@@ -2393,8 +2651,7 @@ export class LifeWorld {
       if (agent.aboard) return true;
       body.x = (col + 0.5 - c0) * width;
       body.y = (row + 0.5 - r0) * height;
-      if (agent.kind === 'person')
-        return terrain.roadAccess.allows(sample, agent.vehicle !== 'cart');
+      if (isWalker(agent.kind)) return terrain.roadAccess.allows(sample, agent.vehicle !== 'cart');
       return (
         agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !terrain.trees.hits(sample)
       );
@@ -2602,6 +2859,11 @@ export class LifeWorld {
     return this.tiles.size;
   }
 
+  /** The same frozen/running clock used by traffic stopping and fixture colors. */
+  get signalClock() {
+    return this.clock;
+  }
+
   /**
    * The agents to draw at `zoom` and time of day: those whose kind shows at the zoom and who
    * are out (config.ts `activityLevels`), movers only inside their own tile (tiles overlap in their
@@ -2640,35 +2902,6 @@ export class LifeWorld {
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
-      if (zoom >= 17)
-        for (const s of life.signals.signals) {
-          if (!inTile(s) || !inView(s.x, s.y)) continue;
-          const state = signalState(s.seed, this.clock, s.a < 0);
-          for (const [bearing, color] of [
-            [s.a < 0 ? 0 : s.a, state.a],
-            [s.b, state.b],
-          ] as const) {
-            const theta = (bearing * Math.PI) / 180,
-              hx = Math.sin(theta),
-              hy = -Math.cos(theta);
-            for (const sign of [-1, 1]) {
-              const [lng, lat] = tileToLngLat(tile, {
-                x: s.x + sign * (hx * s.radius - hy * (s.radius - 1.5)) * perMeter,
-                y: s.y + sign * (hy * s.radius + hx * (s.radius - 1.5)) * perMeter,
-              });
-              out.push({
-                kind: 'vehicle',
-                glyph: '•',
-                lng,
-                lat,
-                paint:
-                  color === 'green' ? Paint.green : color === 'amber' ? Paint.yellow : Paint.red,
-                parked: true,
-                flap: 0,
-              });
-            }
-          }
-        }
       for (const m of life.movers) {
         if (life.scenes.hidden(m)) continue;
         if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
@@ -2697,6 +2930,7 @@ export class LifeWorld {
             side,
             vehicle: m.vehicle,
             paint: m.paint,
+            turnSignal: m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
             flap: 0,
           });
         } else if (m.group) {
@@ -2714,8 +2948,8 @@ export class LifeWorld {
           // Standing, sniffing, or lying down, it keeps still.
           const still = m.pause > 0 || life.scenes.still(m);
           const cat = m.kind === 'cat';
-          // Cats sit (2) or groom (3) when still; dogs stand (0).
-          const stillFlap = cat ? (m.grooming ? 3 : 2) : 0;
+          // Cats sit (2) or groom (3); lying dogs use their resting silhouette (2).
+          const stillFlap = cat ? (m.grooming ? 3 : 2) : m.lying ? 2 : 0;
           const stride = cat ? CAT.stride : DOG.stride;
           const flap = still ? stillFlap : Math.floor((m.walked ?? 0) / stride) & 1;
           out.push({ kind: m.kind, lng, lat, ahead, paint: m.paint, flap });
@@ -2752,7 +2986,7 @@ export class LifeWorld {
           const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
           const still = g.pause > 0 || g.behavior === 'sit';
           const look: PersonLook = {
-            figure: shaded ? 'umbrella' : w.figure,
+            figure: shaded ? 'umbrella' : g.behavior === 'sit' ? 'seated' : w.figure,
             paint: shaded ? w.canopy : w.shirt,
             lateral: 0,
             back: 0,

@@ -10,8 +10,8 @@ import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometr
 import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
-import { usableLines, type Activity } from './config';
-import { memberSize } from './occupancy';
+import { isWalker, usableLines, type Activity } from './config';
+import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 
 export const INTERACTIONS = {
@@ -47,6 +47,8 @@ export type Visit = {
   seat: number;
   sheltering: boolean;
   blocked: number;
+  /** Cancellation waits for the full footprint to leave the crossing before reversing. */
+  returnPending?: boolean;
 };
 type Service = {
   site: Site;
@@ -80,6 +82,7 @@ export class LocalScenes {
     readonly perMeter: number,
     seed: number,
     stalls: readonly Stall[],
+    private readonly idleGuard?: (mover: Mover) => boolean,
   ) {
     this.graph = new WalkingGraph(geo, perMeter);
     this.rng = random(seed ^ 0xb5297a4d);
@@ -142,7 +145,7 @@ export class LocalScenes {
   /** Removed placements must not leave reservable vendor/rest sites behind. */
   removeStall(stall: Stall) {
     for (const [mover, visit] of this.visits)
-      if (visit.site.stall === stall && visit.state !== 'return') this.returning(mover, visit);
+      if (visit.site.stall === stall && visit.state !== 'return') this.requestReturn(mover, visit);
     for (let i = this.sites.length - 1; i >= 0; i--)
       if (this.sites[i]!.stall === stall) {
         this.sites[i]!.queue.length = 0;
@@ -187,7 +190,7 @@ export class LocalScenes {
   /** Explicit entry point also used by deterministic scene tests. */
   reserve(m: Mover, index: number): boolean {
     const site = this.sites[index];
-    if (!site || this.visits.has(m)) return false;
+    if (!site || this.visits.has(m) || (isWalker(m.kind) && !this.canIdle(m))) return false;
     const size = m.group?.length ?? 1;
     const occupied = new Set(
       site.queue.flatMap((p) => {
@@ -204,19 +207,7 @@ export class LocalScenes {
     if (seat + size > site.capacity) return false;
     const point = this.queuePoint(site, seat);
     if (!inTile(point)) return false;
-    if (
-      m.kind === 'person' &&
-      !this.graph.allowsBodies(
-        (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => ({
-          x: point.x - site.hy * w.lateral * this.perMeter - site.hx * w.back * this.perMeter,
-          y: point.y + site.hx * w.lateral * this.perMeter - site.hy * w.back * this.perMeter,
-          hx: site.hx,
-          hy: site.hy,
-          length: memberSize(w.figure).length * this.perMeter,
-          width: memberSize(w.figure).width * this.perMeter,
-        })),
-      )
-    )
+    if (isWalker(m.kind) && !this.canIdle({ ...m, ...point, hx: site.hx, hy: site.hy, avoid: 0 }))
       return false;
     const path = this.graph.route(m, point);
     if (!path || !path.every(inTile)) return false;
@@ -244,7 +235,35 @@ export class LocalScenes {
     visit.next = 1;
     visit.state = 'return';
     visit.blocked = 0;
+    visit.returnPending = false;
     m.pause = 0;
+    m.lying = false;
+  }
+
+  private canIdle(m: Mover): boolean {
+    if (this.idleGuard) return this.idleGuard(m);
+    const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
+    return this.graph.allowsBodies(
+      (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => {
+        const size =
+          m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind) : memberSize(w.figure);
+        return {
+          x: m.x - m.hy * (w.lateral + lane) * this.perMeter - m.hx * w.back * this.perMeter,
+          y: m.y + m.hx * (w.lateral + lane) * this.perMeter - m.hy * w.back * this.perMeter,
+          hx: m.hx,
+          hy: m.hy,
+          length: size.length * this.perMeter,
+          width: size.width * this.perMeter,
+        };
+      }),
+      false,
+    );
+  }
+
+  private requestReturn(m: Mover, visit: Visit) {
+    visit.site.queue = visit.site.queue.filter((p) => p !== m);
+    if (isWalker(m.kind) && !this.canIdle(m)) visit.returnPending = true;
+    else this.returning(m, visit);
   }
 
   private move(
@@ -254,7 +273,7 @@ export class LocalScenes {
     guard?: MoveGuard,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
   ) {
-    const before = guard && m.kind === 'person' ? { ...m } : undefined;
+    const before = guard && isWalker(m.kind) ? { ...m } : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
     let left = m.speed * dt;
@@ -266,7 +285,7 @@ export class LocalScenes {
         m.hy = (target.y - m.y) / d;
       }
       let step = Math.min(d, left);
-      if (m.kind === 'person' && walkLimit) step = walkLimit(m, target, step);
+      if (isWalker(m.kind) && walkLimit) step = walkLimit(m, target, step);
       if (step <= 0 && d > 0.001) break;
       m.x += m.hx * step;
       m.y += m.hy * step;
@@ -289,6 +308,10 @@ export class LocalScenes {
       return false;
     }
     visit.blocked = 0;
+    if (visit.returnPending && this.canIdle(m)) {
+      this.returning(m, visit);
+      return false;
+    }
     return visit.next >= visit.path.length;
   }
 
@@ -333,7 +356,8 @@ export class LocalScenes {
           (kind === 'vendor' && visit.site.stall?.open === false) ||
           (!this.wet && visit.sheltering))
       )
-        this.returning(m, visit);
+        this.requestReturn(m, visit);
+      if (visit.returnPending && this.canIdle(m)) this.returning(m, visit);
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
         if (!this.move(m, visit, dt, guard, walkLimit)) continue;
         if (visit.state === 'return') {
@@ -355,7 +379,7 @@ export class LocalScenes {
           m.hy = visit.site.hy;
           m.pause = 1;
           m.lying = m.kind === 'dog';
-          if (m.kind === 'person' && guard && !guard(m, before)) {
+          if (isWalker(m.kind) && (!this.canIdle(m) || (guard && !guard(m, before)))) {
             Object.assign(m, before);
             this.returning(m, visit);
           }

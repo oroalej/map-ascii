@@ -10,11 +10,11 @@
  * and `FIGURE_TONE` for its skin (the theme's person color) or a canopy's ribs, which the glyph
  * shader tells apart (shaders/glyph.ts `personColor`).
  */
-import { doubled } from './masters';
+import { doubled, turnedPixels, type Heading } from './masters';
 import { Paint } from './vehicles';
 
-/** Someone walking, a child, an umbrella from above, or a paddler in a boat with their paddle. */
-export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower';
+/** Walking or seated people, a child, an umbrella, or a paddler with their paddle. */
+export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated';
 
 /**
  * One person as drawn (life/draw.ts `drawPeople`): their figure and its paint (`PAINT_NONE` for
@@ -35,6 +35,7 @@ export type PersonLook = {
  */
 export const FIGURE_SIZE_M: Readonly<Record<PersonFigure, number>> = {
   adult: 0.6,
+  seated: 0.6,
   child: 0.45,
   umbrella: 1,
   // A paddler with their paddle reaching out over the water.
@@ -224,9 +225,30 @@ const ROWER: Readonly<Record<number, readonly string[]>> = {
   20: doubled(ROWER_10),
 };
 
+/** Seated facing up: knees and feet ahead of compact shoulders and the head. */
+// prettier-ignore
+const SEATED_10 = [
+  '..oo..oo..',
+  '..##..##..',
+  '..##..##..',
+  '..######..',
+  '..######..',
+  '..#oooo#..',
+  '..#oooo#..',
+  '...oooo...',
+  '..........',
+  '..........',
+];
+// prettier-ignore
+const SEATED: Readonly<Record<number, readonly string[]>> = {
+  5: ['.o.o.', '.###.', '.#o#.', '..o..', '.....'],
+  10: SEATED_10,
+  20: doubled(SEATED_10),
+};
+
 export const FIGURE_MASTERS: Readonly<
   Record<PersonFigure, Readonly<Record<number, readonly string[]>>>
-> = { adult: ADULT, child: CHILD, umbrella: UMBRELLA, rower: ROWER };
+> = { adult: ADULT, child: CHILD, umbrella: UMBRELLA, rower: ROWER, seated: SEATED };
 
 /** Each figure's master sizes, smallest first. */
 const sizesOf = (figure: PersonFigure) =>
@@ -238,6 +260,7 @@ const MASTER_SIZES: Readonly<Record<PersonFigure, readonly number[]>> = {
   child: sizesOf('child'),
   umbrella: sizesOf('umbrella'),
   rower: sizesOf('rower'),
+  seated: sizesOf('seated'),
 };
 
 /**
@@ -253,6 +276,8 @@ export type FigureGlyph = {
   slice?: 0 | 1 | 2 | 3;
   /** A paddler: at the reach (0, the blade forward) or the pull (1, the master turned end to end). */
   stroke?: 0 | 1;
+  /** Seated figures are directional, unlike the symmetric walking silhouettes. */
+  heading?: Heading;
 };
 
 /** Where a figure glyph goes: one cell at a scale, or one cell of a 2×2 figure. */
@@ -290,9 +315,18 @@ for (const across of [false, true]) {
   }
 }
 
-const keyOf = ({ figure, across, frame, scale, slice, stroke }: FigureGlyph) => {
+// Append seated glyphs so every existing Private Use character keeps its meaning.
+for (const heading of [0, 1, 2, 3] as const) {
+  for (const scale of [0, 1, 2] as const)
+    glyphTable.push({ figure: 'seated', across: false, frame: 0, heading, scale });
+  for (const slice of [0, 1, 2, 3] as const)
+    glyphTable.push({ figure: 'seated', across: false, frame: 0, heading, slice });
+}
+
+const keyOf = ({ figure, across, frame, scale, slice, stroke, heading }: FigureGlyph) => {
   const at = slice === undefined ? `s${scale}` : `c${slice}`;
   if (figure === 'umbrella') return `umbrella:${at}`;
+  if (figure === 'seated') return `seated:${heading ?? (across ? 1 : 0)}:${at}`;
   return `${figure}:${+across}:${frame}:${at}:${stroke ?? 0}`;
 };
 const byKey = new Map(glyphTable.map((g, i) => [keyOf(g), String.fromCharCode(FIRST_CODE + i)]));
@@ -308,8 +342,9 @@ export function figureGlyph(
   frame: 0 | 1,
   at: FigureAt = { scale: 2 },
   stroke: 0 | 1 = 0,
+  heading?: Heading,
 ): string {
-  return byKey.get(keyOf({ figure, across, frame, ...at, stroke }))!;
+  return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading }))!;
 }
 
 /** Which figure a glyph draws, if it is one. */
@@ -326,6 +361,7 @@ export function personGlyphs(): string[] {
  * mirrored for its heading and step.
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
+  if (g.figure === 'seated') return turnedPixels(SEATED, box, g.heading ?? (g.across ? 1 : 0));
   const masters = FIGURE_MASTERS[g.figure];
   const sizes = MASTER_SIZES[g.figure];
   const size = sizes.find((s) => s >= box) ?? sizes[sizes.length - 1]!;
@@ -361,5 +397,7 @@ export function figureInk(
   const at = (t: number) => Math.min(size - 1, Math.max(0, Math.floor(t * size)));
   const x = at(v);
   const y = at(1 - u);
-  return masters[size]![stroke === 1 ? size - 1 - y : y]![frame === 1 ? size - 1 - x : x]!;
+  return masters[size]![figure !== 'seated' && stroke === 1 ? size - 1 - y : y]![
+    figure !== 'seated' && frame === 1 ? size - 1 - x : x
+  ]!;
 }

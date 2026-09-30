@@ -48,6 +48,8 @@ const float SPLIT = 0.2;
 ${cellHashGlsl}
 ${vegetationGlsl}
 
+int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
+
 void main() {
   int cls = int(a_meta.x + 0.5);
   bool crown = cls == u_crownClass;
@@ -66,13 +68,13 @@ void main() {
   float depth = u_depth[cls] - a_meta.y / 255.0 * ${TIER_STEP * 0.9};
   if ((int(a_meta.z + 0.5) & ${Flags.crossing}) != 0) depth -= ${TIER_STEP * 0.01};
   // Grounds (no height) go under the grass, parks, and water on them.
-  if (((u_groundMask >> cls) & 1) == 1 && a_meta.y == 0.0) depth = u_groundDepth;
+  if (maskBit(u_groundMask, cls) == 1 && a_meta.y == 0.0) depth = u_groundDepth;
   // Classes outside their zoom band are pushed out of the depth range (clipped).
   float vis = u_vis[cls];
   if (vis <= 0.0) depth = 2.0;
   // Carriageways are 1-cell lines until Place level, then strips of their real width.
   bool corridor = (int(a_meta.z + 0.5) & ${Flags.corridor}) != 0;
-  bool carriageway = ((u_roadMask >> cls) & 1) == 1;
+  bool carriageway = maskBit(u_roadMask, cls) == 1;
   if (corridor && u_zoom < ${float(ROAD_AREA_ZOOM)}) depth = 2.0;
   if (carriageway && !corridor && u_zoom >= ${float(ROAD_AREA_ZOOM)}) depth = 2.0;
   depth = depth > 1.0 ? 2.0 : SPLIT + (depth + 1.0) * 0.5 * (1.0 - SPLIT);
@@ -100,6 +102,10 @@ flat in int v_crown;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0)
 uniform ivec2 u_sub;    // samples per cell: 1 x 1, or SUB for the sub-cell targets
+uniform sampler2D u_crownBaseClass;
+uniform sampler2D u_crownBaseAttr;
+uniform int u_crownSurfaces[${MAX_CLASSES}];
+uniform float u_crownOverDepth; // above roads, below point markers
 
 layout(location = 0) out vec4 o_class;
 layout(location = 1) out vec4 o_attr;
@@ -108,6 +114,20 @@ layout(location = 2) out vec4 o_id;
 ${cellHashGlsl}
 
 void main() {
+  gl_FragDepth = gl_FragCoord.z;
+  if (v_crown == 1) {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    int base = int(texelFetch(u_crownBaseClass, p, 0).r * 255.0 + 0.5);
+    int surface = u_crownSurfaces[base];
+    float height = texelFetch(u_crownBaseAttr, p, 0).r * 255.0;
+    // Ground-height building classes are grounds. Equal-height roofs win.
+    if (surface == 2 && height > 0.0 && v_meta.y <= height + 0.01) discard;
+    if (surface == 1 || (surface == 2 && height > 0.0)) {
+      float depth = u_crownOverDepth - v_meta.y / 255.0 * ${TIER_STEP * 0.9};
+      // Match the vertex shader's clip-depth split and the window-depth transform.
+      gl_FragDepth = 0.8 + depth * 0.2;
+    }
+  }
   if (v_vis < 1.0) {
     // Hashed by cell, so the sub-cell samples keep the same cells as the cell pass.
     uint h = cellHash(u_origin + ivec2(gl_FragCoord.xy) / u_sub);

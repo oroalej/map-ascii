@@ -159,6 +159,7 @@ export const subcellClasses: readonly RenderClass[] = [
   'farmland',
   'parking',
   'pitch',
+  'paving',
 ];
 
 /** Per class id, 1 for `subcellClasses`, for the select shader (ids past 31 included). */
@@ -263,14 +264,23 @@ export type SubcellEdge = {
 /** A building standing (not grounds, which have no height). */
 const isBuilding = (s: Sample) => s.cls !== null && s.cls.startsWith('building') && s.height !== 0;
 
+/** Crowns and roofs share height precedence at their edge; equal heights favor the roof. */
+export function edgeForegroundWins(candidate: Sample, current: Sample): boolean {
+  const crown = candidate.cls === 'tree_crown';
+  const underCrown = current.cls === 'tree_crown';
+  if (crown && (isBuilding(current) || underCrown))
+    return (candidate.height ?? 0) > (current.height ?? 0);
+  if (underCrown && isBuilding(candidate)) return (candidate.height ?? 0) >= (current.height ?? 0);
+  return crown || (!isBuilding(current) && isBuilding(candidate));
+}
+
 /**
  * A cell's sub-cell edge, or null if it keeps its glyph. `center` is the cell pass's winner,
  * `samples` the cell's `SUB` samples in mask-bit order, and `outlined` whether a sample's
  * feature is drawn with walls at this zoom (walls trace its edge instead).
  *
- * Only an empty cell or an area (`subcellClasses`) takes part: lines and markers win their cells
- * whole. The sextant draws the cell's own area, unless it isn't a building and a sample is:
- * buildings keep their shape over the grounds, parks, and water they stand in.
+ * Lines and markers keep their cells, except a crown can reach into a road cell. Buildings
+ * keep their shape over ground areas; crowns and roofs compare heights.
  */
 export function subcellEdge(
   center: Sample,
@@ -278,10 +288,11 @@ export function subcellEdge(
   outlined: (sample: Sample) => boolean,
 ): SubcellEdge | null {
   const isArea = (s: Sample) => s.cls !== null && subcellClasses.includes(s.cls);
-  if (center.cls !== null && !isArea(center)) return null;
+  if (center.cls !== null && !isArea(center) && !roadClasses.includes(center.cls)) return null;
   let fg: Sample | null = isArea(center) ? center : null;
   for (const s of samples) {
-    if (isArea(s) && (fg === null || (!isBuilding(fg) && isBuilding(s)))) fg = s;
+    if (center.cls !== null && !isArea(center) && s.cls !== 'tree_crown') continue;
+    if (isArea(s) && (fg === null || edgeForegroundWins(s, fg))) fg = s;
   }
   if (fg === null || outlined(fg)) return null;
   const { id } = fg;

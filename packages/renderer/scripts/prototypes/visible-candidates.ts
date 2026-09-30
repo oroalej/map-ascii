@@ -2,9 +2,16 @@
 import { bandVisibility } from '@atlas/shared';
 import { EXTENT, lngLatToTile, tileToLngLat } from '../../src/raster/geometry';
 import { BIRD_SPECIES, BirdPose } from '../../src/life/birds';
-import { DOG, LIFE_ZOOM, MAX_VISIBLE_AGENTS, PARKED, PEOPLE, PERCH } from '../../src/life/config';
+import {
+  CAT,
+  DOG,
+  LIFE_ZOOM,
+  MAX_VISIBLE_AGENTS,
+  PARKED,
+  PEOPLE,
+  PERCH,
+} from '../../src/life/config';
 import type { Activity } from '../../src/life/config';
-import { CAT } from '../../src/life/cats';
 import type { PersonLook } from '../../src/life/people';
 import type { LngLatBounds } from '../../src/life/procession';
 import { trainCars } from '../../src/life/simulate';
@@ -128,7 +135,7 @@ function look(g: Gatherer, umbrellas: number): PersonLook {
   const w = g.walker,
     shaded = w.figure === 'adult' && w.umbrella < umbrellas;
   return {
-    figure: shaded ? 'umbrella' : w.figure,
+    figure: shaded ? 'umbrella' : g.behavior === 'sit' ? 'seated' : w.figure,
     paint: shaded ? w.canopy : w.shirt,
     lateral: 0,
     back: 0,
@@ -201,7 +208,9 @@ function materialize(c: Candidate, umbrellas: number): VisibleAgent {
               : 2
             : Math.floor((m.walked ?? 0) / CAT.stride) & 1
           : still
-            ? 0
+            ? m.lying
+              ? 2
+              : 0
             : Math.floor((m.walked ?? 0) / DOG.stride) & 1;
       return { kind: m.kind, lng, lat, ahead, paint: m.paint, flap };
     }

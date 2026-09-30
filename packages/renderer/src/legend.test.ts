@@ -126,6 +126,22 @@ describe('legendEntries life', () => {
   });
 });
 
+it('lists visible hardware during daytime with Life off and honors explicit absence', () => {
+  const fixtures = { streetlights: true, trafficSignals: true };
+  const entries = legendEntries('dark', 20, ['road_mid'], { life: false, lights: false, fixtures });
+  expect(entries.map((e) => e.label)).toEqual(
+    expect.arrayContaining(['Streetlights', 'Traffic signals (simulated phases)']),
+  );
+  expect(entries.find((e) => e.label === 'Streetlights')!.glyphs).toBe('▪─▫');
+  const absent = legendEntries('dark', 20, ['road_mid'], {
+    life: true,
+    lights: true,
+    fixtures: { streetlights: false, trafficSignals: false },
+  });
+  expect(absent.map((e) => e.label)).not.toContain('Streetlights');
+  expect(absent.map((e) => e.label)).not.toContain('Traffic signals (simulated phases)');
+});
+
 it('lists static street details at strip zoom with the city sidewalk policy', () => {
   const details = (zoom: number, roads: boolean, sidewalksDerived: boolean) =>
     legendEntries('dark', zoom, roads ? ['road_mid'] : ['building'], {

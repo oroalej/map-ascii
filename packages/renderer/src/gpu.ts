@@ -48,6 +48,10 @@ export type CellTargets = {
   lifeTex: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
   lightTex: WebGLTexture;
+  /** Static fixtures: ten-bit glyph, part, lamp/phase state, opacity. */
+  fixtureTex: WebGLTexture;
+  /** Signal light source offsets, approach direction, and occupancy. */
+  signalLightTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
@@ -155,6 +159,9 @@ export function createCellTargets(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+  const fixtureTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const signalLightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
@@ -173,6 +180,8 @@ export function createCellTargets(
     overlayTex,
     lifeTex,
     lightTex,
+    fixtureTex,
+    signalLightTex,
     depth: cell.depth,
     cellFbo: cell.fbo,
     glyphFbo,
@@ -191,6 +200,8 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
     t.overlayTex,
     t.lifeTex,
     t.lightTex,
+    t.fixtureTex,
+    t.signalLightTex,
   ]) {
     gl.deleteTexture(tex);
   }
@@ -229,6 +240,20 @@ export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
 /** Replace the streetlights' contents (RGBA8 texels from passes.ts `lightPass`). */
 export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lightTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the independent street-hardware texture. */
+export function uploadFixtures(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.fixtureTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the cached signal-light source lookup. */
+export function uploadSignalLights(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.signalLightTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }

@@ -16,6 +16,9 @@ import { LifeLine } from './geometry';
 
 export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog' | 'cat';
 
+/** Ground walkers share routing, crossing, and clearance rules. */
+export const isWalker = (kind: AgentKind) => kind === 'person' || kind === 'dog' || kind === 'cat';
+
 /** The zoom band in which each kind shows. */
 export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   boat: { min: 13.5 },
@@ -86,7 +89,14 @@ export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
-export const JUNCTION = { gap: 1.5, margin: 1, tie: 1, maxWait: 10, giveUp: 30, holdMax: 20 } as const;
+export const JUNCTION = {
+  gap: 1.5,
+  margin: 1,
+  tie: 1,
+  maxWait: 10,
+  giveUp: 30,
+  holdMax: 20,
+} as const;
 export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
 
 /**
@@ -105,12 +115,13 @@ export const PARKED = {
   junctionGap: 5,
 } as const;
 
+const WALKING_LINES = [LifeLine.path, LifeLine.plaza] as const;
 /** The line kinds each moving kind may use, at junctions too. */
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
-  person: [LifeLine.path, LifeLine.plaza],
-  dog: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
-  cat: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
+  person: WALKING_LINES,
+  dog: WALKING_LINES,
+  cat: WALKING_LINES,
   boat: [LifeLine.river, LifeLine.canal],
   train: [LifeLine.rail],
 };
@@ -159,13 +170,16 @@ export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
   [LifeLine.roadMinor]: [
     { kind: 'vehicle', spacing: 100, speed: [3, 6] },
     { kind: 'person', spacing: 50, speed: [0.9, 1.5] },
-    { kind: 'dog', spacing: 150, speed: [0.9, 1.5] },
   ],
   [LifeLine.path]: [
     { kind: 'person', spacing: 20, speed: [0.9, 1.4] },
     { kind: 'dog', spacing: 180, speed: [0.8, 1.3] },
+    { kind: 'cat', spacing: 300, speed: [0.5, 0.9] },
   ],
-  [LifeLine.plaza]: [{ kind: 'person', spacing: 10, speed: [0.6, 1.2] }],
+  [LifeLine.plaza]: [
+    { kind: 'person', spacing: 10, speed: [0.6, 1.2] },
+    { kind: 'cat', spacing: 300, speed: [0.5, 0.9] },
+  ],
   [LifeLine.river]: [{ kind: 'boat', spacing: 200, speed: [1, 2.5] }],
   // Canals: a few small boats, slowly (the city's `traffic.canal` mix).
   [LifeLine.canal]: [{ kind: 'boat', spacing: 250, speed: [0.6, 1.4] }],
@@ -190,6 +204,16 @@ export const DOG = {
   trot: { chance: 0.02, speed: 2.6, seconds: [2, 5] as const },
   lie: { chance: 0.004, seconds: [30, 120] as const },
   stride: 0.35,
+} as const;
+
+/** Cats walk slowly, pause to rest or groom, and occupy at most six slots per tile. */
+export const CAT = {
+  initialPause: [15, 40],
+  pause: { chance: 0.08, seconds: [10, 45] },
+  groomChance: 0.4,
+  blockedPause: 2,
+  stride: 0.25,
+  maxPerTile: 6,
 } as const;
 
 /**

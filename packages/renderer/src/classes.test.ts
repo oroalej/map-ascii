@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { classDepths, classesIn, classId, classVisibility, groundDepth } from './classes';
+import {
+  classDepths,
+  classesIn,
+  classId,
+  classVisibility,
+  crownSurfaces,
+  groundDepth,
+} from './classes';
 
 describe('classesIn', () => {
   it('lists the class ids in a class-buffer read, once each, in id order', () => {
@@ -63,4 +70,21 @@ describe('classDepths', () => {
   it('never draws place labels as cells', () => {
     expect(depth('place_label')).toBe(2);
   });
+});
+
+it('allows crown overlap on roads and compares every roof class, including ids above 31', () => {
+  const surfaces = crownSurfaces();
+  for (const cls of ['road_major', 'road_mid', 'road_minor'])
+    expect(surfaces[classId(cls)]).toBe(1);
+  for (const cls of [
+    'building',
+    'building_religious',
+    'building_school',
+    'building_market',
+    'building_station',
+    'building_part',
+  ])
+    expect(surfaces[classId(cls)]).toBe(2);
+  for (const cls of ['water_river', 'marker_landmark', 'tree', 'trees', 'grass'])
+    expect(surfaces[classId(cls)]).toBe(0);
 });

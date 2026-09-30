@@ -22,7 +22,7 @@ it('adds only one map glyph and eight awning paints per theme', () => {
   const luminance = (rgb: readonly number[]) =>
     rgb.slice(0, 3).reduce((y, c, i) => y + channel(c) * [0.2126, 0.7152, 0.0722][i]!, 0);
   for (const theme of Object.values(themes)) {
-    expect(mapGlyphs(theme).length).toBe(262);
+    expect(mapGlyphs(theme).filter((glyph) => glyph === '¤')).toHaveLength(1);
     expect(theme.awningPaints).toHaveLength(8);
     expect(theme.styles.furniture!.glyphs.slice(9, 12)).toEqual(['¤', '¤', '¤']);
     const back = luminance(theme.background);

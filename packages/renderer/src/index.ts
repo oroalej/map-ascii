@@ -46,6 +46,7 @@ import {
   cellPass,
   crownPass,
   glyphPass,
+  fixturePass,
   hasCrowns,
   lifePass,
   lightPass,
@@ -80,6 +81,7 @@ import {
   type VisibleLamp,
 } from './life/lights';
 import { moonlight } from './life/moon';
+import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life/fixtures';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { treeGust } from './glyphs/select';
@@ -114,6 +116,7 @@ export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
 export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
+export type { FixtureVisibility } from './life/fixtures';
 export type { RenderClass } from './classes';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
@@ -241,6 +244,8 @@ export type AtlasEventMap = {
   procession: ProcessionRun | null;
   /** The streetlights came on (dusk or night, close enough to see them) or went (for the legend). */
   lightschange: boolean;
+  /** Hardware packed inside the viewport, independent of Life and illumination. */
+  fixtureschange: FixtureVisibility;
   /**
    * The names of places, landmarks, and monuments on screen changed (street names aren't
    * included), in placement order: most important first. For a text alternative to the map.
@@ -592,6 +597,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
+    syncFixtures(tiles);
     const labels = new Map<number, TileLabel>();
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -911,6 +917,42 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       for (const lamp of placed.lamps) lamps.push(lamp);
     }
   };
+  let fixtures: StreetFixture[] = [];
+  const fixtureTiles = new WeakMap<LoadedTile['life'], StreetFixture[]>();
+  let fixturesKey = '';
+  const syncFixtures = (tiles: readonly TileId[]) => {
+    fixtures = [];
+    if (camera.zoom < 15) return;
+    for (const tile of tiles) {
+      if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      const loaded = tileCache.get(tile);
+      if (!loaded) continue;
+      let found = fixtureTiles.get(loaded.life);
+      if (!found) {
+        found = tileFixtures(tile, loaded.life);
+        fixtureTiles.set(loaded.life, found);
+      }
+      fixtures.push(...found);
+    }
+  };
+  const drawFixtures = (cellsDrawn: boolean) => {
+    if (!targets || !themeRes || !placement) return;
+    const visible = fixturePass(
+      gl,
+      targets,
+      themeRes,
+      view(),
+      placement,
+      fixtures,
+      world.signalClock,
+      cellsDrawn,
+    );
+    const key = `${visible.streetlights} ${visible.trafficSignals}`;
+    if (key !== fixturesKey) {
+      fixturesKey = key;
+      emit('fixtureschange', visible);
+    }
+  };
   /** Whether the light texture holds headlight beams (so they are cleared once they go). */
   let beamsShown = false;
   /**
@@ -1169,6 +1211,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawLife(now, wind);
       lifeMs = smooth(lifeMs, performance.now() - lifeStart);
       drawLights(cellsDrawn);
+      drawFixtures(cellsDrawn);
       glyphPass(
         gl,
         programs,

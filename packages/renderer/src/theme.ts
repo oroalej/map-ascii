@@ -58,6 +58,8 @@ export type ClassStyle = {
 };
 
 export type Theme = {
+  /** Hardware, housing, warm lamp, and red/amber/green lenses. */
+  fixturePaints: readonly number[];
   awningPaints: readonly number[];
   /** Canvas background as linear 0–1 RGBA. */
   background: RGBA;
@@ -146,6 +148,8 @@ export const rainGlyphs = ['|', '\\', '/'] as const;
 
 /** A streetlight's head (life/lights.ts), lit warm from dusk, grey when it is out. */
 export const streetlightGlyph = '*';
+/** Reuse line, casing, and lens glyphs for static street hardware. */
+export const fixtureGlyphs = ['▪', '─', '│', '╱', '╲', '▫', '○', '•', '*'] as const;
 
 /**
  * Grass and parks: dense, medium, and thin tufts at rest; then leaning right, leaning left, and
@@ -217,6 +221,10 @@ function makeTheme(background: number, c: Palette): Theme {
     background: rgb(background),
     label: c.label,
     accent: c.accent,
+    fixturePaints:
+      background > 0x7fffff
+        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f]
+        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87],
     vehiclePaints: c.vehiclePaints,
     awningPaints:
       background > 0x7fffff
@@ -256,6 +264,7 @@ function makeTheme(background: number, c: Palette): Theme {
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
       building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
       park: { kind: 'grass', glyphs: grassGlyphs, color: c.park, fill: 0.12 },
+      paving: { kind: 'scatter', glyphs: [' ', ' ', ' ', '·'], color: c.furniture, fill: 0.14 },
       grass: { kind: 'grass', glyphs: grassGlyphs, color: c.grass, fill: 0.08 },
       trees: {
         kind: 'canopy',
@@ -286,7 +295,7 @@ function makeTheme(background: number, c: Palette): Theme {
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
       furniture: {
         kind: 'variant',
-        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤', '─', '•'],
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤', '─', '•', '*'],
         color: c.furniture,
       },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },
@@ -438,6 +447,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building_station: 'Train station',
   building_part: 'Landmark part',
   park: 'Park or plaza',
+  paving: 'Paved plaza',
   trees: 'Woods',
   grass: 'Grass',
   tree_crown: 'Tree',
@@ -491,6 +501,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...catGlyphs(),
     ...rainGlyphs,
     streetlightGlyph,
+    ...fixtureGlyphs,
     ...arrowGlyphs,
   ];
   for (const g of extras) set.add(g);

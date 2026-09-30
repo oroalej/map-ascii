@@ -43,6 +43,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
    - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, or woods areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
+   - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. `surface: "paving"` changes its ground class while retaining its id, labels, and landmark metadata. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width stone footprints and sparse bench pause anchors on their accessible side; `lamps` becomes static multi-head hardware. Stable item ids survive record reordering. Reject missing/duplicate parents, buildings, out-of-bounds geometry, and routes across raised beds or monument parts; mapped benches and lamps within 3 m suppress curated duplicates. Credits join the generated meta attribution.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
 5. **`05-tiles`**
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
@@ -76,6 +77,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
 | `building_station` | `building=train_station`, `railway=station|halt`, or `public_transport=station` with `train=yes` or a `railway` tag (area or point) |
 | `park` | `leisure=park|garden|playground`, `place=square` |
+| `paving` | a sourced `details/` ground-surface override on an existing OSM area |
 | `trees` | `natural=wood`, `landuse=forest` (kind in `variant`) |
 | `grass` | `landuse=grass|meadow|village_green`, `natural=grassland`, `leisure=recreation_ground` (a park wins if both are tagged) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
@@ -84,7 +86,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, or `trees` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
-| `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop`, road transport platforms, sourced tricycle ranks, `man_made=flagpole` (kind in `variant`; shelters with buildings keep their building class) |
+| `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop|street_lamp`, road transport platforms, sourced tricycle ranks, `man_made=flagpole` (kind in `variant`; shelters with buildings keep their building class) |
 | `parking` | `amenity=parking` |
 | `pitch` | `leisure=pitch` |
 
@@ -255,6 +257,16 @@ Landcover {                      // cities/<slug>/landcover/*.json — trees and
   sources: Source[];
 }
 TreeKind = 'broadleaved' | 'palm' | 'needleleaved';   // unset: the generic tree
+
+SiteDetail {                     // cities/<slug>/details/*.json — sourced outdoor detail
+  id: string;                    // "detail/<slug>"
+  osm_id: string; title: string; surface: 'paving';
+  walks: { id: string; line: [lng, lat][]; width_m: number }[];
+  seating: { id: string; line: [lng, lat][]; width_m: number; height_m: number; facing: 'left' | 'right' }[];
+  lamps: { id: string; at: [lng, lat]; bearing: number; reach_m: number; heads: number }[];
+  status: 'draft' | 'verified'; credit: string; sources: Source[];
+}
+// CuratedArea also accepts raised?: boolean for planting beds ground agents cannot enter.
 
 LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
   id: string;                    // "art/<slug>"

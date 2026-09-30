@@ -14,6 +14,7 @@ export function themeUniforms(theme: Theme) {
     accent: rgb(theme.accent),
     rain: label.map((c, i) => c * [0.82, 0.9, 1][i]!),
     paints: theme.vehiclePaints.flatMap(rgb),
+    fixtures: theme.fixturePaints.flatMap(rgb),
     awnings: theme.awningPaints.flatMap(rgb),
     frontageMask: renderClasses.reduce(
       (mask, cls) =>

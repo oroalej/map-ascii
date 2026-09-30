@@ -200,8 +200,8 @@ const isCellClass = (cls: RenderClass) => depths[classId(cls)]! <= 1;
  * The legend entries for the classes the theme draws at `zoom`, in the theme's order. Classes
  * with the same label (a school marker and school buildings) share an entry. With `present`
  * (the classes on screen), a class drawn in cells is listed only if it is there. The life
- * layer's agents (street vendors after people) are listed only with `life` (the layer is on), and streetlights only with
- * `lights` (they are lit, the `lightschange` event) and the roads they line on screen.
+ * layer's agents are listed only with `life`. Static hardware follows `fixtureschange`,
+ * independently of Life/daylight; `lights` remains an illumination flag and a legacy fallback.
  */
 export function legendEntries(
   themeName: ThemeName,
@@ -211,7 +211,13 @@ export function legendEntries(
     life = false,
     lights = false,
     sidewalksDerived = true,
-  }: { life?: boolean; lights?: boolean; sidewalksDerived?: boolean } = {},
+    fixtures,
+  }: {
+    life?: boolean;
+    lights?: boolean;
+    sidewalksDerived?: boolean;
+    fixtures?: { streetlights: boolean; trafficSignals: boolean };
+  } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
@@ -266,8 +272,17 @@ export function legendEntries(
       glyphs: '◊ ( )',
       color: css(theme.styles.water_river?.color ?? theme.label),
     });
-  if (lights && (!onScreen || litRoads.some((cls) => onScreen.has(cls)))) {
-    entries.push({ ...STREETLIGHTS_ENTRY, classes: [] });
+  if (
+    fixtures
+      ? fixtures.streetlights
+      : lights && (!onScreen || litRoads.some((cls) => onScreen.has(cls)))
+  ) {
+    entries.push({
+      ...STREETLIGHTS_ENTRY,
+      classes: [],
+      glyphs: zoom >= 18.5 ? '▪─▫' : streetlightGlyph,
+      color: lights ? STREETLIGHTS_ENTRY.color : css(theme.fixturePaints[0]!),
+    });
   }
   const roads =
     !onScreen ||
@@ -290,12 +305,12 @@ export function legendEntries(
       { classes: [], label: 'Stop lines', glyphs: '─', color: css(theme.styles.road_mid!.color) },
       { classes: [], label: 'One-way', glyphs: '→', color: css(theme.styles.road_mid!.color) },
     );
-  if (roads && life && zoom >= 17)
+  if (fixtures ? fixtures.trafficSignals : roads && life && zoom >= 17)
     entries.push({
       classes: [],
       label: 'Traffic signals (simulated phases)',
-      glyphs: '•',
-      color: css(theme.vehiclePaints[Paint.green]!),
+      glyphs: zoom >= 18.5 ? '○○○' : '•',
+      color: css(theme.fixturePaints[5]!),
     });
   return entries;
 }

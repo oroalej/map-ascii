@@ -23,13 +23,16 @@ import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../lif
 import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
+import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
+import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import {
   CROWN_LIGHT,
   EDGE_INK,
   EDGE_STATE,
   SHADOW,
   SHADOW_STATE,
+  SUB,
   Tone,
   TONE,
   TONE_SHIFT,
@@ -77,6 +80,8 @@ uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
 uniform sampler2D u_life;
+uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
+uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
 uniform ivec2 u_origin;
 uniform sampler2D u_attr;
@@ -103,7 +108,11 @@ uniform ivec2 u_fishWater;
 uniform int u_waterGlyphs[4];
 uniform sampler2D u_light;
 uniform float u_lampShow;
-uniform int u_lampGlyph;
+uniform sampler2D u_fixtures;
+uniform vec3 u_fixturePaints[6];
+uniform bool u_signalGlow;
+uniform sampler2D u_signalLight;
+uniform float u_dpr;
 uniform float u_moon;
 
 out vec4 o_color;
@@ -309,11 +318,80 @@ vec3 rainOver(vec3 color, ivec2 cell, ivec2 inCell) {
   return mix(color, drop, min(1.0, ink * ${float(RAIN.ink)} * u_rain * (1.0 + rainLight)));
 }
 
+bool fixtureSurface(int cls, ivec2 cell) {
+  if (cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z) return false;
+  return (u_cellBits[cls] & ${CellBit.person}) != 0 ||
+    ((u_cellBits[cls] & ${CellBit.grounds}) != 0 && texelFetch(u_attr, cell, 0).r == 0.0);
+}
+
+// A short colored approach ray and nighttime halo. The cached lookup names one source;
+// CSS-pixel distances keep the light compact at every zoom and device pixel ratio.
+vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
+  if (!u_signalGlow || !allowed) return vec3(0.0);
+  vec4 lookup = texelFetch(u_signalLight, cell, 0);
+  if (lookup.a == 0.0) return vec3(0.0);
+  ivec2 source = cell + ivec2(floor(lookup.rg * 255.0 + 0.5)) - 128;
+  ivec2 size = textureSize(u_fixtures, 0);
+  if (any(lessThan(source, ivec2(0))) || any(greaterThanEqual(source, size))) return vec3(0.0);
+  vec4 fixture = texelFetch(u_fixtures, source, 0);
+  if (fixture.a == 0.0) return vec3(0.0);
+  int part = int(fixture.g * 255.0 + 0.5) & 63;
+  int phase = int(fixture.b * 255.0 + 0.5);
+  bool emitting = part == ${FixturePart.signal} ||
+    (part >= ${FixturePart.red} && part <= ${FixturePart.green} && part - ${FixturePart.red} == phase);
+  if (!emitting) return vec3(0.0);
+  int cls = int(texelFetch(u_glyphs, source, 0).g * 255.0 + 0.5) & 63;
+  if (!fixtureSurface(cls, source)) return vec3(0.0);
+  float angle = floor(lookup.b * 255.0 + 0.5) * 6.28318530718 / 256.0;
+  vec2 direction = vec2(cos(angle), sin(angle));
+  vec2 delta = (grid - (vec2(source) + 0.5) * u_cell) / u_dpr;
+  float forward = dot(delta, direction);
+  float across = abs(dot(delta, vec2(-direction.y, direction.x)));
+  float reach = mix(${float(SIGNAL_LIGHT.dayLength)}, ${float(SIGNAL_LIGHT.nightLength)}, night);
+  float width = ${float(SIGNAL_LIGHT.halfWidth)} + max(0.0, forward) * ${float(SIGNAL_LIGHT.spread)};
+  float beam = 0.0;
+  if (forward >= 0.0 && forward < reach) {
+    beam = (1.0 - smoothstep(0.0, reach, forward)) * (1.0 - smoothstep(0.0, width, across)) *
+      mix(${float(SIGNAL_LIGHT.dayStrength)}, ${float(SIGNAL_LIGHT.nightStrength)}, night);
+  }
+  float falloff = 1.0 - smoothstep(0.0, ${float(SIGNAL_LIGHT.haloRadius)}, length(delta));
+  float halo = falloff * falloff * ${float(SIGNAL_LIGHT.haloStrength)} * night;
+  return u_fixturePaints[3 + min(phase, 2)] * (beam + halo) * fixture.a;
+}
+
+// Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
+vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo) {
+  if (!allowed || fixture.a == 0.0) return under + halo;
+  int packed = int(fixture.g * 255.0 + 0.5);
+  int part = packed & 63;
+  int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
+  int info = int(fixture.b * 255.0 + 0.5);
+  ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
+  float ink = texelFetch(u_atlas, at + inCell, 0).r;
+  vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
+  if (part == ${FixturePart.casing}) color = daylit(u_fixturePaints[1]);
+  if (part == ${FixturePart.lamp}) {
+    float lit = lampOn(info) * switchedOn(info);
+    color = mix(color, u_fixturePaints[2], lit);
+  }
+  if (part >= ${FixturePart.red} && part <= ${FixturePart.green}) {
+    int lens = part - ${FixturePart.red};
+    color = u_fixturePaints[3 + lens] * (info == lens ? 1.0 : 0.35);
+    under = mix(under, daylit(u_fixturePaints[1]), fixture.a * 0.85);
+  }
+  if (part == ${FixturePart.signal}) color = u_fixturePaints[3 + min(info, 2)];
+  return mix(under, color, ink * fixture.a) + halo;
+}
+
+int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
   vec2 grid = screen + u_shift;
   ivec2 cell = ivec2(floor(grid / u_cell));
   ivec2 inCell = ivec2(grid - vec2(cell) * u_cell);
+  ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
+  ivec2 subAt = cell * sub + clamp(ivec2(vec2(inCell) / u_cell * vec2(sub)), ivec2(0), sub - 1);
 
   // Labels sit on top, on their own coarser grid (density.ts); their cells show the
   // background, which gives them a halo.
@@ -336,7 +414,7 @@ void main() {
   bool edge = (rawState & ${EDGE_STATE}) != 0;
   int windLevel = (rawState >> ${WIND_SHIFT}) & 3;
   int tone = (rawState >> ${TONE_SHIFT}) & 3;
-  int awning = ((u_frontageMask >> cls) & 1) != 0 ? (rawState >> ${WIND_SHIFT}) & 15 : 0;
+  int awning = maskBit(u_frontageMask, cls) != 0 ? (rawState >> ${WIND_SHIFT}) & 15 : 0;
   bool shaded = (rawState & ${SHADOW_STATE}) != 0;
   int state = rawState & ${EDGE_STATE - 1};
   int bgClass = int(g.a * 255.0 + 0.5);
@@ -382,11 +460,15 @@ void main() {
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
   back += glow;
+  vec4 fixture = texelFetch(u_fixtures, cell, 0);
+  bool fixtureAllowed = fixtureSurface(cls, cell);
+  vec3 signalHalo = signalGlow(grid, cell, night, fixtureAllowed);
 
   // Agents stand on top where the cell under them allows; people also on grounds (a church's
   // or a school's) where no building stands (height 0).
   vec4 life = texelFetch(u_life, cell, 0);
-  int lifeBit = int(life.b * 255.0 + 0.5);
+  int lifeFlags = int(life.b * 255.0 + 0.5);
+  int lifeBit = lifeFlags & ${LIFE_AGENT_MASK};
   // A flying bird's shadow on the ground (life/draw.ts drawShadows).
   if (lifeBit == 0 && int(life.a * 255.0 + 0.5) == ${LIFE_SHADOW}) {
     back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
@@ -394,9 +476,13 @@ void main() {
   bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[cls] & ${CellBit.grounds}) != 0 &&
     texelFetch(u_attr, cell, 0).r == 0.0;
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
+  int lifeSurface = cls;
+  if (lifeClass == u_vehicle && cls != u_vehicleOccluders.x) {
+    lifeSurface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+  }
   bool behindTrees = lifeClass == u_vehicle &&
-    (cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z);
-  if (lifeBit != 0 && !behindTrees && ((u_cellBits[cls] & lifeBit) != 0 || onGrounds)) {
+    (lifeSurface == u_vehicleOccluders.x || lifeSurface == u_vehicleOccluders.y || lifeSurface == u_vehicleOccluders.z);
+  if (lifeBit != 0 && !behindTrees && ((u_cellBits[lifeSurface] & lifeBit) != 0 || onGrounds)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
@@ -408,6 +494,8 @@ void main() {
       ? vehicleColor(lifeByte, night)
       : person ? personColor(lifeByte, coverage)
       : bird ? birdColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
+    if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)
+      color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.
     if (person || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
       coverage = coverage > 0.0 ? 1.0 : 0.0;
@@ -419,22 +507,12 @@ void main() {
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
-    o_color = vec4(rainOver(mix(back, color, coverage), cell, inCell), 1.0);
-    return;
-  }
-
-  // A lamp's head, from dusk: warm once lit, grey while off or when it is out.
-  if (light.b > 0.5 && ground && lampsNow > 0.0) {
-    int lampGlyph = u_lampGlyph;
-    ivec2 lampSlot = ivec2(lampGlyph % u_columns, lampGlyph / u_columns) * ivec2(u_cell);
-    float ink = texelFetch(u_atlas, lampSlot + inCell, 0).r;
-    vec3 head = mix(daylit(vec3(0.5)), vec3(1.0, 0.92, 0.7), lampOn(lampG) * switchedOn(lampG));
-    o_color = vec4(rainOver(mix(back, head, ink * min(1.0, lampsNow * 2.0)), cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(rainOver(back, cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
@@ -447,7 +525,7 @@ void main() {
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
   if (cls == u_crownClass) {
-    vec2 local = texelFetch(u_attr, cell, 0).gb * 2.0 - 1.0;
+    vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb * 2.0 - 1.0;
     vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
       sqrt(max(${float(CROWN_LIGHT.minZ)}, 1.0 - dot(local, local)))));
     float light = clamp(
@@ -501,6 +579,6 @@ void main() {
   // shape reads as one area with a crisp rim.
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
-  o_color = vec4(rainOver(mix(back, color, coverage), cell, inCell), 1.0);
+  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;

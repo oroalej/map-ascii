@@ -32,6 +32,7 @@ vi.mock('./passes', async (load) => ({
   overlayPass: () => [],
   lifePass: vi.fn(() => 0),
   lightPass: vi.fn(),
+  fixturePass: vi.fn(() => ({ streetlights: false, trafficSignals: false })),
 }));
 vi.mock('./tile-cache', () => ({
   TileCache: class {

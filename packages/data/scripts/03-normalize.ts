@@ -50,6 +50,12 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  detail_route?: boolean;
+  detail_blocked?: boolean;
+  seat_bearing?: number;
+  lamp_bearing?: number;
+  lamp_reach?: number;
+  lamp_heads?: number;
   sidewalk?: 'both' | 'left' | 'right' | 'none';
   sidewalk_width?: number;
   sidewalk_left_width?: number;

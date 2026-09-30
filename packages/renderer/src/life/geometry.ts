@@ -79,6 +79,7 @@ export const plazaClasses: ReadonlySet<string> = new Set(['park']);
 /** Area classes birds gather over (each a life/birds.ts `Habitat`, `habitatOf`). */
 export const roostClasses: ReadonlySet<string> = new Set([
   'park',
+  'paving',
   'trees',
   'grass',
   'farmland',
@@ -124,6 +125,8 @@ export type LifeGeometry = {
   markets: Float32Array;
   /** Streetlights along main roads: x, y (tile units), state, seed (life/lights.ts). */
   lamps: Float32Array;
+  /** One byte per lamp: 1 for sourced plaza hardware (appears at furniture zoom). */
+  lampSites?: Uint8Array;
   /** Floodlit landmarks: center x, y and radius (tile units; life/lights.ts `FLOOD_STRIDE`). */
   floods: Float32Array;
   /** Shops and markets, lit while open: center x, y and radius (tile units, `SHOP_STRIDE`). */
@@ -134,6 +137,8 @@ export type LifeGeometry = {
    * stand around it, not on it).
    */
   places: Float32Array;
+  /** Compass heading per place; NaN keeps existing unsurveyed bench orientation. */
+  seatBearings?: Float32Array;
 };
 
 export type LifeArea = {
@@ -200,9 +205,11 @@ export class LifeBuilder {
   private stations: number[] = [];
   private markets: number[] = [];
   private lamps: number[] = [];
+  private lampSites: number[] = [];
   private floods: number[] = [];
   private shops: number[] = [];
   private places: number[] = [];
+  private seatBearings: number[] = [];
 
   line(
     points: readonly TilePoint[],
@@ -250,8 +257,9 @@ export class LifeBuilder {
   }
 
   /** Streetlights (life/lights.ts `placeTileLamps`, `LAMP_STRIDE` floats each). */
-  addLamps(values: readonly number[]) {
+  addLamps(values: readonly number[], site = false) {
     for (const v of values) this.lamps.push(v);
+    for (let i = 0; i < values.length; i += 8) this.lampSites.push(site ? 1 : 0);
   }
 
   /** A floodlit landmark centered at `p`, `radius` tile units across. */
@@ -269,9 +277,10 @@ export class LifeBuilder {
    * A place people gather at, centered at `p`, `radius` tile units across (0 for a point);
    * `building` when people stand around it rather than on it. Past `MAX_TILE_PLACES`, dropped.
    */
-  place(p: TilePoint, kind: PlaceKind, radius: number, building = false) {
+  place(p: TilePoint, kind: PlaceKind, radius: number, building = false, bearing = NaN) {
     if (this.places.length / PLACE_STRIDE >= MAX_TILE_PLACES) return;
     this.places.push(p.x, p.y, placeCode(kind), radius, building ? 1 : 0);
+    this.seatBearings.push(bearing);
   }
 
   finish(): LifeGeometry {
@@ -296,14 +305,18 @@ export class LifeBuilder {
       stations: Float32Array.from(this.stations),
       markets: Float32Array.from(this.markets),
       lamps: Float32Array.from(this.lamps),
+      lampSites: Uint8Array.from(this.lampSites),
       floods: Float32Array.from(this.floods),
       shops: Float32Array.from(this.shops),
       places: Float32Array.from(this.places),
+      seatBearings: Float32Array.from(this.seatBearings),
     };
   }
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.lampSites ? [g.lampSites.buffer as ArrayBuffer] : []),
+  ...(g.seatBearings ? [g.seatBearings.buffer as ArrayBuffer] : []),
   ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),

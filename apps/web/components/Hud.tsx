@@ -4,6 +4,7 @@ import {
   cityTime,
   legendEntries,
   type Atlas,
+  type FixtureVisibility,
   type LegendIcon,
   type RenderClass,
   type WindChoice,
@@ -143,9 +144,17 @@ function Legend({
   const [lit, setLit] = useState<{ atlas: Atlas; on: boolean } | null>(null);
   useEffect(() => atlas?.on('lightschange', (on) => setLit({ atlas, on })), [atlas]);
   const lights = lit?.atlas === atlas && lit.on;
+  const [hardware, setHardware] = useState<{ atlas: Atlas; fixtures: FixtureVisibility } | null>(
+    null,
+  );
+  useEffect(
+    () => atlas?.on('fixtureschange', (fixtures) => setHardware({ atlas, fixtures })),
+    [atlas],
+  );
+  const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived],
+    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
