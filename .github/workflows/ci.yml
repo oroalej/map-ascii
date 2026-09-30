@@ -14,8 +14,11 @@ permissions:
   contents: read
 
 jobs:
+  # Jobs run in parallel and time out at 6 minutes, so a change that makes CI slow fails its
+  # PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v7
 
@@ -39,10 +42,15 @@ jobs:
       - run: pnpm test
 
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
-  # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8).
+  # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
+  # across two runners: each test renders WebGL in software on a single worker.
   e2e:
-    needs: check
     runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       # Release assets of a private repository download through the API with this token.
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -72,14 +80,15 @@ jobs:
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 
       # Prepares the static export before Playwright starts or reuses its web server.
-      - run: pnpm test:e2e
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/2
 
       - run: pnpm check:budgets
+        if: matrix.shard == 1
 
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           # Traces of failed tests (retried once in CI, traced on the retry).
-          name: playwright-results
+          name: playwright-results-${{ matrix.shard }}
           path: apps/web/test-results/
           retention-days: 7

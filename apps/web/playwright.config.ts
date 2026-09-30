@@ -14,6 +14,8 @@ export default defineConfig({
   // Each worker is a browser rendering WebGL in software; more than a couple pins the CPU locally.
   workers: process.env.CI ? undefined : 2,
   reporter: process.env.CI ? 'github' : 'list',
+  // Name tests that dominate the run so they get moved to unit tests before CI's job limit hits.
+  reportSlowTests: { max: 5, threshold: 30_000 },
   use: {
     baseURL,
     trace: 'on-first-retry',

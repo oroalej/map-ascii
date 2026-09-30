@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ACTIVE_MS, animationDue, IDLE_FRAME_MS, watchVisibility } from './pacing';
 
