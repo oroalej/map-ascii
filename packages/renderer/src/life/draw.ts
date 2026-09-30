@@ -15,7 +15,8 @@ import {
   type AgentKind,
 } from './config';
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
-import { headingOf } from './masters';
+import { CAT_LENGTH_M, catGlyph, catInk } from './cats';
+import { headingOf, type Heading } from './masters';
 import {
   FIGURE_SIZE_M,
   figureFit,
@@ -68,6 +69,33 @@ const STAMP_BITS: Readonly<Partial<Record<AgentKind, number>>> = {
 
 /** At most this many cells per vehicle (a bus at the closest zoom is well under). */
 const MAX_STAMP_CELLS = 20_000;
+const COVERED_CART: VehicleSpec = {
+  ...VEHICLES.cart,
+  plan: VEHICLES.cart.plan.map((row) => row.replace(/[A-Z]/g, 'R')),
+};
+
+/** Each vehicle part's glyph index (`PART_GLYPHS`). */
+export type LifeGlyphs = { parts: Uint16Array };
+
+/**
+ * The ground agent `packLife` is drawing (a vehicle or person): the cells it overwrote, and
+ * whether one of them was already another ground agent's. A whole ground agent is omitted if
+ * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
+ */
+let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
+/** Cells (texel offset / 4) held by ground agents already drawn this frame. */
+let groundCells = new Uint8Array(0);
+function rememberGroundCell(out: Uint8Array, at: number) {
+  if (!journal || journal.before.has(at)) return;
+  if (groundCells[at / 4]) journal.denied = true;
+  journal.before.set(at, Array.from(out.subarray(at, at + 4)));
+}
+/** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
+export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
+  const parts = new Uint16Array(VehiclePart.accent + 1);
+  for (const [part, glyph] of Object.entries(PART_GLYPHS)) parts[Number(part)] = glyphIndex(glyph);
+  return { parts };
+}
 
 /**
  * Pack `agents` into `out` (cols × rows × 4 bytes, cleared first). A vehicle that covers fewer
@@ -78,7 +106,7 @@ const MAX_STAMP_CELLS = 20_000;
  * `drawDog`); a bird without a species takes the theme's glyph for its wing beat. With the `sun`
  * up, each flying bird first casts a
  * shadow on the ground away from it (`LIFE_SHADOW` texels, config.ts `BIRD_SHADOW`). Later
- * agents win a shared cell. Returns how many agents (each person in a group) landed on the grid.
+ * ground agents keep separate cells. Returns how many agents (each person in a group) landed on the grid.
  */
 export function packLife(
   out: Uint8Array,
@@ -87,83 +115,98 @@ export function packLife(
   theme: Theme,
   glyphIndex: (glyph: string) => number,
   sun?: Sun | null,
+  glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
 ): number {
   out.fill(0);
   if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
-  const { cols, rows, toCell } = grid;
-  const partGlyphs = Object.fromEntries(
-    Object.entries(PART_GLYPHS).map(([part, glyph]) => [part, glyphIndex(glyph)]),
-  ) as Record<number, number>;
-  // Boats are drawn solid, so the water doesn't show through them.
-  const solid = glyphIndex(PART_GLYPHS[VehiclePart.body]);
+  const cells = grid.cols * grid.rows;
+  if (groundCells.length < cells) groundCells = new Uint8Array(cells);
+  else groundCells.fill(0, 0, cells);
   let drawn = 0;
-  for (const agent of agents) {
-    if (agent.line) {
-      if (drawLine(out, grid, agent.line, glyphIndex)) drawn++;
-      continue;
-    }
-    const [col, row] = toCell(agent.lng, agent.lat);
-    const spec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
-    if (agent.kind === 'person' && !spec) {
-      drawn += drawPeople(out, grid, agent, [col, row], glyphIndex);
-      continue;
-    }
-    if (agent.kind === 'dog' && agent.ahead) {
-      if (drawDog(out, grid, agent, [col, row], glyphIndex)) drawn++;
-      continue;
-    }
-    // A vendor's cart is painted as a vehicle.
-    const cls = spec && agent.kind === 'person' ? 'life_vehicle' : lifeClassFor[agent.kind];
-    if (spec && agent.ahead && agent.side) {
-      const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
-      const [sideCol, sideRow] = toCell(agent.side[0], agent.side[1]);
-      const along: [number, number] = [aheadCol - col, aheadRow - row];
-      const across: [number, number] = [sideCol - col, sideRow - row];
-      if (Math.hypot(...along) * spec.length >= STAMP_MIN_CELLS) {
-        const bits = STAMP_BITS[agent.kind] ?? agentBit[agent.kind];
-        const stamped = stamp(out, grid, [col, row], along, across, spec, (part) => [
-          agent.kind === 'boat' ? solid : partGlyphs[part]!,
-          classId(cls),
-          bits,
-          vehicleByte(agent.paint ?? 0, part, agent.parked),
-        ]);
-        if (stamped) drawn++;
-        // The vendor stands clear of the cart's side.
-        if (agent.people) {
-          drawn += drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2);
-        }
-        continue;
+  // Parked cars reserve their cells before passing traffic or walkers.
+  for (const parked of [true, false])
+    for (const agent of agents) {
+      if (!!agent.parked !== parked) continue;
+      const ground = !agent.aboard && (agent.kind === 'vehicle' || agent.kind === 'person');
+      journal = ground ? { before: new Map(), denied: false } : undefined;
+      const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+      if (!journal) drawn += n;
+      else if (journal.denied) for (const [at, previous] of journal.before) out.set(previous, at);
+      else {
+        drawn += n;
+        for (const at of journal.before.keys()) groundCells[at / 4] = 1;
       }
     }
-    if (agent.bird && agent.ahead) {
-      if (drawBird(out, grid, agent, [col, row], theme, glyphIndex)) drawn++;
-      continue;
-    }
-    if (agent.people) drawn += drawPeople(out, grid, agent, [col, row], glyphIndex);
-    const c = Math.floor(col);
-    const r = Math.floor(row);
-    if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
-    const glyphs = spec?.mini ?? theme.styles[cls]?.glyphs;
-    if (!glyphs || glyphs.length === 0) continue;
-    let variant = 0;
-    if (agent.kind === 'bird') {
-      variant = agent.flap;
-    } else if (agent.ahead) {
-      const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
-      const x = Math.abs((aheadCol - col) * grid.cellWidth);
-      const y = Math.abs((aheadRow - row) * grid.cellHeight);
-      variant = x >= y ? 0 : 1;
-    }
-    const index = glyphIndex(glyphs[Math.min(variant, glyphs.length - 1)]!);
-    if (index <= 0 || index > 255) continue;
-    const at = (r * cols + c) * 4;
-    out[at] = index;
-    out[at + 1] = classId(cls);
-    out[at + 2] = agentBit[agent.kind];
-    out[at + 3] = spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255;
-    drawn++;
-  }
+  journal = undefined;
   return drawn;
+}
+
+/** Draw one agent for `packLife`; returns how many landed on the grid (each person in a group). */
+function drawAgent(
+  out: Uint8Array,
+  grid: LifeGrid,
+  agent: VisibleAgent,
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+  { parts }: LifeGlyphs,
+): number {
+  const { cols, rows, toCell } = grid;
+  if (agent.line) return drawLine(out, grid, agent.line, glyphIndex) ? 1 : 0;
+  const [col, row] = toCell(agent.lng, agent.lat);
+  const baseSpec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
+  const spec = agent.covered && agent.vehicle === 'cart' && baseSpec ? COVERED_CART : baseSpec;
+  if (agent.kind === 'person' && !spec) return drawPeople(out, grid, agent, [col, row], glyphIndex);
+  if ((agent.kind === 'dog' || agent.kind === 'cat') && agent.ahead)
+    return drawPet(out, grid, agent, [col, row], glyphIndex) ? 1 : 0;
+  // A vendor's cart is painted as a vehicle.
+  const cls = spec && agent.kind === 'person' ? 'life_vehicle' : lifeClassFor[agent.kind];
+  if (spec && agent.ahead && agent.side) {
+    const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
+    const [sideCol, sideRow] = toCell(agent.side[0], agent.side[1]);
+    const along: [number, number] = [aheadCol - col, aheadRow - row];
+    const across: [number, number] = [sideCol - col, sideRow - row];
+    if (Math.hypot(...along) * spec.length >= STAMP_MIN_CELLS) {
+      const bits = STAMP_BITS[agent.kind] ?? agentBit[agent.kind];
+      const stamped = stamp(out, grid, [col, row], along, across, spec, (part) => [
+        // Boats are drawn solid, so the water doesn't show through them.
+        parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
+        classId(cls),
+        bits,
+        vehicleByte(agent.paint ?? 0, part, agent.parked),
+      ]);
+      // The vendor stands clear of the cart's side.
+      const vendor = agent.people
+        ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
+        : 0;
+      return (stamped ? 1 : 0) + vendor;
+    }
+  }
+  if (agent.bird && agent.ahead)
+    return drawBird(out, grid, agent, [col, row], theme, glyphIndex) ? 1 : 0;
+  const people = agent.people ? drawPeople(out, grid, agent, [col, row], glyphIndex) : 0;
+  const c = Math.floor(col);
+  const r = Math.floor(row);
+  if (c < 0 || r < 0 || c >= cols || r >= rows) return people;
+  const mini = spec?.mini ?? theme.styles[cls]?.glyphs;
+  if (!mini || mini.length === 0) return people;
+  let variant = 0;
+  if (agent.kind === 'bird') {
+    variant = agent.flap;
+  } else if (agent.ahead) {
+    const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
+    const x = Math.abs((aheadCol - col) * grid.cellWidth);
+    const y = Math.abs((aheadRow - row) * grid.cellHeight);
+    variant = x >= y ? 0 : 1;
+  }
+  const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
+  if (index <= 0 || index > 255) return people;
+  const at = (r * cols + c) * 4;
+  rememberGroundCell(out, at);
+  out[at] = index;
+  out[at + 1] = classId(cls);
+  out[at + 2] = agentBit[agent.kind];
+  out[at + 3] = spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255;
+  return people + 1;
 }
 
 /**
@@ -236,6 +279,7 @@ function drawPeople(
     const index = glyphIndex(glyph);
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > 255) return false;
     const at = (r * cols + c) * 4;
+    rememberGroundCell(out, at);
     out[at] = index;
     out[at + 1] = cls;
     out[at + 2] = bits;
@@ -409,6 +453,7 @@ function stampMaster(
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > 255) continue;
       const at = (r * cols + c) * 4;
+      rememberGroundCell(out, at);
       out[at] = index;
       out[at + 1] = cls;
       out[at + 2] = bits;
@@ -523,12 +568,12 @@ function drawShadows(
 }
 
 /**
- * Draw a dog (life/dogs.ts) at its real size, like a bird: in one cell turned to its heading on
- * screen and stepping with `flap`, and closest up stamped over the cells it covers, in its
- * coat's paint (the people's class, `personColor`; its nose and ears the darker ink). Returns
- * whether it landed on the grid.
+ * Draw a dog (life/dogs.ts) or cat (life/cats.ts) at its real size, like a bird: in one cell
+ * turned to its heading on screen and stepping with `flap`, and closest up stamped over the
+ * cells it covers, in its coat's paint (the people's class, `personColor`; its nose and ears
+ * the darker ink). Returns whether it landed on the grid.
  */
-function drawDog(
+function drawPet(
   out: Uint8Array,
   grid: LifeGrid,
   agent: VisibleAgent,
@@ -539,12 +584,25 @@ function drawDog(
   const cls = classId(lifeClassFor.dog);
   const bits = agentBit.dog;
   const paint = agent.paint ?? PAINT_NONE;
-  const frame = agent.flap === 1 ? 1 : 0;
+  const catFrame = Math.min(3, agent.flap);
+  const dogFrame = agent.flap === 1 ? 1 : 0;
+  const art =
+    agent.kind === 'cat'
+      ? {
+          size: CAT_LENGTH_M,
+          ink: (u: number, v: number, detail: number) => catInk(catFrame, u, v, detail),
+          glyph: (heading: Heading) => catGlyph(catFrame, heading),
+        }
+      : {
+          size: DOG_LENGTH_M,
+          ink: (u: number, v: number, detail: number) => dogInk(dogFrame, u, v, detail),
+          glyph: (heading: Heading) => dogGlyph(dogFrame, heading),
+        };
   const [aheadCol, aheadRow] = toCell(agent.ahead![0], agent.ahead![1]);
   const along: [number, number] = [aheadCol - col, aheadRow - row];
   const x = along[0] * cellWidth;
   const y = along[1] * cellHeight;
-  if (dogFit((DOG_LENGTH_M * Math.hypot(x, y)) / cellWidth) === 'stamp') {
+  if (dogFit((art.size * Math.hypot(x, y)) / cellWidth) === 'stamp') {
     const right: [number, number] = [-y / cellWidth, x / cellHeight];
     return stampMaster(
       out,
@@ -552,8 +610,8 @@ function drawDog(
       [col, row],
       along,
       right,
-      DOG_LENGTH_M,
-      (u, v, detail) => dogInk(frame, u, v, detail),
+      art.size,
+      art.ink,
       1 / 2,
       glyphIndex,
       (tone) => [cls, bits, personByte(paint, tone ? PersonPart.rib : PersonPart.canopy)],
@@ -562,7 +620,7 @@ function drawDog(
   const c = Math.floor(col);
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
-  const index = glyphIndex(dogGlyph(frame, headingOf(x, y)));
+  const index = glyphIndex(art.glyph(headingOf(x, y)));
   if (index <= 0 || index > 255) return false;
   const at = (r * cols + c) * 4;
   out[at] = index;
@@ -619,6 +677,7 @@ function stamp(
       const [glyph, cls, bits, byte] = texel(part);
       if (glyph <= 0 || glyph > 255) continue;
       const at = (r * cols + c) * 4;
+      rememberGroundCell(out, at);
       out[at] = glyph;
       out[at + 1] = cls;
       out[at + 2] = bits;

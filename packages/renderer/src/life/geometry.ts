@@ -86,6 +86,16 @@ export const roostClasses: ReadonlySet<string> = new Set([
 ]);
 
 export type LifeGeometry = {
+  /** Stable feature identities for line copies in adjacent tiles. */
+  lineIds?: Uint32Array;
+  /** Lot boundaries and solid ground obstacles, including polygon holes. */
+  areas?: LifeArea[];
+  /** Interaction sites: x, y, kind (0 stop, 1 terminal, 2 shelter), mode bits, covered. */
+  sites: Float32Array;
+  /** Walking obstacles: polyline/polygon coordinates, start offsets and closed flags. */
+  obstacles: Float32Array;
+  obstacleStarts: Uint32Array;
+  obstacleClosed: Uint8Array;
   /** Polyline vertices: x, y in tile units. */
   coords: Float32Array;
   /** The first vertex of each polyline, then one past the last vertex (length = lines + 1). */
@@ -120,7 +130,16 @@ export type LifeGeometry = {
   places: Float32Array;
 };
 
+export type LifeArea = { kind: 'parking' | 'blocked'; rings: TilePoint[][]; water?: boolean };
+
 export const PLACE_STRIDE = 5;
+export const SITE_STRIDE = 5;
+
+/** A tile's own extent in tile units (raster/geometry.ts `EXTENT`). */
+const TILE_EXTENT = 4096;
+/** Whether a point is in its own tile, not in the buffer its neighbor owns. */
+export const inTile = (p: { x: number; y: number }) =>
+  p.x >= 0 && p.x < TILE_EXTENT && p.y >= 0 && p.y < TILE_EXTENT;
 
 /** At most this many parking stalls per tile. */
 export const MAX_TILE_SPOTS = 300;
@@ -130,6 +149,25 @@ export const MAX_TILE_PERCHES = 24;
 export const MAX_TILE_PLACES = 40;
 
 export class LifeBuilder {
+  private lineIds: number[] = [];
+  private areas: LifeArea[] = [];
+  private sites: number[] = [];
+  private obstacles: number[] = [];
+  private obstacleStarts: number[] = [];
+  private obstacleClosed: number[] = [];
+
+  site(p: TilePoint, kind: number, modes = 0, covered = false) {
+    // Sites belong to one tile; its buffer must not duplicate reservations.
+    if (!inTile(p) || this.sites.length >= 64 * SITE_STRIDE) return;
+    this.sites.push(p.x, p.y, kind, modes, covered ? 1 : 0);
+  }
+
+  obstacle(points: readonly TilePoint[], closed: boolean) {
+    if (points.length < 2) return;
+    this.obstacleStarts.push(this.obstacles.length / 2);
+    this.obstacleClosed.push(closed ? 1 : 0);
+    for (const p of points) this.obstacles.push(p.x, p.y);
+  }
   private coords: number[] = [];
   private starts: number[] = [];
   private kinds: number[] = [];
@@ -145,12 +183,17 @@ export class LifeBuilder {
   private shops: number[] = [];
   private places: number[] = [];
 
-  line(points: readonly TilePoint[], kind: LifeLine, width = 0) {
+  line(points: readonly TilePoint[], kind: LifeLine, width = 0, id = this.starts.length + 1) {
     if (points.length < 2) return;
     this.starts.push(this.coords.length / 2);
     this.kinds.push(kind);
     this.widths.push(width);
+    this.lineIds.push(id);
     for (const p of points) this.coords.push(p.x, p.y);
+  }
+
+  area(kind: LifeArea['kind'], rings: readonly (readonly TilePoint[])[], water = false) {
+    this.areas.push({ kind, water, rings: rings.map((r) => r.map((p) => ({ ...p }))) });
   }
 
   roost(p: TilePoint, habitat: Habitat = Habitat.park) {
@@ -204,6 +247,12 @@ export class LifeBuilder {
 
   finish(): LifeGeometry {
     return {
+      lineIds: Uint32Array.from(this.lineIds),
+      areas: this.areas,
+      sites: Float32Array.from(this.sites),
+      obstacles: Float32Array.from(this.obstacles),
+      obstacleStarts: Uint32Array.from([...this.obstacleStarts, this.obstacles.length / 2]),
+      obstacleClosed: Uint8Array.from(this.obstacleClosed),
       coords: Float32Array.from(this.coords),
       starts: Uint32Array.from([...this.starts, this.coords.length / 2]),
       kinds: Uint8Array.from(this.kinds),
@@ -223,6 +272,11 @@ export class LifeBuilder {
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
+  g.sites.buffer as ArrayBuffer,
+  g.obstacles.buffer as ArrayBuffer,
+  g.obstacleStarts.buffer as ArrayBuffer,
+  g.obstacleClosed.buffer as ArrayBuffer,
   g.coords.buffer as ArrayBuffer,
   g.starts.buffer as ArrayBuffer,
   g.kinds.buffer as ArrayBuffer,

@@ -18,7 +18,9 @@ import {
 } from './classes';
 import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
-import { Paint } from './life/vehicles';
+import { CAT_ICON } from './life/cats';
+import { DOG_ICON } from './life/dogs';
+import { Paint, VEHICLES } from './life/vehicles';
 import {
   CLASS_LABELS,
   streetlightGlyph,
@@ -153,6 +155,17 @@ export const STREETLIGHTS_ENTRY: Readonly<LegendEntry> = {
 /** The roads streetlights line. */
 const litRoads: readonly RenderClass[] = ['road_major', 'road_mid'];
 
+/** Match the map's hulls and outriggers rather than the old diamond placeholder. */
+function boatIcons(theme: Theme): LegendIcon[] {
+  return (['motorboat', 'banca'] as const).map((kind) => ({
+    pixels: VEHICLES[kind].plan.map((row) =>
+      row.replace(/[A-Z]/g, (c) => (c === 'R' || c === 'G' ? 'o' : '#')),
+    ),
+    paint: css(theme.vehiclePaints[Paint.cream]!),
+    tone: css(theme.vehiclePaints[Paint.orange]!),
+  }));
+}
+
 /** Markers show whenever the classes that carry them show; the landmark marker always. */
 const markerParents = new Map<RenderClass, AtlasClass[]>();
 for (const [cls, marker] of Object.entries(markerFor)) {
@@ -211,6 +224,7 @@ export function legendEntries(
     } else {
       const entry: LegendEntry = { classes: [cls], label, glyphs, color: css(style.color) };
       if (cls === 'life_person') entry.icons = peopleIcons(theme);
+      if (cls === 'life_boat') entry.icons = boatIcons(theme);
       byLabel.set(label, entry);
     }
   }
@@ -218,6 +232,31 @@ export function legendEntries(
   // Vendors show wherever people do, from the same zoom.
   const people = entries.findIndex((e) => e.classes.includes('life_person'));
   if (people >= 0) entries.splice(people + 1, 0, vendorsEntry(theme));
+  if (life && zoom >= 17.5) {
+    const paint = css(theme.vehiclePaints[Paint.orange]!);
+    entries.push({
+      classes: [],
+      label: 'Cats and dogs (simulated)',
+      glyphs: '',
+      color: paint,
+      icons: [DOG_ICON, CAT_ICON].map((rows) => ({
+        pixels: rows,
+        paint,
+        tone: dim(theme.vehiclePaints[Paint.orange]!, 0.5),
+      })),
+    });
+  }
+  if (
+    life &&
+    zoom >= 18 &&
+    (!onScreen || onScreen.has('water_river') || onScreen.has('water_area'))
+  )
+    entries.push({
+      classes: [],
+      label: 'Fish (simulated)',
+      glyphs: '◊ ( )',
+      color: css(theme.styles.water_river?.color ?? theme.label),
+    });
   if (lights && (!onScreen || litRoads.some((cls) => onScreen.has(cls)))) {
     entries.push({ ...STREETLIGHTS_ENTRY, classes: [] });
   }

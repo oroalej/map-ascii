@@ -76,6 +76,22 @@ out body;
 >;
 out skel qt;`;
 
+/**
+ * Transit stops, terminals, and covered shelters in the detail bbox, asked for on its own like
+ * `railQuery` so adding it left the saved detail download valid (`--offline` needs it saved too).
+ * Covered entrances repeat part of `detailQuery` so this download stands alone.
+ */
+export const lifeQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(
+  nwr["highway"="bus_stop"];
+  nwr["public_transport"~"^(platform|stop_position)$"];
+  nwr["amenity"~"^(bus_station|taxi|shelter)$"];
+  node["entrance"]["covered"="yes"];
+);
+out body;
+>;
+out skel qt;`;
+
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
@@ -199,6 +215,12 @@ export const step: Step = {
       cache,
     );
     console.log(`  railways: ${rail.elements.length} elements`);
+    const sites = await overpass(
+      lifeQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailLife),
+      cache,
+    );
+    console.log(`  life sites: ${sites.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

@@ -4,7 +4,8 @@
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
-import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX, type DogGlyph } from '../life/dogs';
+import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
+import { catOf, catPixels } from '../life/cats';
 import {
   FIGURE_SCALES,
   FIGURE_TONE,
@@ -263,15 +264,16 @@ function drawBird(slot: Slot, g: BirdGlyph) {
 }
 
 /**
- * A dog in its cell (life/dogs.ts `dogPixels`): square, centered, `DOG_SCALE` of the cell's
- * width but no narrower than `MIN_DOG_PX`, in the same two inks as a figure.
+ * A dog or cat in its cell (life/dogs.ts `dogPixels`, life/cats.ts `catPixels`, for a `box`):
+ * square, centered, `DOG_SCALE` of the cell's width but no narrower than `MIN_DOG_PX`, in the
+ * same two inks as a figure.
  */
-function drawDog(slot: Slot, g: DogGlyph) {
+function drawPet(slot: Slot, pixels: (box: number) => (x: number, y: number) => string) {
   const { data, stride, w, h } = slot;
   const box = Math.min(h, Math.max(Math.min(w, MIN_DOG_PX), Math.round(w * DOG_SCALE)));
   const ox = Math.floor((w - box) / 2);
   const oy = Math.floor((h - box) / 2);
-  const pixel = dogPixels(g, box);
+  const pixel = pixels(box);
   for (let y = 0; y < box; y++) {
     for (let x = 0; x < box; x++) {
       const ink = pixel(x, y);
@@ -308,7 +310,8 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
   else if (figureOf(glyph)) drawFigure(slot, figureOf(glyph)!);
   else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
-  else if (dogOf(glyph)) drawDog(slot, dogOf(glyph)!);
+  else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
+  else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === STALL_GLYPH) drawStall(slot);
   else return false;
   return true;

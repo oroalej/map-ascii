@@ -119,5 +119,8 @@ export function dogGlyphs(): string[] {
 }
 
 /** A one-cell dog's pixels in a `box` × `box` square: '#' coat, 'o' nose and ears, '.' empty. */
+/** The legend's dog: standing, facing up (`dogPixels` of frame 0 at 10 px). */
+export const DOG_ICON = STEP_10[0]!;
+
 export const dogPixels = (g: DogGlyph, box: number) =>
   turnedPixels(MASTERS[g.frame]!, box, g.heading);

@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
   ATLAS_CLASSES,
@@ -660,11 +661,51 @@ const Weekdays = z
   .min(1)
   .refine((days) => new Set(days).size === days.length, { message: 'duplicate weekday' });
 
+/** An interaction site: a mapped OSM feature annotated by the city pack, or a sourced point. */
+export const LifeSite = z
+  .strictObject({
+    id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'expected a kebab-case id'),
+    kind: z.enum(LIFE_SITE_KINDS),
+    osm_id: z
+      .string()
+      .regex(/^osm:(node|way|relation)\/\d+$/)
+      .optional(),
+    position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]).optional(),
+    modes: z.array(z.enum(TRANSIT_MODES)).min(1).optional(),
+    covered: z.boolean().optional(),
+    source: z.string().min(1),
+  })
+  .superRefine((site, ctx) => {
+    if (!!site.osm_id === !!site.position)
+      ctx.addIssue({ code: 'custom', message: 'provide either osm_id or position' });
+    if (site.kind !== 'shelter' && !site.modes?.length)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['modes'],
+        message: 'transit sites require vehicle modes',
+      });
+    if (site.kind === 'shelter' && site.covered === false)
+      ctx.addIssue({ code: 'custom', path: ['covered'], message: 'a shelter is covered' });
+  }) satisfies z.ZodType<LifeSiteConfig>;
+
 /**
  * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
  * (rhythm.ts).
  */
 export const CityLife = z.strictObject({
+  sites: z
+    .array(LifeSite)
+    .refine((sites) => new Set(sites.map((s) => s.id)).size === sites.length, {
+      message: 'duplicate life site id',
+    })
+    .refine(
+      (sites) => {
+        const ids = sites.flatMap((s) => (s.osm_id ? [s.osm_id] : []));
+        return new Set(ids).size === ids.length;
+      },
+      { message: 'duplicate life site osm_id' },
+    )
+    .optional(),
   rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
   schedules: z
     .strictObject({
@@ -700,8 +741,8 @@ export type Traffic = z.infer<typeof Traffic>;
 
 /**
  * A city pack's config (`cities/<slug>/city.json`). Geography is looked up in OSM by the
- * pipeline; the only coordinates allowed here are a region bbox, when the region has no usable
- * OSM relation.
+ * pipeline. Coordinates are allowed for a region bbox without a usable OSM relation, and for
+ * independently sourced life sites missing from OSM.
  */
 export const City = z
   .strictObject({

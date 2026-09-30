@@ -1,4 +1,5 @@
 import type { AtlasClass, TileLayer } from '@atlas/shared';
+import { siteOfTags } from './life-sites';
 
 export type Tags = Readonly<Record<string, string | undefined>>;
 export type GeometryKind = 'point' | 'line' | 'area';
@@ -97,7 +98,10 @@ export function treeSize(tags: Tags): { height: number; crown: number } {
 export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
-    return furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k);
+    return (
+      siteOfTags(tags)?.kind ??
+      furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k)
+    );
   }
   if (atlasClass === 'barrier') return barrierKinds.find((k) => tags.barrier === k);
   // Sidings, spurs, and yards, where trains stand by (the renderer's life layer).
@@ -121,6 +125,10 @@ export function classify(
   kind: GeometryKind,
   subdivisionLevel: number,
 ): AtlasClass | null {
+  // A transit point draws as its furniture glyph; areas (a station's grounds) classify as usual
+  // and keep only their site anchor (03-normalize.ts).
+  if (kind === 'point' && !tags.building && siteOfTags(tags))
+    return tags.entrance ? 'entrance' : 'furniture';
   if (tags.boundary === 'administrative') {
     return kind === 'area' && tags.admin_level === String(subdivisionLevel)
       ? 'admin_subdivision'

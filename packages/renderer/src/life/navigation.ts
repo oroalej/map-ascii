@@ -1,0 +1,267 @@
+import { usableLines } from './config';
+import type { LifeGeometry, LifeLine } from './geometry';
+import { boundsOf, pointInside } from './occupancy';
+
+export type WalkPoint = { x: number; y: number };
+type Edge = { a: number; b: number; length: number };
+type Obstacle = { points: WalkPoint[]; closed: boolean; bounds: number[] };
+const distance = (a: WalkPoint, b: WalkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
+const cross = (a: WalkPoint, b: WalkPoint, c: WalkPoint) =>
+  (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+
+function intersects(a: WalkPoint, b: WalkPoint, c: WalkPoint, d: WalkPoint): boolean {
+  if (
+    Math.max(a.x, b.x) < Math.min(c.x, d.x) ||
+    Math.max(c.x, d.x) < Math.min(a.x, b.x) ||
+    Math.max(a.y, b.y) < Math.min(c.y, d.y) ||
+    Math.max(c.y, d.y) < Math.min(a.y, b.y)
+  )
+    return false;
+  return cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
+}
+
+const inside = (p: WalkPoint, ring: readonly WalkPoint[]) => pointInside(p, [ring]);
+
+/** A small tile-local graph. Unsafe connectors and unreachable sites are rejected. */
+export class WalkingGraph {
+  readonly points: WalkPoint[] = [];
+  private readonly edges: Edge[] = [];
+  private readonly adjacent: { to: number; length: number }[][] = [];
+  private readonly obstacles: Obstacle[] = [];
+  private readonly obstacleBins = new Map<string, number[]>();
+  private readonly edgeBins = new Map<string, number[]>();
+  private readonly bin: number;
+
+  constructor(
+    geo: LifeGeometry,
+    readonly perMeter: number,
+  ) {
+    this.bin = 20 * perMeter;
+    for (let i = 0; i < geo.obstacleClosed.length; i++) {
+      const points: WalkPoint[] = [];
+      for (let v = geo.obstacleStarts[i]!; v < geo.obstacleStarts[i + 1]!; v++)
+        points.push({ x: geo.obstacles[v * 2]!, y: geo.obstacles[v * 2 + 1]! });
+      if (points.length < 2) continue;
+      const bounds = boundsOf(points);
+      const index = this.obstacles.length;
+      this.obstacles.push({ points, bounds, closed: geo.obstacleClosed[i] === 1 });
+      this.index(this.obstacleBins, bounds, index);
+    }
+    const nodes = new Map<string, number>();
+    const node = (p: WalkPoint) => {
+      const key = `${Math.round(p.x)},${Math.round(p.y)}`;
+      let id = nodes.get(key);
+      if (id === undefined) {
+        id = this.points.length;
+        nodes.set(key, id);
+        this.points.push(p);
+        this.adjacent.push([]);
+      }
+      return id;
+    };
+    const edge = (a: WalkPoint, b: WalkPoint) => {
+      if (this.points.length >= 4096 || distance(a, b) < 0.01 || !this.clear(a, b)) return;
+      const ai = node(a);
+      const bi = node(b);
+      const length = distance(a, b);
+      const index = this.edges.length;
+      this.edges.push({ a: ai, b: bi, length });
+      this.adjacent[ai]!.push({ to: bi, length });
+      this.adjacent[bi]!.push({ to: ai, length });
+      this.index(
+        this.edgeBins,
+        [Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y)],
+        index,
+      );
+    };
+    for (let l = 0; l < geo.kinds.length; l++) {
+      const kind = geo.kinds[l]! as LifeLine;
+      // People walk along paths; beside roads, along both curbs.
+      const path = usableLines.person.includes(kind);
+      const road = usableLines.vehicle.includes(kind);
+      if (!path && !road) continue;
+      for (let v = geo.starts[l]!; v < geo.starts[l + 1]! - 1; v++) {
+        const a = { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! };
+        const b = { x: geo.coords[v * 2 + 2]!, y: geo.coords[v * 2 + 3]! };
+        if (path) edge(a, b);
+        if (!road) continue;
+        const length = distance(a, b) || 1;
+        const offset = ((geo.widths[l] || 6) / 2 + 0.6) * perMeter;
+        for (const side of [-1, 1]) {
+          const x = (-(b.y - a.y) / length) * offset * side;
+          const y = ((b.x - a.x) / length) * offset * side;
+          edge({ x: a.x + x, y: a.y + y }, { x: b.x + x, y: b.y + y });
+        }
+      }
+    }
+    // Join nearby path/roadside ends, with the same obstacle check as a site connector.
+    const bins = new Map<string, number[]>();
+    this.points.forEach((p, i) => {
+      const bx = Math.floor(p.x / this.bin);
+      const by = Math.floor(p.y / this.bin);
+      for (let x = bx - 1; x <= bx + 1; x++)
+        for (let y = by - 1; y <= by + 1; y++) {
+          for (const j of bins.get(`${x},${y}`) ?? []) {
+            const q = this.points[j]!;
+            const length = distance(p, q);
+            if (length <= 3 * perMeter && this.clear(p, q)) {
+              this.adjacent[i]!.push({ to: j, length });
+              this.adjacent[j]!.push({ to: i, length });
+            }
+          }
+        }
+      this.index(bins, [p.x, p.y, p.x, p.y], i);
+    });
+  }
+
+  private index(map: Map<string, number[]>, bounds: number[], value: number) {
+    for (let x = Math.floor(bounds[0]! / this.bin); x <= Math.floor(bounds[2]! / this.bin); x++)
+      for (let y = Math.floor(bounds[1]! / this.bin); y <= Math.floor(bounds[3]! / this.bin); y++) {
+        const key = `${x},${y}`;
+        const list = map.get(key) ?? [];
+        list.push(value);
+        map.set(key, list);
+      }
+  }
+
+  private candidates(map: Map<string, number[]>, a: WalkPoint, b: WalkPoint): Set<number> {
+    const out = new Set<number>();
+    for (
+      let x = Math.floor(Math.min(a.x, b.x) / this.bin);
+      x <= Math.floor(Math.max(a.x, b.x) / this.bin);
+      x++
+    )
+      for (
+        let y = Math.floor(Math.min(a.y, b.y) / this.bin);
+        y <= Math.floor(Math.max(a.y, b.y) / this.bin);
+        y++
+      )
+        for (const i of map.get(`${x},${y}`) ?? []) out.add(i);
+    return out;
+  }
+
+  clear(a: WalkPoint, b: WalkPoint): boolean {
+    for (const i of this.candidates(this.obstacleBins, a, b)) {
+      const obstacle = this.obstacles[i]!;
+      if (obstacle.closed && (inside(a, obstacle.points) || inside(b, obstacle.points)))
+        return false;
+      const count = obstacle.points.length - (obstacle.closed ? 0 : 1);
+      for (let p = 0; p < count; p++)
+        if (
+          intersects(a, b, obstacle.points[p]!, obstacle.points[(p + 1) % obstacle.points.length]!)
+        )
+          return false;
+    }
+    return true;
+  }
+
+  /** Roofed sites are approached at a reachable exterior entrance, never through the roof. */
+  entrance(p: WalkPoint): WalkPoint | undefined {
+    if (this.clear(p, p) && this.attach(p)) return p;
+    let best = 30 * this.perMeter;
+    let found: WalkPoint | undefined;
+    for (const i of this.candidates(this.obstacleBins, p, p)) {
+      const obstacle = this.obstacles[i]!;
+      if (!obstacle.closed || !inside(p, obstacle.points)) continue;
+      for (let j = 0; j < obstacle.points.length; j++) {
+        const a = obstacle.points[j]!;
+        const b = obstacle.points[(j + 1) % obstacle.points.length]!;
+        const length = distance(a, b);
+        if (length < 0.001) continue;
+        const t = Math.max(
+          0,
+          Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length ** 2),
+        );
+        const x = a.x + (b.x - a.x) * t;
+        const y = a.y + (b.y - a.y) * t;
+        for (const sign of [-1, 1]) {
+          const candidate = {
+            x: x - ((b.y - a.y) / length) * this.perMeter * sign,
+            y: y + ((b.x - a.x) / length) * this.perMeter * sign,
+          };
+          const d = distance(p, candidate);
+          if (d < best && this.clear(candidate, candidate) && this.attach(candidate)) {
+            best = d;
+            found = candidate;
+          }
+        }
+      }
+    }
+    return found;
+  }
+
+  private attach(p: WalkPoint): { point: WalkPoint; edge: Edge; t: number } | undefined {
+    const reach = 8 * this.perMeter;
+    let best = reach;
+    let attachment: { point: WalkPoint; edge: Edge; t: number } | undefined;
+    for (const i of this.candidates(
+      this.edgeBins,
+      { x: p.x - reach, y: p.y - reach },
+      { x: p.x + reach, y: p.y + reach },
+    )) {
+      const edge = this.edges[i]!;
+      const a = this.points[edge.a]!;
+      const b = this.points[edge.b]!;
+      const t = Math.max(
+        0,
+        Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / edge.length ** 2),
+      );
+      const point = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      const d = distance(p, point);
+      if (d <= best && this.clear(p, point)) {
+        best = d;
+        attachment = { point, edge, t };
+      }
+    }
+    return attachment;
+  }
+
+  route(from: WalkPoint, to: WalkPoint): WalkPoint[] | undefined {
+    const start = this.attach(from);
+    const end = this.attach(to);
+    if (!start || !end) return undefined;
+    if (start.edge === end.edge) return [from, start.point, end.point, to];
+    // Short clear connections let a walker reach a neighboring curb without walking to
+    // the ends of two long parallel edges. This uses the graph's same 3 m join limit.
+    if (distance(start.point, end.point) <= 3 * this.perMeter && this.clear(start.point, end.point))
+      return [from, start.point, end.point, to];
+    const costs = new Float64Array(this.points.length).fill(Infinity);
+    const previous = new Int32Array(this.points.length).fill(-1);
+    const done = new Uint8Array(this.points.length);
+    const open = new Set<number>([start.edge.a, start.edge.b]);
+    costs[start.edge.a] = distance(start.point, this.points[start.edge.a]!);
+    costs[start.edge.b] = distance(start.point, this.points[start.edge.b]!);
+    let found = -1;
+    // Local trips only; bounded searches cannot stall a frame on a sprawling graph.
+    for (let visit = 0; open.size && visit < 512; visit++) {
+      let current = -1;
+      let best = Infinity;
+      for (const i of open) {
+        const score = costs[i]! + distance(this.points[i]!, end.point);
+        if (score < best) {
+          best = score;
+          current = i;
+        }
+      }
+      if (current < 0 || costs[current]! > 100 * this.perMeter) break;
+      open.delete(current);
+      done[current] = 1;
+      if (current === end.edge.a || current === end.edge.b) {
+        found = current;
+        break;
+      }
+      for (const { to: next, length } of this.adjacent[current]!) {
+        const cost = costs[current]! + length;
+        if (!done[next] && cost < costs[next]!) {
+          costs[next] = cost;
+          previous[next] = current;
+          open.add(next);
+        }
+      }
+    }
+    if (found < 0) return undefined;
+    const middle: WalkPoint[] = [];
+    for (let i = found; i >= 0; i = previous[i]!) middle.push(this.points[i]!);
+    return [from, start.point, ...middle.reverse(), end.point, to];
+  }
+}

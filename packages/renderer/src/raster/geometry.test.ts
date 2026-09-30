@@ -509,11 +509,15 @@ describe('buildTileGeometry', () => {
       const crown = vertices(crowns);
       expect(crown).toHaveLength(CROWN_SIDES + 1);
       expect(crown.every((v) => v.cls === classId('tree_crown'))).toBe(true);
-      const radii = crown.slice(0, -1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
+      const radii = crown.slice(1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
       const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
       expect(mean / units(4)).toBeGreaterThan(0.96);
       expect(mean / units(4)).toBeLessThan(1.04);
-      expect(crowns.indices).toHaveLength((CROWN_SIDES - 2) * 3);
+      expect(crowns.indices).toHaveLength(CROWN_SIDES * 3);
+      expect(Array.from(crowns.surface.slice(0, 2))).toEqual([0, 0]);
+      expect(crowns.surface).toHaveLength(crown.length * 2);
+      for (let i = 2; i < crowns.surface.length; i += 2)
+        expect(Math.hypot(crowns.surface[i]!, crowns.surface[i + 1]!)).toBeCloseTo(1);
       // Each vertex carries its reach from the trunk, how far it swings.
       Array.from(crowns.ridge).forEach((reach, i) => {
         expect(reach).toBeCloseTo(Math.hypot(crown[i]!.x! - 2000, crown[i]!.y! - 2000), -0.5);
@@ -905,5 +909,55 @@ describe('parkingStalls', () => {
     );
     expect(g.life.spots.length).toBeGreaterThan(0);
     expect(g.life.spots.length % 4).toBe(0);
+  });
+});
+
+describe('local scene geometry', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+  it('owns a stable site anchor once, independent of clipped render geometry', () => {
+    const [lng, lat] = tileToLngLat(tile, { x: 1000, y: 2000 });
+    const stop = feature(
+      1,
+      {
+        class: 'furniture',
+        id: 's',
+        life_site: 'stop',
+        life_modes: 2,
+        life_covered: true,
+        life_lng: lng,
+        life_lat: lat,
+      },
+      [[[3000, 3000]]],
+    );
+    const g = buildTileGeometry({ poi: layer([stop]) }, createIdRegistry(), tile);
+    expect(Array.from(g.life.sites)).toEqual([1000, 2000, 0, 2, 1]);
+    const adjacent = buildTileGeometry({ poi: layer([stop]) }, createIdRegistry(), {
+      ...tile,
+      x: tile.x + 1,
+    });
+    expect(adjacent.life.sites).toHaveLength(0);
+  });
+  it('emits solid buildings, water, and fences as walking obstacles, but not grounds', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building', height: 6 }, [square(100, 100, 30)]),
+          feature(3, { class: 'building_school' }, [square(200, 100, 30)]),
+        ]),
+        water: layer([feature(3, { class: 'water_area' }, [square(300, 100, 30)])]),
+        poi: layer([
+          feature(2, { class: 'barrier' }, [
+            [
+              [400, 100],
+              [400, 200],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.obstacleClosed)).toEqual([1, 1, 0]);
+    expect(g.life.obstacleStarts).toHaveLength(4);
   });
 });

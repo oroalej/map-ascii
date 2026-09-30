@@ -1,6 +1,7 @@
 import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
+import { catGlyphs } from './life/cats';
 import { personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
@@ -277,7 +278,11 @@ function makeTheme(background: number, c: Palette): Theme {
       barrier: { kind: 'road', glyphs: barrierLine, color: c.barrier },
       entrance: { kind: 'single', glyphs: ['▪'], color: c.monument },
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
-      furniture: { kind: 'variant', glyphs: ['•', '╥', '○', '¶'], color: c.furniture },
+      furniture: {
+        kind: 'variant',
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂'],
+        color: c.furniture,
+      },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },
       pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch, fill: 0.12 },
       // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
@@ -435,7 +440,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   tree: 'Tree',
   barrier: 'Fence or wall',
   entrance: 'Entrance',
-  furniture: 'Bench, fountain, or flagpole',
+  furniture: 'Street furniture, transit stop, or shelter',
   parking: 'Parking',
   pitch: 'Sports pitch',
   admin_city: 'City boundary',
@@ -477,6 +482,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...personGlyphs(),
     ...birdGlyphs(),
     ...dogGlyphs(),
+    ...catGlyphs(),
     ...rainGlyphs,
     streetlightGlyph,
   ];

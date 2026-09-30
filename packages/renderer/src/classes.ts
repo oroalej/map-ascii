@@ -188,7 +188,8 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
  */
 export function variantCode(className: string, variant: unknown): number {
   if (typeof variant !== 'string') return 0;
-  if (className === 'furniture') return ['bench', 'fountain', 'flagpole'].indexOf(variant) + 1;
+  if (className === 'furniture')
+    return ['bench', 'fountain', 'flagpole', 'stop', 'terminal', 'shelter'].indexOf(variant) + 1;
   if (className === 'tree' || className === 'trees') {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }

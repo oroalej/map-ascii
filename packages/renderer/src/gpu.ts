@@ -233,7 +233,7 @@ export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }
 
-type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number };
+type Mesh = { vao: WebGLVertexArrayObject | null; buffers: WebGLBuffer[]; count: number };
 
 type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
 
@@ -243,7 +243,13 @@ export type TileMesh = GroundMesh & {
   region: GroundMesh;
 };
 
-function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
+function uploadMesh(
+  gl: GL,
+  arrays: GeometryArrays & { surface?: Float32Array },
+  indices?: Uint32Array,
+): Mesh {
+  const count = indices ? indices.length : arrays.ids.length;
+  if (count === 0) return { vao: null, buffers: [], count };
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   const buffer = (target: number, data: ArrayBufferView) => {
@@ -270,9 +276,14 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
   gl.bindBuffer(gl.ARRAY_BUFFER, buffers[3]!);
   gl.enableVertexAttribArray(3);
   gl.vertexAttribPointer(3, 1, gl.SHORT, false, 0, 0);
+  if (arrays.surface) {
+    buffers.push(buffer(gl.ARRAY_BUFFER, arrays.surface));
+    gl.enableVertexAttribArray(4);
+    gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 0, 0);
+  }
   if (indices) buffers.push(buffer(gl.ELEMENT_ARRAY_BUFFER, indices));
   gl.bindVertexArray(null);
-  return { vao, buffers, count: indices ? indices.length : arrays.ids.length };
+  return { vao, buffers, count };
 }
 
 const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({
@@ -300,7 +311,7 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
     region.lines,
     region.points,
   ]) {
-    gl.deleteVertexArray(m.vao);
+    if (m.vao) gl.deleteVertexArray(m.vao);
     for (const b of m.buffers) gl.deleteBuffer(b);
   }
 }

@@ -159,9 +159,10 @@ export const step: Step = {
     // Railways come in their own download (01-fetch.ts `railQuery`); a city fetched before it
     // existed just has none.
     const rail = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailRail));
+    const sites = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailLife));
     const detailRaw = await readJson<OverpassResponse>(join(rawDir, files.rawDetail));
     const detail: FeatureCollection = osmtogeojson(
-      rail ? mergeResponses([detailRaw, rail]) : detailRaw,
+      mergeResponses([detailRaw, ...(rail ? [rail] : []), ...(sites ? [sites] : [])]),
     );
     await writeJson(join(buildDir, files.osm), detail);
     console.log(`  ${detail.features.length} GeoJSON features`);

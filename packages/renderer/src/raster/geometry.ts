@@ -5,7 +5,7 @@
  * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
-import { featureZoomBand, type ZoomBand } from '@atlas/shared';
+import { featureZoomBand, LIFE_SITE_KINDS, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
 import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
 import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '../labels';
@@ -29,6 +29,8 @@ import { placeTileLamps, type LitLine } from '../life/lights';
 const FLAT_ROOF = 1;
 
 export const EXTENT = 4096;
+/** The world's width in mercator meters. */
+export const MERCATOR_METERS = 40_075_016.686;
 
 /** Layers the renderer doesn't draw yet: event pins arrive with the timeline (Phase 4). */
 export const skippedLayers: ReadonlySet<string> = new Set(['events']);
@@ -57,6 +59,8 @@ export type TileLabel = {
   band: ZoomBand;
   /** Streets: the direction of the run the name sits on (radians, tile y down). */
   angle?: number;
+  /** Straight-run endpoints, so a label is never longer than the road beneath it. */
+  run?: readonly [readonly [number, number], readonly [number, number]];
 };
 
 const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
@@ -94,10 +98,9 @@ const RUN_BEND = (15 * Math.PI) / 180;
  * The longest nearly straight run of a line (consecutive segments within `RUN_BEND` of the
  * run's first one): its midpoint, direction, and length, where a street's name goes.
  */
-export function longestRun(
-  line: readonly TilePoint[],
-): { mid: TilePoint; angle: number; length: number } | null {
-  let best: { mid: TilePoint; angle: number; length: number } | null = null;
+type Run = { mid: TilePoint; angle: number; length: number; from: TilePoint; to: TilePoint };
+export function longestRun(line: readonly TilePoint[]): Run | null {
+  let best: Run | null = null;
   let start = 0;
   while (start < line.length - 1) {
     const a = line[start]!;
@@ -115,7 +118,13 @@ export function longestRun(
     const last = line[end]!;
     const length = Math.hypot(last.x - a.x, last.y - a.y);
     if (length > 0 && (!best || length > best.length)) {
-      best = { mid: { x: (a.x + last.x) / 2, y: (a.y + last.y) / 2 }, angle, length };
+      best = {
+        mid: { x: (a.x + last.x) / 2, y: (a.y + last.y) / 2 },
+        angle,
+        length,
+        from: a,
+        to: last,
+      };
     }
     start = end;
   }
@@ -143,7 +152,7 @@ export type TileGeometry = GroundGeometry & {
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
    * trunk in tile units, how far it swings.
    */
-  crowns: GeometryArrays & { indices: Uint32Array };
+  crowns: GeometryArrays & { indices: Uint32Array; surface: Float32Array };
   /**
    * Region-only features (the pipeline's `region` flag), kept apart: they are tiled only to
    * `REGION_TILE_MAX_ZOOM`, and deeper views draw them from that zoom's tile under the
@@ -529,7 +538,7 @@ export function lngLatToTile({ z, x, y }: TileAddress, lng: number, lat: number)
 export function metersPerUnit({ z, y }: TileAddress): number {
   const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
   const lat = Math.atan(Math.sinh(n));
-  return (40_075_016.686 * Math.cos(lat)) / 2 ** z / EXTENT;
+  return (MERCATOR_METERS * Math.cos(lat)) / 2 ** z / EXTENT;
 }
 
 /**
@@ -583,6 +592,7 @@ export function buildTileGeometry(
   const main = ground();
   const regional = ground();
   const crowns = new Builder();
+  const crownSurface: number[] = [];
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
@@ -650,6 +660,24 @@ export function buildTileGeometry(
       const width = Number(feature.properties.width ?? 0);
       const marker = markerFor[className as keyof typeof markerFor];
       const place = isRegion ? undefined : placeFor(className, variant);
+      const siteKind = LIFE_SITE_KINDS.indexOf(
+        feature.properties.life_site as (typeof LIFE_SITE_KINDS)[number],
+      );
+      if (
+        !isRegion &&
+        tile &&
+        siteKind >= 0 &&
+        typeof feature.properties.life_lng === 'number' &&
+        typeof feature.properties.life_lat === 'number'
+      ) {
+        const p = lngLatToTile(tile, feature.properties.life_lng, feature.properties.life_lat);
+        life.site(
+          p,
+          siteKind,
+          Number(feature.properties.life_modes ?? 0),
+          !!feature.properties.life_covered,
+        );
+      }
 
       const addPoint = (p: TilePoint, klass: number) =>
         points.vertex(p.x, p.y, klass, height, flags, id, variant);
@@ -666,13 +694,20 @@ export function buildTileGeometry(
       const addCrown = (p: TilePoint, index = 0) => {
         if (!unitMeters || !(crown > 0)) return;
         const ring = crownRing(p, crown / 2 / unitMeters, crownSeed + Math.imul(index, 0x9e3779b9));
-        const triangles = ringTriangles(ring);
         const crownCls = classId('tree_crown' satisfies RenderClass);
         const reach = (q: TilePoint) => Math.hypot(q.x - p.x, q.y - p.y);
         const first = crowns.count;
-        for (const q of ring)
-          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, reach(q));
-        for (const i of triangles) crowns.indices.push(first + i);
+        // A center vertex gives both wind reach and canopy lighting an interior, rather
+        // than interpolating only between rim vertices. The radial outline is star-shaped.
+        crowns.vertex(p.x, p.y, crownCls, height, flags, id, variant, 0);
+        crownSurface.push(0, 0);
+        for (const q of ring.slice(0, -1)) {
+          const r = reach(q);
+          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, r);
+          crownSurface.push((q.x - p.x) / (r || 1), (q.y - p.y) / (r || 1));
+        }
+        for (let i = 0; i < CROWN_SIDES; i++)
+          crowns.indices.push(first, first + 1 + i, first + 1 + ((i + 1) % CROWN_SIDES));
       };
       const isTree = className === 'tree' && !isRegion;
 
@@ -715,6 +750,7 @@ export function buildTileGeometry(
               lng: slng,
               lat: slat,
               angle: run.angle,
+              run: [tileToLngLat(tile, run.from), tileToLngLat(tile, run.to)],
             });
           }
         }
@@ -751,7 +787,14 @@ export function buildTileGeometry(
             : isCanal
               ? LifeLine.canal
               : lifeLineFor[className];
-        if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine, width);
+        if (lifeLine !== undefined)
+          for (const line of rings) life.line(line, lifeLine, width, hashString(featureId));
+        if (
+          !isRegion &&
+          (className === 'barrier' || className === 'water_river' || className === 'water_stream')
+        ) {
+          for (const line of rings) life.obstacle(line, false);
+        }
         // Streetlights line major and secondary roads (life/lights.ts), placed once all are in.
         if (lifeLine === LifeLine.roadMajor || lifeLine === LifeLine.roadMid) {
           for (const line of rings) litLines.push({ points: line, width });
@@ -760,7 +803,20 @@ export function buildTileGeometry(
         if (landmark && first && first.length > 0) addMarkers(first[Math.floor(first.length / 2)]!);
       } else if (feature.type === 3) {
         let largest: { ring: TilePoint[]; area: number } | undefined;
+        // What walkers and parked cars keep out of: solid buildings (not grounds) and water.
+        const solid = isBuilding(className) && height > 0;
+        const standingWater = className === 'water_area' || className === 'water_sea';
+        const obstacle =
+          solid ||
+          standingWater ||
+          className === 'building_part' ||
+          className === 'water_river' ||
+          className === 'water_stream';
         for (const polygon of classifyRings(rings)) {
+          if (!isRegion) {
+            if (className === 'parking') life.area('parking', polygon);
+            else if (solid || standingWater) life.area('blocked', polygon, standingWater);
+          }
           const base = fills.count;
           const coords: number[] = [];
           const holes: number[] = [];
@@ -797,6 +853,7 @@ export function buildTileGeometry(
           const triangles = earcut(coords, holes.length > 0 ? holes : null, 2);
           for (const i of triangles) fills.indices.push(base + i);
           const outer = polygon[0]!;
+          if (!isRegion && obstacle) life.obstacle(outer, true);
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           if (!isRegion && className === 'parking' && unitMeters) {
             for (const { p, hx, hy } of parkingStalls(polygon, unitMeters)) life.spot(p, hx, hy);
@@ -852,7 +909,11 @@ export function buildTileGeometry(
   });
   return {
     ...finish(main),
-    crowns: { ...crowns.finish(), indices: Uint32Array.from(crowns.indices) },
+    crowns: {
+      ...crowns.finish(),
+      indices: Uint32Array.from(crowns.indices),
+      surface: Float32Array.from(crownSurface),
+    },
     region: finish(regional),
     labels,
     life: life.finish(),
@@ -882,6 +943,7 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   out.push(
     geometry.fills.indices.buffer as ArrayBuffer,
     geometry.crowns.indices.buffer as ArrayBuffer,
+    geometry.crowns.surface.buffer as ArrayBuffer,
     region.fills.indices.buffer as ArrayBuffer,
     ...lifeTransferables(geometry.life),
   );

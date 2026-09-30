@@ -20,6 +20,7 @@ layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec4 a_meta; // class, height, flags, variant
 layout(location = 2) in uint a_id;
 layout(location = 3) in float a_ridge; // pitched roofs: signed distance to the ridge; crowns: reach from the trunk
+layout(location = 4) in vec2 a_surface; // crown-local coordinates; absent on ground
 
 uniform mat4 u_matrix; // tile units -> cell-grid clip space (affine: the map is flat)
 uniform float u_depth[${MAX_CLASSES}];
@@ -38,6 +39,8 @@ flat out vec4 v_meta;
 flat out uint v_id;
 flat out float v_vis;
 out float v_ridge;
+out vec2 v_surface;
+flat out int v_crown;
 
 // Features' depths fall in [0.2, 1); anything past 1 is clipped.
 const float SPLIT = 0.2;
@@ -78,6 +81,8 @@ void main() {
   v_id = a_id;
   v_vis = vis;
   v_ridge = a_ridge;
+  v_surface = a_surface;
+  v_crown = crown ? 1 : 0;
 }
 `;
 
@@ -89,6 +94,8 @@ flat in vec4 v_meta;
 flat in uint v_id;
 flat in float v_vis;
 in float v_ridge;
+in vec2 v_surface;
+flat in int v_crown;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0)
 uniform ivec2 u_sub;    // samples per cell: 1 x 1, or SUB for the sub-cell targets
@@ -115,6 +122,8 @@ void main() {
       : v_ridge > 0.0 ? ${RoofCode.lit}.0 : ${RoofCode.shaded}.0;
   }
   o_attr = vec4(v_meta.y / 255.0, v_meta.z / 255.0, v_meta.w / 255.0, roof / 255.0);
+  // Crown cells don't need building flags/roof variants. Carry their local surface instead.
+  if (v_crown == 1) o_attr.gb = v_surface * 0.5 + 0.5;
   o_id = vec4(uvec4(v_id, v_id >> 8u, v_id >> 16u, v_id >> 24u) & 255u) / 255.0;
 }
 `;

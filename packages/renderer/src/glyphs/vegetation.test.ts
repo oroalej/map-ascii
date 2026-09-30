@@ -15,7 +15,6 @@ import {
   CROWN,
   CrownGlyph,
   crownIsDry,
-  crownTone,
   DEFAULT_SUN,
   foliageVariant,
   GRASS,
@@ -329,8 +328,9 @@ describe('trees in the wind', () => {
     const inside = field.map(([x, y]) => foliageVariant(x, y, 0, 0, false));
     expect(new Set(inside)).toEqual(new Set([CrownGlyph.interior, CrownGlyph.core]));
     const cores = inside.filter((v) => v === CrownGlyph.core).length / field.length;
-    expect(cores).toBeGreaterThan(0.6 / CROWN.coreEvery);
-    expect(cores).toBeLessThan(1.4 / CROWN.coreEvery);
+    // About a quarter of the inside.
+    expect(cores).toBeGreaterThan(0.15);
+    expect(cores).toBeLessThan(0.35);
     // In a gust the leaves flutter whatever their place in the crown.
     for (const [x, y] of field.slice(0, 200)) {
       expect([0, 1]).toContain(foliageVariant(x, y, 20, 1, false));
@@ -346,11 +346,7 @@ describe('trees in the wind', () => {
     }
   });
 
-  it('tint a crown lit toward the sun, shaded away from it, or yellowing on its own', () => {
-    expect(crownTone(true, true, true)).toBe(Tone.light);
-    expect(crownTone(false, true, true)).toBe(Tone.shade);
-    expect(crownTone(false, false, true)).toBe(Tone.dry);
-    expect(crownTone(false, false, false)).toBe(Tone.none);
+  it('yellow one crown in a few', () => {
     const dry = Array.from({ length: 2000 }, (_, id) => id).filter(crownIsDry).length / 2000;
     expect(dry).toBeGreaterThan(0.5 / CROWN.dryEvery);
     expect(dry).toBeLessThan(1.6 / CROWN.dryEvery);

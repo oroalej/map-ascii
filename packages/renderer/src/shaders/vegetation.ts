@@ -141,18 +141,13 @@ int foliageVariant(ivec2 c, float time, float gust, bool rim) {
   uint h = cellHash(c);
   if (gust >= ${float(TREE_WIND.step)}) return flutters(h, gust, time) ? 0 : 1;
   if (rim) return ${CrownGlyph.rim};
-  return h % ${CROWN.coreEvery}u == 0u ? ${CrownGlyph.core} : ${CrownGlyph.interior};
+  return valueNoise(c, ${CROWN.core.scale}, ${CROWN.core.seed}) > ${float(CROWN.core.above)}
+    && h % ${CROWN.core.skip}u != 0u ? ${CrownGlyph.core} : ${CrownGlyph.interior};
 }
 
-// Whether the crown of feature id is yellowing, and a crown cell's tone from the sun.
+// Whether the crown of feature id is yellowing.
 bool crownIsDry(uint id) {
   return cellHash(ivec2(int(id), 5)) % ${CROWN.dryEvery}u == 0u;
-}
-
-int crownTone(bool sunOpen, bool farOpen, bool dry) {
-  if (sunOpen) return ${Tone.light};
-  if (farOpen) return ${Tone.shade};
-  return dry ? ${Tone.dry} : ${Tone.none};
 }
 
 // The woods' pattern read from upwind by lean cells (fractional, so its edges creep): split into a

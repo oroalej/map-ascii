@@ -49,7 +49,9 @@ import {
   hasCrowns,
   lifePass,
   lightPass,
+  metersPerCssPx,
   overlayPass,
+  streetTextPass,
   placeGrid,
   screenArea,
   selectPass,
@@ -100,7 +102,9 @@ import {
   type TileLabel,
 } from './raster/geometry';
 import { Readback } from './readback';
+import { GpuTimer } from './gpu-timer';
 import { themes, type ThemeName } from './theme';
+import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { tileKey, type TileId } from './tiles';
 
@@ -157,6 +161,8 @@ export type AtlasOptions = {
    * flights are short.
    */
   reducedMotion?: boolean;
+  /** Opt-in asynchronous GPU frame timing, for diagnostics only. */
+  gpuTiming?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -254,6 +260,8 @@ export type AtlasStats = {
   fps: number;
   /** Main-thread time of a drawn frame, smoothed, in ms (GPU time isn't included). */
   frameMs: number;
+  /** GPU rendering time in ms; null when disabled, unavailable, or awaiting a valid sample. */
+  gpuFrameMs: number | null;
   /** Main-thread time of a cell pass (tiles, cells, labels), smoothed, in ms. */
   cellPassMs: number;
   /** Main-thread time of a crown pass (the swaying tree crowns), smoothed, in ms. */
@@ -274,6 +282,8 @@ export type Atlas = {
   /** Fly to a camera (SPEC.md §3): zoom out, travel, zoom in. Any input cancels it. */
   flyTo(target: Partial<CameraState>, opts?: FlyOptions): void;
   getCamera(): CameraState;
+  /** Apply a changed motion preference without recreating the map or changing Life settings. */
+  setReducedMotion(enabled: boolean): void;
   setYear(year: number, opts?: { animate?: boolean }): void;
   setTheme(theme: ThemeName): void;
   /** Select a feature by id (accent color and shimmer), or clear the selection. */
@@ -333,7 +343,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     minZoom: baseMinZoom,
     maxZoom: options.maxZoom ?? MAX_ZOOM,
   };
-  const reducedMotion = options.reducedMotion ?? false;
+  let reducedMotion = options.reducedMotion ?? false;
   const interactive = options.interactive ?? (() => true);
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
@@ -398,6 +408,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The map cell size step (density.ts `cellStep`), set by `resize`. */
   let step: number | undefined;
   const mapGlyphs = new Map<number, MapGlyphs>();
+  let uniforms = themeUniforms(theme);
   let labelGlyphs: LabelGlyphs | undefined;
   let themeRes: ThemeResources | undefined;
   let targets: CellTargets | undefined;
@@ -409,6 +420,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
   const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
   const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
@@ -443,7 +455,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     labelGlyphs ??= createLabelGlyphs(gl, labelCss, dpr, font);
     if (themeRes?.map !== map || themeRes.label !== labelGlyphs) {
-      themeRes = { map, label: labelGlyphs };
+      themeRes = { map, label: labelGlyphs, uniforms };
       cellDirty = true;
       cellsFor = null;
     }
@@ -564,7 +576,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values());
+    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values(), programs);
     reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
     classesStale = true;
   };
@@ -698,6 +710,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         viewBounds(),
         // Circling flocks drift with it (in world axes, like the tiles).
         worldWind(time),
+        { rain: currentRain(), minutes: cityMinutes, cityLife: options.cityLife },
+        // A cell's width in meters, for walkers' clearance.
+        (metersPerCssPx(camera) * cellDev().w) / dpr,
       );
       lastLifeStep = at;
       agents = world.visible(
@@ -996,6 +1011,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         const [lng, lat] = viewportFor(at, size).unproject([...point]) as [number, number];
         emit('click', { featureId, feature, point, lngLat: [lng, lat] });
       } else if (pointerOver && index !== hoverIndex) {
+        canvas.style.cursor = feature ? 'pointer' : '';
         hoverIndex = index;
         drawDirty = true;
         emit('hover', { featureId, feature, point });
@@ -1008,6 +1024,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (destroyed || lost) return;
     raf = requestAnimationFrame(frame);
     readback.poll();
+    gpuTimer.poll();
     // Zooming across a cell size step rebuilds the grid at the new size (density.ts).
     if (step !== undefined && cellStep(schedule, camera.zoom, step) !== step) sizeDirty = true;
     if (sizeDirty) {
@@ -1028,6 +1045,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (cellDirty || drawDirty || animating) {
       const time = (now - start) / 1000;
       const frameStart = performance.now();
+      gpuTimer.begin(now);
       let cellsDrawn = false;
       if (cellDirty) {
         cellDirty = false;
@@ -1078,11 +1096,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         time,
         reducedMotion,
         daylight,
-        { rain: currentRain(), wind },
+        {
+          rain: currentRain(),
+          wind,
+          detail: camera.zoom >= 18,
+          fish: lifeActive() && camera.zoom >= 18,
+        },
         lampShow(),
         moon,
+        sun,
       );
       drawDirty = false;
+      streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
+      gpuTimer.end();
       lastDraw = now;
       frameMs = smooth(frameMs, performance.now() - frameStart);
       drawTimes.push(now);
@@ -1115,12 +1141,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    canvas.style.cursor = '';
+    hoverIndex = 0;
+    emit('hover', { featureId: null, feature: null, point: null });
     cancelAnimationFrame(raf);
     programs = undefined;
     dropGlyphs(false);
     targets = undefined;
     targetsGeneration++;
     readback.reset(true);
+    gpuTimer.reset(true);
     tileCache.suspend();
     emit('contextlost', undefined);
   };
@@ -1128,6 +1158,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!lost || destroyed) return;
     lost = false;
     programs = createPrograms(gl);
+    gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
     tileCache.resume();
     // `resize` rebuilds the theme resources and render targets.
     sizeDirty = true;
@@ -1172,6 +1203,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }),
     hover: (point) => {
       pointerOver = point !== null;
+      if (!point) canvas.style.cursor = '';
       if (point) {
         picker.hover(point);
       } else {
@@ -1197,6 +1229,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     flyTo,
     getCamera: () => ({ ...camera }),
+    setReducedMotion(enabled) {
+      if (reducedMotion === enabled) return;
+      reducedMotion = enabled;
+      lastLifeStep = performance.now();
+      lastSun = -Infinity;
+      cellDirty = true;
+      cellsFor = null;
+      drawDirty = true;
+      if (enabled && flight) {
+        const destination = flight.path.at(1);
+        flight = null;
+        cameraMoved = false;
+        applyCamera(destination);
+        emit('flyend', { ...camera });
+      }
+    },
     setSelected(featureId) {
       selectedId = featureId;
       drawDirty = true;
@@ -1209,6 +1257,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getStats: () => ({
       fps: drawTimes.length,
       frameMs,
+      gpuFrameMs: gpuTimer.milliseconds,
       cellPassMs,
       crownPassMs,
       lifeMs,
@@ -1239,6 +1288,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     setTheme(name) {
       theme = themes[name];
+      uniforms = themeUniforms(theme);
       // `resize` builds the new theme's glyphs (on restore, while the context is lost).
       dropGlyphs(!lost);
       sizeDirty = true;
@@ -1254,6 +1304,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     destroy() {
       destroyed = true;
+      canvas.style.cursor = '';
       cancelAnimationFrame(raf);
       observer.disconnect();
       canvas.removeEventListener('webglcontextlost', onContextLost);
@@ -1262,6 +1313,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       detachInput();
       tileCache.destroy();
       readback.reset(lost);
+      gpuTimer.reset(lost);
       if (!lost) {
         if (targets) deleteCellTargets(gl, targets);
         dropGlyphs(true);

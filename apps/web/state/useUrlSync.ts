@@ -36,67 +36,74 @@ const here = () => `${window.location.pathname}${window.location.search}${window
  *   tour, its steps' selections replace instead, so a tour is one history entry);
  * - Back and Forward apply the URL to the store, the tour player, and the atlas.
  */
-export function useUrlSync() {
-  useEffect(() => {
-    const initial = parseViewParams(window.location.search);
-    const store = useAtlasStore.getState();
-    if (initial.sel) store.setSelected(initial.sel);
-    if (initial.year !== undefined) store.setYear(initial.year);
+export function attachUrlSync() {
+  const initial = parseViewParams(window.location.search);
+  const store = useAtlasStore.getState();
+  if (initial.sel) store.setSelected(initial.sel);
+  if (initial.year !== undefined) store.setYear(initial.year);
 
-    let timer: number | undefined;
-    /** Set while applying Back/Forward, so that doesn't push a new entry. */
-    let fromHistory = false;
+  let timer: number | undefined;
+  /** Set while applying Back/Forward, so that doesn't push a new entry. */
+  let fromHistory = false;
 
-    const unsubscribe = useAtlasStore.subscribe((s, prev) => {
-      const tourStarted =
-        s.tour !== null &&
-        s.tour.id !== prev.tour?.id &&
-        // A tour reopened from the URL is already there.
-        new URLSearchParams(window.location.search).get('tour') !== s.tour.id;
-      const newSelection =
-        s.selectedId !== prev.selectedId && s.tour === null && prev.tour === null;
-      if ((tourStarted || newSelection) && !fromHistory) {
-        window.clearTimeout(timer);
-        const next = currentUrl();
-        if (next && next !== here()) window.history.pushState(null, '', next);
-        return;
-      }
-      if (
-        s.camera !== prev.camera ||
-        s.year !== prev.year ||
-        s.tour !== prev.tour ||
-        s.selectedId !== prev.selectedId
-      ) {
-        window.clearTimeout(timer);
-        timer = window.setTimeout(() => {
-          const next = currentUrl();
-          if (next && next !== here()) window.history.replaceState(null, '', next);
-        }, REPLACE_DELAY_MS);
-      }
-    });
-
-    const onPopState = () => {
-      const params = parseViewParams(window.location.search);
-      fromHistory = true;
-      try {
-        useAtlasStore.getState().setSelected(params.sel ?? null);
-        if (params.tour !== useAtlasStore.getState().tour?.id) {
-          if (!params.tour || !tourControls.restore(params.tour, params.step ?? 0)) {
-            tourControls.exit();
-          }
-        }
-        const atlas = useAtlasInstance.getState().atlas;
-        if (atlas && Object.keys(params.camera).length > 0) atlas.setCamera(params.camera);
-      } finally {
-        fromHistory = false;
-      }
-    };
-    window.addEventListener('popstate', onPopState);
-
-    return () => {
+  const unsubscribe = useAtlasStore.subscribe((s, prev) => {
+    if (fromHistory) return;
+    const tourStarted =
+      s.tour !== null &&
+      s.tour.id !== prev.tour?.id &&
+      // A tour reopened from the URL is already there.
+      new URLSearchParams(window.location.search).get('tour') !== s.tour.id;
+    const newSelection = s.selectedId !== prev.selectedId && s.tour === null && prev.tour === null;
+    if (tourStarted || newSelection) {
       window.clearTimeout(timer);
-      unsubscribe();
-      window.removeEventListener('popstate', onPopState);
-    };
-  }, []);
+      const next = currentUrl();
+      if (next && next !== here()) window.history.pushState(null, '', next);
+      return;
+    }
+    if (
+      s.camera !== prev.camera ||
+      s.year !== prev.year ||
+      s.tour !== prev.tour ||
+      s.selectedId !== prev.selectedId
+    ) {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const next = currentUrl();
+        if (next && next !== here()) window.history.replaceState(null, '', next);
+      }, REPLACE_DELAY_MS);
+    }
+  });
+
+  const onPopState = () => {
+    window.clearTimeout(timer);
+    const params = parseViewParams(window.location.search);
+    const year = params.year ?? DEFAULT_YEAR;
+    fromHistory = true;
+    try {
+      const atlas = useAtlasInstance.getState().atlas;
+      // Even an empty camera update stops a flight from the history entry just left.
+      atlas?.setCamera(params.camera);
+      atlas?.setHighlighted([]);
+      if (!params.tour || !tourControls.restore(params.tour, params.step ?? 0)) {
+        tourControls.exit();
+      }
+      const store = useAtlasStore.getState();
+      store.setSelected(params.sel ?? null);
+      store.setYear(year);
+      atlas?.setYear(year, { animate: false });
+    } finally {
+      fromHistory = false;
+    }
+  };
+  window.addEventListener('popstate', onPopState);
+
+  return () => {
+    window.clearTimeout(timer);
+    unsubscribe();
+    window.removeEventListener('popstate', onPopState);
+  };
+}
+
+export function useUrlSync() {
+  useEffect(attachUrlSync, []);
 }

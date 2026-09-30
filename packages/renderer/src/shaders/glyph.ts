@@ -12,7 +12,11 @@
  * and turns on vehicles' head- and taillights; dusk warms it. From dusk, streetlights along major
  * and secondary roads cast pools of light (life/lights.ts); some are out and some flicker. Zoomed
  * out, those roads read as a lit corridor instead.
- * Vehicles take their colors from their paint and the part each cell shows.
+ * Vehicles take their colors from their paint and the part each cell shows. The life texture
+ * stores glyph, class, kind bits, and paint/part bytes; the overlay stores 16-bit label codes
+ * (0 absent, 1 blank). The light texture stores pool strength, lamp state and seed, head, and
+ * ownership. Uniform names below describe these inputs; documentation stays outside the
+ * GLSL string so it does not add to the shipped shader payload.
  */
 import { Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
@@ -21,6 +25,7 @@ import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import {
+  CROWN_LIGHT,
   EDGE_INK,
   EDGE_STATE,
   SHADOW,
@@ -34,67 +39,79 @@ import {
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
+import { waterEffectGlsl } from '../life/water';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
+/**
+ * Lighting helpers: darkness starts after twilight, daylit warms dusk and cools moonlit nights,
+ * toned brightens foliage only by day, and fillOf tints each class's background. Lamps fade in
+ * through dusk; dead lamps stay off and each flickering lamp has a seeded stutter, while candle
+ * light wavers gently. Reduced motion holds these steady. switchedOn staggers streetlights by
+ * their seed and brings floodlights on early. reflection traces rippled, fading streaks below
+ * bank lamps, excluding vehicle beams. Wet roads strengthen their pools; roofs and water take
+ * a fainter wash than open ground.
+ */
 export const glyphFragment = /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-uniform sampler2D u_glyphs;       // select pass output: glyph index, class id
-uniform sampler2D u_atlas;        // R8 glyph coverage
-uniform vec2 u_cell;              // cell size in device pixels
-uniform vec2 u_shift;             // screen pixel + shift = pixel in the cell grid
-uniform float u_height;           // canvas height in device pixels
-uniform int u_columns;            // glyph slots per atlas row
+uniform sampler2D u_glyphs;
+uniform sampler2D u_atlas;
+uniform vec2 u_cell;
+uniform vec2 u_shift;
+uniform float u_height;
+uniform int u_columns;
 uniform vec3 u_colors[${MAX_CLASSES}];
-uniform float u_fills[${MAX_CLASSES}]; // background fill strength per class (0 = none)
+uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
-uniform int u_pulse;              // class id that pulses (landmarks)
-uniform sampler2D u_overlay;      // RGBA8, label grid: glyph code (lo, hi; 0 none, 1 blank)
-uniform sampler2D u_labelAtlas;   // R8 label text coverage
-uniform vec2 u_labelCell;         // label cell size in device pixels
-uniform vec2 u_labelShift;        // screen pixel + shift = pixel in the label grid
-uniform int u_labelColumns;       // glyph slots per label atlas row
+uniform int u_pulse;
+uniform sampler2D u_overlay;
+uniform sampler2D u_labelAtlas;
+uniform vec2 u_labelCell;
+uniform vec2 u_labelShift;
+uniform int u_labelColumns;
 uniform vec3 u_labelColor;
-uniform vec3 u_accent;            // highlighted and selected features
-uniform bool u_shimmer;           // off with reduced motion
-uniform sampler2D u_life;         // RGBA8: glyph index, life class id, agent kind bits (0 none),
-                                  // vehicles' and people's paint (low 4 bits) and part (high 4)
-uniform int u_cellBits[${MAX_CLASSES}]; // per map class: CellBit set
-uniform ivec2 u_origin;           // world cell of texel (0, 0), for window hashes
-uniform sampler2D u_attr;         // cell pass attributes (flags: landmarks are floodlit)
-uniform float u_daylight;         // 0 night – 1 day
-uniform int u_vehicle;            // the vehicles' class id (paints, lights)
-uniform int u_boat;               // the boats' class id (paints, lights)
-uniform int u_train;              // the trains' class id (paints, lights)
-uniform int u_person;             // the people's class id (candles)
-uniform int u_bird;               // the birds' class id (species colors)
-uniform vec3 u_birdPaints[${BIRD_SPECIES_ORDER.length * 2}]; // per species: body, accent
-uniform vec3 u_paints[${PAINT_COUNT}];   // vehicle paints (theme.ts vehiclePaints)
-uniform float u_rain;             // how hard it rains, 0–1 (life/wind.ts RAIN)
-uniform float u_rainSlant;        // columns a drop drifts per two rows (the wind's x)
-uniform int u_rainGlyph;          // the rain glyph's atlas index
+uniform vec3 u_accent;
+uniform bool u_shimmer;
+uniform sampler2D u_life;
+uniform int u_cellBits[${MAX_CLASSES}];
+uniform ivec2 u_origin;
+uniform sampler2D u_attr;
+uniform int u_crownClass;
+uniform vec3 u_crownSun;
+uniform float u_daylight;
+uniform int u_vehicle;
+uniform int u_boat;
+uniform int u_train;
+uniform int u_person;
+uniform int u_bird;
+uniform vec3 u_birdPaints[${BIRD_SPECIES_ORDER.length * 2}];
+uniform vec3 u_paints[${PAINT_COUNT}];
+uniform float u_rain;
+uniform float u_rainSlant;
+uniform int u_rainGlyph;
 uniform vec3 u_rainColor;
-uniform sampler2D u_light;        // RGBA8 streetlights (linear): pool, lamp state (bits 0–1) +
-                                  // seed, head, whether a lamp claims the cell
-uniform float u_lampShow;         // how far the streetlights have faded in at this zoom, 0–1
-uniform int u_lampGlyph;          // the streetlight head's atlas index
-uniform float u_moon;             // moonlight, 0 (new moon, or down) – 1 (full moon, high)
+uniform bool u_waterDetail;
+uniform bool u_fish;
+uniform ivec2 u_fishWater;
+uniform int u_waterGlyphs[4];
+uniform sampler2D u_light;
+uniform float u_lampShow;
+uniform int u_lampGlyph;
+uniform float u_moon;
 
 out vec4 o_color;
 
 ${cellHashGlsl}
+${waterEffectGlsl}
 
-// How dark it is: none until well into twilight, so dusk reads warm rather than dim.
 float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
 }
 
-// The time of day: dim and blue at night, warm at dusk. Moonlight (life/moon.ts) lifts the night
-// a little and turns it silver; a moonless night is darkest.
 vec3 daylit(vec3 color) {
   float dusk = 1.0 - abs(u_daylight - 0.5) * 2.0;
   color = mix(color, color * vec3(1.2, 0.88, 0.68), dusk * 0.45);
@@ -102,8 +119,6 @@ vec3 daylit(vec3 color) {
   return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon));
 }
 
-// A vegetation cell's tint (glyphs/select.ts Tone, toneColor): the lit side is only lightened by
-// day, so a tree's sunny side doesn't glow at night.
 vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.shade}) return color * ${float(TONE.shade)};
   if (tone == ${Tone.light}) return mix(color, vec3(1.0), ${float(TONE.light)} * (1.0 - night));
@@ -111,12 +126,10 @@ vec3 toned(vec3 color, int tone, float night) {
   return color;
 }
 
-// A class's fill in a color: the background tinted toward it by the class's fill strength.
 vec3 fillOf(int cls, vec3 color) {
   return mix(u_background, color, u_fills[cls]);
 }
 
-// How much lamps and candles shine: from dusk, fully at night.
 float lamps() {
   return smoothstep(0.25, 0.8, 1.0 - u_daylight);
 }
@@ -127,9 +140,6 @@ const vec3 LAMP_WHITE = vec3(1.0, 0.9, 0.7);
 // A shop's warm interior light, spilling out of its door.
 const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 
-// How much a light shines (life/lights.ts LampState, lightByte): a working streetlight fully,
-// one that is out not at all. A flickering one is mostly on, but now and then stutters on and
-// off, each on its own beat; a candle wavers softly. With reduced motion both hold steady.
 float lampOn(int g) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
@@ -148,8 +158,6 @@ float lampOn(int g) {
   return (tick & 255u) < 120u ? 0.06 : 1.0;
 }
 
-// When a streetlight switches on: each at its own point in the dusk (by its seed), quickly, like
-// a photocell clicking on, so they come on one by one, and go off the same way at dawn.
 float switchedOn(int g) {
   int state = g & 7;
   // Headlight beams and candles shine with the vehicles' own lamps; floodlights come on early.
@@ -167,7 +175,6 @@ float switchedOn(int g) {
   return smoothstep(at, at + 0.04, 1.0 - u_daylight);
 }
 
-// How much a streetlight's pool brightens the ground: more on a wet road.
 float poolGlow() {
   return 0.6 * (1.0 + 0.6 * u_rain);
 }
@@ -175,9 +182,6 @@ float poolGlow() {
 // The streetlight pool over the cell being drawn, for rain falling through it (rainOver).
 float rainLight = 0.0;
 
-// A streetlight's reflection on water at a grid position (in cells): a streak running down
-// the water below each lamp's pool, fading with distance, wavering and broken into ripples as the
-// water moves (still with reduced motion).
 float reflection(vec2 at, ivec2 cell) {
   ivec2 size = textureSize(u_light, 0);
   // Most water has no lamp above it: look at every third cell up the streak before tracing it
@@ -214,8 +218,6 @@ vec3 lampLit(vec3 color, float pool) {
   return mix(color, max(color, poolColor), pool * 0.75);
 }
 
-// Whether a cell takes a pool of light: open ground fully, anything else (roofs, walls, water)
-// a faint wash.
 float groundAt(ivec2 c) {
   c = clamp(c, ivec2(0), textureSize(u_glyphs, 0) - 1);
   int k = int(texelFetch(u_glyphs, c, 0).g * 255.0 + 0.5);
@@ -427,9 +429,25 @@ void main() {
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5);
+  if (water) {
+    // Fish only in rivers and ponds; rain splashes on any water, below boats and labels.
+    int effect = waterEffect(cell, cls == u_fishWater.x || cls == u_fishWater.y);
+    if (effect >= 0) glyph = u_waterGlyphs[effect];
+  }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = toned(daylit(u_colors[cls]), tone, night);
+  if (cls == u_crownClass) {
+    vec2 local = texelFetch(u_attr, cell, 0).gb * 2.0 - 1.0;
+    vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
+      sqrt(max(${float(CROWN_LIGHT.minZ)}, 1.0 - dot(local, local)))));
+    float light = clamp(
+      ${float(CROWN_LIGHT.base)} + ${float(CROWN_LIGHT.gain)} * dot(normal, normalize(u_crownSun)),
+      ${float(CROWN_LIGHT.min)}, ${float(CROWN_LIGHT.max)});
+    float variation = 0.94 + 0.12 * float(cellHash((u_origin + cell) / 3) >> 8u) / 16777216.0;
+    color *= light * variation;
+    back *= light;
+  }
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];
   // Zoomed out, major and secondary roads glow as a lit corridor; it hands over to the streetlights.
@@ -439,7 +457,7 @@ void main() {
   color = lampLit(color, pool + refl);
   // A floodlit landmark glows itself, from early dusk (life/lights.ts floods).
   float floodOn = smoothstep(0.2, 0.3, 1.0 - u_daylight) * u_lampShow;
-  if (floodOn > 0.0) {
+  if (floodOn > 0.0 && cls != u_crownClass) {
     int landmarkFlags = int(texelFetch(u_attr, cell, 0).g * 255.0 + 0.5);
     if ((landmarkFlags & ${Flags.landmark}) != 0) color = mix(color, LAMP_WHITE, 0.3 * floodOn);
   }

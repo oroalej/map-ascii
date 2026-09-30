@@ -7,6 +7,7 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "perf:life": "tsx packages/renderer/scripts/perf-life.ts",
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",
     "build:force": "pnpm --filter @atlas/web build:force",

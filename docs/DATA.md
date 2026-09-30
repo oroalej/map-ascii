@@ -28,6 +28,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
      - **Railways** (track and stations in the detail bbox) are a small query of their own, saved as `detail-rail.osm.json`, and the region's railway queries come after its other parts. Adding them left the big saved downloads valid, and the servers answer the small query when the big one times out. `overpass()` retries 5xx answers and dropped connections, rotating through three public instances (`OVERPASS_URL` pins one).
    - Download DEM tiles for the Region bbox.
    - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
+   - Transit stops, terminals, shelters, and covered entrances are fetched separately into `detail-life.osm.json`. Step 02 merges that optional download with the detail data; older cached downloads remain usable. Step 03 writes `life_site`, `life_modes` (bus 1, jeepney 2, tricycle 4), `life_covered`, and a stable `life_lng`/`life_lat` anchor. Rail and ferry platforms are excluded. Site metadata is retained from tile zoom 13 even while furniture glyphs stay hidden at smaller display zooms.
 2. **`02-convert`**
    - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF). The railway download is merged into the detail download first (if there is one).
    - DEM → hillshade/luminance raster (`gdaldem hillshade`) → grayscale PNG tiles.
@@ -83,7 +84,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, or `trees` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
-| `furniture` | `amenity=bench|fountain`, `man_made=flagpole` (kind in `variant`) |
+| `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop`, road transport platforms, sourced tricycle ranks, `man_made=flagpole` (kind in `variant`; shelters with buildings keep their building class) |
 | `parking` | `amenity=parking` |
 | `pitch` | `leisure=pitch` |
 
@@ -125,6 +126,13 @@ City {                           // cities/<slug>/city.json
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
   life?: {
+    // Source each mode override or missing site. Give exactly one of osm_id or position.
+    sites?: {
+      id: string; kind: 'stop' | 'terminal' | 'shelter';
+      osm_id?: string; position?: [lng, lat];
+      modes?: ('bus' | 'jeepney' | 'tricycle')[]; // required for stops and terminals
+      covered?: boolean; source: string;
+    }[];
     rhythm?: { vehicle?: [number, number][]; person?: ...; boat?: ...; train?: ... };
     // When places fill up (SPEC.md §4 "Places"). Weekdays 0 = Sunday; times local HH:MM.
     // Without `worship`, churches only have a few visitors; without `school`, weekdays 07:00–16:00.
@@ -252,7 +260,7 @@ Validation rules:
 - `sources` is non-empty for any record with a year or story, and for every art piece.
 - Art rows in a variant have equal widths, use only `ART_CHARACTERS`, and have a color row of the same shape whose keys are in the palette. Pipeline step 04 checks that each art piece's `osm_id` is in the data and writes `<city>.art.json`.
 - Localized fields contain `en` and only the languages listed in the city's `languages`.
-- A `region` bbox is the only coordinate data allowed in a city config, and only when the region has no usable OSM relation. The boundary and camera always come from OSM: the default camera is centered on the `focus` feature, or on the boundary centroid when there is no `focus`.
+- Coordinates in a city config are limited to a `region` bbox without a usable OSM relation and independently sourced `life.sites` missing from OSM. Prefer an `osm_id` for a mapped site; a missing reference fails the merge. The boundary and camera always come from OSM: the default camera is centered on the `focus` feature, or on the boundary centroid when there is no `focus`.
 - `end_year > start_year`.
 - Photo `credit` and `license` are required.
 - A land cover file has at least one tree, row, or area, a `credit`, and `sources` naming what it was traced from. Positions come from imagery whose terms allow it (never Google), and each file retires as OSM maps what it holds (pipeline step 04 warns). Prefer separate trees to a woods area where crowns are distinguishable: at close zoom a woods area draws as one continuous canopy.

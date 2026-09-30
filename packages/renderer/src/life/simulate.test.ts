@@ -603,7 +603,7 @@ describe('LifeWorld', () => {
     expect(kinds(12)).toEqual(new Set());
     expect(kinds(14)).toEqual(new Set(['boat']));
     expect(kinds(16)).toEqual(new Set(['boat', 'vehicle']));
-    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person', 'dog']));
+    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person', 'dog', 'cat']));
   });
 
   it('has fewer people and vehicles out at night', () => {
@@ -631,7 +631,7 @@ describe('LifeWorld', () => {
       activityLevels(1, { minutes: 480, weekday: 1, life: empty }),
       center,
     );
-    expect(none.filter((a) => a.kind !== 'boat' && a.kind !== 'dog')).toHaveLength(0);
+    expect(none.filter((a) => !['boat', 'dog', 'cat'].includes(a.kind))).toHaveLength(0);
   });
 
   it('clamps a long frame so agents do not jump', () => {

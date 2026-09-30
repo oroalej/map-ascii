@@ -112,7 +112,7 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - Time and animation effects (water shimmer, type-in/dissolve masks, selection glow) are applied here.
 6. **Labels.**
    - CPU placement on the cell grid with a greedy, priority-ordered collision grid.
-   - Drawn as glyphs in the same pass, so they look native.
+   - Place labels use the glyph overlay. Street labels use a batched glyph-quad pass over it, rotating whole words in screen pixels with the same atlas, theme, halo and deterministic dissolve. Their conservative rotated bounds participate in the same collision grid; short straight runs fall back to beside placement.
 7. **Picking.**
    - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below). A feature that fails the `interactive` option (the web app passes "is a landmark") counts as a miss: it is neither highlighted nor reported.
 
@@ -130,8 +130,11 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 - **One matrix path.** The camera is always flat and north-up (the map never tilts or rotates), so the cell pass maps tile units to the world-anchored cell grid with a per-tile affine matrix.
 
 **Life layer (SPEC.md §4).**
+- Interaction data travels with `LifeGeometry`: stable, tile-owned site anchors and mode bits, plus building, water, and barrier outlines. `life/navigation.ts` constructs a bounded tile-local walking graph from paths, plaza outlines, and road edges, rejecting blocked connectors. `life/interactions.ts` reserves existing movers for approach, queue, purchase, boarding, shelter, and return states. Searches are staggered across frames; seeds are separate from traffic and bird random streams. Queues and reservations disappear with their owning tile. Scene movement uses the ground collision guard and retraces its approach to resume ordinary movement.
+- Cats use a separate seeded stream and at most six slots per tile inside the existing 600-mover cap. Their procedural glyphs reuse the people layer; the map atlas remains below 256 entries. Rain rings and occasional fish are world-anchored effects in the existing glyph shader (`life/water.ts`), adding no render pass. Fish require Life and zoom 18; reduced motion disables both effects.
 - The tile worker also emits a tile's `LifeGeometry` (`life/geometry.ts`): road, path, plaza-outline, and river polylines in tile units (roads with their width in meters, so each vehicle keeps to a lane on its half: `life/config.ts` `laneOffset`), plus roost points for birds (park, woods, and water centroids inside the tile) and parking stalls (rows along each parking lot's principal axis, inside the lot and the tile: `raster/geometry.ts` `parkingStalls`). Loaded tiles keep it on the main thread.
 - `life/simulate.ts` is pure TS. `LifeWorld` holds a `TileLife` per drawn tile (z13 and deeper), synced when the cell pass runs and seeded from the tile key. Movers walk their polyline in tile units at meters-per-second speeds and pick another usable line meeting at a junction (an endpoint index per tile), else U-turn. Flocks circle a roost. Before moving, each vehicle and boat takes its speed from the nearest one ahead on its line, going its way, whose side-to-side span overlaps its own (`FOLLOW`: gap less a minimum, over a headway, capped at its own speed), so queues form. Parked vehicles are spawned once per tile on lot stalls and along the curbs of some wide roads, from their own random stream; those roads drive on the width left between the parking strips. `step(dt)` clamps `dt` to 100 ms and moves only what could be seen: the kinds that show at the zoom, and, given the view's bounds, the agents within 100 m of them (`STEP_MARGIN_M`). The others wait where they are, except trains, which run on from tile to tile. `visible()` places only those within 30 m of the view, and applies the zoom bands and time-of-day activity (`life/config.ts`), keeps movers inside their own tile (tiles overlap in their buffers), and caps the count.
+- **Ground clearance.** Ground clearance uses a shared metric spatial hash over loaded tiles. Parked vehicles and vendor carts reserve oriented footprints; moving ground agents test both destination and swept intermediate bodies, including walkers in a group. Static building and water polygon bins are cached until the tile set changes; road traffic can cross bridges over underlying water. Parking checks actual polygon rings, including holes, rather than only spot centers. Junction envelopes derive from intersecting road segments and their widths. The life packer journals each ground stamp and rolls it back in full if coarse cells would merge it with another ground agent, reserving parked cars first. Connected rail topology is cached by loaded tile set and its per-route seeded arrival clocks are reset after a departing service. Train consists are admitted together under the visible-agent cap.
 - Every drawn frame, the **life pass** (`passes.ts`, packing in `life/draw.ts`) projects the agents with the grid placement's `toCell` and writes an RGBA8 `lifeTex` on the cell grid (glyph index, life class id, agent kind bits, and for vehicles and boats their paint in alpha bits 0–3, their part in bits 4–6, and bit 7 for parked, lamps off). A vehicle or boat (`life/vehicles.ts`: kinds, sizes, paints, top-down plans, and the default traffic mix) that is at least `STAMP_MIN_CELLS` long on screen is stamped at its real footprint: the projected 1 m forward and 1 m right vectors give an affine map, each cell center in the footprint's bounding box is mapped back to the vehicle's own coordinates, and the plan gives its part. The glyph pass draws an agent over the map where the map class's `cellBits` allow it, and colors vehicle and boat cells from the theme's `vehiclePaints`, shaded by part. A vehicle's stamp may reach open ground beside the road; a boat's only water. Labels stay on top.
 - **Day/night** is a `u_daylight` uniform (0–1). It comes from the solar altitude over the camera, worked out once a second in `life/sun.ts`, or from a fixed value. The glyph pass tints colors with it and lights hash-chosen building cells as windows, by world cell, so they stay put as the map pans.
 
@@ -187,7 +190,7 @@ The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be
 - **Outlines (Place level):** from `OUTLINE_ZOOM`, a cell of an outlined feature is a wall if any of its 8 neighbors belongs to another feature (per `idTex`; paths, statues, and markers are looked through). A wall joins its neighbor in a direction when that neighbor is in the same feature and a cell touching both is outside, which draws corners and concave corners correctly without false junctions in thin buildings. The join mask indexes the single- or double-line wall set. Grounds (no height) are never outlined.
 - **Sub-cell edges:** `subcellEdge` mirrors the select shader: only empty cells and areas take part (lines and markers win their cells whole); a building among the samples wins over the grounds, park, or water it stands in; walled features are left to their walls; a full or empty mask keeps the class glyph. The mask's bit `row × 2 + col` is the sample's sixth, from the top left, and indexes `sextantGlyphs`.
 - **Classes by zoom:** each class has a zoom band in the shared `CLASS_ZOOM` table (e.g. `monument` from z17, terrain until 9.5); the cell pass crossfades it at the band's edges (see the Phase 2 notes above).
-- **Labels:** place names (provinces, cities, subdivisions, smaller places, each with the band `featureZoomBand` gives it), curated landmarks (from z16), street names (tiered by road class and OSM `highway` kind in `streetLabel`: major roads from z14, secondary from z15.5, tertiary from z17.5, other streets from z18, paths from z18.5), and monuments (from z18) are placed greedily by rank, then feature id, inside the on-screen cells, never overlapping, with a one-cell halo. Names beside an anchor go below, above, right, or left of it, wrapped at 18 characters. A street's name sits at the middle of its longest straight run: along the street's row when the run is within 20° of horizontal, down its column when within 20° of vertical, else beside it; the same name within 30 cells is placed once. The result is a per-cell label texture drawn over the map in the glyph pass.
+- **Labels:** place names (provinces, cities, subdivisions, smaller places, each with the band `featureZoomBand` gives it), curated landmarks (from z16), street names (tiered by road class and OSM `highway` kind in `streetLabel`: major roads from z14, secondary from z15.5, tertiary from z17.5, other streets from z18, paths from z18.5), and monuments (from z18) are placed greedily by rank, then feature id, inside the on-screen cells, never overlapping, with a one-cell halo. Names beside an anchor go below, above, right, or left of it, wrapped at 18 characters. A street's name sits at the middle of its longest straight run, with glyphs rotated to that direction and normalized to an upright reading angle. Run endpoints determine whether the whole word fits; short runs, edge clipping and collisions fall back to horizontal beside placement. Rotated halo bounds reserve the collision grid and a dynamic vertex buffer batches the accepted glyph quads. The same name within 30 cells is placed once.
 
 ## 5. Time model
 
@@ -244,6 +247,48 @@ type AtlasState = {
 | Tile decode | off main thread; < 16 ms per tile on desktop |
 
 Zod stays out of the browser bundle: the pipeline validates each generated file with its schema when it writes it, the web app checks only their shape (`apps/web/lib/guards.ts`), and `packages/shared` keeps the plain values the browser needs (class list, camera ranges, search options) in zod-free modules and is marked side-effect free. CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, and each `<city>.pmtiles`). Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
+
+### Frame preparation and diagnostics
+
+- Empty tile meshes have `count: 0`, a null VAO, and no buffers. Drawing and disposal skip them.
+- Theme palettes are converted to RGB once per theme change. Vehicle part glyph indices belong to each map glyph atlas, rebuilt for theme, density, DPR, or context changes.
+- Crown filtering and matrices are reused while tiles, meshes, zoom, DPR, cell dimensions, grid origin, and target dimensions stay the same. A shift inside a cell does not change a matrix.
+- Label grids, collision storage, and packed upload buffers are reused per render target and fully reset before placing labels again. Maps do not share mutable buffers.
+- `Atlas.setReducedMotion(enabled)` applies a system preference change immediately while preserving saved Life settings. It clears agents and moving lights, stills animated effects, finishes an active flight once at its destination, and resets the simulation step clock before resuming. The web app and HUD subscribe to the same media query.
+- Back/Forward cancels pending URL writes and restores camera, selection, year (including the default when absent), and the requested tour step paused. Even a step of the currently open tour is restored. History restoration stops old flights and tour holds and does not enqueue a new history write.
+
+`getStats().frameMs` measures CPU submission time. `gpuFrameMs` is a separate, smoothed GPU elapsed measurement in milliseconds, or `null` when disabled, unsupported, awaiting results, or invalidated by a disjoint event. `AtlasOptions.gpuTiming` defaults to false; the web app enables it only when the initial URL requests `debug=1`. Timing uses asynchronous `EXT_disjoint_timer_query_webgl2` queries around rendering commands, sampled at most once per 250 ms with at most four outstanding queries. It waits for availability, discards disjoint results, resets on context loss, and never requests a redraw to collect a sample. The debug overlay labels these counters `cpu` and `gpu`; unavailable GPU timing reads `n/a`.
+
+### Simulation experiments
+
+`pnpm perf:life` compares seeded simulation fixtures against a Git revision (`--baseline=<revision>`) or a source snapshot (`--baseline-file=<path>`). Dependencies come from the current checkout, so use a fresh snapshot to isolate an optimization when other simulation features have changed. The harness checks exact visible outputs and mover states before timing, alternates five runs of each variant, and reports median and p95 CPU durations, source hashes, runtime, and the actual warmup and batch sizes.
+
+For an isolated prototype comparison in PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force test-results | Out-Null
+Copy-Item -LiteralPath packages/renderer/src/life/simulate.ts -Destination test-results/life-before.ts
+pnpm perf:life --baseline-file=test-results/life-before.ts --candidates --case=visible --output=test-results/candidates.json
+pnpm perf:life --baseline-file=test-results/life-before.ts --following --case=traffic --output=test-results/following.json
+```
+
+The candidate prototype pools metadata, delays headings and appearances until selection, and uses a stable bounded heap above the 1,200 ordinary-agent cap; procession agents are separate. The following prototype reuses line/direction groups and scans lateral/width buckets in reverse progress order, retaining the exact strict overlap check and progress/index tie order. Both live under `packages/renderer/scripts/prototypes`; production simulation does not import them.
+
+Fixtures cover 1/4/16/64 tiles with desktop and phone viewport bounds, an artificial repeated-coordinate crowd, and 16/120/600 mixed vehicles. The artificial crowd uses tile simulations directly so collision settling does not remove repeated-coordinate agents; its stepping deliberately excludes cross-tile collision handling. These measurements isolate placement and following costs. They do not establish browser FPS, GPU cost, or performance on a physical phone.
+
+Retain a complex simulation optimization only when its dense target cases improve median CPU time by at least 10% and repeated runs show no p95 regression greater than 5% in other cases. Preserve agent density, visual output, activity rules, traversal/tie order, and seeded random streams. Otherwise retain the existing production algorithm.
+
+The September 30, 2026 run (Node 24.12.0, Windows x64, snapshot SHA-256 `99e0309dff1e577d96ee0fc245194ab4d0a7192ade5a6a2da738f8146b266f5d`) rejected both prototypes for production:
+
+| Prototype / fixture | Baseline median, ms | Prototype median, ms | p95 change |
+| --- | ---: | ---: | ---: |
+| Candidates, desktop / 1 tile | 0.266 | 0.731 | +174.5% |
+| Candidates, phone bounds / 1 tile | 0.122 | 0.263 | +203.8% |
+| Candidates, artificial crowd / 16 tiles | 13.080 | 9.650 | −36.2% |
+| Candidates, artificial crowd / 64 tiles | 28.151 | 13.049 | −59.2% |
+| Following buckets, 600 vehicles | 0.265 | 0.463 | +60.5% |
+
+Candidate pooling improved the large artificial crowd but regressed small views. Following buckets regressed all three traffic sizes; a second complete traffic run confirmed the direction (600 vehicles: median 78.5% slower, p95 52.7% slower). Exact output and mover-state comparisons passed. The JSON reports are written to ignored `test-results/` files. These are local experimental results, not a claim that the frame-rate budgets have been reached.
 
 ## 9. Testing
 

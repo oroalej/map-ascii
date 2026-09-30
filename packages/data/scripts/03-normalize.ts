@@ -18,6 +18,7 @@ import type {
   Geometry,
   MultiLineString,
   MultiPolygon,
+  Point,
   Polygon,
   Position,
 } from 'geojson';
@@ -35,6 +36,7 @@ import {
   type Tags,
 } from './lib/classify';
 import { parseOsmDate } from './lib/dates';
+import { markSite, siteOfTags } from './lib/life-sites';
 import { bboxesOverlap } from './lib/geo';
 import { readJson, writeFeatures, writeJson } from './lib/io';
 import { areaAt, isSubdivisionPlace, subdivisionAreas, type Area } from './lib/subdivisions';
@@ -45,6 +47,11 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  life_site?: 'stop' | 'terminal' | 'shelter';
+  life_modes?: number;
+  life_covered?: boolean;
+  life_lng?: number;
+  life_lat?: number;
   id: string;
   class: AtlasClass;
   name?: string;
@@ -122,6 +129,15 @@ function classifyAll(osm: FeatureCollection, subdivisionLevel: number): Classifi
     const tags = tagsOf(feature);
     const cls = classify(tags, kind, subdivisionLevel);
     if (cls) out.push({ feature, kind, cls, tags });
+    // A transit site mapped as an area or line with no class of its own (a station's grounds, a
+    // platform) still gets its glyph: as a point at its center, never filling its grounds.
+    else if (kind !== 'point') {
+      const point = classify(tags, 'point', subdivisionLevel);
+      if (point && siteOfTags(tags)) {
+        const geometry: Point = { type: 'Point', coordinates: centerOf(feature) };
+        out.push({ feature: { ...feature, geometry }, kind: 'point', cls: point, tags });
+      }
+    }
   }
   return out;
 }
@@ -251,6 +267,8 @@ export function normalize(
         subdivision_label: properties.subdivision_label,
       }),
     );
+    const site = siteOfTags(tags);
+    if (site) markSite(tiled, site, centerOf(feature));
     out.push(fromRegion.has(item) ? regionOnly(tiled) : tiled);
   }
 

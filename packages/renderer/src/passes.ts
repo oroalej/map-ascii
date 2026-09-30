@@ -25,9 +25,11 @@ import {
   createOverlay,
   labelVisibility,
   packOverlay,
+  resetOverlay,
   placeLabels,
-  streetMode,
+  rotatedLabelVertices,
   type LabelCandidate,
+  type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
 import { packLife } from './life/draw';
@@ -35,7 +37,7 @@ import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lig
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
-import { EXTENT, type TileLabel } from './raster/geometry';
+import { EXTENT, MERCATOR_METERS, type TileLabel } from './raster/geometry';
 import { rainGlyphs, streetlightGlyph, type Theme } from './theme';
 import type { TileId } from './tiles';
 
@@ -43,19 +45,15 @@ const depths = classDepths();
 const grounds = groundClasses.reduce((mask, cls) => mask | (1 << classId(cls)), 0);
 const groundsDepth = groundDepth();
 const crownClass = classId('tree_crown');
+/** The water fish swim in: rivers and ponds. */
+const fishWater = [classId('water_river'), classId('water_area')];
 const seeThrough = seeThroughMask();
 const roads = roadMask();
 const areas = subcellAreas();
 const lifeCellBits = cellBits();
-/** The world's width in mercator meters. */
-const MERCATOR_METERS = 40_075_016.686;
-
-/** 0xRRGGBB → [r, g, b] in 0–1. */
-const rgb = (hex: number): [number, number, number] => [
-  ((hex >> 16) & 0xff) / 255,
-  ((hex >> 8) & 0xff) / 255,
-  (hex & 0xff) / 255,
-];
+/** Meters per CSS pixel at the camera's center. */
+export const metersPerCssPx = (camera: CameraState) =>
+  (MERCATOR_METERS * Math.cos((camera.lat * Math.PI) / 180)) / (TILE_SIZE * 2 ** camera.zoom);
 
 /** What the passes need to know about the view. */
 export type View = {
@@ -144,6 +142,50 @@ export function screenArea(view: View, grid: Grid, cellDev: CellSize = view.cell
 
 /** A tile to draw and its mesh. */
 export type TileDraw = { tile: TileId; mesh: TileMesh };
+
+type CrownDraw = { mesh: TileMesh; matrix: number[] };
+/** The crowns to draw for a tile array, and the matrix inputs they were worked out for. */
+const crownsOf = new WeakMap<readonly TileDraw[], { key: number[]; drawn: CrownDraw[] }>();
+
+/** Matrices don't change for a sub-cell shift. Tile arrays are replaced when meshes change. */
+export function prepareCrowns(
+  tiles: readonly TileDraw[],
+  view: View,
+  placement: GridPlacement,
+  cols: number,
+  rows: number,
+) {
+  const { grid } = placement;
+  const key = [
+    view.camera.zoom,
+    view.dpr,
+    grid.originCol,
+    grid.originRow,
+    view.cellDev.w,
+    view.cellDev.h,
+    cols,
+    rows,
+  ];
+  const old = crownsOf.get(tiles);
+  if (old && key.every((k, i) => k === old.key[i])) return old.drawn;
+  const drawn = tiles
+    .filter(({ mesh }) => mesh.crowns.count > 0)
+    .map(({ tile, mesh }) => ({ mesh, matrix: placement.tileMatrix(tile) }));
+  crownsOf.set(tiles, { key, drawn });
+  return drawn;
+}
+
+const overlays = new WeakMap<CellTargets, { overlay: Overlay; packed: Uint8Array }>();
+function overlayBuffers(targets: CellTargets) {
+  let buffers = overlays.get(targets);
+  if (!buffers) {
+    const overlay = createOverlay(targets.labelCols, targets.labelRows);
+    buffers = { overlay, packed: new Uint8Array(overlay.glyphs.length * 4) };
+    overlays.set(targets, buffers);
+  }
+  resetOverlay(buffers.overlay);
+  return buffers;
+}
 
 /**
  * Rasterize the region's own features (from their coarser tiles) and then the view's tiles into
@@ -244,9 +286,7 @@ export function crownPass(
     u_grid: [cols, rows],
   });
   // Only the tiles with crowns are drawn, and their matrices are worked out once for both grids.
-  const drawn = tiles
-    .filter(({ mesh }) => mesh.crowns.count > 0)
-    .map(({ tile, mesh }) => ({ mesh, matrix: placement.tileMatrix(tile) }));
+  const drawn = prepareCrowns(tiles, view, placement, cols, rows);
   const draw = (fbo: WebGLFramebuffer, width: number, height: number, sample: [number, number]) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.viewport(0, 0, width, height);
@@ -277,10 +317,17 @@ export function overlayPass(
   view: View,
   placement: GridPlacement,
   labels: Iterable<TileLabel>,
+  { streetText }: Programs,
 ): LabelCandidate[] {
-  const { camera } = view;
+  const { camera, labelDev } = view;
   const { toCell } = placement;
-  const overlay = createOverlay(targets.labelCols, targets.labelRows);
+  /** A street run's length in label cells across, which a rotated name must fit. */
+  const runCells = ([from, to]: NonNullable<TileLabel['run']>) => {
+    const a = toCell(...from),
+      b = toCell(...to);
+    return Math.hypot((b[0] - a[0]) * labelDev.w, (b[1] - a[1]) * labelDev.h) / labelDev.w;
+  };
+  const { overlay, packed } = overlayBuffers(targets);
   const area = screenArea(view, placement.grid, view.labelDev);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
@@ -312,11 +359,20 @@ export function overlayPass(
       col: Math.floor(col),
       row: Math.floor(row),
       // Street names follow the street.
-      mode: label.angle !== undefined ? streetMode(label.angle) : 'beside',
+      mode: label.angle !== undefined ? 'rotated' : 'beside',
+      angle: label.angle,
+      runCells: label.run && runCells(label.run),
     });
   }
-  const placed = placeLabels(overlay, candidates, glyphIndex, area);
-  uploadOverlay(gl, targets, packOverlay(overlay));
+  const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w);
+  uploadOverlay(gl, targets, packOverlay(overlay, packed));
+  // Most views have no rotated names, before or after: nothing to upload.
+  if (overlay.rotated.length > 0 || streetText.count > 0) {
+    const vertices = rotatedLabelVertices(overlay.rotated, labelDev.w, labelDev.h);
+    streetText.count = vertices.length / 5;
+    gl.bindBuffer(gl.ARRAY_BUFFER, streetText.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+  }
   return placed;
 }
 
@@ -384,9 +440,8 @@ export function selectPass(
  * the view's center.
  */
 function sunUniforms(view: View, sun: Sun | null) {
-  const { camera, cellDev, dpr } = view;
-  const metersPerPx =
-    (MERCATOR_METERS * Math.cos((camera.lat * Math.PI) / 180)) / (TILE_SIZE * 2 ** camera.zoom);
+  const { cellDev, dpr } = view;
+  const metersPerPx = metersPerCssPx(view.camera);
   const az = ((sun?.azimuth ?? 0) * Math.PI) / 180;
   const tan = sun ? Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180) : 0;
   return {
@@ -436,6 +491,7 @@ export function lifePass(
     (glyph) => themeRes.map.atlas.index(glyph),
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
+    themeRes.map.lifeGlyphs,
   );
   uploadLife(gl, targets, lifeTexels);
   return drawn;
@@ -475,7 +531,7 @@ export function lightPass(
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
-export type Weather = { rain: number; wind: WindNow | null };
+export type Weather = { rain: number; wind: WindNow | null; fish?: boolean; detail?: boolean };
 
 /**
  * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
@@ -497,6 +553,7 @@ export function glyphPass(
   weather: Weather = { rain: 0, wind: null },
   lampShow = 0,
   moon = 0,
+  sun: Sun | null = null,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -521,9 +578,13 @@ export function glyphPass(
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
     u_overlay: targets.overlayTex,
-    u_labelColor: rgb(theme.label),
-    u_accent: rgb(theme.accent),
+    u_labelColor: themeRes.uniforms.label,
+    u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
+    u_waterDetail: !!weather.detail && !reducedMotion,
+    u_fish: !!weather.fish && !reducedMotion,
+    u_fishWater: fishWater,
+    u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
     u_cellBits: lifeCellBits,
     u_origin: [grid.originCol, grid.originRow],
@@ -532,21 +593,52 @@ export function glyphPass(
     u_light: targets.lightTex,
     u_lampShow: lampShow,
     u_moon: moon,
+    u_crownClass: classId('tree_crown'),
+    u_crownSun:
+      sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_lampGlyph: atlas.index(streetlightGlyph),
     u_vehicle: classId('life_vehicle'),
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),
     u_bird: classId('life_bird'),
-    u_paints: theme.vehiclePaints.flatMap((paint) => rgb(paint)),
-    u_birdPaints: theme.birdPaints.flatMap((pair) => pair.flatMap((paint) => rgb(paint))),
+    u_paints: themeRes.uniforms.paints,
+    u_birdPaints: themeRes.uniforms.birds,
     u_rain: weather.rain,
     u_rainSlant: weather.wind?.dir[0] ?? 0,
     u_rainGlyph: atlas.index(rainGlyphs[weather.wind ? rainGlyphIndex(weather.wind.dir) : 0]!),
     // The label color, a little blue: pale drops on the dark theme, dark ones on the light.
-    u_rainColor: rgb(theme.label).map((c, i) => c * [0.82, 0.9, 1][i]!),
+    u_rainColor: themeRes.uniforms.rain,
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindVertexArray(null);
+}
+
+/** Whole street words rotate in pixels, over the map and its unrotated labels. */
+export function streetTextPass(
+  gl: GL,
+  programs: Programs,
+  themeRes: ThemeResources,
+  theme: Theme,
+  view: View,
+  grid: Grid,
+) {
+  const { streetText } = programs;
+  if (!streetText.count) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, view.width, view.height);
+  gl.useProgram(programs.labels.program);
+  twgl.setUniforms(programs.labels, {
+    u_size: [view.width, view.height],
+    u_shift: [grid.shiftX, grid.shiftY],
+    u_cell: [themeRes.label.cellDev.w, themeRes.label.cellDev.h],
+    u_columns: themeRes.label.atlas.columns,
+    u_atlas: themeRes.label.atlasTex,
+    u_color: themeRes.uniforms.label,
+    u_background: theme.background.slice(0, 3),
+  });
+  gl.bindVertexArray(streetText.vao);
+  gl.drawArrays(gl.TRIANGLES, 0, streetText.count);
   gl.bindVertexArray(null);
 }

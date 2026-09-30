@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest';
+import { LifeBuilder, LifeLine, lifeTransferables } from './geometry';
+import { WalkingGraph } from './navigation';
+
+const line = (b: LifeBuilder, points: [number, number][]) =>
+  b.line(
+    points.map(([x, y]) => ({ x, y })),
+    LifeLine.path,
+  );
+describe('local walking routes', () => {
+  it('uses a connected bend instead of cutting across a building', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [10, 10],
+      [10, 40],
+      [50, 40],
+      [50, 10],
+    ]);
+    b.obstacle(
+      [
+        { x: 20, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 30 },
+        { x: 20, y: 30 },
+      ],
+      true,
+    );
+    const graph = new WalkingGraph(b.finish(), 1);
+    const path = graph.route({ x: 10, y: 15 }, { x: 50, y: 15 });
+    expect(path).toBeDefined();
+    expect(path!.some((p) => p.y === 40)).toBe(true);
+    for (let i = 1; i < path!.length; i++) expect(graph.clear(path![i - 1]!, path![i]!)).toBe(true);
+  });
+  it('rejects blocked connectors and disconnected destinations', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [0, 10],
+      [100, 10],
+    ]);
+    line(b, [
+      [0, 80],
+      [100, 80],
+    ]);
+    b.obstacle(
+      [
+        { x: 40, y: 12 },
+        { x: 60, y: 12 },
+        { x: 60, y: 20 },
+        { x: 40, y: 20 },
+      ],
+      true,
+    );
+    const graph = new WalkingGraph(b.finish(), 1);
+    expect(graph.route({ x: 10, y: 10 }, { x: 50, y: 18 })).toBeUndefined();
+    expect(graph.route({ x: 10, y: 10 }, { x: 50, y: 80 })).toBeUndefined();
+  });
+  it('does not cross fences or river lines', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [0, 10],
+      [100, 10],
+    ]);
+    b.obstacle(
+      [
+        { x: 50, y: 0 },
+        { x: 50, y: 20 },
+      ],
+      false,
+    );
+    expect(
+      new WalkingGraph(b.finish(), 1).route({ x: 10, y: 10 }, { x: 90, y: 10 }),
+    ).toBeUndefined();
+  });
+  it('approaches a roofed site from a safe exterior entrance', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [0, 10],
+      [100, 10],
+    ]);
+    b.obstacle(
+      [
+        { x: 40, y: 14 },
+        { x: 60, y: 14 },
+        { x: 60, y: 25 },
+        { x: 40, y: 25 },
+      ],
+      true,
+    );
+    const graph = new WalkingGraph(b.finish(), 1);
+    const p = graph.entrance({ x: 50, y: 18 });
+    expect(p).toBeDefined();
+    expect(graph.clear(p!, p!)).toBe(true);
+    expect(graph.route({ x: 10, y: 10 }, p!)).toBeDefined();
+  });
+  it('owns sites in one tile and transfers all scene arrays', () => {
+    const b = new LifeBuilder();
+    b.site({ x: 4096, y: 20 }, 0);
+    b.site({ x: 0, y: 20 }, 0, 3, true);
+    const geo = b.finish();
+    expect(geo.sites).toEqual(new Float32Array([0, 20, 0, 3, 1]));
+    for (const key of ['sites', 'obstacles', 'obstacleStarts', 'obstacleClosed'] as const)
+      expect(lifeTransferables(geo)).toContain(geo[key].buffer);
+  });
+  it('takes a short clear connection to a neighboring curb', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [0, 30],
+      [200, 30],
+    ]);
+    b.line(
+      [
+        { x: 0, y: 24 },
+        { x: 200, y: 24 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
+    const route = new WalkingGraph(b.finish(), 1).route({ x: 50, y: 30 }, { x: 50, y: 27.75 });
+    expect(route).toBeDefined();
+    const length = route!
+      .slice(1)
+      .reduce((n, p, i) => n + Math.hypot(p.x - route![i]!.x, p.y - route![i]!.y), 0);
+    expect(length).toBeLessThan(4);
+  });
+});

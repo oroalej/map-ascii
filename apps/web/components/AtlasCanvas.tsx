@@ -11,6 +11,8 @@ import {
 } from '@atlas/shared';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
+import { isDebugRequested } from '@/lib/debug';
+import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
@@ -142,7 +144,8 @@ export function AtlasCanvas({
       bounds: meta.regionBounds,
       initialCamera: camera,
       year: store.year,
-      reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      reducedMotion: prefersReducedMotion(),
+      gpuTiming: isDebugRequested(),
       interactive: isPickable,
       life: lifeSettings(lifePrefs),
       traffic,
@@ -155,6 +158,7 @@ export function AtlasCanvas({
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas });
     const offs = [
+      listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('contextlost', () => setContextLost(true)),
       atlas.on('contextrestored', () => setContextLost(false)),

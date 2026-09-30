@@ -61,6 +61,8 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 ## 5. Data notes
 
+- Local life scenes use mapped bus stops, jeepney terminals, and gazebos. The pack identifies the mapped Milaor, Dinaga, Carolina/Panicuason, and Pacol terminals as jeepney sites, with links to their OSM nodes. Tricycle stands, covered entrances near the Centro, and terminal curb positions still need sourced surveys; unmapped sites are not guessed. Terminal service and animal presence are illustrative, not live transport or wildlife data.
+
 - Check OpenHistoricalMap coverage for Naga, and contribute back.
 - **Barangay boundaries are mostly unmapped (checked 2026-09-29).** Of the 27 barangays, only 3 (Abella, Dinaga, Santa Cruz) have admin_level 10 boundary relations. The rest are `place` nodes only. OSM also has admin_level 11 "Zone" relations. Point-in-polygon subdivision lookup covers only part of the city until this is solved (see ROADMAP open decisions).
 - Copernicus DEM is used for the Mt. Isarog relief at Region level (not visible while the map is limited to downtown).

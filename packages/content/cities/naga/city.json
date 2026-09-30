@@ -60,6 +60,39 @@
       "tricycle": 20
     }
   },
+  "life": {
+    "source": "OpenStreetMap transit features; modes are identified by the mapped terminal names. These sites stage simulated local scenes.",
+    "sites": [
+      {
+        "id": "milaor-jeepney-terminal",
+        "kind": "terminal",
+        "osm_id": "osm:node/4545730692",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Milaor Jeepney Terminal. https://www.openstreetmap.org/node/4545730692"
+      },
+      {
+        "id": "dinaga-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850021524",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangays Concepcion and Del Rosario, Dinaga Street. https://www.openstreetmap.org/node/4850021524"
+      },
+      {
+        "id": "carolina-panicuason-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850021531",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangays Carolina and Panicuason. https://www.openstreetmap.org/node/4850021531"
+      },
+      {
+        "id": "pacol-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850042233",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangay Pacol. https://www.openstreetmap.org/node/4850042233"
+      }
+    ]
+  },
   "climate": {
     "wind": [
       {

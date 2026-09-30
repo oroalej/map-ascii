@@ -1,3 +1,5 @@
+import type { LifeSiteConfig } from './life-sites';
+
 /**
  * A city's daily rhythm, as far as the map shows it (SPEC.md §4 "Life layer"): how much of each
  * kind of traffic is out at each hour of the local day. Zod-free, like `climate.ts`, so the
@@ -48,6 +50,8 @@ export type LifeSchedules = {
 };
 
 export type CityLifeConfig = {
+  /** Sourced transit-mode overrides and missing stops or shelters. */
+  sites?: LifeSiteConfig[];
   /** Curves that replace the defaults, per kind. */
   rhythm?: Rhythm;
   /** When places fill up (the pack's own; its `source` covers them). */

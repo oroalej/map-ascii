@@ -17,6 +17,7 @@ import {
 } from '@atlas/shared';
 import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
+import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
@@ -147,14 +148,6 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
     </details>
   );
 }
-
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
-const prefersReducedMotion = () => window.matchMedia(REDUCED_MOTION).matches;
-const subscribeReducedMotion = (onChange: () => void) => {
-  const query = window.matchMedia(REDUCED_MOTION);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-};
 
 /** Whether the life layer's agents are on screen (never with reduced motion). */
 function useLifeShown() {

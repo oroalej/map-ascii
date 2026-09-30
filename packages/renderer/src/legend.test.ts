@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { legendEntries } from './legend';
+import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+
+it("shows the map's own standing dog in the legend", () => {
+  const dog = dogPixels({ frame: 0, heading: 0 }, 10);
+  const drawn = Array.from({ length: 10 }, (_, y) =>
+    Array.from({ length: 10 }, (_, x) => dog(x, y)).join(''),
+  );
+  expect(drawn).toEqual(DOG_ICON);
+});
 
 describe('legendEntries', () => {
   it('lists only what the map shows at the zoom', () => {
@@ -11,8 +20,8 @@ describe('legendEntries', () => {
     expect(labels(7)).not.toContain('Building');
     expect(labels(16)).toContain('Building');
     expect(labels(16)).not.toContain('Terrain (by elevation)');
-    expect(labels(16)).not.toContain('Bench, fountain, or flagpole');
-    expect(labels(18.5)).toContain('Bench, fountain, or flagpole');
+    expect(labels(16)).not.toContain('Street furniture, transit stop, or shelter');
+    expect(labels(18.5)).toContain('Street furniture, transit stop, or shelter');
   });
 
   it('counts classes that are fading in', () => {

@@ -3,9 +3,10 @@ import { classId } from '../classes';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
+import { catGlyphs } from './cats';
 import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
 import { Heading } from './masters';
-import { packLife, vehicleByte, type LifeGrid } from './draw';
+import { buildLifeGlyphs, packLife, vehicleByte, type LifeGrid } from './draw';
 import {
   CANDLE_BIT,
   figureGlyph,
@@ -35,6 +36,7 @@ const glyphs = [
   ...personGlyphs(),
   ...birdGlyphs(),
   ...dogGlyphs(),
+  ...catGlyphs(),
   STALL_GLYPH,
   ...sextantGlyphs.slice(1),
 ];
@@ -51,6 +53,38 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it('reuses an atlas lookup without changing packed vehicles', () => {
+    let lookups = 0;
+    const lookup = (glyph: string) => {
+      lookups++;
+      return glyphIndex(glyph);
+    };
+    const cached = buildLifeGlyphs(lookup);
+    const before = lookups;
+    const agents: VisibleAgent[] = [
+      {
+        kind: 'vehicle',
+        vehicle: 'car',
+        paint: Paint.red,
+        lng: 3,
+        lat: 2,
+        ahead: [4, 2],
+        side: [3, 3],
+        flap: 0,
+      },
+    ];
+    const old = new Uint8Array(200),
+      next = new Uint8Array(200);
+    expect(packLife(next, grid, agents, themes.dark, lookup, undefined, cached)).toBe(
+      packLife(old, grid, agents, themes.dark, glyphIndex),
+    );
+    expect(lookups).toBe(before);
+    expect(next).toEqual(old);
+    const other = buildLifeGlyphs(() => 123);
+    expect(other.parts).not.toBe(cached.parts);
+    expect(other.parts.every((glyph) => glyph === 123)).toBe(true);
+  });
+
   it('writes the glyph, the life class, and the agent bit', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const drawn = packLife(
@@ -200,6 +234,23 @@ describe('packLife dogs and shadows', () => {
       CellBit.person,
       personByte(Paint.orange, PersonPart.canopy),
     ]);
+  });
+
+  it('keeps ground agents apart, but never hides one under a dog or cat', () => {
+    const car = (lng: number): VisibleAgent => ({
+      kind: 'vehicle',
+      vehicle: 'car',
+      lng,
+      lat: 15,
+      ahead: [lng + 0.5, 15],
+      flap: 0,
+    });
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    for (const pet of [dog(0.5), { ...dog(0.5), kind: 'cat' as const }]) {
+      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(2);
+      expect(cellOf(out, 20, 15)[1]).toBe(classId('life_vehicle'));
+    }
+    expect(packLife(out, big, [car(20), car(20.2)], themes.dark, glyphIndex)).toBe(1);
   });
 
   it('stamps a dog at its real size up close', () => {

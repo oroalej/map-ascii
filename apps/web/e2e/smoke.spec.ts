@@ -108,6 +108,12 @@ for (const city of cities) {
           const position = { x: box.width / 2, y: box.height / 2 };
           const panel = page.getByRole('complementary', { name: 'Selected place' });
           await expect(panel).toHaveCount(0);
+          if (!hasTouch) {
+            await canvas.hover({ position });
+            await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 20_000 });
+            await page.mouse.move(-10, -10);
+            await expect(canvas).not.toHaveCSS('cursor', 'pointer');
+          }
           // Drawing may begin before this landmark's tile arrives. Retry the same point, with
           // enough time for asynchronous picking (and beyond the double-tap interval).
           await expect(async () => {
@@ -186,6 +192,27 @@ for (const city of cities) {
         await expect
           .poll(async () => drawnShare(page, await mapShot(canvas)), drawn)
           .toBeGreaterThan(MIN_DRAWN);
+        expect(errors).toEqual([]);
+      });
+
+      test('follows a changed motion preference and shows GPU timing on request', async ({
+        page,
+      }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.goto(`/${city.slug}?debug=1&z=18`);
+        await mapReady(page);
+        const life = page.getByRole('button', { name: 'Life', exact: true });
+        await expect(life).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('pre')).toContainText(/gpu\s+(?:n\/a|\d+\.\d+) ms/);
+        const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await expect(life).toBeDisabled();
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await expect(life).toHaveAttribute('aria-pressed', 'true');
+        // The preference pauses Life without changing the viewer's saved settings.
+        expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         expect(errors).toEqual([]);
       });
 

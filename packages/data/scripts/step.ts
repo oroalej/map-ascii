@@ -52,6 +52,7 @@ export const files = {
   rawDetail: 'detail.osm.json',
   /** Railways in the detail bbox, fetched on their own (01-fetch.ts `railQuery`). */
   rawDetailRail: 'detail-rail.osm.json',
+  rawDetailLife: 'detail-life.osm.json',
   /** The region relation lookup (tags and bounds only). */
   rawRegionRelation: 'region-relation.osm.json',
   /** Region-wide low-detail layers: coastline, major roads, rivers, lakes, places. */

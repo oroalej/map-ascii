@@ -18,6 +18,7 @@ import {
   SHADOW_STATE,
   DEFAULT_SUN,
   GUST_STEPS,
+  Tone,
   TONE_SHIFT,
   WIND_SHIFT,
   FALLING,
@@ -379,16 +380,12 @@ void main() {
     v = min(canopyVariant(w, variant, gust, u_time, sunDir(), tone), u_count[cls] - 1);
     g_tone = tone;
   } else if (kind == ${kindCodes.foliage}) {
-    // A tree's crown, flat (glyphs/select.ts foliageVariant, crownTone): a rim of leaves around
-    // an inside, lit on the side toward the sun and shaded on the far side.
+    // Crown lighting is applied across its rounded surface in the glyph pass.
     float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
-    ivec2 toSun = ivec2(floor(sunDir() * 1.2 + 0.5));
-    bool lit = toSun != ivec2(0);
     bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
       || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
     v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);
-    g_tone = crownTone(lit && classAt(p + toSun) != cls, lit && classAt(p - toSun) != cls,
-      crownIsDry(unpackId(id)));
+    g_tone = crownIsDry(unpackId(id)) ? ${Tone.dry} : ${Tone.none};
   }
   float glyph = texelFetch(u_table, ivec2(v, cls), 0).r;
   emit(glyph, cls);

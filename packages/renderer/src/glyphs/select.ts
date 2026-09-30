@@ -721,10 +721,30 @@ export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 /** Crown glyphs by role (theme.ts `tree_crown`): the rim's leaf, a thick interior, a dense core. */
 export const CrownGlyph = { rim: 0, interior: 1, core: 4 } as const;
 /**
- * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, one
- * in `coreEvery` is a dense `@`, the rest `&`. One crown in `dryEvery` is yellowing (`Tone.dry`).
+ * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, a
+ * dense `@` where value noise (`scale`, `seed`) is over `above`, except one cell in `skip`, and
+ * `&` elsewhere. One crown in `dryEvery` is yellowing (`Tone.dry`).
  */
-export const CROWN = { coreEvery: 4, dryEvery: 12 } as const;
+export const CROWN = {
+  core: { scale: 3, seed: 17, above: 0.62, skip: 3 },
+  dryEvery: 12,
+} as const;
+
+/**
+ * A crown lit as a rounded canopy (shaders/glyph.ts): its surface normal leans outward by `tilt`
+ * with at least `minZ` up, and the light is `base + gain · (normal · sun)`, within [min, max].
+ */
+export const CROWN_LIGHT = { tilt: 1.2, minZ: 0.08, base: 0.55, gain: 0.7, min: 0.38, max: 1.25 };
+
+/** `CROWN_LIGHT` at crown-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
+export function crownLight(x: number, y: number, [sx, sy, sz]: readonly number[]): number {
+  const { tilt, minZ, base, gain, min, max } = CROWN_LIGHT;
+  const z = Math.sqrt(Math.max(minZ, 1 - x * x - y * y));
+  const norm = Math.hypot(x * tilt, y * tilt, z);
+  const light = Math.hypot(sx!, sy!, sz!) || 1;
+  const dot = (x * tilt * sx! + y * tilt * sy! + z * sz!) / norm / light;
+  return Math.max(min, Math.min(max, base + gain * dot));
+}
 
 /**
  * A crown cell's glyph (theme.ts `tree_crown`): at rest the rim (`rim`: some neighbor isn't
@@ -735,21 +755,14 @@ export function foliageVariant(x: number, y: number, time = 0, gust = 0, rim = t
   const h = cellHash(x, y);
   if (gust >= TREE_WIND.step) return flutters(h, gust, time) ? 0 : 1;
   if (rim) return CrownGlyph.rim;
-  return h % CROWN.coreEvery === 0 ? CrownGlyph.core : CrownGlyph.interior;
+  const { scale, seed, above, skip } = CROWN.core;
+  return valueNoise(x, y, scale, seed) > above && h % skip !== 0
+    ? CrownGlyph.core
+    : CrownGlyph.interior;
 }
 
 /** Whether the crown of feature `id` is yellowing: one in `CROWN.dryEvery`. */
 export const crownIsDry = (id: number): boolean => cellHash(id, 5) % CROWN.dryEvery === 0;
-
-/**
- * A crown cell's tone from the sun: lit when the cell toward the sun isn't crown (`sunOpen`),
- * shaded when the one away from it isn't (`farOpen`), else the crown's own (`dry`: yellowing).
- */
-export function crownTone(sunOpen: boolean, farOpen: boolean, dry: boolean): number {
-  if (sunOpen) return Tone.light;
-  if (farOpen) return Tone.shade;
-  return dry ? Tone.dry : Tone.none;
-}
 
 /**
  * Woods as clumped crowns (SPEC.md §4): a crown per `cols × rows` block of cells, centered on a

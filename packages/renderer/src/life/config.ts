@@ -14,7 +14,7 @@ import {
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
 
-export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog';
+export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog' | 'cat';
 
 /** The zoom band in which each kind shows. */
 export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
@@ -24,6 +24,7 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   vehicle: { min: 15 },
   person: { min: 17 },
   dog: { min: 17 },
+  cat: { min: 17 },
 };
 
 /** At most this many agents are drawn, those nearest the view's center first. */
@@ -78,6 +79,7 @@ export const PARKED = {
   gap: 1.5,
   taken: 0.6,
   lotTaken: 0.65,
+  junctionGap: 5,
 } as const;
 
 /** The line kinds each moving kind may use, at junctions too. */
@@ -85,6 +87,7 @@ export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly L
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
   person: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
   dog: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
+  cat: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
   boat: [LifeLine.river, LifeLine.canal],
   train: [LifeLine.rail],
 };
@@ -99,6 +102,7 @@ export const TRAIN_SPACING_M = 3000;
  * track, where it pulls back out the way it came.
  */
 export const TRAIN = {
+  arrivals: [60, 120] as const,
   coaches: [2, 4] as const,
   coupling: 1,
   dwell: [20, 40] as const,
@@ -348,6 +352,8 @@ export function activity(kind: AgentKind, daylight: number): number {
       return 0.5 + 0.5 * daylight;
     case 'dog':
       return 0.5 + 0.5 * daylight;
+    case 'cat':
+      return 0.7 + 0.3 * daylight;
   }
 }
 
@@ -388,6 +394,7 @@ export function activityLevels(
     train: byRhythm('train'),
     bird: activity('bird', daylight),
     dog: Math.max(byRhythm('person'), activity('dog', 0)),
+    cat: activity('cat', daylight),
     night: nightActivity(daylight),
     places,
   };
@@ -395,7 +402,7 @@ export function activityLevels(
 
 /** Whether two activities differ by more than `epsilon` for any kind or place. */
 export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): boolean {
-  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train', 'dog'];
+  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train', 'dog', 'cat'];
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
     Math.abs(a.night - b.night) > epsilon ||
@@ -409,6 +416,7 @@ export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
   // Dogs are drawn as people are (their own figures, life/dogs.ts): the classes are all taken.
   // Listed before people, so a lookup from the class finds people.
   dog: 'life_person',
+  cat: 'life_person',
   person: 'life_person',
   boat: 'life_boat',
   bird: 'life_bird',
@@ -495,6 +503,7 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
   train: CellBit.train,
   // Dogs go where people go.
   dog: CellBit.person,
+  cat: CellBit.person,
 };
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
