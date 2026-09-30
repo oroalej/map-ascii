@@ -513,9 +513,7 @@ describe('LifeWorld', () => {
     expect(inHalf.every((a) => a.lng <= edge)).toBe(true);
     // Far away: none.
     expect(
-      world
-        .visible(18, 1, center, undefined, [0, 0, 1, 1])
-        .filter((a) => a.kind !== 'train'),
+      world.visible(18, 1, center, undefined, [0, 0, 1, 1]).filter((a) => a.kind !== 'train'),
     ).toHaveLength(0);
   });
 
