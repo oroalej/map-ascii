@@ -5,23 +5,36 @@ import {
   buildGlyphTables,
   CANOPY,
   CanopyGlyph,
-  canopyShift,
+  canopyCell,
+  canopyLean,
   canopyVariant,
+  CROP,
   CropGlyph,
+  cropTone,
   cropVariant,
-  EDGE_STATE,
+  CROWN,
+  CrownGlyph,
+  crownIsDry,
+  crownTone,
+  DEFAULT_SUN,
   EXTRUDE_ROW,
   foliageVariant,
+  GRASS,
   GUST_STEPS,
   GrassGlyph,
+  grassCell,
   grassVariant,
   kindCodes,
   MAX_VARIANTS,
   selectGlyph,
+  STIR,
   subcellAreas,
   subcellClasses,
   SWAY,
   swayOffset,
+  Tone,
+  TONE,
+  toneColor,
   TREE_WIND,
   treeGust,
   TRUNK_VARIANT,
@@ -29,13 +42,13 @@ import {
   valueNoise,
   waterVariant,
   WIND,
-  WIND_STATE,
+  WIND_LIGHT,
   windFrom,
   DEFAULT_WIND_DIR,
+  windFront,
   windGust,
-  windLit,
+  windLevel,
 } from './select';
-import { CellState } from '../picking';
 
 /** Every cell of a `size × size` square from (x0, y0). */
 const cells = (x0: number, y0: number, size: number) =>
@@ -112,21 +125,45 @@ describe('wind over grass', () => {
     close(DEFAULT_WIND_DIR, windFrom(45));
   });
 
-  it('shows the park pattern at rest, and without wind', () => {
+  it('grows tufts at rest instead of a diagonal stripe, and holds them without wind', () => {
+    const tufts = [0, 1, 2, GrassGlyph.sparse];
+    const seen = new Set<number>();
+    let same = 0;
     for (const [x, y] of field) {
-      expect(grassVariant(x, y, 20, 0)).toBe((((x + y) % 3) + 3) % 3);
+      const v = grassVariant(x, y, 20, 0);
+      expect(tufts).toContain(v);
+      expect(grassVariant(x, y, 99, 0)).toBe(v);
+      seen.add(v);
+      // The old stripe repeated every 3 cells along a row.
+      if (grassVariant(x + 3, y, 20, 0) === v) same++;
+    }
+    expect(seen.size).toBe(tufts.length);
+    expect(same / field.length).toBeLessThan(0.8);
+  });
+
+  it('leans downwind in a gust (upright when it blows along the columns), then lies flat', () => {
+    for (const from of [45, 270, 0]) {
+      const dir = windFrom(from);
+      const lean =
+        Math.abs(dir[0]) < GRASS.uprightBelow
+          ? GrassGlyph.upright
+          : dir[0] > 0
+            ? GrassGlyph.leanRight
+            : GrassGlyph.leanLeft;
+      const seen = new Set(field.map(([x, y]) => grassVariant(x, y, 20, 1, dir)));
+      expect(seen.has(lean)).toBe(true);
+      for (const other of [GrassGlyph.leanRight, GrassGlyph.leanLeft, GrassGlyph.upright]) {
+        if (other !== lean) expect(seen.has(other)).toBe(false);
+      }
+      for (const v of seen) expect(v).toBeLessThan(grassGlyphs.length);
     }
   });
 
-  it('leans downwind in a gust, then lies flat', () => {
-    for (const from of [45, 270]) {
-      const dir = windFrom(from);
-      const lean = dir[0] >= 0 ? GrassGlyph.leanRight : GrassGlyph.leanLeft;
-      const seen = new Set(field.map(([x, y]) => grassVariant(x, y, 20, 1, dir)));
-      expect(seen.has(lean)).toBe(true);
-      expect(seen.has(dir[0] >= 0 ? GrassGlyph.leanLeft : GrassGlyph.leanRight)).toBe(false);
-      for (const v of seen) expect(v).toBeLessThan(grassGlyphs.length);
-    }
+  it('bends at its gust steps, toward where the wind goes', () => {
+    const east = windFrom(270);
+    expect(grassCell(5, 5, GUST_STEPS[0], east).variant).toBe(GrassGlyph.leanRight);
+    expect(grassCell(5, 5, GUST_STEPS[1], east).variant).toBe(GrassGlyph.flat);
+    expect(grassCell(5, 5, GUST_STEPS[0], windFrom(90)).variant).toBe(GrassGlyph.leanLeft);
   });
 
   it('draws parks and grass with it', () => {
@@ -142,7 +179,49 @@ describe('wind over grass', () => {
         time,
         wind,
       });
-    expect(at(0, 0)).toBe(grassGlyphs[0]);
+    expect(at(0, 0)).toBe(grassGlyphs[grassVariant(10, 20, 0, 0)]);
+  });
+});
+
+describe('the wind front and its wake', () => {
+  const field = cells(200_000, 300_000, 64);
+
+  it('has a gust that is exactly the wind gust, and a wake that stays in 0–1', () => {
+    for (const [x, y] of field) {
+      for (const t of [3, 12.5, 40]) {
+        const { gust, wake } = windFront(x, y, t);
+        expect(gust).toBe(windGust(x, y, t));
+        expect(wake).toBeGreaterThanOrEqual(0);
+        expect(wake).toBeLessThanOrEqual(1);
+        // The wake starts where the crest ends: never both at their fullest.
+        expect(gust + wake).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+  });
+
+  it('follows a crest: calm air before it, a wake behind it, in the moments after', () => {
+    let behind = 0;
+    let ahead = 0;
+    let total = 0;
+    for (const [x, y] of field) {
+      if (windGust(x, y, 20) < 0.9) continue;
+      total++;
+      // A second later the front has moved on downwind: this cell is in its wake.
+      if (windFront(x, y, 21).wake > 0) behind++;
+      // A second earlier the front hadn't arrived: no wake yet.
+      if (windFront(x, y, 19).wake === 0) ahead++;
+    }
+    expect(total).toBeGreaterThan(0);
+    expect(behind / total).toBeGreaterThan(0.8);
+    expect(ahead / total).toBeGreaterThan(0.8);
+  });
+
+  it('leaves most of the map in neither, so the patch noise is skipped', () => {
+    const still = field.filter(([x, y]) => {
+      const { gust, wake } = windFront(x, y, 20);
+      return gust === 0 && wake === 0;
+    });
+    expect(still.length).toBeGreaterThan(field.length / 2);
   });
 });
 
@@ -191,23 +270,37 @@ describe('trees in the wind', () => {
   it('swing their branches downwind, the tips most, and never at the trunk or in still air', () => {
     const [dx, dy] = DEFAULT_WIND_DIR;
     expect(Math.hypot(dx, dy)).toBeCloseTo(1);
-    for (const v of [...swayOffset(0, 1, 3, 0.5), ...swayOffset(5, 0, 3, 0.5)])
+    for (const v of [...swayOffset(0, 1, 0, 3, 0.5), ...swayOffset(5, 0, 0, 3, 0.5)])
       expect(v).toBeCloseTo(0);
     // Downwind on average (the flutter across it averages out over a cycle).
     const mean = [0, 0];
     for (let i = 0; i < 100; i++) {
-      const [x, y] = swayOffset(4, 1, (i / 100) * ((2 * Math.PI) / SWAY.rate), 0);
+      const [x, y] = swayOffset(4, 1, 0, (i / 100) * ((2 * Math.PI) / SWAY.rate), 0);
       mean[0]! += x / 100;
       mean[1]! += y / 100;
     }
     expect(mean[0]! * dx + mean[1]! * dy).toBeCloseTo(SWAY.bend * 4, 1);
     // Farther from the trunk swings more, up to the cap.
     const along = (reach: number) => {
-      const [x, y] = swayOffset(reach, 1, 0, 0);
+      const [x, y] = swayOffset(reach, 1, 0, 0, 0);
       return x * dx + y * dy;
     };
     expect(along(2)).toBeLessThan(along(4));
     expect(along(100)).toBeCloseTo(SWAY.max);
+  });
+
+  it('spring back upwind in the wake behind a gust, and settle', () => {
+    const [dx, dy] = DEFAULT_WIND_DIR;
+    for (let i = 0; i < 40; i++) {
+      // No gust, only its wake: the crown is upwind of rest whatever the moment of its rocking.
+      const [x, y] = swayOffset(4, 0, 1, i * 0.37, i);
+      expect(x * dx + y * dy).toBeLessThan(0);
+    }
+    // The recoil is smaller than the push, and the wake alone never throws a crown far.
+    const push = swayOffset(4, 1, 0, 0, 0);
+    const back = swayOffset(4, 0, 1, 0, 0);
+    expect(Math.hypot(...back)).toBeLessThan(Math.hypot(...push));
+    expect(SWAY.recoil).toBeLessThan(1);
   });
 
   it('flutter their leaves between % and & in a gust, and hold still without wind', () => {
@@ -234,31 +327,164 @@ describe('trees in the wind', () => {
     expect(crown(20, 0)).toEqual(crown(25, 0));
   });
 
+  it('draw a crown as a rim of leaves around an inside, with a dense core here and there', () => {
+    const rim = field.map(([x, y]) => foliageVariant(x, y, 0, 0, true));
+    expect(new Set(rim)).toEqual(new Set([CrownGlyph.rim]));
+    const inside = field.map(([x, y]) => foliageVariant(x, y, 0, 0, false));
+    expect(new Set(inside)).toEqual(new Set([CrownGlyph.interior, CrownGlyph.core]));
+    const cores = inside.filter((v) => v === CrownGlyph.core).length / field.length;
+    expect(cores).toBeGreaterThan(0.6 / CROWN.coreEvery);
+    expect(cores).toBeLessThan(1.4 / CROWN.coreEvery);
+    // In a gust the leaves flutter whatever their place in the crown.
+    for (const [x, y] of field.slice(0, 200)) {
+      expect([0, 1]).toContain(foliageVariant(x, y, 20, 1, false));
+    }
+  });
+
+  it('draw a crown from the rim of its neighbors', () => {
+    const glyph = (neighbor: () => 'tree_crown' | 'grass' | null, x: number, y: number) =>
+      selectGlyph(themes.dark, 'tree_crown', { x, y, height: 0, neighbor, time: 0, wind: 0 });
+    for (const [x, y] of field.slice(0, 100)) {
+      expect(glyph(() => 'grass', x, y)).toBe('%'); // rim: something else all around
+      expect(['&', '@']).toContain(glyph(() => 'tree_crown', x, y)); // inside
+    }
+  });
+
+  it('tint a crown lit toward the sun, shaded away from it, or yellowing on its own', () => {
+    expect(crownTone(true, true, true)).toBe(Tone.light);
+    expect(crownTone(false, true, true)).toBe(Tone.shade);
+    expect(crownTone(false, false, true)).toBe(Tone.dry);
+    expect(crownTone(false, false, false)).toBe(Tone.none);
+    const dry = Array.from({ length: 2000 }, (_, id) => id).filter(crownIsDry).length / 2000;
+    expect(dry).toBeGreaterThan(0.5 / CROWN.dryEvery);
+    expect(dry).toBeLessThan(1.6 / CROWN.dryEvery);
+  });
+
   it('lean the woods downwind in a gust, and flutter their foliage', () => {
-    expect(canopyShift(0)).toBe(0);
-    expect(canopyShift(TREE_WIND.step - 0.01)).toBe(0);
-    expect(canopyShift(1)).toBe(Math.round(CANOPY.sway));
-    const shift = canopyShift(1);
+    expect(canopyLean(0)).toBe(0);
+    expect(canopyLean(1)).toBeCloseTo(CANOPY.sway);
+    const east = windFrom(270);
+    // A lean of a whole number of cells moves the crowns exactly that far. (Rustling leaves and
+    // the clearing's gap dots, which stay on their cells, are foliage here.)
+    const shape = (v: number) =>
+      v === CanopyGlyph.rustle || v === CanopyGlyph.gap ? CanopyGlyph.foliage : v;
+    const gust = 3 / CANOPY.sway;
     for (const [x, y] of field) {
       expect(canopyVariant(x, y, 0, 0, 5)).toBe(canopyVariant(x, y, 0, 0, 9));
-      // In a gust, a crown center shows up `shift` cells downwind of where it stood.
-      if (canopyVariant(x, y) < 3) {
-        const [dx, dy] = DEFAULT_WIND_DIR.map((d) => Math.round(d * shift));
-        const there = canopyVariant(x + dx!, y + dy!, 0, 1, 5);
-        expect(there).toBe(canopyVariant(x, y));
-      }
+      expect(shape(canopyVariant(x + 3, y, 0, gust, 5, east))).toBe(shape(canopyVariant(x, y)));
       expect([CanopyGlyph.foliage, CanopyGlyph.rustle, CanopyGlyph.gap, 0, 1, 2]).toContain(
         canopyVariant(x, y, 0, 1, 5),
       );
     }
   });
 
-  it('light only grass, with a bit of its own', () => {
-    expect(windLit(GUST_STEPS[0])).toBe(true);
-    expect(windLit(GUST_STEPS[0] - 0.01)).toBe(false);
-    expect(WIND_STATE & EDGE_STATE).toBe(0);
-    for (const state of Object.values(CellState)) expect(state & WIND_STATE).toBe(0);
-    expect(WIND_STATE + EDGE_STATE + CellState.selected).toBeLessThan(256);
+  it('let the woods creep, not jump: a slightly stronger gust changes few cells', () => {
+    const still = (v: number) => (v === CanopyGlyph.rustle ? CanopyGlyph.foliage : v);
+    const changed = field.filter(
+      ([x, y]) => still(canopyVariant(x, y, 0, 1.0, 5)) !== still(canopyVariant(x, y, 0, 1.1, 5)),
+    );
+    expect(changed.length).toBeLessThan(field.length * 0.25);
+  });
+
+  it('light the sunny side of a wood and shade the far side, and swap them with the sun', () => {
+    const sun = DEFAULT_SUN;
+    const away: readonly [number, number] = [-sun[0], -sun[1]];
+    let lit = 0;
+    let shaded = 0;
+    for (const [x, y] of field) {
+      const a = canopyCell(x, y, 0, 0, 0, DEFAULT_WIND_DIR, sun);
+      const b = canopyCell(x, y, 0, 0, 0, DEFAULT_WIND_DIR, away);
+      expect(b.variant).toBe(a.variant);
+      if (a.variant !== CanopyGlyph.foliage) {
+        expect(a.tone).toBe(Tone.none); // centers and clearings keep their own color
+        continue;
+      }
+      if (a.tone === Tone.light) {
+        lit++;
+        expect(b.tone).toBe(Tone.shade);
+      } else if (a.tone === Tone.shade) {
+        shaded++;
+        expect(b.tone).toBe(Tone.light);
+      }
+    }
+    expect(lit).toBeGreaterThan(field.length / 20);
+    expect(shaded).toBeGreaterThan(field.length / 20);
+  });
+});
+
+describe('wind levels and tones', () => {
+  it('rise with the gust: still, stirring, leaning, flat', () => {
+    expect(windLevel(0)).toBe(0);
+    expect(windLevel(STIR.gust - 0.01)).toBe(0);
+    expect(windLevel(STIR.gust)).toBe(1);
+    expect(windLevel(0, STIR.wake)).toBe(1); // settling in a gust's wake
+    expect(windLevel(0, STIR.wake - 0.01)).toBe(0);
+    expect(windLevel(GUST_STEPS[0])).toBe(2);
+    expect(windLevel(GUST_STEPS[1])).toBe(3);
+    let last = 0;
+    for (let g = 0; g <= 1.5; g += 0.01) {
+      const level = windLevel(g);
+      expect(level).toBeGreaterThanOrEqual(last);
+      last = level;
+    }
+    for (let i = 1; i < WIND_LIGHT.length; i++) {
+      expect(WIND_LIGHT[i]!).toBeGreaterThan(WIND_LIGHT[i - 1]!);
+    }
+  });
+
+  it('tint dark, light, and straw, relative to the color they tint', () => {
+    for (const rgb of [
+      [0.55, 0.75, 0.37],
+      [0.24, 0.54, 0.23],
+    ] as const) {
+      const [r, g, b] = rgb;
+      expect(toneColor(rgb, Tone.none)).toEqual([r, g, b]);
+      const shade = toneColor(rgb, Tone.shade);
+      const light = toneColor(rgb, Tone.light);
+      const dry = toneColor(rgb, Tone.dry);
+      expect(shade[1]).toBeCloseTo(g * TONE.shade);
+      expect(light[1]).toBeGreaterThan(g);
+      expect(light[1]).toBeLessThan(1);
+      // Straw: redder and less blue than the green it was.
+      expect(dry[0]).toBeGreaterThan(r);
+      expect(dry[2]).toBeLessThan(b);
+    }
+  });
+
+  it('keeps grass tones to its patches: dry and deep green, some in specks', () => {
+    const field = cells(400_000, 600_000, 96);
+    let dry = 0;
+    let shade = 0;
+    let specks = 0;
+    for (const [x, y] of field) {
+      const lush = valueNoise(x, y, GRASS.lushScale, GRASS.lushSeed);
+      const { tone } = grassCell(x, y, 0);
+      if (lush < GRASS.dryBelow) expect(tone).toBe(Tone.dry);
+      else if (tone === Tone.dry) {
+        // Outside a dry patch, only in the speckled margin.
+        expect(lush).toBeLessThan(GRASS.speckBelow);
+        specks++;
+      } else if (lush > GRASS.shadeAbove) expect(tone).toBe(Tone.shade);
+      else expect(tone).toBe(Tone.none);
+      if (tone === Tone.dry) dry++;
+      if (tone === Tone.shade) shade++;
+      // The tone doesn't change with the wind.
+      expect(grassCell(x, y, 0.5).tone).toBe(tone);
+    }
+    expect(dry).toBeGreaterThan(field.length * 0.03);
+    expect(dry).toBeLessThan(field.length * 0.4);
+    expect(shade).toBeGreaterThan(field.length * 0.03);
+    expect(specks).toBeGreaterThan(0);
+  });
+
+  it('ripens patches of a field', () => {
+    const field = cells(300_000, 500_000, 96);
+    const ripe = field.filter(([x, y]) => cropTone(x, y) === Tone.dry);
+    for (const [x, y] of ripe) {
+      expect(valueNoise(x, y, CROP.ripeScale, CROP.ripeSeed)).toBeGreaterThan(CROP.ripeAbove);
+    }
+    expect(ripe.length).toBeGreaterThan(field.length * 0.03);
+    expect(ripe.length).toBeLessThan(field.length * 0.5);
   });
 });
 

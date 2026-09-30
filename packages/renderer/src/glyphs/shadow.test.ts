@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CellState } from '../picking';
-import { EDGE_STATE, inShadow, SHADOW, SHADOW_STATE, WIND_STATE } from './select';
+import { EDGE_STATE, inShadow, SHADOW, SHADOW_STATE, TONE_SHIFT, WIND_SHIFT } from './select';
 
 describe('shadows', () => {
   const tan = (degrees: number) => Math.tan((degrees * Math.PI) / 180);
@@ -27,9 +27,10 @@ describe('shadows', () => {
   });
 
   it('has its own bit in the state byte', () => {
-    for (const bit of [EDGE_STATE, WIND_STATE, ...Object.values(CellState)]) {
-      expect(bit & SHADOW_STATE).toBe(0);
-    }
-    expect(SHADOW_STATE + WIND_STATE + EDGE_STATE + CellState.selected).toBeLessThan(256);
+    // Nothing else in the byte overlaps it: not the picking state, the edge, the wind level
+    // (2 bits) or the tone (2 bits, the top of the byte).
+    const others = [EDGE_STATE, 3 << WIND_SHIFT, 3 << TONE_SHIFT, ...Object.values(CellState)];
+    for (const bit of others) expect(bit & SHADOW_STATE).toBe(0);
+    expect(SHADOW_STATE + EDGE_STATE + (3 << WIND_SHIFT) + (3 << TONE_SHIFT) + 3).toBe(255);
   });
 });

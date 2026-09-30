@@ -109,6 +109,12 @@ export function sextantMask(inside: (col: number, row: number) => boolean): numb
 /** A mask on the feature's edge: some samples in, some out. Full and empty cells keep their glyph. */
 export const isEdgeMask = (mask: number): boolean => mask !== 0 && mask !== 63;
 
+/**
+ * The select pass's state byte (glyph texture, blue): bits 0–1 the picking.ts `CellState`, then
+ * `EDGE_STATE`, `SHADOW_STATE`, the wind level (2 bits from `WIND_SHIFT`, `windLevel`), and the
+ * tone (2 bits from `TONE_SHIFT`, `Tone`). All 8 bits are used.
+ */
+
 /** Bit in the select pass's state byte for a sub-cell edge (above picking.ts `CellState`). */
 export const EDGE_STATE = 4;
 
@@ -118,7 +124,33 @@ export const EDGE_STATE = 4;
  * distance. Shaded cells (`SHADOW_STATE` in the select pass's state byte) draw `dark` darker.
  */
 export const SHADOW = { steps: 6, dark: 0.5 } as const;
-export const SHADOW_STATE = 16;
+export const SHADOW_STATE = 8;
+
+/** Where the wind level (0–3) and the tone (`Tone`) sit in the state byte. */
+export const WIND_SHIFT = 4;
+export const TONE_SHIFT = 6;
+
+/**
+ * A tint on a vegetation cell's ink and fill, relative to its class color so it suits either
+ * theme: `shade` darker, `light` toward white, `dry` toward straw (a per-channel multiplier).
+ */
+export const Tone = { none: 0, shade: 1, light: 2, dry: 3 } as const;
+export const TONE = { shade: 0.8, light: 0.22, dry: [1.25, 1.08, 0.6] } as const;
+
+/** The CPU twin of the glyph pass's tint: `rgb` (0–1 channels) under `tone`. */
+export function toneColor(rgb: readonly [number, number, number], tone: number) {
+  const [r, g, b] = rgb;
+  if (tone === Tone.shade) return [r * TONE.shade, g * TONE.shade, b * TONE.shade] as const;
+  if (tone === Tone.light) {
+    const mix = (c: number) => c + (1 - c) * TONE.light;
+    return [mix(r), mix(g), mix(b)] as const;
+  }
+  if (tone === Tone.dry) {
+    const [dr, dg, db] = TONE.dry;
+    return [Math.min(1, r * dr), Math.min(1, g * dg), Math.min(1, b * db)] as const;
+  }
+  return [r, g, b] as const;
+}
 
 /**
  * Whether a cell `selfHeight` meters tall is in shadow: `heightAt(k)` is the height standing
@@ -485,34 +517,122 @@ export function windFrom(degrees: number): WindDir {
 /** The direction when none is given: from the northeast. */
 export const DEFAULT_WIND_DIR = windFrom(45);
 
-/** How strong the wind is at a world cell, 0 (still) to 1 (a gust's crest). */
-export function windGust(
+/**
+ * The wind at a world cell: `gust` from 0 (still) to 1 (a front's crest), and `wake`, 0–1, in the
+ * stretch just behind a crest where the air settles again (a crown springs back there, the
+ * blades lift). Most cells are in neither, so the patch noise (two thirds of the hashing) is
+ * only paid where a front or its wake is.
+ */
+export function windFront(
   x: number,
   y: number,
   time: number,
   dir: WindDir = DEFAULT_WIND_DIR,
-): number {
+): { gust: number; wake: number } {
   const { period, speed, wrap } = WIND;
   const along = (mod(x, wrap) * dir[0] + mod(y, wrap) * dir[1]) / period;
   const travel = (time * speed) / period;
   const s = along - (travel - Math.floor(travel)) + WIND.bend * valueNoise(x, y, WIND.bendScale, 0);
-  const band = smoothstep(0.7, 1, 0.5 + 0.5 * Math.sin(2 * Math.PI * s));
+  const phase = 2 * Math.PI * s;
+  const v = 0.5 + 0.5 * Math.sin(phase);
+  const band = smoothstep(0.7, 1, v);
+  // Behind the crest (a cell's phase falls as the front passes): from v = 0.7 down to 0.2.
+  const behind = Math.cos(phase) > 0 ? smoothstep(0.2, 0.7, v) * (1 - band) : 0;
+  if (band <= 0 && behind <= 0) return { gust: 0, wake: 0 };
   const k = time * WIND.drift;
   const k0 = Math.floor(k);
   const kf = smoothstep(0, 1, k - k0);
   const a = valueNoise(x, y, WIND.patchScale, 1 + k0);
   const b = valueNoise(x, y, WIND.patchScale, 2 + k0);
-  return band * smoothstep(0.35, 0.65, a + (b - a) * kf);
+  const patch = smoothstep(0.35, 0.65, a + (b - a) * kf);
+  return { gust: band * patch, wake: behind * patch };
 }
+
+/** How strong the wind is at a world cell, 0 (still) to 1 (a gust's crest). */
+export const windGust = (
+  x: number,
+  y: number,
+  time: number,
+  dir: WindDir = DEFAULT_WIND_DIR,
+): number => windFront(x, y, time, dir).gust;
 
 /** A gust this strong bends grass over, and this strong flattens it. */
 export const GUST_STEPS = [0.3, 0.8] as const;
-/** Grass glyphs by role (theme.ts `grassGlyphs`). */
-export const GrassGlyph = { leanRight: 3, leanLeft: 4, flat: 5 } as const;
+/** A gust this strong (or a wake this strong) stirs the grass: it lightens without bending. */
+export const STIR = { gust: 0.15, wake: 0.5 } as const;
+/** How far each wind level (`windLevel`) lightens a lit cell's ink toward white, 0–1. */
+export const WIND_LIGHT = [0, 0.1, 0.2, 0.32] as const;
 
 /**
- * A grass cell's glyph: the park pattern at rest; in a gust, leaning downwind, then flat.
- * `wind` scales the gusts (0 with reduced motion), which blow along `dir`.
+ * The wind level a grass or crop cell shows, 0–3 (`gust` and `wake` already scaled by the wind):
+ * still, stirring (or settling in the wake), leaning, flat. The glyph pass lightens by level, so
+ * a gust shades in and trails off as a wave rather than switching on.
+ */
+export function windLevel(gust: number, wake = 0): number {
+  if (gust >= GUST_STEPS[1]) return 3;
+  if (gust >= GUST_STEPS[0]) return 2;
+  return gust >= STIR.gust || wake >= STIR.wake ? 1 : 0;
+}
+
+/** Grass glyphs by role (theme.ts `grassGlyphs`). */
+export const GrassGlyph = { leanRight: 3, leanLeft: 4, flat: 5, upright: 6, sparse: 7 } as const;
+
+/**
+ * Grass at rest is tufted, not striped: a soft noise (`lushScale` cells across) picks dense `"`,
+ * `'`, `,`, or a sparse `.`, jittered by a hash per cell, so lawns look grown. The same noise
+ * tints it: a patch below `dryBelow` is straw and above `shadeAbove` deep green; `speck` of the
+ * cells below `speckBelow` are straw on their own.
+ */
+export const GRASS = {
+  lushScale: 7,
+  lushSeed: 3,
+  dense: 0.6,
+  medium: 0.42,
+  thin: 0.25,
+  dryBelow: 0.28,
+  shadeAbove: 0.72,
+  speckBelow: 0.45,
+  speck: 0.04,
+  /** How far a hash jitters the noise, in noise units. */
+  jitter: 0.5,
+  /** A wind blowing more along the columns than this leans blades upright (`|`), not aslant. */
+  uprightBelow: 0.4,
+} as const;
+
+/** A grass cell's glyph and tone: the tufts at rest, leaning downwind in a gust, then flat. */
+export function grassCell(
+  x: number,
+  y: number,
+  gust: number,
+  dir: WindDir = DEFAULT_WIND_DIR,
+): { variant: number; tone: number } {
+  const lush = valueNoise(x, y, GRASS.lushScale, GRASS.lushSeed);
+  const h = cellHash(x, y);
+  const tone =
+    lush < GRASS.dryBelow || (lush < GRASS.speckBelow && ((h >>> 16) & 255) < GRASS.speck * 256)
+      ? Tone.dry
+      : lush > GRASS.shadeAbove
+        ? Tone.shade
+        : Tone.none;
+  if (gust >= GUST_STEPS[1]) return { variant: GrassGlyph.flat, tone };
+  if (gust >= GUST_STEPS[0]) {
+    const lean =
+      Math.abs(dir[0]) < GRASS.uprightBelow
+        ? GrassGlyph.upright
+        : dir[0] > 0
+          ? GrassGlyph.leanRight
+          : GrassGlyph.leanLeft;
+    return { variant: lean, tone };
+  }
+  const score = lush + (((h >>> 8) & 255) / 256 - 0.5) * GRASS.jitter;
+  const variant =
+    score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : GrassGlyph.sparse;
+  return { variant, tone };
+}
+
+/**
+ * A grass cell's glyph: the tufts at rest; in a gust, leaning downwind, then flat. `wind` scales
+ * the gusts (0 with reduced motion), which blow along `dir`.
  */
 export function grassVariant(
   x: number,
@@ -521,14 +641,18 @@ export function grassVariant(
   wind = 1,
   dir: WindDir = DEFAULT_WIND_DIR,
 ): number {
-  const gust = wind * windGust(x, y, time, dir);
-  if (gust < GUST_STEPS[0]) return mod(x + y, 3);
-  if (gust < GUST_STEPS[1]) return dir[0] >= 0 ? GrassGlyph.leanRight : GrassGlyph.leanLeft;
-  return GrassGlyph.flat;
+  return grassCell(x, y, wind * windGust(x, y, time, dir), dir).variant;
 }
 
 /** Crop glyphs by role (theme.ts `farmland`): rows at rest, then leaning right, left, and flat. */
 export const CropGlyph = { leanRight: 2, leanLeft: 3, flat: 4 } as const;
+
+/** Broad patches of a field ripen: above `ripeAbove` its noise (`ripeScale` cells) is straw. */
+export const CROP = { ripeScale: 16, ripeSeed: 13, ripeAbove: 0.62 } as const;
+
+/** A field cell's tone: `Tone.dry` where its patch has ripened. */
+export const cropTone = (x: number, y: number): number =>
+  valueNoise(x, y, CROP.ripeScale, CROP.ripeSeed) > CROP.ripeAbove ? Tone.dry : Tone.none;
 
 /**
  * A field's glyph: rows by `y` at rest; in a gust (`gust`, already scaled by the wind, blowing
@@ -548,47 +672,60 @@ export function cropVariant(y: number, gust = 0, dir: WindDir = DEFAULT_WIND_DIR
  */
 export const TREE_WIND = { lag: 0.35, step: 0.4 } as const;
 
+/** The wind in a tree's crown at a world cell: the grass's front, `lag` seconds late. */
+export const treeFront = (
+  x: number,
+  y: number,
+  time: number,
+  dir: WindDir = DEFAULT_WIND_DIR,
+): { gust: number; wake: number } => windFront(x, y, time - TREE_WIND.lag, dir);
+
 /** How strong the wind is in a tree's crown at a world cell, 0–1. */
 export const treeGust = (
   x: number,
   y: number,
   time: number,
   dir: WindDir = DEFAULT_WIND_DIR,
-): number => windGust(x, y, time - TREE_WIND.lag, dir);
-
-/**
- * Bit in the select pass's state byte (above `EDGE_STATE`) for grass bent over by a gust: the
- * glyph pass draws it a little lighter, the blades' pale sides catching the light.
- */
-export const WIND_STATE = 8;
-/** How far a gust lightens a lit cell's glyph toward white, 0–1. */
-export const WIND_LIGHT = 0.3;
-
-/** Whether a gust lights a grass cell: bent over or flat. */
-export const windLit = (gust: number): boolean => gust >= GUST_STEPS[0];
+): number => treeFront(x, y, time, dir).gust;
 
 /**
  * How a crown's branches swing (cells; the cell shader moves each vertex of a crown): downwind
  * by `bend` × its reach from the trunk (so the tips swing most), at most `max`, and a flutter
- * of `flutter` across the wind at `rate` radians per second, each vertex at its own phase. A
- * standing crown swings fully at its top and by `standingBase` at its bottom.
+ * of `flutter` across the wind at `rate` radians per second, each vertex at its own phase. In
+ * the wake behind a gust the branches spring back: upwind of rest by up to `recoil` of the
+ * swing, rocking at `bounce` radians per second as they settle. A standing crown swings fully at
+ * its top and by `standingBase` at its bottom.
  */
-export const SWAY = { bend: 0.3, max: 3, flutter: 0.5, rate: 7, standingBase: 0.4 } as const;
+export const SWAY = {
+  bend: 0.3,
+  max: 3,
+  flutter: 0.5,
+  rate: 7,
+  standingBase: 0.4,
+  recoil: 0.45,
+  bounce: 4,
+} as const;
 
 /**
- * How far (cells, [x, y]) a crown vertex `reach` cells from its trunk swings in a gust (`gust`,
- * already scaled by the wind) at `time`: the CPU twin of the cell shader's sway.
+ * How far (cells, [x, y]) a crown vertex `reach` cells from its trunk swings in a gust (`gust`
+ * and `wake`, already scaled by the wind) at `time`: the CPU twin of the cell shader's sway.
  */
 export function swayOffset(
   reach: number,
   gust: number,
+  wake: number,
   time: number,
   phase: number,
   dir: WindDir = DEFAULT_WIND_DIR,
 ): [number, number] {
   const [dx, dy] = dir;
-  const along = gust * Math.min(SWAY.bend * reach, SWAY.max);
-  const across = gust * SWAY.flutter * Math.min(reach / 2, 1) * Math.sin(time * SWAY.rate + phase);
+  const lean = gust - SWAY.recoil * wake * (0.6 + 0.4 * Math.cos(time * SWAY.bounce + phase));
+  const along = lean * Math.min(SWAY.bend * reach, SWAY.max);
+  const across =
+    (gust + 0.6 * wake) *
+    SWAY.flutter *
+    Math.min(reach / 2, 1) *
+    Math.sin(time * SWAY.rate + phase);
   return [dx * along - dy * across, dy * along + dx * across];
 }
 
@@ -602,81 +739,148 @@ function flutters(h: number, gust: number, time: number): boolean {
   return (((h >>> 2) + flips) & 1) === 1;
 }
 
+/** Where the sun is when there is none (night): to the northwest, a unit vector (x east, y south). */
+export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
+
+/** Crown glyphs by role (theme.ts `tree_crown`): the rim's leaf, a thick interior, a dense core. */
+export const CrownGlyph = { rim: 0, interior: 1, core: 4 } as const;
 /**
- * A crown cell's glyph (theme.ts `tree_crown`): a hashed pick of the leaves at rest; in a gust
- * (`gust`, already scaled by the wind), the leaves flutter, flipping between `%` and `&`.
+ * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, one
+ * in `coreEvery` is a dense `@`, the rest `&`. One crown in `dryEvery` is yellowing (`Tone.dry`).
  */
-export function foliageVariant(x: number, y: number, time = 0, gust = 0): number {
+export const CROWN = { coreEvery: 4, dryEvery: 12 } as const;
+
+/**
+ * A crown cell's glyph (theme.ts `tree_crown`): at rest the rim (`rim`: some neighbor isn't
+ * crown) is `%` and the inside `&` or a dense `@` by hash; in a gust (`gust`, already scaled by
+ * the wind), the leaves flutter, flipping between `%` and `&`.
+ */
+export function foliageVariant(x: number, y: number, time = 0, gust = 0, rim = true): number {
   const h = cellHash(x, y);
   if (gust >= TREE_WIND.step) return flutters(h, gust, time) ? 0 : 1;
-  return h % 4;
+  if (rim) return CrownGlyph.rim;
+  return h % CROWN.coreEvery === 0 ? CrownGlyph.core : CrownGlyph.interior;
+}
+
+/** Whether the crown of feature `id` is yellowing: one in `CROWN.dryEvery`. */
+export const crownIsDry = (id: number): boolean => cellHash(id, 5) % CROWN.dryEvery === 0;
+
+/**
+ * A crown cell's tone from the sun: lit when the cell toward the sun isn't crown (`sunOpen`),
+ * shaded when the one away from it isn't (`farOpen`), else the crown's own (`dry`: yellowing).
+ */
+export function crownTone(sunOpen: boolean, farOpen: boolean, dry: boolean): number {
+  if (sunOpen) return Tone.light;
+  if (farOpen) return Tone.shade;
+  return dry ? Tone.dry : Tone.none;
 }
 
 /**
  * Woods as clumped crowns (SPEC.md §4): a crown per `cols × rows` block of cells, centered on a
  * hashed cell of the block. A cell farther than `clearing` (in blocks) from every center is a
- * clearing with chance `gaps`. In a gust the whole pattern leans downwind by up to `sway` cells.
+ * clearing with chance `gaps`. In a gust the whole pattern leans downwind by `sway` cells at a
+ * gust's crest, continuously, so crowns creep across cells. Foliage more than `lit` cells from
+ * its crown's center toward the sun is lit, and away from it shaded.
  */
-export const CANOPY = { cols: 4, rows: 2, clearing: 0.65, gaps: 0.5, sway: 1.5 } as const;
+export const CANOPY = {
+  cols: 4,
+  rows: 2,
+  clearing: 0.65,
+  gaps: 0.5,
+  sway: 1.5,
+  lit: 0.75,
+} as const;
 /** Canopy glyphs by role (theme.ts `trees`); `rustle` is the foliage's other glyph in a gust. */
 export const CanopyGlyph = { foliage: 3, gap: 4, palm: 5, needle: 6, rustle: 8 } as const;
 
-/** The woods' pattern at a world cell: a crown's center, foliage, or a clearing. */
-function canopyShape(x: number, y: number, variant: number): number {
+/** How many cells the woods' pattern leans downwind in a gust (already scaled by the wind). */
+export const canopyLean = (gust: number): number => CANOPY.sway * gust;
+
+/** The woods' pattern at a world cell: a crown's center, foliage, or a clearing, and its tone. */
+function canopyShape(
+  x: number,
+  y: number,
+  variant: number,
+  lean: WindDir,
+  sun: WindDir,
+): { variant: number; tone: number } {
   const { cols, rows } = CANOPY;
-  const gx = Math.floor(x / cols);
-  const gy = Math.floor(y / rows);
+  // The pattern, read from upwind: fractional, so its edges creep a cell at a time.
+  const px = x - lean[0];
+  const py = y - lean[1];
+  const gx = Math.floor(px / cols);
+  const gy = Math.floor(py / rows);
   let best = Infinity;
   let bestHash = 0;
+  let bx = 0;
+  let by = 0;
   for (let oy = -1; oy <= 1; oy++) {
     for (let ox = -1; ox <= 1; ox++) {
       const h = cellHash(gx + ox, gy + oy);
-      const dx = (x - ((gx + ox) * cols + (h % cols))) / cols;
-      const dy = (y - ((gy + oy) * rows + ((h >>> 8) % rows))) / rows;
-      const d = dx * dx + dy * dy;
+      const dx = px - ((gx + ox) * cols + (h % cols));
+      const dy = py - ((gy + oy) * rows + ((h >>> 8) % rows));
+      const d = (dx / cols) * (dx / cols) + (dy / rows) * (dy / rows);
       if (d < best) {
         best = d;
         bestHash = h;
+        bx = dx;
+        by = dy;
       }
     }
   }
-  if (best === 0) {
-    if (variant === 1) return CanopyGlyph.palm;
-    if (variant === 2) return CanopyGlyph.needle + ((bestHash >>> 16) & 1);
-    return (bestHash >>> 16) % 3;
+  if (Math.abs(bx) < 0.5 && Math.abs(by) < 0.5) {
+    if (variant === 1) return { variant: CanopyGlyph.palm, tone: Tone.none };
+    if (variant === 2) {
+      return { variant: CanopyGlyph.needle + ((bestHash >>> 16) & 1), tone: Tone.none };
+    }
+    return { variant: (bestHash >>> 16) % 3, tone: Tone.none };
   }
   const clearing = best > CANOPY.clearing * CANOPY.clearing;
-  if (clearing && ((cellHash(x, y) >>> 8) & 255) < CANOPY.gaps * 256) return CanopyGlyph.gap;
-  return CanopyGlyph.foliage;
+  // Gaps are picked by the fixed world cell, so a clearing moving over the wood reveals or hides
+  // them one by one instead of re-rolling them.
+  if (clearing && ((cellHash(x, y) >>> 8) & 255) < CANOPY.gaps * 256) {
+    return { variant: CanopyGlyph.gap, tone: Tone.none };
+  }
+  const toSun = bx * sun[0] + by * sun[1];
+  const tone = toSun > CANOPY.lit ? Tone.light : toSun < -CANOPY.lit ? Tone.shade : Tone.none;
+  return { variant: CanopyGlyph.foliage, tone };
 }
 
-/** How many cells the woods' pattern leans downwind in a gust (already scaled by the wind). */
-export const canopyShift = (gust: number): number =>
-  gust >= TREE_WIND.step ? Math.round(gust * CANOPY.sway) : 0;
-
 /**
- * A canopy cell's glyph: at a crown's center, by the wood's kind (`variant`, classes.ts
+ * A canopy cell's glyph and tone: at a crown's center, by the wood's kind (`variant`, classes.ts
  * `TREE_KINDS` + 1), else one of three by the crown's hash; around it, foliage or a clearing.
  * In a gust (`gust`, already scaled by the wind) the crowns lean downwind with it (the pattern
  * is read from upwind) and their foliage flutters.
  */
-export function canopyVariant(
+export function canopyCell(
   x: number,
   y: number,
   variant = 0,
   gust = 0,
   time = 0,
   dir: WindDir = DEFAULT_WIND_DIR,
-): number {
-  const shift = canopyShift(gust);
-  const sx = x - Math.round(dir[0] * shift);
-  const sy = y - Math.round(dir[1] * shift);
-  const v = canopyShape(sx, sy, variant);
-  if (v === CanopyGlyph.foliage && gust >= TREE_WIND.step && flutters(cellHash(x, y), gust, time)) {
-    return CanopyGlyph.rustle;
+  sun: WindDir = DEFAULT_SUN,
+): { variant: number; tone: number } {
+  const lean = canopyLean(gust);
+  const cell = canopyShape(x, y, variant, [dir[0] * lean, dir[1] * lean], sun);
+  if (
+    cell.variant === CanopyGlyph.foliage &&
+    gust >= TREE_WIND.step &&
+    flutters(cellHash(x, y), gust, time)
+  ) {
+    return { variant: CanopyGlyph.rustle, tone: cell.tone };
   }
-  return v;
+  return cell;
 }
+
+export const canopyVariant = (
+  x: number,
+  y: number,
+  variant = 0,
+  gust = 0,
+  time = 0,
+  dir: WindDir = DEFAULT_WIND_DIR,
+): number => canopyCell(x, y, variant, gust, time, dir).variant;
 
 /** Area patterns, from world cell coordinates so they stay put while panning. */
 export function patternVariant(
@@ -760,7 +964,16 @@ export function variantFor(
     }
     case 'foliage': {
       const gust = (ctx.wind ?? 1) * treeGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
-      return Math.min(foliageVariant(ctx.x, ctx.y, ctx.time, gust), count - 1);
+      // The rim of a crown: some side neighbor is something else.
+      const rim = (
+        [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const
+      ).some(([dx, dy]) => ctx.neighbor(dx, dy) !== cls);
+      return Math.min(foliageVariant(ctx.x, ctx.y, ctx.time, gust, rim), count - 1);
     }
   }
 }

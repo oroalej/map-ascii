@@ -691,13 +691,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
   let lifeAgents: VisibleAgent[] = [];
-  const drawLife = (at: number) => {
+  const drawLife = (at: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
     let agents: VisibleAgent[] = [];
     if (lifeActive()) {
-      // How hard the wind blows in a tree's crown at a place, on the grid's cells (select pass).
+      // How hard the wind blows in a tree's crown at a place, on the grid's cells (select pass);
+      // `wind` is the frame's, taken at this same `at`.
       const time = (at - start) / 1000;
-      const wind = currentWind(time);
       const grid = placement.grid;
       const toCell = placement.toCell;
       world.step(
@@ -1055,7 +1055,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const wind = currentWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
-        !reducedMotion && hasCrowns(crownTiles) && bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
+        !reducedMotion &&
+        wind.strength > 0 &&
+        hasCrowns(crownTiles) &&
+        bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
       if (placement && (cellsDrawn || swaying)) {
         const crownStart = performance.now();
         crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
@@ -1074,7 +1077,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         sun,
       );
       const lifeStart = performance.now();
-      drawLife(now);
+      drawLife(now, wind);
       lifeMs = smooth(lifeMs, performance.now() - lifeStart);
       drawLights(cellsDrawn);
       glyphPass(

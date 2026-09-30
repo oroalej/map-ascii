@@ -2,7 +2,8 @@
  * Select pass: per cell, pick the glyph from the class, its neighbors, and the world position.
  * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output (RGBA8): glyph atlas index,
  * class id, the cell's state (picking.ts `cellState`: hover, highlighted, selected; plus
- * `EDGE_STATE` for a sub-cell edge), and the class whose fill is the cell's background.
+ * `EDGE_STATE` for a sub-cell edge, `SHADOW_STATE`, and vegetation's wind level and tone; see
+ * glyphs/select.ts), and the class whose fill is the cell's background.
  *
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
@@ -15,9 +16,11 @@ import {
   EDGE_STATE,
   SHADOW,
   SHADOW_STATE,
+  DEFAULT_SUN,
   GUST_STEPS,
+  TONE_SHIFT,
   TREE_WIND,
-  WIND_STATE,
+  WIND_SHIFT,
   EXTRUDE_ROW,
   FALLING,
   kindCodes,
@@ -82,9 +85,13 @@ float g_state = 0.0;
 int g_bg = 0;
 // SHADOW_STATE if the cell is in a shadow (glyphs/select.ts inShadow), whatever it draws.
 float g_shadow = 0.0;
+// A vegetation cell's wind level (windLevel) and tone (Tone), which the glyph pass lights and tints.
+int g_wind = 0;
+int g_tone = 0;
 
 void emit(float glyph, int cls) {
-  o_glyph = vec4(glyph, float(cls) / 255.0, (g_state + g_shadow) / 255.0, float(g_bg) / 255.0);
+  float state = g_state + g_shadow + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
+  o_glyph = vec4(glyph, float(cls) / 255.0, state / 255.0, float(g_bg) / 255.0);
 }
 
 int classAt(ivec2 p) {
@@ -103,6 +110,13 @@ vec4 idAt(ivec2 p) {
 uint unpackId(vec4 id) {
   uvec4 b = uvec4(id * 255.0 + 0.5);
   return b.r | (b.g << 8u) | (b.b << 16u) | (b.a << 24u);
+}
+
+// The way toward the sun on the grid (x east, y south), or a fixed northwest at night; zero when
+// tilted, where the grid is the screen's and no side is lit.
+vec2 sunDir() {
+  if (u_tilted) return vec2(0.0);
+  return u_sun.z > 0.0 ? normalize(u_sun.xy) : vec2(${float(DEFAULT_SUN[0])}, ${float(DEFAULT_SUN[1])});
 }
 
 // A feature's highlight state (picking.ts cellState).
@@ -316,8 +330,8 @@ void main() {
       : variant < ${WALL_SHADE_STEPS[0]} ? 0 : variant < ${WALL_SHADE_STEPS[1]} ? 1 : 2;
     // A standing crown's leaves flutter in a gust, like a flat one's.
     if (kind == ${kindCodes.foliage}) {
-      float gust = u_wind * treeGust(w, u_time);
-      if (gust >= ${float(TREE_WIND.step)}) step = foliageVariant(w, u_time, gust);
+      float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
+      if (gust >= ${float(TREE_WIND.step)}) step = foliageVariant(w, u_time, gust, false);
     }
     float glyph = kind == ${kindCodes.building}
       ? texelFetch(u_table, ivec2(step, ${EXTRUDE_ROW}), 0).r
@@ -357,7 +371,7 @@ void main() {
     } else {
       // A gust ruffles the water in its bands (glyphs/select.ts waterVariant); else each cell
       // flips on its own.
-      float gust = u_wind * windGust(w, u_time);
+      float gust = u_wind > 0.0 ? u_wind * windGust(w, u_time) : 0.0;
       uint h = cellHash(w);
       float phase = float((h >> 8u) & 255u) / 255.0;
       v = gust >= ${float(GUST_STEPS[0])} ? (gust >= ${float(GUST_STEPS[1])} ? 0 : 1)
@@ -392,20 +406,37 @@ void main() {
   } else if (kind == ${kindCodes.scatter}) {
     v = int(cellHash(w) % uint(u_count[cls]));
   } else if (kind == ${kindCodes.grass}) {
-    // Wind (glyphs/select.ts grassVariant); bent-over blades catch the light (windLit).
-    float gust = u_wind * windGust(w, u_time);
-    v = min(grassVariant(w, gust), u_count[cls] - 1);
-    if (gust >= ${float(GUST_STEPS[0])}) g_state += ${WIND_STATE}.0;
+    // Wind (glyphs/select.ts grassCell): tufts at rest, tinted by patch; blades lean and lighten
+    // by wind level in a gust and lift again in its wake.
+    vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
+    int tone;
+    v = min(grassVariant(w, front.x, tone), u_count[cls] - 1);
+    g_tone = tone;
+    g_wind = windLevel(front.x, front.y);
   } else if (kind == ${kindCodes.crop}) {
-    // Fields in the wind (glyphs/select.ts cropVariant).
-    v = min(cropVariant(w, u_wind * windGust(w, u_time)), u_count[cls] - 1);
-  } else if (kind == ${kindCodes.canopy} || kind == ${kindCodes.foliage}) {
-    // Trees in the wind (glyphs/select.ts treeGust): leaves flutter, woods lean downwind.
-    float gust = u_wind * treeGust(w, u_time);
-    v = kind == ${kindCodes.canopy}
-      ? canopyVariant(w, variant, gust, u_time)
-      : foliageVariant(w, u_time, gust);
-    v = min(v, u_count[cls] - 1);
+    // Fields in the wind (glyphs/select.ts cropVariant); ripe patches are straw.
+    vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
+    v = min(cropVariant(w, front.x), u_count[cls] - 1);
+    g_tone = cropTone(w);
+    g_wind = windLevel(front.x, front.y);
+  } else if (kind == ${kindCodes.canopy}) {
+    // Woods in the wind (glyphs/select.ts canopyCell): crowns creep downwind and flutter; their
+    // sunny side is lit and the far side shaded.
+    float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
+    int tone;
+    v = min(canopyVariant(w, variant, gust, u_time, sunDir(), tone), u_count[cls] - 1);
+    g_tone = tone;
+  } else if (kind == ${kindCodes.foliage}) {
+    // A tree's crown, flat (glyphs/select.ts foliageVariant, crownTone): a rim of leaves around
+    // an inside, lit on the side toward the sun and shaded on the far side.
+    float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
+    ivec2 toSun = ivec2(floor(sunDir() * 1.2 + 0.5));
+    bool lit = toSun != ivec2(0);
+    bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
+      || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
+    v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);
+    g_tone = crownTone(lit && classAt(p + toSun) != cls, lit && classAt(p - toSun) != cls,
+      crownIsDry(unpackId(id)));
   }
   float glyph = texelFetch(u_table, ivec2(v, cls), 0).r;
   emit(glyph, cls);

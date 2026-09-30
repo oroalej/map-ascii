@@ -17,15 +17,16 @@ export type RGBA = readonly [number, number, number, number];
  * - `single`: always the first glyph
  * - `ramp`: by the feature's height byte, 1 = the first glyph (terrain bands)
  * - `variant`: the glyph the feature's variant byte names (e.g. bench, fountain, flagpole)
- * - `grass`: the `diagonal` pattern over glyphs 0–2 at rest; in a gust of wind, blades lean
- *   right (3) or left (4) with it, or lie flat (5)
+ * - `grass`: tufts at rest (0–2 dense to thin, 7 sparse), noise-grown and tinted; in a gust of
+ *   wind, blades lean right (3) or left (4) with it, or stand upright (6) when it blows along
+ *   the columns, or lie flat (5)
  * - `canopy`: clumped tree crowns: a crown's center (0–2, or 5 for palms and 6–7 for conifers
  *   by the variant byte), foliage around it (3), and here and there a clearing (4); in a gust
  *   of wind, the pattern leans downwind and the foliage flutters to 8
  * - `crop`: rows by `y` (0–1) at rest; in a gust, the rows lean right (2) or left (3) and the
  *   furrows ripple flat (4)
- * - `foliage`: a tree's crown: a hashed pick of glyphs 0–3 (standing, by shade, darkest first,
- *   then the top); in a gust, the leaves flutter between 0 and 1
+ * - `foliage`: a tree's crown: its rim (0), its inside (1, and a dense 4 here and there); standing
+ *   (by shade, darkest first, then the top: 0–3); in a gust, the leaves flutter between 0 and 1
  */
 export type GlyphKind =
   | 'road'
@@ -143,8 +144,11 @@ export const rainGlyphs = ['|', '\\', '/'] as const;
 /** A streetlight's head (life/lights.ts), lit warm from dusk, grey when it is out. */
 export const streetlightGlyph = '*';
 
-/** Grass and parks: the rest pattern, then leaning right, leaning left, and flat in the wind. */
-export const grassGlyphs = ['"', "'", ',', '/', '\\', '~'] as const;
+/**
+ * Grass and parks: dense, medium, and thin tufts at rest; then leaning right, leaning left, and
+ * flat in the wind; upright (a wind along the columns) and a sparse tuft (glyphs/select.ts `GrassGlyph`).
+ */
+export const grassGlyphs = ['"', "'", ',', '/', '\\', '~', '|', '.'] as const;
 
 /** Building ramp by height, lowest first. */
 export const buildingRamp = ['░', '▒', '▓', '█'] as const;
@@ -253,11 +257,12 @@ function makeTheme(background: number, c: Palette): Theme {
         fill: 0.1,
       },
       // A tree's crown around its trunk; standing (tilted views), its walls darkest first, then
-      // its top (glyphs/select.ts extrusionVariant). In the wind it sways (the cell shader)
-      // and its leaves flutter between `%` and `&`.
+      // its top (glyphs/select.ts extrusionVariant). Flat, its rim is `%` and its inside `&`, with
+      // a dense `@` here and there (glyphs/select.ts `CrownGlyph`). In the wind it sways (the
+      // cell shader) and its leaves flutter between `%` and `&`.
       tree_crown: {
         kind: 'foliage',
-        glyphs: ['%', '&', '&', '&'],
+        glyphs: ['%', '&', '&', '&', '@'],
         color: c.crown,
         fill: 0.14,
       },

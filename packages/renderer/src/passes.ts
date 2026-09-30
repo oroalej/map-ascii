@@ -225,11 +225,12 @@ export function cellPass(
     u_wind: 0,
   });
   const matrices = layers.tiles.map(({ tile }) => placement.tileMatrix(tile));
+  const regionMatrices = layers.region.map(({ tile }) => placement.tileMatrix(tile));
   const drawFlat = () => {
-    for (const { tile, mesh } of layers.region) {
-      twgl.setUniforms(program, { u_matrix: placement.tileMatrix(tile) });
+    layers.region.forEach(({ mesh }, i) => {
+      twgl.setUniforms(program, { u_matrix: regionMatrices[i]! });
       drawGround(gl, mesh.region);
-    }
+    });
     layers.tiles.forEach(({ mesh }, i) => {
       twgl.setUniforms(program, { u_matrix: matrices[i]! });
       drawGround(gl, mesh);
@@ -300,12 +301,16 @@ export function crownPass(
     u_windDir: wind.dir,
     u_grid: [cols, rows],
   });
+  // Only the tiles with crowns are drawn, and their matrices are worked out once for both grids.
+  const drawn = tiles
+    .filter(({ mesh }) => (tilted ? mesh.standingCrowns : mesh.crowns).count > 0)
+    .map(({ tile, mesh }) => ({ mesh, matrix: placement.tileMatrix(tile) }));
   const draw = (fbo: WebGLFramebuffer, width: number, height: number, sample: [number, number]) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.viewport(0, 0, width, height);
     twgl.setUniforms(program, { u_sub: sample });
-    for (const { tile, mesh } of tiles) {
-      twgl.setUniforms(program, { u_matrix: placement.tileMatrix(tile) });
+    for (const { mesh, matrix } of drawn) {
+      twgl.setUniforms(program, { u_matrix: matrix });
       drawCrowns(gl, mesh, tilted);
     }
   };

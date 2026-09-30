@@ -66,12 +66,13 @@ void main() {
   vec4 clip = u_matrix * vec4(a_pos, z, 1.0);
   // Branches swing in the wind (glyphs/select.ts swayOffset): each vertex by the gust where it
   // is and its reach from the trunk (a_ridge, tile units), so the tips swing most and the lobes
-  // move out of step. A standing crown leans over its trunk.
+  // move out of step, and spring back in the wake behind a gust. A standing crown leans over
+  // its trunk.
   if (crown && u_wind > 0.0) {
     vec2 cell = (clip.xy / clip.w * 0.5 + 0.5) * u_grid;
-    float gust = u_wind * treeGust(u_origin + ivec2(floor(cell)), u_time);
+    vec2 front = u_wind * treeFront(u_origin + ivec2(floor(cell)), u_time);
     float cellsPerUnit = length(u_matrix[0].xy / clip.w * u_grid * 0.5);
-    vec2 sway = swayOffset(a_ridge * cellsPerUnit, gust, u_time, float(gl_VertexID % 13));
+    vec2 sway = swayOffset(a_ridge * cellsPerUnit, front.x, front.y, u_time, float(gl_VertexID % 13));
     if (extruded && !top) sway *= ${float(SWAY.standingBase)};
     clip.xy += sway / u_grid * 2.0 * clip.w;
   }

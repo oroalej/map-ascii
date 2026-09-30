@@ -25,8 +25,11 @@ import {
   EDGE_STATE,
   SHADOW,
   SHADOW_STATE,
+  Tone,
+  TONE,
+  TONE_SHIFT,
   WIND_LIGHT,
-  WIND_STATE,
+  WIND_SHIFT,
 } from '../glyphs/select';
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
@@ -98,6 +101,15 @@ vec3 daylit(vec3 color) {
   color = mix(color, color * vec3(1.2, 0.88, 0.68), dusk * 0.45);
   vec3 tint = mix(vec3(0.4, 0.48, 0.78), vec3(0.6, 0.64, 0.76), u_moon);
   return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon));
+}
+
+// A vegetation cell's tint (glyphs/select.ts Tone, toneColor): the lit side is only lightened by
+// day, so a tree's sunny side doesn't glow at night.
+vec3 toned(vec3 color, int tone, float night) {
+  if (tone == ${Tone.shade}) return color * ${float(TONE.shade)};
+  if (tone == ${Tone.light}) return mix(color, vec3(1.0), ${float(TONE.light)} * (1.0 - night));
+  if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
+  return color;
 }
 
 // A class's fill in a color: the background tinted toward it by the class's fill strength.
@@ -318,7 +330,8 @@ void main() {
   int cls = int(g.g * 255.0 + 0.5);
   int rawState = int(g.b * 255.0 + 0.5);
   bool edge = (rawState & ${EDGE_STATE}) != 0;
-  bool windLit = (rawState & ${WIND_STATE}) != 0;
+  int windLevel = (rawState >> ${WIND_SHIFT}) & 3;
+  int tone = (rawState >> ${TONE_SHIFT}) & 3;
   bool shaded = (rawState & ${SHADOW_STATE}) != 0;
   int state = rawState & ${EDGE_STATE - 1};
   int bgClass = int(g.a * 255.0 + 0.5);
@@ -417,7 +430,7 @@ void main() {
   int glyph = int(g.r * 255.0 + 0.5);
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
-  vec3 color = daylit(u_colors[cls]);
+  vec3 color = toned(daylit(u_colors[cls]), tone, night);
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];
   // Zoomed out, major and secondary roads glow as a lit corridor; it hands over to the streetlights.
@@ -448,8 +461,12 @@ void main() {
       color = mix(color, vec3(1.0, 0.82, 0.48) * flicker, 0.85);
     }
   }
-  // Blades and leaves caught by a gust show their pale sides (glyphs/select.ts WIND_STATE).
-  if (windLit) color = mix(color, vec3(1.0), ${WIND_LIGHT});
+  // Blades caught by a gust show their pale sides, more as it strengthens (glyphs/select.ts
+  // WIND_LIGHT by wind level).
+  if (windLevel > 0) {
+    color = mix(color, vec3(1.0), windLevel == 3 ? ${float(WIND_LIGHT[3])}
+      : windLevel == 2 ? ${float(WIND_LIGHT[2])} : ${float(WIND_LIGHT[1])});
+  }
   if (state == ${CellState.hover}) {
     color = mix(color, vec3(1.0), 0.45);
   } else if (state == ${CellState.highlight}) {

@@ -105,7 +105,7 @@ const STALL_ICON = [
 
 /**
  * People as the map draws them (life/people.ts): someone walking, in a shirt, their skin in the
- * theme's person color; an umbrella from above, its ribs darker; and a vendor's cart.
+ * theme's person color; and an umbrella from above, its ribs darker.
  */
 function peopleIcons(theme: Theme): LegendIcon[] {
   const paint = (p: number) => theme.vehiclePaints[p]!;
@@ -117,8 +117,27 @@ function peopleIcons(theme: Theme): LegendIcon[] {
       paint: css(paint(Paint.blue)),
       tone: dim(paint(Paint.blue), 0.6),
     },
-    { pixels: STALL_ICON, paint: css(paint(Paint.orange)), tone: skin },
   ];
+}
+
+/**
+ * Street vendors (life/simulate.ts `Stall`) aren't a map class of their own (their carts are
+ * painted as vehicles), so they have an entry of their own beside the people's: a cart and the
+ * vendor who stands by it.
+ */
+function vendorsEntry(theme: Theme): LegendEntry {
+  const paint = (p: number) => theme.vehiclePaints[p]!;
+  const skin = css(theme.styles.life_person!.color);
+  return {
+    classes: [],
+    label: 'Street vendors (simulated)',
+    glyphs: '',
+    color: css(paint(Paint.orange)),
+    icons: [
+      { pixels: STALL_ICON, paint: css(paint(Paint.orange)), tone: skin },
+      { pixels: FIGURE_MASTERS.adult[10]!, paint: css(paint(Paint.green)), tone: skin },
+    ],
+  };
 }
 
 /**
@@ -165,7 +184,7 @@ const isCellClass = (cls: RenderClass) => depths[classId(cls)]! <= 1;
  * The legend entries for the classes the theme draws at `zoom`, in the theme's order. Classes
  * with the same label (a school marker and school buildings) share an entry. With `present`
  * (the classes on screen), a class drawn in cells is listed only if it is there. The life
- * layer's agents are listed only with `life` (the layer is on), and streetlights only with
+ * layer's agents (street vendors after people) are listed only with `life` (the layer is on), and streetlights only with
  * `lights` (they are lit, the `lightschange` event) and the roads they line on screen.
  */
 export function legendEntries(
@@ -196,6 +215,9 @@ export function legendEntries(
     }
   }
   const entries = [...byLabel.values()];
+  // Vendors show wherever people do, from the same zoom.
+  const people = entries.findIndex((e) => e.classes.includes('life_person'));
+  if (people >= 0) entries.splice(people + 1, 0, vendorsEntry(theme));
   if (lights && (!onScreen || litRoads.some((cls) => onScreen.has(cls)))) {
     entries.push({ ...STREETLIGHTS_ENTRY, classes: [] });
   }

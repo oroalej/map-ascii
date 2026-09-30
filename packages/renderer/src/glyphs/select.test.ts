@@ -256,7 +256,7 @@ describe('glyph tables', () => {
     expect(tables.kinds[classId('admin_city')]).toBe(kindCodes.road);
     // Place names are labels (the overlay), never cells.
     expect(tables.kinds[classId('place_label')]).toBe(0);
-    expect(tables.counts[classId('park')]).toBe(6);
+    expect(tables.counts[classId('park')]).toBe(8);
     const mask = tables.connects[classId('path')]!;
     expect(mask & (1 << classId('road_major'))).not.toBe(0);
     expect(mask & (1 << classId('building'))).toBe(0);
