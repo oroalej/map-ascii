@@ -195,7 +195,7 @@ Tour {                           // cities/<slug>/tours/*.json
   description?: LocalizedText;
   status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources on every step
   steps: {
-    camera: { lat: number; lng: number; zoom: number; pitch: number; bearing: number };
+    camera: { lat: number; lng: number; zoom: number };  // flat and north-up; no other keys
     duration_ms: number;         // how long the step holds after the camera arrives
     fly_ms?: number;             // flight duration (≤ 15 s); default: the 0.8–3 s fly-to rule
     narration: LocalizedText;

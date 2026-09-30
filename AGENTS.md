@@ -59,7 +59,7 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 - The renderer package must not import React or Next. The web app consumes it through a small imperative API (`createAtlas(canvas, options)`).
 - All geographic data flows through the pipeline — never hand-edit generated tiles. Curated facts (dates, stories, name history) live in the city's pack in `packages/content` and are merged by the pipeline.
 - Every shared data shape has a zod schema in `packages/shared`; validate content at build time and fail loudly.
-- App state that affects the view (city, lat, lng, zoom, pitch, bearing, year, tour) is mirrored in the URL. The city is the path (`/<city>`).
+- App state that affects the view (city, lat, lng, zoom, year, tour) is mirrored in the URL. The city is the path (`/<city>`).
 - Don't hardcode any city's name, boundary, landmark coordinates, or tile filenames in the renderer or web app. City specifics live in the city pack, and geography is derived from OSM by the pipeline (exposed via `<city>.meta.json`).
 - Use the generic term "subdivision" in code and schemas. The UI shows the city's local label (e.g. "barangay").
 - Show OSM attribution (and any other source attribution) in the UI at all times. See `docs/DATA.md`.
