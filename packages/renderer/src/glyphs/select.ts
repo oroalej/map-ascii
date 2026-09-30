@@ -25,6 +25,20 @@ export const kindCodes: Record<GlyphKind, number> = {
 /** Width of the glyph table: the most variants any class can have. */
 export const MAX_VARIANTS = 32;
 
+export const GLYPH_BITS = 10;
+/** Highest index; slot zero is blank. */
+export const MAX_GLYPHS = (1 << GLYPH_BITS) - 1;
+/** RGBA8 map/life texels share the class byte with the glyph's two high bits. */
+export const packGlyph = (glyph: number, cls: number) =>
+  [glyph & 255, (cls & 63) | ((glyph >> 8) << 6)] as const;
+export const unpackGlyph = (lo: number, clsByte: number) => ({
+  glyph: lo | ((clsByte >> 6) << 8),
+  cls: clsByte & 63,
+});
+/** Decode one RG8 lookup-table entry (not a packed class byte). */
+export const tableGlyph = (table: Uint8Array, entry: number) =>
+  table[entry * 2]! | (table[entry * 2 + 1]! << 8);
+
 /** Connectivity bits, with north toward the top of the screen. */
 export const Dir = { N: 1, E: 2, S: 4, W: 8 } as const;
 /** First outside side with mapped street/path adjacency within three cells, N/E/S/W order. */
@@ -1014,7 +1028,7 @@ export function selectGlyph(theme: Theme, cls: RenderClass, ctx: CellContext): s
 }
 
 export type GlyphTables = {
-  /** R8, MAX_VARIANTS × MAX_CLASSES: glyph atlas index per (variant, class id). */
+  /** RG8, MAX_VARIANTS × MAX_CLASSES: low/high glyph bytes per (variant, class id). */
   table: Uint8Array;
   /** Kind code per class id (0 = not drawn). */
   kinds: Int32Array;
@@ -1030,13 +1044,18 @@ export type GlyphTables = {
 
 /** Build the select shader's lookup tables from a theme and the glyph atlas's index. */
 export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => number): GlyphTables {
-  // The table is a byte texture, so map glyphs must come first in the atlas (theme.ts).
   const glyphIndex = (glyph: string) => {
     const index = atlasIndex(glyph);
-    if (index > 255) throw new Error(`map glyph ${glyph} has atlas index ${index}, over 255`);
+    if (index < 0 || index > MAX_GLYPHS)
+      throw new Error(`map glyph ${glyph} has atlas index ${index}, outside 0–${MAX_GLYPHS}`);
     return index;
   };
-  const table = new Uint8Array(MAX_VARIANTS * MAX_CLASSES);
+  const table = new Uint8Array(MAX_VARIANTS * MAX_CLASSES * 2);
+  const setGlyph = (entry: number, glyph: string) => {
+    const index = glyphIndex(glyph);
+    table[entry * 2] = index & 255;
+    table[entry * 2 + 1] = index >> 8;
+  };
   const kinds = new Int32Array(MAX_CLASSES);
   const counts = new Int32Array(MAX_CLASSES);
   const connectMasks = new Int32Array(MAX_CLASSES);
@@ -1051,7 +1070,7 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     counts[id] = style.glyphs.length;
     for (let v = 0; v < MAX_VARIANTS; v++) {
       const glyph = style.glyphs[Math.min(v, style.glyphs.length - 1)]!;
-      table[id * MAX_VARIANTS + v] = glyphIndex(glyph);
+      setGlyph(id * MAX_VARIANTS + v, glyph);
     }
     for (const other of connectsTo[cls] ?? []) connectMasks[id]! |= classBit(other);
     colors[id * 3] = ((style.color >> 16) & 0xff) / 255;
@@ -1060,14 +1079,14 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     fills[id] = style.fill ?? 0;
   }
   ridgeGlyphs.forEach((glyph, i) => {
-    table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i] = glyphIndex(glyph);
+    setGlyph(ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i, glyph);
   });
   for (let mask = 0; mask < 16; mask++) {
-    table[WALL_SINGLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('single', mask));
-    table[WALL_DOUBLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('double', mask));
+    setGlyph(WALL_SINGLE_ROW * MAX_VARIANTS + mask, wallGlyph('single', mask));
+    setGlyph(WALL_DOUBLE_ROW * MAX_VARIANTS + mask, wallGlyph('double', mask));
   }
   sextantGlyphs.forEach((glyph, mask) => {
-    table[SEXTANT_ROW * MAX_VARIANTS + mask] = glyphIndex(glyph);
+    setGlyph(SEXTANT_ROW * MAX_VARIANTS + mask, glyph);
   });
   return { table, kinds, counts, connects: connectMasks, colors, fills };
 }

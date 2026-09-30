@@ -87,9 +87,9 @@ float g_shadow = 0.0;
 int g_wind = 0;
 int g_tone = 0;
 
-void emit(float glyph, int cls) {
+void emit(vec2 glyph, int cls) {
   float state = g_state + g_shadow + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
-  o_glyph = vec4(glyph, float(cls) / 255.0, state / 255.0, float(g_bg) / 255.0);
+  o_glyph = vec4(glyph.x, float(cls + (int(glyph.y * 255.0 + 0.5) << 6)) / 255.0, state / 255.0, float(g_bg) / 255.0);
 }
 
 int classAt(ivec2 p) {
@@ -186,7 +186,7 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
   if (mask == 0 || mask == 63) return false;
   g_state = stateOf(unpackId(fgId)) + ${EDGE_STATE}.0;
   g_bg = fillClass(bg);
-  emit(texelFetch(u_table, ivec2(mask % 32, ${SEXTANT_ROW} + mask / 32), 0).r, fg);
+  emit(texelFetch(u_table, ivec2(mask % 32, ${SEXTANT_ROW} + mask / 32), 0).rg, fg);
   return true;
 }
 
@@ -317,12 +317,12 @@ void main() {
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (((u_roadMask >> cls) & 1) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     int curb = wallMask(p, CURBS);
-    float glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).r : 0.0;
+    vec2 glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).rg : vec2(0.0);
     if (curb < 0 && (int(attr.g * 255.0 + 0.5) & ${Flags.crossing}) != 0) {
       bool vertical = variant < 64 || variant >= 191;
       int parity = vertical ? w.y : w.x;
       bool stripe = min(u_cellMeters.x, u_cellMeters.y) >= 1.2 || (parity & 1) == 0;
-      glyph = stripe ? texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_DOUBLE_ROW}), 0).r : 0.0;
+      glyph = stripe ? texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_DOUBLE_ROW}), 0).rg : vec2(0.0);
     }
     emit(glyph, cls);
     return;
@@ -342,11 +342,11 @@ void main() {
           int code = 1 + shopKind * 2 + ((side == 0 || side == 2 ? w.x : w.y) & 1);
           g_wind = code & 3;
           g_tone = code >> 2;
-          emit(texelFetch(u_table, ivec2(shape % 32, ${SEXTANT_ROW} + shape / 32), 0).r, cls);
+          emit(texelFetch(u_table, ivec2(shape % 32, ${SEXTANT_ROW} + shape / 32), 0).rg, cls);
           return;
         }
       }
-      float wall = texelFetch(u_table, ivec2(mask, wallRow), 0).r;
+      vec2 wall = texelFetch(u_table, ivec2(mask, wallRow), 0).rg;
       emit(wall, cls);
       return;
     }
@@ -386,7 +386,7 @@ void main() {
         float theta = float(variant) / 255.0 * ${Math.PI};
         float phi = atan(sin(theta) / u_cellAspect, cos(theta));
         int bin = int(floor(phi / ${Math.PI / 4} + 0.5)) % 4;
-        float ridge = texelFetch(u_table, ivec2(${RIDGE_VARIANT} + bin, ${ROOF_ROW}), 0).r;
+        vec2 ridge = texelFetch(u_table, ivec2(${RIDGE_VARIANT} + bin, ${ROOF_ROW}), 0).rg;
         emit(ridge, cls);
         return;
       }
@@ -437,7 +437,7 @@ void main() {
     v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);
     g_tone = crownIsDry(unpackId(id)) ? ${Tone.dry} : ${Tone.none};
   }
-  float glyph = texelFetch(u_table, ivec2(v, cls), 0).r;
+  vec2 glyph = texelFetch(u_table, ivec2(v, cls), 0).rg;
   emit(glyph, cls);
 }
 `;

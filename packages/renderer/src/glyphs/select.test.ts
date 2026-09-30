@@ -3,6 +3,7 @@ import { classId, MAX_CLASSES, type RenderClass } from '../classes';
 import { buildingRamp, doubleLine, sextantGlyphs, singleLine, themes } from '../theme';
 import {
   buildGlyphTables,
+  tableGlyph,
   buildingVariant,
   cellHash,
   connects,
@@ -265,12 +266,13 @@ describe('glyph tables', () => {
   const tables = buildGlyphTables(themes.dark, index);
 
   it('fills a row per class with its glyphs, padding with the last one', () => {
-    const row = (cls: RenderClass) => [
-      ...tables.table.slice(classId(cls) * MAX_VARIANTS, classId(cls) * MAX_VARIANTS + 20),
-    ];
+    const row = (cls: RenderClass) =>
+      Array.from({ length: 20 }, (_, v) =>
+        tableGlyph(tables.table, classId(cls) * MAX_VARIANTS + v),
+      );
     expect(row('road_major').slice(0, 18)).toEqual(doubleLine.map(index));
     expect(row('building').slice(0, 5)).toEqual(['░', '▒', '▓', '█', '█'].map(index));
-    expect(tables.table.length).toBe(MAX_VARIANTS * MAX_CLASSES);
+    expect(tables.table.length).toBe(MAX_VARIANTS * MAX_CLASSES * 2);
   });
 
   it('records kinds, counts, connectivity, and colors', () => {
@@ -294,7 +296,7 @@ describe('glyph tables', () => {
 
   it('holds the sextants by mask in two rows past the classes', () => {
     const at = (mask: number) =>
-      tables.table[(SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31)];
+      tableGlyph(tables.table, (SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31));
     for (const mask of [1, 21, 31, 32, 42, 62]) expect(at(mask)).toBe(index(sextantGlyphs[mask]!));
     expect(SEXTANT_ROW + 1).toBeLessThan(ROOF_ROW);
   });
@@ -418,9 +420,9 @@ describe('building outlines', () => {
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[WALL_SINGLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S)]).toBe(index('┌'));
-    expect(table[WALL_DOUBLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S)]).toBe(index('╔'));
-    expect(table[WALL_SINGLE_ROW * MAX_VARIANTS]).toBe(index('□'));
+    expect(tableGlyph(table, WALL_SINGLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S))).toBe(index('┌'));
+    expect(tableGlyph(table, WALL_DOUBLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S))).toBe(index('╔'));
+    expect(tableGlyph(table, WALL_SINGLE_ROW * MAX_VARIANTS)).toBe(index('□'));
   });
 });
 
@@ -467,7 +469,7 @@ describe('Place-level ground detail', () => {
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
+    expect(tableGlyph(table, ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2)).toBe(index('│'));
   });
 
   it('picks furniture glyphs by variant, falling back to a dot', () => {

@@ -1,3 +1,4 @@
+import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import {
   doubleLine,
@@ -37,18 +38,18 @@ function draw(glyph: string) {
 }
 
 describe('procedural glyphs', () => {
-  it('rejects a map atlas larger than its byte index before allocating a canvas', () => {
+  it('rejects a map atlas larger than its ten-bit index before allocating a canvas', () => {
     expect(() =>
       buildGlyphAtlas(
-        Array.from({ length: 256 }, (_, i) => `g${i}`),
+        Array.from({ length: MAX_GLYPHS + 1 }, (_, i) => `g${i}`),
         10,
         18,
         undefined,
-        256,
+        MAX_GLYPHS + 1,
       ),
-    ).toThrow('257 > 256');
+    ).toThrow('1025 > 1024');
     for (const theme of Object.values(themes))
-      expect(mapGlyphs(theme).length).toBeLessThanOrEqual(256);
+      expect(mapGlyphs(theme).length).toBeLessThanOrEqual(MAX_GLYPHS + 1);
   });
   it('draws every road glyph as shapes', () => {
     for (const g of [...singleLine, ...doubleLine]) expect(draw(g).drawn, g).toBe(true);
@@ -248,7 +249,7 @@ describe('people', () => {
 });
 
 describe('glyph set', () => {
-  it('fits every map glyph (styles, walls, sextants) in the 256 slots the glyph table holds', () => {
+  it('fits every map glyph (styles, walls, sextants) in the 1024 slots the glyph table holds', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
@@ -266,7 +267,7 @@ describe('glyph set', () => {
       ]);
       expect(new Set(glyphs)).toEqual(expected);
       // Index 0 of the atlas is blank, so the glyphs take indices 1 on.
-      expect(glyphs.length).toBeLessThan(256);
+      expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS);
     }
   });
 

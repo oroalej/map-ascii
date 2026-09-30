@@ -1,9 +1,10 @@
 /**
- * Agents → the life layer's texels (RGBA8 per cell: glyph index, life class id, agent kind bits,
+ * Agents → the life layer's texels (RGBA8 per cell: low glyph byte, packed glyph/class byte, agent kind bits,
  * and for vehicles their paint and part, for people their paint, part, and candle), which the
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
 import { classId } from '../classes';
+import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
 import {
@@ -199,11 +200,10 @@ function drawAgent(
     variant = x >= y ? 0 : 1;
   }
   const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
-  if (index <= 0 || index > 255) return people;
+  if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  out[at] = index;
-  out[at + 1] = classId(cls);
+  [out[at], out[at + 1]] = packGlyph(index, classId(cls));
   out[at + 2] = agentBit[agent.kind];
   out[at + 3] = spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255;
   return people + 1;
@@ -277,11 +277,10 @@ function drawPeople(
   };
   const put = (c: number, r: number, glyph: string, byte: number) => {
     const index = glyphIndex(glyph);
-    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > 255) return false;
+    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return false;
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
-    out[at] = index;
-    out[at + 1] = cls;
+    [out[at], out[at + 1]] = packGlyph(index, cls);
     out[at + 2] = bits;
     out[at + 3] = byte;
     return true;
@@ -451,11 +450,10 @@ function stampMaster(
       if (mask === 0) continue;
       const [cls, bits, byte] = texel(tone > inked * toneShare);
       const index = glyphIndex(sextantGlyphs[mask]!);
-      if (index <= 0 || index > 255) continue;
+      if (index <= 0 || index > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      out[at] = index;
-      out[at + 1] = cls;
+      [out[at], out[at + 1]] = packGlyph(index, cls);
       out[at + 2] = bits;
       out[at + 3] = byte;
       any = true;
@@ -523,10 +521,9 @@ function drawBird(
     glyph = glyphs[Math.min(pose === BirdPose.perched ? 2 : pose, glyphs.length - 1)];
   }
   const index = glyph ? glyphIndex(glyph) : 0;
-  if (index <= 0 || index > 255) return false;
+  if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
-  out[at] = index;
-  out[at + 1] = cls;
+  [out[at], out[at + 1]] = packGlyph(index, cls);
   out[at + 2] = bits;
   out[at + 3] = birdByte(species, false, fit === 'cell');
   return true;
@@ -621,10 +618,9 @@ function drawPet(
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
   const index = glyphIndex(art.glyph(headingOf(x, y)));
-  if (index <= 0 || index > 255) return false;
+  if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
-  out[at] = index;
-  out[at + 1] = cls;
+  [out[at], out[at + 1]] = packGlyph(index, cls);
   out[at + 2] = bits;
   // Drawn like a canopy: the full ink its paint, the tone ink darker (shaders/glyph.ts).
   out[at + 3] = personByte(paint, PersonPart.canopy);
@@ -675,11 +671,10 @@ function stamp(
       const part = planPart(spec, forward / length + 0.5, right / width + 0.5);
       if (part === null) continue;
       const [glyph, cls, bits, byte] = texel(part);
-      if (glyph <= 0 || glyph > 255) continue;
+      if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      out[at] = glyph;
-      out[at + 1] = cls;
+      [out[at], out[at + 1]] = packGlyph(glyph, cls);
       out[at + 2] = bits;
       out[at + 3] = byte;
       any = true;
@@ -748,9 +743,8 @@ function drawLine(
   marks.forEach(({ at, glyph }, k) => {
     const tip = line.tip && k === marks.length - 1 ? line.tip : undefined;
     const index = tip ? glyphIndex(tip.glyph) : glyph;
-    if (index <= 0 || index > 255) return;
-    out[at] = index;
-    out[at + 1] = cls;
+    if (index <= 0 || index > MAX_GLYPHS) return;
+    [out[at], out[at + 1]] = packGlyph(index, cls);
     out[at + 2] = CellBit.boat;
     out[at + 3] = vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body);
   });

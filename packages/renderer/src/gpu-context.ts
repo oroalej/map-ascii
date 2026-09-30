@@ -7,7 +7,7 @@
 import type * as twgl from 'twgl.js';
 import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
-import { buildGlyphTables, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
+import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
 import { createProgram, createTexture, type GL } from './gpu';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
@@ -98,10 +98,10 @@ export function createMapGlyphs(
   font: string,
 ): MapGlyphs {
   const cellDev = toDevice(cellCss, dpr);
-  const atlas = buildGlyphAtlas(mapGlyphs(theme), cellDev.w, cellDev.h, font, 256);
+  const atlas = buildGlyphAtlas(mapGlyphs(theme), cellDev.w, cellDev.h, font, MAX_GLYPHS + 1);
   const atlasTex = createTexture(gl, gl.R8, gl.RED, atlas.width, atlas.height, atlas.data);
   const tables = buildGlyphTables(theme, atlas.index);
-  const tableTex = createTexture(gl, gl.R8, gl.RED, MAX_VARIANTS, MAX_CLASSES, tables.table);
+  const tableTex = createTexture(gl, gl.RG8, gl.RG, MAX_VARIANTS, MAX_CLASSES, tables.table);
   return {
     cellDev,
     atlas,

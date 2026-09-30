@@ -222,7 +222,7 @@ vec3 lampLit(vec3 color, float pool) {
 
 float groundAt(ivec2 c) {
   c = clamp(c, ivec2(0), textureSize(u_glyphs, 0) - 1);
-  int k = int(texelFetch(u_glyphs, c, 0).g * 255.0 + 0.5);
+  int k = int(texelFetch(u_glyphs, c, 0).g * 255.0 + 0.5) & 63;
   return (u_cellBits[k] & ${CellBit.person}) != 0 ? 1.0 : 0.3;
 }
 
@@ -330,7 +330,7 @@ void main() {
   }
 
   vec4 g = texelFetch(u_glyphs, cell, 0);
-  int cls = int(g.g * 255.0 + 0.5);
+  int cls = int(g.g * 255.0 + 0.5) & 63;
   int rawState = int(g.b * 255.0 + 0.5);
   bool edge = (rawState & ${EDGE_STATE}) != 0;
   int windLevel = (rawState >> ${WIND_SHIFT}) & 3;
@@ -393,8 +393,8 @@ void main() {
   bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[cls] & ${CellBit.grounds}) != 0 &&
     texelFetch(u_attr, cell, 0).r == 0.0;
   if (lifeBit != 0 && ((u_cellBits[cls] & lifeBit) != 0 || onGrounds)) {
-    int lifeGlyph = int(life.r * 255.0 + 0.5);
-    int lifeClass = int(life.g * 255.0 + 0.5);
+    int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
+    int lifeClass = int(life.g * 255.0 + 0.5) & 63;
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
     int lifeByte = int(life.a * 255.0 + 0.5);
@@ -434,7 +434,7 @@ void main() {
     o_color = vec4(rainOver(back, cell, inCell), 1.0);
     return;
   }
-  int glyph = int(g.r * 255.0 + 0.5);
+  int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
   if (water) {
     // Fish only in rivers and ponds; rain splashes on any water, below boats and labels.
     int effect = waterEffect(cell, cls == u_fishWater.x || cls == u_fishWater.y);

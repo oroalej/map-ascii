@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
+import { unpackGlyph } from '../glyphs/select';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
@@ -53,6 +54,24 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it('packs high glyph indices with the class without changing agent attributes', () => {
+    for (const glyph of [255, 256, 1023]) {
+      const out = new Uint8Array(grid.cols * grid.rows * 4);
+      expect(
+        packLife(
+          out,
+          grid,
+          [{ kind: 'vehicle', lng: 2.5, lat: 1.2, flap: 0 }],
+          themes.dark,
+          () => glyph,
+        ),
+      ).toBe(1);
+      const [lo, packed, bits, byte] = cell(out, 2, 1);
+      expect(unpackGlyph(lo!, packed!)).toEqual({ glyph, cls: classId('life_vehicle') });
+      expect(bits).toBe(agentBit.vehicle);
+      expect(byte).toBe(255);
+    }
+  });
   it('reuses an atlas lookup without changing packed vehicles', () => {
     let lookups = 0;
     const lookup = (glyph: string) => {
