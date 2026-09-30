@@ -534,6 +534,27 @@ describe('LifeWorld', () => {
     for (let i = 0; i < 10; i++) world.step(0.1, undefined, 16);
     expect(where()).not.toEqual(before);
   });
+
+  it('moves only the agents near the view', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'n', tile, life: road }]);
+    const vehicles = () =>
+      world.visible(18, 1, center).filter((a) => a.kind === 'vehicle' && !a.parked);
+    const before = vehicles();
+    // The tile's western tenth: 100 m of margin reaches ~0.2 of the way across.
+    const [west, north] = tileToLngLat(tile, { x: 0, y: 0 });
+    const [east, south] = tileToLngLat(tile, { x: 400, y: 4096 });
+    const [reach] = tileToLngLat(tile, { x: 400 + 110 * perMeter, y: 0 });
+    const far = before.filter((a) => a.lng > reach + 0.0005);
+    expect(far.length).toBeGreaterThan(0);
+    for (let i = 0; i < 10; i++) world.step(0.1, undefined, 16, [west, south, east, north]);
+    const after = vehicles();
+    // Far off, each is still where it was; nearer, some have moved on.
+    const at = new Set(after.map((a) => `${a.lng},${a.lat}`));
+    expect(far.every((a) => at.has(`${a.lng},${a.lat}`))).toBe(true);
+    const near = before.filter((a) => a.lng < east);
+    if (near.length > 0) expect(near.some((a) => !at.has(`${a.lng},${a.lat}`))).toBe(true);
+  });
 });
 
 describe('vehicles and boats', () => {
@@ -1015,6 +1036,13 @@ describe('trains crossing tiles', () => {
     westLife.movers.push(m);
     return { world, m };
   };
+
+  it('run on out of the view (they cross tiles, so they never wait)', () => {
+    const { world, m } = setUp(false);
+    const x = m.x;
+    for (let i = 0; i < 5; i++) world.step(0.1, undefined, 16, [0, 0, 0.001, 0.001]);
+    expect(m.x).not.toBe(x);
+  });
 
   it('run on into the next tile, the same way, cars behind', () => {
     const { world, m } = setUp(true);

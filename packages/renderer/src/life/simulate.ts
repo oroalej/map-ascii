@@ -63,6 +63,9 @@ const NO_MOVERS: readonly Mover[] = [];
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
 
+/** Agents this far outside the view's bounds still move, m, so those panned into view are. */
+const STEP_MARGIN_M = 100;
+
 /**
  * Whether a point in `tile`'s units is inside `bounds` (none: everywhere), `margin` tile units
  * around them. The bounds' corners are enough: mercator keeps lines of longitude and latitude
@@ -671,10 +674,10 @@ export class TileLife {
   }
 
   /** People at places walk to their next spot, and stand there a while (`PLACES` `pause`). */
-  private stepGatherers(dt: number) {
+  private stepGatherers(dt: number, near?: (x: number, y: number) => boolean) {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
-      if (g.behavior === 'sit') continue;
+      if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
       if (g.pause > 0) {
         g.pause -= dt;
         continue;
@@ -1029,7 +1032,10 @@ export class TileLife {
    * the nearest one ahead on its line, going its way, that it can't pass side by side. Queues
    * across junctions, cross traffic, and tile borders are not looked at.
    */
-  private followSpeeds(shows?: (kind: AgentKind) => boolean): Float64Array {
+  private followSpeeds(
+    shows?: (kind: AgentKind) => boolean,
+    near?: (x: number, y: number) => boolean,
+  ): Float64Array {
     const { movers, perMeter } = this;
     // Reused between steps; grown when there are more movers.
     if (this.speeds.length < movers.length) {
@@ -1044,6 +1050,7 @@ export class TileLife {
       const m = movers[i]!;
       speeds[i] = m.speed;
       if (!m.vehicle || (shows && !shows(m.kind))) continue;
+      if (near && !m.train && !near(m.x, m.y)) continue;
       const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
       const group = groups.get(key);
       if (group) group.push(i);
@@ -1079,18 +1086,21 @@ export class TileLife {
   /**
    * Move everything on by `dt` seconds. `gustAt` is how hard the wind blows in a tree's crown at
    * a point (tile units), which can flush birds out of it. With `shows`, only the kinds it shows
-   * move (the others wait where they are, unseen).
+   * move, and with `near` (tile units), only those near the view, trains aside (they run on
+   * from tile to tile); the others wait where they are, unseen.
    */
   step(
     dt: number,
     gustAt?: (x: number, y: number) => number,
     shows?: (kind: AgentKind) => boolean,
+    near?: (x: number, y: number) => boolean,
   ) {
     this.time += dt;
     const { rng } = this;
-    const speeds = this.followSpeeds(shows);
+    const speeds = this.followSpeeds(shows, near);
     for (const [i, m] of this.movers.entries()) {
       if (shows && !shows(m.kind)) continue;
+      if (near && !m.train && !near(m.x, m.y)) continue;
       if (m.train) {
         if (m.train.edge) continue;
         if (m.pause > 0) {
@@ -1130,8 +1140,8 @@ export class TileLife {
       }
       this.advance(m, speeds[i]! * dt);
     }
-    if (!shows || shows('person')) this.stepGatherers(dt);
-    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt);
+    if (!shows || shows('person')) this.stepGatherers(dt, near);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near);
   }
 
   /**
@@ -1150,11 +1160,16 @@ export class TileLife {
     }
   }
 
-  private stepFlocks(dt: number, gustAt?: (x: number, y: number) => number) {
+  private stepFlocks(
+    dt: number,
+    gustAt?: (x: number, y: number) => number,
+    near?: (x: number, y: number) => boolean,
+  ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
     const speed = BIRDS.speed * this.perMeter;
     for (const flock of this.flocks) {
+      if (near && !near(flock.x, flock.y)) continue;
       flock.scatter = Math.max(0, flock.scatter - dt);
       flock.stay -= dt;
       // In a tree: stay a while, unless a gust through the crown flushes the flock out.
@@ -1323,9 +1338,15 @@ export class LifeWorld {
    * Move every tile's agents on by `dt` seconds. `gustAt(lng, lat)` is how hard the wind blows
    * in a tree's crown there (life/wind.ts strength × glyphs/select.ts treeGust); a strong gust
    * flushes birds out of the tree. With `zoom`, only the kinds that show at it move (config.ts
-   * `LIFE_ZOOM`): the others wait, unseen, until they show.
+   * `LIFE_ZOOM`): the others wait, unseen, until they show. With `bounds` (the view's), only
+   * those near it move (`STEP_MARGIN_M`), trains aside.
    */
-  step(dt: number, gustAt?: (lng: number, lat: number) => number, zoom?: number) {
+  step(
+    dt: number,
+    gustAt?: (lng: number, lat: number) => number,
+    zoom?: number,
+    bounds?: LngLatBounds,
+  ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
     this.clock += clamped;
@@ -1337,7 +1358,8 @@ export class LifeWorld {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
         : undefined;
-      tile.step(clamped, inTile, shows);
+      const near = bounds && viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
+      tile.step(clamped, inTile, shows, near);
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileId; m: Mover }[] | undefined;

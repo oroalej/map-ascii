@@ -704,7 +704,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         const x = grid.originCol + Math.floor(col);
         const y = grid.originRow + Math.floor(row);
         return wind.strength * treeGust(x, y, time, wind.dir);
-      }, camera.zoom);
+      }, camera.zoom, viewBounds());
       lastLifeStep = at;
       agents = world.visible(
         camera.zoom,
