@@ -106,6 +106,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
     'building_market',
     'building_station',
     'building_part',
+    'building_woodwork',
   ],
   ['water_river', 'water_stream'],
   ['coastline'],
@@ -114,6 +115,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['tree_crown'],
   ['seating'],
   ['shrubs'],
+  ['planting'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
   // Under the parks, woods, and fields drawn on it.
   ['grass'],
@@ -138,7 +140,8 @@ export const groundClasses: readonly RenderClass[] = [
 export function crownSurfaces(): Int32Array {
   const surfaces = new Int32Array(MAX_CLASSES);
   for (const cls of ['road_major', 'road_mid', 'road_minor']) surfaces[classId(cls)] = 1;
-  for (const cls of [...groundClasses, 'building_part']) surfaces[classId(cls)] = 2;
+  for (const cls of [...groundClasses, 'building_part', 'building_woodwork'])
+    surfaces[classId(cls)] = 2;
   return surfaces;
 }
 

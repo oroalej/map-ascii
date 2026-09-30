@@ -21,6 +21,7 @@ const coverClass: Record<LandCover, AtlasClass> = {
   parking: 'parking',
   woods: 'trees',
   shrubs: 'shrubs',
+  planting: 'planting',
 };
 
 /** How close (meters) an OSM tree must be to a curated one to count as the same tree. */

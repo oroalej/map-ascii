@@ -155,6 +155,8 @@ int fillClass(int cls) {
 
 // The wall row a feature's outline uses at this zoom, or -1 (glyphs/select.ts wallStyle).
 int wallRowFor(int kind, vec4 attr) {
+  // Low stone edges keep an outline even when their height rounds to zero in the byte buffer.
+  if (kind == ${kindCodes.seating} && u_zoom >= ${float(OUTLINE_ZOOM.building)}) return ${WALL_SINGLE_ROW};
   // Crown gb attributes encode the local surface, rather than feature flags.
   if (kind == ${kindCodes.foliage}) return -1;
   int flags = int(attr.g * 255.0 + 0.5);
@@ -462,12 +464,12 @@ void main() {
     v = imod(w.y, u_count[cls]);
   } else if (kind == ${kindCodes.scatter}) {
     v = int(cellHash(w) % uint(u_count[cls]));
-  } else if (kind == ${kindCodes.grass}) {
+  } else if (kind == ${kindCodes.grass} || kind == ${kindCodes.planting}) {
     // Wind (glyphs/select.ts grassCell): tufts at rest, tinted by patch; blades lean and lighten
     // by wind level in a gust and lift again in its wake.
     vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
     int tone;
-    v = min(grassVariant(w, front.x, tone), u_count[cls] - 1);
+    v = min(kind == ${kindCodes.planting} ? plantingVariant(w, front.x, tone) : grassVariant(w, front.x, tone), u_count[cls] - 1);
     g_tone = tone;
     g_wind = windLevel(front.x, front.y);
   } else if (kind == ${kindCodes.crop}) {

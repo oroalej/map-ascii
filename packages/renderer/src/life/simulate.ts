@@ -191,6 +191,8 @@ export type Mover = {
   waiting?: number;
   /** Motor vehicles: immutable exit intent and rear-clearance state for turn indicators. */
   routing?: VehicleRouting;
+  /** Immutable endpoint choices through an explicitly linked signal zone. */
+  junctionRoute?: { key: string; exits: readonly number[] };
   /** Non-motor craft intent; motors use routing.plan.exit exclusively. */
   next?: number;
   /** Incoming endpoint code, retained for the outgoing half of a curve. */
@@ -604,6 +606,7 @@ export class TileLife {
         if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
         // Start somewhere along the line.
         this.advance(mover, rng() * this.lineLength(line), false);
+        if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
           this.moveTrain(mover, trainLength(train.cars) * this.perMeter);
@@ -1597,13 +1600,28 @@ export class TileLife {
     }
   }
 
-  /** Move a mover `distance` tile units along its lines, turning at junctions and dead ends. */
+  /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
+  private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
+    if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
+    const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+    if (junctions && this.exitOptions(m, end).length) return;
+    const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
+    const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
+    return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
+  }
+
+  /** Move along legal lines; one-way dead ends hold instead of reversing. */
   private advance(m: Mover, distance: number, junctions = true) {
     const { coords } = this.geo;
     let left = distance;
     let moved = 0;
     // Bounded, so zero-length segments can't loop forever.
-    for (let guard = 0; guard < 256; guard++) {
+    for (let guard = 0; guard < 256 && left > 0; guard++) {
+      // Also protects initial placement, oversized steps, and collision retries. Re-evaluate
+      // after each junction in case this step enters a one-way line ending at a dead end.
+      const room = this.oneWayEndRoom(m, junctions);
+      if (room !== undefined) left = Math.min(left, room);
+      if (left <= 0) break;
       const to = m.from + m.dir;
       const length = this.segment(m.from, to);
       const traveled = Math.min(left, Math.max(0, length - m.d));
@@ -1652,7 +1670,6 @@ export class TileLife {
         usable.includes(this.geo.kinds[code >> 1]! as LifeLine) &&
         !(
           m.kind === 'vehicle' &&
-          m.vehicle &&
           this.geo.oneway?.[code >> 1] &&
           this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
         ),
@@ -1744,10 +1761,67 @@ export class TileLife {
     if (remaining <= lead && !m.routing.indicating) m.routing = { ...m.routing, indicating: true };
   }
 
+  private prepareSignalRoute(m: Mover) {
+    if (!this.junctionIndex.hasLinked || m.kind !== 'vehicle' || m.junctionRoute) return;
+    const movement = this.junctionIndex.movement(m, 60 * this.perMeter);
+    if (!movement?.junction.linked || movement.ahead < 0) return;
+    const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+    const options = this.exitOptions(m, end);
+    if (hasTurnSignals(m.vehicle) && m.routing && !m.routing.plan)
+      m.routing = { ...m.routing, plan: this.plannedExit(m, end, options) };
+    let code = m.routing?.plan?.exit ?? m.next;
+    if (code === undefined && options.length) {
+      code =
+        options[
+          Math.floor(
+            (hashString(`${this.routingSeed}/${m.line}/${m.dir}`) / 0x1_0000_0000) * options.length,
+          )
+        ];
+      m.next = code;
+    }
+    if (code === undefined || code < 0) return;
+    const exits: number[] = [];
+    const future = { ...m };
+    for (let step = 0; step < 16; step++) {
+      if (exits.includes(code)) return; // Do not reserve a route trapped inside the zone.
+      exits.push(code);
+      const line: number = code >> 1,
+        dir: 1 | -1 = code & 1 ? -1 : 1;
+      if (
+        movement.junction.arms.some((a) => a.line === line && a.out === dir && a.outbound !== false)
+      ) {
+        m.junctionRoute = { key: movement.key, exits };
+        return;
+      }
+      future.line = line;
+      future.dir = dir;
+      const vertex: number = dir === 1 ? this.last(line) : this.first(line);
+      future.from = vertex;
+      if (future.routing) future.routing = { ...future.routing, turns: future.routing.turns + 1 };
+      const next = this.exitOptions(future, vertex);
+      if (!next.length) return;
+      code =
+        this.plannedExit(future, vertex, next)?.exit ??
+        next[
+          Math.floor(
+            (hashString(`${this.routingSeed}/${line}/${dir}`) / 0x1_0000_0000) * next.length,
+          )
+        ]!;
+    }
+  }
+
   /** At a line's end: consume a remembered exit, else keep the existing non-motor routing. */
   private turn(m: Mover) {
     if (m.vehicle) m.came = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const options = this.exitOptions(m, m.from);
+    if (!options.length && m.kind === 'vehicle' && this.geo.oneway?.[m.line]) {
+      // Defensive terminal clamp: keep a valid incoming cursor, never point against flow.
+      // Normal movement brakes before this endpoint through oneWayEndRoom.
+      m.from -= m.dir;
+      m.d = this.segment(m.from, m.from + m.dir);
+      m.next = undefined;
+      return;
+    }
     const motor = m.kind === 'vehicle' && hasTurnSignals(m.vehicle);
     const planned = m.routing?.plan;
     const plan = motor
@@ -1790,24 +1864,33 @@ export class TileLife {
       }
       return;
     }
-    const code = plan
-      ? plan.exit
-      : m.vehicle && m.next !== undefined && options.includes(m.next)
-        ? m.next
-        : m.train
-          ? this.straightest(m, options)
-          : options[
-              Math.floor(
-                (m.vehicle
-                  ? this.routeRng()
-                  : m.kind === 'cat'
-                    ? this.catRng()
-                    : m.kind === 'dog'
-                      ? this.dogRng()
-                      : this.rng()) * options.length,
-              )
-            ]!;
+    const reserved = m.junctionRoute?.exits[0];
+    const code =
+      reserved !== undefined && options.includes(reserved)
+        ? reserved
+        : plan
+          ? plan.exit
+          : m.vehicle && m.next !== undefined && options.includes(m.next)
+            ? m.next
+            : m.train
+              ? this.straightest(m, options)
+              : options[
+                  Math.floor(
+                    (m.vehicle
+                      ? this.routeRng()
+                      : m.kind === 'cat'
+                        ? this.catRng()
+                        : m.kind === 'dog'
+                          ? this.dogRng()
+                          : this.rng()) * options.length,
+                  )
+                ]!;
     m.next = undefined;
+    if (m.junctionRoute)
+      m.junctionRoute =
+        m.junctionRoute.exits.length > 1
+          ? { ...m.junctionRoute, exits: m.junctionRoute.exits.slice(1) }
+          : undefined;
     m.line = code >> 1;
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
@@ -2067,6 +2150,7 @@ export class TileLife {
       const m = movers[i]!;
       if (!m.vehicle || !active(m)) continue;
       this.prepareTurn(m, i);
+      this.prepareSignalRoute(m);
       this.progress[i] = (m.dir * this.along[m.from]! + m.d) / pm;
       this.offsets[i] = this.offsetOf(m);
       const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
@@ -2094,7 +2178,9 @@ export class TileLife {
       let movement = previous;
       if (previous) {
         const j = previous.junction;
-        const past = (m.x - j.x) * previous.outHx + (m.y - j.y) * previous.outHy;
+        const past =
+          (m.x - (previous.exit.x ?? j.x)) * previous.outHx +
+          (m.y - (previous.exit.y ?? j.y)) * previous.outHy;
         const sameApproach =
           m.line === previous.line &&
           m.dir === previous.dir &&
@@ -2102,6 +2188,9 @@ export class TileLife {
         if (!sameApproach && past > j.radius + length / 2) {
           table.release(m);
           movement = undefined;
+        } else if (sameApproach && previous.ahead >= 0) {
+          // Refresh a pending route as it becomes known; retain the committed route inside.
+          movement = this.junctionIndex.movement(m, 60 * pm) ?? previous;
         }
       }
       movement ??= this.junctionIndex.movement(
@@ -2117,7 +2206,12 @@ export class TileLife {
         m.line === movement.line && m.dir === movement.dir
           ? m.dir * (movement.stop - this.along[m.from]! - m.dir * m.d)
           : -Infinity;
-      const ahead = before - j.radius - JUNCTION.gap * pm - length / 2;
+      const ahead =
+        before -
+        (movement.entry?.stopAlong !== undefined
+          ? movement.dir * (movement.stop - movement.entry.stopAlong)
+          : j.radius + JUNCTION.gap * pm) -
+        length / 2;
       const inside = ahead < -0.05 * pm;
       // Do not change the incoming/outgoing movement when a holder crosses its endpoint.
       movement = { ...movement, ahead };
@@ -2132,7 +2226,13 @@ export class TileLife {
       }
       const ready =
         room >= length + FOLLOW.minGap * pm &&
-        this.signals.allows(m, j.x, j.y, clock, Math.max(0, ahead));
+        this.signals.allows(
+          m,
+          movement.entry?.x ?? j.x,
+          movement.entry?.y ?? j.y,
+          clock,
+          Math.max(0, ahead),
+        );
       table.request({ m, life: this, tileKey, index, movement, ready, inside, room: room / pm });
     }
   }
@@ -2144,6 +2244,11 @@ export class TileLife {
       const m = movers[i]!;
       speeds[i] = m.speed;
       caps[i] = Infinity;
+      const room = this.oneWayEndRoom(m);
+      if (room !== undefined) {
+        speeds[i] = Math.min(m.speed, approach(room, 0, kinematicsOf(m.vehicle).brake * pm));
+        caps[i] = room / dt;
+      }
     }
     const limit = (i: number, j: number, separation: number) => {
       const m = movers[i]!,
@@ -2273,7 +2378,16 @@ export class TileLife {
           limit.target = speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
-          this.signals.vehicleLimit(m, dt, clock, limit);
+          const movement = table.movement(m);
+          this.signals.vehicleLimit(
+            m,
+            dt,
+            clock,
+            limit,
+            movement && table.granted(m) && movement.ahead < -0.05 * this.perMeter
+              ? movement.key
+              : undefined,
+          );
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
         } else

@@ -19,7 +19,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         .map((file) => JSON.parse(readFileSync(new URL(file, directory), 'utf8')) as SiteDetail)
     : [];
   for (const detail of details.filter((detail) => detail.walks.length > 0)) {
-    test(`${city.name}: plaza details retain area selection with Life off and on`, async ({
+    test(`${city.name}: ${detail.title} details retain area selection with Life off and on`, async ({
       page,
     }, info) => {
       const errors: string[] = [];

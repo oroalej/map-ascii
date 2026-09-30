@@ -1,5 +1,6 @@
 import type { TileId } from '../tiles';
-import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
+import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
+import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
 import { SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
 import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
@@ -49,8 +50,16 @@ export function signalState(seed: number, clock: number, midBlock = false): Sign
   throw new Error('invalid signal clock');
 }
 type Point = { x: number; y: number };
-type Signal = Point & { radius: number; a: number; b: number; seed: number };
-type Stop = { along: number; signal: Signal; group: 'a' | 'b' };
+type Signal = Point & {
+  radius: number;
+  a: number;
+  b: number;
+  seed: number;
+  approaches?: SignalApproach[];
+  members?: Point[];
+  key?: string;
+};
+type Stop = { along: number; signal: Signal; group: 'a' | 'b'; dir?: 1 | -1; exact?: boolean };
 const axis = (x: number, y: number) => ((Math.atan2(x, -y) * 180) / Math.PI + 180) % 180;
 const angle = (a: number, b: number) => Math.min(Math.abs(a - b), 180 - Math.abs(a - b));
 const group = (s: Signal, x: number, y: number): 'a' | 'b' =>
@@ -70,6 +79,7 @@ export class SignalControl {
     for (let i = 0; i < values.length; i += SIGNAL_STRIDE) {
       const x = values[i]!,
         y = values[i + 1]!;
+      const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
       this.signals.push({
         x,
         y,
@@ -77,12 +87,28 @@ export class SignalControl {
         a: values[i + 3]!,
         b: values[i + 4]!,
         seed: placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
+        approaches: layout && signalApproaches(tile, geo, layout, along),
+        key: layout && signalJunctionKey(layout),
+        members: layout?.members.map((p) => lngLatToTile(tile, ...p)),
       });
     }
     for (let line = 0; line < geo.kinds.length; line++) {
       if (geo.kinds[line]! > LifeLine.path) continue;
       const stops: Stop[] = [];
-      for (const s of this.signals)
+      for (const s of this.signals) {
+        if (s.approaches) {
+          for (const a of s.approaches) {
+            if (a.line === line && a.arm.inbound && a.stopAlong !== undefined)
+              stops.push({
+                along: a.stopAlong,
+                signal: s,
+                group: a.arm.group,
+                dir: a.arm.direction,
+                exact: true,
+              });
+          }
+          continue;
+        }
         for (let v = geo.starts[line]! + 1; v < geo.starts[line + 1]!; v++) {
           const x = geo.coords[(v - 1) * 2]!,
             y = geo.coords[(v - 1) * 2 + 1]!;
@@ -98,6 +124,7 @@ export class SignalControl {
           if (!stops.some((stop) => stop.signal === s && Math.abs(stop.along - at) < perMeter))
             stops.push({ along: at, signal: s, group: group(s, dx, dy) });
         }
+      }
       if (stops.length) this.stops.set(line, stops);
     }
   }
@@ -106,12 +133,15 @@ export class SignalControl {
     this.vehicleLimit(m, dt, clock, out);
     return Math.min(out.target, out.cap);
   }
-  vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit): void {
+  vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit, clearing?: string): void {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
+      if (stop.dir !== undefined && stop.dir !== m.dir) continue;
+      if (clearing && stop.signal.key === clearing) continue;
       const ahead =
         m.dir * (stop.along - progress) -
-        (stop.signal.radius + SIGNAL.gap + (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
+        ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
+          (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
           this.perMeter;
       if (ahead < -0.5 * this.perMeter || ahead >= SIGNAL.lookahead * this.perMeter) continue;
       const state = signalState(stop.signal.seed, clock, stop.signal.a < 0)[stop.group];
@@ -125,6 +155,21 @@ export class SignalControl {
   }
   allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
     for (const s of this.signals) {
+      if (s.approaches) {
+        const entry = s.approaches.find(
+          (a) =>
+            a.arm.inbound &&
+            a.line === m.line &&
+            a.arm.direction === m.dir &&
+            Math.hypot(a.x - x, a.y - y) <= 2,
+        );
+        if (!entry) continue;
+        const state = signalState(s.seed, clock, s.a < 0)[entry.arm.group];
+        const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
+        if (state === 'red' || (state === 'amber' && (m.v ?? m.speed) ** 2 / (2 * brake) <= ahead))
+          return false;
+        continue;
+      }
       if (Math.hypot(s.x - x, s.y - y) > (s.radius + 2) * this.perMeter) continue;
       const state = signalState(s.seed, clock, s.a < 0)[group(s, m.hx, m.hy)];
       const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
@@ -143,18 +188,25 @@ export class SignalControl {
       hy = dy / length;
     for (const s of this.signals) {
       const radius = (s.radius + 0.5) * this.perMeter;
-      const px = s.x - from.x,
-        py = s.y - from.y;
-      if (Math.hypot(px, py) < radius - 0.01 * this.perMeter) continue;
-      const projection = px * hx + py * hy,
-        lateral2 = px * px + py * py - projection * projection;
-      if (projection < 0 || lateral2 >= radius * radius) continue;
-      const entry = projection - Math.sqrt(Math.max(0, radius * radius - lateral2));
-      if (entry < -0.01 * this.perMeter || entry > distance) continue;
-      const state = signalState(s.seed, clock, s.a < 0),
-        walking = group(s, hx, hy) === 'a' ? state.walkA : state.walkB;
-      if (!walking || state.left < SIGNAL.walkMin)
-        distance = Math.min(distance, Math.max(0, entry));
+      const centers = s.members ?? [s];
+      if (
+        centers.some((p) => Math.hypot(p.x - from.x, p.y - from.y) < radius - 0.01 * this.perMeter)
+      )
+        continue;
+      for (const center of centers) {
+        const px = center.x - from.x,
+          py = center.y - from.y;
+        if (Math.hypot(px, py) < radius - 0.01 * this.perMeter) continue;
+        const projection = px * hx + py * hy,
+          lateral2 = px * px + py * py - projection * projection;
+        if (projection < 0 || lateral2 >= radius * radius) continue;
+        const entry = projection - Math.sqrt(Math.max(0, radius * radius - lateral2));
+        if (entry < -0.01 * this.perMeter || entry > distance) continue;
+        const state = signalState(s.seed, clock, s.a < 0),
+          walking = group(s, hx, hy) === 'a' ? state.walkA : state.walkB;
+        if (!walking || state.left < SIGNAL.walkMin)
+          distance = Math.min(distance, Math.max(0, entry));
+      }
     }
     return distance;
   }

@@ -1,7 +1,13 @@
 /** Static street hardware, independent of the life population and lighting texture. */
 import { bandVisibility } from '@atlas/shared';
 import { MAX_GLYPHS, packGlyph, wallGlyph } from '../glyphs/select';
-import { EXTENT, MERCATOR_METERS, metersPerUnit, tileToLngLat } from '../raster/geometry';
+import {
+  EXTENT,
+  MERCATOR_METERS,
+  metersPerUnit,
+  tileToLngLat,
+  lngLatToTile,
+} from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { SIGNAL_STRIDE, type LifeGeometry } from './geometry';
 import {
@@ -26,6 +32,7 @@ export type StreetFixture = FixtureBody &
         style?: 'streetlight' | 'lantern';
       }
     | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
+    | { kind: 'flagpole'; flag: 'PH' }
   );
 export type FixtureVisibility = { streetlights: boolean; trafficSignals: boolean };
 export type FixtureGrid = LightGrid & {
@@ -46,6 +53,13 @@ export const FixturePart = {
   green: 7,
   signal: 8,
   casing: 9,
+  flagBlue: 10,
+  flagRed: 11,
+  flagWhite: 12,
+  flagGold: 13,
+  flagMast: 14,
+  flagPlinth: 15,
+  flagFoot: 16,
 } as const;
 const signalColor = { red: 0, amber: 1, green: 2 } as const;
 
@@ -96,6 +110,13 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
       roadCenter: tileToLngLat(tile, { x: geo.lamps[i + 6]!, y: geo.lamps[i + 7]! }),
     });
   }
+  const poles = geo.flagpoles ?? [];
+  for (let i = 0; i < poles.length; i += 3) {
+    const x = poles[i]!,
+      y = poles[i + 1]!;
+    if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT || poles[i + 2] !== 1) continue;
+    out.push({ ...body(x, y, 0, -1, perMeter), kind: 'flagpole', flag: 'PH' });
+  }
   const signals = geo.signals ?? [];
   for (let i = 0; i < signals.length; i += SIGNAL_STRIDE) {
     const x = signals[i]!,
@@ -104,6 +125,28 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
     if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT) continue;
     const seed = placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale);
     const midBlock = signals[i + 3]! < 0;
+    const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
+    if (layout) {
+      for (const arm of layout.arms) {
+        if (!arm.inbound || !arm.stop) continue;
+        const junction = lngLatToTile(tile, ...arm.junction);
+        // Outward bearing: the housing and its ray face the approaching driver.
+        const theta = ((arm.bearing + 180) * Math.PI) / 180;
+        const hx = Math.sin(theta),
+          hy = -Math.cos(theta);
+        const lateral = arm.width / 2 + 0.5;
+        const bx = junction.x + (hx * radius - hy * lateral) * perMeter;
+        const by = junction.y + (hy * radius + hx * lateral) * perMeter;
+        out.push({
+          ...body(bx, by, hy, -hx, perMeter),
+          kind: 'signal',
+          group: arm.group,
+          midBlock,
+          seed,
+        });
+      }
+      continue;
+    }
     for (const [bearing, group] of [
       [midBlock ? 0 : signals[i + 3]!, 'a'],
       [signals[i + 4]!, 'b'],
@@ -159,7 +202,7 @@ export function updateFixtureSignals(packed: PackedFixtures, clock: number): boo
 }
 
 /**
- * R/G encode a ten-bit glyph and fixture part, B lamp condition/seed or signal phase, A opacity.
+ * R/G encode a ten-bit glyph and fixture part, B lamp condition/seed, signal phase or cloth shading, A opacity.
  * Geometry is in meters, with readable minimum housings. A position-seeded dissolve switches
  * whole fixtures between compact and detailed plans from z18 to z18.5.
  */
@@ -182,6 +225,7 @@ export function packFixtures(
   const ordered = [
     ...fixtures.filter((f) => f.kind === 'signal'),
     ...fixtures.filter((f) => f.kind === 'streetlight'),
+    ...fixtures.filter((f) => f.kind === 'flagpole'),
   ];
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
   const posts = new Map<string, number>();
@@ -192,7 +236,14 @@ export function packFixtures(
       owner = posts.get(key) ?? index;
       posts.set(key, owner);
     }
-    const min = fixture.kind === 'streetlight' ? (fixture.site ? 18 : 15) : 17;
+    const min =
+      fixture.kind === 'flagpole'
+        ? 18
+        : fixture.kind === 'streetlight'
+          ? fixture.site
+            ? 18
+            : 15
+          : 17;
     if (zoom < min) continue;
     const opacity = bandVisibility({ min }, zoom);
     if (opacity <= 0) continue;
@@ -229,8 +280,10 @@ export function packFixtures(
           }
         : undefined;
     const info =
-      fixture.kind === 'streetlight' ? lightByte(fixture.state, fixture.seed) : signal!.color;
-    const write = (x: number, y: number, glyph: string, part: number) => {
+      fixture.kind === 'streetlight'
+        ? lightByte(fixture.state, fixture.seed)
+        : (signal?.color ?? 0);
+    const write = (x: number, y: number, glyph: string, part: number, tone = info) => {
       const c = Math.floor(x),
         r = Math.floor(y);
       if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) return;
@@ -241,10 +294,10 @@ export function packFixtures(
       if (code <= 0 || code > MAX_GLYPHS) return;
       owners[cell] = owner;
       [out[at], out[at + 1]] = packGlyph(code, part);
-      out[at + 2] = info;
+      out[at + 2] = tone;
       out[at + 3] = Math.round(opacity * 255);
       if (signal) signal.cells.push(at);
-      if (!grid.visible || grid.visible(c, r))
+      if (fixture.kind !== 'flagpole' && (!grid.visible || grid.visible(c, r)))
         packed.visibility[fixture.kind === 'signal' ? 'trafficSignals' : 'streetlights'] = true;
     };
     // Avoid expensive offscreen loops, including malformed geometry.
@@ -268,6 +321,56 @@ export function packFixtures(
         write(from[0] + dx * t, from[1] + dy * t, glyph, part);
       }
     };
+    if (fixture.kind === 'flagpole') {
+      // A symbolic elevation anchored to the map position. The taller shaft, stepped
+      // plinth and folded cloth remain readable on the rectangular ASCII cell grid.
+      const rows = zoom >= 20 ? 6 : 3;
+      const cols = Math.round((rows * grid.cellHeight * 2) / grid.cellWidth);
+      const x = Math.floor(base[0]),
+        y = Math.floor(base[1]);
+      const top = y - rows - (zoom >= 20 ? 8 : 4);
+      const lift = (c: number) => {
+        const u = c / Math.max(1, cols - 1);
+        return Math.round(-Math.sin(u * Math.PI * 2) * (rows / 5) + u * 0.7);
+      };
+      const tone = (c: number) =>
+        Math.round(155 + 100 * (0.5 + 0.5 * Math.cos((c / cols) * Math.PI * 4 - 0.4)));
+      for (let r = top - 1; r <= y - 1; r++) write(x, r, '\u2551', FixturePart.flagMast);
+      write(x, top - 2, '\u2022', FixturePart.flagMast);
+      // A light tapered pedestal, a broad foot, and a bright cap around the pole.
+      for (let c = -2; c <= 2; c++) write(x + c, y + 1, '\u2584', FixturePart.flagFoot);
+      for (let c = -1; c <= 1; c++) {
+        write(x + c, y, '\u2588', FixturePart.flagPlinth);
+        write(x + c, y - 1, '\u2580', FixturePart.flagMast);
+      }
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const u = (c + 0.5) / cols,
+            v = (r + 0.5) / rows;
+          const triangle = u < (Math.sqrt(3) / 2) * Math.min(v, 1 - v);
+          write(
+            x + 1 + c,
+            top + r + lift(c),
+            '\u2588',
+            triangle
+              ? FixturePart.flagWhite
+              : r < rows / 2
+                ? FixturePart.flagBlue
+                : FixturePart.flagRed,
+            tone(c),
+          );
+        }
+      }
+      if (rows >= 6) {
+        const emblem = (c: number, r: number, mark: string) =>
+          write(x + 1 + c, top + r + lift(c), mark, FixturePart.flagGold, tone(c));
+        emblem(2, 2, '\u263c');
+        emblem(0, 0, '\u2605');
+        emblem(0, rows - 1, '\u2605');
+        emblem(Math.floor(cols * 0.32), 3, '\u2605');
+      }
+      continue;
+    }
     if (!detailed) {
       let [x, y] = base;
       if (fixture.kind === 'streetlight') {

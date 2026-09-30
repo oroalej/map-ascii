@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import type { BBox } from '@atlas/shared';
+import { SubdivisionAreas, type BBox } from '@atlas/shared';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
@@ -118,7 +118,12 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    const detail = mergeSiteDetails([...merged, ...parts, ...landcover.features], content.details);
+    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    const detail = mergeSiteDetails(
+      [...merged, ...parts, ...landcover.features],
+      content.details,
+      subdivisions,
+    );
     for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }

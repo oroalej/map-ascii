@@ -5,6 +5,7 @@ import { TileLife, LifeWorld, type Mover } from './simulate';
 import { compatible, type JunctionTable } from './junctions';
 import { FOLLOW } from './config';
 import { worldTiles } from './testing/scenarios';
+import { VEHICLES } from './vehicles';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
@@ -77,16 +78,128 @@ describe('curved traffic', () => {
     expect(m.v / pm).toBeLessThanOrEqual(Math.sqrt(2.5 * 8) + 0.03);
   });
 
-  it('retains the no-legal-exit one-way U-turn exception', () => {
+  it('holds its heading at a disconnected one-way exit, even when already past the setback', () => {
     const { life, m } = corner(true);
     life.geo.oneway![0] = 1;
     life.geo.oneway![1] = -1;
     m.d = 99.99 * pm;
     m.x = 1000 + m.d;
-    life.step(0.1);
+    for (let i = 0; i < 100; i++) life.step(0.1);
     expect(m.line).toBe(0);
-    expect(m.dir).toBe(-1); // Exactly one fallback at the deliberately unconnected flow.
-    expect(m.routing?.turns).toBe(1);
+    expect(m.dir).toBe(1);
+    expect(m.d / pm).toBeCloseTo(99.99);
+    expect(m.v).toBe(0);
+    expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+    expect(m.routing?.turns ?? 0).toBe(0);
+  });
+
+  for (const vehicle of ['car', 'bicycle'] as const)
+    for (const dir of [-1, 1] as const)
+      it(`brakes and holds ${vehicle} in ${dir} one-way flow at a clipped endpoint`, () => {
+        const b = new LifeBuilder();
+        b.line(
+          [
+            { x: -100, y: 1000 },
+            { x: 4300, y: 1000 },
+          ],
+          LifeLine.roadMinor,
+          8,
+          1,
+          dir,
+        );
+        const life = new TileLife(tile, b.finish(), 4);
+        life.movers.length = life.parked.length = life.stalls.length = 0;
+        life.scenes.sites.length = 0;
+        const { m } = corner(true);
+        Object.assign(m, {
+          vehicle,
+          dir,
+          from: dir === 1 ? 0 : 1,
+          d: 0,
+          x: dir === 1 ? -100 : 4300,
+          hx: dir,
+          speed: 10 * pm,
+          v: 10 * pm,
+        });
+        life.movers.push(m);
+        let previous = m.x;
+        let braking = false;
+        for (let i = 0; i < 1200; i++) {
+          life.step(0.1);
+          expect(m.dir).toBe(dir);
+          expect((m.x - previous) * dir).toBeGreaterThanOrEqual(-1e-8);
+          expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+          if (m.v! > 0 && m.v! < 9 * pm) braking = true;
+          previous = m.x;
+        }
+        expect(braking).toBe(true);
+        expect(m.v! / pm).toBeLessThan(0.001);
+        const front = VEHICLES[vehicle].length / 2;
+        expect((dir === 1 ? 4300 - m.x : m.x + 100) / pm).toBeGreaterThanOrEqual(
+          front + FOLLOW.minGap - 1e-6,
+        );
+      });
+
+  it('never reverses one-way vehicles while retrying obstructed initial placement', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 1000, y: 1000 },
+        { x: 1200, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      1,
+      -1,
+    );
+    const life = new TileLife(tile, b.finish(), 7);
+    const { m } = corner(true);
+    Object.assign(m, { from: 1, dir: -1, d: 190, x: 1010, hx: -1 });
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.movers.push(m);
+    let checks = 0;
+    life.settleGround((owner) => {
+      if (owner === m) {
+        checks++;
+        expect(m.dir).toBe(-1);
+        expect(Number.isFinite(m.x)).toBe(true);
+      }
+      return false;
+    });
+    expect(checks).toBeGreaterThan(1);
+    expect(life.movers).toHaveLength(0);
+  });
+
+  it('still turns around at a two-way dead end', () => {
+    const { life, m } = corner(false);
+    m.from = 1;
+    m.d = 99.99 * pm;
+    life.step(0.1);
+    expect(m.dir).toBe(-1);
+  });
+
+  it('keeps one-way state intact through rejected movement and shorter collision retries', () => {
+    const { life, m } = corner(true);
+    life.geo.oneway![0] = 1;
+    life.geo.oneway![1] = -1;
+    m.d = 90 * pm;
+    m.x = 1000 + m.d;
+    m.speed = m.v = 20 * pm;
+    let trials = 0;
+    for (let frame = 0; frame < 10; frame++)
+      life.step(0.1, undefined, undefined, undefined, undefined, (owner) => {
+        if (owner === m) {
+          trials++;
+          expect(m.dir).toBe(1);
+          expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+        }
+        return false;
+      });
+    expect(trials).toBeGreaterThan(10);
+    expect(m.d / pm).toBeCloseTo(90);
+    expect(m.dir).toBe(1);
+    expect(m.v).toBe(0);
+    expect(m.routing?.turns ?? 0).toBe(0);
   });
   it('keeps vehicles in legal flow for 120 seconds on a connected one-way loop', () => {
     const b = new LifeBuilder();

@@ -5,7 +5,7 @@
  * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
-import { featureZoomBand, LIFE_SITE_KINDS, type ZoomBand } from '@atlas/shared';
+import { featureZoomBand, LIFE_SITE_KINDS, SignalLayout, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
 import {
   classId,
@@ -833,6 +833,14 @@ export function buildTileGeometry(
       if (feature.type === 1) {
         for (const ring of rings) {
           for (const p of ring) {
+            if (
+              !isRegion &&
+              className === 'furniture' &&
+              variant === 3 &&
+              feature.properties.flag === 'PH'
+            ) {
+              life.flagpole(p, 1);
+            }
             if (className === 'furniture' && variant === 14 && unitMeters && tile) {
               if (!isRegion && inTileAt(p)) {
                 const heads = Math.max(1, Math.min(4, Number(feature.properties.lamp_heads ?? 1)));
@@ -947,6 +955,9 @@ export function buildTileGeometry(
                   Number(feature.properties.signal_a ?? -1),
                   Number(feature.properties.signal_b ?? 90),
                   feature.properties.life_signal === 'mapped',
+                  feature.properties.signal_layout === undefined
+                    ? undefined
+                    : SignalLayout.parse(JSON.parse(String(feature.properties.signal_layout))),
                 );
               continue;
             }
@@ -1109,13 +1120,14 @@ export function buildTileGeometry(
       } else if (feature.type === 3) {
         let largest: { ring: TilePoint[]; area: number } | undefined;
         // What walkers and parked cars keep out of: solid buildings (not grounds) and water.
-        const solid = isBuilding(className) && height > 0;
+        const overhead = feature.properties.detail_overhead === true;
+        const solid = !overhead && isBuilding(className) && height > 0;
         const standingWater = className === 'water_area' || className === 'water_sea';
         const obstacle =
           !!feature.properties.detail_blocked ||
           solid ||
           standingWater ||
-          className === 'building_part' ||
+          (!overhead && className === 'building_part') ||
           className === 'water_river' ||
           className === 'water_stream';
         for (const polygon of classifyRings(rings)) {
@@ -1207,6 +1219,7 @@ export function buildTileGeometry(
   }
 
   for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
+  if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
 
   if (unitMeters && tile) {
     const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };

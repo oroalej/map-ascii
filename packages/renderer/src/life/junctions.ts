@@ -1,12 +1,31 @@
-import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
+import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
+import { signalApproaches, signalJunctionKey } from './signal-approaches';
 import type { TileId } from '../tiles';
 import { JUNCTION } from './config';
-import { LifeLine, type LifeGeometry } from './geometry';
+import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
 import type { Mover, TileLife } from './simulate';
 import { VEHICLES } from './vehicles';
 
-export type Arm = { line: number; along: number; out: 1 | -1; hx: number; hy: number };
-export type Junction = { key: string; x: number; y: number; radius: number; arms: Arm[] };
+export type Arm = {
+  line: number;
+  along: number;
+  out: 1 | -1;
+  hx: number;
+  hy: number;
+  x?: number;
+  y?: number;
+  inbound?: boolean;
+  outbound?: boolean;
+  stopAlong?: number;
+};
+export type Junction = {
+  key: string;
+  x: number;
+  y: number;
+  radius: number;
+  arms: Arm[];
+  linked?: boolean;
+};
 export type Movement = {
   key: string;
   junction: Junction;
@@ -20,11 +39,14 @@ export type Movement = {
   dir: 1 | -1;
   exit: Arm;
   ahead: number;
+  entry?: Arm;
 };
 
 /** Connectivity comes from shared vertices, never geometric crossing/bridge intersections. */
 export class JunctionIndex {
   readonly junctions: Junction[];
+  readonly hasLinked: boolean;
+  private readonly internalLines = new Set<number>();
   private readonly lines = new Map<number, Junction[]>();
   constructor(
     tile: TileId,
@@ -62,9 +84,53 @@ export class JunctionIndex {
         vertices.set(key, j);
       }
     }
-    this.junctions = [...vertices.values()].filter(
+    const resolved: Junction[] = [];
+    for (const [index, layout] of (geo.signalLayouts ?? []).entries()) {
+      if (!layout) continue;
+      const members = layout.members.map((p) => lngLatToTile(tile, ...p));
+      const arms = signalApproaches(tile, geo, layout, along);
+      if (members.length > 1) {
+        for (let line = 0; line < geo.kinds.length; line++) {
+          if (geo.kinds[line]! > LifeLine.roadMinor) continue;
+          const ends = [geo.starts[line]!, geo.starts[line + 1]! - 1];
+          if (
+            ends.every((v) =>
+              members.some(
+                (p) => Math.hypot(p.x - geo.coords[v * 2]!, p.y - geo.coords[v * 2 + 1]!) <= 2,
+              ),
+            )
+          )
+            this.internalLines.add(line);
+        }
+      }
+      // A buffered copy with no local approach does not own a reservation zone.
+      if (!arms.length) continue;
+      for (const [key, j] of vertices)
+        if (members.some((p) => Math.hypot(p.x - j.x, p.y - j.y) <= 2)) vertices.delete(key);
+      resolved.push({
+        key: signalJunctionKey(layout),
+        x: members[0]!.x,
+        y: members[0]!.y,
+        radius: geo.signals![index * SIGNAL_STRIDE + 2]! * pm,
+        linked: members.length > 1,
+        arms: arms.map((a) => ({
+          line: a.line,
+          along: a.along,
+          out: a.out,
+          hx: a.hx,
+          hy: a.hy,
+          x: a.x,
+          y: a.y,
+          inbound: a.arm.inbound,
+          outbound: a.arm.outbound,
+          stopAlong: a.stopAlong,
+        })),
+      });
+    }
+    this.junctions = [...vertices.values(), ...resolved].filter(
       (j) => j.arms.length >= 3 && new Set(j.arms.map((a) => a.line)).size >= 2,
     );
+    this.hasLinked = this.junctions.some((j) => j.linked);
     for (const j of this.junctions)
       for (const line of new Set(j.arms.map((a) => a.line))) {
         const list = this.lines.get(line) ?? [];
@@ -73,24 +139,43 @@ export class JunctionIndex {
       }
   }
 
+  /** Initial traffic must enter a linked zone through its gates and acquire a reservation. */
+  canSpawnVehicle(m: Mover): boolean {
+    if (!this.hasLinked) return true;
+    if (this.internalLines.has(m.line)) return false;
+    const movement = this.movement(m, 60 * this.pm);
+    return !movement?.junction.linked || movement.ahead >= 0;
+  }
+
   movement(m: Mover, reach: number): Movement | undefined {
     let nearest: Movement | undefined;
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const j of this.lines.get(m.line) ?? []) {
-      const incoming = j.arms.find((a) => a.line === m.line && a.out === -m.dir);
+      const incoming = j.arms.find(
+        (a) => a.line === m.line && a.out === -m.dir && a.inbound !== false,
+      );
       if (!incoming) continue;
       const distance = m.dir * (incoming.along - progress);
       const length = VEHICLES[m.vehicle!].length * this.pm;
       if (distance < -j.radius - length / 2 || distance > reach) continue;
-      let exit = j.arms.find((a) => a.line === m.line && a.out === m.dir);
+      let exit = j.arms.find((a) => a.line === m.line && a.out === m.dir && a.outbound !== false);
       if (!exit) {
-        const code = m.routing?.plan?.exit ?? m.next;
+        const code =
+          m.junctionRoute?.key === j.key
+            ? m.junctionRoute.exits.at(-1)
+            : (m.routing?.plan?.exit ?? m.next);
         exit = j.arms.find(
-          (a) => a.line === (code === undefined ? -1 : code >> 1) && a.out === (code! & 1 ? -1 : 1),
+          (a) =>
+            a.line === (code === undefined ? -1 : code >> 1) &&
+            a.out === (code! & 1 ? -1 : 1) &&
+            a.outbound !== false,
         );
       }
       if (!exit) exit = incoming; // Dead-end fallback is still a movement to protect.
-      const ahead = distance - j.radius - (JUNCTION.gap * this.pm + length / 2);
+      const ahead =
+        incoming.stopAlong !== undefined
+          ? m.dir * (incoming.stopAlong - progress) - length / 2
+          : distance - j.radius - (JUNCTION.gap * this.pm + length / 2);
       if (!nearest || ahead < nearest.ahead)
         nearest = {
           key: j.key,
@@ -105,6 +190,7 @@ export class JunctionIndex {
           dir: m.dir,
           exit,
           ahead,
+          entry: incoming,
         };
     }
     return nearest;
@@ -115,6 +201,10 @@ const COS20 = Math.cos(Math.PI / 9),
   COS30 = Math.cos(Math.PI / 6);
 export function compatible(a: Movement, b: Movement): boolean {
   const sameIn = a.inHx * b.inHx + a.inHy * b.inHy > COS20;
+  // Offset member junctions can make nominally opposing straight routes cross. Reserve
+  // the combined zone conservatively, allowing only followers on the same approach.
+  if (a.junction.linked || b.junction.linked)
+    return sameIn && a.entry?.x === b.entry?.x && a.entry?.y === b.entry?.y;
   if (sameIn) return true;
   if (a.outHx * b.outHx + a.outHy * b.outHy > COS20) return false;
   const straight = (m: Movement) => m.inHx * m.outHx + m.inHy * m.outHy > COS30;

@@ -59,7 +59,6 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 Sometimes you're given a handoff file written by another agent, in `.plans/<topic>-handoff.md` (gitignored, never committed).
 
 - Implement only what its steps list, in their order, and keep its invariants. Put anything else worth doing in your summary instead of doing it.
-- If the code doesn't match the handoff's "verified current state", or a "stop and report" condition is met, stop at that step and report it. Don't improvise a different design.
 - Run its verification commands, follow its commit instructions, and answer its "report back" items.
 
 ## Conventions
@@ -77,6 +76,7 @@ Sometimes you're given a handoff file written by another agent, in `.plans/<topi
 ## Git
 
 - Several agent sessions (Claude Code, Codex) often edit this working tree at once, so `git status` can show someone else's half-finished edits, sometimes in the files you're changing.
+- Continue working when another session has uncommitted edits, including in files needed for your task. Preserve those edits and keep your changes scoped to your task. Concurrent edits alone must not trigger a pause or permission request, even if a handoff says to "stop and report" for that reason.
 - Before each commit, run `git status` and `git branch`: another session may have switched branches.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`. If a file you must commit also holds another session's uncommitted edits, ask before committing it.
 - Commit messages are gitmoji + conventional commits, lowercase and imperative: `✨ feat(life): …`, `🐛 fix(renderer): …`, `⚡️ perf(web): …`, `📝 docs(roadmap): …`. Match `git log`.

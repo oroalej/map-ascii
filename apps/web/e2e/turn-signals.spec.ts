@@ -147,6 +147,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           u_labelColor: [0, 0, 1],
           u_background: input.background,
           u_colors: colors,
+          u_fillColors: colors,
           u_cellBits: input.bits,
           u_paints: input.paints,
           u_crownClass: input.crown,

@@ -1,7 +1,8 @@
 import type { City, CityLifeConfig } from '@atlas/shared';
-import { mergeStreetDetails, type RoadArm, type StreetStats } from './streets';
+import { applyRoadDirections, mergeStreetDetails, type RoadArm, type StreetStats } from './streets';
 import type { Position } from 'geojson';
 import type { AtlasFeature, AtlasProperties } from '../03-normalize';
+import { resolveSignalLayout } from './signal-layout';
 
 type Arm = RoadArm;
 type Junction = { p: Position; arms: Arm[] };
@@ -69,6 +70,7 @@ export function mergeTraffic(
   streets?: City['streets'],
   report?: (stats: StreetStats) => void,
 ): AtlasFeature[] {
+  features = applyRoadDirections(features, streets?.directions);
   const roads = features.filter(
     (f) => !f.properties.region && f.properties.class.startsWith('road_'),
   );
@@ -193,10 +195,33 @@ export function mergeTraffic(
           : distance(r.position!, (s.geometry as { coordinates: Position }).coordinates) <= 30,
       ),
   );
+  const vertices = roadVertexArms(roads);
+  const owned = new Set<string>();
   for (const s of kept) {
+    const linked = config?.add?.find(
+      (a) => s.properties.id === `pack:signal:${a.id}`,
+    )?.linked_junctions;
+    const layout = resolveSignalLayout(s, vertices, linked);
+    if (layout) {
+      for (const p of layout.members) {
+        if (owned.has(key(p))) throw new Error(`Duplicate signal junction membership: ${key(p)}`);
+        owned.add(key(p));
+      }
+      s.properties.signal_layout = JSON.stringify(layout);
+    }
     const p = (s.geometry as { coordinates: Position }).coordinates,
       j = nearestJunction(p, 1);
-    for (const arm of j?.arms ?? []) {
+    const external = layout
+      ? layout.arms.map((a) => ({
+          p: a.junction,
+          arm: vertices
+            .get(key(a.junction))!
+            .arms.find(
+              (arm) => arm.road.properties.id === a.road_id && key(arm.toward) === key(a.toward),
+            )!,
+        }))
+      : (j?.arms ?? []).map((arm) => ({ p, arm }));
+    for (const { p, arm } of external) {
       const d = distance(p, arm.toward),
         shift = s.properties.signal_radius! + 2;
       if (d < shift) continue;
@@ -222,7 +247,7 @@ export function mergeTraffic(
       ),
   );
   out.push(...crossings.values(), ...kept);
-  const result = mergeStreetDetails(out, kept, roadVertexArms(roads), streets);
+  const result = mergeStreetDetails(out, kept, vertices, streets);
   report?.(result.stats);
   return result.features;
 }

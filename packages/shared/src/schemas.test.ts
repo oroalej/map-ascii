@@ -255,6 +255,21 @@ describe('City', () => {
     expect(City.safeParse({ ...city, streets: { driving_side: 'left' } }).success).toBe(false);
   });
 
+  it('validates sourced road direction overrides and rejects duplicate targets', () => {
+    const entry = { osm_id: 'osm:way/1', oneway: 1, source: 'Owner survey' };
+    const parse = (directions: unknown[]) => City.safeParse({ ...city, streets: { directions } });
+    for (const oneway of [-1, 0, 1]) expect(parse([{ ...entry, oneway }]).success).toBe(true);
+    for (const invalid of [
+      { ...entry, oneway: 2 },
+      { ...entry, oneway: 'yes' },
+      { ...entry, osm_id: 'osm:node/1' },
+      { ...entry, source: ' ' },
+      { osm_id: entry.osm_id, oneway: 1 },
+    ])
+      expect(parse([invalid]).success).toBe(false);
+    expect(parse([entry, entry]).success).toBe(false);
+  });
+
   it('rejects localized fields in undeclared languages', () => {
     const result = City.safeParse({ ...city, languages: [] });
     expect(result.error?.issues[0]?.path).toEqual(['subdivision', 'label', 'xx']);

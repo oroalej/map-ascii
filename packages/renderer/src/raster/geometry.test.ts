@@ -868,6 +868,27 @@ describe('buildTileGeometry', () => {
     expect(meta[3]).toBe(3);
   });
 
+  it('extracts explicitly authored flag designs without guessing flags on other poles', () => {
+    const { life } = buildTileGeometry(
+      {
+        poi: layer([
+          feature(1, { id: 'osm:node/21', class: 'furniture', variant: 'flagpole', flag: 'PH' }, [
+            [[100, 200]],
+          ]),
+          feature(1, { id: 'osm:node/22', class: 'furniture', variant: 'flagpole' }, [
+            [[300, 400]],
+          ]),
+          feature(1, { id: 'osm:node/23', class: 'furniture', variant: 'flagpole', flag: 'PH' }, [
+            [[-100, 200]],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+    expect([...life.flagpoles!]).toEqual([100, 200, 1]);
+  });
+
   describe('trees', () => {
     const tile = { z: 16, x: 55_194, y: 30_268 };
     const units = (meters: number) => meters / metersPerUnit(tile);

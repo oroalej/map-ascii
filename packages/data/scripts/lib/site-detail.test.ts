@@ -41,6 +41,122 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  const flagpole: AtlasFeature = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: p(-5, 5) },
+    properties: {
+      id: 'osm:node/4',
+      class: 'furniture',
+      variant: 'flagpole',
+      operator: 'City government',
+      subdivision: 'Old district',
+      subdivision_approx: true,
+      label_lng: -5 / m,
+      label_lat: 5 / m,
+    },
+    tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
+  };
+  const correction = { ...detail, flagpoles: [{ osm_id: flagpole.properties.id, at: p(35, 35) }] };
+
+  it('relocates one mapped flagpole and refreshes its location metadata without mutating inputs', () => {
+    const input = [parent, flagpole];
+    const before = structuredClone(input);
+    const flagged = {
+      ...correction,
+      flagpoles: correction.flagpoles.map((pole) => ({ ...pole, flag: 'PH' as const })),
+    };
+    const packs = structuredClone([flagged]);
+    const geometry = {
+      type: 'Polygon' as const,
+      coordinates: [[p(0, 0), p(50, 0), p(50, 50), p(0, 50), p(0, 0)]],
+    };
+    const result = mergeSiteDetails(input, packs, [
+      { name: 'Approximate district', approximate: true, geometry },
+      { name: 'Mapped district', approximate: false, geometry },
+    ]);
+    const poles = result.features.filter((f) => f.properties.variant === 'flagpole');
+    expect(poles).toHaveLength(1);
+    expect(poles[0]).toEqual({
+      ...flagpole,
+      geometry: { type: 'Point', coordinates: p(35, 35) },
+      properties: {
+        ...flagpole.properties,
+        flag: 'PH',
+        label_lng: 35 / m,
+        label_lat: 35 / m,
+        subdivision: 'Mapped district',
+        subdivision_approx: undefined,
+      },
+    });
+    expect(input).toEqual(before);
+    expect(packs).toEqual([flagged]);
+    // Neither the original geometry nor the content pack owns the output coordinates.
+    expect(poles[0]!.geometry).not.toBe(flagpole.geometry);
+    if (poles[0]!.geometry.type !== 'Point') throw new Error('expected point');
+    expect(poles[0]!.geometry.coordinates).not.toBe(packs[0]!.flagpoles[0]!.at);
+
+    const unmapped = mergeSiteDetails(input, packs).features.find(
+      (f) => f.properties.id === flagpole.properties.id,
+    )!;
+    expect(unmapped.properties).not.toHaveProperty('subdivision');
+    expect(unmapped.properties).not.toHaveProperty('subdivision_approx');
+    const approximate = mergeSiteDetails(input, packs, [
+      { name: 'Approximate district', approximate: true, geometry },
+    ]).features.find((f) => f.properties.id === flagpole.properties.id)!;
+    expect(approximate.properties).toMatchObject({
+      subdivision: 'Approximate district',
+      subdivision_approx: true,
+    });
+  });
+
+  it('rejects absent or wrong flagpole targets, duplicate overrides, and blocked destinations', () => {
+    expect(() => mergeSiteDetails([parent], [correction])).toThrow('existing mapped flagpole');
+    for (const invalid of [
+      { ...flagpole, properties: { ...flagpole.properties, variant: 'bench' } },
+      { ...flagpole, geometry: parent.geometry },
+    ]) {
+      expect(() => mergeSiteDetails([parent, invalid], [correction])).toThrow(
+        'existing mapped flagpole',
+      );
+    }
+    const input = [parent, flagpole];
+    expect(() =>
+      mergeSiteDetails(input, [
+        { ...correction, flagpoles: [...correction.flagpoles, ...correction.flagpoles] },
+      ]),
+    ).toThrow('duplicate flagpole');
+    const otherParent = { ...parent, properties: { ...parent.properties, id: 'osm:way/2' } };
+    expect(() =>
+      mergeSiteDetails(
+        [...input, otherParent],
+        [correction, { ...correction, id: 'detail/other', osm_id: 'osm:way/2' }],
+      ),
+    ).toThrow('duplicate flagpole');
+    expect(() =>
+      mergeSiteDetails(input, [
+        { ...correction, flagpoles: [{ osm_id: flagpole.properties.id, at: p(60, 30) }] },
+      ]),
+    ).toThrow('outside parent footprint');
+    expect(() =>
+      mergeSiteDetails(input, [
+        { ...correction, flagpoles: [{ osm_id: flagpole.properties.id, at: p(15, 23) }] },
+      ]),
+    ).toThrow('crosses detail:test/seating-curve');
+  });
+
+  it('defaults legacy details to no flagpole overrides and validates targets and coordinates', () => {
+    expect(SiteDetail.parse({ ...detail, flagpoles: undefined }).flagpoles).toEqual([]);
+    expect(SiteDetail.safeParse(correction).success).toBe(true);
+    for (const flagpoles of [
+      [...correction.flagpoles, ...correction.flagpoles],
+      [{ osm_id: 'not-an-osm-id', at: p(35, 35) }],
+      [{ osm_id: flagpole.properties.id, at: p(35, 35), flag: 'unknown' }],
+      [{ osm_id: flagpole.properties.id, at: [181, 0] }],
+    ]) {
+      expect(SiteDetail.safeParse({ ...detail, flagpoles }).success).toBe(false);
+    }
+  });
+
   it('preserves the parent identity and does not mutate inputs, with stable authored feature ids', () => {
     const result = mergeSiteDetails([parent], [detail]);
     expect(parent.properties.class).toBe('park');
@@ -175,6 +291,80 @@ describe('site details', () => {
     expect(
       SiteDetail.safeParse({ ...detail, lamps: [{ ...legacy, style: 'floodlight' }] }).success,
     ).toBe(false);
+  });
+
+  it('unions wider bench spans into a hollow rim and seats only along those spans', () => {
+    const line = [p(15, 15), p(30, 15), p(30, 30), p(15, 30), p(15, 15)];
+    const span = { id: 'front', start: 0, end: 1, width_m: 0.8 };
+    const seat = { ...detail.seating[0]!, line, width_m: 0.3, bench_spans: [span] };
+    const shape = seatingFootprint(line, seat.width_m, seat.bench_spans);
+    expect(shape.coordinates).toHaveLength(1);
+    expect(shape.coordinates[0]).toHaveLength(2);
+    expect(inside(p(22, 22), shape)).toBe(false);
+    expect(inside(p(22, 14.65), shape)).toBe(true); // wide bench
+    expect(inside(p(30.35, 22), shape)).toBe(false); // narrow rim
+    expect(inside(p(30.1, 22), shape)).toBe(true);
+    const pack = { ...detail, seating: [seat] };
+    const result = mergeSiteDetails([parent], [pack]);
+    expect(result.features.filter((f) => f.properties.class === 'seating')).toHaveLength(1);
+    const anchors = result.features.filter((f) => f.properties.seat_bearing !== undefined);
+    expect(anchors).toHaveLength(4);
+    for (const anchor of anchors) {
+      expect(anchor.properties.id).toContain('/bench-curve-front-');
+      expect(anchor.properties.seat_bearing).toBeCloseTo(180);
+      if (anchor.geometry.type !== 'Point') throw new Error('expected point');
+      expect(anchor.geometry.coordinates[1]! * m).toBeCloseTo(13.85);
+      expect(inside(anchor.geometry.coordinates, { type: 'Polygon', coordinates: [line] })).toBe(
+        false,
+      );
+    }
+    const rim = mergeSiteDetails([parent], [{ ...pack, seating: [{ ...seat, bench_spans: [] }] }]);
+    expect(rim.features.some((f) => f.properties.seat_bearing !== undefined)).toBe(false);
+    expect(rim.features.filter((f) => f.properties.class === 'seating')).toHaveLength(1);
+    expect(() =>
+      mergeSiteDetails(
+        [parent],
+        [{ ...pack, walks: [{ id: 'blocked', line: [p(20, 14.7), p(25, 14.7)], width_m: 1 }] }],
+      ),
+    ).toThrow('crosses detail:test/seating-curve');
+  });
+
+  it('validates bench span names, widths and non-overlapping inclusive vertex ranges', () => {
+    const seat = { ...detail.seating[0]!, width_m: 0.3 };
+    const span = { id: 'front', start: 0, end: 1, width_m: 0.8 };
+    const parse = (bench_spans: unknown) =>
+      SiteDetail.safeParse({ ...detail, seating: [{ ...seat, bench_spans }] }).success;
+    expect(parse(undefined)).toBe(true);
+    expect(parse([])).toBe(true);
+    expect(parse([span, { ...span, id: 'side', start: 1, end: 2 }])).toBe(true);
+    for (const spans of [
+      [span, span],
+      [span, { ...span, id: 'overlap', end: 2 }],
+      [{ ...span, start: -1 }],
+      [{ ...span, start: 0.5 }],
+      [{ ...span, end: 3 }],
+      [{ ...span, start: 1 }],
+      [{ ...span, start: 2 }],
+      [{ ...span, width_m: 0.2 }],
+      [{ ...span, width_m: 0 }],
+      [{ ...span, width_m: 4 }],
+      [{ ...span, id: 'Bad span' }],
+    ])
+      expect(parse(spans)).toBe(false);
+  });
+
+  it('unions densely sampled curved rims and benches without losing the planted hole', () => {
+    const line = Array.from({ length: 361 }, (_, i) => {
+      const angle = ((i % 360) / 180) * Math.PI;
+      return p(25 + 10 * Math.cos(angle), 25 + 5 * Math.sin(angle));
+    });
+    const spans = [{ id: 'front', start: 20, end: 140, width_m: 0.8 }];
+    const shape = seatingFootprint(line, 0.3, spans);
+    expect(shape.coordinates).toHaveLength(1);
+    expect(shape.coordinates[0]).toHaveLength(2);
+    expect(inside(p(25, 25), shape)).toBe(false);
+    expect(inside(p(25, 30.35), shape)).toBe(true);
+    expect(inside(p(25, 19.65), shape)).toBe(false);
   });
 
   it('rejects duplicate item ids, empty credits, zero dimensions, and degenerate lines', () => {

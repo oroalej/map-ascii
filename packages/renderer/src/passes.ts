@@ -713,6 +713,7 @@ export function glyphPass(
     u_labelShift: [labelGrid.shiftX, labelGrid.shiftY],
     u_labelColumns: label.atlas.columns,
     u_colors: tables.colors,
+    u_fillColors: tables.fillColors,
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,

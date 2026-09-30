@@ -67,6 +67,7 @@ uniform vec2 u_shift;
 uniform float u_height;
 uniform int u_columns;
 uniform vec3 u_colors[${MAX_CLASSES}];
+uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
@@ -139,7 +140,8 @@ vec3 toned(vec3 color, int tone, float night) {
 }
 
 vec3 fillOf(int cls, vec3 color) {
-  return mix(u_background, color, u_fills[cls]);
+  vec3 pigment = color * u_fillColors[cls] / max(u_colors[cls], vec3(1.0 / 255.0));
+  return mix(u_background, pigment, u_fills[cls]);
 }
 
 float lamps() {
@@ -369,6 +371,19 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float ink = texelFetch(u_atlas, at + inCell, 0).r;
   vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
+  if (part >= ${FixturePart.flagBlue} && part <= ${FixturePart.flagGold}) {
+    vec3 paint = part == ${FixturePart.flagBlue} ? vec3(0.04, 0.22, 0.70) :
+      part == ${FixturePart.flagRed} ? vec3(0.82, 0.08, 0.16) :
+      part == ${FixturePart.flagGold} ? vec3(1.0, 0.78, 0.12) : vec3(0.96, 0.96, 0.93);
+    float fold = 0.68 + 0.32 * float(info) / 255.0;
+    if (u_shimmer) fold *= 0.97 + 0.03 * sin(u_time * 1.6 + float(info) * 0.045);
+    color = lampLit(daylit(paint * fold), rainLight);
+    if (part == ${FixturePart.flagGold})
+      under = mix(under, daylit(vec3(0.96, 0.96, 0.93) * fold), fixture.a);
+  }
+  if (part == ${FixturePart.flagMast}) color = daylit(vec3(0.92, 0.94, 0.96));
+  if (part == ${FixturePart.flagPlinth}) color = daylit(vec3(0.70, 0.73, 0.75));
+  if (part == ${FixturePart.flagFoot}) color = daylit(vec3(0.43, 0.39, 0.33));
   if (part == ${FixturePart.casing}) color = daylit(u_fixturePaints[1]);
   if (part == ${FixturePart.lamp}) {
     float lit = lampOn(info) * switchedOn(info);

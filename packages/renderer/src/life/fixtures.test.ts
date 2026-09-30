@@ -58,6 +58,65 @@ const cells = (out: Uint8Array) => {
 };
 
 describe('street fixtures', () => {
+  it('draws authored Philippine flags with a base, pole, bicolor cloth and gold hoist details', () => {
+    const pole: StreetFixture = { ...lamp, kind: 'flagpole', flag: 'PH' };
+    expect(cells(pack([pole], 17.9).texels)).toHaveLength(0);
+    const result = pack([pole], 20.5);
+    const marks = cells(result.texels);
+    for (const part of [
+      FixturePart.flagPlinth,
+      FixturePart.flagMast,
+      FixturePart.flagBlue,
+      FixturePart.flagRed,
+      FixturePart.flagWhite,
+    ])
+      expect(marks.some((c) => c.part === part)).toBe(true);
+    expect(marks.filter((c) => c.part === FixturePart.flagGold)).toHaveLength(4);
+    const cloth = marks.filter(
+      (c) => c.part >= FixturePart.flagBlue && c.part <= FixturePart.flagWhite,
+    );
+    expect(new Set(cloth.map((c) => c.info)).size).toBeGreaterThan(5);
+    const byCol = new Map<number, typeof cloth>();
+    for (const c of cloth) {
+      const col = (c.at / 4) % grid.cols;
+      byCol.set(col, [...(byCol.get(col) ?? []), c]);
+    }
+    const tops: number[] = [];
+    for (const col of byCol.values()) {
+      const row = (c: (typeof cloth)[number]) => Math.floor(c.at / 4 / grid.cols);
+      tops.push(Math.min(...col.map(row)));
+      const blue = col.filter((c) => c.part === FixturePart.flagBlue).map(row);
+      const red = col.filter((c) => c.part === FixturePart.flagRed).map(row);
+      if (blue.length && red.length) expect(Math.max(...blue)).toBeLessThan(Math.min(...red));
+    }
+    expect(new Set(tops).size).toBeGreaterThan(1);
+    expect(marks.filter((c) => c.glyph === glyph('\u2605'))).toHaveLength(3);
+    expect(marks.filter((c) => c.glyph === glyph('\u263c'))).toHaveLength(1);
+    expect(result.visibility).toEqual({ streetlights: false, trafficSignals: false });
+    expect(pack([pole], 20.5, grid, 500).texels).toEqual(result.texels);
+    expect(updateFixtureSignals(result, 500)).toBe(false);
+    expect(cells(pack([pole], 19).texels).length).toBeLessThan(marks.length);
+    expect(cells(pack([pole], 21, { ...grid, cols: 2, rows: 2 }).texels)).toHaveLength(0);
+    expect(glyphs).toContain('\u25aa');
+  });
+
+  it('owns flagpoles in one tile and accepts worker geometry without flags', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const builder = new LifeBuilder();
+    builder.flagpole({ x: 100, y: 200 }, 1);
+    builder.flagpole({ x: -10, y: 200 }, 1);
+    const geometry = builder.finish();
+    const fixtures = tileFixtures(tile, geometry);
+    expect(fixtures).toHaveLength(1);
+    expect(fixtures[0]).toMatchObject({
+      kind: 'flagpole',
+      flag: 'PH',
+      base: tileToLngLat(tile, { x: 100, y: 200 }),
+    });
+    geometry.flagpoles = undefined;
+    expect(tileFixtures(tile, geometry)).toHaveLength(0);
+  });
+
   it('draws compact three-head lantern clusters with one shared post', () => {
     const lanterns: StreetFixture[] = [0, 1, 2].map((i) => {
       const angle = (i * Math.PI * 2) / 3;

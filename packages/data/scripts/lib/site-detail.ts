@@ -1,11 +1,18 @@
-import { featureZoomBand, tileZoomRange, type LngLat, type SiteDetail } from '@atlas/shared';
+import {
+  featureZoomBand,
+  tileZoomRange,
+  type LngLat,
+  type SiteDetail,
+  type SubdivisionArea,
+} from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
-import { union } from 'polyclip-ts';
+import { difference, union } from 'polyclip-ts';
 import type { Polygon, MultiPolygon, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
 
 const METERS = 111_320;
+type MultiPoly = ReturnType<typeof union>;
 const frame = ([lng, lat]: LngLat) => {
   const mx = METERS * Math.cos((lat * Math.PI) / 180);
   return {
@@ -15,10 +22,7 @@ const frame = ([lng, lat]: LngLat) => {
 };
 const distance = (a: Position, b: Position) => Math.hypot(...frame(a as LngLat).local(b));
 
-/** Rounded, real-width seating footprint, unioned before tiling so bends have no seams. */
-export function seatingFootprint(line: LngLat[], width: number): MultiPolygon {
-  const f = frame(line[0]!);
-  const points = line.map(f.local);
+function strokePieces(points: LngLat[], width: number): LngLat[][][] {
   const half = width / 2;
   const pieces: LngLat[][][] = points.map(([x, y]) => {
     const ring = Array.from({ length: 17 }, (_, i): LngLat => {
@@ -43,10 +47,36 @@ export function seatingFootprint(line: LngLat[], width: number): MultiPolygon {
       ],
     ]);
   }
-  const [first, ...rest] = pieces;
+  return pieces;
+}
+
+/** Union rim and wider bench sections in one meter frame, retaining the planted hole. */
+export function seatingFootprint(
+  line: LngLat[],
+  width: number,
+  spans: SiteDetail['seating'][number]['bench_spans'] = [],
+): MultiPolygon {
+  const f = frame(line[0]!);
+  const points = line.map(f.local);
+  const pieces = strokePieces(points, width);
+  for (const span of spans)
+    pieces.push(...strokePieces(points.slice(span.start, span.end + 1), span.width_m));
+  // A balanced union avoids thousands of near-coincident edges in one sweep.
+  // Round local coordinates to micrometers before clipping (far below tile precision).
+  let merged: MultiPoly[] = pieces.map((piece) => [
+    piece.map((ring) =>
+      ring.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6] as LngLat),
+    ),
+  ]);
+  while (merged.length > 1) {
+    const next: MultiPoly[] = [];
+    for (let i = 0; i < merged.length; i += 2)
+      next.push(i + 1 < merged.length ? union(merged[i]!, merged[i + 1]!) : merged[i]!);
+    merged = next;
+  }
   return {
     type: 'MultiPolygon',
-    coordinates: union(first!, ...rest).map((p) => p.map((r) => r.map((p) => f.world(p)))),
+    coordinates: merged[0]!.map((p) => p.map((r) => r.map((p) => f.world(p)))),
   };
 }
 
@@ -71,10 +101,15 @@ function feature(
 }
 
 /** Replace an area's ground material while retaining its OSM identity, labels and selection. */
-export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDetail[]) {
+export function mergeSiteDetails(
+  input: AtlasFeature[],
+  packs: readonly SiteDetail[],
+  subdivisions: readonly SubdivisionArea[] = [],
+) {
   const features = input.map((f) => ({ ...f, properties: { ...f.properties } }));
   const warnings: string[] = [];
   const parents = new Set<string>();
+  const relocated = new Set<string>();
   for (const pack of packs) {
     const parent = features.find((f) => f.properties.id === pack.osm_id);
     if (!parent || (parent.geometry.type !== 'Polygon' && parent.geometry.type !== 'MultiPolygon'))
@@ -85,6 +120,9 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
     if (parent.properties.height)
       throw new Error(`${pack.id}: a building cannot be replaced by paving`);
     const area = parent.geometry;
+    const parentClip = (area.type === 'Polygon' ? [area.coordinates] : area.coordinates).map(
+      (polygon) => polygon.map((ring) => ring.map(([lng, lat]): LngLat => [lng!, lat!])),
+    );
     const requireInside = (points: Position[], item: string) => {
       if (points.some((p) => !inside(p, area)))
         throw new Error(`${pack.id} ${item}: outside parent footprint`);
@@ -97,17 +135,34 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
     const prefix = `detail:${pack.id.slice(7)}`;
     const seating = pack.seating.map((seat) => ({
       seat,
-      shape: seatingFootprint(seat.line, seat.width_m),
+      shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
     }));
+    const structures = pack.structures.map((part) => {
+      const shape: Polygon = { type: 'Polygon', coordinates: [part.ring] };
+      requireInside(part.ring, `structure ${part.id}`);
+      // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
+      if (difference([part.ring], parentClip).length > 0)
+        throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+      return feature(`${prefix}/structure-${part.id}`, shape, {
+        class: part.material === 'wood' ? 'building_woodwork' : 'building_part',
+        height: part.height_m,
+        variant: 'flat',
+        detail_overhead: part.overhead,
+        ...(!part.overhead && { detail_blocked: true }),
+      });
+    });
+    features.push(...structures);
     const obstacles = [
       ...input.filter(
         (f) =>
+          !f.properties.detail_overhead &&
           (f.properties.detail_blocked || f.properties.class === 'building_part') &&
           (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
       ),
       ...seating.map(({ seat, shape }) =>
         feature(`${prefix}/seating-${seat.id}`, shape, { detail_blocked: true }),
       ),
+      ...structures.filter((f) => !f.properties.detail_overhead),
     ];
     const requireClear = (points: Position[], item: string) => {
       requireInside(points, item);
@@ -115,6 +170,37 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
         if (points.some((p) => inside(p, obstacle.geometry as Polygon | MultiPolygon)))
           throw new Error(`${pack.id} ${item}: crosses ${obstacle.properties.id}`);
     };
+    for (const pole of pack.flagpoles) {
+      if (relocated.has(pole.osm_id))
+        throw new Error(`${pack.id}: duplicate flagpole target ${pole.osm_id}`);
+      const target = features.find((f) => f.properties.id === pole.osm_id);
+      if (
+        !target ||
+        target.geometry.type !== 'Point' ||
+        target.properties.class !== 'furniture' ||
+        target.properties.variant !== 'flagpole'
+      )
+        throw new Error(`${pack.id}: ${pole.osm_id} must be an existing mapped flagpole point`);
+      requireClear([pole.at], `flagpole ${pole.osm_id}`);
+      relocated.add(pole.osm_id);
+      target.geometry = { type: 'Point', coordinates: [...pole.at] };
+      const properties = target.properties;
+      if (pole.flag !== undefined) properties.flag = pole.flag;
+      if (properties.label_lng !== undefined || properties.label_lat !== undefined) {
+        [properties.label_lng, properties.label_lat] = pole.at;
+      }
+      // A correction can cross a subdivision boundary, including an approximate one.
+      delete properties.subdivision;
+      delete properties.subdivision_approx;
+      const containing = subdivisions.filter((s) =>
+        inside(pole.at, s.geometry as Polygon | MultiPolygon),
+      );
+      const subdivision = containing.find((s) => !s.approximate) ?? containing[0];
+      if (subdivision) {
+        properties.subdivision = subdivision.name;
+        if (subdivision.approximate) properties.subdivision_approx = true;
+      }
+    }
     for (const walk of pack.walks) {
       // Sample the whole route, not just its vertices, against the parent and raised obstacles.
       const samples: LngLat[] = [];
@@ -149,46 +235,51 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
         }),
       );
       // Sparse pause anchors on the accessible side; bodies do not stand inside the stonework.
-      let phase = 1.5;
-      for (let i = 1; i < seat.line.length; i++) {
-        const a = seat.line[i - 1]!,
-          b = seat.line[i]!,
-          f = frame(a);
-        const [dx, dy] = f.local(b),
-          length = Math.hypot(dx, dy);
-        const side = seat.facing === 'left' ? 1 : -1;
-        const nx = (-dy / length) * side,
-          ny = (dx / length) * side;
-        for (; phase < length; phase += 4) {
-          const at = f.world([
-            (dx / length) * phase + nx * (seat.width_m / 2 + 0.75),
-            (dy / length) * phase + ny * (seat.width_m / 2 + 0.75),
-          ]);
-          requireClear([at], `seating anchor ${seat.id}`);
-          const mapped = input.some(
-            (f) =>
-              f.properties.class === 'furniture' &&
-              f.properties.variant === 'bench' &&
-              f.geometry.type === 'Point' &&
-              distance(at, f.geometry.coordinates) <= 3,
-          );
-          if (mapped) {
-            warnings.push(`${pack.id}: mapped bench replaces seating anchor ${seat.id}`);
-            continue;
+      const spans = seat.bench_spans ?? [
+        { id: '', start: 0, end: seat.line.length - 1, width_m: seat.width_m },
+      ];
+      for (const span of spans) {
+        let phase = 1.5;
+        for (let i = span.start + 1; i <= span.end; i++) {
+          const a = seat.line[i - 1]!,
+            b = seat.line[i]!,
+            f = frame(a);
+          const [dx, dy] = f.local(b),
+            length = Math.hypot(dx, dy);
+          const side = seat.facing === 'left' ? 1 : -1;
+          const nx = (-dy / length) * side,
+            ny = (dx / length) * side;
+          for (; phase < length; phase += 4) {
+            const at = f.world([
+              (dx / length) * phase + nx * (span.width_m / 2 + 0.75),
+              (dy / length) * phase + ny * (span.width_m / 2 + 0.75),
+            ]);
+            requireClear([at], `seating anchor ${seat.id}`);
+            const mapped = input.some(
+              (f) =>
+                f.properties.class === 'furniture' &&
+                f.properties.variant === 'bench' &&
+                f.geometry.type === 'Point' &&
+                distance(at, f.geometry.coordinates) <= 3,
+            );
+            if (mapped) {
+              warnings.push(`${pack.id}: mapped bench replaces seating anchor ${seat.id}`);
+              continue;
+            }
+            const key = `${span.id ? `${span.id}-` : ''}${i}-${Math.round(phase * 100)}`;
+            features.push(
+              feature(
+                `${prefix}/bench-${seat.id}-${key}`,
+                { type: 'Point', coordinates: at },
+                {
+                  variant: 'bench',
+                  seat_bearing: ((Math.atan2(nx, ny) * 180) / Math.PI + 360) % 360,
+                },
+              ),
+            );
           }
-          const key = `${i}-${Math.round(phase * 100)}`;
-          features.push(
-            feature(
-              `${prefix}/bench-${seat.id}-${key}`,
-              { type: 'Point', coordinates: at },
-              {
-                variant: 'bench',
-                seat_bearing: ((Math.atan2(nx, ny) * 180) / Math.PI + 360) % 360,
-              },
-            ),
-          );
+          phase -= length;
         }
-        phase -= length;
       }
     }
     for (const lamp of pack.lamps) {

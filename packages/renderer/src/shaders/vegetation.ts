@@ -14,6 +14,7 @@ import {
   FLUTTER,
   GrassGlyph,
   GRASS,
+  PLANTING,
   GUST_STEPS,
   STIR,
   SWAY,
@@ -104,6 +105,14 @@ int grassVariant(ivec2 c, float gust, out int tone) {
   return score > ${float(GRASS.dense)} ? 0
     : score > ${float(GRASS.medium)} ? 1
     : score > ${float(GRASS.thin)} ? 2 : ${GrassGlyph.sparse};
+}
+
+int plantingVariant(ivec2 c, float gust, out int tone) {
+  if (valueNoise(c, ${PLANTING.scale}, ${PLANTING.seed}) < ${float(PLANTING.bareBelow)}) {
+    tone = ${Tone.none};
+    return ${PLANTING.bareGlyph};
+  }
+  return grassVariant(c, gust, tone);
 }
 
 int cropVariant(ivec2 c, float gust) {

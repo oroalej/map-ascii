@@ -53,6 +53,8 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   furniture: { min: 18 },
   seating: { min: 18 },
   shrubs: { min: 19 },
+  planting: { min: 18 },
+  building_woodwork: { min: 18 },
   // Labels have their own zoom bands (the renderer's labels.ts).
   place_label: { min: 0 },
 };

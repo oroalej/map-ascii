@@ -89,6 +89,17 @@ describe('landcoverFeatures', () => {
     expect(warnings).toEqual(['landcover/test tree 1 is now in OSM; remove it from the pack']);
   });
 
+  it('keeps raised soil-and-ground-cover beds blocked without inventing tree crowns', () => {
+    const { features } = landcoverFeatures(
+      [],
+      [pack({ areas: [{ ring, cover: 'planting', raised: true }] })],
+    );
+    expect(features[0]!.properties).toMatchObject({ class: 'planting', detail_blocked: true });
+    expect(features[0]!.properties.crown).toBeUndefined();
+    expect(features[0]!.geometry.type).toBe('Polygon');
+    expect(features[0]!.tippecanoe.layer).toBe('landuse');
+  });
+
   it('warns about OSM areas of the same class inside a curated area, but keeps it', () => {
     const osmParking = {
       properties: { id: 'osm:way/2', class: 'parking' },

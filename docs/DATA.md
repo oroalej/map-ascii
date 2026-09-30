@@ -41,9 +41,9 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 4. **`04-merge-content`**
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
-   - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, woods, or shrub areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`, `shrubs`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
+   - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, woods, shrub, or planting-bed areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`, `shrubs`, `planting`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
-   - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. `surface: "paving"` changes its ground class while retaining its id, labels, and landmark metadata. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, buildings, out-of-bounds geometry, and routes across raised beds or monument parts; mapped benches and lamps within 3 m suppress curated duplicates. Credits join the generated meta attribution.
+   - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. `surface: "paving"` changes its ground class while retaining its id, labels, and landmark metadata. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side. Optional `bench_spans` select named sections by inclusive start/end vertex indices and widen them to the specified `width_m`. Spans must have unique ids, non-overlapping ranges within the line (shared endpoints are allowed), and widths at least the base rim width. Omission seats the entire line as before; `[]` creates a rim without pause anchors. Rim and bench sections are unioned in a common meter frame into one footprint, preserving the planted hole and avoiding internal seams; anchors use only the bench sections and their widths; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, buildings, out-of-bounds geometry, and routes across raised beds or monument parts; mapped benches and lamps within 3 m suppress curated duplicates. Optional `flagpoles` relocate existing OSM flagpole points by id, preserving their identity and refreshing label anchors and subdivision membership. Reject missing or non-flagpole targets, duplicate targets across detail packs, and positions outside the parent or inside raised obstacles. Omitted overrides default to an empty array. Optional `flag: "PH"` explicitly selects a Philippine flag marker at the mapped pole; omitted designs retain the generic pole glyph. The code is carried through tiles and worker fixture geometry, independent of Life. Credits join the generated meta attribution.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
 5. **`05-tiles`**
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
@@ -80,12 +80,13 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `paving` | a sourced `details/` ground-surface override on an existing OSM area |
 | `seating` | sourced real-width stone seating and planter edges from `details/` |
 | `shrubs` | curated shrub polygons from `landcover/` |
+| `planting` | curated soil and sparse ground cover in planting beds; `raised` beds block ground agents |
 | `trees` | `natural=wood`, `landuse=forest` (kind in `variant`) |
 | `grass` | `landuse=grass|meadow|village_green`, `natural=grassland`, `leisure=recreation_ground` (a park wins if both are tagged) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
 | `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
-| `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, `trees`, or `shrubs` |
+| `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, `trees`, `shrubs`, or `planting` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
 | `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop|street_lamp`, road transport platforms, sourced tricycle ranks, `man_made=flagpole` (kind in `variant`; shelters with buildings keep their building class) |
@@ -103,7 +104,9 @@ Road normalization reads `sidewalk`, `sidewalk:both`, `sidewalk:left`, and `side
 
 Step 04 may add both sidewalks to untagged, non-region `road_major` and `road_mid` features at 2 m per side, with `sidewalk_src: "derived"`. `city.streets.sidewalks.derive` defaults to true; an explicit sidewalk policy requires a nonempty `source`. A false policy keeps mapped bands only. The legend receives this policy from the city pack. Logs report sidewalk-side kilometers separately from the road kilometers they cover. Naga explicitly disables derivation pending a sourced survey.
 
-`oneway=yes|true|1` becomes 1, `oneway=-1|reverse` becomes -1, and `no|reversible|alternating` becomes 0. Without an explicit `oneway`, `junction=roundabout|circular` implies 1; other roads default to 0. Nonzero direction is retained in tiles and carried on life polylines for future routing; current simulated traffic behavior is unchanged. Arrow anchors are baked from complete original segments before tippecanoe clips them. Their world-meter phase gives 30 m spacing, with an 8 m exclusion at real segment vertices; tile seams do not restart the phase or add exclusions. The worker draws each anchor as an exact 3 m by at most 3 m quad.
+`oneway=yes|true|1` becomes 1, `oneway=-1|reverse` becomes -1, and `no|reversible|alternating` becomes 0. Without an explicit `oneway`, `junction=roundabout|circular` implies 1; other roads default to 0. Step 04 applies sourced `city.streets.directions` overrides before resolving traffic approaches and markings. Each entry identifies an `osm:way/<id>` and supplies `oneway: -1 | 0 | 1`, relative to its unchanged OSM coordinate order; zero removes the restriction. Duplicate targets, missing detail ways, and non-road/non-LineString targets fail the build. Region copies stay unchanged. Corrected roads retain `oneway_source`, also used in their arrow provenance.
+
+Nonzero direction is retained in tiles and carried on life polylines. Simulated road vehicles, including bicycles, spawn along that flow and exclude exits entered against it; boats, walkers and trains ignore it. One-way vehicles with no legal exit brake and hold before the endpoint with front-bumper clearance, including at clipped endpoints. Placement retries and collision retries also cannot reverse their flow. Two-way roads retain their dead-end turnaround. Arrow anchors are baked from complete original segments before tippecanoe clips them. Their world-meter phase gives 30 m spacing, with an 8 m exclusion at real segment vertices; tile seams do not restart the phase or add exclusions. The worker draws each anchor as an exact 3 m by at most 3 m quad.
 
 The small traffic query also fetches `highway=stop` nodes. Resolved signals generate stop lines on inbound approaches only, at `signal_radius + 1.5 m` from the shared vertex; outgoing one-way arms and approaches shorter than the setback are skipped. Two-way lines cover half the road, centered one quarter-width to the right of travel; one-way lines cover the full road. Driving side currently defaults to right: the city schema has no driving-side setting. Mapped stop nodes must match a road vertex. A `direction=forward|backward` sign resolves one approach; at an ambiguous shared vertex the lowest road rank, then narrower width and stable id resolve the tie. An undirected junction sign covers approaches of the lowest-ranked road; undirected mid-block nodes are skipped and counted. Coincident lines are deduplicated, preferring mapped provenance. Stop anchors carry `stop_bearing`, `stop_width`, `stop_road`, and `stop_src`; they produce an exact 0.5 m long quad and never a point glyph. Positions, line dimensions and arrow spacing are illustrative rather than surveyed road paint.
 
@@ -137,7 +140,10 @@ City {                           // cities/<slug>/city.json
   // and seasons follow it. Without it: the sun's time at the city's longitude.
   timezone?: string;
   // Street enrichment. An explicit sidewalk policy requires its decision/survey source.
-  streets?: { sidewalks?: { derive?: boolean; source: string } }; // derive defaults to true
+  streets?: {
+    sidewalks?: { derive?: boolean; source: string }; // derive defaults to true
+    directions?: { osm_id: string; oneway: -1 | 0 | 1; source: string }[];
+  };
   // The daily rhythm (SPEC.md §4 "Time of day"): per kind (vehicle, person, boat, train), how
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
@@ -253,7 +259,7 @@ Landcover {                      // cities/<slug>/landcover/*.json — trees and
   title: string;
   trees?: { at: [lng, lat]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
   rows?: { line: [lng, lat][]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
-  areas?: { ring: [lng, lat][]; cover: 'grass' | 'parking' | 'woods' | 'shrubs'; kind?: TreeKind; raised?: boolean }[];  // closed ring; kind: woods only
+  areas?: { ring: [lng, lat][]; cover: 'grass' | 'parking' | 'woods' | 'shrubs' | 'planting'; kind?: TreeKind; raised?: boolean }[];  // closed ring; kind: woods only
   status: 'draft' | 'verified';  // draft until checked on the ground or against newer imagery
   credit: string;                // shown with the map attribution, e.g. the traced imagery
   sources: Source[];
@@ -263,12 +269,30 @@ TreeKind = 'broadleaved' | 'palm' | 'needleleaved';   // unset: the generic tree
 SiteDetail {                     // cities/<slug>/details/*.json — sourced outdoor detail
   id: string;                    // "detail/<slug>"
   osm_id: string; title: string; surface: 'paving';
+  structures?: {
+    id: string; ring: [lng, lat][]; height_m: number;
+    material: 'wood' | 'stone' | 'roof'; overhead: boolean;
+  }[]; // default []; simple closed footprints wholly inside the parent area
+  flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
-  seating: { id: string; line: [lng, lat][]; width_m: number; height_m: number; facing: 'left' | 'right' }[];
+  seating: {
+    id: string; line: [lng, lat][]; width_m: number; height_m: number;
+    facing: 'left' | 'right';
+    bench_spans?: { id: string; start: number; end: number; width_m: number }[];
+  }[];
   lamps: { id: string; at: [lng, lat]; bearing: number; reach_m: number; heads: number; style?: 'streetlight' | 'lantern' }[]; // default: streetlight
   status: 'draft' | 'verified'; credit: string; sources: Source[];
 }
 // CuratedArea also accepts raised?: boolean for planting beds ground agents cannot enter.
+
+Structure parts receive stable `detail:<slug>/structure-<id>` identities. Timber uses
+`building_woodwork` (from z18); stone and roof contours use `building_part`. Parts are flat
+plan-view polygons with height shading and outlines, beneath taller crowns. Elevated beams
+and roof contours carry `detail_overhead: true`: their visible coverage hides ground figures,
+but they create no ground obstacles. Supports and platforms are blocked footprints. Walking
+routes and bench anchors must clear these ground parts; an overhead part may span a route.
+The merge rejects structures crossing the plaza edge, a concavity, or a hole, even if all
+their vertices lie inside. Existing detail records need no changes.
 
 LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
   id: string;                    // "art/<slug>"
@@ -333,6 +357,8 @@ Generated files are gitignored (never commit tiles), so builds get them from Git
 ### Traffic enrichment
 
 `01-fetch` saves a separate `detail-traffic.osm.json` node query for `highway=traffic_signals|crossing|stop`, `crossing`, and `crossing:markings`, preserving existing download caches. Tagged nodes win over skeletal way members when responses merge. Marked crossing nodes and signals use furniture variants; `footway=crossing` ways keep their path class and receive point stripe anchors in `lib/traffic.ts`. That resolver uses exact shared road vertices, snaps mapped signals within 30 m, derives signals only at four-arm mid/major intersections, suppresses nearby duplicates, and adds crossing anchors on their approaches. Tiles carry crossing bearing/width/road and signal axes/radius/provenance from z15. `life.signals` supports `derive`, sourced `add` positions, and sourced `remove` targets by node ID or position. Phases and derived crossings are simulated, not surveyed traffic timings.
+
+After direction overrides, `lib/signal-layout.ts` resolves each controller into validated `signal_layout` JSON metadata: member coordinates and exterior road arms with stable way IDs, travel direction, inbound/outbound eligibility, phase group, bearing, width, and optional stop position/width. Stop paint, signal fixtures, and vehicle gates consume this same layout. Curated `life.signals.add` entries may list `linked_junctions`; every member must be a shared road vertex, connected to the primary member without an intervening unlisted junction, and owned by only one controller. Duplicate, missing, disconnected, or multiply owned members fail the build. Internal connecting arms produce no signal heads, stops, or derived crossings. Archives lacking the optional metadata retain legacy behavior.
 
 ### Neighborhood enrichment
 

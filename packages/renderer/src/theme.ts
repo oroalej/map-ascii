@@ -42,7 +42,9 @@ export type GlyphKind =
   | 'grass'
   | 'canopy'
   | 'foliage'
-  | 'crop';
+  | 'crop'
+  | 'seating'
+  | 'planting';
 
 export type ClassStyle = {
   kind: GlyphKind;
@@ -55,6 +57,8 @@ export type ClassStyle = {
    * shape; lines and markers leave it unset and draw over the plain background.
    */
   fill?: number;
+  /** Optional 0xRRGGBB background pigment, independent of the glyph color. */
+  fillColor?: number;
 };
 
 export type Theme = {
@@ -149,7 +153,20 @@ export const rainGlyphs = ['|', '\\', '/'] as const;
 /** A streetlight's head (life/lights.ts), lit warm from dusk, grey when it is out. */
 export const streetlightGlyph = '*';
 /** Reuse line, casing, and lens glyphs for static street hardware. */
-export const fixtureGlyphs = ['▪', '─', '│', '╱', '╲', '▫', '○', '•', '*'] as const;
+export const fixtureGlyphs = [
+  '\u2584',
+  '\u263c',
+  '\u2605',
+  '▪',
+  '─',
+  '│',
+  '╱',
+  '╲',
+  '▫',
+  '○',
+  '•',
+  '*',
+] as const;
 
 /**
  * Grass and parks: dense, medium, and thin tufts at rest; then leaning right, leaning left, and
@@ -263,15 +280,28 @@ function makeTheme(background: number, c: Palette): Theme {
       building_station: { kind: 'building', glyphs: buildingRamp, color: c.station, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
       building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
+      building_woodwork: {
+        kind: 'building',
+        glyphs: buildingRamp,
+        color: background > 0x7fffff ? 0x70513b : 0xb99570,
+        fill: 0.3,
+      },
       park: { kind: 'grass', glyphs: grassGlyphs, color: c.park, fill: 0.12 },
       paving: { kind: 'scatter', glyphs: [' ', ' ', ' ', '·'], color: c.furniture, fill: 0.14 },
       seating: {
-        kind: 'single',
-        glyphs: ['░'],
+        kind: 'seating',
+        glyphs: ['▒'],
         color: background > 0x7fffff ? 0x676d70 : 0xb8bec2,
-        fill: 0.3,
+        fill: 0.65,
       },
       shrubs: { kind: 'scatter', glyphs: ['%', '*', '%'], color: c.trees, fill: 0.25 },
+      planting: {
+        kind: 'planting',
+        glyphs: [...grassGlyphs, ' '],
+        color: c.grass,
+        fillColor: background > 0x7fffff ? 0x826a50 : 0x95734e,
+        fill: 0.4,
+      },
       grass: { kind: 'grass', glyphs: grassGlyphs, color: c.grass, fill: 0.08 },
       trees: {
         kind: 'canopy',
@@ -453,10 +483,12 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building_market: 'Market or shop',
   building_station: 'Train station',
   building_part: 'Landmark part',
+  building_woodwork: 'Pergola or timber structure',
   park: 'Park or plaza',
   paving: 'Paved plaza',
   seating: 'Stone seating or planter edge',
   shrubs: 'Shrubs',
+  planting: 'Soil and ground cover',
   trees: 'Woods',
   grass: 'Grass',
   tree_crown: 'Tree',

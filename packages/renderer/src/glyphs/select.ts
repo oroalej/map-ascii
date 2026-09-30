@@ -35,6 +35,8 @@ export const kindCodes: Record<GlyphKind, number> = {
   canopy: 11,
   foliage: 12,
   crop: 13,
+  seating: 14,
+  planting: 15,
 };
 
 /** Width of the glyph table: the most variants any class can have. */
@@ -150,6 +152,7 @@ export const subcellClasses: readonly RenderClass[] = [
   'building_market',
   'building_station',
   'building_part',
+  'building_woodwork',
   'water_area',
   'water_sea',
   'park',
@@ -162,6 +165,7 @@ export const subcellClasses: readonly RenderClass[] = [
   'paving',
   'seating',
   'shrubs',
+  'planting',
 ];
 
 /** Per class id, 1 for `subcellClasses`, for the select shader (ids past 31 included). */
@@ -352,6 +356,7 @@ export function wallStyle(
   height: number,
   zoom: number,
 ): WallStyle | null {
+  if (kind === 'seating' && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
   if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
   return null;
@@ -691,6 +696,14 @@ export const GRASS = {
   /** A wind blowing more along the columns than this leans blades upright (`|`), not aslant. */
   uprightBelow: 0.4,
 } as const;
+
+/** Broad bare-earth patches between ground cover, stable in world cells. */
+export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
+export function plantingCell(x: number, y: number, gust: number, dir: WindDir = DEFAULT_WIND_DIR) {
+  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
+    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
+    : grassCell(x, y, gust, dir);
+}
 
 /** A grass cell's glyph and tone: the tufts at rest, leaning downwind in a gust, then flat. */
 export function grassCell(
@@ -1050,11 +1063,16 @@ export function variantFor(
     case 'scatter':
       return patternVariant(kind, ctx.x, ctx.y, count);
     case 'single':
+    case 'seating':
       return 0;
     case 'variant':
       return Math.min(ctx.variant ?? 0, count - 1);
     case 'ramp':
       return rampVariant(ctx.height, count);
+    case 'planting': {
+      const gust = (ctx.wind ?? 1) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
+      return Math.min(plantingCell(ctx.x, ctx.y, gust, ctx.windDir).variant, count - 1);
+    }
     case 'grass':
       return Math.min(grassVariant(ctx.x, ctx.y, ctx.time, ctx.wind, ctx.windDir), count - 1);
     case 'canopy': {
@@ -1101,6 +1119,8 @@ export type GlyphTables = {
   connects: Int32Array;
   /** Linear RGB per class id. */
   colors: Float32Array;
+  /** Background pigments; default to each class's glyph color. */
+  fillColors: Float32Array;
   /** Background fill strength per class id (theme.ts `ClassStyle.fill`, 0 = none). */
   fills: Float32Array;
 };
@@ -1123,6 +1143,7 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
   const counts = new Int32Array(MAX_CLASSES);
   const connectMasks = new Int32Array(MAX_CLASSES);
   const colors = new Float32Array(MAX_CLASSES * 3);
+  const fillColors = new Float32Array(MAX_CLASSES * 3);
   const fills = new Float32Array(MAX_CLASSES);
 
   for (const cls of renderClasses) {
@@ -1139,6 +1160,10 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     colors[id * 3] = ((style.color >> 16) & 0xff) / 255;
     colors[id * 3 + 1] = ((style.color >> 8) & 0xff) / 255;
     colors[id * 3 + 2] = (style.color & 0xff) / 255;
+    const fillColor = style.fillColor ?? style.color;
+    fillColors[id * 3] = ((fillColor >> 16) & 0xff) / 255;
+    fillColors[id * 3 + 1] = ((fillColor >> 8) & 0xff) / 255;
+    fillColors[id * 3 + 2] = (fillColor & 0xff) / 255;
     fills[id] = style.fill ?? 0;
   }
   ridgeGlyphs.forEach((glyph, i) => {
@@ -1152,5 +1177,5 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
   sextantGlyphs.forEach((glyph, mask) => {
     setGlyph(SEXTANT_ROW * MAX_VARIANTS + mask, glyph);
   });
-  return { table, kinds, counts, connects: connectMasks, colors, fills };
+  return { table, kinds, counts, connects: connectMasks, colors, fillColors, fills };
 }

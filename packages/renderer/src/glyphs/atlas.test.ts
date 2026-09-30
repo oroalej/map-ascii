@@ -266,6 +266,9 @@ describe('glyph set', () => {
         ...dogGlyphs(),
         ...catGlyphs(),
         streetlightGlyph,
+        '\u2584',
+        '\u263c',
+        '\u2605',
       ]);
       expect(new Set(glyphs)).toEqual(expected);
       // Index 0 of the atlas is blank, so the glyphs take indices 1 on.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onewayOf, sidewalkOf, classify, variantOf } from './classify';
-import { deriveSidewalks, onewayArrows, streetStats } from './streets';
+import { applyRoadDirections, deriveSidewalks, onewayArrows, streetStats } from './streets';
 import { mergeTraffic } from './traffic';
 import type { AtlasFeature } from '../03-normalize';
 
@@ -114,6 +114,67 @@ describe('street tags', () => {
     expect(streetStats(derived).derivedSidewalkKm).toBeCloseTo(
       streetStats(derived).derivedRoadKm * 2,
     );
+  });
+});
+
+describe('curated road directions', () => {
+  const source = 'Project owner annotated map';
+  it('applies directions before arrows and inbound stop lines without reversing geometry', () => {
+    for (const oneway of [-1, 0, 1] as const) {
+      const roads = cross();
+      const original = roads[0]!;
+      original.properties.id = 'osm:way/1';
+      original.properties.oneway = 1;
+      original.properties.sidewalk = 'left';
+      original.properties.sidewalk_left_width = 1.5;
+      const result = mergeTraffic(roads, undefined, {
+        directions: [{ osm_id: 'osm:way/1', oneway, source }],
+        sidewalks: { derive: false, source },
+      });
+      const changed = result.find((f) => f.properties.id === 'osm:way/1')!;
+      expect(changed.geometry).toBe(original.geometry);
+      expect(changed.properties).toMatchObject({
+        sidewalk: 'left',
+        sidewalk_left_width: 1.5,
+        oneway_source: source,
+      });
+      expect(changed.properties.oneway).toBe(oneway || undefined);
+      expect(original.properties.oneway).toBe(1);
+      expect(result.find((f) => f.properties.id === 'north')).toBe(roads[1]);
+      const arrows = result.filter((f) => f.properties.variant === 'oneway_arrow');
+      if (!oneway) expect(arrows).toHaveLength(0);
+      else {
+        expect(arrows.length).toBeGreaterThan(0);
+        expect(arrows.every((f) => f.properties.arrow_bearing === (oneway === 1 ? 90 : 270))).toBe(
+          true,
+        );
+        expect(arrows.every((f) => f.properties.source?.includes(source))).toBe(true);
+      }
+      const horizontal = stops(result).filter((f) =>
+        [90, 270].includes(f.properties.stop_bearing!),
+      );
+      expect(horizontal).toHaveLength(oneway ? 1 : 2);
+      expect(horizontal.every((f) => f.properties.stop_width === (oneway ? 10 : 5))).toBe(true);
+      if (oneway) expect(horizontal[0]!.properties.stop_bearing).toBe(oneway === 1 ? 90 : 270);
+    }
+  });
+
+  it('fails loudly for missing, non-road, region-only, and duplicate targets', () => {
+    const item = { osm_id: 'osm:way/1', oneway: 0 as const, source };
+    const f = road(item.osm_id, [
+      [0, 0],
+      [0.001, 0],
+    ]);
+    expect(() => applyRoadDirections([], [item])).toThrow('not found');
+    expect(() =>
+      applyRoadDirections([{ ...f, properties: { ...f.properties, class: 'path' } }], [item]),
+    ).toThrow('not a road');
+    expect(() =>
+      applyRoadDirections([{ ...f, properties: { ...f.properties, region: true } }], [item]),
+    ).toThrow('not found');
+    expect(() => applyRoadDirections([f], [item, item])).toThrow('Duplicate');
+    const region = { ...f, properties: { ...f.properties, region: true, oneway: 1 as const } };
+    expect(applyRoadDirections([f, region], [item])[1]).toBe(region);
   });
 });
 

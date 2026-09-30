@@ -52,7 +52,11 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 export type AtlasProperties = {
   detail_route?: boolean;
   detail_blocked?: boolean;
+  /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
+  detail_overhead?: boolean;
   seat_bearing?: number;
+  /** Country flag design explicitly supplied by a city detail pack. */
+  flag?: 'PH';
   lamp_bearing?: number;
   lamp_reach?: number;
   lamp_heads?: number;
@@ -63,6 +67,7 @@ export type AtlasProperties = {
   sidewalk_right_width?: number;
   sidewalk_src?: 'mapped' | 'derived';
   oneway?: -1 | 1;
+  oneway_source?: string;
   stop_direction?: 'forward' | 'backward';
   stop_bearing?: number;
   stop_width?: number;
@@ -79,6 +84,8 @@ export type AtlasProperties = {
   signal_a?: number;
   signal_b?: number;
   signal_radius?: number;
+  /** JSON-encoded SignalLayout; scalar string survives vector tile encoding. */
+  signal_layout?: string;
   source?: string;
   life_site?: 'stop' | 'terminal' | 'shelter';
   life_modes?: number;

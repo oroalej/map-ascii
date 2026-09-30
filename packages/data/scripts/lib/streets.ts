@@ -1,4 +1,4 @@
-import type { City } from '@atlas/shared';
+import { SignalLayout, type City } from '@atlas/shared';
 import type { Position } from 'geojson';
 import type { AtlasFeature, AtlasProperties } from '../03-normalize';
 
@@ -32,6 +32,31 @@ const width = (road: AtlasFeature) =>
   { road_major: 14, road_mid: 10, road_minor: 6 }[road.properties.class as 'road_major'] ??
   6;
 const road = (f: AtlasFeature) => !f.properties.region && f.properties.class.startsWith('road_');
+
+/** Apply sourced city corrections before resolving junction approaches and arrow anchors. */
+export function applyRoadDirections(
+  features: AtlasFeature[],
+  directions: NonNullable<City['streets']>['directions'],
+): AtlasFeature[] {
+  if (!directions?.length) return features;
+  const overrides = new Map(directions.map((item) => [item.osm_id, item]));
+  if (overrides.size !== directions.length) throw new Error('Duplicate road direction target');
+  const matched = new Set<string>();
+  const result = features.map((feature) => {
+    const override = overrides.get(feature.properties.id);
+    if (!override || feature.properties.region) return feature;
+    if (!road(feature) || feature.geometry.type !== 'LineString')
+      throw new Error(`Road direction target is not a road LineString: ${override.osm_id}`);
+    matched.add(override.osm_id);
+    const properties = { ...feature.properties, oneway_source: override.source };
+    if (override.oneway === 0) delete properties.oneway;
+    else properties.oneway = override.oneway;
+    return { ...feature, properties };
+  });
+  for (const id of overrides.keys())
+    if (!matched.has(id)) throw new Error(`Road direction target not found in detail data: ${id}`);
+  return result;
+}
 const point = (
   id: string,
   position: Position,
@@ -101,7 +126,7 @@ export function onewayArrows(features: readonly AtlasFeature[]): AtlasFeature[] 
               arrow_road: f.properties.class,
               arrow_width: Math.min(width(f), 3),
               arrow_bearing: ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360,
-              source: 'Direction from OpenStreetMap; illustrative arrow spacing',
+              source: `Direction from ${f.properties.oneway_source ?? 'OpenStreetMap'}; illustrative arrow spacing`,
             }),
           );
         }
@@ -146,6 +171,30 @@ export function streetStats(features: readonly AtlasFeature[]): StreetStats {
   return stats;
 }
 
+/** The same inbound stop geometry is used by paint, hardware, and vehicle control. */
+export function signalStop(p: Position, arm: RoadArm, setback: number) {
+  const direction = arm.forward ? -1 : 1;
+  if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
+  const [x, y] = delta(p, arm.toward),
+    length = Math.hypot(x, y);
+  if (!length || length < setback) {
+    return;
+  }
+  const tx = -x / length,
+    ty = -y / length; // toward the stop, east/north
+  const q = [
+    p[0]! + ((arm.toward[0]! - p[0]!) * setback) / length,
+    p[1]! + ((arm.toward[1]! - p[1]!) * setback) / length,
+  ];
+  const w = width(arm.road),
+    offset = arm.road.properties.oneway ? 0 : w / 4;
+  q[0]! += (ty * offset) / (111320 * Math.cos((q[1]! * Math.PI) / 180));
+  q[1]! -= (tx * offset) / 111320;
+  const bearing = ((Math.atan2(tx, ty) * 180) / Math.PI + 360) % 360;
+  const stopWidth = arm.road.properties.oneway ? w : w / 2;
+  return { position: q as [number, number], bearing, width: stopWidth };
+}
+
 /** Resolve stop approaches before tiling; driving side currently defaults to right. */
 export function mergeStreetDetails(
   features: AtlasFeature[],
@@ -163,25 +212,13 @@ export function mergeStreetDetails(
   function stop(p: Position, arm: RoadArm, setback: number, mapped: boolean, id: string) {
     const direction = arm.forward ? -1 : 1;
     if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
-    const [x, y] = delta(p, arm.toward),
-      length = Math.hypot(x, y);
-    if (!length || length < setback) {
+    const resolved = signalStop(p, arm, setback);
+    if (!resolved) {
       shortApproaches++;
       return;
     }
-    const tx = -x / length,
-      ty = -y / length; // toward the stop, east/north
-    const q = [
-      p[0]! + ((arm.toward[0]! - p[0]!) * setback) / length,
-      p[1]! + ((arm.toward[1]! - p[1]!) * setback) / length,
-    ];
-    const w = width(arm.road),
-      offset = arm.road.properties.oneway ? 0 : w / 4;
-    q[0]! += (ty * offset) / (111320 * Math.cos((q[1]! * Math.PI) / 180));
-    q[1]! -= (tx * offset) / 111320;
-    const bearing = ((Math.atan2(tx, ty) * 180) / Math.PI + 360) % 360;
-    const stopWidth = arm.road.properties.oneway ? w : w / 2;
-    const k = `${q[0]!.toFixed(7)},${q[1]!.toFixed(7)}:${bearing.toFixed(2)}:${stopWidth}`;
+    const { position: q, bearing, width: stopWidth } = resolved;
+    const k = `${q[0].toFixed(7)},${q[1].toFixed(7)}:${bearing.toFixed(2)}:${stopWidth}`;
     if (stops.has(k) && (!mapped || stops.get(k)!.properties.stop_src === 'mapped')) return;
     stops.set(
       k,
@@ -197,6 +234,32 @@ export function mergeStreetDetails(
   }
   for (const signal of signals) {
     if (signal.geometry.type !== 'Point') continue;
+    if (signal.properties.signal_layout) {
+      const layout = SignalLayout.parse(JSON.parse(signal.properties.signal_layout));
+      for (const arm of layout.arms) {
+        if (!arm.inbound) continue;
+        if (!arm.stop || !arm.stop_width) {
+          shortApproaches++;
+          continue;
+        }
+        const feature = features.find(
+          (f) => f.properties.id === arm.road_id && !f.properties.region,
+        )!;
+        const k = `${arm.stop[0].toFixed(7)},${arm.stop[1].toFixed(7)}:${arm.bearing.toFixed(2)}:${arm.stop_width}`;
+        stops.set(
+          k,
+          point(`${signal.properties.id}:stop:${arm.road_id}:${key(arm.toward)}`, arm.stop, {
+            variant: 'stop_line',
+            stop_road: feature.properties.class,
+            stop_width: arm.stop_width,
+            stop_bearing: arm.bearing,
+            stop_src: 'signalized',
+            source: 'Derived stop line at a resolved signal',
+          }),
+        );
+      }
+      continue;
+    }
     const v = vertices.get(key(signal.geometry.coordinates));
     for (const arm of v?.arms ?? [])
       stop(

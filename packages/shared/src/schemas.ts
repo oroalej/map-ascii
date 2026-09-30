@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
@@ -233,7 +234,7 @@ export const CuratedTree = z.strictObject({ at: LngLat, ...treeShape });
 export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
 
 /** A curated ground cover; woods use the atlas `trees` class. */
-export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs']);
+export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs', 'planting']);
 export type LandCover = z.infer<typeof LandCover>;
 
 /**
@@ -266,6 +267,64 @@ const DetailLine = z
     'consecutive positions must differ',
   );
 
+/** A plan-view beam, support, platform, or roof; overhead parts leave the ground walkable. */
+export const SiteStructure = z.strictObject({
+  id: DetailKey,
+  ring: z
+    .array(LngLat)
+    .min(4)
+    .superRefine((ring, ctx) => {
+      if (ring.length < 4) return;
+      const first = ring[0]!,
+        last = ring.at(-1)!;
+      const fail = () =>
+        ctx.addIssue({ code: 'custom', message: 'expected a simple, closed, nonzero-area ring' });
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        fail();
+        return;
+      }
+      const cross = (a: LngLat, b: LngLat, c: LngLat) =>
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      const on = (a: LngLat, b: LngLat, p: LngLat) =>
+        cross(a, b, p) === 0 &&
+        p[0] >= Math.min(a[0], b[0]) &&
+        p[0] <= Math.max(a[0], b[0]) &&
+        p[1] >= Math.min(a[1], b[1]) &&
+        p[1] <= Math.max(a[1], b[1]);
+      let area = 0;
+      const count = ring.length - 1;
+      for (let i = 0; i < count; i++) {
+        const a = ring[i]!,
+          b = ring[i + 1]!;
+        if (a[0] === b[0] && a[1] === b[1]) {
+          fail();
+          return;
+        }
+        area += cross(first, a, b);
+        for (let j = i + 2; j < count; j++) {
+          if (i === 0 && j === count - 1) continue;
+          const c = ring[j]!,
+            d = ring[j + 1]!;
+          if (
+            (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) ||
+            on(a, b, c) ||
+            on(a, b, d) ||
+            on(c, d, a) ||
+            on(c, d, b)
+          ) {
+            fail();
+            return;
+          }
+        }
+      }
+      if (area === 0) fail();
+    }),
+  height_m: z.number().positive().max(255),
+  material: z.enum(['wood', 'stone', 'roof']),
+  overhead: z.boolean(),
+});
+export type SiteStructure = z.infer<typeof SiteStructure>;
+
 /** Sourced outdoor detail, anchored to an existing OSM area; coordinates are GeoJSON order. */
 export const SiteDetail = z
   .strictObject({
@@ -273,6 +332,11 @@ export const SiteDetail = z
     osm_id: OsmId,
     title: z.string().min(1),
     surface: z.literal('paving'),
+    structures: z.array(SiteStructure).default([]),
+    /** Curated positions for existing mapped flagpoles, retaining their OSM identity. */
+    flagpoles: z
+      .array(z.strictObject({ osm_id: OsmId, at: LngLat, flag: z.literal('PH').optional() }))
+      .default([]),
     walks: z
       .array(
         z.strictObject({
@@ -284,14 +348,57 @@ export const SiteDetail = z
       .default([]),
     seating: z
       .array(
-        z.strictObject({
-          id: DetailKey,
-          line: DetailLine,
-          width_m: z.number().positive().max(3),
-          height_m: z.number().positive().max(2),
-          /** Which side of the directed seating line faces accessible paving. */
-          facing: z.enum(['left', 'right']),
-        }),
+        z
+          .strictObject({
+            id: DetailKey,
+            line: DetailLine,
+            width_m: z.number().positive().max(3),
+            height_m: z.number().positive().max(2),
+            /** Which side of the directed seating line faces accessible paving. */
+            facing: z.enum(['left', 'right']),
+            /** Inclusive vertex indices for wider seating sections; [] is a rim without seats. */
+            bench_spans: z
+              .array(
+                z.strictObject({
+                  id: DetailKey,
+                  start: z.int().nonnegative(),
+                  end: z.int().positive(),
+                  width_m: z.number().positive().max(3),
+                }),
+              )
+              .optional(),
+          })
+          .superRefine((seat, ctx) => {
+            const spans = seat.bench_spans ?? [];
+            if (new Set(spans.map((span) => span.id)).size !== spans.length)
+              ctx.addIssue({
+                code: 'custom',
+                path: ['bench_spans'],
+                message: 'duplicate bench span id',
+              });
+            for (const [i, span] of spans.entries()) {
+              if (span.start >= span.end || span.end >= seat.line.length)
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i],
+                  message: 'invalid bench span vertex range',
+                });
+              if (span.width_m < seat.width_m)
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i, 'width_m'],
+                  message: 'bench must be at least as wide as the rim',
+                });
+              if (
+                spans.slice(0, i).some((other) => span.start < other.end && span.end > other.start)
+              )
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i],
+                  message: 'overlapping bench spans',
+                });
+            }
+          }),
       )
       .default([]),
     lamps: z
@@ -311,7 +418,9 @@ export const SiteDetail = z
     sources: Sources,
   })
   .superRefine((v, ctx) => {
-    for (const key of ['walks', 'seating', 'lamps'] as const) {
+    if (new Set(v.flagpoles.map((pole) => pole.osm_id)).size !== v.flagpoles.length)
+      ctx.addIssue({ code: 'custom', path: ['flagpoles'], message: 'duplicate flagpole target' });
+    for (const key of ['walks', 'seating', 'lamps', 'structures'] as const) {
       if (new Set(v[key].map((item) => item.id)).size !== v[key].length)
         ctx.addIssue({ code: 'custom', path: [key], message: 'duplicate detail id' });
     }
@@ -769,6 +878,14 @@ export const CityLife = z.strictObject({
           z.strictObject({
             id: z.string().min(1),
             position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+            linked_junctions: z
+              .array(SignalPosition)
+              .min(1)
+              .refine(
+                (points) => new Set(points.map((p) => p.join(','))).size === points.length,
+                'duplicate linked junction',
+              )
+              .optional(),
             source: z.string().min(1),
           }),
         )
@@ -849,6 +966,20 @@ export type Traffic = z.infer<typeof Traffic>;
  */
 /** Optional city policy for derived street details; explicit policy is sourced. */
 export const CityStreets = z.strictObject({
+  directions: z
+    .array(
+      z.strictObject({
+        osm_id: z.string().regex(/^osm:way\/\d+$/, 'expected osm:way/<id>'),
+        /** Relative to the original OSM coordinate order; zero explicitly restores two-way. */
+        oneway: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+        source: z.string().trim().min(1),
+      }),
+    )
+    .refine(
+      (items) => new Set(items.map((item) => item.osm_id)).size === items.length,
+      'duplicate road direction target',
+    )
+    .optional(),
   sidewalks: z
     .strictObject({
       derive: z.boolean().default(true),

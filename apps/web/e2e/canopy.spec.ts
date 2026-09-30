@@ -319,6 +319,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           u_height: canvas.height,
           u_columns: input.glyphs.length,
           u_colors: colors,
+          u_fillColors: colors,
           u_daylight: 1,
           u_labelCell: [cw, ch],
           u_crownClass: input.crown,

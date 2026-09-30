@@ -565,7 +565,14 @@ const lit = [
   'building_station',
 ];
 /** Where people can't stand: roofs, water, and walls. */
-const noWalking = new Set([...lit, 'building_part', ...water, 'barrier', 'coastline']);
+const noWalking = new Set([
+  ...lit,
+  'building_part',
+  'building_woodwork',
+  ...water,
+  'barrier',
+  'coastline',
+]);
 
 /**
  * Per class id, the `CellBit`s of its cells. Vehicles keep to roads, trains to track (and the

@@ -63,6 +63,9 @@ function sample(style: ClassStyle): string {
     case 'rows':
     case 'scatter':
       return [...new Set(style.glyphs.filter((g) => g.trim()))].join('');
+    case 'seating':
+      return style.glyphs.join('');
+    case 'planting':
     case 'grass':
       return style.glyphs.slice(0, 3).join(''); // at rest
     case 'canopy':

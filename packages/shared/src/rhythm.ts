@@ -52,7 +52,12 @@ export type LifeSchedules = {
 export type CityLifeConfig = {
   signals?: {
     derive?: boolean;
-    add?: { id: string; position: [number, number]; source: string }[];
+    add?: {
+      id: string;
+      position: [number, number];
+      linked_junctions?: [number, number][];
+      source: string;
+    }[];
     remove?: { id: string; osm_id?: number; position?: [number, number]; source: string }[];
   };
   /** Sourced transit-mode overrides and missing stops or shelters. */

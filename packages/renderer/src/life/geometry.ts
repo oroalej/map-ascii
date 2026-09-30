@@ -3,7 +3,7 @@
  * along and the places birds gather over, in tile units. Built in the tile worker next to the
  * render geometry (raster/geometry.ts), and kept on the main thread for the simulation.
  */
-import type { PlaceKind } from '@atlas/shared';
+import type { PlaceKind, SignalLayout } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
@@ -91,6 +91,8 @@ export type LifeGeometry = {
   commerce?: Float32Array;
   /** Buffered signal centers, radius in meters, two bearings, mapped flag. */
   signals?: Float32Array;
+  /** Geographic approach records, aligned with signal centers; absent for legacy archives. */
+  signalLayouts?: (SignalLayout | undefined)[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
   /** Lot boundaries and solid ground obstacles, including polygon holes. */
@@ -109,7 +111,7 @@ export type LifeGeometry = {
   kinds: Uint8Array;
   /** Each polyline's width in meters (roads' carriageways; 0 unknown). */
   widths: Float32Array;
-  /** Direction relative to each way (-1, 0, 1); absent means zero. Reserved for future routing. */
+  /** Vehicle flow relative to each way (-1, 0, 1); absent means two-way. */
   oneway?: Int8Array;
   /** Where birds gather: x, y in tile units. */
   roosts: Float32Array;
@@ -129,6 +131,8 @@ export type LifeGeometry = {
   lampSites?: Uint8Array;
   /** One byte per lamp head: 0 streetlight (legacy default), 1 lantern. */
   lampStyles?: Uint8Array;
+  /** Authored flags: x, y in tile units, design code (1 = PH). */
+  flagpoles?: Float32Array;
   /** Floodlit landmarks: center x, y and radius (tile units; life/lights.ts `FLOOD_STRIDE`). */
   floods: Float32Array;
   /** Shops and markets, lit while open: center x, y and radius (tile units, `SHOP_STRIDE`). */
@@ -173,8 +177,17 @@ export class LifeBuilder {
     if (this.commerce.length / 2 < MAX_TILE_SHOPS) this.commerce.push(p.x, p.y);
   }
   private signals: number[] = [];
-  signal(p: TilePoint, radius: number, axisA: number, axisB: number, mapped: boolean) {
+  private signalLayouts: (SignalLayout | undefined)[] = [];
+  signal(
+    p: TilePoint,
+    radius: number,
+    axisA: number,
+    axisB: number,
+    mapped: boolean,
+    layout?: SignalLayout,
+  ) {
     this.signals.push(p.x, p.y, radius, axisA, axisB, mapped ? 1 : 0);
+    this.signalLayouts.push(layout);
   }
   private lineIds: number[] = [];
   private areas: LifeArea[] = [];
@@ -206,6 +219,10 @@ export class LifeBuilder {
   private spots: number[] = [];
   private stations: number[] = [];
   private markets: number[] = [];
+  private flagpoles: number[] = [];
+  flagpole(p: TilePoint, design: number) {
+    if (inTile(p)) this.flagpoles.push(p.x, p.y, design);
+  }
   private lamps: number[] = [];
   private lampSites: number[] = [];
   private lampStyles: number[] = [];
@@ -228,6 +245,87 @@ export class LifeBuilder {
     this.oneways.push(oneway);
     this.lineIds.push(id);
     for (const p of points) this.coords.push(p.x, p.y);
+  }
+
+  /** Signal entrances must be routable endpoints, even when OSM keeps a way continuous. */
+  splitSignalRoads(
+    project: (position: [number, number]) => TilePoint,
+    identify: (id: string) => number,
+  ) {
+    const members = this.signalLayouts
+      .flatMap((layout) => layout?.arms ?? [])
+      .map((arm) => ({ ...project(arm.junction), id: identify(arm.road_id) }));
+    if (!members.length) return;
+    const coords = this.coords,
+      starts = [...this.starts, coords.length / 2],
+      kinds = this.kinds,
+      widths = this.widths,
+      ids = this.lineIds,
+      flows = this.oneways;
+    this.coords = [];
+    this.starts = [];
+    this.kinds = [];
+    this.widths = [];
+    this.lineIds = [];
+    this.oneways = [];
+    for (let line = 0; line < kinds.length; line++) {
+      const junctions = members.filter((m) => m.id === ids[line]);
+      const original: TilePoint[] = [];
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
+        const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
+        const previous = original.at(-1);
+        if (previous && kinds[line]! <= LifeLine.roadMinor) {
+          const dx = p.x - previous.x,
+            dy = p.y - previous.y;
+          const length2 = dx * dx + dy * dy;
+          // Simplification can remove a shared vertex from a straight way. Restore only
+          // authoritative members on this exact road, within tile quantization error.
+          const inserted = new Map<string, { point: TilePoint; t: number }>();
+          for (const m of junctions) {
+            const t = ((m.x - previous.x) * dx + (m.y - previous.y) * dy) / length2;
+            if (t <= 0 || t >= 1 || !Number.isFinite(t)) continue;
+            if (
+              Math.hypot(m.x - previous.x, m.y - previous.y) <= 2 ||
+              Math.hypot(m.x - p.x, m.y - p.y) <= 2
+            )
+              continue;
+            if (Math.hypot(m.x - previous.x - t * dx, m.y - previous.y - t * dy) > 2) continue;
+            const point = { x: Math.round(m.x), y: Math.round(m.y) };
+            inserted.set(`${point.x}/${point.y}`, { point, t });
+          }
+          original.push(
+            ...[...inserted.values()].sort((a, b) => a.t - b.t).map((entry) => entry.point),
+          );
+        }
+        original.push(p);
+      }
+      let points: TilePoint[] = [];
+      for (const [v, p] of original.entries()) {
+        points.push(p);
+        if (
+          kinds[line]! <= LifeLine.roadMinor &&
+          points.length > 1 &&
+          v < original.length - 1 &&
+          junctions.some((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 2)
+        ) {
+          this.line(
+            points,
+            kinds[line]! as LifeLine,
+            widths[line],
+            ids[line],
+            flows[line] as -1 | 0 | 1,
+          );
+          points = [p];
+        }
+      }
+      this.line(
+        points,
+        kinds[line]! as LifeLine,
+        widths[line],
+        ids[line],
+        flows[line] as -1 | 0 | 1,
+      );
+    }
   }
 
   area(kind: LifeArea['kind'], rings: readonly (readonly TilePoint[])[], water = false) {
@@ -294,6 +392,7 @@ export class LifeBuilder {
   finish(): LifeGeometry {
     return {
       signals: Float32Array.from(this.signals),
+      signalLayouts: this.signalLayouts,
       commerce: Float32Array.from(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
       areas: this.areas,
@@ -312,6 +411,7 @@ export class LifeBuilder {
       spots: Float32Array.from(this.spots),
       stations: Float32Array.from(this.stations),
       markets: Float32Array.from(this.markets),
+      flagpoles: Float32Array.from(this.flagpoles),
       lamps: Float32Array.from(this.lamps),
       lampSites: Uint8Array.from(this.lampSites),
       lampStyles: Uint8Array.from(this.lampStyles),
@@ -324,6 +424,7 @@ export class LifeBuilder {
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.flagpoles ? [g.flagpoles.buffer as ArrayBuffer] : []),
   ...(g.lampSites ? [g.lampSites.buffer as ArrayBuffer] : []),
   ...(g.lampStyles ? [g.lampStyles.buffer as ArrayBuffer] : []),
   ...(g.seatBearings ? [g.seatBearings.buffer as ArrayBuffer] : []),
