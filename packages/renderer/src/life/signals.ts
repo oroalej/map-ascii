@@ -123,6 +123,16 @@ export class SignalControl {
       }
     }
   }
+  allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
+    for (const s of this.signals) {
+      if (Math.hypot(s.x - x, s.y - y) > (s.radius + 2) * this.perMeter) continue;
+      const state = signalState(s.seed, clock, s.a < 0)[group(s, m.hx, m.hy)];
+      const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
+      if (state === 'red' || (state === 'amber' && (m.v ?? m.speed) ** 2 / (2 * brake) <= ahead))
+        return false;
+    }
+    return true;
+  }
   /** Clamp new crossing entries; someone inside the crossing always clears it. */
   walkDistance(from: Point, toward: Point, distance: number, clock: number): number {
     const dx = toward.x - from.x,

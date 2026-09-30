@@ -34,6 +34,7 @@ import {
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   FILLET,
+  JUNCTION,
   kinematicsOf,
   laneOffset,
   LIFE_ZOOM,
@@ -71,7 +72,7 @@ import { LocalScenes } from './interactions';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
-import { YieldControl } from './yield';
+import { JunctionIndex, JunctionTable } from './junctions';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
@@ -119,6 +120,7 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
+export type StepPass = { junctions: JunctionTable };
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -408,7 +410,11 @@ export class TileLife {
   private readonly commerceStallsRng: () => number;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
-  readonly yielding: YieldControl;
+  readonly junctionIndex: JunctionIndex;
+  private readonly localJunctions = new JunctionTable();
+  private readonly trafficGroups = new Map<number, number[]>();
+  /** Aggregate controller counters for deterministic regression/performance fixtures. */
+  readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
   readonly signals: SignalControl;
   readonly scenes: LocalScenes;
   private readonly catRng: () => number;
@@ -479,7 +485,7 @@ export class TileLife {
       }
     }
     this.signals = new SignalControl(tile, geo, this.perMeter, this.along);
-    this.yielding = new YieldControl(tile, geo, this.perMeter, this.along);
+    this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
     this.findJunctions();
@@ -1934,19 +1940,9 @@ export class TileLife {
     return false;
   }
 
-  /**
-   * Following (config.ts `FOLLOW`): each vehicle's or boat's speed for this step, slowed behind
-   * the nearest one ahead on its line, going its way, that it can't pass side by side. Queues
-   * across junctions, cross traffic, and tile borders are not looked at.
-   */
-  private followLimits(
-    dt: number,
-    shows?: (kind: AgentKind) => boolean,
-    near?: (x: number, y: number) => boolean,
-    levels?: Activity,
-  ): Float64Array {
-    const { movers, perMeter } = this;
-    // Reused between steps; grown when there are more movers.
+  /** Route plans and lane progress are prepared for every tile before world arbitration. */
+  prepareTraffic(active: (m: Mover) => boolean) {
+    const { movers, perMeter: pm } = this;
     if (this.speeds.length < movers.length) {
       const size = Math.max(movers.length, 2 * this.speeds.length);
       this.speeds = new Float64Array(size);
@@ -1954,54 +1950,149 @@ export class TileLife {
       this.progress = new Float64Array(size);
       this.offsets = new Float64Array(size);
     }
-    const { speeds, progress, offsets } = this;
-    const groups = new Map<number, number[]>();
+    this.trafficGroups.clear();
+    for (let i = 0; i < movers.length; i++) {
+      const m = movers[i]!;
+      if (!m.vehicle || !active(m)) continue;
+      this.prepareTurn(m, i);
+      this.progress[i] = (m.dir * this.along[m.from]! + m.d) / pm;
+      this.offsets[i] = this.offsetOf(m);
+      const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
+      const group = this.trafficGroups.get(key) ?? [];
+      group.push(i);
+      this.trafficGroups.set(key, group);
+    }
+    for (const group of this.trafficGroups.values())
+      group.sort((a, b) => this.progress[a]! - this.progress[b]! || a - b);
+  }
+
+  requestJunctions(
+    table: JunctionTable,
+    active: (m: Mover) => boolean,
+    clock: number,
+    tileKey = '',
+  ) {
+    for (let index = 0; index < this.movers.length; index++) {
+      const m = this.movers[index]!;
+      if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
+      const pm = this.perMeter,
+        length = VEHICLES[m.vehicle].length * pm;
+      const previous = table.movement(m);
+      let movement = previous;
+      if (previous) {
+        const j = previous.junction;
+        const past = (m.x - j.x) * previous.outHx + (m.y - j.y) * previous.outHy;
+        const sameApproach =
+          m.line === previous.line &&
+          m.dir === previous.dir &&
+          m.dir * (previous.stop - this.along[m.from]! - m.dir * m.d) > 0;
+        if (!sameApproach && past > j.radius + length / 2) {
+          table.release(m);
+          movement = undefined;
+        }
+      }
+      movement ??= this.junctionIndex.movement(
+        m,
+        Math.max(
+          60 * pm,
+          (m.v ?? m.speed) ** 2 / (2 * kinematicsOf(m.vehicle).brake * pm) + 20 * pm,
+        ),
+      );
+      if (!movement) continue;
+      const j = movement.junction;
+      const before =
+        m.line === movement.line && m.dir === movement.dir
+          ? m.dir * (movement.stop - this.along[m.from]! - m.dir * m.d)
+          : -Infinity;
+      const ahead = before - j.radius - JUNCTION.gap * pm - length / 2;
+      const inside = ahead < -0.05 * pm;
+      // Do not change the incoming/outgoing movement when a holder crosses its endpoint.
+      movement = { ...movement, ahead };
+      const exit = movement.exit;
+      let room = Infinity;
+      for (const other of this.trafficGroups.get(exit.line * 2 + (exit.out === 1 ? 1 : 0)) ?? []) {
+        const leader = this.movers[other]!;
+        if (leader === m) continue;
+        const past = this.progress[other]! * pm - exit.out * exit.along;
+        if (past < 0) continue;
+        room = Math.min(room, past - (VEHICLES[leader.vehicle!].length * pm) / 2 - j.radius);
+      }
+      const ready =
+        room >= length + FOLLOW.minGap * pm &&
+        this.signals.allows(m, j.x, j.y, clock, Math.max(0, ahead));
+      table.request({ m, life: this, tileKey, index, movement, ready, inside, room: room / pm });
+    }
+  }
+
+  /** Nearest overlapping leader, including the chosen exit when this line is clear. */
+  private followLimits(dt: number, table: JunctionTable): Float64Array {
+    const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = m.vehicle ? this.curveTarget(m) : m.speed;
-      this.caps[i] = Infinity;
-      if (!m.vehicle || (shows && !shows(m.kind))) continue;
-      if (levels && m.rank >= levels[m.kind]) continue;
-      if (near && !m.train && !near(m.x, m.y)) continue;
-      const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
-      const group = groups.get(key);
-      if (group) group.push(i);
-      else groups.set(key, [i]);
+      caps[i] = Infinity;
     }
-    for (const group of groups.values()) {
-      if (group.length < 2) continue;
-      // Meters along the line in the direction of travel, and each one's lateral offset.
-      for (const i of group) {
-        const m = movers[i]!;
-        progress[i] = (m.dir * this.along[m.from]! + m.d) / perMeter;
-        offsets[i] = this.offsetOf(m);
-      }
-      group.sort((a, b) => progress[a]! - progress[b]! || a - b);
-      for (let k = 0; k < group.length - 1; k++) {
-        const i = group[k]!;
-        const me = VEHICLES[movers[i]!.vehicle!];
-        for (let l = k + 1; l < group.length; l++) {
-          const j = group[l]!;
-          const them = VEHICLES[movers[j]!.vehicle!];
-          const apart = Math.abs(offsets[i]! - offsets[j]!);
-          if (apart >= (me.width + them.width) / 2 - FOLLOW.squeeze) continue;
-          const gap = progress[j]! - progress[i]! - (me.length + them.length) / 2;
-          const fits = Math.max(0, (gap - FOLLOW.minGap) / FOLLOW.headway) * perMeter;
-          const room = Math.max(0, gap - FOLLOW.minGap) * perMeter;
-          speeds[i] = Math.min(
-            speeds[i]!,
-            fits,
-            approach(
-              room,
-              movers[j]!.v ?? movers[j]!.speed,
-              kinematicsOf(movers[i]!.vehicle).brake * perMeter,
-            ),
-          );
-          this.caps[i] = Math.min(this.caps[i]!, room / dt);
+    const limit = (i: number, j: number, separation: number) => {
+      const m = movers[i]!,
+        leader = movers[j]!;
+      const gap = separation - (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2;
+      const room = Math.max(0, gap - FOLLOW.minGap) * pm;
+      speeds[i] = Math.min(
+        speeds[i]!,
+        room / FOLLOW.headway,
+        approach(room, leader.v ?? leader.speed, kinematicsOf(m.vehicle).brake * pm),
+      );
+      caps[i] = Math.min(caps[i]!, room / dt);
+    };
+    const overlaps = (i: number, j: number, lane = offsets[i]!) =>
+      Math.abs(lane - offsets[j]!) <
+      (VEHICLES[movers[i]!.vehicle!].width + VEHICLES[movers[j]!.vehicle!].width) / 2 -
+        FOLLOW.squeeze;
+    for (const group of this.trafficGroups.values())
+      for (let k = 0; k < group.length; k++) {
+        const i = group[k]!,
+          m = movers[i]!;
+        let found = false;
+        for (let n = k + 1; n < group.length; n++) {
+          const j = group[n]!;
+          if (!overlaps(i, j)) continue;
+          limit(i, j, progress[j]! - progress[i]!);
+          found = true;
           break;
         }
+        if (!found) {
+          const code = m.routing?.plan?.exit ?? m.next;
+          if (code !== undefined && code >= 0) {
+            const line = code >> 1,
+              dir = code & 1 ? -1 : 1;
+            const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+            const remaining = (m.dir * this.along[end]!) / pm - progress[i]!;
+            const entry = (dir * this.along[dir === 1 ? this.first(line) : this.last(line)]!) / pm;
+            const lane =
+              m.kind === 'vehicle'
+                ? laneOffset(
+                    this.roadWidth(line),
+                    VEHICLES[m.vehicle!].width,
+                    m.lane,
+                    VEHICLES[m.vehicle!].curb,
+                  )
+                : 0;
+            for (const j of this.trafficGroups.get(line * 2 + (dir === 1 ? 1 : 0)) ?? []) {
+              if (j === i || !overlaps(i, j, lane)) continue;
+              limit(i, j, remaining + progress[j]! - entry);
+              break;
+            }
+          }
+        }
+        const movement = table.movement(m);
+        if (movement && !table.granted(m) && movement.ahead >= -0.05 * pm) {
+          speeds[i] = Math.min(
+            speeds[i]!,
+            approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
+          );
+          caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
+        }
       }
-    }
     return speeds;
   }
 
@@ -2018,7 +2109,7 @@ export class TileLife {
     near?: (x: number, y: number) => boolean,
     env?: LifeEnv,
     guard?: GroundGuard,
-    busy: ReadonlyMap<string, number> = new Map(),
+    pass?: StepPass,
   ) {
     if (dt <= 0) return;
     this.time += dt;
@@ -2034,16 +2125,19 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
     );
-    for (let i = 0; i < this.movers.length; i++) {
-      const m = this.movers[i]!;
-      if (
+    const table = pass?.junctions ?? this.localJunctions;
+    if (!pass) {
+      const active = (m: Mover) =>
         (!shows || shows(m.kind)) &&
         (!near || near(m.x, m.y)) &&
-        (!env?.levels || m.rank < env.levels[m.kind])
-      )
-        this.prepareTurn(m, i);
+        (!env?.levels || m.rank < env.levels[m.kind]) &&
+        !this.scenes.hidden(m);
+      this.prepareTraffic(active);
+      table.begin(new Set([this]));
+      this.requestJunctions(table, active, clock);
+      table.resolve(clock);
     }
-    const speeds = this.followLimits(dt, shows, near, env?.levels);
+    const speeds = this.followLimits(dt, table);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movers
@@ -2067,13 +2161,12 @@ export class TileLife {
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
           this.signals.vehicleLimit(m, dt, clock, limit);
           speeds[i] = limit.target;
-          this.caps[i] = Math.min(limit.cap, this.yielding.speed(m, dt, busy));
+          this.caps[i] = limit.cap;
         } else
           speeds[i] = Math.min(
             speeds[i]!,
             this.scenes.speed(m, dt),
             this.signals.vehicleSpeed(m, dt, clock),
-            this.yielding.speed(m, dt, busy),
           );
         if (this.scenes.held(m)) {
           if (m.vehicle) m.v = 0;
@@ -2147,6 +2240,21 @@ export class TileLife {
           ) / dt;
       }
       const before = { ...m };
+      if (m.vehicle) {
+        this.motionStats.steps++;
+        if (
+          this.caps[i]! + 1e-9 <
+          nextSpeed(
+            m.v ?? m.speed,
+            speeds[i]!,
+            Infinity,
+            kinematicsOf(m.vehicle),
+            this.perMeter,
+            dt,
+          )
+        )
+          this.motionStats.hardCaps++;
+      }
       if (m.vehicle)
         speeds[i] = nextSpeed(
           m.v ?? m.speed,
@@ -2213,6 +2321,7 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
+      if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
@@ -2523,6 +2632,7 @@ export type LifeLineShape = {
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 export class LifeWorld {
+  private readonly junctions = new JunctionTable();
   private readonly roadCache = new WorldRoadCache();
   /** Weak ownership releases evicted agents. A stored body never aliases the next trial. */
   private groundBuffers = new WeakMap<object, { live: Body[]; trial: Body[] }>();
@@ -2581,6 +2691,7 @@ export class LifeWorld {
   setTraffic(traffic?: TrafficMix) {
     this.traffic = resolveTraffic(traffic);
     this.tiles.clear();
+    this.junctions.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
     this.groundBuffers = new WeakMap();
@@ -2606,6 +2717,7 @@ export class LifeWorld {
         this.groundTerrain = undefined;
         this.railTopology = undefined;
       }
+    this.junctions.begin(new Set(this.tiles.values()));
     if (added.size) {
       const guard = this.groundGuard(0, added);
       for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
@@ -2882,27 +2994,29 @@ export class LifeWorld {
       ...weather,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
-    const busy = new Map<string, number>();
-    for (const tile of this.tiles.values())
-      tile.yielding.markBusy(
-        tile.movers,
-        busy,
-        (m) => (!shows || shows(m.kind)) && (!env.levels || m.rank < env.levels[m.kind]),
-      );
+    this.junctions.begin(new Set(this.tiles.values()));
+    const eligibility = new Map<TileLife, (m: Mover) => boolean>();
+    for (const tile of this.tiles.values()) {
+      const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
+      const active = (m: Mover) =>
+        (!shows || shows(m.kind)) &&
+        near(m.x, m.y) &&
+        (!env.levels || m.rank < env.levels[m.kind]) &&
+        !tile.scenes.hidden(m);
+      eligibility.set(tile, active);
+      tile.prepareTraffic(active);
+    }
+    for (const [key, tile] of this.tiles)
+      tile.requestJunctions(this.junctions, eligibility.get(tile)!, this.clock, key);
+    this.junctions.resolve(this.clock);
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
         : undefined;
       const near = bounds && viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
-      tile.step(
-        clamped,
-        inTile,
-        shows,
-        near,
-        env,
-        (owner, before) => guard(tile, owner, before),
-        busy,
-      );
+      tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
+        junctions: this.junctions,
+      });
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileId; m: Mover }[] | undefined;

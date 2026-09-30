@@ -18,6 +18,7 @@ export function nextSpeed(
 
 /** Speed from which comfortable braking reaches `lead` within `gap`, in tile units. */
 export const approach = (gap: number, lead: number, brake: number): number =>
-  Math.sqrt(lead * lead + 2 * brake * Math.max(0, gap));
+  // Sub-nanounit cursor residue is a reached stop, not a request to accelerate forever.
+  Math.sqrt(lead * lead + 2 * brake * (gap > 1e-9 ? gap : 0));
 
 export type MotionLimit = { target: number; cap: number };

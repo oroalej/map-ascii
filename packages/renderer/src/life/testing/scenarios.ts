@@ -7,7 +7,7 @@ import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
 import { stripRing } from '../terrain';
 
-export const SCENARIOS = ['sparse', 'junction', 'transit', 'rain'] as const;
+export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 const base = { z: 16, x: 55192, y: 30266 };
 // Explicit mapped sidewalk outside the 14 m carriageway, wide enough for waiting groups.
@@ -21,23 +21,51 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile[] {
   const b = new LifeBuilder();
-  b.line(
-    [
+  if (kind === 'crossroads') {
+    const center = { x: 2048, y: 2048 };
+    for (const end of [
       { x: 0, y: 2048 },
       { x: 4095, y: 2048 },
-    ],
-    LifeLine.roadMajor,
-    14,
-  );
-  if (kind !== 'sparse') {
+      { x: 2048, y: 0 },
+      { x: 2048, y: 4095 },
+    ])
+      b.line([center, end], LifeLine.roadMajor, 14);
     b.line(
       [
-        { x: 2048, y: 0 },
-        { x: 2048, y: 4095 },
+        { x: 0, y: 1000 },
+        { x: 1000, y: 1000 },
+        { x: 1800, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+    );
+    b.line(
+      [
+        { x: 1000, y: 0 },
+        { x: 1000, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+    );
+  } else
+    b.line(
+      [
+        { x: 0, y: 2048 },
+        { x: 4095, y: 2048 },
       ],
       LifeLine.roadMajor,
       14,
     );
+  if (kind !== 'sparse') {
+    if (kind !== 'crossroads')
+      b.line(
+        [
+          { x: 2048, y: 0 },
+          { x: 2048, y: 4095 },
+        ],
+        LifeLine.roadMajor,
+        14,
+      );
     for (const y of [800, 1800, SCENE_CURB_Y, 3000])
       b.line(
         [
@@ -160,10 +188,12 @@ export function scenarioState(world: LifeWorld) {
 export function completeScenarioState(world: LifeWorld) {
   const internal = world as unknown as {
     clock: number;
+    junctions?: { snapshot(): unknown };
     arrivals: Map<string, { left: number; occupied: boolean }>;
   };
   return {
     clock: internal.clock,
+    junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
     tiles: scenarioState(world),
   };

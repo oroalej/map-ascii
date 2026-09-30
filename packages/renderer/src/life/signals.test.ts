@@ -125,7 +125,7 @@ describe('signals', () => {
     }
   }, 30000);
 });
-describe('unsignalized yielding', () => {
+describe('junction reservations', () => {
   it('clears a real shared junction within thirty seconds with collision protection enabled', () => {
     const world = new LifeWorld();
     world.sync([{ tile, key: 'yield', life: geography(false) }]);
@@ -150,22 +150,8 @@ describe('unsignalized yielding', () => {
     expect(low.y).toBeGreaterThan(2048 + 10 * pm);
     expect(low.waiting ?? 0).toBeLessThan(30);
   });
-  it('ignores bridges and signals, and caps a lower-ranked approach hold at eight seconds', () => {
-    expect(new TileLife(tile, geography(false, false), 1).yielding.junctions).toHaveLength(0);
-    expect(new TileLife(tile, geography(true), 1).yielding.junctions).toHaveLength(0);
-    const life = new TileLife(tile, geography(false), 1),
-      m = car();
-    m.line = 1;
-    m.from = 3;
-    m.d = 2048 - 11.7 * pm;
-    m.x = 2048;
-    m.y = m.d;
-    m.hx = 0;
-    m.hy = 1;
-    const busy = new Map([[life.yielding.junctions[0]!.key, 0]]);
-    let held = 0;
-    for (let i = 0; i < 300; i++) if (life.yielding.speed(m, 0.1, busy) < m.speed) held += 0.1;
-    expect(held).toBeLessThanOrEqual(8.1);
-    expect(life.yielding.speed(m, 0.1, busy)).toBe(m.speed);
+  it('indexes shared vertices including signalized junctions, but ignores bridges', () => {
+    expect(new TileLife(tile, geography(false, false), 1).junctionIndex.junctions).toHaveLength(0);
+    expect(new TileLife(tile, geography(true), 1).junctionIndex.junctions).toHaveLength(1);
   });
 });
