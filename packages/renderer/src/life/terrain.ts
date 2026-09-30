@@ -217,6 +217,9 @@ type TileFragments = {
   terrain: PreparedRoadTerrain;
   tokens: CrossingToken[];
   roads: RoadFragments[];
+  origin: string;
+  transformed: WeakMap<Polygon, Polygon>;
+  pieces: WeakMap<readonly Polygon[], Polygon[]>;
 };
 
 /** Keep fragments in owner-local meters so changing the world reference never invalidates them. */
@@ -230,6 +233,9 @@ export class WorldRoadCache {
       if (!cached || cached.terrain !== c.terrain) {
         cached = {
           terrain: c.terrain,
+          origin: '',
+          transformed: new WeakMap(),
+          pieces: new WeakMap(),
           tokens: c.terrain.crossings.map((source) => ({ owner: c.owner, source })),
           roads: c.terrain.access.piecesByRoad.map((pieces) => ({
             dependencies: new Set(),
@@ -238,15 +244,21 @@ export class WorldRoadCache {
         };
         this.tiles.set(c.owner, cached);
       }
+      const origin = `${c.x},${c.y},${c.scale}`;
+      if (cached.origin !== origin) {
+        cached.origin = origin;
+        cached.transformed = new WeakMap();
+        cached.pieces = new WeakMap();
+      }
       for (const token of cached.tokens)
-        index.add({ token, polygon: transformPolygon(token.source, c.x, c.y, c.scale) });
+        index.add({ token, polygon: this.transform(cached, token.source, c) });
     }
     const roads: Polygon[] = [],
       pieces: Polygon[][] = [];
     for (const c of contributions) {
       const cached = this.tiles.get(c.owner)!;
       c.terrain.roads.forEach((road, i) => {
-        const worldRoad = transformPolygon(road, c.x, c.y, c.scale);
+        const worldRoad = this.transform(cached, road, c);
         const nearby = [...index.nearby(worldRoad)].filter(
           (entry) => entry.token.owner !== c.owner,
         );
@@ -256,6 +268,7 @@ export class WorldRoadCache {
           nearby.some((entry) => !fragments.dependencies.has(entry.token))
         ) {
           fragments.dependencies = new Set(nearby.map((entry) => entry.token));
+          cached.pieces.delete(fragments.pieces);
           fragments.pieces = cut(
             c.terrain.access.piecesByRoad[i]!,
             nearby.map((entry) =>
@@ -264,11 +277,23 @@ export class WorldRoadCache {
           );
         }
         roads.push(worldRoad);
-        pieces.push(
-          fragments.pieces.map((polygon) => transformPolygon(polygon, c.x, c.y, c.scale)),
-        );
+        let worldPieces = cached.pieces.get(fragments.pieces);
+        if (!worldPieces) {
+          worldPieces = fragments.pieces.map((polygon) => this.transform(cached, polygon, c));
+          cached.pieces.set(fragments.pieces, worldPieces);
+        }
+        pieces.push(worldPieces);
       });
     }
     return RoadAccess.fromPrepared(roads, pieces);
+  }
+
+  private transform(cache: TileFragments, polygon: Polygon, c: Contribution): Polygon {
+    let world = cache.transformed.get(polygon);
+    if (!world) {
+      world = transformPolygon(polygon, c.x, c.y, c.scale);
+      cache.transformed.set(polygon, world);
+    }
+    return world;
   }
 }

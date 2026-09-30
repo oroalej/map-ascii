@@ -81,7 +81,7 @@ describe('carriageway access', () => {
     const cache = new WorldRoadCache(),
       owner = {};
     const contribution = { owner, terrain, x: 0, y: 0, scale: 1 };
-    cache.build([contribution]);
+    const first = cache.build([contribution]);
     // Inspect identity only: world indices may be rebuilt, but clipping must be reused.
     const entries = (
       cache as unknown as { tiles: WeakMap<object, { roads: { pieces: unknown }[] }> }
@@ -90,9 +90,12 @@ describe('carriageway access', () => {
     const c = new LifeBuilder();
     c.area('crossing', [crossing]);
     const far = { owner: {}, terrain: prepareRoadTerrain(c.finish(), 1), x: 10000, y: 0, scale: 1 };
-    cache.build([contribution, far]);
+    const again = cache.build([contribution, far]);
+    expect(again.roads.polygons[0]).toBe(first.roads.polygons[0]);
+    expect(again.forbidden.polygons[0]).toBe(first.forbidden.polygons[0]);
     expect(entries.get(owner)!.roads[0]!.pieces).toBe(fragments);
     const shifted = cache.build([{ ...contribution, x: 20, y: 30, scale: 2 }]);
+    expect(shifted.roads.polygons[0]).not.toBe(first.roads.polygons[0]);
     expect(entries.get(owner)!.roads[0]!.pieces).toBe(fragments);
     expect(shifted.allows([body(60, 30)])).toBe(false);
   });
