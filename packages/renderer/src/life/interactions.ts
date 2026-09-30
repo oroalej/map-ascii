@@ -11,6 +11,7 @@ import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
 import { usableLines, type Activity } from './config';
+import { memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 
 export const INTERACTIONS = {
@@ -138,6 +139,17 @@ export class LocalScenes {
     });
   }
 
+  /** Removed placements must not leave reservable vendor/rest sites behind. */
+  removeStall(stall: Stall) {
+    for (const [mover, visit] of this.visits)
+      if (visit.site.stall === stall && visit.state !== 'return') this.returning(mover, visit);
+    for (let i = this.sites.length - 1; i >= 0; i--)
+      if (this.sites[i]!.stall === stall) {
+        this.sites[i]!.queue.length = 0;
+        this.sites.splice(i, 1);
+      }
+  }
+
   private attachRoad(site: Site, geo: LifeGeometry) {
     let best = 25 * this.perMeter;
     for (let line = 0; line < geo.kinds.length; line++) {
@@ -192,6 +204,20 @@ export class LocalScenes {
     if (seat + size > site.capacity) return false;
     const point = this.queuePoint(site, seat);
     if (!inTile(point)) return false;
+    if (
+      m.kind === 'person' &&
+      !this.graph.allowsBodies(
+        (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => ({
+          x: point.x - site.hy * w.lateral * this.perMeter - site.hx * w.back * this.perMeter,
+          y: point.y + site.hx * w.lateral * this.perMeter - site.hy * w.back * this.perMeter,
+          hx: site.hx,
+          hy: site.hy,
+          length: memberSize(w.figure).length * this.perMeter,
+          width: memberSize(w.figure).width * this.perMeter,
+        })),
+      )
+    )
+      return false;
     const path = this.graph.route(m, point);
     if (!path || !path.every(inTile)) return false;
     site.queue.push(m);
@@ -322,12 +348,17 @@ export class LocalScenes {
           visit.time = 3;
           m.pause = 1;
         } else {
+          const before = { ...m };
           visit.state = visit.sheltering ? 'shelter' : visit.site.kind === 'rest' ? 'rest' : 'wait';
           visit.time = visit.state === 'rest' ? 30 + this.rng() * 60 : 60 + this.rng() * 30;
           m.hx = visit.site.hx;
           m.hy = visit.site.hy;
           m.pause = 1;
           m.lying = m.kind === 'dog';
+          if (m.kind === 'person' && guard && !guard(m, before)) {
+            Object.assign(m, before);
+            this.returning(m, visit);
+          }
         }
         continue;
       }

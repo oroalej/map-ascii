@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { makeScenario, scenarioState, worldTiles } from './testing/scenarios';
+import { makeScenario, scenarioState, worldTiles, SCENE_CURB_Y } from './testing/scenarios';
 import { LifeWorld, type Mover, type TileLife } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
 import { MAX_STEP_S } from './config';
@@ -60,9 +60,9 @@ function bounded(world: LifeWorld) {
   // CI checks long lifecycles with a bounded population; CPU benchmarks retain full density.
   for (const tile of worldTiles(world).values()) {
     if (tile.movers.length <= 48) continue;
-    const near = (m: Mover) => Math.hypot(m.x - 1900, m.y - 2090);
+    const near = (m: Mover) => Math.hypot(m.x - 1900, m.y - SCENE_CURB_Y);
     const targets = [
-      { x: 1900, y: 2090 },
+      { x: 1900, y: SCENE_CURB_Y },
       tile.scenes.sites.find((s) => s.kind === 'vendor') ?? { x: 1300, y: 1800 },
       tile.scenes.sites.find((s) => s.kind === 'shelter') ?? { x: 1800, y: 800 },
     ];

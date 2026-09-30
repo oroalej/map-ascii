@@ -32,7 +32,7 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
-import { packLife } from './life/draw';
+import { packLife, type LifeGrid } from './life/draw';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
@@ -486,13 +486,21 @@ export function lifePass(
   agents: readonly VisibleAgent[],
   sun?: Sun | null,
   profiler?: FrameProfiler,
+  allowsGroundCell?: LifeGrid['allowsGroundCell'],
 ): number {
   const { cols, rows } = targets;
   const lifeTexels = texels(targets).life;
   const packStart = profiler?.time();
   const drawn = packLife(
     lifeTexels,
-    { cols, rows, cellWidth: view.cellDev.w, cellHeight: view.cellDev.h, toCell: placement.toCell },
+    {
+      cols,
+      rows,
+      cellWidth: view.cellDev.w,
+      cellHeight: view.cellDev.h,
+      toCell: placement.toCell,
+      allowsGroundCell,
+    },
     agents,
     theme,
     (glyph) => themeRes.map.atlas.index(glyph),
@@ -608,6 +616,7 @@ export function glyphPass(
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_lampGlyph: atlas.index(streetlightGlyph),
     u_vehicle: classId('life_vehicle'),
+    u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),

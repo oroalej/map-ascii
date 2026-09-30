@@ -48,6 +48,8 @@ export type LifeGrid = {
   cellHeight: number;
   /** A point's position on the grid, in fractional cells (passes.ts `GridPlacement.toCell`). */
   toCell: (lng: number, lat: number) => [number, number];
+  /** Reject a complete ground agent when any of its ASCII cells crosses forbidden terrain. */
+  allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
 };
 
 /**
@@ -131,6 +133,12 @@ export function packLife(
       const ground = !agent.aboard && (agent.kind === 'vehicle' || agent.kind === 'person');
       journal = ground ? { before: new Map(), denied: false } : undefined;
       const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+      if (journal && grid.allowsGroundCell)
+        for (const at of journal.before.keys())
+          if (!grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))) {
+            journal.denied = true;
+            break;
+          }
       if (!journal) drawn += n;
       else if (journal.denied) for (const [at, previous] of journal.before) out.set(previous, at);
       else {

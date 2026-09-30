@@ -1339,14 +1339,17 @@ describe('people', () => {
     expect(share(0, -10)).toBeLessThanOrEqual(UMBRELLA.base + 0.1);
   });
 
-  it('set up vendors’ carts by the curb, more of them near a market', () => {
-    const plain = new TileLife(tile, across(LifeLine.roadMinor, 8), 3);
-    const market = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
+  it('sets up carts beside walking paths, more of them near a market, and omits road vendors', () => {
+    const road = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
+    expect(road.stalls).toHaveLength(0);
+    expect(road.movers.some((m) => m.kind === 'person')).toBe(false);
+    const plain = new TileLife(tile, across(LifeLine.path), 3);
+    const market = new TileLife(tile, across(LifeLine.path, 0, [[2048, 2100]]), 3);
     expect(plain.stalls.length).toBeGreaterThan(0);
     expect(market.stalls.length).toBeGreaterThan(plain.stalls.length);
     expect(market.stalls.length).toBeLessThanOrEqual(VENDORS.maxPerTile);
     for (const s of plain.stalls) {
-      expect(Math.abs(s.y - 2048) / perMeter).toBeCloseTo(4 - VENDORS.curb, 3);
+      expect(Math.abs(s.y - 2048) / perMeter).toBeCloseTo(VENDORS.beside, 3);
     }
   });
 

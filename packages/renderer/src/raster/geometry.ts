@@ -28,13 +28,20 @@ import {
   roostClasses,
   type LifeGeometry,
 } from '../life/geometry';
-import { ROAD_AREA_ZOOM, ROOF_ZOOM } from '../glyphs/select';
-import { FLOOD, SHOP } from '../life/config';
+import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
+import { stripRing } from '../life/terrain';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
+import { DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP } from '../life/config';
 import { habitatOf } from '../life/birds';
 import { placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
 const FLAT_ROOF = 1;
+const CROWN_SWEEP_FACTOR =
+  1 +
+  Math.max(...Object.values(WIND_PRESETS)) *
+    (1 + WIND_VARIATION.breathe) *
+    Math.hypot(SWAY.bend, SWAY.flutter * 0.8);
 
 export const EXTENT = 4096;
 /** The world's width in mercator meters. */
@@ -174,6 +181,30 @@ export type TileGeometry = GroundGeometry & {
 
 /** Structural subset of `@mapbox/vector-tile`, so tests can pass plain objects. */
 export type TilePoint = { x: number; y: number };
+
+/** Offset a mapped sidewalk's continuous center line, including its bends. */
+export function sidewalkLine(line: readonly TilePoint[], offset: number): TilePoint[] {
+  const points = line.filter((p, i) => i === 0 || p.x !== line[i - 1]!.x || p.y !== line[i - 1]!.y);
+  if (points.length < 2) return points.map((p) => ({ ...p }));
+  const normal = (a: TilePoint, b: TilePoint) => {
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
+  };
+  return points.flatMap((p, i) => {
+    const before = normal(points[Math.max(0, i - 1)]!, points[Math.max(1, i)]!);
+    const after = normal(
+      points[Math.min(i, points.length - 2)]!,
+      points[Math.min(i + 1, points.length - 1)]!,
+    );
+    const x = before.x + after.x,
+      y = before.y + after.y;
+    const dot = x * after.x + y * after.y;
+    const scale = dot > 0 ? offset / dot : Infinity;
+    if (dot > 0 && Math.hypot(x * scale, y * scale) <= 2 * Math.abs(offset))
+      return [{ x: p.x + x * scale, y: p.y + y * scale }];
+    return [before, after].map((n) => ({ x: p.x + n.x * offset, y: p.y + n.y * offset }));
+  });
+}
 export type TileFeatureLike = {
   type: 0 | 1 | 2 | 3;
   properties: Record<string, string | number | boolean>;
@@ -353,6 +384,7 @@ const LIGHT = { x: 0.45, y: 0.89 };
 
 /** Sides of the polygon a tree's crown is drawn as. */
 export const CROWN_SIDES = 24;
+const CROWN_CIRCUMSCRIPTION = 1 / Math.cos(Math.PI / CROWN_SIDES);
 
 /** A 32-bit FNV-1a hash of a string: a feature's seed, the same in every tile. */
 export function hashString(text: string): number {
@@ -653,6 +685,8 @@ export function buildTileGeometry(
   const crownSurface: number[] = [];
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
+  // Append new walking lines after the original lines to retain their stable indices/seeds.
+  const walkingLines: { points: TilePoint[]; width: number; id: number }[] = [];
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
 
@@ -760,6 +794,16 @@ export function buildTileGeometry(
       const addCrown = (p: TilePoint, index = 0) => {
         if (!unitMeters || !(crown > 0)) return;
         const ring = crownRing(p, crown / 2 / unitMeters, crownSeed + Math.imul(index, 0x9e3779b9));
+        // A conservative swept crown envelope: branches lean and flutter in any wind direction.
+        // The flutter bound follows swayOffset, including its wake term, independently of cells.
+        const radius = Math.max(...ring.map((q) => Math.hypot(q.x - p.x, q.y - p.y)));
+        const sweptRadius = radius * CROWN_SWEEP_FACTOR;
+        const envelope = Array.from({ length: CROWN_SIDES + 1 }, (_, i) => {
+          const angle = (i * 2 * Math.PI) / CROWN_SIDES;
+          const r = sweptRadius * CROWN_CIRCUMSCRIPTION;
+          return { x: p.x + Math.cos(angle) * r, y: p.y + Math.sin(angle) * r };
+        });
+        life.area('parking-exclusion', [envelope]);
         const crownCls = classId('tree_crown' satisfies RenderClass);
         const reach = (q: TilePoint) => Math.hypot(q.x - p.x, q.y - p.y);
         const first = crowns.count;
@@ -815,6 +859,28 @@ export function buildTileGeometry(
               continue;
             }
             if (className === 'furniture' && variant === 7) {
+              if (unitMeters && !isRegion) {
+                const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
+                const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
+                const along = 1.5 / unitMeters;
+                life.area('crossing', [
+                  stripRing(
+                    { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along },
+                    { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along },
+                    halfWidth,
+                  ),
+                ]);
+                // Extend to the curb so mapped sidewalks and walking ways can attach safely.
+                const reach = halfWidth + 1 / unitMeters;
+                walkingLines.push({
+                  points: [
+                    { x: p.x - Math.cos(theta) * reach, y: p.y - Math.sin(theta) * reach },
+                    { x: p.x + Math.cos(theta) * reach, y: p.y + Math.sin(theta) * reach },
+                  ],
+                  width: 3,
+                  id: hashString(`${featureId}/crossing`),
+                });
+              }
               if (strips && unitMeters) {
                 const bearing = Number(feature.properties.crossing_bearing ?? 0);
                 const theta = (bearing * Math.PI) / 180;
@@ -958,6 +1024,38 @@ export function buildTileGeometry(
             : isCanal
               ? LifeLine.canal
               : lifeLineFor[className];
+        if (!isRegion && unitMeters && lifeLine !== undefined && lifeLine <= LifeLine.roadMinor) {
+          for (const line of rings) {
+            for (let i = 1; i < line.length; i++) {
+              const ring = stripRing(
+                line[i - 1]!,
+                line[i]!,
+                (width || DEFAULT_ROAD_WIDTH_M) / 2 / unitMeters,
+              );
+              if (ring.length) life.area('carriageway', [ring]);
+            }
+            if (feature.properties.sidewalk_src === 'derived') continue;
+            for (const side of ['left', 'right'] as const) {
+              if (feature.properties.sidewalk !== 'both' && feature.properties.sidewalk !== side)
+                continue;
+              const sidewalkWidth = Number(
+                feature.properties[`sidewalk_${side}_width`] ??
+                  feature.properties.sidewalk_width ??
+                  2,
+              );
+              if (!(sidewalkWidth > 0)) continue;
+              walkingLines.push({
+                points: sidewalkLine(
+                  line,
+                  (((width || DEFAULT_ROAD_WIDTH_M) / 2 + sidewalkWidth / 2) / unitMeters) *
+                    (side === 'left' ? 1 : -1),
+                ),
+                width: sidewalkWidth,
+                id: hashString(`${featureId}/sidewalk-${side}`),
+              });
+            }
+          }
+        }
         if (lifeLine !== undefined) {
           const oneway =
             feature.properties.oneway === -1 ? -1 : feature.properties.oneway === 1 ? 1 : 0;
@@ -990,6 +1088,7 @@ export function buildTileGeometry(
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
             else if (solid || standingWater) life.area('blocked', polygon, standingWater);
+            else if (className === 'trees') life.area('parking-exclusion', polygon);
           }
           const base = fills.count;
           const coords: number[] = [];
@@ -1071,6 +1170,8 @@ export function buildTileGeometry(
       }
     }
   }
+
+  for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
 
   if (unitMeters && tile) {
     const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };

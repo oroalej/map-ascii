@@ -1,4 +1,11 @@
 /** Ground-agent clearance, in meters, shared across loaded tile boundaries. */
+import type { PersonFigure } from './people';
+
+const ADULT_BODY = { length: 0.9, width: 1 } as const;
+const CHILD_BODY = { length: 0.5, width: 0.5 } as const;
+/** Physical clearance dimensions; umbrellas and rowers use the adult footprint. */
+export const memberSize = (figure: PersonFigure) => (figure === 'child' ? CHILD_BODY : ADULT_BODY);
+
 export type Body = {
   x: number;
   y: number;

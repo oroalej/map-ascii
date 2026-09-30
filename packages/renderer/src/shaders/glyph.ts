@@ -84,6 +84,7 @@ uniform int u_crownClass;
 uniform vec3 u_crownSun;
 uniform float u_daylight;
 uniform int u_vehicle;
+uniform ivec3 u_vehicleOccluders; // trunks, crowns, and woods cover vehicle cells
 uniform int u_boat;
 uniform int u_train;
 uniform int u_person;
@@ -392,9 +393,11 @@ void main() {
   }
   bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[cls] & ${CellBit.grounds}) != 0 &&
     texelFetch(u_attr, cell, 0).r == 0.0;
-  if (lifeBit != 0 && ((u_cellBits[cls] & lifeBit) != 0 || onGrounds)) {
+  int lifeClass = int(life.g * 255.0 + 0.5) & 63;
+  bool behindTrees = lifeClass == u_vehicle &&
+    (cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z);
+  if (lifeBit != 0 && !behindTrees && ((u_cellBits[cls] & lifeBit) != 0 || onGrounds)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
-    int lifeClass = int(life.g * 255.0 + 0.5) & 63;
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
     int lifeByte = int(life.a * 255.0 + 0.5);

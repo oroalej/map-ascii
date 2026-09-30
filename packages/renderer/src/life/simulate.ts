@@ -82,13 +82,21 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import {
   bodyInside,
-  bodyHitsPolygon,
   bodiesOverlap,
   segmentCrossing,
   Occupancy,
   PolygonIndex,
+  memberSize,
   type Body,
+  type Polygon,
 } from './occupancy';
+import {
+  prepareRoadTerrain,
+  RoadAccess,
+  WorldRoadCache,
+  transformPolygon,
+  type PreparedRoadTerrain,
+} from './terrain';
 
 export { hashString, random } from './random';
 
@@ -391,6 +399,7 @@ export class TileLife {
   readonly gatherers: Gatherer[] = [];
   /** Tile units per meter. */
   readonly perMeter: number;
+  readonly roadTerrain: PreparedRoadTerrain;
   private readonly rng: () => number;
   /** Scratch for `followSpeeds`, by mover: its speed, progress along its line, and offset. */
   private speeds = new Float64Array(0);
@@ -420,6 +429,7 @@ export class TileLife {
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
+    this.roadTerrain = prepareRoadTerrain(geo, this.perMeter);
     this.rng = random(seed);
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
@@ -547,7 +557,7 @@ export class TileLife {
           this.moveTrain(mover, trainLength(train.cars) * this.perMeter);
           mover.pause = 0;
         }
-        this.movers.push(mover);
+        if (rule.kind !== 'person' || usableLines.person.includes(kind)) this.movers.push(mover);
       }
     }
   }
@@ -589,8 +599,8 @@ export class TileLife {
         1,
         a.x / this.perMeter - a.hy * a.side * 1.3,
         a.y / this.perMeter + a.hx * a.side * 1.3,
-        0.9,
-        1,
+        memberSize('adult').length,
+        memberSize('adult').width,
       );
       out.length = 2;
       return out;
@@ -620,8 +630,8 @@ export class TileLife {
       b.y = y + a.hx * w.lateral * spacing - a.hy * w.back * spacing;
       b.hx = a.hx;
       b.hy = a.hy;
-      b.length = Math.max(w.figure === 'child' ? 0.5 : 0.9, minimum);
-      b.width = Math.max(w.figure === 'child' ? 0.5 : 1, minimum);
+      b.length = Math.max(memberSize(w.figure).length, minimum);
+      b.width = Math.max(memberSize(w.figure).width, minimum);
     }
     out.length = walkers.length;
     return out;
@@ -629,6 +639,11 @@ export class TileLife {
 
   /** Resolve invalid initial positions instead of leaving an overlapping agent stuck. */
   settleGround(guard: GroundGuard) {
+    for (let i = this.stalls.length - 1; i >= 0; i--)
+      if (!guard(this.stalls[i]!)) {
+        this.scenes.removeStall(this.stalls[i]!);
+        this.stalls.splice(i, 1);
+      }
     for (let i = this.movers.length - 1; i >= 0; i--) {
       const m = this.movers[i]!;
       if (m.kind !== 'vehicle' && m.kind !== 'person') continue;
@@ -662,8 +677,7 @@ export class TileLife {
       const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
       for (let line = 0; line < this.geo.kinds.length; line++) {
         const kind = this.geo.kinds[line];
-        if (kind !== LifeLine.roadMinor && kind !== LifeLine.path && kind !== LifeLine.plaza)
-          continue;
+        if (kind !== LifeLine.path && kind !== LifeLine.plaza) continue;
         const length = this.lineLength(line),
           meters = length / this.perMeter;
         if (!length) continue;
@@ -746,14 +760,10 @@ export class TileLife {
               )
                 market = true;
             if (market) continue;
-            const side = dir,
-              offset =
-                this.geo.kinds[line] === LifeLine.roadMinor
-                  ? Math.max(0, (this.geo.widths[line] || 6) / 2 - VENDORS.curb)
-                  : VENDORS.beside;
+            const side = dir;
             const stall: Stall = {
-              x: m.x - m.hy * offset * this.perMeter,
-              y: m.y + m.hx * offset * this.perMeter,
+              x: m.x - m.hy * VENDORS.beside * this.perMeter,
+              y: m.y + m.hx * VENDORS.beside * this.perMeter,
               hx: m.hx,
               hy: m.hy,
               paint: Paint.cream,
@@ -839,8 +849,8 @@ export class TileLife {
   }
 
   /**
-   * Street vendors (config.ts `VENDORS`): carts along side streets, paths, and around parks,
-   * more of them near markets, each by a road's curb or beside a path, facing along it.
+   * Street vendors beside walking paths and parks. Legacy road candidates consume their
+   * appearance stream but are omitted, keeping the other vendors deterministic.
    */
   private spawnStalls() {
     const { geo, looks, perMeter } = this;
@@ -863,13 +873,9 @@ export class TileLife {
       for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
         const p = this.pointAt(line, looks() * length);
         const side = looks() < 0.5 ? 1 : -1;
-        const offset =
-          kind === LifeLine.roadMinor
-            ? (geo.widths[line] || DEFAULT_ROAD_WIDTH_M) / 2 - VENDORS.curb
-            : VENDORS.beside;
         // Right of the line's direction for `side` 1; the vendor stands on the far side.
-        const o = offset * perMeter * side;
-        this.stalls.push({
+        const o = VENDORS.beside * perMeter * side;
+        const stall: Stall = {
           x: p.x - p.hy * o,
           y: p.y + p.hx * o,
           hx: p.hx,
@@ -878,7 +884,12 @@ export class TileLife {
           shirt: SHIRT_PAINTS[Math.floor(looks() * SHIRT_PAINTS.length)]!,
           side,
           rank: looks(),
-        });
+        };
+        if (
+          kind !== LifeLine.roadMinor &&
+          this.roadTerrain.access.allows(this.groundBodies(stall), false)
+        )
+          this.stalls.push(stall);
       }
     }
   }
@@ -1066,6 +1077,11 @@ export class TileLife {
   private spawnParked(rng: () => number) {
     const { geo, perMeter } = this;
     const shares = this.traffic.parked;
+    const excluded = new PolygonIndex();
+    for (const a of geo.areas ?? [])
+      if (a.kind === 'blocked' || a.kind === 'parking-exclusion')
+        excluded.add(transformPolygon(a.rings, 0, 0, 1 / perMeter));
+    const sample: Body[] = [];
     const bodyOf = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => ({
       x,
       y,
@@ -1077,8 +1093,14 @@ export class TileLife {
     const park = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => {
       if (this.parked.length >= MAX_TILE_AGENTS || !inTile({ x, y })) return;
       const body = bodyOf(x, y, hx, hy, vehicle);
-      if (this.geo.areas?.some((a) => a.kind === 'blocked' && bodyHitsPolygon(body, a.rings)))
-        return;
+      sample[0] = {
+        ...body,
+        x: x / perMeter,
+        y: y / perMeter,
+        length: body.length / perMeter,
+        width: body.width / perMeter,
+      };
+      if (excluded.hits(sample)) return;
       const gap = 0.2 * perMeter;
       if (
         this.parked.some((p) => bodiesOverlap(body, bodyOf(p.x, p.y, p.hx, p.hy, p.vehicle), gap))
@@ -1746,9 +1768,8 @@ export class TileLife {
           ];
           let limit = 0;
           if (m.kind === 'person') {
-            const width = this.geo.widths[m.line] || DEFAULT_ROAD_WIDTH_M;
-            limit =
-              this.geo.kinds[m.line] === LifeLine.roadMinor ? Math.max(0, width / 2 - 1) : 1.5;
+            // Mapped sidewalk/path widths bound detours; unmeasured paths retain 1.5 m.
+            limit = Math.max(0, (this.geo.widths[m.line] || 4) / 2 - 0.5);
             const side = Math.sign(before.avoid ?? 0) || (i % 2 ? -1 : 1);
             tries = [
               [side, 0.5],
@@ -2076,6 +2097,7 @@ export type LifeLineShape = {
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 export class LifeWorld {
+  private readonly roadCache = new WorldRoadCache();
   /** Weak ownership releases evicted agents. A stored body never aliases the next trial. */
   private groundBuffers = new WeakMap<object, { live: Body[]; trial: Body[] }>();
   private readonly groundPrevious: Body[] = [];
@@ -2088,6 +2110,8 @@ export class LifeWorld {
     key: string;
     blocked: PolygonIndex;
     water: PolygonIndex;
+    roadAccess: RoadAccess;
+    trees: PolygonIndex;
     origins: Map<TileLife, { x: number; y: number; scale: number }>;
   };
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
@@ -2162,6 +2186,8 @@ export class LifeWorld {
         key,
         blocked: new PolygonIndex(),
         water: new PolygonIndex(),
+        roadAccess: new RoadAccess([], []),
+        trees: new PolygonIndex(),
         origins: new Map(),
       };
     const { blocked, water } = this.groundTerrain!;
@@ -2195,6 +2221,51 @@ export class LifeWorld {
       for (const b of out) toRef(o, b);
       return out;
     };
+    if (rebuild) {
+      const contributions = [];
+      for (const life of this.tiles.values()) {
+        const o = origin(life);
+        const metric = (polygon: Polygon) =>
+          polygon.map((ring) =>
+            ring.map((p) => ({
+              x: o.x + (p.x / life.perMeter) * o.scale,
+              y: o.y + (p.y / life.perMeter) * o.scale,
+            })),
+          );
+        contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
+        for (const a of life.geo.areas ?? []) {
+          if (a.kind === 'parking-exclusion') this.groundTerrain!.trees.add(metric(a.rings));
+        }
+      }
+      this.groundTerrain!.roadAccess = this.roadCache.build(contributions);
+      // A neighboring buffered crown can invalidate an already admitted parking placement.
+      for (const life of this.tiles.values()) {
+        const o = origin(life);
+        for (let i = life.parked.length - 1; i >= 0; i--) {
+          const p = life.parked[i]!,
+            spec = VEHICLES[p.vehicle];
+          const body = toRef(o, {
+            ...p,
+            x: p.x / life.perMeter,
+            y: p.y / life.perMeter,
+            length: spec.length,
+            width: spec.width,
+          });
+          if (this.groundTerrain!.trees.hits([body])) life.parked.splice(i, 1);
+        }
+        // Revalidate physical vendor footprints on terrain changes, independent of zoom.
+        for (let i = life.stalls.length - 1; i >= 0; i--) {
+          const stall = life.stalls[i]!;
+          const sample = life.groundBodies(stall, 0, this.groundSample);
+          for (const body of sample) toRef(o, body);
+          if (!this.groundTerrain!.roadAccess.allows(sample, false)) {
+            life.scenes.removeStall(stall);
+            life.stalls.splice(i, 1);
+          }
+        }
+      }
+    }
+    const roadAccess = this.groundTerrain!.roadAccess;
     for (const life of this.tiles.values()) {
       const o = origin(life);
       for (const a of rebuild ? (life.geo.areas ?? []) : [])
@@ -2247,6 +2318,7 @@ export class LifeWorld {
     if (buildStart !== undefined)
       this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
     const check = (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
+      const onFoot = !('kind' in owner) || owner.kind === 'person';
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
       const previous = before ? bodies(life, before, this.groundPrevious) : next;
@@ -2283,7 +2355,8 @@ export class LifeWorld {
         }
         if (
           blocked.hits(sample) ||
-          ((!('kind' in owner) || owner.kind === 'person') && water.hits(sample))
+          (onFoot && water.hits(sample)) ||
+          (onFoot && !roadAccess.allows(sample, 'kind' in owner || 'walker' in owner))
         )
           return false;
         if (oldScore === 0 && occupied.conflicts(owner, sample) > 0) return false;
@@ -2302,6 +2375,29 @@ export class LifeWorld {
       } finally {
         this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
       }
+    };
+  }
+
+  /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
+  groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
+    const ref = this.tiles.values().next().value;
+    const terrain = this.groundTerrain;
+    if (!ref || !terrain) return undefined;
+    const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
+    const [c1, r1] = toCell(...tileToLngLat(ref.tile, { x: ref.perMeter, y: ref.perMeter }));
+    const width = 1 / (c1 - c0),
+      height = 1 / (r1 - r0);
+    const body: Body = { x: 0, y: 0, hx: 1, hy: 0, length: width, width: height };
+    const sample = [body];
+    return (agent: VisibleAgent, col: number, row: number) => {
+      if (agent.aboard) return true;
+      body.x = (col + 0.5 - c0) * width;
+      body.y = (row + 0.5 - r0) * height;
+      if (agent.kind === 'person')
+        return terrain.roadAccess.allows(sample, agent.vehicle !== 'cart');
+      return (
+        agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !terrain.trees.hits(sample)
+      );
     };
   }
 

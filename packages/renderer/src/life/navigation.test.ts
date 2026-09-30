@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine, lifeTransferables } from './geometry';
 import { WalkingGraph } from './navigation';
+import { stripRing } from './terrain';
 
 const line = (b: LifeBuilder, points: [number, number][]) =>
   b.line(
@@ -8,6 +9,50 @@ const line = (b: LifeBuilder, points: [number, number][]) =>
     LifeLine.path,
   );
 describe('local walking routes', () => {
+  it('does not invent roadside routes when a road has no mapped sidewalk', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 20 },
+        { x: 100, y: 20 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
+    const graph = new WalkingGraph(b.finish(), 1);
+    expect(graph.points).toHaveLength(0);
+    expect(graph.route({ x: 10, y: 25 }, { x: 80, y: 25 })).toBeUndefined();
+  });
+  it('joins mapped sidewalks across a road only through an explicit crossing', () => {
+    for (const marked of [false, true]) {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 20 },
+          { x: 100, y: 20 },
+        ],
+        LifeLine.roadMinor,
+        6,
+      );
+      line(b, [
+        [0, 15],
+        [100, 15],
+      ]);
+      line(b, [
+        [0, 25],
+        [100, 25],
+      ]);
+      if (marked) {
+        b.area('crossing', [stripRing({ x: 48.5, y: 20 }, { x: 51.5, y: 20 }, 3)]);
+        line(b, [
+          [50, 15],
+          [50, 25],
+        ]);
+      }
+      const graph = new WalkingGraph(b.finish(), 1);
+      expect(Boolean(graph.route({ x: 10, y: 15 }, { x: 80, y: 25 }))).toBe(marked);
+    }
+  });
   it('uses a connected bend instead of cutting across a building', () => {
     const b = new LifeBuilder();
     line(b, [

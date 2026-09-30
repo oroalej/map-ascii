@@ -136,7 +136,11 @@ export type LifeGeometry = {
   places: Float32Array;
 };
 
-export type LifeArea = { kind: 'parking' | 'blocked'; rings: TilePoint[][]; water?: boolean };
+export type LifeArea = {
+  kind: 'parking' | 'blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
+  rings: TilePoint[][];
+  water?: boolean;
+};
 
 export const PLACE_STRIDE = 5;
 export const SITE_STRIDE = 5;

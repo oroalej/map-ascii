@@ -1,14 +1,17 @@
 /** Shared synthetic geography for CPU benchmarks and combined simulation tests. */
 import { viewportFor } from '../../camera';
-import { tileToLngLat } from '../../raster/geometry';
+import { metersPerUnit, tileToLngLat } from '../../raster/geometry';
 import { LifeBuilder, LifeLine } from '../geometry';
 import { activityLevels } from '../config';
 import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
+import { stripRing } from '../terrain';
 
 export const SCENARIOS = ['sparse', 'junction', 'transit', 'rain'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 const base = { z: 16, x: 55192, y: 30266 };
+// Explicit mapped sidewalk outside the 14 m carriageway, wide enough for waiting groups.
+export const SCENE_CURB_Y = 2048 + 10 / metersPerUnit(base);
 const ring = (x: number, y: number, w: number, h: number) => [
   { x, y },
   { x: x + w, y },
@@ -35,7 +38,7 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
       LifeLine.roadMajor,
       14,
     );
-    for (const y of [800, 1800, 2090, 3000])
+    for (const y of [800, 1800, SCENE_CURB_Y, 3000])
       b.line(
         [
           { x: 0, y },
@@ -51,6 +54,15 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
         ],
         LifeLine.path,
       );
+    const pm = 1 / metersPerUnit(base);
+    for (const y of [800, 1800, SCENE_CURB_Y, 3000])
+      b.area('crossing', [
+        stripRing({ x: 2048, y: y - 1.5 * pm }, { x: 2048, y: y + 1.5 * pm }, 7 * pm),
+      ]);
+    for (const x of [800, 1800, 3000])
+      b.area('crossing', [
+        stripRing({ x: x - 1.5 * pm, y: 2048 }, { x: x + 1.5 * pm, y: 2048 }, 7 * pm),
+      ]);
     const blocked = ring(2400, 2300, 350, 300);
     b.area('blocked', [blocked]);
     b.obstacle(blocked, true);
@@ -58,8 +70,8 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
     b.area('parking', [ring(500, 450, 300, 180), ring(620, 500, 30, 30)]);
     for (const x of [540, 590, 680, 740]) b.spot({ x, y: 530 }, 0, 1);
     if (kind === 'transit' || kind === 'rain') {
-      b.site({ x: 1900, y: 2090 }, 0, 7, true);
-      b.site({ x: 2300, y: 2090 }, 1, 7, true);
+      b.site({ x: 1900, y: SCENE_CURB_Y }, 0, 7, true);
+      b.site({ x: 2300, y: SCENE_CURB_Y }, 1, 7, true);
       b.site({ x: 1800, y: 800 }, 2, 0, true);
       b.market({ x: 1300, y: 1800 });
     }

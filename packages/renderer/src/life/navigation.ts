@@ -1,6 +1,7 @@
 import { usableLines } from './config';
 import type { LifeGeometry, LifeLine } from './geometry';
-import { boundsOf, pointInside } from './occupancy';
+import { boundsOf, pointInside, PolygonIndex, type Body } from './occupancy';
+import { prepareRoadTerrain, type RoadAccess } from './terrain';
 
 export type WalkPoint = { x: number; y: number };
 type Edge = { a: number; b: number; length: number };
@@ -31,12 +32,17 @@ export class WalkingGraph {
   private readonly obstacleBins = new Map<string, number[]>();
   private readonly edgeBins = new Map<string, number[]>();
   private readonly bin: number;
+  private readonly roadAccess: RoadAccess;
 
   constructor(
     geo: LifeGeometry,
     readonly perMeter: number,
   ) {
     this.bin = 20 * perMeter;
+    const crossings = (geo.areas ?? []).filter((a) => a.kind === 'crossing').map((a) => a.rings);
+    this.roadAccess = prepareRoadTerrain(geo, perMeter).access;
+    const crossingReach = new PolygonIndex();
+    for (const polygon of crossings) crossingReach.add(polygon);
     for (let i = 0; i < geo.obstacleClosed.length; i++) {
       const points: WalkPoint[] = [];
       for (let v = geo.obstacleStarts[i]!; v < geo.obstacleStarts[i + 1]!; v++)
@@ -59,10 +65,14 @@ export class WalkingGraph {
       }
       return id;
     };
+    const connected = new Set<string>();
     const edge = (a: WalkPoint, b: WalkPoint) => {
       if (this.points.length >= 4096 || distance(a, b) < 0.01 || !this.clear(a, b)) return;
       const ai = node(a);
       const bi = node(b);
+      const pair = `${Math.min(ai, bi)},${Math.max(ai, bi)}`;
+      if (ai === bi || connected.has(pair)) return;
+      connected.add(pair);
       const length = distance(a, b);
       const index = this.edges.length;
       this.edges.push({ a: ai, b: bi, length });
@@ -76,25 +86,43 @@ export class WalkingGraph {
     };
     for (let l = 0; l < geo.kinds.length; l++) {
       const kind = geo.kinds[l]! as LifeLine;
-      // People walk along paths; beside roads, along both curbs.
-      const path = usableLines.person.includes(kind);
-      const road = usableLines.vehicle.includes(kind);
-      if (!path && !road) continue;
+      // Only mapped walking lines and plaza routes, including decoded mapped sidewalks.
+      if (!usableLines.person.includes(kind)) continue;
       for (let v = geo.starts[l]!; v < geo.starts[l + 1]! - 1; v++) {
         const a = { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! };
         const b = { x: geo.coords[v * 2 + 2]!, y: geo.coords[v * 2 + 3]! };
-        if (path) edge(a, b);
-        if (!road) continue;
-        const length = distance(a, b) || 1;
-        const offset = ((geo.widths[l] || 6) / 2 + 0.6) * perMeter;
-        for (const side of [-1, 1]) {
-          const x = (-(b.y - a.y) / length) * offset * side;
-          const y = ((b.x - a.x) / length) * offset * side;
-          edge({ x: a.x + x, y: a.y + y }, { x: b.x + x, y: b.y + y });
-        }
+        edge(a, b);
       }
     }
-    // Join nearby path/roadside ends, with the same obstacle check as a site connector.
+    // A mapped crossing can meet the middle of a long sidewalk segment. Attach its end to
+    // that segment, rather than requiring OSM to repeat the crossing anchor as a way vertex.
+    const originalPoints = this.points.length;
+    const reach = 3 * perMeter;
+    for (let i = 0; crossings.length && i < originalPoints; i++) {
+      const p = this.points[i]!;
+      if (!crossingReach.hits([{ ...p, hx: 1, hy: 0, length: 2 * reach, width: 2 * reach }]))
+        continue;
+      for (const index of this.candidates(
+        this.edgeBins,
+        { x: p.x - reach, y: p.y - reach },
+        { x: p.x + reach, y: p.y + reach },
+      )) {
+        const e = this.edges[index]!;
+        if (e.a === i || e.b === i) continue;
+        const a = this.points[e.a]!,
+          b = this.points[e.b]!;
+        const dx = b.x - a.x,
+          dy = b.y - a.y;
+        const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy);
+        if (t <= 0 || t >= 1) continue;
+        const q = { x: a.x + dx * t, y: a.y + dy * t };
+        if (distance(p, q) > reach || !this.clear(p, q)) continue;
+        edge(p, q);
+        edge(a, q);
+        edge(q, b);
+      }
+    }
+    // Join nearby mapped walking ends with the same terrain check as a site connector.
     const bins = new Map<string, number[]>();
     this.points.forEach((p, i) => {
       const bx = Math.floor(p.x / this.bin);
@@ -141,6 +169,13 @@ export class WalkingGraph {
   }
 
   clear(a: WalkPoint, b: WalkPoint): boolean {
+    if (
+      !this.roadAccess.clear(
+        { x: a.x / this.perMeter, y: a.y / this.perMeter },
+        { x: b.x / this.perMeter, y: b.y / this.perMeter },
+      )
+    )
+      return false;
     for (const i of this.candidates(this.obstacleBins, a, b)) {
       const obstacle = this.obstacles[i]!;
       if (obstacle.closed && (inside(a, obstacle.points) || inside(b, obstacle.points)))
@@ -153,6 +188,18 @@ export class WalkingGraph {
           return false;
     }
     return true;
+  }
+
+  allowsBodies(bodies: readonly Body[]): boolean {
+    return this.roadAccess.allows(
+      bodies.map((b) => ({
+        ...b,
+        x: b.x / this.perMeter,
+        y: b.y / this.perMeter,
+        length: b.length / this.perMeter,
+        width: b.width / this.perMeter,
+      })),
+    );
   }
 
   /** Roofed sites are approached at a reachable exterior entrance, never through the roof. */

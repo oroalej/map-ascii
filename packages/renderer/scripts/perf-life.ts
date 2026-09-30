@@ -11,6 +11,7 @@ import { LifeBuilder, LifeLine } from '../src/life/geometry';
 import * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
 import type { LngLatBounds } from '../src/life/procession';
+import { snapshotRevision } from './snapshot';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const revision =
@@ -20,6 +21,8 @@ const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9)
 const baselineFile = process.argv.find((arg) => arg.startsWith('--baseline-file='))?.slice(16);
 const candidates = process.argv.includes('--candidates');
 const following = process.argv.includes('--following');
+const allowDiff = process.argv.includes('--allow-diff');
+if (allowDiff) console.log('behavior differs from baseline: timing only');
 const casePrefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
 const scratchRoot = resolve(tmpdir());
 const temporary = await mkdtemp(join(scratchRoot, 'atlas-life-perf-'));
@@ -123,6 +126,8 @@ function compare(before: () => unknown, after: () => unknown) {
 
 try {
   const sourcePath = 'packages/renderer/src/life/simulate.ts';
+  const frozenRoot = join(temporary, 'baseline-snapshot');
+  const frozen = baselineFile ? undefined : await snapshotRevision(root, revision, frozenRoot);
   const rawSource = baselineFile
     ? await readFile(resolve(root, baselineFile), 'utf8')
     : execFileSync('git', ['show', `${revision}:${sourcePath}`], { cwd: root, encoding: 'utf8' });
@@ -133,16 +138,22 @@ try {
       (whole, prefix: string, quote: string, specifier: string) => {
         const path =
           specifier === '@atlas/shared'
-            ? join(root, 'packages/shared/src/index.ts')
+            ? join(frozen ? frozenRoot : root, 'packages/shared/src/index.ts')
             : specifier.startsWith('.')
-              ? resolve(root, dirname(sourcePath), specifier)
+              ? resolve(
+                  frozen && !specifier.startsWith('../../scripts/') ? frozenRoot : root,
+                  dirname(sourcePath),
+                  specifier,
+                )
               : undefined;
         return path ? `${prefix}${quote}${pathToFileURL(path).href}${quote}` : whole;
       },
     );
   const baselinePath = join(temporary, 'baseline.mts');
   await writeFile(baselinePath, rewrite(source));
-  const baseline = (await import(pathToFileURL(baselinePath).href)) as Simulation;
+  const baseline = (await import(
+    frozen?.path('life/simulate.ts') ?? pathToFileURL(baselinePath).href
+  )) as Simulation;
   let changed: Simulation = current;
   let changedSource = await readFile(join(root, sourcePath), 'utf8');
   if (candidates || following) {
@@ -221,10 +232,11 @@ try {
       for (let frame = 0; frame < 40; frame++) {
         const weather = { rain: frame % 2, sunAltitude: frame % 3 ? 40 : -10 };
         const zoom = [14, 16, 18, 20][frame % 4]!;
-        deepStrictEqual(
-          next.visible(zoom, 1, center, weather, bounds),
-          old.visible(zoom, 1, center, weather, bounds),
-        );
+        if (!allowDiff)
+          deepStrictEqual(
+            next.visible(zoom, 1, center, weather, bounds),
+            old.visible(zoom, 1, center, weather, bounds),
+          );
         if (view === 'over-cap') {
           for (const world of [old, next])
             for (const life of (
@@ -288,7 +300,7 @@ try {
     for (let frame = 0; frame < 100; frame++) {
       old.step(1 / 30);
       next.step(1 / 30);
-      deepStrictEqual(next.movers, old.movers);
+      if (!allowDiff) deepStrictEqual(next.movers, old.movers);
     }
     const timings = compare(
       () => old.step(1 / 30),
@@ -301,6 +313,8 @@ try {
   }
   const report = {
     baseline: baselineFile ?? revision,
+    allowDiff,
+    baselineGraphHash: frozen?.hash,
     candidates,
     following,
     baselineHash: createHash('sha256').update(source).digest('hex'),

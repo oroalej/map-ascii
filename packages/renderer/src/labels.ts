@@ -42,11 +42,15 @@ export const labelText = (name: string): string =>
 export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
 export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };
 
+/** Hard label blackout over district zooms, including fractional levels. */
+export const LABEL_GAP = { min: 15, max: 17 } as const satisfies ZoomBand;
+
 /**
  * How much of a label shows at `zoom`, 0–1. Labels fade in and out over the same half level as
  * the classes (`bandVisibility`): a partly shown label keeps that share of its cells.
  */
-export const labelVisibility = (band: ZoomBand, zoom: number) => bandVisibility(band, zoom);
+export const labelVisibility = (band: ZoomBand, zoom: number) =>
+  zoom >= LABEL_GAP.min && zoom < LABEL_GAP.max ? 0 : bandVisibility(band, zoom);
 
 /**
  * Whether a label's cell `k` (counted across its halo box) shows at visibility `vis`: a fixed

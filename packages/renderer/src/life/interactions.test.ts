@@ -53,6 +53,24 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('releases a removed vendor queue and returns active customers along their approach', () => {
+    const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]),
+      p = person();
+    expect(scene.reserve(p, 1)).toBe(true);
+    run(scene, [p], 1);
+    const visit = scene.visits.get(p)!;
+    const site = visit.site;
+    expect(p.x).not.toBe(40);
+    scene.removeStall(stall);
+    expect(site.queue).toHaveLength(0);
+    expect(scene.sites.some((s) => s.stall === stall)).toBe(false);
+    expect(visit.state).toBe('return');
+    run(scene, [p], 8);
+    expect(scene.visits.has(p)).toBe(false);
+    expect([p.x, p.y]).toEqual([40, 30]);
+  });
+
   it('reserves whole groups and never claims the same slots twice', () => {
     const scene = setup();
     const a = person();

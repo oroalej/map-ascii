@@ -72,6 +72,8 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
   const gl = {
     bindTexture: vi.fn(),
     pixelStorei: vi.fn(),
+    bindBuffer: vi.fn(),
+    bufferData: vi.fn(),
     texSubImage2D: (...args: unknown[]) => uploaded.push(args.at(-1) as Uint8Array),
   } as unknown as GL;
   const targets = { labelCols: 83, labelRows: 37 } as CellTargets;
@@ -96,10 +98,16 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
   expect(buffer.every((byte) => byte === 0)).toBe(true);
   expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
   expect(buffer).toEqual(snapshot);
+  programs.streetText.count = 6;
+  const hidden = { ...view, camera: { ...view.camera, zoom: 16 } };
+  expect(overlayPass(gl, targets, resources, hidden, placement, [label], programs)).toEqual([]);
+  expect(buffer.every((byte) => byte === 0)).toBe(true);
+  expect(programs.streetText.count).toBe(0);
+  expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
   overlayPass(gl, { ...targets }, resources, view, placement, [label], programs);
-  expect(uploaded[3]).not.toBe(buffer);
-  expect(uploaded[3]).toEqual(snapshot);
+  expect(uploaded[5]).not.toBe(buffer);
+  expect(uploaded[5]).toEqual(snapshot);
   const resized = { ...targets, labelCols: 10, labelRows: 10 };
   overlayPass(gl, resized, resources, view, placement, [], programs);
-  expect(uploaded[4]).toHaveLength(400);
+  expect(uploaded[6]).toHaveLength(400);
 });

@@ -3,6 +3,9 @@ import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
 import { lifeTransferables } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
+import { pointInside } from '../life/occupancy';
+import { swayOffset } from '../glyphs/select';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import {
   buildTileGeometry,
   classifyRings,
@@ -23,6 +26,7 @@ import {
   streetLabel,
   tileToLngLat,
   ringCentroid,
+  sidewalkLine,
   unpackId,
   type TileFeatureLike,
   type TileLayerLike,
@@ -64,6 +68,66 @@ const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
     height: g.meta[i * 4 + 1],
     flags: g.meta[i * 4 + 2],
   }));
+
+describe('mapped sidewalk joins', () => {
+  it('keeps straight and right-angle offsets on either side, including reversed ways', () => {
+    const way = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    expect(sidewalkLine(way, 5)).toEqual([
+      { x: 0, y: -5 },
+      { x: 105, y: -5 },
+      { x: 105, y: 100 },
+    ]);
+    expect(sidewalkLine([...way].reverse(), -5)).toEqual(sidewalkLine(way, 5).reverse());
+  });
+  it('bevels acute bends and hairpins instead of spiking or returning to the centerline', () => {
+    for (const last of [
+      { x: 0, y: 0 },
+      { x: 0, y: 10 },
+      { x: 1, y: -1 },
+    ]) {
+      const way = [{ x: 0, y: 0 }, { x: 100, y: 0 }, last];
+      for (const offset of [-5, 5]) {
+        const result = sidewalkLine(way, offset);
+        expect(result).toHaveLength(4);
+        for (const p of result.slice(1, -1)) {
+          const distance = Math.hypot(p.x - 100, p.y);
+          expect(distance).toBeGreaterThanOrEqual(5 - 1e-8);
+          expect(distance).toBeLessThanOrEqual(10);
+          expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+        }
+      }
+    }
+  });
+  it('handles empty, single-point, and repeated-point ways without invalid coordinates', () => {
+    expect(sidewalkLine([], 5)).toEqual([]);
+    expect(
+      sidewalkLine(
+        [
+          { x: 1, y: 2 },
+          { x: 1, y: 2 },
+        ],
+        5,
+      ),
+    ).toEqual([{ x: 1, y: 2 }]);
+    expect(
+      sidewalkLine(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        5,
+      ),
+    ).toEqual([
+      { x: 0, y: -5 },
+      { x: 10, y: -5 },
+    ]);
+  });
+});
 
 describe('classifyRings', () => {
   it('puts mapped sidewalk bands on the correct side of the way with unequal widths', () => {
@@ -125,7 +189,11 @@ describe('classifyRings', () => {
       expect(Math.min(...distances)).toBeCloseTo(5, 0);
       expect(Math.max(...distances)).toBeCloseTo(7, 0);
       expect(band.every((v) => v.flags === (Flags.corridor | Flags.sidewalk))).toBe(true);
-      expect(Array.from(result.life.oneway!)).toEqual([-1]);
+      expect(Array.from(result.life.oneway!)).toEqual([-1, 0]);
+      expect(Array.from(result.life.kinds)).toEqual([LifeLine.roadMid, LifeLine.path]);
+      const walkY = result.life.coords[axis === 'y' ? 5 : 4]!;
+      expect((walkY - center) * unit).toBeCloseTo(leftSign * 6);
+      expect(result.life.widths[1]).toBe(2);
       expect(lifeTransferables(result.life)).toContain(result.life.oneway!.buffer);
     }
     const both = buildTileGeometry(
@@ -156,6 +224,55 @@ describe('classifyRings', () => {
     const band = vertices(both.fills).filter((v) => v.cls === classId('path'));
     expect(band).toHaveLength(8);
     expect((Math.max(...band.map((v) => v.y!)) - 2000) * unit).toBeCloseTo(8, 0);
+  });
+
+  it('retains road and crossing access in coarse tiles and uses only mapped sidewalks', () => {
+    const tile = { z: 14, x: 13798, y: 7566 };
+    for (const source of ['mapped', 'derived']) {
+      const result = buildTileGeometry(
+        {
+          roads: layer([
+            feature(
+              2,
+              { id: 'road', class: 'road_mid', width: 10, sidewalk: 'both', sidewalk_src: source },
+              [
+                [
+                  [1000, 2000],
+                  [3000, 2000],
+                ],
+              ],
+            ),
+          ]),
+          poi: layer([
+            feature(
+              1,
+              {
+                id: 'cross',
+                class: 'furniture',
+                variant: 'crossing',
+                crossing_bearing: 90,
+                crossing_width: 10,
+              },
+              [[[2000, 2000]]],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+        16,
+      );
+      expect(result.fills.positions).toHaveLength(0);
+      expect(result.life.areas?.map((a) => a.kind)).toEqual(['carriageway', 'crossing']);
+      expect(Array.from(result.life.kinds)).toEqual(
+        source === 'mapped'
+          ? [LifeLine.roadMid, LifeLine.path, LifeLine.path, LifeLine.path]
+          : [LifeLine.roadMid, LifeLine.path],
+      );
+      const crossing = result.life.areas!.find((a) => a.kind === 'crossing')!;
+      const unit = metersPerUnit(tile);
+      expect(pointInside({ x: 2000, y: 2000 + 4 / unit }, crossing.rings)).toBe(true);
+      expect(pointInside({ x: 2000 + 2 / unit, y: 2000 }, crossing.rings)).toBe(false);
+    }
   });
 
   it('draws exact marking quads without point glyphs and hides them in coarse tiles', () => {
@@ -791,6 +908,42 @@ describe('buildTileGeometry', () => {
       expect(crowns.positions).toHaveLength(0);
     });
 
+    it('keeps the visible crown inside the parking exclusion through storm wind and recoil', () => {
+      const { crowns, life } = build(tree());
+      const exclusions = life.areas!.filter((a) => a.kind === 'parking-exclusion');
+      expect(exclusions).toHaveLength(1);
+      const maxWind = WIND_PRESETS.storm * (1 + WIND_VARIATION.breathe);
+      for (const metersPerCell of [0.2, 0.6, 1.5]) {
+        const unitsPerCell = units(metersPerCell);
+        for (let i = 1; i < crowns.positions.length / 2; i++) {
+          for (const [gust, wake] of [
+            [maxWind, 0],
+            [0, maxWind],
+            [maxWind / 2, maxWind / 2],
+          ]) {
+            for (const time of [0, 0.3, 1]) {
+              const [dx, dy] = swayOffset(
+                crowns.ridge[i]! / unitsPerCell,
+                gust!,
+                wake!,
+                time,
+                i % 13,
+              );
+              expect(
+                pointInside(
+                  {
+                    x: crowns.positions[2 * i]! + dx * unitsPerCell,
+                    y: crowns.positions[2 * i + 1]! + dy * unitsPerCell,
+                  },
+                  exclusions[0]!.rings,
+                ),
+              ).toBe(true);
+            }
+          }
+        }
+      }
+    });
+
     it('spaces a tree row’s crowns a crown apart', () => {
       const row = feature(2, { id: 'osm:way/41', class: 'tree', height: 10, crown: 8 }, [
         [
@@ -798,9 +951,14 @@ describe('buildTileGeometry', () => {
           [1000 + Math.round(units(40)), 1000],
         ],
       ]);
-      const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
+      const { crowns, life } = buildTileGeometry(
+        { landuse: layer([row]) },
+        createIdRegistry(),
+        tile,
+      );
       // At 0, 8, 16, 24, 32, and 40 m.
       expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
+      expect(life.areas!.filter((a) => a.kind === 'parking-exclusion')).toHaveLength(6);
     });
 
     it('gives each tree its own lumpy crown, the same wherever it is built', () => {

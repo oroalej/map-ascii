@@ -6,6 +6,7 @@ import {
   type LabelArea,
   type LabelCandidate,
   LabelRank,
+  LABEL_GAP,
   labelText,
   labelVisibility,
   placeLabels,
@@ -91,12 +92,22 @@ describe('labelText', () => {
 describe('labelVisibility', () => {
   it('is full inside the band and fades over half a level outside it', () => {
     expect(labelVisibility({ min: 16 }, 15.4)).toBe(0);
-    expect(labelVisibility({ min: 16 }, 15.75)).toBeCloseTo(0.5);
-    expect(labelVisibility({ min: 16 }, 16)).toBe(1);
+    expect(labelVisibility({ min: 16 }, 15.75)).toBe(0);
+    expect(labelVisibility({ min: 16 }, 16)).toBe(0);
     expect(labelVisibility({ min: 16 }, 21)).toBe(1);
     expect(labelVisibility({ min: 0, max: 9.5 }, 9.5)).toBe(1);
     expect(labelVisibility({ min: 0, max: 9.5 }, 9.75)).toBeCloseTo(0.5);
     expect(labelVisibility({ min: 0, max: 9.5 }, 10)).toBe(0);
+  });
+  it('hides every rank throughout zooms 15 and 16, restoring ordinary bands at 17', () => {
+    const { min, max } = LABEL_GAP;
+    expect(LABEL_GAP).toEqual({ min: 15, max: 17 });
+    for (const band of [{ min: 0 }, { min: 14 }, { min: 16 }, { min: 18 }])
+      for (const zoom of [min, min + 0.99, max - 1, max - 0.01])
+        expect(labelVisibility(band, zoom)).toBe(0);
+    expect(labelVisibility({ min: 14 }, min - 0.01)).toBe(1);
+    expect(labelVisibility({ min: 14 }, max)).toBe(1);
+    expect(labelVisibility({ min: 18 }, max)).toBe(0);
   });
 });
 

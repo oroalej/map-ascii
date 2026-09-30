@@ -66,6 +66,29 @@ export function laneOffset(
  */
 export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
 
+/** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
+ * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
+export type Kinematics = { accel: number; brake: number; maxBrake: number; lateral: number };
+export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
+  default: { accel: 1.5, brake: 2.5, maxBrake: 5, lateral: 2 },
+  car: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5 },
+  motorcycle: { accel: 2.5, brake: 3.5, maxBrake: 7, lateral: 3 },
+  tricycle: { accel: 1.2, brake: 2.5, maxBrake: 5, lateral: 1.8 },
+  jeepney: { accel: 1, brake: 2, maxBrake: 5, lateral: 1.5 },
+  bus: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
+  truck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
+  bicycle: { accel: 1, brake: 2, maxBrake: 4, lateral: 2 },
+  rowboat: { accel: 0.3, brake: 0.4, maxBrake: 0.8, lateral: 1 },
+  motorboat: { accel: 0.8, brake: 0.8, maxBrake: 1.5, lateral: 1.5 },
+  banca: { accel: 0.5, brake: 0.6, maxBrake: 1.2, lateral: 1.2 },
+  locomotive: { accel: 0.8, brake: 0.9, maxBrake: 1.5, lateral: 1 },
+};
+export const kinematicsOf = (craft?: string): Kinematics =>
+  KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
+export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
+export const JUNCTION = { gap: 1.5, margin: 1, tie: 1, maxWait: 10, giveUp: 30, holdMax: 20 } as const;
+export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
+
 /**
  * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of the roads at least
  * `minWidth` m wide, in a strip `strip` m wide, one every vehicle length plus `gap` m with
@@ -85,7 +108,7 @@ export const PARKED = {
 /** The line kinds each moving kind may use, at junctions too. */
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
-  person: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
+  person: [LifeLine.path, LifeLine.plaza],
   dog: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
   cat: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
   boat: [LifeLine.river, LifeLine.canal],
@@ -131,7 +154,8 @@ export type SpawnRule = {
 export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
   [LifeLine.roadMajor]: [{ kind: 'vehicle', spacing: 30, speed: [7, 12] }],
   [LifeLine.roadMid]: [{ kind: 'vehicle', spacing: 50, speed: [6, 10] }],
-  // Side streets: tricycles, people on foot, and street dogs.
+  // Consume the legacy person stream on side streets, but spawnOn rejects those candidates.
+  // This preserves unrelated traffic seeds while people use mapped walking lines only.
   [LifeLine.roadMinor]: [
     { kind: 'vehicle', spacing: 100, speed: [3, 6] },
     { kind: 'person', spacing: 50, speed: [0.9, 1.5] },
