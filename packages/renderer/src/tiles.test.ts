@@ -7,6 +7,7 @@ import {
   findAncestor,
   LruCache,
   parentOf,
+  RequestQueue,
   tileKey,
   tileZoom,
   viewTiles,
@@ -128,5 +129,40 @@ describe('ancestorAt', () => {
     expect(ancestorAt({ z: 16, x: 55_247, y: 30_252 }, 11)).toEqual({ z: 11, x: 1726, y: 945 });
     expect(ancestorAt({ z: 3, x: 5, y: 2 }, 3)).toEqual({ z: 3, x: 5, y: 2 });
     expect(ancestorAt({ z: 9, x: 431, y: 236 }, 11)).toEqual({ z: 9, x: 431, y: 236 });
+  });
+});
+
+describe('RequestQueue', () => {
+  const tile = (x: number, z = 16) => ({ z, x, y: 0 });
+  const setUp = () => {
+    const sent: string[] = [];
+    const queue = new RequestQueue((_, key) => sent.push(key), 2);
+    return { queue, sent };
+  };
+
+  it('sends at most a few at once, in the order wanted, and the next as each is answered', () => {
+    const { queue, sent } = setUp();
+    queue.want([tile(1), tile(2), tile(3), tile(4)], 'view');
+    expect(sent).toEqual(['16/1/0', '16/2/0']);
+    expect(queue.size).toBe(4);
+    expect(queue.has('16/3/0')).toBe(true);
+    queue.done('16/1/0');
+    expect(sent).toEqual(['16/1/0', '16/2/0', '16/3/0']);
+    // An answer for a tile it never sent changes nothing.
+    queue.done('16/9/0');
+    expect(sent).toHaveLength(3);
+  });
+
+  it('drops queued tiles the view no longer wants, and puts the region first', () => {
+    const { queue, sent } = setUp();
+    queue.want([tile(1), tile(2), tile(3), tile(4)], 'view');
+    // The view moved on (a fly-to): only the new tiles wait, and those sent aren't sent again.
+    queue.want([tile(2), tile(10), tile(11)], 'view');
+    expect(queue.has('16/3/0')).toBe(false);
+    queue.want([tile(0, 11)], 'region');
+    queue.done('16/1/0');
+    queue.done('16/2/0');
+    expect(sent).toEqual(['16/1/0', '16/2/0', '11/0/0', '16/10/0']);
+    expect(queue.size).toBe(3);
   });
 });

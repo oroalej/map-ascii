@@ -139,13 +139,14 @@ export class TileCache {
       view = viewTiles(camera, size, header);
     }
     const out = new Map<string, TileId>();
+    const missing: TileId[] = [];
     for (const tile of view) {
       const key = tileKey(tile);
       if (meshes.has(key)) {
         out.set(key, tile);
         continue;
       }
-      if (this.mayRequest(key)) this.source.request(tile);
+      if (this.mayRequest(key)) missing.push(tile);
       const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
       if (ancestor) {
         out.set(tileKey(ancestor), ancestor);
@@ -158,6 +159,8 @@ export class TileCache {
         }
       }
     }
+    // In the view's order (from its center out): those the view no longer needs are dropped.
+    this.source.want(missing, 'view');
     // Coarser tiles first, so finer ones overwrite them where both exist.
     return [...out.values()].sort((a, b) => a.z - b.z);
   }
@@ -172,6 +175,7 @@ export class TileCache {
     if (!header) return [];
     const loaded = (key: string) => !!meshes.get(key);
     const out = new Map<string, TileId>();
+    const missing = new Map<string, TileId>();
     for (const tile of tiles) {
       const region = ancestorAt(tile, Math.max(header.minZoom, REGION_TILE_MAX_ZOOM));
       const key = tileKey(region);
@@ -179,10 +183,11 @@ export class TileCache {
         out.set(key, region);
         continue;
       }
-      if (!meshes.has(key) && this.mayRequest(key)) this.source.request(region);
+      if (!meshes.has(key) && this.mayRequest(key)) missing.set(key, region);
       const fallback = findAncestor(region, header.minZoom, loaded);
       if (fallback) out.set(tileKey(fallback), fallback);
     }
+    this.source.want([...missing.values()], 'region');
     return [...out.values()].sort((a, b) => a.z - b.z);
   }
 

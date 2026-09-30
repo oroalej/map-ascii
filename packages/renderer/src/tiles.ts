@@ -176,25 +176,83 @@ export type TileSourceHandlers = {
 /** How many recent tile decodes `decodeMsAverage` covers. */
 const DECODE_SAMPLES = 50;
 
+/** At most this many tile requests are at the worker at once; the rest wait their turn. */
+export const MAX_IN_FLIGHT = 6;
+
+/** Who wants a tile: the region's coarser tiles go before the view's own. */
+export type RequestGroup = 'region' | 'view';
+
+/**
+ * Tile requests: at most `max` at the worker at once, the rest queued in the order they are
+ * wanted. Each group's queue is replaced whenever it is wanted again, so tiles the view has
+ * moved past (the zooms a fly-to passes through) are dropped before they are asked for.
+ */
+export class RequestQueue {
+  private readonly inFlight = new Set<string>();
+  private readonly queues: Record<RequestGroup, TileId[]> = { region: [], view: [] };
+
+  constructor(
+    private readonly send: (tile: TileId, key: string) => void,
+    private readonly max = MAX_IN_FLIGHT,
+  ) {}
+
+  /** The tiles `group` needs now, most wanted first: they replace its queue. */
+  want(tiles: readonly TileId[], group: RequestGroup) {
+    this.queues[group] = tiles.filter((t) => !this.inFlight.has(tileKey(t)));
+    this.pump();
+  }
+
+  /** The worker answered for `key` (a tile or an error): the next one can go. */
+  done(key: string) {
+    if (this.inFlight.delete(key)) this.pump();
+  }
+
+  /** Whether `key` is queued or at the worker. */
+  has(key: string) {
+    return (
+      this.inFlight.has(key) ||
+      this.queues.region.some((t) => tileKey(t) === key) ||
+      this.queues.view.some((t) => tileKey(t) === key)
+    );
+  }
+
+  /** Requests queued or at the worker. */
+  get size() {
+    return this.inFlight.size + this.queues.region.length + this.queues.view.length;
+  }
+
+  private pump() {
+    while (this.inFlight.size < this.max) {
+      const tile = this.queues.region.shift() ?? this.queues.view.shift();
+      if (!tile) return;
+      const key = tileKey(tile);
+      if (this.inFlight.has(key)) continue;
+      this.inFlight.add(key);
+      this.send(tile, key);
+    }
+  }
+}
+
 /** Requests tiles from the worker and tracks the feature id strings it registers. */
 export class TileSource {
   /** Features by index - 1 (the id buffer stores the index; 0 = none). */
   private readonly features: FeatureInfo[] = [];
   /** Feature id string → index. */
   private readonly indices = new Map<string, number>();
-  private readonly pending = new Set<string>();
+  private readonly requests: RequestQueue;
   private readonly worker: Worker;
   /** Decode times of the most recent tiles, for `decodeMsAverage`. */
   private readonly decodeTimes: number[] = [];
 
   constructor(url: string, handlers: TileSourceHandlers) {
+    this.requests = new RequestQueue((tile, key) => this.post({ type: 'tile', key, ...tile }));
     this.worker = new Worker(new URL('./tiles.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
       if (message.type === 'header') {
         handlers.header(message.header);
       } else if (message.type === 'tile') {
-        this.pending.delete(message.key);
+        this.requests.done(message.key);
         if (message.decodeMs !== undefined) {
           this.decodeTimes.push(message.decodeMs);
           if (this.decodeTimes.length > DECODE_SAMPLES) this.decodeTimes.shift();
@@ -205,8 +263,8 @@ export class TileSource {
         }
         handlers.tile(message.key, message.geometry);
       } else {
-        if (message.key) this.pending.delete(message.key);
         handlers.error(message.message, message.key);
+        if (message.key) this.requests.done(message.key);
       }
     };
     this.post({ type: 'init', url });
@@ -228,12 +286,12 @@ export class TileSource {
   }
 
   isPending(key: string) {
-    return this.pending.has(key);
+    return this.requests.has(key);
   }
 
-  /** Tiles requested from the worker and not yet answered. */
+  /** Tiles wanted and not yet answered: queued, or at the worker. */
   get pendingCount() {
-    return this.pending.size;
+    return this.requests.size;
   }
 
   /** Mean decode time of the last tiles decoded, in ms (0 before any). */
@@ -242,11 +300,9 @@ export class TileSource {
     return n === 0 ? 0 : this.decodeTimes.reduce((a, b) => a + b, 0) / n;
   }
 
-  request(tile: TileId) {
-    const key = tileKey(tile);
-    if (this.pending.has(key)) return;
-    this.pending.add(key);
-    this.post({ type: 'tile', key, ...tile });
+  /** The tiles `group` needs now, most wanted first (`RequestQueue.want`). */
+  want(tiles: readonly TileId[], group: RequestGroup) {
+    this.requests.want(tiles, group);
   }
 
   destroy() {

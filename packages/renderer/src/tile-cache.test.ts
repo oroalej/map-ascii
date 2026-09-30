@@ -8,7 +8,9 @@ const sources: { handlers: TileSourceHandlers; request: ReturnType<typeof vi.fn>
 vi.mock('./tiles', async (importOriginal) => {
   const actual = await importOriginal<typeof tiles>();
   class FakeSource {
+    /** Each tile wanted, one call per tile, in the order wanted. */
     request = vi.fn();
+    want = vi.fn((wanted: readonly TileId[]) => wanted.forEach((t) => this.request(t)));
     destroy = vi.fn();
     constructor(_url: string, handlers: TileSourceHandlers) {
       sources.push({ handlers, request: this.request });
