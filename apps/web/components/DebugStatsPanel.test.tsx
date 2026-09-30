@@ -8,6 +8,7 @@ import DebugStatsPanel from './DebugStatsPanel';
 vi.mock('@/lib/debug', () => ({ debugCaptureMs: () => 30_000 }));
 
 const stats: AtlasStats = {
+  quality: { choice: 'high', tier: 0, name: 'high' },
   fps: 60,
   frameMs: 1,
   gpuFrameMs: null,

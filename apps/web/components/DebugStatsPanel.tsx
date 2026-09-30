@@ -45,6 +45,7 @@ export default function DebugStatsPanel() {
       },
       camera: atlas?.getCamera(),
       life: { ...useLifeStore.getState() },
+      quality: stats.quality,
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       focused: document.hasFocus(),
       visibility: document.visibilityState,
@@ -96,6 +97,7 @@ export default function DebugStatsPanel() {
     <div className={styles.stats}>
       <pre aria-hidden="true">
         {[
+          `quality ${stats.quality.name} (${stats.quality.tier})`,
           `fps    ${String(stats.fps).padStart(5)}`,
           `cpu    ${ms(stats.frameMs)} ms`,
           `gpu    ${stats.gpuFrameMs === null ? '  n/a' : ms(stats.gpuFrameMs)} ms`,

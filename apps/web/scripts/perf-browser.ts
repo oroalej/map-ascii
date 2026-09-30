@@ -53,8 +53,10 @@ try {
       acceptDownloads: true,
     });
     await page.addInitScript(
-      (wind) =>
-        localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon', wind })),
+      (wind) => {
+        localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon', wind }));
+        localStorage.setItem('atlas.quality', JSON.stringify('high'));
+      },
       storm ? 'storm' : 'calm',
     );
     await page.goto(`http://localhost:${port}/${city.slug}?debug=1&z=18`);

@@ -3,6 +3,10 @@ import { readFile } from 'node:fs/promises';
 import type { AtlasProfile } from '@atlas/renderer';
 import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from './helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('atlas.quality', JSON.stringify('high')));
+});
+
 /** The view parameters currently in the address bar. */
 const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParams);
 

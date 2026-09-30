@@ -20,11 +20,38 @@ import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
+import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function QualityControl() {
+  const choice = useQualityStore((s) => s.choice);
+  const atlas = useAtlasInstance((s) => s.atlas);
+  const name = useSyncExternalStore(
+    (change) => atlas?.on('qualitychange', change) ?? (() => {}),
+    () => atlas?.getStats().quality.name ?? 'high',
+    () => 'high',
+  );
+  return (
+    <button
+      type="button"
+      className={styles.button}
+      title={
+        choice === 'auto' ? `Automatic quality: ${name}` : `${capitalize(choice)} drawing quality`
+      }
+      onClick={() =>
+        useQualityStore.setState({
+          choice: QUALITY_CHOICES[(QUALITY_CHOICES.indexOf(choice) + 1) % QUALITY_CHOICES.length]!,
+        })
+      }
+    >
+      Quality: {capitalize(choice)}
+    </button>
+  );
+}
 
 const WIDE = '(min-width: 640px)';
 const isWide = () => window.matchMedia(WIDE).matches;
@@ -417,6 +444,7 @@ export function Hud({
         </div>
         <div className={styles.row}>
           <LifeControls climate={climate} timezone={timezone} />
+          <QualityControl />
         </div>
         <ProcessionControls />
       </div>
