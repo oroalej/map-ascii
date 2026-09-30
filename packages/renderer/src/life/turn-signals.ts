@@ -43,6 +43,8 @@ export type VehicleRouting = Readonly<{
   seed: number;
   turns: number;
   plan?: VehicleTurnPlan;
+  /** Planning may precede the visible 20 m / two-second indication window. */
+  indicating?: boolean;
   signal?: Readonly<{ side: TurnSide; remaining: number }>;
 }>;
 
@@ -65,7 +67,7 @@ export function visibleTurnSignal(
   routing: VehicleRouting | undefined,
   clock: number,
 ): TurnSignal | undefined {
-  const side = routing?.signal?.side ?? routing?.plan?.side;
+  const side = routing?.signal?.side ?? (routing?.indicating ? routing.plan?.side : undefined);
   if (!side || !routing) return;
   const offset = ((routing.seed >>> 0) / 0x1_0000_0000) * TURN_SIGNAL.period;
   const phase = (((clock + offset) % TURN_SIGNAL.period) + TURN_SIGNAL.period) % TURN_SIGNAL.period;

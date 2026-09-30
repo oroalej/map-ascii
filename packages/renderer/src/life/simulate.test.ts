@@ -131,16 +131,14 @@ describe('TileLife', () => {
     expect(a.movers.map((m) => [m.x, m.y, m.dir])).toEqual(b.movers.map((m) => [m.x, m.y, m.dir]));
   });
 
-  it('ignores reserved oneway metadata without changing seeded spawns or simulation', () => {
+  it('uses one-way spawn flow without consuming additional random draws', () => {
     const { oneway: _unused, ...legacy } = road;
     const a = new TileLife(tile, legacy, 42);
     const b = new TileLife(tile, { ...road, oneway: Int8Array.of(-1) }, 42);
-    expect(b.movers).toEqual(a.movers);
-    for (let i = 0; i < 60; i++) {
-      a.step(1 / 30);
-      b.step(1 / 30);
-    }
-    expect(b.movers).toEqual(a.movers);
+    const draws = (life: TileLife) =>
+      life.movers.map((m) => [m.vehicle, m.speed, m.paint, m.lane, m.rank, m.d, m.routing]);
+    expect(draws(b)).toEqual(draws(a));
+    expect(b.movers.every((m) => m.dir === -1)).toBe(true);
     expect(b.parked).toEqual(a.parked);
   });
 

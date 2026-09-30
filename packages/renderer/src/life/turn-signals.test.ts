@@ -117,10 +117,12 @@ describe('turn indicators', () => {
     m.speed = 30 * pm;
     position(m, 61);
     life.step(0.1, undefined, undefined, undefined, undefined, () => false);
-    expect(m.routing?.plan).toBeUndefined();
+    expect(m.routing?.plan).toBeDefined();
+    expect(m.routing?.indicating).not.toBe(true);
     position(m, 59);
     life.step(0.1, undefined, undefined, undefined, undefined, () => false);
     expect(m.routing?.plan?.vertex).toBe(2);
+    expect(m.routing?.indicating).toBe(true);
   });
 
   it('keeps signaling at a red light and follows the planned exit after green', () => {
@@ -159,7 +161,7 @@ describe('turn indicators', () => {
     expect(m.line).toBe(before!.plan!.exit >> 1);
     expect(m.routing?.turns).toBe(1);
     expect(m.routing?.plan).toBeUndefined();
-    expect(m.routing?.signal?.remaining).toBeCloseTo(6 + 2.2 + 1 - 0.1);
+    expect(m.routing?.signal?.remaining).toBeCloseTo(6 + 2.2 + 1 - m.d / pm);
     const after = m.routing;
     life.step(0.1, undefined, undefined, undefined, undefined, () => false);
     expect(m.routing).toBe(after);

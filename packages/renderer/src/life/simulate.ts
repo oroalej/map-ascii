@@ -33,6 +33,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  FILLET,
   kinematicsOf,
   laneOffset,
   LIFE_ZOOM,
@@ -69,6 +70,7 @@ import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
+import { fillet, curvePose, type Pose, type Curve } from './curves';
 import { YieldControl } from './yield';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -186,6 +188,10 @@ export type Mover = {
   waiting?: number;
   /** Motor vehicles: immutable exit intent and rear-clearance state for turn indicators. */
   routing?: VehicleRouting;
+  /** Non-motor craft intent; motors use routing.plan.exit exclusively. */
+  next?: number;
+  /** Incoming endpoint code, retained for the outgoing half of a curve. */
+  came?: number;
 };
 
 /**
@@ -422,6 +428,7 @@ export class TileLife {
   private readonly idleBodies: Body[] = [];
   private readonly rng: () => number;
   private readonly routingSeed: number;
+  private readonly routeRng: () => number;
   /** Scratch for `followSpeeds`, by mover: its speed, progress along its line, and offset. */
   private speeds = new Float64Array(0);
   private caps = new Float64Array(0);
@@ -454,6 +461,7 @@ export class TileLife {
     this.roadTerrain = prepareRoadTerrain(geo, this.perMeter);
     this.rng = random(seed);
     this.routingSeed = seed;
+    this.routeRng = random(seed ^ 0x2545f491);
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
     this.birdRng = random(seed ^ 0x165667b1);
@@ -532,7 +540,9 @@ export class TileLife {
       if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
       for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
-        const dir = rng() < 0.5 ? 1 : -1;
+        let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
+        const flow = this.geo.oneway?.[line];
+        if (rule.kind === 'vehicle' && flow) dir = flow === 1 ? 1 : -1;
         let speed = between(rng, rule.speed);
         let vehicle: CraftType | undefined;
         let paint = 0;
@@ -606,6 +616,97 @@ export class TileLife {
     return this.scenes.offset(m, normal, curb);
   }
 
+  private corner(m: Mover, vertex: number): Curve | undefined {
+    let incoming = vertex - m.dir,
+      outgoing = vertex + m.dir;
+    let inLine = m.line,
+      outLine = m.line;
+    const start = m.dir === 1 ? this.first(m.line) : this.last(m.line);
+    const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+    if (vertex === start) {
+      if (m.came === undefined) return;
+      inLine = m.came >> 1;
+      incoming = m.came & 1 ? this.last(inLine) - 1 : this.first(inLine) + 1;
+    }
+    if (vertex === end) {
+      const next = m.routing?.plan?.exit ?? m.next;
+      if (next === undefined || next < 0) return;
+      outLine = next >> 1;
+      outgoing = next & 1 ? this.last(outLine) - 1 : this.first(outLine) + 1;
+    }
+    const c = this.geo.coords;
+    const x = c[vertex * 2]!,
+      y = c[vertex * 2 + 1]!;
+    const ix = x - c[incoming * 2]!,
+      iy = y - c[incoming * 2 + 1]!;
+    const ox = c[outgoing * 2]! - x,
+      oy = c[outgoing * 2 + 1]! - y;
+    const li = Math.hypot(ix, iy),
+      lo = Math.hypot(ox, oy);
+    if (!li || !lo) return;
+    const offset = (line: number) =>
+      line === m.line
+        ? this.offsetOf(m)
+        : m.kind === 'vehicle'
+          ? laneOffset(
+              this.roadWidth(line),
+              VEHICLES[m.vehicle!].width,
+              m.lane,
+              VEHICLES[m.vehicle!].curb,
+            )
+          : 0;
+    return fillet(
+      x,
+      y,
+      ix / li,
+      iy / li,
+      ox / lo,
+      oy / lo,
+      li,
+      lo,
+      offset(inLine) * this.perMeter,
+      offset(outLine) * this.perMeter,
+      this.perMeter,
+    );
+  }
+
+  /** Pure render/clearance pose; the route cursor stays on the centreline. */
+  pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }): Pose {
+    const offset = this.offsetOf(m) * this.perMeter;
+    Object.assign(out, { x: m.x - m.hy * offset, y: m.y + m.hx * offset, hx: m.hx, hy: m.hy });
+    if (!m.vehicle || m.train) return out;
+    const behind = this.corner(m, m.from);
+    if (behind && m.d <= behind.length) return curvePose(behind, m.d, out);
+    const ahead = this.corner(m, m.from + m.dir);
+    const remaining = this.segment(m.from, m.from + m.dir) - m.d;
+    if (ahead && remaining <= ahead.length) return curvePose(ahead, -remaining, out);
+    return out;
+  }
+
+  private curveTarget(m: Mover): number {
+    const k = kinematicsOf(m.vehicle),
+      pm = this.perMeter;
+    let target = m.speed;
+    const behind = this.corner(m, m.from);
+    if (behind && m.d <= behind.length)
+      target = Math.min(target, Math.sqrt(k.lateral * pm * behind.radius));
+    let distance = -m.d;
+    let v = m.from;
+    const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
+    for (let count = 0; count < 3 && v !== end; count++) {
+      distance += this.segment(v, v + m.dir);
+      v += m.dir;
+      if (distance > FILLET.lookaheadM * pm) break;
+      const curve = this.corner(m, v);
+      if (curve)
+        target = Math.min(
+          target,
+          approach(distance - curve.length, Math.sqrt(k.lateral * pm * curve.radius), k.brake * pm),
+        );
+    }
+    return target;
+  }
+
   /** The same meters and group slots used by the life drawing pass. */
   groundBodies(a: GroundAgent, minimum = 0, out: Body[] = []): Body[] {
     if (!('kind' in a) && !('walker' in a)) {
@@ -653,10 +754,9 @@ export class TileLife {
     if (mover && a.vehicle) {
       const s = VEHICLES[a.vehicle];
       const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
-      b.x = x;
-      b.y = y;
-      b.hx = a.hx;
-      b.hy = a.hy;
+      this.pose(a, b);
+      b.x /= this.perMeter;
+      b.y /= this.perMeter;
       b.length = Math.max(s.length, minimum);
       b.width = s.width;
       out.length = 1;
@@ -1523,7 +1623,15 @@ export class TileLife {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const usable = usableLines[m.kind];
     return (this.ends.get(this.endKey(vertex)) ?? []).filter(
-      (code) => code !== arrived && usable.includes(this.geo.kinds[code >> 1]! as LifeLine),
+      (code) =>
+        code !== arrived &&
+        usable.includes(this.geo.kinds[code >> 1]! as LifeLine) &&
+        !(
+          m.kind === 'vehicle' &&
+          m.vehicle &&
+          this.geo.oneway?.[code >> 1] &&
+          this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
+        ),
     );
   }
 
@@ -1579,24 +1687,38 @@ export class TileLife {
 
   /** Plan before speed restrictions, so waiting traffic keeps its original intention. */
   private prepareTurn(m: Mover, index: number) {
-    if (!hasTurnSignals(m.vehicle)) return;
-    m.routing ??= this.newRouting(index);
-    const plan = m.routing.plan;
-    if (plan && (plan.line !== m.line || plan.dir !== m.dir))
-      m.routing = { ...m.routing, plan: undefined, signal: undefined };
+    if (!m.vehicle) return;
     const vertex = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const progress = this.along[m.from]! + m.dir * m.d;
     const remaining = m.dir * (this.along[vertex]! - progress);
+    const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
+    const reach = Math.max(
+      FILLET.lookaheadM * this.perMeter,
+      (m.v ?? m.speed) ** 2 / (2 * brake) + FILLET.maxM * this.perMeter,
+    );
+    if (!hasTurnSignals(m.vehicle)) {
+      if (remaining <= reach && m.next === undefined) {
+        const options = this.exitOptions(m, vertex);
+        m.next = options.length ? options[Math.floor(this.routeRng() * options.length)]! : -1;
+      }
+      return;
+    }
+    m.routing ??= this.newRouting(index);
+    const plan = m.routing.plan;
+    if (plan && (plan.line !== m.line || plan.dir !== m.dir))
+      m.routing = { ...m.routing, plan: undefined, signal: undefined, indicating: false };
     const lead = Math.max(
       TURN_SIGNAL.leadMeters * this.perMeter,
       TURN_SIGNAL.leadSeconds * m.speed,
     );
-    if (remaining <= lead && !m.routing.plan)
+    if (remaining <= Math.max(reach, lead) && !m.routing.plan)
       m.routing = { ...m.routing, plan: this.plannedExit(m, vertex, this.exitOptions(m, vertex)) };
+    if (remaining <= lead && !m.routing.indicating) m.routing = { ...m.routing, indicating: true };
   }
 
   /** At a line's end: consume a remembered exit, else keep the existing non-motor routing. */
   private turn(m: Mover) {
+    if (m.vehicle) m.came = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const options = this.exitOptions(m, m.from);
     const motor = m.kind === 'vehicle' && hasTurnSignals(m.vehicle);
     const planned = m.routing?.plan;
@@ -1614,6 +1736,7 @@ export class TileLife {
         ...m.routing,
         turns: m.routing.turns + 1,
         plan: undefined,
+        indicating: false,
         signal: plan?.side
           ? {
               side: plan.side,
@@ -1622,6 +1745,7 @@ export class TileLife {
           : undefined,
       };
     if (options.length === 0) {
+      m.next = undefined;
       m.dir = m.dir === 1 ? -1 : 1;
       if (m.train) {
         // A real end of the track: it waits, then heads back. Past the tile's edge, the track
@@ -1640,14 +1764,22 @@ export class TileLife {
     }
     const code = plan
       ? plan.exit
-      : m.train
-        ? this.straightest(m, options)
-        : options[
-            Math.floor(
-              (m.kind === 'cat' ? this.catRng() : m.kind === 'dog' ? this.dogRng() : this.rng()) *
-                options.length,
-            )
-          ]!;
+      : m.vehicle && m.next !== undefined && options.includes(m.next)
+        ? m.next
+        : m.train
+          ? this.straightest(m, options)
+          : options[
+              Math.floor(
+                (m.vehicle
+                  ? this.routeRng()
+                  : m.kind === 'cat'
+                    ? this.catRng()
+                    : m.kind === 'dog'
+                      ? this.dogRng()
+                      : this.rng()) * options.length,
+              )
+            ]!;
+    m.next = undefined;
     m.line = code >> 1;
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
@@ -1826,7 +1958,7 @@ export class TileLife {
     const groups = new Map<number, number[]>();
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
-      speeds[i] = m.speed;
+      speeds[i] = m.vehicle ? this.curveTarget(m) : m.speed;
       this.caps[i] = Infinity;
       if (!m.vehicle || (shows && !shows(m.kind))) continue;
       if (levels && m.rank >= levels[m.kind]) continue;
@@ -1902,6 +2034,15 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
     );
+    for (let i = 0; i < this.movers.length; i++) {
+      const m = this.movers[i]!;
+      if (
+        (!shows || shows(m.kind)) &&
+        (!near || near(m.x, m.y)) &&
+        (!env?.levels || m.rank < env.levels[m.kind])
+      )
+        this.prepareTurn(m, i);
+    }
     const speeds = this.followLimits(dt, shows, near, env?.levels);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
@@ -2965,13 +3106,11 @@ export class LifeWorld {
         if (!inView(m.x, m.y)) continue;
         // Keep right, in a lane that fits the road: offset to the right of the heading (tile y
         // points down).
-        const lane = life.offsetOf(m) * perMeter;
-        const x = m.x - m.hy * lane;
-        const y = m.y + m.hx * lane;
+        const { x, y, hx, hy } = life.pose(m);
         const [lng, lat] = tileToLngLat(tile, { x, y });
-        const ahead = tileToLngLat(tile, { x: x + m.hx * perMeter, y: y + m.hy * perMeter });
+        const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
-          const side = tileToLngLat(tile, { x: x - m.hy * perMeter, y: y + m.hx * perMeter });
+          const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
           out.push({
             kind: m.kind,
             lng,
