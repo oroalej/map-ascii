@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { GL } from './gpu';
 import type * as tiles from './tiles';
 import { tileKey, type TileId, type TileSourceHandlers } from './tiles';
 
 // The tile worker doesn't run under jsdom: stand in for the source, and for the GPU uploads.
-const sources: { handlers: TileSourceHandlers; request: ReturnType<typeof vi.fn> }[] = [];
+const sources: { handlers: TileSourceHandlers; request: Mock<(tile: TileId) => void> }[] = [];
 vi.mock('./tiles', async (importOriginal) => {
   const actual = await importOriginal<typeof tiles>();
   class FakeSource {
     /** Each tile wanted, one call per tile, in the order wanted. */
-    request = vi.fn();
+    request = vi.fn<(tile: TileId) => void>();
     want = vi.fn((wanted: readonly TileId[]) => wanted.forEach((t) => this.request(t)));
     destroy = vi.fn();
     constructor(_url: string, handlers: TileSourceHandlers) {
@@ -50,7 +50,7 @@ describe('TileCache', () => {
   it('requests the view’s tiles and draws them once loaded', () => {
     const { cache, source } = setup();
     expect(cache.tilesToDraw(camera, size)).toEqual([]);
-    const requested = source.request.mock.calls.map(([t]) => t as TileId);
+    const requested = source.request.mock.calls.map(([t]) => t);
     expect(requested.length).toBeGreaterThan(0);
     expect(requested.every((t) => t.z === 14)).toBe(true);
     const first = requested[0]!;
@@ -61,7 +61,7 @@ describe('TileCache', () => {
   it('after a lost context, forgets its meshes without deleting them and asks again', () => {
     const { cache, source } = setup();
     cache.tilesToDraw(camera, size);
-    const tile = source.request.mock.calls[0]![0] as TileId;
+    const tile = source.request.mock.calls[0]![0];
     const key = tileKey(tile);
     source.handlers.tile(key, geometry);
     expect(cache.size).toBe(1);
@@ -86,9 +86,9 @@ describe('TileCache', () => {
     try {
       const { cache, source, onChange } = setup();
       cache.tilesToDraw(camera, size);
-      const tile = source.request.mock.calls[0]![0] as TileId;
+      const tile = source.request.mock.calls[0]![0];
       const key = tileKey(tile);
-      const asked = () => source.request.mock.calls.some(([t]) => tileKey(t as TileId) === key);
+      const asked = () => source.request.mock.calls.some(([t]) => tileKey(t) === key);
       const fail = () => source.handlers.error('network', key);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
 

@@ -27,6 +27,9 @@ playwright/.cache/
 npm-debug.log*
 pnpm-debug.log*
 
+# temporary local probes
+*.tmp.*
+
 # OS / editors
 .DS_Store
 Thumbs.db
