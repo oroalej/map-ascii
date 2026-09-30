@@ -71,7 +71,7 @@ jobs:
 
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 
-      # Builds the static export (the web server step in playwright.config.ts) and tests it.
+      # Prepares the static export before Playwright starts or reuses its web server.
       - run: pnpm test:e2e
 
       - run: pnpm check:budgets

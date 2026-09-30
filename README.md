@@ -17,11 +17,11 @@ An engine for explorable, ASCII-rendered city maps. Each city zooms seamlessly f
 |---|---|
 | `pnpm install` | Install all workspace dependencies |
 | `pnpm dev` | Run the web app at http://localhost:3000 |
-| `pnpm build` | Static export of the web app to `apps/web/out` |
+| `pnpm build` / `pnpm build:force` | Reuse or rebuild the static export in `apps/web/out` / explicitly force a fresh build |
 | `pnpm data:build` | Run the data pipeline (tiles, meta, and search index per city; `-- --city <slug>` for one city) |
 | `pnpm data:publish` / `pnpm data:fetch` | Upload a city's tiles as a GitHub release and pin them in its `tiles.lock.json` / download the pinned tiles (`docs/DATA.md` §9) |
 | `pnpm test` | Unit tests (Vitest) |
-| `pnpm test:e2e` | Smoke tests (Playwright; run `pnpm --filter @atlas/web exec playwright install chromium` once) |
+| `pnpm test:e2e` | Prepare the export only when needed, then run Playwright smoke tests (install Chromium once with `pnpm --filter @atlas/web exec playwright install chromium`) |
 | `pnpm check:budgets` | After `pnpm build`, check initial JS and tile sizes against the budgets |
 | `pnpm --filter @atlas/content validate` | Validate every city pack |
 | `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript |

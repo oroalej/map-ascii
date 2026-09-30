@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",
+    "build:force": "pnpm --filter @atlas/web build:force",
     "check:budgets": "pnpm --filter @atlas/web check:budgets",
     "data:build": "pnpm --filter @atlas/data build",
     "data:fetch": "pnpm --filter @atlas/data fetch-tiles",

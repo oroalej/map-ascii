@@ -38,8 +38,9 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] }, grep: /@mobile/ },
   ],
   webServer: {
-    // Test the static export, which is what ships.
-    command: `pnpm build && pnpm exec serve out -l ${port}`,
+    // The E2E wrapper prepares the export before server reuse; direct Playwright runs also
+    // prepare it here when starting a server. The build command reuses unchanged exports.
+    command: `${process.env.ATLAS_E2E_EXPORT_PREPARED === '1' ? '' : 'pnpm build && '}pnpm exec serve out -l ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
