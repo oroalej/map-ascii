@@ -146,6 +146,7 @@ export function AtlasCanvas({
       year: store.year,
       reducedMotion: prefersReducedMotion(),
       gpuTiming: isDebugRequested(),
+      profiling: isDebugRequested(),
       interactive: isPickable,
       life: lifeSettings(lifePrefs),
       traffic,

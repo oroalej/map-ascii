@@ -28,9 +28,18 @@ export function boundsOf(points: readonly Point[]): [number, number, number, num
 /** Spatial-hash bin size, m. */
 const BIN_M = 12;
 /** The bins `points` span, padded by `pad` m, row by row. Keys are numeric (bins within ±32768). */
-function binKeys(points: readonly Point[], pad = 0): number[] {
-  const [x0, y0, x1, y1] = boundsOf(points);
-  const out: number[] = [];
+function binKeys(points: readonly Point[], pad = 0, out: number[] = []): number[] {
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of points) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
+  }
+  out.length = 0;
   for (let y = Math.floor((y0 - pad) / BIN_M); y <= Math.floor((y1 + pad) / BIN_M); y++)
     for (let x = Math.floor((x0 - pad) / BIN_M); x <= Math.floor((x1 + pad) / BIN_M); x++)
       out.push((x + 32768) * 65536 + (y + 32768));
@@ -43,16 +52,16 @@ function put<K, V>(bins: Map<K, Set<V>>, key: K, value: V) {
   bin.add(value);
 }
 
-export function bodyCorners(b: Body): Point[] {
-  return [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ].map(([a, c]) => ({
-    x: b.x + (b.hx * a! * b.length) / 2 - (b.hy * c! * b.width) / 2,
-    y: b.y + (b.hy * a! * b.length) / 2 + (b.hx * c! * b.width) / 2,
-  }));
+export function bodyCorners(b: Body, out: Point[] = []): Point[] {
+  for (let i = 0; i < 4; i++) {
+    const a = i === 0 || i === 3 ? -1 : 1,
+      c = i < 2 ? -1 : 1;
+    const p = out[i] ?? (out[i] = { x: 0, y: 0 });
+    p.x = b.x + (b.hx * a * b.length) / 2 - (b.hy * c * b.width) / 2;
+    p.y = b.y + (b.hy * a * b.length) / 2 + (b.hx * c * b.width) / 2;
+  }
+  out.length = 4;
+  return out;
 }
 
 /** Separating axes of both oriented rectangles; touching edges are allowed. */
@@ -62,20 +71,31 @@ export function bodiesOverlap(a: Body, b: Body, gap = 0.15): boolean {
 
 function overlapDepth(a: Body, b: Body, gap = 0.15): number {
   let depth = Infinity;
-  for (const [x, y] of [
-    [a.hx, a.hy],
-    [-a.hy, a.hx],
-    [b.hx, b.hy],
-    [-b.hy, b.hx],
-  ]) {
-    const reach = (p: Body) =>
-      (Math.abs(p.hx * x! + p.hy * y!) * p.length) / 2 +
-      (Math.abs(-p.hy * x! + p.hx * y!) * p.width) / 2;
-    const overlap = reach(a) + reach(b) + gap - Math.abs((b.x - a.x) * x! + (b.y - a.y) * y!);
+  for (let i = 0; i < 4; i++) {
+    const p = i < 2 ? a : b;
+    const x = i % 2 ? -p.hy : p.hx,
+      y = i % 2 ? p.hx : p.hy;
+    const overlap =
+      reach(a, x, y) + reach(b, x, y) + gap - Math.abs((b.x - a.x) * x + (b.y - a.y) * y);
     if (overlap <= 0) return 0;
     depth = Math.min(depth, overlap);
   }
   return depth;
+}
+function reach(p: Body, x: number, y: number) {
+  return (
+    (Math.abs(p.hx * x + p.hy * y) * p.length) / 2 + (Math.abs(-p.hy * x + p.hx * y) * p.width) / 2
+  );
+}
+function insideRing(p: Point, ring: readonly Point[]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!,
+      b = ring[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+      inside = !inside;
+  }
+  return inside;
 }
 
 export function pointInside(p: Point, polygon: Polygon): boolean {
@@ -124,16 +144,15 @@ export function bodyInside(b: Body, polygon: Polygon): boolean {
   return (
     corners.every((p) => pointInside(p, polygon)) &&
     !crossesBoundary(corners, polygon) &&
-    !polygon.slice(1).some((ring) => ring.some((p) => pointInside(p, [corners])))
+    !polygon.some((ring, i) => i > 0 && ring.some((p) => insideRing(p, corners)))
   );
 }
 
-export function bodyHitsPolygon(b: Body, polygon: Polygon): boolean {
-  const corners = bodyCorners(b);
+export function bodyHitsPolygon(b: Body, polygon: Polygon, corners = bodyCorners(b)): boolean {
   return (
     corners.some((p) => pointInside(p, polygon)) ||
     crossesBoundary(corners, polygon) ||
-    polygon.some((ring) => ring.some((p) => pointInside(p, [corners])))
+    polygon.some((ring) => ring.some((p) => insideRing(p, corners)))
   );
 }
 
@@ -141,50 +160,81 @@ export function bodyHitsPolygon(b: Body, polygon: Polygon): boolean {
 export class Occupancy {
   private bins = new Map<number, Set<object>>();
   private entries = new Map<object, { bodies: readonly Body[]; keys: number[] }>();
+  private readonly corners: Point[] = [];
+  private readonly scratchKeys: number[] = [];
+  private readonly uniqueKeys = new Set<number>();
+  private readonly neighbors = new Set<object>();
   private keys(b: Body): number[] {
-    return binKeys(bodyCorners(b), 0.2);
+    return binKeys(bodyCorners(b, this.corners), 0.2, this.scratchKeys);
   }
   set(owner: object, bodies: readonly Body[]) {
+    const keys = this.entries.get(owner)?.keys ?? [];
     this.delete(owner);
-    const keys = [...new Set(bodies.flatMap((b) => this.keys(b)))];
+    keys.length = 0;
+    this.uniqueKeys.clear();
+    for (const b of bodies)
+      for (const key of this.keys(b))
+        if (!this.uniqueKeys.has(key)) {
+          this.uniqueKeys.add(key);
+          keys.push(key);
+        }
+    this.uniqueKeys.clear();
     this.entries.set(owner, { bodies, keys });
     for (const key of keys) put(this.bins, key, owner);
   }
   delete(owner: object) {
-    for (const key of this.entries.get(owner)?.keys ?? []) this.bins.get(key)?.delete(owner);
+    for (const key of this.entries.get(owner)?.keys ?? []) {
+      const bin = this.bins.get(key);
+      bin?.delete(owner);
+      if (bin?.size === 0) this.bins.delete(key);
+    }
     this.entries.delete(owner);
   }
   conflicts(owner: object, bodies: readonly Body[]): number {
-    const neighbors = new Set<object>();
-    for (const b of bodies)
-      for (const key of this.keys(b)) {
-        for (const other of this.bins.get(key) ?? []) if (other !== owner) neighbors.add(other);
+    const neighbors = this.neighbors;
+    neighbors.clear();
+    try {
+      for (const b of bodies)
+        for (const key of this.keys(b)) {
+          for (const other of this.bins.get(key) ?? []) if (other !== owner) neighbors.add(other);
+        }
+      let hits = 0;
+      for (const other of neighbors) {
+        for (const a of bodies)
+          for (const b of this.entries.get(other)!.bodies) hits += overlapDepth(a, b);
       }
-    let hits = 0;
-    for (const other of neighbors) {
-      for (const a of bodies)
-        for (const b of this.entries.get(other)!.bodies) hits += overlapDepth(a, b);
+      return hits;
+    } finally {
+      neighbors.clear();
     }
-    return hits;
   }
 }
 
 /** Polygon holes remain usable; index only the bounds and check the actual shape on query. */
 export class PolygonIndex {
   private bins = new Map<number, Set<Polygon>>();
+  private readonly corners: Point[] = [];
+  private readonly keys: number[] = [];
+  private readonly tested = new Set<Polygon>();
   add(polygon: Polygon) {
     for (const key of binKeys(polygon.flat())) put(this.bins, key, polygon);
   }
   hits(bodies: readonly Body[]): boolean {
-    for (const b of bodies) {
-      const tested = new Set<Polygon>();
-      for (const key of binKeys(bodyCorners(b)))
-        for (const polygon of this.bins.get(key) ?? []) {
-          if (tested.has(polygon)) continue;
-          tested.add(polygon);
-          if (bodyHitsPolygon(b, polygon)) return true;
-        }
+    const tested = this.tested;
+    try {
+      for (const b of bodies) {
+        tested.clear();
+        const corners = bodyCorners(b, this.corners);
+        for (const key of binKeys(corners, 0, this.keys))
+          for (const polygon of this.bins.get(key) ?? []) {
+            if (tested.has(polygon)) continue;
+            tested.add(polygon);
+            if (bodyHitsPolygon(b, polygon, corners)) return true;
+          }
+      }
+      return false;
+    } finally {
+      tested.clear();
     }
-    return false;
   }
 }

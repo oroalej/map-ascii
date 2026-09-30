@@ -5,6 +5,7 @@
  * key when it comes into view, so the same tile always starts with the same agents. Pure TS: the
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
+import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
   type PlaceKind,
@@ -555,25 +556,37 @@ export class TileLife {
   }
 
   /** The same meters and group slots used by the life drawing pass. */
-  groundBodies(a: GroundAgent, minimum = 0): Body[] {
+  groundBodies(a: GroundAgent, minimum = 0, out: Body[] = []): Body[] {
     const mover = 'kind' in a;
     const lane = mover ? this.offsetOf(a) : 0;
     const x = a.x / this.perMeter - a.hy * lane;
     const y = a.y / this.perMeter + a.hx * lane;
     if (mover && a.vehicle) {
       const s = VEHICLES[a.vehicle];
-      return [{ x, y, hx: a.hx, hy: a.hy, length: Math.max(s.length, minimum), width: s.width }];
+      const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+      b.x = x;
+      b.y = y;
+      b.hx = a.hx;
+      b.hy = a.hy;
+      b.length = Math.max(s.length, minimum);
+      b.width = s.width;
+      out.length = 1;
+      return out;
     }
     const walkers = mover ? (a.group ?? []) : [a.walker];
     const spacing = Math.max(1, minimum);
-    return walkers.map((w) => ({
-      x: x - a.hy * w.lateral * spacing - a.hx * w.back * spacing,
-      y: y + a.hx * w.lateral * spacing - a.hy * w.back * spacing,
-      hx: a.hx,
-      hy: a.hy,
-      length: Math.max(w.figure === 'child' ? 0.5 : 0.9, minimum),
-      width: Math.max(w.figure === 'child' ? 0.5 : 1, minimum),
-    }));
+    for (let i = 0; i < walkers.length; i++) {
+      const w = walkers[i]!;
+      const b = out[i] ?? (out[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+      b.x = x - a.hy * w.lateral * spacing - a.hx * w.back * spacing;
+      b.y = y + a.hx * w.lateral * spacing - a.hy * w.back * spacing;
+      b.hx = a.hx;
+      b.hy = a.hy;
+      b.length = Math.max(w.figure === 'child' ? 0.5 : 0.9, minimum);
+      b.width = Math.max(w.figure === 'child' ? 0.5 : 1, minimum);
+    }
+    out.length = walkers.length;
+    return out;
   }
 
   /** Resolve invalid initial positions instead of leaving an overlapping agent stuck. */
@@ -1882,11 +1895,20 @@ export type LifeLineShape = {
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 export class LifeWorld {
+  /** Weak ownership releases evicted agents. A stored body never aliases the next trial. */
+  private groundBuffers = new WeakMap<object, { live: Body[]; trial: Body[] }>();
+  private readonly groundPrevious: Body[] = [];
+  private readonly groundSample: Body[] = [];
   private railTopology?: {
     key: string;
     routes: { life: TileLife; line: number; id: number; ends: string[] }[][];
   };
-  private groundTerrain?: { key: string; blocked: PolygonIndex; water: PolygonIndex };
+  private groundTerrain?: {
+    key: string;
+    blocked: PolygonIndex;
+    water: PolygonIndex;
+    origins: Map<TileLife, { x: number; y: number; scale: number }>;
+  };
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
   private readonly tiles = new Map<string, TileLife>();
   private traffic: ResolvedTraffic;
@@ -1900,7 +1922,10 @@ export class LifeWorld {
   private lastRain = 0;
 
   /** `traffic`: the city's vehicle mix (its pack's `traffic`), over the default. */
-  constructor(traffic?: TrafficMix) {
+  constructor(
+    traffic?: TrafficMix,
+    private readonly profiler?: FrameProfiler,
+  ) {
     this.traffic = resolveTraffic(traffic);
   }
 
@@ -1910,6 +1935,7 @@ export class LifeWorld {
     this.tiles.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
+    this.groundBuffers = new WeakMap();
     this.railTopology = undefined;
   }
 
@@ -1925,7 +1951,13 @@ export class LifeWorld {
         added.add(fresh);
       }
     }
-    for (const key of this.tiles.keys()) if (!keep.has(key)) this.tiles.delete(key);
+    for (const key of this.tiles.keys())
+      if (!keep.has(key)) {
+        this.tiles.delete(key);
+        // Cached transforms own TileLife instances, so release them immediately on eviction.
+        this.groundTerrain = undefined;
+        this.railTopology = undefined;
+      }
     if (added.size) {
       const guard = this.groundGuard(0, added);
       for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
@@ -1934,31 +1966,48 @@ export class LifeWorld {
 
   /** One metric coordinate system for all tiles, so clearance also works across a seam. */
   private groundGuard(minimum = 0, fresh?: ReadonlySet<TileLife>, bounds?: LngLatBounds) {
+    const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const key = [...this.tiles.keys()].join('|');
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild)
-      this.groundTerrain = { key, blocked: new PolygonIndex(), water: new PolygonIndex() };
+      this.groundTerrain = {
+        key,
+        blocked: new PolygonIndex(),
+        water: new PolygonIndex(),
+        origins: new Map(),
+      };
     const { blocked, water } = this.groundTerrain!;
     const origin = (life: TileLife) => {
+      const found = this.groundTerrain!.origins.get(life);
+      if (found) return found;
       const scale = 2 ** (ref!.tile.z - life.tile.z);
-      return {
+      const at = {
         x: ((life.tile.x * scale - ref!.tile.x) * EXTENT) / ref!.perMeter,
         y: ((life.tile.y * scale - ref!.tile.y) * EXTENT) / ref!.perMeter,
         scale: (scale * life.perMeter) / ref!.perMeter,
       };
+      this.groundTerrain!.origins.set(life, at);
+      return at;
     };
-    const toRef = (o: ReturnType<typeof origin>, b: Body): Body => ({
-      ...b,
-      x: o.x + b.x * o.scale,
-      y: o.y + b.y * o.scale,
-      length: b.length * o.scale,
-      width: b.width * o.scale,
-    });
-    const bodies = (life: TileLife, owner: GroundAgent) => {
+    const buffer = (owner: object) => {
+      let pair = this.groundBuffers.get(owner);
+      if (!pair) this.groundBuffers.set(owner, (pair = { live: [], trial: [] }));
+      return pair;
+    };
+    const toRef = (o: ReturnType<typeof origin>, b: Body): Body => {
+      b.x = o.x + b.x * o.scale;
+      b.y = o.y + b.y * o.scale;
+      b.length *= o.scale;
+      b.width *= o.scale;
+      return b;
+    };
+    const bodies = (life: TileLife, owner: GroundAgent, out: Body[]) => {
       const o = origin(life);
-      return life.groundBodies(owner, minimum).map((b) => toRef(o, b));
+      life.groundBodies(owner, minimum, out);
+      for (const b of out) toRef(o, b);
+      return out;
     };
     for (const life of this.tiles.values()) {
       const o = origin(life);
@@ -1979,9 +2028,17 @@ export class LifeWorld {
         if (!inView(p)) return;
         const { length, width } = VEHICLES[vehicle];
         const { perMeter } = life;
-        occupied.set(p, [
-          toRef(o, { x: p.x / perMeter, y: p.y / perMeter, hx: p.hx, hy: p.hy, length, width }),
-        ]);
+        const out = buffer(p).live;
+        const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+        b.x = p.x / perMeter;
+        b.y = p.y / perMeter;
+        b.hx = p.hx;
+        b.hy = p.hy;
+        b.length = length;
+        b.width = width;
+        out.length = 1;
+        toRef(o, b);
+        occupied.set(p, out);
       };
       for (const p of life.parked) standing(p, p.vehicle);
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
@@ -1996,44 +2053,48 @@ export class LifeWorld {
           (m.kind === 'vehicle' || m.kind === 'person') &&
           (!this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
-          occupied.set(m, bodies(life, m));
+          occupied.set(m, bodies(life, m, buffer(m).live));
       for (const g of life.gatherers)
         if (inView(g) && (!this.lastLevels || g.rank < this.lastLevels.places[g.place]))
-          occupied.set(g, bodies(life, g));
+          occupied.set(g, bodies(life, g, buffer(g).live));
     }
-    return (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
-      const next = bodies(life, owner);
-      const previous = before ? bodies(life, before) : next;
+    if (buildStart !== undefined)
+      this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
+    const check = (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
+      const pair = buffer(owner);
+      const next = bodies(life, owner, pair.trial);
+      const previous = before ? bodies(life, before, this.groundPrevious) : next;
       const oldScore = before ? occupied.conflicts(owner, previous) : 0;
       const endScore = occupied.conflicts(owner, next);
       // Existing overlaps at a density change may escape, but never deepen or tunnel through.
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) return false;
-      const distance = Math.max(
-        0,
-        ...next.map((b, i) => Math.hypot(b.x - previous[i]!.x, b.y - previous[i]!.y)),
-      );
-      const steps = Math.max(
-        1,
-        Math.ceil(distance / 0.3),
-        ...next.map((b, i) =>
-          Math.ceil(Math.hypot(b.hx - previous[i]!.hx, b.hy - previous[i]!.hy) * 8),
-        ),
-      );
+      let distance = 0,
+        turns = 1;
+      for (let i = 0; i < next.length; i++) {
+        const b = next[i]!,
+          a = previous[i]!;
+        distance = Math.max(distance, Math.hypot(b.x - a.x, b.y - a.y));
+        turns = Math.max(turns, Math.ceil(Math.hypot(b.hx - a.hx, b.hy - a.hy) * 8));
+      }
+      const steps = Math.max(1, Math.ceil(distance / 0.3), turns);
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
-        const sample = next.map((b, i) => {
+        const sample = this.groundSample;
+        sample.length = next.length;
+        for (let i = 0; i < next.length; i++) {
+          const b = next[i]!;
           const a = previous[i]!;
           const hx = a.hx + (b.hx - a.hx) * t,
             hy = a.hy + (b.hy - a.hy) * t;
           const norm = Math.hypot(hx, hy) || 1;
-          return {
-            ...b,
-            x: a.x + (b.x - a.x) * t,
-            y: a.y + (b.y - a.y) * t,
-            hx: hx / norm,
-            hy: hy / norm,
-          };
-        });
+          const s = sample[i] ?? (sample[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+          s.x = a.x + (b.x - a.x) * t;
+          s.y = a.y + (b.y - a.y) * t;
+          s.hx = hx / norm;
+          s.hy = hy / norm;
+          s.length = b.length;
+          s.width = b.width;
+        }
         if (
           blocked.hits(sample) ||
           ((!('kind' in owner) || owner.kind === 'person') && water.hits(sample))
@@ -2042,7 +2103,19 @@ export class LifeWorld {
         if (oldScore === 0 && occupied.conflicts(owner, sample) > 0) return false;
       }
       occupied.set(owner, next);
+      pair.trial = pair.live;
+      pair.live = next;
       return true;
+    };
+    if (!this.profiler) return check;
+    return (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
+      const start = this.profiler!.time();
+      this.profiler!.check();
+      try {
+        return check(life, owner, before);
+      } finally {
+        this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
+      }
     };
   }
 

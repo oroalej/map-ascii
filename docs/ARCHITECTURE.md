@@ -261,6 +261,38 @@ Zod stays out of the browser bundle: the pipeline validates each generated file 
 
 ### Simulation experiments
 
+#### Complete workload and browser captures
+
+`pnpm perf:world` (also `pnpm perf:life --suite=world`) compares complete seeded worlds against `00f1f6f` by default; `--baseline=<revision>` selects another revision. Renderer and shared runtime sources are frozen together, including collision helpers and workspace imports. Third-party dependencies must use the same lockfile. Each variant starts fresh with the same seed and scripted inputs for each of five alternating runs, warms up for 90 steps, and records 160 individual frames. `--case=<prefix>`, `--samples=<count>`, `--runs=<count>`, and `--output=<path>` narrow or configure a run.
+
+The matrix covers sparse traffic, crowded intersections, transit/vendor scenes, and alternating rain/shelter activity, with 1/4/16 loaded tiles and desktop/phone viewport bounds at z18. Transit and rain fixtures use a jeepney fleet so eligible stop service is exercised. Timed synthetic fixtures explicitly use a 0.9 m minimum ground footprint and 10×18 pixel packing cells; these are declared test inputs. The browser capture uses the real viewport, density and DPR. Full `LifeWorld.step`, visibility, packing, and combined CPU costs have individual-run and aggregate median/p95 results. Exact visible outputs are compared for 300 frames with 0/0.9/3 m footprint changes, with mover/scene state and packed texels compared every 30 frames. Actual populations, scene activity, source graph hashes, dependency hash, runtime, CPU, and heap deltas accompany the timings. Heap deltas are diagnostics; structural tests check retained ownership. Source changes during a run invalidate its comparison.
+
+`--overhead` adds five alternating pairs of plain and instrumented runs, including profiling setup/sample storage in instrumented combined CPU time. Instrumented reports also contain raw samples and clearance stage summaries. Normal timing runs disable the profiler. The gate requires at least 10% median step improvement in every dense target and at most 5% p95 regression in step or combined cost elsewhere; repeat any apparent regression before accepting or rejecting the change. Reports remain in ignored `test-results/`.
+
+`AtlasOptions.profiling` defaults to false. When enabled, `getProfile()` returns a detached snapshot of at most 4,096 callback samples and stage median/p95 values; `resetProfile()` releases samples, and context loss also resets them. The stage counters cover callback CPU time, drawing, simulation, clearance preparation/checks, visibility, packing and upload. Clearance is included in simulation time, and simulation/packing/upload are included in drawing and callback time. Missing stages have zero samples and null quantiles. GPU time retains its separate asynchronous counter. Quantiles are calculated on request, outside the frame path.
+
+The `?debug=1` panel enables profiling and offers Reset, Capture 30 seconds, and Download. Its UI is loaded only on request. Captures include raw bounded samples, settings and camera at both ends, viewport/DPR, browser and available GPU backend information. Backend classification distinguishes hardware-reported, software and unidentified renderers.
+
+`pnpm perf:browser` prepares the current static export, serves it locally on port 3198 (`E2E_PORT` overrides it), and captures a visible desktop Chromium with calm and storm wind at noon. It warms up for five seconds after tiles finish loading, then alternates opposite arrow inputs every 250 ms for a 30-second active-camera capture. Reports are `test-results/browser-calm.json` and `browser-storm.json`; software backends establish functional behavior only. For a physical phone later, open the same static site with `?debug=1`, allow the initial tiles to load, and use the same capture/download controls. Phone viewport CPU fixtures and software browser timings do not establish physical-phone performance.
+
+Combined unit scenarios run 180 simulated seconds with two fixed seeds using bounded test populations; benchmark fixtures retain full populations. Controlled scene fixtures ensure purchasing, boarding, hidden passengers and returning complete through the world's collision guard. Lifecycle checks repeat 100 pan-away/return and tile eviction/reload cycles, verify seeded respawn and frozen out-of-view poses, and check unique ownership, queue capacities, seats, service limits, finite coordinates and bounded cooldown storage. Focused replays cover 30/60/120 Hz and oversized-step clamping. Collision scratch buffers are per index/world, clear owner references after queries, and stored bodies use per-owner double buffers so rejected trials cannot overwrite accepted reservations. Transform caches release evicted tiles immediately.
+
+The September 30, 2026 comparison against `00f1f6f` retained these allocation changes. Both complete 24-case matrices passed the 10% dense-step / 5% p95 gate; the repeat used the refined transit fleet and changing-footprint correctness checks. On the Ryzen 5 2600X, Windows 10, Node 24.12.0, the repeat reduced dense median step time by 16.3–40.5% and combined step/visibility/packing time by 7.1–36.0%. Every exact state/output/packed-texture comparison passed. No measured step or combined p95 regressed; the smallest combined p95 improvement was 0.2%, within timing noise. Runtime source SHA-256: `956705c0ee6df956321131a56d6d66f1303e29a67109d6b26bec22fb34684a4d`.
+
+| Desktop fixture, 16 loaded tiles | Baseline step median, ms | Current step median, ms | Median reduction | Step p95 change |
+| --- | ---: | ---: | ---: | ---: |
+| Crowded intersection | 6.837 | 5.314 | 22.3% | −29.5% |
+| Transit/vendor scenes | 7.581 | 5.628 | 25.8% | −21.0% |
+| Rain/shelter activity | 7.016 | 5.169 | 26.3% | −16.8% |
+
+Five alternating plain/profiled pairs for `transit/1/desktop` measured 4.816/4.975 ms median combined CPU time, a 3.3% instrumentation overhead. This is a representative synthetic workload, not an overhead bound for every browser or density. The profiler remains off by default.
+
+The visible-browser captures used Chromium 153, a GTX 1650 SUPER reported through ANGLE Direct3D11, 1920×1080 at DPR 1, Naga at z18/noon, 17 loaded tiles, and alternating camera inputs. Both ends were focused and visible. The 30-second calm/storm captures averaged 59.5/59.6 drawn frames per second; callback CPU median/p95 was 13.4/17.6 ms calm and 12.7/17.1 ms storm. Median per-frame clearance share of simulation time was 71.6/72.8%. These captures validate the current desktop workload, with occasional callbacks above the 16.7 ms frame budget. They establish no physical-phone result or before/after browser FPS gain.
+
+To keep diagnostics within the startup budget, the WebGL canvas loads as a separate client chunk while the HUD and page content initialize. The current static export reports 160 KB of initial gzipped JavaScript against the 250 KB budget; the renderer is subsequently downloaded for the map.
+
+#### Earlier isolated prototypes
+
 `pnpm perf:life` compares seeded simulation fixtures against a Git revision (`--baseline=<revision>`) or a source snapshot (`--baseline-file=<path>`). Dependencies come from the current checkout, so use a fresh snapshot to isolate an optimization when other simulation features have changed. The harness checks exact visible outputs and mover states before timing, alternates five runs of each variant, and reports median and p95 CPU durations, source hashes, runtime, and the actual warmup and batch sizes.
 
 For an isolated prototype comparison in PowerShell:

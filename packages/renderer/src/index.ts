@@ -103,6 +103,7 @@ import {
 } from './raster/geometry';
 import { Readback } from './readback';
 import { GpuTimer } from './gpu-timer';
+import { FrameProfiler, type AtlasProfile } from './profile';
 import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
@@ -113,6 +114,7 @@ export { DEFAULT_CELLS, type CellSchedule } from './density';
 export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { RenderClass } from './classes';
+export type { AtlasProfile } from './profile';
 export type { WindChoice } from './life/wind';
 export { cityTime, type LocalTime } from './life/clock';
 
@@ -163,6 +165,8 @@ export type AtlasOptions = {
   reducedMotion?: boolean;
   /** Opt-in asynchronous GPU frame timing, for diagnostics only. */
   gpuTiming?: boolean;
+  /** Collect bounded CPU stage samples for local diagnostics. Disabled by default. */
+  profiling?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -293,6 +297,9 @@ export type Atlas = {
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
   getStats(): AtlasStats;
+  /** A detached diagnostic snapshot, or null when profiling is disabled. */
+  getProfile(): AtlasProfile | null;
+  resetProfile(): void;
   /** Turn the life layer on or off, or change the time of day. */
   setLife(settings: Partial<LifeSettings>): void;
   getLife(): LifeSettings;
@@ -642,7 +649,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
-  const world = new LifeWorld(options.traffic);
+  const profiler = options.profiling ? new FrameProfiler() : undefined;
+  const world = new LifeWorld(options.traffic, profiler);
   const processions = options.processions ?? [];
   world.setProcessions(processions);
   /** The procession last reported (`procession` event), as "id live". */
@@ -698,6 +706,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const time = (at - start) / 1000;
       const grid = placement.grid;
       const toCell = placement.toCell;
+      const stepStart = profiler?.time();
       world.step(
         (at - lastLifeStep) / 1000,
         (lng, lat) => {
@@ -714,7 +723,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         // A cell's width in meters, for walkers' clearance.
         (metersPerCssPx(camera) * cellDev().w) / dpr,
       );
+      if (stepStart !== undefined) profiler!.add('step', profiler!.time() - stepStart);
       lastLifeStep = at;
+      const visibleStart = profiler?.time();
       agents = world.visible(
         camera.zoom,
         activity,
@@ -722,6 +733,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
         viewBounds(),
       );
+      if (visibleStart !== undefined) profiler!.add('visible', profiler!.time() - visibleStart);
       reportProcession();
     } else if (!lifeShown) {
       return;
@@ -732,7 +744,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeAgents = agents;
       return;
     }
-    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents, sun);
+    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents, sun, profiler);
     lifeShown = agents.length > 0;
     lifeAgents = agents;
   };
@@ -1022,6 +1034,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let raf = 0;
   const frame = (now: number) => {
     if (destroyed || lost) return;
+    profiler?.begin(now);
     raf = requestAnimationFrame(frame);
     readback.poll();
     gpuTimer.poll();
@@ -1037,7 +1050,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     updateSun(now);
-    if (!targets || !programs || !themeRes) return;
+    if (!targets || !programs || !themeRes) {
+      profiler?.end();
+      return;
+    }
     const animating = animationDue(now, lastDraw, lastInput, {
       reducedMotion,
       watched: watch.watched(),
@@ -1111,6 +1127,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       gpuTimer.end();
       lastDraw = now;
       frameMs = smooth(frameMs, performance.now() - frameStart);
+      profiler?.draw(performance.now() - frameStart, agentsDrawn);
       drawTimes.push(now);
     }
     while (drawTimes.length > 0 && drawTimes[0]! <= now - 1000) drawTimes.shift();
@@ -1132,6 +1149,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       generation: targetsGeneration,
     });
     readClasses(now);
+    profiler?.end();
   };
   raf = requestAnimationFrame(frame);
 
@@ -1151,6 +1169,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     targetsGeneration++;
     readback.reset(true);
     gpuTimer.reset(true);
+    profiler?.reset();
     tileCache.suspend();
     emit('contextlost', undefined);
   };
@@ -1266,6 +1285,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       decodeMs: source.decodeMsAverage,
       agents: agentsDrawn,
     }),
+    getProfile: () => profiler?.snapshot() ?? null,
+    resetProfile: () => profiler?.reset(),
     setLife(settings) {
       life = { ...life, ...settings };
       lastSun = -Infinity;
@@ -1314,6 +1335,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       tileCache.destroy();
       readback.reset(lost);
       gpuTimer.reset(lost);
+      profiler?.reset();
       if (!lost) {
         if (targets) deleteCellTargets(gl, targets);
         dropGlyphs(true);

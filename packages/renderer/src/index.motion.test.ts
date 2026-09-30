@@ -107,6 +107,32 @@ describe('live motion preference', () => {
     vi.unstubAllGlobals();
   });
 
+  it('leaves profiling disabled by default and resets enabled profiles on context loss', () => {
+    draw(10);
+    expect(atlas.getProfile()).toBeNull();
+    atlas.resetProfile();
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      life: { time: 720, wind: 'storm' },
+      profiling: true,
+    });
+    draw(20);
+    expect(atlas.getProfile()!.samples).toHaveLength(1);
+    expect(atlas.getProfile()!.stages.callback.count).toBe(1);
+    atlas.resetProfile();
+    expect(atlas.getProfile()!.samples).toHaveLength(0);
+    draw(50);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    expect(atlas.getProfile()!.samples).toHaveLength(0);
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(100);
+    expect(atlas.getProfile()!.samples).toHaveLength(1);
+  });
+
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([

@@ -9,11 +9,11 @@ import type {
   Tour,
 } from '@atlas/shared';
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
 import { useTourPlayer } from '@/state/useTourPlayer';
 import { useUrlSync } from '@/state/useUrlSync';
-import { AtlasCanvas } from './AtlasCanvas';
 import { Attribution } from './Attribution';
 import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
@@ -23,6 +23,11 @@ import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
+
+// WebGL starts on the client; load its engine separately from the HUD and page content.
+const AtlasCanvas = dynamic(() => import('./AtlasCanvas').then((m) => m.AtlasCanvas), {
+  ssr: false,
+});
 
 export type CityAtlasProps = {
   slug: string;

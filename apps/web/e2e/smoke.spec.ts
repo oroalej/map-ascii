@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import type { AtlasProfile } from '@atlas/renderer';
 import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from './helpers';
 
 /** The view parameters currently in the address bar. */
@@ -214,6 +216,30 @@ for (const city of cities) {
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         expect(errors).toEqual([]);
+      });
+
+      test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
+        await page.goto(`/${city.slug}?debug=1&z=18`);
+        await mapReady(page);
+        await page.getByRole('button', { name: 'Capture 30 seconds', exact: true }).click();
+        const button = page.getByRole('button', { name: 'Download profile', exact: true });
+        await expect(button).toBeEnabled({ timeout: 35_000 });
+        const downloading = page.waitForEvent('download');
+        await button.click();
+        const download = await downloading;
+        const report = JSON.parse(await readFile(await download.path(), 'utf8')) as {
+          version: number;
+          start: { city: string; viewport: { dpr: number } };
+          profile: AtlasProfile;
+        };
+        expect(report.version).toBe(1);
+        expect(report.start.city).toBe(`/${city.slug}`);
+        expect(report.start.viewport.dpr).toBeGreaterThan(0);
+        expect(report.profile.samples.length).toBeGreaterThan(0);
+        expect(report.profile.samples.length).toBeLessThanOrEqual(4096);
+        expect(report.profile.stages.callback.medianMs).not.toBeNull();
+        await page.getByRole('button', { name: 'Reset profile', exact: true }).click();
+        await expect(button).toBeDisabled();
       });
 
       // One tour stands for the player; its controls are unit-tested (state/tour.test.ts).

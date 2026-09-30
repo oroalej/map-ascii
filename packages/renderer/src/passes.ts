@@ -33,6 +33,7 @@ import {
 } from './labels';
 import { cellBits } from './life/config';
 import { packLife } from './life/draw';
+import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
@@ -480,9 +481,11 @@ export function lifePass(
   placement: GridPlacement,
   agents: readonly VisibleAgent[],
   sun?: Sun | null,
+  profiler?: FrameProfiler,
 ): number {
   const { cols, rows } = targets;
   const lifeTexels = texels(targets).life;
+  const packStart = profiler?.time();
   const drawn = packLife(
     lifeTexels,
     { cols, rows, cellWidth: view.cellDev.w, cellHeight: view.cellDev.h, toCell: placement.toCell },
@@ -493,7 +496,10 @@ export function lifePass(
     sun,
     themeRes.map.lifeGlyphs,
   );
+  if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
+  const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
+  if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
 }
 
