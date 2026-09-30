@@ -125,3 +125,20 @@ describe('legendEntries life', () => {
     expect(lit(['road_minor', 'building'], true)).not.toContain('Streetlights');
   });
 });
+
+it('lists static street details at strip zoom with the city sidewalk policy', () => {
+  const details = (zoom: number, roads: boolean, sidewalksDerived: boolean) =>
+    legendEntries('dark', zoom, roads ? ['road_mid'] : ['building'], {
+      life: false,
+      sidewalksDerived,
+    }).map((e) => e.label);
+  expect(details(18, true, false)).toEqual(
+    expect.arrayContaining(['Sidewalks (mapped)', 'Stop lines', 'One-way']),
+  );
+  expect(details(18, true, true)).toContain('Sidewalks (partly derived)');
+  for (const entries of [details(16, true, false), details(18, false, false)]) {
+    expect(entries).not.toContain('Sidewalks (mapped)');
+    expect(entries).not.toContain('Stop lines');
+    expect(entries).not.toContain('One-way');
+  }
+});

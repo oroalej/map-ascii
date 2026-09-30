@@ -123,7 +123,13 @@ const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
   );
 });
 
-function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
+function Legend({
+  subdivisionLabel,
+  sidewalksDerived,
+}: {
+  subdivisionLabel: string;
+  sidewalksDerived: boolean;
+}) {
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.05));
   const theme = useAtlasStore((s) => s.theme);
@@ -138,8 +144,8 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   useEffect(() => atlas?.on('lightschange', (on) => setLit({ atlas, on })), [atlas]);
   const lights = lit?.atlas === atlas && lit.on;
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life, lights }),
-    [theme, rounded, onScreen, life, lights],
+    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
@@ -405,12 +411,14 @@ export function Hud({
   subdivisionLabel,
   climate,
   timezone,
+  sidewalksDerived = true,
 }: {
   city: string;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (its pack's `timezone`). */
   timezone?: string | undefined;
+  sidewalksDerived?: boolean;
 }) {
   useSubdivisionTracking(city);
   const hasCamera = useAtlasStore((s) => s.camera !== null);
@@ -425,7 +433,9 @@ export function Hud({
         <div className={styles.row}>
           <ZoomReadout />
         </div>
-        {!panelOpen && <Legend subdivisionLabel={subdivisionLabel} />}
+        {!panelOpen && (
+          <Legend subdivisionLabel={subdivisionLabel} sidewalksDerived={sidewalksDerived} />
+        )}
       </div>
       <div className={styles.bottomLeft} data-touring={touring}>
         <ScaleBar />

@@ -31,6 +31,7 @@ export default async function CityPage({ params }: Props) {
         climate={city.climate}
         timezone={city.timezone}
         cityLife={city.life}
+        sidewalksDerived={city.streets?.sidewalks?.derive !== false}
         landmarks={content.landmarks}
         art={content.art}
         tours={content.tours}

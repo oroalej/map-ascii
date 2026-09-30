@@ -175,12 +175,35 @@ export const Flags = {
   /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
   corridor: 2,
   crossing: 4,
+  /** A paved sidewalk band outside the carriageway; reuses the path class. */
+  sidewalk: 128,
   frontage: 8,
   frontageLow: 16,
   frontageHigh: 64,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
 } as const;
+
+export const Marking = { crosswalk: 0, stop: 1, arrow: 2 } as const;
+/** Kind in the high two bits; clockwise bearing from north in 64 steps. */
+export function markingByte(kind: number, bearingDeg: number): number {
+  const bearing = ((bearingDeg % 360) + 360) % 360;
+  let bin = Math.round((bearing / 360) * 64) & 63;
+  if (kind === Marking.crosswalk) {
+    // Retain the old stripe orientation at its 8-bit boundaries. Moving to the adjacent
+    // bin avoids changing a crosswalk's glyph while keeping error below one bearing step.
+    const axis = bearing % 180;
+    const old = Math.round((axis / 180) * 255);
+    const vertical = old < 64 || old >= 191;
+    const q = bin & 31;
+    if (vertical !== (q < 8 || q >= 24)) bin = (bin + (vertical === axis >= 90 ? 1 : -1)) & 63;
+  }
+  return (kind << 6) | bin;
+}
+export const markingOf = (byte: number) => ({
+  kind: byte >> 6,
+  bearingDeg: (byte & 63) * (360 / 64),
+});
 
 /** Tree kinds by variant byte (the pipeline's `variant`); 0 is unknown. */
 export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
@@ -206,6 +229,8 @@ export function variantCode(className: string, variant: unknown): number {
         'shop_food',
         'shop_retail',
         'shop_service',
+        'stop_line',
+        'oneway_arrow',
       ].indexOf(variant) + 1
     );
   if (className === 'tree' || className === 'trees') {

@@ -8,7 +8,7 @@
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
  */
-import { classId, Flags, MAX_CLASSES } from '../classes';
+import { classId, Flags, Marking, MAX_CLASSES } from '../classes';
 import { CellState, MAX_HIGHLIGHT } from '../picking';
 import {
   BUILDING_STEPS,
@@ -25,6 +25,7 @@ import {
   kindCodes,
   OUTLINE_ZOOM,
   RIDGE_VARIANT,
+  ARROW_VARIANT,
   RISING,
   ROAD_AREA_ZOOM,
   RoofCode,
@@ -220,8 +221,9 @@ int wallMask(ivec2 p, int mode) {
       ivec2 q = p + ivec2(dx, dy);
       int c = classAt(q);
       bool seeThrough = ((u_seeThrough >> c) & 1) == 1;
+      bool sidewalk = (int(texelFetch(u_attr, clamp(q, ivec2(0), textureSize(u_attr, 0) - 1), 0).g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0;
       bool outside = mode == CURBS
-        ? ((u_roadMask >> c) & 1) == 0 && !seeThrough
+        ? sidewalk || (((u_roadMask >> c) & 1) == 0 && !seeThrough)
         : idAt(q) != id && !seeThrough;
       o[(dy + 1) * 3 + dx + 1] = outside;
       edge = edge || outside;
@@ -319,10 +321,21 @@ void main() {
     int curb = wallMask(p, CURBS);
     vec2 glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).rg : vec2(0.0);
     if (curb < 0 && (int(attr.g * 255.0 + 0.5) & ${Flags.crossing}) != 0) {
-      bool vertical = variant < 64 || variant >= 191;
-      int parity = vertical ? w.y : w.x;
-      bool stripe = min(u_cellMeters.x, u_cellMeters.y) >= 1.2 || (parity & 1) == 0;
-      glyph = stripe ? texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_DOUBLE_ROW}), 0).rg : vec2(0.0);
+      int axis = variant & 31;
+      bool vertical = axis < 8 || axis >= 24;
+      int marking = variant >> 6;
+      if (marking == ${Marking.crosswalk}) {
+        int parity = vertical ? w.y : w.x;
+        bool stripe = min(u_cellMeters.x, u_cellMeters.y) >= 1.2 || (parity & 1) == 0;
+        glyph = stripe ? texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_DOUBLE_ROW}), 0).rg : vec2(0.0);
+      } else if (marking == ${Marking.stop}) {
+        glyph = texelFetch(u_table, ivec2(vertical ? 10 : 5, ${WALL_SINGLE_ROW}), 0).rg;
+      } else if (marking == ${Marking.arrow}) {
+        float theta = float(variant & 63) * ${(2 * Math.PI) / 64};
+        float angle = atan(sin(theta), cos(theta) / u_cellAspect);
+        int bin = imod(int(floor(angle / ${Math.PI / 4} + 0.5)), 8);
+        glyph = texelFetch(u_table, ivec2(${ARROW_VARIANT} + bin, ${ROOF_ROW}), 0).rg;
+      }
     }
     emit(glyph, cls);
     return;
@@ -356,6 +369,10 @@ void main() {
   if (isArea(cls) && subcellEdge(p, cls, id)) return;
 
   int v = 0;
+  if ((int(attr.g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
+    emit(texelFetch(u_table, ivec2(0, ${classId('path')}), 0).rg, cls);
+    return;
+  }
   if (kind == ${kindCodes.road}) {
     int m = u_connect[cls];
     int mask = (joins(m, p + ivec2(0, -1)) ? ${Dir.N} : 0)

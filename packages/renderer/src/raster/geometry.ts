@@ -7,7 +7,15 @@
  */
 import { featureZoomBand, LIFE_SITE_KINDS, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
-import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
+import {
+  classId,
+  Flags,
+  Marking,
+  markingByte,
+  markerFor,
+  variantCode,
+  type RenderClass,
+} from '../classes';
 import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '../labels';
 import {
   CANAL_KIND,
@@ -567,6 +575,56 @@ function addStrip(
   fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
 
+/** Side of the way in downward-positive tile Y: left is (dy, -dx). */
+function addSideStrip(
+  fills: Builder,
+  a: TilePoint,
+  b: TilePoint,
+  inner: number,
+  outer: number,
+  side: number,
+  vertex: (p: TilePoint) => void,
+) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!length) return;
+  const dx = (b.x - a.x) / length,
+    dy = (b.y - a.y) / length;
+  const nx = dy * side,
+    ny = -dx * side;
+  const base = fills.count;
+  for (const [end, along, across] of [
+    [a, -inner, inner],
+    [a, -inner, outer],
+    [b, inner, outer],
+    [b, inner, inner],
+  ] as const)
+    vertex({ x: end.x + dx * along + nx * across, y: end.y + dy * along + ny * across });
+  fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/** Exact dimensions; marking quads must not inherit road strips' extended caps. */
+function addMarkingQuad(
+  fills: Builder,
+  p: TilePoint,
+  bearing: number,
+  length: number,
+  width: number,
+  vertex: (p: TilePoint) => void,
+) {
+  const theta = (bearing * Math.PI) / 180,
+    dx = Math.sin(theta),
+    dy = -Math.cos(theta);
+  const base = fills.count;
+  for (const [along, across] of [
+    [-length / 2, -width / 2],
+    [-length / 2, width / 2],
+    [length / 2, width / 2],
+    [length / 2, -width / 2],
+  ])
+    vertex({ x: p.x + dx * along! - dy * across!, y: p.y + dy * along! + dx * across! });
+  fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
 /**
  * Convert a tile's layers into fill triangles, line segments, and points.
  * - Polygons are triangulated with earcut.
@@ -726,6 +784,36 @@ export function buildTileGeometry(
       if (feature.type === 1) {
         for (const ring of rings) {
           for (const p of ring) {
+            if (className === 'furniture' && (variant === 12 || variant === 13)) {
+              if (strips && unitMeters && !isRegion) {
+                const stop = variant === 12;
+                const bearing = Number(
+                  feature.properties[stop ? 'stop_bearing' : 'arrow_bearing'] ?? 0,
+                );
+                const road = classId(
+                  String(feature.properties[stop ? 'stop_road' : 'arrow_road'] ?? 'road_minor'),
+                );
+                const width = Number(feature.properties[stop ? 'stop_width' : 'arrow_width'] ?? 3);
+                addMarkingQuad(
+                  fills,
+                  p,
+                  bearing,
+                  (stop ? 0.5 : 3) / unitMeters,
+                  width / unitMeters,
+                  (q) =>
+                    fills.vertex(
+                      q.x,
+                      q.y,
+                      road,
+                      0,
+                      Flags.corridor | Flags.crossing,
+                      id,
+                      markingByte(stop ? Marking.stop : Marking.arrow, bearing),
+                    ),
+                );
+              }
+              continue;
+            }
             if (className === 'furniture' && variant === 7) {
               if (strips && unitMeters) {
                 const bearing = Number(feature.properties.crossing_bearing ?? 0);
@@ -747,7 +835,7 @@ export function buildTileGeometry(
                       0,
                       Flags.corridor | Flags.crossing,
                       id,
-                      Math.round((bearing / 180) * 255),
+                      markingByte(Marking.crosswalk, bearing),
                     ),
                 );
               }
@@ -824,6 +912,33 @@ export function buildTileGeometry(
               addStrip(fills, a, b, width / 2 / unitMeters, (p) =>
                 fills.vertex(p.x, p.y, cls, 0, flags | Flags.corridor, id),
               );
+              const sidewalk = feature.properties.sidewalk;
+              for (const side of ['left', 'right'] as const) {
+                if (sidewalk !== 'both' && sidewalk !== side) continue;
+                const sidewalkWidth = Number(
+                  feature.properties[`sidewalk_${side}_width`] ??
+                    feature.properties.sidewalk_width ??
+                    2,
+                );
+                if (sidewalkWidth > 0)
+                  addSideStrip(
+                    fills,
+                    a,
+                    b,
+                    width / 2 / unitMeters,
+                    (width / 2 + sidewalkWidth) / unitMeters,
+                    side === 'left' ? 1 : -1,
+                    (p) =>
+                      fills.vertex(
+                        p.x,
+                        p.y,
+                        classId('path'),
+                        0,
+                        flags | Flags.corridor | Flags.sidewalk,
+                        id,
+                      ),
+                  );
+              }
             }
           }
         }
@@ -843,8 +958,11 @@ export function buildTileGeometry(
             : isCanal
               ? LifeLine.canal
               : lifeLineFor[className];
-        if (lifeLine !== undefined)
-          for (const line of rings) life.line(line, lifeLine, width, hashString(featureId));
+        if (lifeLine !== undefined) {
+          const oneway =
+            feature.properties.oneway === -1 ? -1 : feature.properties.oneway === 1 ? 1 : 0;
+          for (const line of rings) life.line(line, lifeLine, width, hashString(featureId), oneway);
+        }
         if (
           !isRegion &&
           (className === 'barrier' || className === 'water_river' || className === 'water_stream')

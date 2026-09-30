@@ -2,8 +2,23 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
-import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
-import { doubleWall, sextantGlyphs, singleWall, type GlyphKind, type Theme } from '../theme';
+import {
+  classId,
+  Flags,
+  Marking,
+  markingOf,
+  MAX_CLASSES,
+  renderClasses,
+  type RenderClass,
+} from '../classes';
+import {
+  arrowGlyphs,
+  doubleWall,
+  sextantGlyphs,
+  singleWall,
+  type GlyphKind,
+  type Theme,
+} from '../theme';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {
@@ -59,7 +74,8 @@ export const awningCode = (kind: number, parity: number) => 1 + kind * 2 + (pari
 /** Stripe orientation and fine-scale alternation, matching the select shader. */
 export function crossingGlyph(bearingByte: number, cellMeters: number, parity: number): string {
   if (cellMeters < 1.2 && parity & 1) return ' ';
-  return bearingByte < 64 || bearingByte >= 191 ? '═' : '║';
+  const axis = bearingByte & 31;
+  return axis < 8 || axis >= 24 ? '═' : '║';
 }
 /** Road variants past the 16 masks: an isolated diagonal step. */
 export const RISING = 16; // ╱ (neighbor to the NE or SW)
@@ -80,7 +96,41 @@ export const WALL_DOUBLE_ROW = MAX_CLASSES - 1;
  */
 export const ROOF_ROW = MAX_CLASSES - 3;
 export const RIDGE_VARIANT = 4;
+export const ARROW_VARIANT = 8;
 export const ridgeGlyphs = ['─', '╲', '│', '╱'] as const;
+
+/** Bearing is clockwise from north; compensate for the cell grid's taller characters. */
+export function arrowVariant(bearing: number, aspect: number): number {
+  const theta = (bearing * Math.PI) / 180;
+  const angle = Math.atan2(Math.sin(theta), Math.cos(theta) / aspect);
+  return ARROW_VARIANT + (((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8);
+}
+
+export function markingGlyph(
+  byte: number,
+  cellMeters: number,
+  parity: number,
+  aspect: number,
+): string {
+  const marking = markingOf(byte);
+  if (marking.kind === Marking.crosswalk) return crossingGlyph(byte, cellMeters, parity);
+  if (marking.kind === Marking.stop) {
+    const axis = byte & 31;
+    return axis < 8 || axis >= 24 ? '─' : '│';
+  }
+  return marking.kind === Marking.arrow
+    ? arrowGlyphs[arrowVariant(marking.bearingDeg, aspect) - ARROW_VARIANT]!
+    : ' ';
+}
+
+/** Curbs look through ordinary paths, but remain against a paved sidewalk band. */
+export function curbOutside(cls: RenderClass | null, flags = 0): boolean {
+  return (
+    (flags & Flags.sidewalk) !== 0 ||
+    cls === null ||
+    (!roadClasses.includes(cls) && !seeThrough.includes(cls))
+  );
+}
 
 /** Glyph-table rows for the sextants (two rows of 32, indexed by mask). */
 export const SEXTANT_ROW = MAX_CLASSES - 5;
@@ -1081,6 +1131,7 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
   ridgeGlyphs.forEach((glyph, i) => {
     setGlyph(ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i, glyph);
   });
+  arrowGlyphs.forEach((glyph, i) => setGlyph(ROOF_ROW * MAX_VARIANTS + ARROW_VARIANT + i, glyph));
   for (let mask = 0; mask < 16; mask++) {
     setGlyph(WALL_SINGLE_ROW * MAX_VARIANTS + mask, wallGlyph('single', mask));
     setGlyph(WALL_DOUBLE_ROW * MAX_VARIANTS + mask, wallGlyph('double', mask));

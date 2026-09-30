@@ -117,6 +117,7 @@ export const railLine = ['╪', '╫', '╪', '╚', '╫', '╫', '╔', '╠',
 
 /** Building outlines at close zoom: the line sets with `□` for a one-cell building. */
 export const singleWall = ['□', ...singleLine.slice(1)] as const;
+export const arrowGlyphs = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'] as const;
 export const doubleWall = ['□', ...doubleLine.slice(1)] as const;
 
 /** Admin boundaries: the city's dashed, subdivisions' dotted. */
@@ -285,7 +286,7 @@ function makeTheme(background: number, c: Palette): Theme {
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
       furniture: {
         kind: 'variant',
-        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤'],
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤', '─', '•'],
         color: c.furniture,
       },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },
@@ -473,7 +474,7 @@ export const labelCharacters: readonly string[] = [
 /**
  * Every glyph a theme draws on the map, deduplicated: class styles, walls, sextants, vehicles,
  * and people. They
- * share the map atlas, whose indices must fit the byte-sized glyph table. Labels have their own
+ * share the map atlas, whose indices must fit the ten-bit glyph table. Labels have their own
  * atlas (`labelCharacters`), at the label cell size.
  */
 export function mapGlyphs(theme: Theme): string[] {
@@ -490,6 +491,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...catGlyphs(),
     ...rainGlyphs,
     streetlightGlyph,
+    ...arrowGlyphs,
   ];
   for (const g of extras) set.add(g);
   return [...set];

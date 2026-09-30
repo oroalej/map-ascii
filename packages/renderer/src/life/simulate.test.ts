@@ -131,6 +131,19 @@ describe('TileLife', () => {
     expect(a.movers.map((m) => [m.x, m.y, m.dir])).toEqual(b.movers.map((m) => [m.x, m.y, m.dir]));
   });
 
+  it('ignores reserved oneway metadata without changing seeded spawns or simulation', () => {
+    const { oneway: _unused, ...legacy } = road;
+    const a = new TileLife(tile, legacy, 42);
+    const b = new TileLife(tile, { ...road, oneway: Int8Array.of(-1) }, 42);
+    expect(b.movers).toEqual(a.movers);
+    for (let i = 0; i < 60; i++) {
+      a.step(1 / 30);
+      b.step(1 / 30);
+    }
+    expect(b.movers).toEqual(a.movers);
+    expect(b.parked).toEqual(a.parked);
+  });
+
   it('spawns vehicles by the length of road', () => {
     // About 600 m of major road, one vehicle per 30 m.
     const { movers } = new TileLife(tile, road, 7);

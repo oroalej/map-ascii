@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mapGlyphs, themes } from '../theme';
 import { drawProcedural } from '../glyphs/atlas';
+import { MAX_GLYPHS } from '../glyphs/select';
 import { metersPerUnit } from '../raster/geometry';
 import { CAT, CAT_PAINTS, catGlyph, catGlyphs } from './cats';
 import { CellBit, LIFE_ZOOM, MAX_TILE_AGENTS } from './config';
@@ -13,7 +14,7 @@ describe('cats', () => {
   it('draws every walking, resting, and grooming cell with a bounded atlas', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
-      expect(glyphs.length).toBeLessThan(256);
+      expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS + 1);
       for (const glyph of catGlyphs()) {
         expect(glyphs).toContain(glyph);
         const data = new Uint8Array(10 * 18);
@@ -81,7 +82,9 @@ describe('cats', () => {
     }
     const world = new LifeWorld();
     world.sync([{ key: 'cats', tile, life: geometry }]);
-    expect(world.visible(LIFE_ZOOM.cat.min - 0.1, 1, [123, 13]).some((m) => m.kind === 'cat')).toBe(false);
+    expect(world.visible(LIFE_ZOOM.cat.min - 0.1, 1, [123, 13]).some((m) => m.kind === 'cat')).toBe(
+      false,
+    );
     expect(world.visible(LIFE_ZOOM.cat.min, 1, [123, 13]).some((m) => m.kind === 'cat')).toBe(true);
   });
 });

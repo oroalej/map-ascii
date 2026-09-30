@@ -207,7 +207,11 @@ export function legendEntries(
   themeName: ThemeName,
   zoom: number,
   present?: readonly RenderClass[],
-  { life = false, lights = false }: { life?: boolean; lights?: boolean } = {},
+  {
+    life = false,
+    lights = false,
+    sidewalksDerived = true,
+  }: { life?: boolean; lights?: boolean; sidewalksDerived?: boolean } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
@@ -275,6 +279,17 @@ export function legendEntries(
       glyphs: '═ ║',
       color: css(theme.styles.road_mid!.color),
     });
+  if (roads && zoom >= ROAD_AREA_ZOOM)
+    entries.push(
+      {
+        classes: [],
+        label: sidewalksDerived ? 'Sidewalks (partly derived)' : 'Sidewalks (mapped)',
+        glyphs: '·',
+        color: css(theme.styles.path!.color),
+      },
+      { classes: [], label: 'Stop lines', glyphs: '─', color: css(theme.styles.road_mid!.color) },
+      { classes: [], label: 'One-way', glyphs: '→', color: css(theme.styles.road_mid!.color) },
+    );
   if (roads && life && zoom >= 17)
     entries.push({
       classes: [],

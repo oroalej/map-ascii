@@ -108,6 +108,8 @@ export type LifeGeometry = {
   kinds: Uint8Array;
   /** Each polyline's width in meters (roads' carriageways; 0 unknown). */
   widths: Float32Array;
+  /** Direction relative to each way (-1, 0, 1); absent means zero. Reserved for future routing. */
+  oneway?: Int8Array;
   /** Where birds gather: x, y in tile units. */
   roosts: Float32Array;
   /** Each roost's life/birds.ts `Habitat`, which picks the species that gather there. */
@@ -186,6 +188,7 @@ export class LifeBuilder {
   private starts: number[] = [];
   private kinds: number[] = [];
   private widths: number[] = [];
+  private oneways: number[] = [];
   private roosts: number[] = [];
   private roostHabitats: number[] = [];
   private perches: number[] = [];
@@ -197,11 +200,18 @@ export class LifeBuilder {
   private shops: number[] = [];
   private places: number[] = [];
 
-  line(points: readonly TilePoint[], kind: LifeLine, width = 0, id = this.starts.length + 1) {
+  line(
+    points: readonly TilePoint[],
+    kind: LifeLine,
+    width = 0,
+    id = this.starts.length + 1,
+    oneway: -1 | 0 | 1 = 0,
+  ) {
     if (points.length < 2) return;
     this.starts.push(this.coords.length / 2);
     this.kinds.push(kind);
     this.widths.push(width);
+    this.oneways.push(oneway);
     this.lineIds.push(id);
     for (const p of points) this.coords.push(p.x, p.y);
   }
@@ -274,6 +284,7 @@ export class LifeBuilder {
       starts: Uint32Array.from([...this.starts, this.coords.length / 2]),
       kinds: Uint8Array.from(this.kinds),
       widths: Float32Array.from(this.widths),
+      oneway: Int8Array.from(this.oneways),
       roosts: Float32Array.from(this.roosts),
       roostHabitats: Uint8Array.from(this.roostHabitats),
       perches: Float32Array.from(this.perches),
@@ -292,6 +303,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
+  ...(g.oneway ? [g.oneway.buffer as ArrayBuffer] : []),
   g.sites.buffer as ArrayBuffer,
   g.obstacles.buffer as ArrayBuffer,
   g.obstacleStarts.buffer as ArrayBuffer,

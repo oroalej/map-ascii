@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { classId, Flags, variantCode } from '../classes';
+import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
+import { lifeTransferables } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import {
@@ -65,6 +66,184 @@ const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
   }));
 
 describe('classifyRings', () => {
+  it('puts mapped sidewalk bands on the correct side of the way with unequal widths', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const unit = metersPerUnit(tile);
+    for (const [coords, axis, center, leftSign] of [
+      [
+        [
+          [1000, 2000],
+          [3000, 2000],
+        ],
+        'y',
+        2000,
+        -1,
+      ],
+      [
+        [
+          [2000, 3000],
+          [2000, 1000],
+        ],
+        'x',
+        2000,
+        -1,
+      ],
+      [
+        [
+          [2000, 1000],
+          [2000, 3000],
+        ],
+        'x',
+        2000,
+        1,
+      ],
+    ] as const) {
+      const result = buildTileGeometry(
+        {
+          roads: layer([
+            feature(
+              2,
+              {
+                id: 'walk',
+                class: 'road_mid',
+                width: 10,
+                sidewalk: 'left',
+                sidewalk_left_width: 2,
+                oneway: -1,
+              },
+              [[...coords].map((p) => [p[0], p[1]])],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+      );
+      const band = vertices(result.fills).filter((v) => v.cls === classId('path'));
+      expect(band).toHaveLength(4);
+      expect(band.every((v) => Math.sign(v[axis]! - center) === leftSign)).toBe(true);
+      const distances = band.map((v) => Math.abs(v[axis]! - center) * unit);
+      expect(Math.min(...distances)).toBeCloseTo(5, 0);
+      expect(Math.max(...distances)).toBeCloseTo(7, 0);
+      expect(band.every((v) => v.flags === (Flags.corridor | Flags.sidewalk))).toBe(true);
+      expect(Array.from(result.life.oneway!)).toEqual([-1]);
+      expect(lifeTransferables(result.life)).toContain(result.life.oneway!.buffer);
+    }
+    const both = buildTileGeometry(
+      {
+        roads: layer([
+          feature(
+            2,
+            {
+              id: 'both',
+              class: 'road_mid',
+              width: 10,
+              sidewalk: 'both',
+              sidewalk_left_width: 2,
+              sidewalk_right_width: 3,
+            },
+            [
+              [
+                [1000, 2000],
+                [3000, 2000],
+              ],
+            ],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const band = vertices(both.fills).filter((v) => v.cls === classId('path'));
+    expect(band).toHaveLength(8);
+    expect((Math.max(...band.map((v) => v.y!)) - 2000) * unit).toBeCloseTo(8, 0);
+  });
+
+  it('draws exact marking quads without point glyphs and hides them in coarse tiles', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    for (const [variant, kind, length, width] of [
+      ['stop_line', Marking.stop, 0.5, 5],
+      ['oneway_arrow', Marking.arrow, 3, 3],
+    ] as const) {
+      const f = feature(
+        1,
+        {
+          id: variant,
+          class: 'furniture',
+          variant,
+          stop_bearing: 90,
+          stop_width: 5,
+          stop_road: 'road_mid',
+          arrow_bearing: 90,
+          arrow_width: 3,
+          arrow_road: 'road_mid',
+        },
+        [[[2000, 2000]]],
+      );
+      const result = buildTileGeometry({ poi: layer([f]) }, createIdRegistry(), tile, 16);
+      const vs = vertices(result.fills);
+      expect(vs).toHaveLength(4);
+      expect(result.points.positions).toHaveLength(0);
+      expect(result.life.coords).toHaveLength(0);
+      expect(markingOf(result.fills.meta[3]!).kind).toBe(kind);
+      expect(
+        (Math.max(...vs.map((v) => v.x!)) - Math.min(...vs.map((v) => v.x!))) * metersPerUnit(tile),
+      ).toBeCloseTo(length, 0);
+      expect(
+        (Math.max(...vs.map((v) => v.y!)) - Math.min(...vs.map((v) => v.y!))) * metersPerUnit(tile),
+      ).toBeCloseTo(width, 0);
+      const coarse = buildTileGeometry(
+        { poi: layer([f]) },
+        createIdRegistry(),
+        { ...tile, z: 14 },
+        16,
+      );
+      expect(coarse.fills.positions).toHaveLength(0);
+      expect(coarse.points.positions).toHaveLength(0);
+    }
+  });
+
+  it('keeps a baked arrow at the same world position in neighboring tile buffers', () => {
+    const west = { z: 16, x: 55192, y: 30266 },
+      east = { ...west, x: west.x + 1 };
+    const anchor = tileToLngLat(west, { x: 4100, y: 2000 });
+    const centers = [west, east].map((tile) => {
+      const p = lngLatToTile(tile, anchor[0], anchor[1]);
+      const result = buildTileGeometry(
+        {
+          poi: layer([
+            feature(
+              1,
+              {
+                id: 'stable-arrow',
+                class: 'furniture',
+                variant: 'oneway_arrow',
+                arrow_bearing: 90,
+                arrow_width: 3,
+                arrow_road: 'road_mid',
+              },
+              [[[p.x, p.y]]],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+        16,
+      );
+      const vs = vertices(result.fills);
+      expect(vs).toHaveLength(4);
+      return tileToLngLat(tile, {
+        x: vs.reduce((s, v) => s + v.x!, 0) / 4,
+        y: vs.reduce((s, v) => s + v.y!, 0) / 4,
+      });
+    });
+    expect(
+      Math.hypot(
+        (centers[0]![0] - centers[1]![0]) * 111320 * Math.cos((anchor[1] * Math.PI) / 180),
+        (centers[0]![1] - centers[1]![1]) * 111320,
+      ),
+    ).toBeLessThan(0.1);
+  });
+
   it('packs frontage kind bits on flat and ridged buildings and retains commerce in the buffer', () => {
     const result = buildTileGeometry(
       {

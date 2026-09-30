@@ -45,6 +45,8 @@ export type CityAtlasProps = {
   timezone?: string | undefined;
   /** The daily rhythm of simulated traffic (the city pack's `life`). */
   cityLife?: CityLifeConfig | undefined;
+  /** Whether the city's street layer supplements mapped sidewalks. */
+  sidewalksDerived?: boolean;
   landmarks: readonly Landmark[];
   art: readonly LandmarkArt[];
   tours: readonly Tour[];
@@ -59,6 +61,7 @@ export function CityAtlas({
   climate,
   timezone,
   cityLife,
+  sidewalksDerived = true,
   landmarks,
   art,
   tours,
@@ -82,7 +85,13 @@ export function CityAtlas({
         timezone={timezone}
         cityLife={cityLife}
       />
-      <Hud city={slug} subdivisionLabel={subdivisionLabel} climate={climate} timezone={timezone} />
+      <Hud
+        city={slug}
+        subdivisionLabel={subdivisionLabel}
+        climate={climate}
+        timezone={timezone}
+        sidewalksDerived={sidewalksDerived}
+      />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
       <HoverTooltip />
