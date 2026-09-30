@@ -1,5 +1,6 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import type { SearchIndexFile } from '@atlas/shared';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */
@@ -13,6 +14,23 @@ export const cities = readdirSync(citiesDir)
       smoke_landmark: string;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
+    // Use the configured smoke landmark instead of assuming the city's focus is pickable.
+    const search = hasMeta
+      ? (JSON.parse(
+          readFileSync(
+            new URL(`../public/tiles/${slug}.search-index.json`, import.meta.url),
+            'utf8',
+          ),
+        ) as SearchIndexFile)
+      : null;
+    const smokePlace = search?.entries.find(
+      (entry) =>
+        entry.type === 'landmark' &&
+        (entry.name === city.smoke_landmark || entry.altNames.includes(city.smoke_landmark)),
+    );
+    if (hasMeta && !smokePlace) {
+      throw new Error(`${slug}: no landmark search entry for "${city.smoke_landmark}"`);
+    }
     const toursDir = new URL(`${slug}/tours/`, citiesDir);
     const tours = existsSync(toursDir)
       ? readdirSync(toursDir)
@@ -24,6 +42,7 @@ export const cities = readdirSync(citiesDir)
       slug,
       name: city.name.en,
       smokeLandmark: city.smoke_landmark,
+      smokePlace,
       hasMeta,
       tours,
     };

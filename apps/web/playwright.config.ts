@@ -17,6 +17,8 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
+    // Core flows need the map to draw, but continuous animation overloads CI's software GPU.
+    reducedMotion: 'reduce',
     // Noon in the city whatever the clock says, so a night run draws the same map (the life
     // layer's time of day, apps/web/state/life.ts).
     storageState: {

@@ -55,6 +55,7 @@ for (const city of cities) {
         await expect(page.getByText(/No map data for/)).toHaveCount(city.hasMeta ? 0 : 1);
         await expect(page.getByText(/map data .* is invalid/)).toHaveCount(0);
         if (city.hasMeta) {
+          await mapReady(page);
           // The default camera shows the city's focus at street level, so glyphs cover a good
           // share of the screen once tiles arrive.
           await expect
@@ -89,46 +90,40 @@ for (const city of cities) {
       test(
         'a click or tap on a place opens the panel, and Esc closes it',
         { tag: '@mobile' },
-        async ({ page }) => {
-          await page.goto(`/${city.slug}`);
+        async ({ page, hasTouch }) => {
+          const place = city.smokePlace!;
+          const view = new URLSearchParams({
+            lat: String(place.lat),
+            lng: String(place.lng),
+            z: String(place.zoomHint),
+          });
+          await page.goto(`/${city.slug}?${view}`);
+          await mapReady(page);
           const canvas = page.getByLabel(`Map of ${city.name}`);
           await expect
             .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
             .toBeGreaterThan(MIN_DRAWN);
-          // The default camera centers on the city's focus landmark. Only the landmark's own cells
-          // respond to the pointer, and grass, trees, or paths drawn over it cover most of a
-          // plaza: hover outward from the center until the landmark's tooltip shows, then click
-          // there. Its tile may still be on the way when drawing starts, so search again until
-          // the panel opens.
+          // Start without a selection: only the actual mouse click or touch tap opens the panel.
           const box = (await canvas.boundingBox())!;
-          const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
-          const steps = Array.from({ length: 9 }, (_, i) => (i - 4) * 4);
-          const offsets = steps
-            .flatMap((dx) => steps.map((dy) => [dx, dy] as const))
-            .sort(([ax, ay], [bx, by]) => Math.hypot(ax, ay) - Math.hypot(bx, by));
-          const tooltip = page.getByRole('tooltip');
+          const position = { x: box.width / 2, y: box.height / 2 };
           const panel = page.getByRole('complementary', { name: 'Selected place' });
+          await expect(panel).toHaveCount(0);
+          // Drawing may begin before this landmark's tile arrives. Retry the same point, with
+          // enough time for asynchronous picking (and beyond the double-tap interval).
           await expect(async () => {
-            for (const [dx, dy] of offsets) {
-              await page.mouse.move(cx + dx, cy + dy);
-              // Hover answers a frame or more late (WebGL runs in software here): let it settle
-              // for this point, and make sure it stays up.
-              await page.waitForTimeout(250);
-              if (!(await tooltip.isVisible())) continue;
-              await page.waitForTimeout(250);
-              if (!(await tooltip.isVisible())) continue;
-              await page.mouse.click(cx + dx, cy + dy);
-              break;
-            }
-            await expect(panel).toBeVisible({ timeout: 1_500 });
-          }).toPass({ timeout: 30_000 });
-          await expect.poll(() => query(page).sel).toBeTruthy();
+            if (hasTouch) await canvas.tap({ position });
+            else await canvas.click({ position });
+            await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark, {
+              timeout: 1_500,
+            });
+          }).toPass({ timeout: 20_000 });
+          await expect.poll(() => query(page).sel).toBe(place.id);
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
         },
       );
 
-      test('a shared URL reproduces the view', async ({ page, browser }) => {
+      test('a shared URL reproduces the view', async ({ page, context }) => {
         await page.goto(`/${city.slug}?z=15.5`);
         await mapReady(page);
         const canvas = page.getByLabel(`Map of ${city.name}`);
@@ -150,13 +145,18 @@ for (const city of cities) {
           })
           .toBe(true);
         const shared = page.url();
-
-        const other = await browser.newPage();
-        await other.goto(shared);
-        await expect(other.getByLabel('Zoom')).toHaveText(/^z 15\.5 /);
-        await other.getByRole('button', { name: 'Coordinates' }).click();
-        await expect(coordsButton(other)).toHaveText(coords);
-        await other.close();
+        await page.close();
+        // Inherit the fixture's rendering settings; only one atlas uses the software GPU.
+        const other = await context.newPage();
+        try {
+          await other.goto(shared);
+          await mapReady(other);
+          await expect(other.getByLabel('Zoom')).toHaveText(/^z 15\.5 /);
+          await other.getByRole('button', { name: 'Coordinates' }).click();
+          await expect(coordsButton(other)).toHaveText(coords);
+        } finally {
+          await other.close();
+        }
       });
 
       test('redraws after the browser takes the WebGL context away', async ({ page }) => {
