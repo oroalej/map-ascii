@@ -30,6 +30,8 @@ import {
   kindOf,
   layerFor,
   roadWidth,
+  sidewalkOf,
+  onewayOf,
   treeSize,
   variantOf,
   type GeometryKind,
@@ -48,6 +50,20 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  sidewalk?: 'both' | 'left' | 'right' | 'none';
+  sidewalk_width?: number;
+  sidewalk_left_width?: number;
+  sidewalk_right_width?: number;
+  sidewalk_src?: 'mapped' | 'derived';
+  oneway?: -1 | 1;
+  stop_direction?: 'forward' | 'backward';
+  stop_bearing?: number;
+  stop_width?: number;
+  stop_road?: AtlasClass;
+  stop_src?: 'mapped' | 'signalized';
+  arrow_bearing?: number;
+  arrow_width?: number;
+  arrow_road?: AtlasClass;
   frontage?: Frontage;
   crossing_bearing?: number;
   crossing_width?: number;
@@ -245,6 +261,21 @@ export function normalize(
     if (cls === 'tree') Object.assign(properties, treeSize(tags));
     const width = roadWidth(tags, cls);
     if (width !== undefined) properties.width = width;
+    if (cls.startsWith('road_')) {
+      const sidewalk = sidewalkOf(tags);
+      if (sidewalk)
+        Object.assign(properties, {
+          sidewalk: sidewalk.sidewalk,
+          sidewalk_width: sidewalk.width,
+          sidewalk_left_width: sidewalk.leftWidth,
+          sidewalk_right_width: sidewalk.rightWidth,
+          sidewalk_src: 'mapped',
+        });
+      const oneway = onewayOf(tags);
+      if (oneway) properties.oneway = oneway;
+    }
+    if (tags.highway === 'stop' && (tags.direction === 'forward' || tags.direction === 'backward'))
+      properties.stop_direction = tags.direction;
     const variant = variantOf(tags, cls);
     if (variant !== undefined) properties.variant = variant;
     if (cls === 'place_label') {

@@ -21,6 +21,12 @@
   },
   "languages": ["fil", "bcl"],
   "timezone": "Asia/Manila",
+  "streets": {
+    "sidewalks": {
+      "derive": false,
+      "source": "Project decision (2026-09-30): show OSM-tagged sidewalks pending a sourced survey; docs/cities/naga.md section 4."
+    }
+  },
   "smoke_landmark": "Naga Metropolitan Cathedral",
   "focus": {
     "osm_id": "osm:way/201276958",

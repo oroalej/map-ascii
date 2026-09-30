@@ -108,6 +108,7 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
     return 'crossing';
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
+    if (tags.highway === 'stop') return 'traffic_stop';
     if (tags.highway === 'traffic_signals') return 'signals';
     if (markedCrossing(tags)) return 'crossing';
     const frontage = frontageOf(tags);
@@ -154,7 +155,7 @@ export function classify(
 
   if (kind === 'point') {
     if (frontageOf(tags) && tags.atlas_in_building === 'yes') return null;
-    if (tags.highway === 'traffic_signals' || markedCrossing(tags)) return 'furniture';
+    if (oneOf(tags.highway, 'traffic_signals', 'stop') || markedCrossing(tags)) return 'furniture';
     if (oneOf(tags.place, ...placeLabels) && tags.name) return 'place_label';
     const building = buildingKind(tags);
     if (building) return building;
@@ -207,6 +208,53 @@ const defaultRoadWidths: Partial<Record<AtlasClass, number>> = {
   road_mid: 10,
   road_minor: 6,
 };
+
+export function onewayOf(tags: Tags): -1 | 0 | 1 {
+  if (oneOf(tags.oneway, 'yes', 'true', '1')) return 1;
+  if (oneOf(tags.oneway, '-1', 'reverse')) return -1;
+  if (tags.oneway !== undefined) return 0;
+  return oneOf(tags.junction, 'roundabout', 'circular') ? 1 : 0;
+}
+
+/** A tagged side, including explicit absence, prevents speculative derivation. */
+export function sidewalkOf(tags: Tags):
+  | {
+      sidewalk: 'both' | 'left' | 'right' | 'none';
+      width: number;
+      leftWidth: number;
+      rightWidth: number;
+    }
+  | undefined {
+  if (
+    !['sidewalk', 'sidewalk:both', 'sidewalk:left', 'sidewalk:right'].some(
+      (k) => tags[k] !== undefined,
+    )
+  )
+    return undefined;
+  const present = (tag: string | undefined, fallback: boolean) =>
+    tag === undefined ? fallback : oneOf(tag, 'yes', 'both', 'left', 'right');
+  const general = tags.sidewalk;
+  const both = present(tags['sidewalk:both'], general === 'both' || general === 'yes');
+  const left = present(
+    tags['sidewalk:left'],
+    tags['sidewalk:both'] !== undefined ? both : both || general === 'left',
+  );
+  const right = present(
+    tags['sidewalk:right'],
+    tags['sidewalk:both'] !== undefined ? both : both || general === 'right',
+  );
+  const meters = (tag: string | undefined, fallback: number) => {
+    const value = Number.parseFloat(tag ?? '');
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 10) / 10 : fallback;
+  };
+  const width = meters(tags['sidewalk:both:width'], meters(tags['sidewalk:width'], 2));
+  return {
+    sidewalk: left && right ? 'both' : left ? 'left' : right ? 'right' : 'none',
+    width,
+    leftWidth: meters(tags['sidewalk:left:width'], width),
+    rightWidth: meters(tags['sidewalk:right:width'], width),
+  };
+}
 
 /** Road width in meters: `width`, else `lanes` × 3.2, else a class default. */
 export function roadWidth(tags: Tags, atlasClass: AtlasClass): number | undefined {

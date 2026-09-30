@@ -61,6 +61,7 @@ describe('mergeResponses', () => {
     ])
       expect(mergeResponses(pair.map((node) => ({ elements: [node] }))).elements).toEqual([tagged]);
     expect(trafficQuery('1,2,3,4')).toContain('node["crossing:markings"]');
+    expect(trafficQuery('1,2,3,4')).toContain('node["highway"="stop"]');
   });
   it('keeps each element once, preferring the copy with the most data', () => {
     const merged = mergeResponses([

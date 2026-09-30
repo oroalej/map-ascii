@@ -1,8 +1,9 @@
-import type { CityLifeConfig } from '@atlas/shared';
+import type { City, CityLifeConfig } from '@atlas/shared';
+import { mergeStreetDetails, type RoadArm, type StreetStats } from './streets';
 import type { Position } from 'geojson';
 import type { AtlasFeature, AtlasProperties } from '../03-normalize';
 
-type Arm = { road: AtlasFeature; bearing: number; toward: Position };
+type Arm = RoadArm;
 type Junction = { p: Position; arms: Arm[] };
 const key = (p: Position) => `${p[0]},${p[1]}`;
 const delta = (a: Position, b: Position) => [
@@ -35,7 +36,7 @@ function point(id: string, p: Position, properties: Partial<AtlasProperties>): A
 }
 
 /** Exact road vertices only: a geometric intersection may be a bridge. */
-export function roadJunctions(features: readonly AtlasFeature[]): Junction[] {
+function roadVertexArms(features: readonly AtlasFeature[]): Map<string, Junction> {
   const vertices = new Map<string, Junction>();
   for (const road of features) {
     if (road.properties.region || !road.properties.class.startsWith('road_')) continue;
@@ -44,17 +45,29 @@ export function roadJunctions(features: readonly AtlasFeature[]): Junction[] {
         const p = line[i]!;
         const vertex = vertices.get(key(p)) ?? { p, arms: [] };
         for (const j of [i - 1, i + 1])
-          if (line[j]) vertex.arms.push({ road, bearing: bearing(p, line[j]), toward: line[j] });
+          if (line[j])
+            vertex.arms.push({
+              road,
+              bearing: bearing(p, line[j]),
+              toward: line[j],
+              forward: j > i,
+            });
         vertices.set(key(p), vertex);
       }
   }
-  return [...vertices.values()].filter((v) => v.arms.length >= 3);
+  return vertices;
+}
+
+export function roadJunctions(features: readonly AtlasFeature[]): Junction[] {
+  return [...roadVertexArms(features).values()].filter((v) => v.arms.length >= 3);
 }
 
 /** Add point anchors for stripes, keeping crossing ways as pedestrian geometry. */
 export function mergeTraffic(
   features: AtlasFeature[],
   config?: CityLifeConfig['signals'],
+  streets?: City['streets'],
+  report?: (stats: StreetStats) => void,
 ): AtlasFeature[] {
   const roads = features.filter(
     (f) => !f.properties.region && f.properties.class.startsWith('road_'),
@@ -209,5 +222,7 @@ export function mergeTraffic(
       ),
   );
   out.push(...crossings.values(), ...kept);
-  return out;
+  const result = mergeStreetDetails(out, kept, roadVertexArms(roads), streets);
+  report?.(result.stats);
+  return result.features;
 }

@@ -779,6 +779,16 @@ export type Traffic = z.infer<typeof Traffic>;
  * pipeline. Coordinates are allowed for a region bbox without a usable OSM relation, and for
  * independently sourced life sites missing from OSM.
  */
+/** Optional city policy for derived street details; explicit policy is sourced. */
+export const CityStreets = z.strictObject({
+  sidewalks: z
+    .strictObject({
+      derive: z.boolean().default(true),
+      source: z.string().trim().min(1),
+    })
+    .optional(),
+});
+
 export const City = z
   .strictObject({
     slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug'),
@@ -832,6 +842,7 @@ export const City = z
     timezone: TimeZone.optional(),
     /** The daily rhythm of the life layer (default: rhythm.ts `DEFAULT_RHYTHM`). */
     life: CityLife.optional(),
+    streets: CityStreets.optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.

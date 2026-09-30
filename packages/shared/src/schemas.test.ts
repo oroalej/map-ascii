@@ -238,6 +238,23 @@ describe('City', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
   });
 
+  it('accepts sourced sidewalk policy and defaults derivation only when configured', () => {
+    expect(City.parse(city).streets).toBeUndefined();
+    const policy = { sidewalks: { source: 'Project policy' } };
+    expect(City.parse({ ...city, streets: policy }).streets?.sidewalks?.derive).toBe(true);
+    expect(
+      City.parse({ ...city, streets: { sidewalks: { derive: false, source: 'Survey pending' } } })
+        .streets?.sidewalks?.derive,
+    ).toBe(false);
+    expect(City.safeParse({ ...city, streets: { sidewalks: { derive: false } } }).success).toBe(
+      false,
+    );
+    expect(City.safeParse({ ...city, streets: { sidewalks: { source: ' ' } } }).success).toBe(
+      false,
+    );
+    expect(City.safeParse({ ...city, streets: { driving_side: 'left' } }).success).toBe(false);
+  });
+
   it('rejects localized fields in undeclared languages', () => {
     const result = City.safeParse({ ...city, languages: [] });
     expect(result.error?.issues[0]?.path).toEqual(['subdivision', 'label', 'xx']);

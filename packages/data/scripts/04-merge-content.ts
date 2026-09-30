@@ -106,6 +106,8 @@ export const step: Step = {
     const merged = mergeTraffic(
       mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
       city.life?.signals,
+      city.streets,
+      (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
     );
     const tourProblems = checkTours(merged, content.tours, regionBounds);
     if (tourProblems.length > 0) {
