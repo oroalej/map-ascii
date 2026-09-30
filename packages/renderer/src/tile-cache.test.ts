@@ -24,7 +24,7 @@ vi.mock('./gpu', () => ({
   },
 }));
 
-const { TileCache } = await import('./tile-cache');
+const { RETRY_MS, TileCache } = await import('./tile-cache');
 
 const camera = { lat: 13.62, lng: 123.19, zoom: 14.5, pitch: 0, bearing: 0 };
 const size = { width: 400, height: 300 };
@@ -77,5 +77,47 @@ describe('TileCache', () => {
     cache.resume();
     cache.tilesToDraw(camera, size);
     expect(source.request).toHaveBeenCalledWith(tile);
+  });
+
+  it('asks again for a tile that failed, backing off, until it loads', () => {
+    vi.useFakeTimers();
+    try {
+      const { cache, source, onChange } = setup();
+      cache.tilesToDraw(camera, size);
+      const tile = source.request.mock.calls[0]![0] as TileId;
+      const key = tileKey(tile);
+      const asked = () => source.request.mock.calls.some(([t]) => tileKey(t as TileId) === key);
+      const fail = () => source.handlers.error('network', key);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      fail();
+      source.request.mockClear();
+      onChange.mockClear();
+      cache.tilesToDraw(camera, size);
+      expect(asked()).toBe(false);
+      // When the retry is due, the view is told to redraw, and asks again.
+      vi.advanceTimersByTime(RETRY_MS);
+      expect(onChange).toHaveBeenCalled();
+      cache.tilesToDraw(camera, size);
+      expect(asked()).toBe(true);
+
+      // A second failure waits twice as long.
+      fail();
+      source.request.mockClear();
+      vi.advanceTimersByTime(RETRY_MS);
+      cache.tilesToDraw(camera, size);
+      expect(asked()).toBe(false);
+      vi.advanceTimersByTime(RETRY_MS);
+      cache.tilesToDraw(camera, size);
+      expect(asked()).toBe(true);
+
+      // Loaded, it is drawn, and a later failure starts the backoff over.
+      source.handlers.tile(key, geometry);
+      expect(cache.tilesToDraw(camera, size)).toContainEqual(tile);
+      cache.destroy();
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
   });
 });

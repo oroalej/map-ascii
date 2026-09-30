@@ -22,6 +22,9 @@ import {
 } from './tiles';
 
 const TILE_CACHE_SIZE = 256;
+/** A tile that failed is asked for again after this long, doubling each time up to the max. */
+export const RETRY_MS = 2000;
+export const RETRY_MAX_MS = 60_000;
 
 /** A loaded tile: its GPU mesh and label candidates. */
 export type LoadedTile = { mesh: TileMesh; labels: TileLabel[]; life: LifeGeometry };
@@ -29,7 +32,10 @@ export type LoadedTile = { mesh: TileMesh; labels: TileLabel[]; life: LifeGeomet
 export class TileCache {
   readonly source: TileSource;
   private header: TileHeader | null = null;
-  private readonly failed = new Set<string>();
+  /** Tiles that failed to load: how often, and when to ask for them again (`Date.now()` ms). */
+  private readonly failed = new Map<string, { tries: number; retryAt: number }>();
+  /** Timers that redraw when a failed tile's retry comes due, so an idle map asks again. */
+  private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
   /** Loaded tiles (null = the archive has no tile there). */
   private meshes: LruCache<LoadedTile | null>;
   /** While the WebGL context is lost, arriving tiles are dropped and asked for again later. */
@@ -49,6 +55,7 @@ export class TileCache {
       },
       tile: (key, geometry) => {
         if (this.suspended) return;
+        this.failed.delete(key);
         this.meshes.set(
           key,
           geometry
@@ -58,10 +65,28 @@ export class TileCache {
         onChange();
       },
       error: (message, key) => {
-        if (key) this.failed.add(key);
+        if (key) this.retryLater(key, onChange);
         console.warn(`ASCII Atlas: ${key ? `tile ${key}: ` : ''}${message}`);
       },
     });
+  }
+
+  /** A tile failed: ask for it again after a backoff, and redraw then so the view does. */
+  private retryLater(key: string, onChange: () => void) {
+    const tries = (this.failed.get(key)?.tries ?? 0) + 1;
+    const delay = Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (tries - 1));
+    this.failed.set(key, { tries, retryAt: Date.now() + delay });
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timer);
+      onChange();
+    }, delay);
+    this.retryTimers.add(timer);
+  }
+
+  /** Whether a tile may be asked for: it never failed, or its retry is due. */
+  private mayRequest(key: string) {
+    const failed = this.failed.get(key);
+    return !failed || Date.now() >= failed.retryAt;
   }
 
   private createCache() {
@@ -120,7 +145,7 @@ export class TileCache {
         out.set(key, tile);
         continue;
       }
-      if (!this.failed.has(key)) this.source.request(tile);
+      if (this.mayRequest(key)) this.source.request(tile);
       const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
       if (ancestor) {
         out.set(tileKey(ancestor), ancestor);
@@ -154,7 +179,7 @@ export class TileCache {
         out.set(key, region);
         continue;
       }
-      if (!meshes.has(key) && !this.failed.has(key)) this.source.request(region);
+      if (!meshes.has(key) && this.mayRequest(key)) this.source.request(region);
       const fallback = findAncestor(region, header.minZoom, loaded);
       if (fallback) out.set(tileKey(fallback), fallback);
     }
@@ -162,6 +187,8 @@ export class TileCache {
   }
 
   destroy() {
+    for (const timer of this.retryTimers) clearTimeout(timer);
+    this.retryTimers.clear();
     this.source.destroy();
     this.meshes.clear();
   }
