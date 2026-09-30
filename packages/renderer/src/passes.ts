@@ -347,6 +347,17 @@ export function overlayPass(
     const vis = labelVisibility(label.band, camera.zoom);
     if (vis <= 0) continue;
     const [col, row] = toCell(label.lng, label.lat);
+    // No box of a label's (none wider or taller than its text, a few cells from its anchor)
+    // reaches the area from further out.
+    const reach = label.text.length + 3;
+    if (
+      col < area.left - reach ||
+      col >= area.right + reach ||
+      row < area.top - reach ||
+      row >= area.bottom + reach
+    ) {
+      continue;
+    }
     if (tilted && !tiltedLabelShows(label.rank, row, targets.labelRows, camera.pitch)) continue;
     candidates.push({
       id: label.id,

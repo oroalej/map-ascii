@@ -103,7 +103,7 @@ import {
 } from './raster/geometry';
 import { Readback } from './readback';
 import { themes, type ThemeName } from './theme';
-import { TileCache } from './tile-cache';
+import { TileCache, type LoadedTile } from './tile-cache';
 import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
@@ -383,6 +383,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // Frame state
   let cellDirty = true;
+  /**
+   * What the cells were last drawn for, in a flat view: the zoom, where the map and label grids
+   * start, and which of their cells are on screen. A pan that changes none of it (within a cell)
+   * leaves the cells as they are, only shifted (`shiftCells`). Null: draw them again.
+   */
+  let cellsFor: string | null = null;
+  let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
@@ -449,6 +456,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (themeRes?.map !== map || themeRes.label !== labelGlyphs) {
       themeRes = { map, label: labelGlyphs };
       cellDirty = true;
+      cellsFor = null;
     }
   };
 
@@ -491,6 +499,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     cellDirty = true;
+    cellsFor = null;
   };
 
   // Tiles
@@ -498,10 +507,48 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     gl,
     new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
     () => {
-      if (!destroyed) cellDirty = true;
+      if (destroyed) return;
+      cellDirty = true;
+      cellsFor = null;
     },
   );
   const { source } = tileCache;
+
+  const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
+    const a = screenArea(v, map.grid);
+    const b = screenArea(v, labels.grid, v.labelDev);
+    return [
+      v.camera.zoom,
+      map.grid.originCol,
+      map.grid.originRow,
+      labels.grid.originCol,
+      labels.grid.originRow,
+      a.left,
+      a.top,
+      a.right,
+      a.bottom,
+      b.left,
+      b.top,
+      b.right,
+      b.bottom,
+    ].join(' ');
+  };
+  /** Shift the cells for a pan within a cell, if that is all it takes; whether it was. */
+  const shiftCells = (): boolean => {
+    if (!targets || cellsFor === null || cellsTargets !== targets || isTilted(camera)) {
+      return false;
+    }
+    const v = view();
+    const next = placeGrid(v, v.cellDev, targets.cols, targets.rows);
+    const nextLabels = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
+    if (cellsKey(v, next, nextLabels) !== cellsFor) return false;
+    placement = next;
+    grid = next.grid;
+    labelGrid = nextLabels.grid;
+    // Keep asking for the view's tiles (one that arrives draws the cells again).
+    tileCache.tilesToDraw(camera, cssSize());
+    return true;
+  };
 
   const drawCells = () => {
     if (!targets || !programs || !themeRes) return;
@@ -510,6 +557,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     grid = placement.grid;
     const labelPlacement = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
     labelGrid = labelPlacement.grid;
+    cellsFor = isTilted(camera) ? null : cellsKey(v, placement, labelPlacement);
+    cellsTargets = targets;
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
@@ -708,6 +757,81 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** Whether the light texture holds lamps (so it is cleared once when they go). */
   let lampsShown = false;
   const lampShow = () => bandVisibility(STREETLIGHT.zoom, camera.zoom);
+  /** Each loaded tile's shops and lamps, placed once (by its life data, dropped with it). */
+  const tileLights = new WeakMap<
+    LoadedTile['life'],
+    { shops: { lamp: VisibleLamp; hours: ShopHours }[]; lamps: VisibleLamp[] }
+  >();
+  const lightsOf = (tile: TileId, life: LoadedTile['life']) => {
+    const cached = tileLights.get(life);
+    if (cached) return cached;
+    const tileShops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
+    const tileLamps: VisibleLamp[] = [];
+    // Shops and markets: lit while open, each by its own hours (shared rhythm.ts shopHours).
+    const shopsHere = life.shops;
+    for (let i = 0; shopsHere && i < shopsHere.length; i += SHOP_STRIDE) {
+      const x = shopsHere[i]!;
+      const y = shopsHere[i + 1]!;
+      const perMeter = 1 / metersPerUnit(tile);
+      const reach =
+        Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
+      const at = tileToLngLat(tile, { x, y });
+      const seed = placeSeed((tile.x * EXTENT + x) / perMeter, (tile.y * EXTENT + y) / perMeter);
+      tileShops.push({
+        lamp: {
+          lng: at[0],
+          lat: at[1],
+          center: at,
+          pool: at,
+          east: tileToLngLat(tile, { x: x + reach, y }),
+          north: tileToLngLat(tile, { x, y: y - reach }),
+          state: LampState.shop,
+          seed: seed & 31,
+        },
+        hours: shopHours(seed, options.cityLife),
+      });
+    }
+    // Floodlit landmarks: a wash of light over each footprint, and a little past it.
+    const floods = life.floods;
+    for (let i = 0; floods && i < floods.length; i += FLOOD_STRIDE) {
+      const x = floods[i]!;
+      const y = floods[i + 1]!;
+      const perMeter = 1 / metersPerUnit(tile);
+      const reach = Math.min(floods[i + 2]!, FLOOD.maxRadius * perMeter) + FLOOD.spill * perMeter;
+      const at = tileToLngLat(tile, { x, y });
+      tileLamps.push({
+        lng: at[0],
+        lat: at[1],
+        center: at,
+        pool: at,
+        east: tileToLngLat(tile, { x: x + reach, y }),
+        north: tileToLngLat(tile, { x, y: y - reach }),
+        state: LampState.flood,
+        seed: 0,
+      });
+    }
+    const found = life.lamps;
+    const radius = STREETLIGHT.radius / metersPerUnit(tile);
+    for (let i = 0; i < found.length; i += LAMP_STRIDE) {
+      const [lng, lat] = tileToLngLat(tile, { x: found[i]!, y: found[i + 1]! });
+      // The pool, centered out over the road.
+      const x = found[i + 4]!;
+      const y = found[i + 5]!;
+      tileLamps.push({
+        lng,
+        lat,
+        center: tileToLngLat(tile, { x: found[i + 6]!, y: found[i + 7]! }),
+        pool: tileToLngLat(tile, { x, y }),
+        east: tileToLngLat(tile, { x: x + radius, y }),
+        north: tileToLngLat(tile, { x, y: y - radius }),
+        state: found[i + 2]! as LampStateValue,
+        seed: found[i + 3]!,
+      });
+    }
+    const placed = { shops: tileShops, lamps: tileLamps };
+    tileLights.set(life, placed);
+    return placed;
+  };
   const syncLamps = (tiles: readonly TileId[]) => {
     lamps = [];
     shops = [];
@@ -715,68 +839,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (lampShow() <= 0) return;
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
-      // Shops and markets: lit while open, each by its own hours (shared rhythm.ts shopHours).
-      const shopsHere = tileCache.get(tile)?.life.shops;
-      for (let i = 0; shopsHere && i < shopsHere.length; i += SHOP_STRIDE) {
-        const x = shopsHere[i]!;
-        const y = shopsHere[i + 1]!;
-        const perMeter = 1 / metersPerUnit(tile);
-        const reach =
-          Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
-        const at = tileToLngLat(tile, { x, y });
-        const seed = placeSeed((tile.x * EXTENT + x) / perMeter, (tile.y * EXTENT + y) / perMeter);
-        shops.push({
-          lamp: {
-            lng: at[0],
-            lat: at[1],
-            center: at,
-            pool: at,
-            east: tileToLngLat(tile, { x: x + reach, y }),
-            north: tileToLngLat(tile, { x, y: y - reach }),
-            state: LampState.shop,
-            seed: seed & 31,
-          },
-          hours: shopHours(seed, options.cityLife),
-        });
-      }
-      // Floodlit landmarks: a wash of light over each footprint, and a little past it.
-      const floods = tileCache.get(tile)?.life.floods;
-      for (let i = 0; floods && i < floods.length; i += FLOOD_STRIDE) {
-        const x = floods[i]!;
-        const y = floods[i + 1]!;
-        const perMeter = 1 / metersPerUnit(tile);
-        const reach = Math.min(floods[i + 2]!, FLOOD.maxRadius * perMeter) + FLOOD.spill * perMeter;
-        const at = tileToLngLat(tile, { x, y });
-        lamps.push({
-          lng: at[0],
-          lat: at[1],
-          center: at,
-          pool: at,
-          east: tileToLngLat(tile, { x: x + reach, y }),
-          north: tileToLngLat(tile, { x, y: y - reach }),
-          state: LampState.flood,
-          seed: 0,
-        });
-      }
-      const found = tileCache.get(tile)?.life.lamps;
-      if (!found) continue;
-      const radius = STREETLIGHT.radius / metersPerUnit(tile);
-      for (let i = 0; i < found.length; i += LAMP_STRIDE) {
-        const [lng, lat] = tileToLngLat(tile, { x: found[i]!, y: found[i + 1]! });
-        // The pool, centered out over the road.
-        const x = found[i + 4]!;
-        const y = found[i + 5]!;
-        lamps.push({
-          lng,
-          lat,
-          center: tileToLngLat(tile, { x: found[i + 6]!, y: found[i + 7]! }),
-          pool: tileToLngLat(tile, { x, y }),
-          east: tileToLngLat(tile, { x: x + radius, y }),
-          north: tileToLngLat(tile, { x, y: y - radius }),
-          state: found[i + 2]! as LampStateValue,
-          seed: found[i + 3]!,
-        });
-      }
+      const loaded = tileCache.get(tile);
+      if (!loaded) continue;
+      const placed = lightsOf(tile, loaded.life);
+      for (const shop of placed.shops) shops.push(shop);
+      for (const lamp of placed.lamps) lamps.push(lamp);
     }
   };
   /** Whether the light texture holds headlight beams (so they are cleared once they go). */
@@ -955,6 +1022,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       resize();
     }
     advanceFlight(now);
+    if (cameraMoved) {
+      cameraMoved = false;
+      emit('camerachange', { ...camera });
+    }
     updateSun(now);
     if (!targets || !programs || !themeRes) return;
     const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
@@ -962,11 +1033,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (cellDirty || drawDirty || animationDue) {
       const time = (now - start) / 1000;
       const frameStart = performance.now();
-      const cellsDrawn = cellDirty;
+      let cellsDrawn = false;
       if (cellDirty) {
         cellDirty = false;
-        drawCells();
-        cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
+        if (!shiftCells()) {
+          drawCells();
+          cellsDrawn = true;
+          cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
+        }
       }
       const v = view();
       const wind = currentWind(time);
@@ -1066,11 +1140,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   canvas.addEventListener('webglcontextlost', onContextLost);
   canvas.addEventListener('webglcontextrestored', onContextRestored);
 
-  const applyCamera = (next: CameraState) => {
+  /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
+  let cameraMoved = false;
+  /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
+  const applyCamera = (next: CameraState, batched = false) => {
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
     lastInput = performance.now();
-    emit('camerachange', { ...camera });
+    if (batched) cameraMoved = true;
+    else emit('camerachange', { ...camera });
   };
 
   /** Input takes over from any flight. */
@@ -1083,14 +1161,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     };
 
   const detachInput = attachInput(canvas, {
-    pan: byUser((dx: number, dy: number) => applyCamera(panByView(camera, dx, dy, cssSize()))),
+    pan: byUser((dx: number, dy: number) =>
+      applyCamera(panByView(camera, dx, dy, cssSize()), true),
+    ),
     // Tilted views zoom around the center (the cursor anchor math is for flat views).
     zoom: byUser((delta: number, anchor: [number, number]) => {
       const zoom = Math.min(limits.maxZoom, Math.max(limits.minZoom, camera.zoom + delta));
-      applyCamera(zoomAround(camera, zoom, isTilted(camera) ? [0, 0] : anchor));
+      applyCamera(zoomAround(camera, zoom, isTilted(camera) ? [0, 0] : anchor), true);
     }),
     orbit: byUser((dBearing: number, dPitch: number) =>
-      applyCamera(orbitBy(camera, dBearing, dPitch)),
+      applyCamera(orbitBy(camera, dBearing, dPitch), true),
     ),
     hover: (point) => {
       pointerOver = point !== null;
@@ -1144,6 +1224,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;
+      cellsFor = null;
     },
     getLife: () => ({ ...life }),
     playProcession(id) {

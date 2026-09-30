@@ -107,14 +107,59 @@ export type Overlay = {
   glyphs: Uint16Array;
   /** Boxes taken so far, which later placements avoid. */
   taken: Box[];
+  /**
+   * The same boxes by cell, 1 where taken, over the grid and `TAKEN_PAD` cells around it, so a
+   * placement checks its own cells instead of every box placed.
+   */
+  takenCells?: Uint8Array;
 };
+
+/** How far past the grid's edges `takenCells` reaches (a halo, and a tilted view's gap). */
+const TAKEN_PAD = 4;
 
 export const createOverlay = (cols: number, rows: number): Overlay => ({
   cols,
   rows,
   glyphs: new Uint16Array(cols * rows),
   taken: [],
+  takenCells: new Uint8Array((cols + 2 * TAKEN_PAD) * (rows + 2 * TAKEN_PAD)),
 });
+
+/** Whether `box` is within `takenCells` (the grid and its pad). */
+const inTakenCells = (o: Overlay, b: Box) =>
+  b.left >= -TAKEN_PAD &&
+  b.top >= -TAKEN_PAD &&
+  b.left + b.width <= o.cols + TAKEN_PAD &&
+  b.top + b.height <= o.rows + TAKEN_PAD;
+
+/** Whether `box` overlaps any box taken so far. */
+function isTaken(o: Overlay, b: Box): boolean {
+  const cells = o.takenCells;
+  if (!cells || !inTakenCells(o, b)) return o.taken.some((p) => overlaps(p, b));
+  const stride = o.cols + 2 * TAKEN_PAD;
+  for (let y = b.top; y < b.top + b.height; y++) {
+    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
+    for (let x = b.left; x < b.left + b.width; x++) if (cells[row + x]) return true;
+  }
+  return false;
+}
+
+/** Take `box`, so later placements avoid it. */
+function take(o: Overlay, b: Box) {
+  o.taken.push(b);
+  const cells = o.takenCells;
+  if (!cells) return;
+  const stride = o.cols + 2 * TAKEN_PAD;
+  // A box past the pad stays out of the cells: `isTaken` checks the list for boxes that reach it.
+  const x0 = Math.max(b.left, -TAKEN_PAD);
+  const x1 = Math.min(b.left + b.width, o.cols + TAKEN_PAD);
+  const y0 = Math.max(b.top, -TAKEN_PAD);
+  const y1 = Math.min(b.top + b.height, o.rows + TAKEN_PAD);
+  for (let y = y0; y < y1; y++) {
+    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
+    for (let x = x0; x < x1; x++) cells[row + x] = 1;
+  }
+}
 
 /** The overlay as RGBA8 texels: glyph code low byte, high byte, 0, 0. */
 export function packOverlay(overlay: Overlay): Uint8Array {
@@ -181,6 +226,20 @@ export function streetMode(angle: number): LabelMode {
 /** Labels with the same text closer than this (cells) are one: the first placed wins. */
 export const DUPLICATE_DISTANCE = 30;
 
+/** Each label text's lines at `LABEL_WIDTH`, and their width in characters, wrapped once. */
+const wrapped = new Map<string, { lines: string[]; width: number }>();
+const WRAPPED_MAX = 20_000;
+function wrapOnce(text: string) {
+  let found = wrapped.get(text);
+  if (!found) {
+    const lines = wrapText(text);
+    found = { lines, width: Math.max(0, ...lines.map((l) => [...l].length)) };
+    if (wrapped.size >= WRAPPED_MAX) wrapped.clear();
+    wrapped.set(text, found);
+  }
+  return found;
+}
+
 /** Split text into lines of at most `width` characters at word boundaries. */
 export function wrapText(text: string, width = LABEL_WIDTH): string[] {
   const lines: string[] = [];
@@ -246,9 +305,11 @@ export function placeLabels(
       continue;
     }
     // Text on a street is one line; text beside an anchor wraps.
-    const lines = mode === 'beside' ? wrapText(label.text) : [label.text.trim()];
+    const { lines, width } =
+      mode === 'beside'
+        ? wrapOnce(label.text)
+        : { lines: [label.text.trim()], width: [...label.text.trim()].length };
     if (lines.length === 0 || !lines[0]) continue;
-    const width = Math.max(...lines.map((l) => [...l].length));
     const boxes =
       mode === 'along'
         ? [{ left: label.col - Math.floor(width / 2), top: label.row, width, height: 1 }]
@@ -262,12 +323,13 @@ export function placeLabels(
         b.left + b.width <= area.right &&
         b.top + b.height <= area.bottom;
       const clear = spaced(withHalo(b, mode), gap);
-      return inside && !overlay.taken.some((p) => overlaps(p, clear));
+      return inside && !isTaken(overlay, clear);
     });
     if (!box) continue;
     const halo = withHalo(box, mode);
-    overlay.taken.push(halo);
-    placed.set(label.text, [...nearby, { col: label.col, row: label.row }]);
+    take(overlay, halo);
+    if (nearby.length === 0) placed.set(label.text, nearby);
+    nearby.push({ col: label.col, row: label.row });
     out.push(label);
 
     // A fading label keeps only some of its cells (text and halo alike); the map shows through

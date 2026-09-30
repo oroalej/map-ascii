@@ -283,6 +283,34 @@ describe('placeLabels with a gap', () => {
   });
 });
 
+describe('placeLabels by taken cells', () => {
+  it('places the same labels as checking every box taken', () => {
+    // A seeded mix of modes, lengths, and anchors, some off the grid, packed tight.
+    let seed = 7;
+    const rng = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    const words = ['A', 'BC', 'DEF', 'GHIJ', 'KLMNO', 'PQ RS', 'TUV WXY Z'];
+    const modes = ['beside', 'along', 'down'] as const;
+    const labels: LabelCandidate[] = Array.from({ length: 400 }, (_, id) => ({
+      id,
+      text: words[Math.floor(rng() * words.length)]!,
+      rank: Math.floor(rng() * 4),
+      col: Math.floor(rng() * 70) - 5,
+      row: Math.floor(rng() * 30) - 5,
+      mode: modes[Math.floor(rng() * modes.length)]!,
+    }));
+    for (const gap of [0, 1]) {
+      const byCells = createOverlay(60, 20);
+      const byBoxes = { ...createOverlay(60, 20), takenCells: undefined };
+      const area = { left: 1, top: 1, right: 59, bottom: 19 };
+      const a = placeLabels(byCells, labels, index, area, gap).map((l) => l.id);
+      const b = placeLabels(byBoxes, labels, index, area, gap).map((l) => l.id);
+      expect(a.length).toBeGreaterThan(10);
+      expect(a).toEqual(b);
+      expect([...byCells.glyphs]).toEqual([...byBoxes.glyphs]);
+    }
+  });
+});
+
 describe('packOverlay', () => {
   it('packs 16-bit glyph codes into RGBA texels', () => {
     const overlay = { ...createOverlay(1, 1), glyphs: Uint16Array.of(0x1234) };
