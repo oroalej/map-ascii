@@ -455,6 +455,7 @@ export class TileLife {
   private readonly along: Float64Array;
   /** Line ends by position: packed position → line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
+  private readonly curvable: Uint8Array;
   private time = 0;
   private junctions: { x: number; y: number; radius: number }[] = [];
 
@@ -485,6 +486,13 @@ export class TileLife {
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
       }
     }
+    this.curvable = new Uint8Array(lines);
+    for (let line = 0; line < lines; line++)
+      this.curvable[line] = Number(
+        this.last(line) - this.first(line) > 1 ||
+          (this.ends.get(this.endKey(this.first(line)))?.length ?? 0) > 1 ||
+          (this.ends.get(this.endKey(this.last(line)))?.length ?? 0) > 1,
+      );
     this.signals = new SignalControl(tile, geo, this.perMeter, this.along);
     this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
@@ -681,16 +689,25 @@ export class TileLife {
   pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }): Pose {
     const offset = this.offsetOf(m) * this.perMeter;
     Object.assign(out, { x: m.x - m.hy * offset, y: m.y + m.hx * offset, hx: m.hx, hy: m.hy });
-    if (!m.vehicle || m.train) return out;
-    const behind = this.corner(m, m.from);
+    if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
+    const reach = FILLET.maxM * this.perMeter;
+    const behind = m.d <= reach ? this.corner(m, m.from) : undefined;
     if (behind && m.d <= behind.length) return curvePose(behind, m.d, out);
-    const ahead = this.corner(m, m.from + m.dir);
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
+    const ahead = remaining <= reach ? this.corner(m, m.from + m.dir) : undefined;
     if (ahead && remaining <= ahead.length) return curvePose(ahead, -remaining, out);
     return out;
   }
 
   private curveTarget(m: Mover): number {
+    if (!this.curvable[m.line]) return m.speed;
+    if (
+      this.last(m.line) - this.first(m.line) === 1 &&
+      m.came === undefined &&
+      m.routing?.plan === undefined &&
+      m.next === undefined
+    )
+      return m.speed;
     const k = kinematicsOf(m.vehicle),
       pm = this.perMeter;
     let target = m.speed;
@@ -1695,6 +1712,10 @@ export class TileLife {
   /** Plan before speed restrictions, so waiting traffic keeps its original intention. */
   private prepareTurn(m: Mover, index: number) {
     if (!m.vehicle) return;
+    if (!this.curvable[m.line]) {
+      if (hasTurnSignals(m.vehicle)) m.routing ??= this.newRouting(index);
+      return;
+    }
     const vertex = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const progress = this.along[m.from]! + m.dir * m.d;
     const remaining = m.dir * (this.along[vertex]! - progress);
@@ -2063,6 +2084,7 @@ export class TileLife {
     clock: number,
     tileKey = '',
   ) {
+    if (!this.junctionIndex.junctions.length) return;
     for (let index = 0; index < this.movers.length; index++) {
       const m = this.movers[index]!;
       if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
@@ -2120,7 +2142,7 @@ export class TileLife {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
-      speeds[i] = m.vehicle ? this.curveTarget(m) : m.speed;
+      speeds[i] = m.speed;
       caps[i] = Infinity;
     }
     const limit = (i: number, j: number, separation: number) => {
@@ -2143,6 +2165,7 @@ export class TileLife {
       for (let k = 0; k < group.length; k++) {
         const i = group[k]!,
           m = movers[i]!;
+        speeds[i] = Math.min(speeds[i]!, this.curveTarget(m));
         let found = false;
         for (let n = k + 1; n < group.length; n++) {
           const j = group[n]!;
@@ -2178,7 +2201,7 @@ export class TileLife {
         const movement = table.movement(m);
         if (movement && !table.granted(m) && movement.ahead >= -0.05 * pm) {
           speeds[i] = Math.min(
-            speeds[i]!,
+            speeds[i],
             approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
           );
           caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
@@ -2243,10 +2266,9 @@ export class TileLife {
     for (const { i, m } of order) {
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
-      if (env?.levels && m.rank >= env.levels[m.kind]) continue;
+      if (m.vehicle && env?.levels && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
       if (m.kind === 'vehicle') {
-        this.prepareTurn(m, i);
         if (m.vehicle) {
           limit.target = speeds[i]!;
           limit.cap = this.caps[i]!;
@@ -2347,32 +2369,27 @@ export class TileLife {
             clock,
           ) / dt;
       }
-      const before = { ...m };
       if (m.vehicle) {
         this.motionStats.steps++;
-        if (
-          this.caps[i]! + 1e-9 <
-          nextSpeed(
-            m.v ?? m.speed,
-            speeds[i]!,
-            Infinity,
-            kinematicsOf(m.vehicle),
-            this.perMeter,
-            dt,
-          )
-        )
-          this.motionStats.hardCaps++;
-      }
-      if (m.vehicle)
-        speeds[i] = nextSpeed(
+        const next = nextSpeed(
           m.v ?? m.speed,
           speeds[i]!,
-          this.caps[i]!,
+          Infinity,
           kinematicsOf(m.vehicle),
           this.perMeter,
           dt,
         );
+        if (this.caps[i]! + 1e-9 < next) this.motionStats.hardCaps++;
+        speeds[i] = Math.min(next, this.caps[i]!);
+      }
       const distance = speeds[i]! * dt;
+      // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
+      if (m.vehicle && (!guard || m.kind !== 'vehicle')) {
+        m.v = this.advance(m, distance) / dt;
+        m.waiting = 0;
+        continue;
+      }
+      const before = { ...m };
       if (walking) {
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
@@ -3107,7 +3124,7 @@ export class LifeWorld {
     for (const tile of this.tiles.values()) {
       const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
-        (!shows || shows(m.kind)) &&
+        (m.kind === 'vehicle' || !shows || shows(m.kind)) &&
         near(m.x, m.y) &&
         (!env.levels || m.rank < env.levels[m.kind]) &&
         !tile.scenes.hidden(m);

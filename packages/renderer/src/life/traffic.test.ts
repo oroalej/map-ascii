@@ -74,7 +74,7 @@ describe('curved traffic', () => {
     for (let i = 0; i < 1000 && m.line === 0; i++) life.step(0.01);
     // 8m road, inner lane 2m: R = 10 - 2 = 8m.
     expect(m.line).toBe(1);
-    expect(m.v! / pm).toBeLessThanOrEqual(Math.sqrt(2.5 * 8) + 0.03);
+    expect(m.v / pm).toBeLessThanOrEqual(Math.sqrt(2.5 * 8) + 0.03);
   });
 
   it('retains the no-legal-exit one-way U-turn exception', () => {
