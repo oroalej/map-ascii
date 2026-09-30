@@ -161,6 +161,9 @@ export const step: Step = {
     const rail = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailRail));
     const sites = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailLife));
     const traffic = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailTraffic));
+    const neighborhood = await readOptional<OverpassResponse>(
+      join(rawDir, files.rawDetailNeighborhood),
+    );
     const detailRaw = await readJson<OverpassResponse>(join(rawDir, files.rawDetail));
     const detail: FeatureCollection = osmtogeojson(
       mergeResponses([
@@ -168,6 +171,7 @@ export const step: Step = {
         ...(rail ? [rail] : []),
         ...(sites ? [sites] : []),
         ...(traffic ? [traffic] : []),
+        ...(neighborhood ? [neighborhood] : []),
       ]),
     );
     await writeJson(join(buildDir, files.osm), detail);

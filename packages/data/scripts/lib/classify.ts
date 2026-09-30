@@ -1,5 +1,6 @@
 import type { AtlasClass, TileLayer } from '@atlas/shared';
 import { siteOfTags } from './life-sites';
+import { frontageOf } from './frontage';
 
 export type Tags = Readonly<Record<string, string | undefined>>;
 export type GeometryKind = 'point' | 'line' | 'area';
@@ -58,7 +59,14 @@ const PALM =
  * (OSM's `leaf_type` has no palm value), else its `leaf_type`, else unknown.
  */
 export function treeKind(tags: Tags): TreeKind | undefined {
-  const taxonomy = [tags.genus, tags.species, tags['species:en'], tags.taxon, tags['taxon:en']];
+  const taxonomy = [
+    tags.genus,
+    tags.species,
+    tags['species:en'],
+    tags.taxon,
+    tags['taxon:en'],
+    tags.trees,
+  ];
   if (taxonomy.some((value) => value !== undefined && PALM.test(value))) return 'palm';
   if (tags.leaf_type === 'needleleaved' || tags.leaf_type === 'broadleaved') return tags.leaf_type;
   return undefined;
@@ -102,6 +110,8 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
   if (atlasClass === 'furniture') {
     if (tags.highway === 'traffic_signals') return 'signals';
     if (markedCrossing(tags)) return 'crossing';
+    const frontage = frontageOf(tags);
+    if (frontage && frontage !== 'commercial') return `shop_${frontage}`;
     return (
       siteOfTags(tags)?.kind ??
       furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k)
@@ -143,6 +153,7 @@ export function classify(
   }
 
   if (kind === 'point') {
+    if (frontageOf(tags) && tags.atlas_in_building === 'yes') return null;
     if (tags.highway === 'traffic_signals' || markedCrossing(tags)) return 'furniture';
     if (oneOf(tags.place, ...placeLabels) && tags.name) return 'place_label';
     const building = buildingKind(tags);
@@ -150,6 +161,7 @@ export function classify(
     if (isMonument(tags)) return 'monument';
     if (tags.natural === 'tree') return 'tree';
     if (isFurniture(tags)) return 'furniture';
+    if (frontageOf(tags)) return 'furniture';
     if (tags.entrance !== undefined) return 'entrance';
     if (isBarrier(tags)) return 'barrier';
     return null;
@@ -176,7 +188,9 @@ export function classify(
   if (tags.natural === 'water' || tags.water !== undefined) return 'water_area';
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
-  if (tags.natural === 'wood' || tags.landuse === 'forest') return 'trees';
+  if (tags.natural === 'wood' || oneOf(tags.landuse, 'forest', 'orchard')) return 'trees';
+  if (oneOf(tags.natural, 'scrub', 'heath') || oneOf(tags.landuse, 'plant_nursery', 'cemetery'))
+    return 'grass';
   if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
   if (tags.natural === 'grassland' || tags.leisure === 'recreation_ground') return 'grass';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';

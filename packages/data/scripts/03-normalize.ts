@@ -36,6 +36,7 @@ import {
   type Tags,
 } from './lib/classify';
 import { parseOsmDate } from './lib/dates';
+import { assignFrontages, frontageOf, type Frontage } from './lib/frontage';
 import { markSite, siteOfTags } from './lib/life-sites';
 import { bboxesOverlap } from './lib/geo';
 import { readJson, writeFeatures, writeJson } from './lib/io';
@@ -47,6 +48,7 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  frontage?: Frontage;
   crossing_bearing?: number;
   crossing_width?: number;
   crossing_road?: AtlasClass;
@@ -191,7 +193,7 @@ export function normalize(
     derived: [],
   },
 ): { features: AtlasFeature[]; areas: Area[] } {
-  const detail = classifyAll(osm, subdivisionLevel);
+  const detail = classifyAll(assignFrontages(osm), subdivisionLevel);
   const detailIds = new Set(detail.map((c) => String(c.feature.id)));
   const regional = classifyAll(region.osm, subdivisionLevel).filter(
     (c) => !detailIds.has(String(c.feature.id)) && c.cls !== 'admin_subdivision',
@@ -227,6 +229,10 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
+    if (cls.startsWith('building')) {
+      const frontage = (tags.frontage as Frontage | undefined) ?? frontageOf(tags);
+      if (frontage) properties.frontage = frontage;
+    }
     if (tags.name) properties.name = tags.name;
     const featureKind = kindOf(tags);
     if (featureKind) properties.kind = featureKind;

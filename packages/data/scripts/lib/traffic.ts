@@ -44,7 +44,7 @@ export function roadJunctions(features: readonly AtlasFeature[]): Junction[] {
         const p = line[i]!;
         const vertex = vertices.get(key(p)) ?? { p, arms: [] };
         for (const j of [i - 1, i + 1])
-          if (line[j]) vertex.arms.push({ road, bearing: bearing(p, line[j]!), toward: line[j]! });
+          if (line[j]) vertex.arms.push({ road, bearing: bearing(p, line[j]), toward: line[j] });
         vertices.set(key(p), vertex);
       }
   }

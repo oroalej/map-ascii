@@ -96,6 +96,10 @@ out skel qt;`;
 export const trafficQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
 (node["highway"~"^(traffic_signals|crossing)$"]; node["crossing"]; node["crossing:markings"];);
 out body;`;
+export const neighborhoodQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(nwr["shop"]; nwr["amenity"~"^(restaurant|fast_food|cafe|bar|pub|food_court|ice_cream|pharmacy|bank|clinic|dentist|internet_cafe)$"];
+nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"];);
+out body; >; out skel qt;`;
 
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
@@ -232,6 +236,12 @@ export const step: Step = {
       cache,
     );
     console.log(`  traffic nodes: ${traffic.elements.length} elements`);
+    const neighborhood = await overpass(
+      neighborhoodQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailNeighborhood),
+      cache,
+    );
+    console.log(`  neighborhood: ${neighborhood.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {
