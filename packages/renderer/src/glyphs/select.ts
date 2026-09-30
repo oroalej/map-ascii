@@ -3,13 +3,7 @@
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
 import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
-import {
-  doubleWall,
-  sextantGlyphs,
-  singleWall,
-  type GlyphKind,
-  type Theme,
-} from '../theme';
+import { doubleWall, sextantGlyphs, singleWall, type GlyphKind, type Theme } from '../theme';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {

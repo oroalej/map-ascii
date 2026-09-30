@@ -208,4 +208,3 @@ export function zoomAroundClamped(
   const target = clamp(zoom, limits.minZoom, limits.maxZoom);
   return clampCamera(zoomAround(camera, target, anchor), limits);
 }
-
