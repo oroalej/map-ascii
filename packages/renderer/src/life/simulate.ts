@@ -73,6 +73,7 @@ import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
 import { JunctionIndex, JunctionTable } from './junctions';
+import { trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
@@ -120,7 +121,7 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
-export type StepPass = { junctions: JunctionTable };
+export type StepPass = { junctions: JunctionTable; trains?: ReadonlyMap<Mover, TrainLimit> };
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -1821,9 +1822,10 @@ export class TileLife {
   private moveTrain(m: Mover, distance: number) {
     const train = m.train!;
     const crumb = TRAIN.crumb * this.perMeter;
-    for (let left = distance; left > 0 && !train.reverse; left -= crumb) {
+    let moved = 0;
+    for (let left = distance; left > 0 && !train.reverse && !train.edge; left -= crumb) {
       const [px, py] = [m.x, m.y];
-      this.advance(m, Math.min(left, crumb));
+      moved += this.advance(m, Math.min(left, crumb));
       const [tx, ty] = train.trail.length ? [train.trail[0]!, train.trail[1]!] : [px, py];
       if (train.trail.length === 0 || Math.hypot(m.x - tx, m.y - ty) >= crumb) {
         train.trail.unshift(px, py);
@@ -1840,6 +1842,94 @@ export class TileLife {
       }
       length += Math.hypot(trail[i + 2]! - trail[i]!, trail[i + 3]! - trail[i + 1]!);
     }
+    return moved;
+  }
+
+  /** Pure rail projection using the same nearest-track tolerance as adoption. */
+  projectRail(m: Mover): Mover | undefined {
+    const c = this.geo.coords;
+    let best = TRAIN.handover * this.perMeter;
+    let result: Mover | undefined;
+    for (let line = 0; line < this.geo.kinds.length; line++) {
+      if (this.geo.kinds[line] !== LifeLine.rail) continue;
+      for (let v = this.first(line); v < this.last(line); v++) {
+        const x = c[v * 2]!,
+          y = c[v * 2 + 1]!,
+          dx = c[(v + 1) * 2]! - x,
+          dy = c[(v + 1) * 2 + 1]! - y;
+        const length = Math.hypot(dx, dy);
+        if (!length) continue;
+        const t = Math.max(0, Math.min(1, ((m.x - x) * dx + (m.y - y) * dy) / (length * length)));
+        const distance = Math.hypot(m.x - x - t * dx, m.y - y - t * dy);
+        if (distance > best || (result && distance === best)) continue;
+        best = distance;
+        const dir = m.hx * dx + m.hy * dy >= 0 ? 1 : -1;
+        result = {
+          ...m,
+          line,
+          from: dir === 1 ? v : v + 1,
+          dir,
+          d: (dir === 1 ? t : 1 - t) * length,
+          x: x + t * dx,
+          y: y + t * dy,
+          hx: (dir * dx) / length,
+          hy: (dir * dy) / length,
+        };
+      }
+    }
+    return result;
+  }
+
+  /** Walk a copied rail cursor without RNG, breadcrumbs, stops, or simulation mutation. */
+  trackAhead(m: Mover, reach: number, visit: (p: Pose & { distance: number }) => void) {
+    const cursor = { ...m },
+      c = this.geo.coords;
+    let distance = 0,
+      end = false,
+      edge = false;
+    const place = () => {
+      const to = cursor.from + cursor.dir,
+        length = this.segment(cursor.from, to);
+      cursor.hx = length ? (c[to * 2]! - c[cursor.from * 2]!) / length : cursor.hx;
+      cursor.hy = length ? (c[to * 2 + 1]! - c[cursor.from * 2 + 1]!) / length : cursor.hy;
+      cursor.x = c[cursor.from * 2]! + cursor.hx * cursor.d;
+      cursor.y = c[cursor.from * 2 + 1]! + cursor.hy * cursor.d;
+    };
+    place();
+    visit({ x: cursor.x, y: cursor.y, hx: cursor.hx, hy: cursor.hy, distance });
+    for (let guard = 0; guard < 2048 && distance < reach; guard++) {
+      const to = cursor.from + cursor.dir,
+        length = this.segment(cursor.from, to);
+      const step = Math.min(
+        TRAIN.crumb * this.perMeter,
+        reach - distance,
+        Math.max(0, length - cursor.d),
+      );
+      cursor.d += step;
+      distance += step;
+      place();
+      visit({ x: cursor.x, y: cursor.y, hx: cursor.hx, hy: cursor.hy, distance });
+      if (!inTile(cursor)) {
+        edge = true;
+        break;
+      }
+      if (cursor.d >= length - 1e-9) {
+        cursor.from = to;
+        cursor.d = 0;
+        if (to === (cursor.dir === 1 ? this.last(cursor.line) : this.first(cursor.line))) {
+          const options = this.exitOptions(cursor, to);
+          if (!options.length) {
+            end = true;
+            break;
+          }
+          const code = this.straightest(cursor, options);
+          cursor.line = code >> 1;
+          cursor.dir = code & 1 ? -1 : 1;
+          cursor.from = cursor.dir === 1 ? this.first(cursor.line) : this.last(cursor.line);
+        }
+      }
+    }
+    return { cursor, distance, end, edge };
   }
 
   /**
@@ -1920,7 +2010,7 @@ export class TileLife {
   }
 
   /** Whether a train has come to a station it hasn't just stopped at (and if so, stops there). */
-  private atStation(m: Mover): boolean {
+  private atStation(m: Mover, remaining: number): boolean {
     const train = m.train!;
     const { stations } = this.geo;
     const reach = TRAIN.stationReach * this.perMeter;
@@ -1930,6 +2020,7 @@ export class TileLife {
       return false;
     }
     train.stopX = train.stopY = NaN;
+    if (remaining > this.perMeter) return false;
     for (let i = 0; i < stations.length; i += 2) {
       if (Math.hypot(stations[i]! - m.x, stations[i + 1]! - m.y) <= reach) {
         train.stopX = m.x;
@@ -2138,6 +2229,7 @@ export class TileLife {
       table.resolve(clock);
     }
     const speeds = this.followLimits(dt, table);
+    const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movers
@@ -2176,15 +2268,31 @@ export class TileLife {
       if (m.train) {
         if (m.train.edge) continue;
         if (m.pause > 0) {
+          m.v = 0;
           m.pause -= dt;
           continue;
         }
-        if (m.train.reverse) this.reverseTrain(m);
-        if (this.atStation(m)) {
-          m.pause = between(rng, TRAIN.dwell);
+        if (m.train.reverse) {
+          this.reverseTrain(m);
+          m.v = 0;
           continue;
         }
-        this.moveTrain(m, m.speed * dt);
+        const trainLimit = trains.get(m) ?? { target: m.speed, cap: Infinity, station: Infinity };
+        if (this.atStation(m, trainLimit.station)) {
+          m.pause = between(rng, TRAIN.dwell);
+          m.v = 0;
+          continue;
+        }
+        const v = nextSpeed(
+          m.v ?? m.speed,
+          trainLimit.target,
+          trainLimit.cap,
+          kinematicsOf('locomotive'),
+          this.perMeter,
+          dt,
+        );
+        const moved = this.moveTrain(m, v * dt);
+        m.v = m.pause > 0 || m.train.reverse || m.train.edge ? 0 : moved / dt;
         continue;
       }
       if (m.kind === 'dog') {
@@ -3009,6 +3117,7 @@ export class LifeWorld {
     for (const [key, tile] of this.tiles)
       tile.requestJunctions(this.junctions, eligibility.get(tile)!, this.clock, key);
     this.junctions.resolve(this.clock);
+    const trains = trainLimits([...this.tiles.values()], clamped);
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
@@ -3016,6 +3125,7 @@ export class LifeWorld {
       const near = bounds && viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
+        trains,
       });
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.

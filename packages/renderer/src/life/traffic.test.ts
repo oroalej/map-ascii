@@ -88,6 +88,48 @@ describe('curved traffic', () => {
     expect(m.dir).toBe(-1); // Exactly one fallback at the deliberately unconnected flow.
     expect(m.routing?.turns).toBe(1);
   });
+  it('keeps vehicles in legal flow for 120 seconds on a connected one-way loop', () => {
+    const b = new LifeBuilder();
+    const points = [
+      { x: 800, y: 800 },
+      { x: 3000, y: 800 },
+      { x: 3000, y: 3000 },
+      { x: 800, y: 3000 },
+    ];
+    for (let i = 0; i < 4; i++) b.line([points[i]!, points[(i + 1) % 4]!], LifeLine.roadMajor, 12);
+    const geo = b.finish();
+    geo.oneway!.fill(1);
+    const life = new TileLife(tile, geo, 3);
+    life.parked.length = life.stalls.length = 0;
+    for (let frame = 0; frame < 120 * 30; frame++) {
+      life.step(1 / 30);
+      for (const m of life.movers) if (m.kind === 'vehicle') expect(m.dir).toBe(1);
+    }
+  });
+  it('queues behind a leader on the planned exit without compressing the bumper gap', () => {
+    const { life, m } = corner(true);
+    m.d = 90 * pm;
+    m.x = 1000 + m.d;
+    m.speed = m.v = 10 * pm;
+    const leader: Mover = {
+      ...m,
+      line: 1,
+      from: 2,
+      d: 10 * pm,
+      x: 1000 + 100 * pm,
+      y: 1000 + 10 * pm,
+      hx: 0,
+      hy: 1,
+      speed: 0,
+      v: 0,
+    };
+    life.movers.push(leader);
+    for (let frame = 0; frame < 600; frame++) {
+      life.step(0.1);
+      const separation = m.line === 0 ? 100 + leader.d / pm - m.d / pm : (leader.d - m.d) / pm;
+      expect(separation - 4.4).toBeGreaterThanOrEqual(FOLLOW.minGap - 1e-6);
+    }
+  });
 });
 
 describe('crossroads traffic', () => {
@@ -174,7 +216,10 @@ describe('crossroads traffic', () => {
             expect(Math.abs(other.d - m.d) / pm - 4.4).toBeGreaterThanOrEqual(FOLLOW.minGap - 1e-6);
         }
       }
-      if (frame === 60 * 30 - 1) expect(crossed.size).toBe(4);
+      if ((frame + 1) % (60 * 30) === 0) {
+        expect(crossed.size).toBe(4);
+        crossed.clear();
+      }
     }
     expect(maxWait).toBeLessThanOrEqual(50);
   }, 30000);
