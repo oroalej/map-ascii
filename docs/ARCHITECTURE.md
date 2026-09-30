@@ -6,7 +6,7 @@ The engine is city-agnostic. Everything specific to a city lives in its city pac
 
 ```
 ascii-atlas/
-├─ CLAUDE.md
+├─ AGENTS.md                  guide for coding agents (CLAUDE.md imports it)
 ├─ docs/                      SPEC, ARCHITECTURE, DATA, ROADMAP
 │  └─ cities/                 one brief per city (naga.md, …)
 ├─ package.json               root scripts (dev, data:build, test, lint, typecheck)

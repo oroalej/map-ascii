@@ -4,7 +4,7 @@ An engine for explorable, ASCII-rendered city maps. Each city zooms seamlessly f
 
 **First city:** Naga City, Camarines Sur, Philippines ([`docs/cities/naga.md`](docs/cities/naga.md)). More cities are added as city packs; see [`docs/DATA.md`](docs/DATA.md) §8, "Adding a city".
 
-> Status: Phase 0 (scaffold). See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: see the phases and the log in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Prerequisites
 
@@ -18,11 +18,16 @@ An engine for explorable, ASCII-rendered city maps. Each city zooms seamlessly f
 | `pnpm install` | Install all workspace dependencies |
 | `pnpm dev` | Run the web app at http://localhost:3000 |
 | `pnpm build` | Static export of the web app to `apps/web/out` |
-| `pnpm data:build` | Run the data pipeline (tiles, meta, and search index per city; `-- --city <slug>` from Phase 1) |
+| `pnpm data:build` | Run the data pipeline (tiles, meta, and search index per city; `-- --city <slug>` for one city) |
+| `pnpm data:publish` / `pnpm data:fetch` | Upload a city's tiles as a GitHub release and pin them in its `tiles.lock.json` / download the pinned tiles (`docs/DATA.md` §9) |
 | `pnpm test` | Unit tests (Vitest) |
 | `pnpm test:e2e` | Smoke tests (Playwright; run `pnpm --filter @atlas/web exec playwright install chromium` once) |
+| `pnpm check:budgets` | After `pnpm build`, check initial JS and tile sizes against the budgets |
+| `pnpm --filter @atlas/content validate` | Validate every city pack |
 | `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript |
 | `pnpm format` | Prettier |
+
+Working with coding agents (Claude Code, Codex): see [`AGENTS.md`](AGENTS.md).
 
 ## Layout
 

@@ -61,7 +61,7 @@ export default tseslint.config(
     settings: { next: { rootDir: 'apps/web' } },
   },
 
-  // The renderer is framework-agnostic: no React or Next (see CLAUDE.md).
+  // The renderer is framework-agnostic: no React or Next (see AGENTS.md).
   {
     files: ['packages/renderer/**/*.ts'],
     languageOptions: { globals: { ...globals.browser } },
