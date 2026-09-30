@@ -98,7 +98,7 @@ export function createMapGlyphs(
   font: string,
 ): MapGlyphs {
   const cellDev = toDevice(cellCss, dpr);
-  const atlas = buildGlyphAtlas(mapGlyphs(theme), cellDev.w, cellDev.h, font);
+  const atlas = buildGlyphAtlas(mapGlyphs(theme), cellDev.w, cellDev.h, font, 256);
   const atlasTex = createTexture(gl, gl.R8, gl.RED, atlas.width, atlas.height, atlas.data);
   const tables = buildGlyphTables(theme, atlas.index);
   const tableTex = createTexture(gl, gl.R8, gl.RED, MAX_VARIANTS, MAX_CLASSES, tables.table);

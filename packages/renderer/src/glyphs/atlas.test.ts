@@ -17,7 +17,7 @@ import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
 import { FIGURE_TONE, figureGlyph, figureOf, MIN_FIGURE_PX, personGlyphs } from '../life/people';
 import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
-import { drawProcedural, shadeCoverage } from './atlas';
+import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
 
 const W = 10;
 const H = 18;
@@ -37,6 +37,19 @@ function draw(glyph: string) {
 }
 
 describe('procedural glyphs', () => {
+  it('rejects a map atlas larger than its byte index before allocating a canvas', () => {
+    expect(() =>
+      buildGlyphAtlas(
+        Array.from({ length: 256 }, (_, i) => `g${i}`),
+        10,
+        18,
+        undefined,
+        256,
+      ),
+    ).toThrow('257 > 256');
+    for (const theme of Object.values(themes))
+      expect(mapGlyphs(theme).length).toBeLessThanOrEqual(256);
+  });
   it('draws every road glyph as shapes', () => {
     for (const g of [...singleLine, ...doubleLine]) expect(draw(g).drawn, g).toBe(true);
     expect(draw('~').drawn).toBe(false);

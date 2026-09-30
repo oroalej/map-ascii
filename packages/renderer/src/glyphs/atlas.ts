@@ -348,8 +348,11 @@ export function buildGlyphAtlas(
   cellWidth: number,
   cellHeight: number,
   font = DEFAULT_FONT,
+  maxGlyphs = 0xfffe,
 ): GlyphAtlas {
   const all = [' ', ...glyphs.filter((g) => g !== ' ')];
+  if (all.length > maxGlyphs)
+    throw new Error(`too many glyphs for the atlas: ${all.length} > ${maxGlyphs}`);
   // The overlay stores glyph index + 1 in 16 bits.
   if (all.length >= 0xffff) throw new Error(`too many glyphs for the atlas: ${all.length}`);
   const indices = new Map(all.map((g, i) => [g, i]));
