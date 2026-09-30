@@ -1,4 +1,4 @@
-/** Fixed-scene acceptance capture. Run after pnpm build against this checkout's static export. */
+/** Fixed-scene capture against this export. PERF_HEADLESS=false and PERF_BROWSER_CHANNEL=chrome allow a hardware-backed browser. */
 /* eslint-disable @typescript-eslint/unbound-method -- Native methods are reinstalled and called with their original GL receiver. */
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -11,7 +11,10 @@ const meta = JSON.parse(await readFile(`apps/web/public/tiles/${city.slug}.meta.
   defaultCamera: { lat: number; lng: number };
 };
 const camera = { ...meta.defaultCamera, zoom: 18 };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: process.env.PERF_HEADLESS !== 'false',
+  channel: process.env.PERF_BROWSER_CHANNEL,
+});
 const page = await browser.newPage({
   viewport: { width: 1920, height: 1080 },
   deviceScaleFactor: 1,
