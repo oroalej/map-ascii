@@ -431,6 +431,16 @@ describe('Landcover', () => {
     expect(Landcover.safeParse({ ...pack, credit: '' }).success).toBe(false);
   });
 
+  it('accepts shrub polygons without a tree kind', () => {
+    expect(
+      Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [{ ring, cover: 'shrubs' }] })
+        .success,
+    ).toBe(true);
+    expect(
+      Landcover.safeParse({ ...pack, areas: [{ ring, cover: 'shrubs', kind: 'palm' }] }).success,
+    ).toBe(false);
+  });
+
   it('rejects unclosed rings, unknown covers, and tree kinds on non-woods', () => {
     const open = { ring: ring.slice(0, 3).concat([[123.2, 13.7]]), cover: 'grass' };
     expect(Landcover.safeParse({ ...pack, areas: [open] }).success).toBe(false);

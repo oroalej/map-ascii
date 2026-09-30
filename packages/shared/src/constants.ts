@@ -42,6 +42,8 @@ export const ATLAS_CLASSES = [
   'pitch',
   'building_station',
   'paving',
+  'seating',
+  'shrubs',
 ] as const;
 
 /** The valid range of each camera field (the `CameraState` schema). */

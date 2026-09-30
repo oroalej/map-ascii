@@ -1,4 +1,5 @@
 import { SiteDetail } from '@atlas/shared';
+import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
@@ -51,14 +52,18 @@ describe('site details', () => {
     const seat = result.features.find((f) => f.properties.id === 'detail:test/seating-curve')!;
     expect(seat).toMatchObject({
       geometry: { type: 'MultiPolygon' },
-      properties: { height: 0.45, detail_blocked: true },
+      properties: { class: 'seating', height: 0.45, detail_blocked: true },
     });
     const anchors = result.features.filter((f) => f.properties.seat_bearing !== undefined);
     expect(anchors.length).toBeGreaterThan(1);
     expect(
       anchors.every((f) => f.properties.seat_bearing! > 90 && f.properties.seat_bearing! < 180),
     ).toBe(true);
-    expect(result.features.at(-1)!.properties).toMatchObject({ variant: 'lamp', lamp_heads: 3 });
+    expect(result.features.at(-1)!.properties).toMatchObject({
+      variant: 'lamp',
+      lamp_heads: 3,
+      lamp_style: 'streetlight',
+    });
     expect(result.features.map((f) => f.properties.id)).toEqual(
       mergeSiteDetails([parent], [detail]).features.map((f) => f.properties.id),
     );
@@ -121,6 +126,55 @@ describe('site details', () => {
     const xs = footprint.coordinates[0]![0]!.map((x) => x[0]! * m);
     expect(Math.min(...xs)).toBeCloseTo(9.5);
     expect(Math.max(...xs)).toBeCloseTo(15.5);
+  });
+
+  it('keeps closed seating footprints hollow and faces anchors outside raised beds', () => {
+    const ring = [p(15, 15), p(30, 15), p(30, 30), p(15, 30), p(15, 15)];
+    const footprint = seatingFootprint(ring, 0.65);
+    expect(footprint.coordinates).toHaveLength(1);
+    expect(footprint.coordinates[0]).toHaveLength(2);
+    expect(inside(p(22, 22), footprint)).toBe(false);
+    expect(inside(p(22, 15), footprint)).toBe(true);
+    const garden = { type: 'Polygon' as const, coordinates: [ring] };
+    const bed: AtlasFeature = {
+      ...parent,
+      properties: { id: 'cover:test/bed', class: 'grass', detail_blocked: true },
+      geometry: garden,
+    };
+    const closed = {
+      ...detail,
+      seating: [{ ...detail.seating[0]!, line: ring, facing: 'right' as const }],
+      lamps: [{ ...detail.lamps[0]!, style: 'lantern' as const }],
+    };
+    const result = mergeSiteDetails([parent, bed], [closed]);
+    const anchors = result.features.filter((f) => f.properties.seat_bearing !== undefined);
+    expect(anchors.length).toBeGreaterThan(8);
+    expect(
+      anchors.every((f) => f.geometry.type === 'Point' && !inside(f.geometry.coordinates, garden)),
+    ).toBe(true);
+    for (const anchor of anchors) {
+      if (anchor.geometry.type !== 'Point') throw new Error('expected point anchor');
+      const [x, y] = anchor.geometry.coordinates;
+      const angle = (anchor.properties.seat_bearing! * Math.PI) / 180;
+      expect((x! * m - 22.5) * Math.sin(angle) + (y! * m - 22.5) * Math.cos(angle)).toBeGreaterThan(
+        7.5,
+      );
+    }
+    expect(result.features.at(-1)!.properties.lamp_style).toBe('lantern');
+    expect(() =>
+      mergeSiteDetails(
+        [parent, bed],
+        [{ ...closed, walks: [{ id: 'inside', line: [p(10, 22), p(35, 22)], width_m: 2 }] }],
+      ),
+    ).toThrow('crosses');
+  });
+
+  it('defaults legacy lamps to streetlights and rejects unknown styles', () => {
+    const legacy = { ...detail.lamps[0]!, style: undefined };
+    expect(SiteDetail.parse({ ...detail, lamps: [legacy] }).lamps[0]!.style).toBe('streetlight');
+    expect(
+      SiteDetail.safeParse({ ...detail, lamps: [{ ...legacy, style: 'floodlight' }] }).success,
+    ).toBe(false);
   });
 
   it('rejects duplicate item ids, empty credits, zero dimensions, and degenerate lines', () => {

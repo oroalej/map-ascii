@@ -160,6 +160,8 @@ export const subcellClasses: readonly RenderClass[] = [
   'parking',
   'pitch',
   'paving',
+  'seating',
+  'shrubs',
 ];
 
 /** Per class id, 1 for `subcellClasses`, for the select shader (ids past 31 included). */

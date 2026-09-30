@@ -29,6 +29,14 @@ describe('classVisibility', () => {
     expect(at(13, 'building')).toBe(1);
   });
 
+  it('reveals stone edges and shrubs at their detail zooms', () => {
+    expect(at(17.4, 'seating')).toBe(0);
+    expect(at(18, 'seating')).toBe(1);
+    expect(at(18.4, 'shrubs')).toBe(0);
+    expect(at(18.75, 'shrubs')).toBeCloseTo(0.5);
+    expect(at(19, 'shrubs')).toBe(1);
+  });
+
   it('fades a class out after its band ends', () => {
     expect(at(9, 'terrain')).toBe(1);
     expect(at(9.75, 'terrain')).toBeCloseTo(0.5);

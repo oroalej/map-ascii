@@ -58,6 +58,45 @@ const cells = (out: Uint8Array) => {
 };
 
 describe('street fixtures', () => {
+  it('draws compact three-head lantern clusters with one shared post', () => {
+    const lanterns: StreetFixture[] = [0, 1, 2].map((i) => {
+      const angle = (i * Math.PI * 2) / 3;
+      const dx = Math.sin(angle),
+        dy = -Math.cos(angle);
+      return {
+        ...lamp,
+        site: true,
+        style: 'lantern',
+        tip: [40.5 + 2 * dx, 40.5 + 2 * dy],
+        forward: [40.5 + dx, 40.5 + dy],
+        right: [40.5 - dy, 40.5 + dx],
+      };
+    });
+    expect(cells(pack(lanterns, 17.9).texels)).toHaveLength(0);
+    const result = cells(pack(lanterns).texels);
+    expect(result.filter((c) => c.part === FixturePart.base)).toHaveLength(1);
+    expect(result.filter((c) => c.part === FixturePart.lamp)).toHaveLength(3);
+    expect(
+      result.filter((c) => c.part === FixturePart.lamp).every((c) => c.glyph === glyph('*')),
+    ).toBe(true);
+    const cols = result.map((c) => (c.at / 4) % grid.cols);
+    const rows = result.map((c) => Math.floor(c.at / 4 / grid.cols));
+    expect(Math.max(...cols) - Math.min(...cols)).toBeLessThanOrEqual(6);
+    expect(Math.max(...rows) - Math.min(...rows)).toBeLessThanOrEqual(6);
+    expect(result.every((c) => c.info === lightByte(lamp.state, lamp.seed))).toBe(true);
+    expect(pack([{ ...lamp, style: 'streetlight' }]).texels).toEqual(pack([lamp]).texels);
+  });
+
+  it('keeps missing style bytes compatible with legacy worker geometry', () => {
+    const builder = new LifeBuilder();
+    builder.addLamps([1000, 1000, LampState.working, 3, 1001, 1000, 1000, 1000]);
+    const geometry = builder.finish();
+    geometry.lampStyles = undefined;
+    const fixtures = tileFixtures({ z: 16, x: 55209, y: 30264 }, geometry);
+    expect(fixtures).toHaveLength(1);
+    expect(fixtures[0]).toMatchObject({ kind: 'streetlight', style: 'streetlight', site: false });
+  });
+
   it('keeps compact symbols, then reveals supports, housing, and separate lenses', () => {
     expect(cells(pack([lamp], 16).texels)).toHaveLength(1);
     expect(cells(pack([signal], 17).texels)).toHaveLength(1);

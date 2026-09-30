@@ -31,8 +31,15 @@ describe('outdoor site detail', () => {
     expect(() => [roadMask(), seeThroughMask()]).not.toThrow();
     expect(subcellAreas()[classId('paving')]).toBe(1);
     const depths = classDepths();
-    for (const name of ['grass', 'building_part', 'tree_crown', 'furniture'])
+    for (const name of ['grass', 'building_part', 'tree_crown', 'furniture', 'seating', 'shrubs'])
       expect(depths[classId(name)]).toBeLessThan(depths[classId('paving')]!);
+    expect(classId('paving')).toBe(37);
+    for (const name of ['seating', 'shrubs']) {
+      expect(classId(name)).toBeGreaterThan(37);
+      expect(subcellAreas()[classId(name)]).toBe(1);
+      expect(depths[classId('tree_crown')]).toBeLessThan(depths[classId(name)]!);
+      expect(depths[classId(name)]).toBeLessThan(depths[classId('grass')]!);
+    }
     expect(groundDepth()).toBeGreaterThan(depths[classId('paving')]!);
   });
 
@@ -53,7 +60,7 @@ describe('outdoor site detail', () => {
           [300, 200],
         ],
       ]),
-      f(3, { id: 'detail:test/seat', class: 'building_part', height: 0.45, detail_blocked: true }, [
+      f(3, { id: 'detail:test/seat', class: 'seating', height: 0.45, detail_blocked: true }, [
         [
           [300, 400],
           [600, 400],
@@ -85,7 +92,7 @@ describe('outdoor site detail', () => {
     expect(blocked.hits([{ x: 290, y: 300, hx: 1, hy: 0, length: 40, width: 20 }])).toBe(true);
     expect(blocked.hits([{ x: 100, y: 100, hx: 1, hy: 0, length: 40, width: 20 }])).toBe(false);
     const seatHeights = Array.from(result.fills.meta).filter(
-      (_, i) => i % 4 === 1 && result.fills.meta[i - 1] === classId('building_part'),
+      (_, i) => i % 4 === 1 && result.fills.meta[i - 1] === classId('seating'),
     );
     expect(seatHeights.every((h) => h === 1)).toBe(true);
   });
@@ -99,6 +106,7 @@ describe('outdoor site detail', () => {
         variant: 'lamp',
         lamp_heads: 3,
         lamp_reach: 0.7,
+        lamp_style: 'lantern',
       },
       [[[1000, 1000]]],
     );
@@ -111,8 +119,13 @@ describe('outdoor site detail', () => {
     const geometry = build(lamp).life;
     expect(geometry.lamps).toHaveLength(24);
     expect(Array.from(geometry.lampSites!)).toEqual([1, 1, 1]);
+    expect(Array.from(geometry.lampStyles!)).toEqual([1, 1, 1]);
     expect(lifeTransferables(geometry)).toContain(geometry.lampSites!.buffer);
+    expect(lifeTransferables(geometry)).toContain(geometry.lampStyles!.buffer);
     expect(tileFixtures(tile, geometry)).toHaveLength(3);
+    expect(
+      tileFixtures(tile, geometry).every((f) => f.kind === 'streetlight' && f.style === 'lantern'),
+    ).toBe(true);
     const neighbor = build(f(1, lamp.properties, [[[-10, 1000]]])).life;
     expect(tileFixtures(tile, neighbor)).toHaveLength(0);
     const fixtures = tileFixtures(tile, geometry);
@@ -144,5 +157,27 @@ describe('outdoor site detail', () => {
     const legacy = make();
     expect(legacy.every((g) => g.y === 1000)).toBe(true);
     expect(legacy.every((g) => g.hx === 1 && g.hy === 0)).toBe(true);
+  });
+
+  it('keeps shrubs out of tree geometry, roosts and pedestrian routes', () => {
+    const shrub = f(3, { id: 'cover:test/shrub', class: 'shrubs', detail_blocked: true }, [
+      [
+        [100, 100],
+        [300, 100],
+        [300, 300],
+        [100, 300],
+        [100, 100],
+      ],
+    ]);
+    const result = buildTileGeometry(
+      { landuse: { extent: EXTENT, length: 1, feature: () => shrub } },
+      createIdRegistry(),
+      tile,
+    );
+    expect(result.crowns.positions.length).toBe(0);
+    expect(result.points.positions.length).toBe(0);
+    expect(result.life.roosts.length).toBe(0);
+    expect(result.life.kinds.length).toBe(0);
+    expect(result.life.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(1);
   });
 });

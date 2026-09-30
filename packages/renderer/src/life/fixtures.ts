@@ -18,7 +18,13 @@ type Point = [number, number];
 type FixtureBody = { base: Point; tip: Point; forward: Point; right: Point; seed: number };
 export type StreetFixture = FixtureBody &
   (
-    | { kind: 'streetlight'; state: LampState; roadCenter: Point; site?: boolean }
+    | {
+        kind: 'streetlight';
+        state: LampState;
+        roadCenter: Point;
+        site?: boolean;
+        style?: 'streetlight' | 'lantern';
+      }
     | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
   );
 export type FixtureVisibility = { streetlights: boolean; trafficSignals: boolean };
@@ -84,6 +90,7 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
       ...fixture,
       kind: 'streetlight',
       site: geo.lampSites?.[i / LAMP_STRIDE] === 1,
+      style: geo.lampStyles?.[i / LAMP_STRIDE] === 1 ? 'lantern' : 'streetlight',
       state: geo.lamps[i + 2]! as LampState,
       seed: geo.lamps[i + 3]!,
       roadCenter: tileToLngLat(tile, { x: geo.lamps[i + 6]!, y: geo.lamps[i + 7]! }),
@@ -170,13 +177,21 @@ export function packFixtures(
     visibility: { streetlights: false, trafficSignals: false },
     signals: [],
   };
-  // Signal lenses own their cells before streetlight arms. Never join two separate fixtures.
+  // Signal lenses own their cells before streetlight arms. Only heads on the same authored
+  // lantern post share hardware ownership, so their short brackets may meet at the base.
   const ordered = [
     ...fixtures.filter((f) => f.kind === 'signal'),
     ...fixtures.filter((f) => f.kind === 'streetlight'),
   ];
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
-  for (const [owner, fixture] of ordered.entries()) {
+  const posts = new Map<string, number>();
+  for (const [index, fixture] of ordered.entries()) {
+    let owner = index;
+    if (fixture.kind === 'streetlight' && fixture.site && fixture.style === 'lantern') {
+      const key = fixture.base.join(',');
+      owner = posts.get(key) ?? index;
+      posts.set(key, owner);
+    }
     const min = fixture.kind === 'streetlight' ? (fixture.site ? 18 : 15) : 17;
     if (zoom < min) continue;
     const opacity = bandVisibility({ min }, zoom);
@@ -271,15 +286,18 @@ export function packFixtures(
         fixture.kind === 'streetlight' ? FixturePart.lamp : FixturePart.signal,
       );
     } else {
-      const long = Math.max(
-        fixture.kind === 'streetlight' ? 1.2 * length : 2.2 * length,
-        fixture.kind === 'streetlight' ? 2 : 5,
-      );
+      const lantern = fixture.kind === 'streetlight' && fixture.style === 'lantern';
+      const long = lantern
+        ? Math.max(0.45 * length, 1.1)
+        : Math.max(
+            fixture.kind === 'streetlight' ? 1.2 * length : 2.2 * length,
+            fixture.kind === 'streetlight' ? 2 : 5,
+          );
       // Leave a visible casing on either side of the lens/glass strip at close zoom.
-      const wide = Math.max(0.65 * breadth, 2.1);
+      const wide = lantern ? Math.max(0.45 * breadth, 1.1) : Math.max(0.65 * breadth, 2.1);
       const arm: Point = [tip[0] - base[0], tip[1] - base[1]];
       const reach = Math.hypot(...arm);
-      const armScale = reach > 0 ? Math.max(1, (long / 2 + 1.5) / reach) : 0;
+      const armScale = reach > 0 ? Math.max(1, (long / 2 + (lantern ? 0.65 : 1.5)) / reach) : 0;
       const head: Point = [base[0] + arm[0] * armScale, base[1] + arm[1] * armScale];
       line(base, head, FixturePart.arm);
       write(...base, '▪', FixturePart.base);
@@ -326,12 +344,16 @@ export function packFixtures(
         }
       }
       if (fixture.kind === 'streetlight') {
-        const spacing = Math.max(0.5, (long - 1) / 2);
-        line(
-          [cx - a[0] * spacing, cy - a[1] * spacing],
-          [cx + a[0] * spacing, cy + a[1] * spacing],
-          FixturePart.lamp,
-        );
+        if (lantern) {
+          write(cx, cy, '*', FixturePart.lamp);
+        } else {
+          const spacing = Math.max(0.5, (long - 1) / 2);
+          line(
+            [cx - a[0] * spacing, cy - a[1] * spacing],
+            [cx + a[0] * spacing, cy + a[1] * spacing],
+            FixturePart.lamp,
+          );
+        }
       } else {
         // Three separate lens glyphs; darkness of the inactive lenses distinguishes the phase.
         const pitch = Math.max(1.1, (long - 2) / 3);

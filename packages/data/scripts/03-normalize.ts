@@ -56,6 +56,7 @@ export type AtlasProperties = {
   lamp_bearing?: number;
   lamp_reach?: number;
   lamp_heads?: number;
+  lamp_style?: 'streetlight' | 'lantern';
   sidewalk?: 'both' | 'left' | 'right' | 'none';
   sidewalk_width?: number;
   sidewalk_left_width?: number;

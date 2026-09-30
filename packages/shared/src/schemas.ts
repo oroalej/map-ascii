@@ -232,8 +232,8 @@ export const CuratedTree = z.strictObject({ at: LngLat, ...treeShape });
 /** A curated line of trees, drawn a crown every crown's width (`Landcover`). */
 export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
 
-/** What a curated area is: its atlas class is `grass`, `parking`, or `trees` (woods). */
-export const LandCover = z.enum(['grass', 'parking', 'woods']);
+/** A curated ground cover; woods use the atlas `trees` class. */
+export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs']);
 export type LandCover = z.infer<typeof LandCover>;
 
 /**
@@ -302,6 +302,7 @@ export const SiteDetail = z
           bearing: z.number().min(0).lt(360),
           reach_m: z.number().positive().max(3),
           heads: z.int().min(1).max(4),
+          style: z.enum(['streetlight', 'lantern']).default('streetlight'),
         }),
       )
       .default([]),
@@ -522,7 +523,7 @@ export function contentSchemas(languages?: readonly string[]) {
     );
 
   /**
-   * Trees and land cover (grass, parking, woods) that OSM doesn't have yet, traced from imagery
+   * Trees and land cover (grass, parking, woods, shrubs) that OSM doesn't have yet, traced from imagery
    * (DATA.md §2 step 04). The pipeline adds them as features of their atlas class and drops a
    * tree once OSM maps one at the same spot. `credit` is shown with the map attribution;
    * `status` stays `draft` until someone has checked the tracing on the ground or against

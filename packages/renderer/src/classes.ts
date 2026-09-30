@@ -112,6 +112,8 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['water_area', 'water_sea'],
   // Baseline crown depth. The crown pass overrides it over roads and lower roofs.
   ['tree_crown'],
+  ['seating'],
+  ['shrubs'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
   // Under the parks, woods, and fields drawn on it.
   ['grass'],

@@ -127,6 +127,8 @@ export type LifeGeometry = {
   lamps: Float32Array;
   /** One byte per lamp: 1 for sourced plaza hardware (appears at furniture zoom). */
   lampSites?: Uint8Array;
+  /** One byte per lamp head: 0 streetlight (legacy default), 1 lantern. */
+  lampStyles?: Uint8Array;
   /** Floodlit landmarks: center x, y and radius (tile units; life/lights.ts `FLOOD_STRIDE`). */
   floods: Float32Array;
   /** Shops and markets, lit while open: center x, y and radius (tile units, `SHOP_STRIDE`). */
@@ -206,6 +208,7 @@ export class LifeBuilder {
   private markets: number[] = [];
   private lamps: number[] = [];
   private lampSites: number[] = [];
+  private lampStyles: number[] = [];
   private floods: number[] = [];
   private shops: number[] = [];
   private places: number[] = [];
@@ -257,9 +260,14 @@ export class LifeBuilder {
   }
 
   /** Streetlights (life/lights.ts `placeTileLamps`, `LAMP_STRIDE` floats each). */
-  addLamps(values: readonly number[], site = false) {
+  addLamps(
+    values: readonly number[],
+    site = false,
+    style: 'streetlight' | 'lantern' = 'streetlight',
+  ) {
     for (const v of values) this.lamps.push(v);
     for (let i = 0; i < values.length; i += 8) this.lampSites.push(site ? 1 : 0);
+    for (let i = 0; i < values.length; i += 8) this.lampStyles.push(style === 'lantern' ? 1 : 0);
   }
 
   /** A floodlit landmark centered at `p`, `radius` tile units across. */
@@ -306,6 +314,7 @@ export class LifeBuilder {
       markets: Float32Array.from(this.markets),
       lamps: Float32Array.from(this.lamps),
       lampSites: Uint8Array.from(this.lampSites),
+      lampStyles: Uint8Array.from(this.lampStyles),
       floods: Float32Array.from(this.floods),
       shops: Float32Array.from(this.shops),
       places: Float32Array.from(this.places),
@@ -316,6 +325,7 @@ export class LifeBuilder {
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   ...(g.lampSites ? [g.lampSites.buffer as ArrayBuffer] : []),
+  ...(g.lampStyles ? [g.lampStyles.buffer as ArrayBuffer] : []),
   ...(g.seatBearings ? [g.seatBearings.buffer as ArrayBuffer] : []),
   ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),

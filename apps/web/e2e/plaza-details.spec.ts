@@ -1,9 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
+import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
 
-test.use({ reducedMotion: 'no-preference' });
+// A compact viewport keeps the legend collapsed and software rendering bounded. Enable
+// animation only for the Life-on check, after the map has loaded.
+test.use({ viewport: { width: 600, height: 600 }, reducedMotion: 'reduce' });
 
 for (const city of cities.filter((city) => city.hasMeta)) {
   const directory = new URL(
@@ -35,13 +38,22 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       await expect
         .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
         .toBeGreaterThan(MIN_DRAWN);
-      await expect(page.locator('footer')).toContainText(detail.credit);
+      const response = await page.request.get(`/tiles/${city.slug}.meta.json`);
+      expect(response.ok()).toBe(true);
+      const meta: unknown = await response.json();
+      if (!isCityMeta(meta)) throw new Error(`${city.slug}: invalid served city meta`);
+      // A pinned release can predate the detail pack. Check selection on both the original OSM
+      // area and its enriched replacement; detail attribution is required when that layer ships.
+      if (meta.attribution.includes(detail.credit)) {
+        await expect(page.locator('footer')).toContainText(detail.credit);
+      }
       const box = (await canvas.boundingBox())!;
       const position = { x: box.width / 2, y: box.height / 2 };
       const life = page.getByRole('button', { name: 'Life', exact: true });
       await expect(life).toHaveAttribute('aria-pressed', 'false');
       for (const enabled of [false, true]) {
         if (enabled) {
+          await page.emulateMedia({ reducedMotion: 'no-preference' });
           await life.click();
           await expect(life).toHaveAttribute('aria-pressed', 'true');
         }
@@ -56,6 +68,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         await expect(page.getByRole('complementary', { name: 'Selected place' })).toBeVisible();
         await page.keyboard.press('Escape');
       }
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       await info.attach('plaza-detail', { body: await mapShot(canvas), contentType: 'image/png' });
       expect(errors).toEqual([]);
     });

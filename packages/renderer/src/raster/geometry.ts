@@ -851,7 +851,11 @@ export function buildTileGeometry(
                     180;
                   const x = p.x + Math.sin(angle) * reach,
                     y = p.y - Math.cos(angle) * reach;
-                  life.addLamps([p.x, p.y, LampState.working, seed, x, y, p.x, p.y], true);
+                  life.addLamps(
+                    [p.x, p.y, LampState.working, seed, x, y, p.x, p.y],
+                    true,
+                    feature.properties.lamp_style === 'lantern' ? 'lantern' : 'streetlight',
+                  );
                 }
               }
               continue;

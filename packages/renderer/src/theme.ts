@@ -265,6 +265,13 @@ function makeTheme(background: number, c: Palette): Theme {
       building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
       park: { kind: 'grass', glyphs: grassGlyphs, color: c.park, fill: 0.12 },
       paving: { kind: 'scatter', glyphs: [' ', ' ', ' ', '·'], color: c.furniture, fill: 0.14 },
+      seating: {
+        kind: 'single',
+        glyphs: ['░'],
+        color: background > 0x7fffff ? 0x676d70 : 0xb8bec2,
+        fill: 0.3,
+      },
+      shrubs: { kind: 'scatter', glyphs: ['%', '*', '%'], color: c.trees, fill: 0.25 },
       grass: { kind: 'grass', glyphs: grassGlyphs, color: c.grass, fill: 0.08 },
       trees: {
         kind: 'canopy',
@@ -448,6 +455,8 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building_part: 'Landmark part',
   park: 'Park or plaza',
   paving: 'Paved plaza',
+  seating: 'Stone seating or planter edge',
+  shrubs: 'Shrubs',
   trees: 'Woods',
   grass: 'Grass',
   tree_crown: 'Tree',

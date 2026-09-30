@@ -142,7 +142,7 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
       requireInside(shape.coordinates.flat(2), `seating ${seat.id}`);
       features.push(
         feature(`${prefix}/seating-${seat.id}`, shape, {
-          class: 'building_part',
+          class: 'seating',
           height: seat.height_m,
           variant: 'seating',
           detail_blocked: true,
@@ -213,6 +213,7 @@ export function mergeSiteDetails(input: AtlasFeature[], packs: readonly SiteDeta
             lamp_bearing: lamp.bearing,
             lamp_reach: lamp.reach_m,
             lamp_heads: lamp.heads,
+            lamp_style: lamp.style,
           },
         ),
       );
