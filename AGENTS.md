@@ -54,6 +54,14 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 - Rerun a failing e2e test with `--last-failed`, not the whole spec.
 - Report which checks ran and which were left to CI.
 
+## Implementing a handed-off plan
+
+Sometimes you're given a handoff file written by another agent, in `.plans/<topic>-handoff.md` (gitignored, never committed).
+
+- Implement only what its steps list, in their order, and keep its invariants. Put anything else worth doing in your summary instead of doing it.
+- If the code doesn't match the handoff's "verified current state", or a "stop and report" condition is met, stop at that step and report it. Don't improvise a different design.
+- Run its verification commands, follow its commit instructions, and answer its "report back" items.
+
 ## Conventions
 
 - TypeScript strict everywhere; no `any` without a comment explaining why.
