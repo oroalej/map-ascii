@@ -2,6 +2,7 @@
 
 import type { AtlasProfile, AtlasStats } from '@atlas/renderer';
 import { useEffect, useRef, useState } from 'react';
+import { debugCaptureMs } from '@/lib/debug';
 import { useAtlasInstance } from '@/state/store';
 import { useLifeStore } from '@/state/life';
 import styles from './DebugStats.module.css';
@@ -26,23 +27,20 @@ export default function DebugStatsPanel() {
     return () => {
       clearInterval(timer);
       clearTimeout(captureTimer.current);
+      setCapturing(false);
     };
   }, [atlas]);
 
   if (!stats) return null;
+  const duration = debugCaptureMs();
   const metadata = () => {
-    const canvas = document.querySelector('canvas');
-    const gl = canvas?.getContext('webgl2');
-    const ext = gl?.getExtension('WEBGL_debug_renderer_info');
-    const backend: string | null = ext
-      ? (gl!.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string)
-      : null;
+    const backend = atlas?.getProfile()?.gpuRenderer ?? null;
     return {
       at: new Date().toISOString(),
       city: window.location.pathname,
       viewport: {
-        width: canvas?.clientWidth,
-        height: canvas?.clientHeight,
+        width: window.innerWidth,
+        height: window.innerHeight,
         dpr: window.devicePixelRatio,
       },
       camera: atlas?.getCamera(),
@@ -79,7 +77,7 @@ export default function DebugStatsPanel() {
         stats: atlas?.getStats(),
       };
       setCapturing(false);
-    }, 30_000);
+    }, duration);
   };
   const download = () => {
     const blob = new Blob(
@@ -114,7 +112,7 @@ export default function DebugStatsPanel() {
           Reset profile
         </button>
         <button type="button" onClick={capture} disabled={capturing}>
-          {capturing ? 'Capturing…' : 'Capture 30 seconds'}
+          {capturing ? 'Capturing…' : `Capture ${Math.round(duration / 1000)} seconds`}
         </button>
         <button type="button" onClick={download} disabled={!profile}>
           Download profile
@@ -122,12 +120,17 @@ export default function DebugStatsPanel() {
       </div>
       {profile && (
         <pre aria-hidden="true">
-          {Object.entries(profile.stages)
-            .map(
+          {[
+            ...(profile.dropped > 0
+              ? [
+                  `window ${(profile.spanMs / 1000).toFixed(1)} s (${profile.dropped} samples dropped)`,
+                ]
+              : []),
+            ...Object.entries(profile.stages).map(
               ([name, s]) =>
                 `${name.padEnd(16)} ${s.medianMs?.toFixed(2) ?? 'n/a'} / ${s.p95Ms?.toFixed(2) ?? 'n/a'} ms (${s.count})`,
-            )
-            .join('\n')}
+            ),
+          ].join('\n')}
         </pre>
       )}
     </div>

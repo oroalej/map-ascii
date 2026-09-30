@@ -3,9 +3,11 @@ import { chromium, type Browser } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync, spawn } from 'node:child_process';
 import { cpus, release } from 'node:os';
+import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cities } from '../e2e/helpers';
+// This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -13,7 +15,10 @@ const port = Number(process.env.E2E_PORT ?? 3198);
 const city = cities.find((c) => c.hasMeta);
 if (!city) throw new Error('Build city tiles before capturing a profile');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_PORT');
-const serve = fileURLToPath(new URL('../node_modules/serve/build/main.js', import.meta.url));
+const require = createRequire(import.meta.url);
+const pkg = require.resolve('serve/package.json');
+const { bin } = require('serve/package.json') as { bin: string | Record<string, string> };
+const serve = resolve(dirname(pkg), typeof bin === 'string' ? bin : bin.serve!);
 const expected = await readFile(resolve(root, 'apps/web/out', `${city.slug}.html`), 'utf8');
 const server = spawn(process.execPath, [serve, 'out', '-l', String(port)], {
   cwd: resolve(root, 'apps/web'),

@@ -25,7 +25,10 @@ import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
 
 // WebGL starts on the client; load its engine separately from the HUD and page content.
-const AtlasCanvas = dynamic(() => import('./AtlasCanvas').then((m) => m.AtlasCanvas), {
+const loadCanvas = () => import('./AtlasCanvas');
+// Start the renderer download in parallel with hydration when this module runs in the browser.
+if (typeof window !== 'undefined') void loadCanvas();
+const AtlasCanvas = dynamic(() => loadCanvas().then((m) => m.AtlasCanvas), {
   ssr: false,
 });
 

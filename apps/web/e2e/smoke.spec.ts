@@ -219,22 +219,26 @@ for (const city of cities) {
       });
 
       test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
-        await page.goto(`/${city.slug}?debug=1&z=18`);
+        await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
         await mapReady(page);
-        await page.getByRole('button', { name: 'Capture 30 seconds', exact: true }).click();
+        await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
         const button = page.getByRole('button', { name: 'Download profile', exact: true });
-        await expect(button).toBeEnabled({ timeout: 35_000 });
+        await expect(button).toBeEnabled({ timeout: 5_000 });
         const downloading = page.waitForEvent('download');
         await button.click();
         const download = await downloading;
         const report = JSON.parse(await readFile(await download.path(), 'utf8')) as {
           version: number;
-          start: { city: string; viewport: { dpr: number } };
+          start: { city: string; viewport: { dpr: number }; gpuBackend: string | null };
           profile: AtlasProfile;
         };
         expect(report.version).toBe(1);
         expect(report.start.city).toBe(`/${city.slug}`);
         expect(report.start.viewport.dpr).toBeGreaterThan(0);
+        expect(report.start).toHaveProperty('gpuBackend');
+        expect(report.profile.gpuRenderer).toBe(report.start.gpuBackend);
+        expect(report.profile.dropped).toBe(0);
+        expect(report.profile.spanMs).toBeGreaterThan(0);
         expect(report.profile.samples.length).toBeGreaterThan(0);
         expect(report.profile.samples.length).toBeLessThanOrEqual(4096);
         expect(report.profile.stages.callback.medianMs).not.toBeNull();

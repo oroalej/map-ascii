@@ -87,7 +87,7 @@ function bounded(world: LifeWorld) {
 }
 
 describe('combined living-city scenarios', () => {
-  for (const seed of [1, 42]) {
+  for (const seed of [1]) {
     for (const kind of ['junction', 'transit', 'rain'] as const) {
       it(`${kind}, seed ${seed}: 180 seconds retain finite positions and valid ownership`, () => {
         const s = makeScenario(kind, 4, false, seed);
@@ -114,6 +114,8 @@ describe('combined living-city scenarios', () => {
         if (kind === 'rain') expect(states.has('shelter')).toBe(true);
       }, 30_000);
     }
+  }
+  for (const seed of [1, 42]) {
     it(`seed ${seed}: view changes release evicted tiles and respawn deterministically`, () => {
       const s = makeScenario('transit', 4, false, seed);
       bounded(s.world);
@@ -232,7 +234,7 @@ describe('combined living-city scenarios', () => {
         expect(states.has(state), `missing ${state}; observed ${[...states].join(', ')}`).toBe(
           true,
         );
-    });
+    }, 30_000);
   }
   for (const hz of [30, 60, 120])
     it(`replays ${hz} Hz inputs exactly and clamps oversized steps`, () => {

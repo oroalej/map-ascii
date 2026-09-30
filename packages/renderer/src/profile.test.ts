@@ -18,6 +18,9 @@ describe('bounded frame profiles', () => {
     expect(report.stages.visible.count).toBe(0);
     expect(report.stages.visible.medianMs).toBeNull();
     expect(report.samples[0]).toMatchObject({ drawn: true, agents: 12, checks: 1 });
+    expect(report.spanMs).toBe(0);
+    expect(report.dropped).toBe(0);
+    expect(report.gpuRenderer).toBeNull();
     report.samples[0]!.ms.callback = 999;
     expect(p.snapshot().stages.callback.medianMs).toBe(8);
   });
@@ -27,7 +30,10 @@ describe('bounded frame profiles', () => {
       p.begin(i);
       p.end();
     }
-    const s = p.snapshot().samples;
+    const report = p.snapshot();
+    expect(report.dropped).toBe(3);
+    expect(report.spanMs).toBe(PROFILE_CAPACITY - 1);
+    const s = report.samples;
     expect(s).toHaveLength(PROFILE_CAPACITY);
     expect(s[0]!.at).toBe(3);
     expect(s.at(-1)!.at).toBe(PROFILE_CAPACITY + 2);
@@ -35,5 +41,7 @@ describe('bounded frame profiles', () => {
     p.reset();
     p.end();
     expect(p.snapshot().samples).toHaveLength(0);
+    expect(p.snapshot().dropped).toBe(0);
+    expect(p.snapshot().spanMs).toBe(0);
   });
 });

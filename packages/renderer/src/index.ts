@@ -341,6 +341,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   if (!gl) {
     throw new Error('ASCII Atlas requires WebGL2, which this browser does not support.');
   }
+  const readGpuRenderer = (): string | null => {
+    if (!options.profiling) return null;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? (gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string) : null;
+  };
+  let gpuRenderer = readGpuRenderer();
 
   const schedule = options.cells ?? DEFAULT_CELLS;
   const labelCss = options.labelCell ?? DEFAULT_LABEL_CELL;
@@ -1176,6 +1182,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const onContextRestored = () => {
     if (!lost || destroyed) return;
     lost = false;
+    gpuRenderer = readGpuRenderer();
     programs = createPrograms(gl);
     gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
     tileCache.resume();
@@ -1285,7 +1292,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       decodeMs: source.decodeMsAverage,
       agents: agentsDrawn,
     }),
-    getProfile: () => profiler?.snapshot() ?? null,
+    getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
       life = { ...life, ...settings };

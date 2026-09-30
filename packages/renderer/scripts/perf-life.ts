@@ -12,11 +12,6 @@ import * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
 import type { LngLatBounds } from '../src/life/procession';
 
-if (process.argv.includes('--suite=world')) {
-  await import('./perf-world');
-  process.exit(0);
-}
-
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const revision =
   process.argv.find((arg) => arg.startsWith('--baseline='))?.split('=')[1] ?? '68310a7';

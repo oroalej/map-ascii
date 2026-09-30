@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -84,10 +85,12 @@ export async function currentSourceHash(root: string) {
     .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))
     .sort();
   const hash = createHash('sha256');
-  for (const p of paths)
+  for (const p of paths) {
+    if (!existsSync(join(root, p))) continue;
     hash
       .update(p)
       .update('\0')
       .update((await readFile(join(root, p), 'utf8')).replace(/\r\n/g, '\n'));
+  }
   return hash.digest('hex');
 }

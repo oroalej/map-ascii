@@ -2,11 +2,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, join, dirname, basename } from 'node:path';
-import { snapshotRevision } from './snapshot';
+import { currentSourceHash, snapshotRevision } from './snapshot';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn((_command: string, args: string[]) => {
-    if (args[0] === 'ls-tree')
+    if (args[0] === 'ls-tree' || args[0] === 'ls-files')
       return 'packages/renderer/src/life/simulate.ts\npackages/renderer/src/life/occupancy.ts\npackages/shared/src/index.ts';
     if (args[1]?.endsWith('pnpm-lock.yaml')) return 'same-lock\n';
     if (args[1]?.endsWith('simulate.ts'))
@@ -45,3 +45,23 @@ it('copies helper sources and redirects shared aliases into the frozen source gr
   ).toContain('frozen-collision');
   expect(snapshot.hash).toMatch(/^[a-f0-9]{64}$/);
 }, 10_000);
+
+it('hashes the current sources when a tracked file is deleted from the working tree', async () => {
+  await mkdir(workspace, { recursive: true });
+  temporary = await mkdtemp(join(workspace, 'snapshot-test-'));
+  const paths = [
+    'packages/renderer/src/life/simulate.ts',
+    'packages/renderer/src/life/occupancy.ts',
+    'packages/shared/src/index.ts',
+  ];
+  for (const path of paths) {
+    await mkdir(dirname(join(temporary, path)), { recursive: true });
+    await writeFile(join(temporary, path), `export const source = '${path}';\n`);
+  }
+  const before = await currentSourceHash(temporary);
+  await rm(join(temporary, paths[1]!));
+  const after = await currentSourceHash(temporary);
+  expect(after).toMatch(/^[a-f0-9]{64}$/);
+  expect(after).not.toBe(before);
+  expect(await currentSourceHash(temporary)).toBe(after);
+});

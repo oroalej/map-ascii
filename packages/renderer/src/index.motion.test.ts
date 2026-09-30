@@ -69,7 +69,12 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
-  let canvas: HTMLCanvasElement, atlas: Atlas, time: number, next: FrameRequestCallback;
+  const defaultGetExtension = vi.fn(() => null);
+  let canvas: HTMLCanvasElement,
+    gl: WebGL2RenderingContext,
+    atlas: Atlas,
+    time: number,
+    next: FrameRequestCallback;
   const draw = (at: number) => {
     time = at;
     next(at);
@@ -92,7 +97,11 @@ describe('live motion preference', () => {
     );
     canvas = document.createElement('canvas');
     Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
-    vi.spyOn(canvas, 'getContext').mockReturnValue({} as WebGL2RenderingContext);
+    gl = {
+      getExtension: defaultGetExtension,
+      getParameter: vi.fn(),
+    } as unknown as WebGL2RenderingContext;
+    vi.spyOn(canvas, 'getContext').mockReturnValue(gl);
     atlas = createAtlas(canvas, {
       tilesUrl: '/tiles/test.pmtiles',
       bounds: [-1, -1, 1, 1],
@@ -131,6 +140,34 @@ describe('live motion preference', () => {
     canvas.dispatchEvent(new Event('webglcontextrestored'));
     draw(100);
     expect(atlas.getProfile()!.samples).toHaveLength(1);
+  });
+
+  it('reads GPU metadata only for profiling and refreshes it after context restoration', () => {
+    expect(defaultGetExtension).not.toHaveBeenCalled();
+    const extension = { UNMASKED_RENDERER_WEBGL: 123 };
+    const getExtension = vi.fn((name: string) =>
+      name === 'WEBGL_debug_renderer_info' ? extension : null,
+    );
+    Object.defineProperty(gl, 'getExtension', { value: getExtension });
+    const getParameter = vi.spyOn(gl, 'getParameter').mockReturnValue('initial GPU');
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      profiling: true,
+    });
+    expect(atlas.getProfile()!.gpuRenderer).toBe('initial GPU');
+    expect(atlas.getProfile()!.gpuRenderer).toBe('initial GPU');
+    expect(getExtension).toHaveBeenCalledOnce();
+    expect(getParameter).toHaveBeenCalledExactlyOnceWith(extension.UNMASKED_RENDERER_WEBGL);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    getParameter.mockReturnValue('restored GPU');
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    expect(atlas.getProfile()!.gpuRenderer).toBe('restored GPU');
+    expect(getExtension).toHaveBeenCalledTimes(2);
+    expect(getParameter).toHaveBeenCalledTimes(2);
   });
 
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {

@@ -19,6 +19,9 @@ export type ProfileSample = {
 };
 export type AtlasProfile = {
   capacity: number;
+  dropped: number;
+  spanMs: number;
+  gpuRenderer: string | null;
   samples: ProfileSample[];
   stages: Record<ProfileStage, { count: number; medianMs: number | null; p95Ms: number | null }>;
 };
@@ -28,6 +31,7 @@ export class FrameProfiler {
   private readonly ring = new Array<ProfileSample | undefined>(PROFILE_CAPACITY);
   private cursor = 0;
   private count = 0;
+  private dropped = 0;
   private current: ProfileSample | undefined;
   private started = 0;
   constructor(private readonly now: () => number = () => performance.now()) {}
@@ -53,6 +57,7 @@ export class FrameProfiler {
   end() {
     if (!this.current) return;
     this.add('callback', this.now() - this.started);
+    if (this.count === PROFILE_CAPACITY) this.dropped++;
     this.ring[this.cursor] = this.current;
     this.cursor = (this.cursor + 1) % PROFILE_CAPACITY;
     this.count = Math.min(PROFILE_CAPACITY, this.count + 1);
@@ -61,9 +66,10 @@ export class FrameProfiler {
   reset() {
     this.ring.fill(undefined);
     this.cursor = this.count = 0;
+    this.dropped = 0;
     this.current = undefined;
   }
-  snapshot(): AtlasProfile {
+  snapshot(gpuRenderer: string | null = null): AtlasProfile {
     const samples: ProfileSample[] = [];
     for (let i = 0; i < this.count; i++) {
       const sample =
@@ -82,6 +88,14 @@ export class FrameProfiler {
         return [stage, { count: values.length, medianMs: quantile(0.5), p95Ms: quantile(0.95) }];
       }),
     ) as AtlasProfile['stages'];
-    return { capacity: PROFILE_CAPACITY, samples, stages };
+    const spanMs = samples.length ? samples.at(-1)!.at - samples[0]!.at : 0;
+    return {
+      capacity: PROFILE_CAPACITY,
+      dropped: this.dropped,
+      spanMs,
+      gpuRenderer,
+      samples,
+      stages,
+    };
   }
 }
