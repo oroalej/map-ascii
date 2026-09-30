@@ -34,7 +34,7 @@ import {
   SUB,
   WALL_DOUBLE_ROW,
   WALL_SINGLE_ROW,
-  WATER_RATE,
+  WATER_RIPPLE,
   WATER_STROKE_GLYPHS,
   WaterStroke,
 } from '../glyphs/select';
@@ -248,6 +248,20 @@ bool isWater(ivec2 p) {
   return u_kind[classAt(p)] == ${kindCodes.water};
 }
 
+// Open water's drifting crests (glyphs/select.ts waterVariant).
+int waterRipple(ivec2 w) {
+  int period = ${WATER_RIPPLE.period};
+  uint row = cellHash(ivec2(w.y, ${WATER_RIPPLE.salt}));
+  float speed = (row & 1u) == 0u ? ${float(WATER_RIPPLE.speeds[0])} : ${float(WATER_RIPPLE.speeds[1])};
+  int shifted = w.x + int((row >> 8u) % uint(period));
+  int base = imod(shifted, period);
+  float pos = float(base) - u_time * speed;
+  float cycles = floor(pos / float(period));
+  float along = pos - cycles * float(period);
+  int slot = (shifted - base) / period + int(cycles);
+  return along < ${float(WATER_RIPPLE.crest)} && (cellHash(ivec2(slot, w.y)) & 3u) != 0u ? 1 : 0;
+}
+
 // Thin water drawn as a stroke (glyphs/select.ts waterStrokeVariant), or -1 to animate.
 int waterStroke(ivec2 p, ivec2 w) {
   bool horizontal = isWater(p + ivec2(1, 0)) || isWater(p + ivec2(-1, 0));
@@ -356,13 +370,10 @@ void main() {
     if (stroke >= 0) {
       v = stroke;
     } else {
-      // A gust ruffles the water in its bands (glyphs/select.ts waterVariant); else each cell
-      // flips on its own.
+      // A gust ruffles the water in its bands (glyphs/select.ts waterVariant); else its crests drift.
       float gust = u_wind > 0.0 ? u_wind * windGust(w, u_time) : 0.0;
-      uint h = cellHash(w);
-      float phase = float((h >> 8u) & 255u) / 255.0;
       v = gust >= ${float(GUST_STEPS[0])} ? (gust >= ${float(GUST_STEPS[1])} ? 0 : 1)
-        : int((h + uint(floor(u_time * ${float(WATER_RATE)} + phase))) & 1u);
+        : waterRipple(w);
     }
   } else if (kind == ${kindCodes.building}) {
     float height = attr.r * 255.0;

@@ -346,8 +346,20 @@ export const seeThroughMask = (): number =>
 export const wallGlyph = (style: WallStyle, mask: number): string =>
   (style === 'double' ? doubleWall : singleWall)[mask]!;
 
-/** How fast each water cell flips between its glyphs, in flips per second. */
-export const WATER_RATE = 0.5;
+/**
+ * Open water: short crests (variant 1) drift east along each row over the resting glyph
+ * (variant 0). Rows are offset and move at one of two speeds; some crests are left out.
+ */
+export const WATER_RIPPLE = {
+  period: 10, // cells from one crest slot to the next along a row
+  crest: 3, // cells in a crest
+  speeds: [0.5, 0.25], // cells per second, picked per row
+  salt: 0x9e37, // row hash is cellHash(y, salt), apart from the slot hash cellHash(slot, y)
+} as const;
+
+/** The drift speed of a row's crests, in cells per second. */
+export const rippleSpeed = (y: number): number =>
+  WATER_RIPPLE.speeds[cellHash(y, WATER_RIPPLE.salt) & 1]!;
 
 /** Carriageways: they connect to each other, and become strips with curbs at Place level. */
 export const roadClasses: readonly RenderClass[] = ['road_major', 'road_mid', 'road_minor'];
@@ -413,14 +425,20 @@ export function cellHash(x: number, y: number): number {
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
-/** Water alternates glyphs; each cell flips at its own phase. `time` is 0 with reduced motion. */
+/** Water's short crests drift east along each row. `time` is 0 with reduced motion. */
 export function waterVariant(x: number, y: number, time: number, gust = 0): number {
   // A gust ruffles the water in its bands: the strong part one glyph, the edges the other, so
   // the band reads as it runs downwind (`gust` already scaled by the wind).
   if (gust >= GUST_STEPS[0]) return gust >= GUST_STEPS[1] ? 0 : 1;
-  const h = cellHash(x, y);
-  const phase = ((h >>> 8) & 255) / 255;
-  return (h + Math.floor(time * WATER_RATE + phase)) % 2;
+  const { period, crest } = WATER_RIPPLE;
+  const row = cellHash(y, WATER_RIPPLE.salt);
+  const shifted = x + ((row >>> 8) % period);
+  const pos = mod(shifted, period) - time * rippleSpeed(y);
+  const cycles = Math.floor(pos / period);
+  const along = pos - cycles * period; // [0, period)
+  const slot = Math.floor(shifted / period) + cycles;
+  // About three in four slots carry a crest.
+  return along < crest && (cellHash(slot, y) & 3) !== 0 ? 1 : 0;
 }
 
 /**
@@ -944,7 +962,7 @@ export function variantFor(
         return n !== null && waterClasses.includes(n);
       };
       const stroke = count >= WATER_STROKE_GLYPHS ? waterStrokeVariant(isWater, ctx.y) : null;
-      // Without a wind given, water just flips (its gust bands need the wind to be named).
+      // Without a wind given, water just ripples (its gust bands need the wind to be named).
       const gust = (ctx.wind ?? 0) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
       return stroke ?? waterVariant(ctx.x, ctx.y, ctx.time, gust);
     }

@@ -371,10 +371,13 @@ void main() {
   bool water = (u_cellBits[cls] & ${CellBit.boat}) != 0;
   float refl = water && lampsNow > 0.0 ? reflection(grid / u_cell, cell) : 0.0;
   vec3 glow = poolColor * pool * poolGlow() + LAMP * refl * 0.9;
-  // Under the moon, water glints here and there, now and then (still with reduced motion).
+  // Under the moon, water glints linger on staggered beats (still with reduced motion).
   if (water && u_moon > 0.0 && night > 0.0) {
-    int beat = u_shimmer ? int(floor(u_time * 2.0)) : 0;
-    uint h = cellHash(u_origin + cell + ivec2(beat * 7919, beat * 104729));
+    ivec2 world = u_origin + cell;
+    // Each cell re-rolls its glint on its own 2 s beat, so glints linger and don't all jump at once.
+    float stagger = float(cellHash(world) & 255u) / 256.0;
+    int beat = u_shimmer ? int(floor(u_time * 0.5 + stagger)) : 0;
+    uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
   back += glow;

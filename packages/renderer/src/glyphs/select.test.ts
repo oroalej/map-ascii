@@ -17,6 +17,7 @@ import {
   ROOF_ROW,
   ridgeGlyphs,
   ridgeVariant,
+  rippleSpeed,
   RISING,
   ROAD_AREA_ZOOM,
   roadClasses,
@@ -188,19 +189,41 @@ describe('water', () => {
     expect(cellHash(0x7fffffff, 1)).toBeGreaterThanOrEqual(0);
   });
 
-  it('alternates each cell over time, at different phases', () => {
-    const flips = (x: number, y: number) => {
-      const seen = new Set<number>();
-      for (let t = 0; t < 10; t += 0.25) seen.add(waterVariant(x, y, t));
-      return seen;
-    };
-    expect(flips(3, 4)).toEqual(new Set([0, 1]));
-    const atZero = Array.from({ length: 20 }, (_, x) => waterVariant(x, 0, 0));
-    expect(new Set(atZero)).toEqual(new Set([0, 1]));
+  it("drifts crests east at the row's speed", () => {
+    for (let y = -10; y <= 10; y++) {
+      for (let x = -30; x <= 30; x++) {
+        for (const time of [0, 3, 7.5]) {
+          expect(waterVariant(x + 1, y, time + 1 / rippleSpeed(y))).toBe(waterVariant(x, y, time));
+        }
+      }
+    }
+  });
+
+  const field = Array.from(
+    { length: 60 * 40 },
+    (_, i) => [(i % 60) - 30, Math.floor(i / 60) - 20] as const,
+  );
+
+  it('changes few cells per second', () => {
+    const changed = field.filter(
+      ([x, y]) => waterVariant(x, y, 10) !== waterVariant(x, y, 11),
+    ).length;
+    const share = changed / field.length;
+    expect(share).toBeGreaterThan(0);
+    expect(share).toBeLessThan(0.15);
+  });
+
+  it('crests are a minority', () => {
+    const crests = field.filter(([x, y]) => waterVariant(x, y, 0) === 1).length;
+    const share = crests / field.length;
+    expect(share).toBeGreaterThan(0.1);
+    expect(share).toBeLessThan(0.35);
   });
 
   it('holds still with reduced motion (time 0)', () => {
-    expect(waterVariant(5, 5, 0)).toBe(cellHash(5, 5) % 2);
+    const atZero = Array.from({ length: 60 }, (_, i) => waterVariant(i - 30, 0, 0));
+    expect(Array.from({ length: 60 }, (_, i) => waterVariant(i - 30, 0, 0))).toEqual(atZero);
+    expect(new Set(atZero)).toEqual(new Set([0, 1]));
   });
 
   const riverAt = (rows: string[], y = 0, cls: RenderClass = 'water_river') =>

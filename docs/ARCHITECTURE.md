@@ -170,7 +170,7 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.
 
-- **Water:** alternates `~`/`≈` using `hash(cell) + time`, unless reduced-motion is on. Rivers and streams (styles with the six stroke glyphs) draw a 1-cell-wide run that isn't horizontal as a stroke instead: `(` and `)` alternating down a vertical run, `╱` / `╲` for a diagonal one, judged from which neighbors are any water class.
+- **Water:** short crests of the second glyph drift east along each row, with rows offset and moving at one of two speeds and some crests skipped; reduced motion holds the pattern still. Rivers and streams (styles with the six stroke glyphs) draw a 1-cell-wide run that isn't horizontal as a stroke instead: `(` and `)` alternating down a vertical run, `╱` / `╲` for a diagonal one, judged from which neighbors are any water class.
 - **Buildings:** luminance from shade × height factor maps onto the `░▒▓█` ramp.
 - **Roads:** connectivity bitmask → box-drawing LUT. Road hierarchy picks a single-line or double-line set.
 - **Area fills** (farmland, parking, pitches): patterned by `(x + y) mod n` so fields form rows.

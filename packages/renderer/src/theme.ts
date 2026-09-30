@@ -12,7 +12,7 @@ export type RGBA = readonly [number, number, number, number];
 /**
  * How a class picks among its glyphs (the rules live in `glyphs/select.ts`):
  * - `road`: 18 glyphs indexed by the N/E/S/W connectivity mask (0–15), then `╱` and `╲`
- * - `water`: alternates between the glyphs per cell over time
+ * - `water`: glyph 0 at rest, with drifting crests of glyph 1
  * - `building`: a height ramp, lowest first
  * - `diagonal` / `rows` / `scatter`: area patterns by `(x + y) mod n`, `y mod n`, or a cell hash
  * - `single`: always the first glyph
