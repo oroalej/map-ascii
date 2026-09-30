@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { BBox, GeoJsonGeometry } from './schemas';
 
 /** What a search result is; results are grouped by it (SPEC.md §5). */
@@ -9,6 +9,7 @@ export const SearchType = z.enum([
   'school',
   'worship',
   'market',
+  'station',
   'monument',
   'place',
 ]);
@@ -41,29 +42,6 @@ export const SearchIndexFile = z.object({
   index: z.unknown(),
 });
 export type SearchIndexFile = z.infer<typeof SearchIndexFile>;
-
-/**
- * Lowercase and strip diacritics, so "Penafrancia" matches "Peñafrancia" (ARCHITECTURE.md §7).
- */
-export const foldTerm = (term: string): string =>
-  term.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-
-/**
- * MiniSearch options. The pipeline builds the index and the web app loads it with these same
- * options, so both sides tokenize and fold terms identically.
- */
-export const searchOptions = {
-  idField: 'id',
-  fields: ['name', 'altNames'],
-  storeFields: [] as string[],
-  extractField: (document: Record<string, unknown>, field: string): string => {
-    const value = document[field];
-    if (Array.isArray(value)) return value.join(' ');
-    return typeof value === 'string' ? value : '';
-  },
-  processTerm: (term: string): string => foldTerm(term),
-  searchOptions: { prefix: true, fuzzy: 0.2, boost: { name: 2 }, combineWith: 'AND' as const },
-};
 
 /** A city's subdivision areas (`<city>.subdivisions.json`), for the HUD. */
 export const SubdivisionArea = z.object({

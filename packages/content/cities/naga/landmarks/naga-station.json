@@ -1,0 +1,21 @@
+{
+  "id": "landmark/naga-station",
+  "osm_id": "osm:way/23662289",
+  "name": {
+    "en": "Naga Station"
+  },
+  "type": "station",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23662289",
+      "note": "Location and name only."
+    },
+    {
+      "title": "Naga station (Wikipedia)",
+      "url": "https://en.wikipedia.org/wiki/Naga_station",
+      "note": "Linked from the OSM feature (wikidata Q6958301). No opening year taken from it yet."
+    }
+  ]
+}

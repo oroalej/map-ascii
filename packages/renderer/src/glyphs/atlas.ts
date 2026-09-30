@@ -3,6 +3,18 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
+import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX, type DogGlyph } from '../life/dogs';
+import {
+  FIGURE_SCALES,
+  FIGURE_TONE,
+  figureOf,
+  figurePixels,
+  MIN_FIGURE_PX,
+  type FigureGlyph,
+} from '../life/people';
+import { STALL_GLYPH } from '../life/vehicles';
+import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
   "ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, monospace";
@@ -68,6 +80,49 @@ function drawBox(slot: Slot, [n, e, s, w]: Arms) {
   }
 }
 
+/**
+ * Railway track (theme.ts `railLine`): two rails with two crossties per cell. The rails sit
+ * where a double line's strokes do (`drawBox`), so they join the double-line corners.
+ */
+function drawTrack(slot: Slot, vertical: boolean) {
+  const { w: cw, h: ch } = slot;
+  const t = Math.max(1, Math.floor(cw / 8));
+  const cx = Math.floor(cw / 2) - Math.floor(t / 2);
+  const cy = Math.floor(ch / 2) - Math.floor(t / 2);
+  const d = Math.max(t + 1, Math.round(cw * 0.18));
+  if (vertical) {
+    fill(slot, cx - d, 0, cx - d + t, ch);
+    fill(slot, cx + d, 0, cx + d + t, ch);
+    for (const f of [0.25, 0.75]) {
+      const y = Math.round(ch * f - t / 2);
+      fill(slot, cx - d - t, y, cx + d + 2 * t, y + t);
+    }
+    return;
+  }
+  fill(slot, 0, cy - d, cw, cy - d + t);
+  fill(slot, 0, cy + d, cw, cy + d + t);
+  for (const f of [0.25, 0.75]) {
+    const x = Math.round(cw * f - t / 2);
+    fill(slot, x, cy - d - t, x + t, cy + d + 2 * t);
+  }
+}
+
+/** A diagonal track: two rails corner to corner (`drawDiagonal`), with a tie across the middle. */
+function drawDiagonalTrack(slot: Slot, rising: boolean) {
+  const { w, h } = slot;
+  const t = Math.max(1, Math.floor(w / 8));
+  const d = Math.max(t + 1, Math.round(w * 0.18));
+  for (let y = 0; y < h; y++) {
+    const along = (y + 0.5) / h;
+    const x = Math.round((rising ? 1 - along : along) * w - t / 2);
+    fill(slot, x - d, y, x - d + t, y + 1);
+    fill(slot, x + d, y, x + d + t, y + 1);
+  }
+  const cx = Math.round(w / 2 - t / 2);
+  const cy = Math.round(h / 2 - t / 2);
+  fill(slot, cx - d - t, cy, cx + d + 2 * t, cy + t);
+}
+
 /** Dashed lines by number of dashes per cell: `┄ ┆` (fences) and `╌ ╎` (city boundary). */
 const dashes: Record<string, { vertical: boolean; count: number }> = {
   '┄': { vertical: false, count: 3 },
@@ -124,12 +179,15 @@ export const shadeCoverage: Readonly<Record<string, number>> = { '░': 80, '▒
 
 /**
  * Block glyphs. Shades are flat fills at partial coverage, with a one-pixel gap on the right and
- * bottom so shaded areas still read as a grid of characters; `█` fills the whole cell.
+ * bottom so shaded areas still read as a grid of characters; `█` fills the whole cell. Small
+ * cells (density.ts) leave the gap out: a pixel of a few would draw a mesh over every building.
  */
+export const SHADE_GAP_MIN_WIDTH = 8;
+
 function drawBlock(slot: Slot, glyph: string) {
   const { data, stride, w, h } = slot;
   const shade = shadeCoverage[glyph];
-  const gap = shade !== undefined && w > 4 ? 1 : 0;
+  const gap = shade !== undefined && w >= SHADE_GAP_MIN_WIDTH ? 1 : 0;
   const bottom = glyph === '▀' ? Math.ceil(h / 2) : h - gap;
   const value = shade ?? 255;
   for (let y = 0; y < bottom; y++) {
@@ -137,14 +195,121 @@ function drawBlock(slot: Slot, glyph: string) {
   }
 }
 
-/** Draw a glyph as shapes into `slot` if it is a box-drawing or block character. */
+/** Sextant mask by glyph (theme.ts `sextantGlyphs`), for the partial blocks only. */
+const sextantMasks = new Map<string, number>(
+  sextantGlyphs.flatMap((glyph, mask) => (mask === 0 || mask === 63 ? [] : [[glyph, mask]])),
+);
+
+/**
+ * A sextant: the cell split into 2 columns and 3 rows, each sixth solid or empty. The splits are
+ * rounded the same way in every cell, so neighboring sextants meet without seams or gaps.
+ */
+function drawSextant(slot: Slot, mask: number) {
+  const { w, h } = slot;
+  const xs = [0, Math.round(w / 2), w];
+  const ys = [0, Math.round(h / 3), Math.round((2 * h) / 3), h];
+  for (let bit = 0; bit < 6; bit++) {
+    if (!(mask & (1 << bit))) continue;
+    const col = bit % 2;
+    const row = Math.floor(bit / 2);
+    fill(slot, xs[col]!, ys[row]!, xs[col + 1]!, ys[row + 1]!);
+  }
+}
+
+/**
+ * A person's figure (life/people.ts), pixel for pixel: paint at full coverage, tone at
+ * `FIGURE_TONE`, which the glyph shader tells apart. A 2×2 figure is laid out over four slots
+ * and this slot gets its `slice` of it. The figure is square, centered in its cell (or cells); a
+ * one-cell figure is its `scale` of the cell's width, but no narrower than `MIN_FIGURE_PX`.
+ */
+function drawFigure(slot: Slot, g: FigureGlyph) {
+  const { data, stride, w, h } = slot;
+  const big = g.slice !== undefined;
+  const width = big ? 2 * w : w;
+  const height = big ? 2 * h : h;
+  const scaled = Math.max(Math.min(w, MIN_FIGURE_PX), Math.round(w * FIGURE_SCALES[g.scale ?? 2]));
+  const box = big ? Math.min(width, height) : Math.min(scaled, h);
+  const ox = Math.floor((width - box) / 2) - (big ? (g.slice! & 1) * w : 0);
+  const oy = Math.floor((height - box) / 2) - (big ? (g.slice! >> 1) * h : 0);
+  const pixel = figurePixels(g, box);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [bx, by] = [x - ox, y - oy];
+      if (bx < 0 || by < 0 || bx >= box || by >= box) continue;
+      const ink = pixel(bx, by);
+      if (ink === '.') continue;
+      data[(slot.y0 + y) * stride + slot.x0 + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
+/**
+ * A bird filling its cell (life/birds.ts `birdPixels`): square, centered, as wide as the cell
+ * (or as tall, if that is less), in the same two inks as a figure.
+ */
+function drawBird(slot: Slot, g: BirdGlyph) {
+  const { data, stride, w, h } = slot;
+  const box = Math.min(w, h);
+  const ox = Math.floor((w - box) / 2);
+  const oy = Math.floor((h - box) / 2);
+  const pixel = birdPixels(g, box);
+  for (let y = 0; y < box; y++) {
+    for (let x = 0; x < box; x++) {
+      const ink = pixel(x, y);
+      if (ink === '.') continue;
+      data[(slot.y0 + oy + y) * stride + slot.x0 + ox + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
+/**
+ * A dog in its cell (life/dogs.ts `dogPixels`): square, centered, `DOG_SCALE` of the cell's
+ * width but no narrower than `MIN_DOG_PX`, in the same two inks as a figure.
+ */
+function drawDog(slot: Slot, g: DogGlyph) {
+  const { data, stride, w, h } = slot;
+  const box = Math.min(h, Math.max(Math.min(w, MIN_DOG_PX), Math.round(w * DOG_SCALE)));
+  const ox = Math.floor((w - box) / 2);
+  const oy = Math.floor((h - box) / 2);
+  const pixel = dogPixels(g, box);
+  for (let y = 0; y < box; y++) {
+    for (let x = 0; x < box; x++) {
+      const ink = pixel(x, y);
+      if (ink === '.') continue;
+      data[(slot.y0 + oy + y) * stride + slot.x0 + ox + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
+/** A vendor's cart (life/vehicles.ts `STALL_GLYPH`): a square awning in stripes. */
+function drawStall(slot: Slot) {
+  const { w, h } = slot;
+  const size = Math.max(3, Math.round(w * 0.8));
+  const x0 = Math.floor((w - size) / 2);
+  const y0 = Math.floor((h - size) / 2);
+  for (let y = 0; y < size; y++) {
+    if (y % 3 !== 2) fill(slot, x0, y0 + y, x0 + size, y0 + y + 1);
+  }
+}
+
+/**
+ * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
+ * figure, a bird, a dog, or a vendor's cart.
+ */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
   else if (dashes[glyph]) drawDashes(slot, dashes[glyph]);
   else if (glyph === '╱' || glyph === '╲') drawDiagonal(slot, glyph === '╱');
+  else if (glyph === '╪' || glyph === '╫') drawTrack(slot, glyph === '╫');
+  else if (glyph === '⫽' || glyph === '⑊') drawDiagonalTrack(slot, glyph === '⫽');
   else if (glyph === '□') drawSquare(slot);
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);
+  else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
+  else if (figureOf(glyph)) drawFigure(slot, figureOf(glyph)!);
+  else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
+  else if (dogOf(glyph)) drawDog(slot, dogOf(glyph)!);
+  else if (glyph === STALL_GLYPH) drawStall(slot);
   else return false;
   return true;
 }

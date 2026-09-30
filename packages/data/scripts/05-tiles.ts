@@ -1,9 +1,10 @@
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CityMeta, type City } from '@atlas/shared';
+import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
 import { readFeatures, readJson, writeJson } from './lib/io';
+import { landcoverCredits } from './lib/landcover';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
 
@@ -19,7 +20,16 @@ async function yearRange(mergedPath: string, now: number): Promise<[number, numb
   return [earliest, now];
 }
 
-export function buildMeta(city: City, geography: Geography, years: [number, number]): CityMeta {
+/**
+ * The city's meta. `credits` are sources beyond OSM that the city pack drew on (e.g. the imagery
+ * curated trees and land cover were traced from); they join the geography's credits in the attribution.
+ */
+export function buildMeta(
+  city: City,
+  geography: Geography,
+  years: [number, number],
+  credits: readonly string[] = [],
+): CityMeta {
   return CityMeta.parse({
     slug: city.slug,
     name: city.name,
@@ -27,19 +37,20 @@ export function buildMeta(city: City, geography: Geography, years: [number, numb
     languages: city.languages,
     bounds: geography.bounds,
     regionBounds: geography.regionBounds,
-    defaultCamera: { ...geography.center, zoom: geography.zoom, pitch: 0, bearing: 0 },
+    defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
-    attribution: geography.attribution ?? [],
+    attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
   });
 }
 
 // Build <city>.pmtiles with tippecanoe and write <city>.meta.json
 export const step: Step = {
   name: '05-tiles',
-  async run({ city, buildDir, outDir }) {
+  async run({ city, content, buildDir, outDir }) {
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
-    const meta = buildMeta(city, geography, await yearRange(merged, new Date().getFullYear()));
+    const years = await yearRange(merged, new Date().getFullYear());
+    const meta = buildMeta(city, geography, years, landcoverCredits(content.landcover));
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     tippecanoe(merged, pmtiles, [
@@ -58,10 +69,9 @@ export const step: Step = {
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
     await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
-    await copyFile(
-      join(buildDir, files.subdivisions),
-      join(outDir, `${city.slug}.subdivisions.json`),
-    );
+    // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
+    const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    await writeJson(join(outDir, `${city.slug}.subdivisions.json`), areas);
     const mb = (await stat(pmtiles)).size / 1e6;
     console.log(
       `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, and .subdivisions.json to ${outDir}`,

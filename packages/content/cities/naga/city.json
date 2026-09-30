@@ -11,8 +11,7 @@
   },
   "detail_buffer_km": 2,
   "region": {
-    "name": "Bicol Region",
-    "osm_relation": "3561455"
+    "bbox": [123.17, 13.602, 123.213, 13.64]
   },
   "subdivision": {
     "admin_level": 10,
@@ -21,9 +20,62 @@
     }
   },
   "languages": ["fil", "bcl"],
+  "timezone": "Asia/Manila",
   "smoke_landmark": "Naga Metropolitan Cathedral",
   "focus": {
     "osm_id": "osm:way/201276958",
     "zoom": 17
+  },
+  "traffic": {
+    "road_major": {
+      "jeepney": 30,
+      "car": 25,
+      "motorcycle": 20,
+      "tricycle": 15,
+      "bus": 5,
+      "truck": 5
+    },
+    "road_mid": {
+      "tricycle": 30,
+      "motorcycle": 25,
+      "jeepney": 20,
+      "car": 20,
+      "truck": 5,
+      "bicycle": 4
+    },
+    "road_minor": {
+      "tricycle": 45,
+      "motorcycle": 40,
+      "car": 15,
+      "bicycle": 8
+    },
+    "river": {
+      "banca": 60,
+      "motorboat": 25,
+      "rowboat": 15
+    },
+    "parked": {
+      "car": 55,
+      "motorcycle": 25,
+      "tricycle": 20
+    }
+  },
+  "climate": {
+    "wind": [
+      {
+        "name": "Amihan (northeast monsoon)",
+        "months": [11, 12, 1, 2, 3],
+        "from": 45,
+        "strength": "breeze"
+      },
+      {
+        "name": "Habagat (southwest monsoon)",
+        "months": [6, 7, 8, 9],
+        "from": 225,
+        "strength": "breeze"
+      }
+    ],
+    "default": { "from": 90, "strength": "calm" },
+    "source": "PAGASA, Climate of the Philippines: the northeast monsoon (amihan) blows about November to March, the southwest monsoon (habagat) about June to September, with easterly trade winds between them. https://www.pagasa.dost.gov.ph/information/climate-philippines"
   }
 }

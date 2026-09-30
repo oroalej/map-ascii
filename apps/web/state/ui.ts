@@ -1,5 +1,5 @@
-import type { FeatureInfo } from '@atlas/renderer';
-import type { CityMeta } from '@atlas/shared';
+import type { FeatureInfo, ProcessionRun } from '@atlas/renderer';
+import type { CityMeta, ProcessionRoute } from '@atlas/shared';
 import { create } from 'zustand';
 
 /**
@@ -14,6 +14,10 @@ export type UiState = {
   meta: CityMeta | null;
   /** The subdivision under the view's center (HUD). */
   subdivision: { name: string; approximate: boolean } | null;
+  /** The city's river processions (its generated `<slug>.processions.json`), once loaded. */
+  processions: readonly ProcessionRoute[];
+  /** The procession under way, as the renderer reports it. */
+  procession: ProcessionRun | null;
 };
 
 export const useUiStore = create<UiState>()(() => ({
@@ -21,13 +25,13 @@ export const useUiStore = create<UiState>()(() => ({
   picked: null,
   meta: null,
   subdivision: null,
+  processions: [],
+  procession: null,
 }));
 
 /**
- * Classes that are backdrop rather than places: hovering or clicking them does nothing, and
- * clicking one clears the selection.
+ * Only landmarks respond to the pointer: hovering anything else does nothing, and clicking it
+ * clears the selection. Other places are still selected through search, tours, and the URL.
  */
-const backdrop = new Set(['terrain', 'water_sea', 'coastline', 'admin_city', 'admin_subdivision']);
-
 export const isPickable = (feature: FeatureInfo | null): feature is FeatureInfo =>
-  feature !== null && !backdrop.has(feature.class);
+  feature !== null && feature.landmarkId !== undefined;

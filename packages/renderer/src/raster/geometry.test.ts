@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, variantCode } from '../classes';
 import { LabelRank } from '../labels';
+import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import {
   buildTileGeometry,
   classifyRings,
   createIdRegistry,
+  CROWN_SIDES,
+  crownRing,
+  hashString,
+  ringTriangles,
   EXTENT,
+  lngLatToTile,
   metersPerUnit,
   packId,
+  parkingStalls,
+  STALL,
+  pointsAlong,
   longestRun,
   roofRidge,
+  streetLabel,
   tileToLngLat,
-  wallShade,
   ringCentroid,
   unpackId,
   type TileFeatureLike,
@@ -112,8 +121,8 @@ describe('buildTileGeometry', () => {
     expect(vertices(fills).every((v) => v.cls === classId('park'))).toBe(true);
   });
 
-  it('turns lines into segment pairs', () => {
-    const { lines } = buildTileGeometry(
+  it('turns lines into segment pairs, plus a point per vertex so short segments still draw', () => {
+    const { lines, points } = buildTileGeometry(
       {
         roads: layer([
           feature(2, { id: 'osm:way/2', class: 'road_major' }, [
@@ -133,6 +142,13 @@ describe('buildTileGeometry', () => {
       [10, 0],
       [10, 10],
     ]);
+    expect(vertices(points).map(({ x, y, cls }) => [x, y, cls])).toEqual(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ].map(([x, y]) => [x, y, classId('road_major')]),
+    );
   });
 
   it('adds building center points and markers for special buildings and landmarks', () => {
@@ -228,8 +244,8 @@ describe('buildTileGeometry', () => {
 
   it('labels named streets on their longest run, ranked by road class', () => {
     const tile = { z: 16, x: 55_247, y: 30_252 };
-    const street = (id: string, cls: string, name?: string) =>
-      feature(2, { id, class: cls, ...(name && { name }) }, [
+    const street = (id: string, cls: string, name?: string, kind?: string) =>
+      feature(2, { id, class: cls, ...(name && { name }), ...(kind && { kind }) }, [
         [
           [0, 100],
           [0, 900],
@@ -238,9 +254,11 @@ describe('buildTileGeometry', () => {
     const { labels } = buildTileGeometry(
       {
         roads: layer([
-          street('osm:way/1', 'road_major', 'Magsaysay Avenue'),
-          street('osm:way/2', 'road_minor', 'Elias Angeles Street'),
-          street('osm:way/3', 'road_minor'),
+          street('osm:way/1', 'road_major', 'Magsaysay Avenue', 'highway=primary'),
+          street('osm:way/2', 'road_mid', 'Elias Angeles Street', 'highway=secondary'),
+          street('osm:way/3', 'road_mid', 'Taal Avenue', 'highway=tertiary'),
+          street('osm:way/4', 'road_minor', 'Jade Street', 'highway=residential'),
+          street('osm:way/5', 'road_minor'),
         ]),
       },
       createIdRegistry(),
@@ -249,8 +267,23 @@ describe('buildTileGeometry', () => {
     expect(labels.map(({ text, rank, band }) => ({ text, rank, band }))).toEqual([
       { text: 'Magsaysay Avenue', rank: LabelRank.roadMajor, band: { min: 14 } },
       { text: 'Elias Angeles Street', rank: LabelRank.street, band: { min: 15.5 } },
+      { text: 'Taal Avenue', rank: LabelRank.streetMinor, band: { min: 17.5 } },
+      { text: 'Jade Street', rank: LabelRank.streetMinor, band: { min: 18 } },
     ]);
     expect(labels[0]!.angle).toBeCloseTo(Math.PI / 2); // north–south, y down
+  });
+
+  it('names only the key streets at the Street level', () => {
+    const at = (cls: string, kind?: string) => streetLabel(cls, kind);
+    expect(at('road_major')).toEqual({ rank: LabelRank.roadMajor, band: { min: 14 } });
+    expect(at('road_mid', 'highway=secondary')?.band).toEqual({ min: 15.5 });
+    expect(at('road_mid', 'highway=secondary_link')?.band).toEqual({ min: 15.5 });
+    expect(at('road_mid', 'highway=tertiary')?.band).toEqual({ min: 17.5 });
+    expect(at('road_mid')?.band).toEqual({ min: 17.5 }); // unknown kind: the cautious tier
+    expect(at('road_mid', 'amenity=parking')?.band).toEqual({ min: 17.5 });
+    expect(at('road_minor', 'highway=residential')?.band).toEqual({ min: 18 });
+    expect(at('path', 'highway=footway')?.band).toEqual({ min: 18.5 });
+    expect(at('building')).toBeUndefined();
   });
 
   it('labels places at their point, ranked and banded by what they name', () => {
@@ -407,6 +440,40 @@ describe('buildTileGeometry', () => {
     ).toHaveLength(0);
   });
 
+  it('finds a place in a tile, the inverse of tileToLngLat', () => {
+    const tile = { z: 16, x: 55_247, y: 30_252 };
+    for (const p of [
+      { x: 0, y: 0 },
+      { x: 1234, y: 3210 },
+      { x: -500, y: 4600 },
+    ]) {
+      const [lng, lat] = tileToLngLat(tile, p);
+      const back = lngLatToTile(tile, lng, lat);
+      expect(back.x).toBeCloseTo(p.x, 6);
+      expect(back.y).toBeCloseTo(p.y, 6);
+    }
+  });
+
+  it('leaves strips out of tiles too coarse to be drawn at Place level', () => {
+    const road = () =>
+      feature(2, { id: 'osm:way/23', class: 'road_mid', width: 10 }, [
+        [
+          [100, 100],
+          [300, 100],
+        ],
+      ]);
+    const strips = (z: number) =>
+      buildTileGeometry(
+        { roads: layer([road()]) },
+        createIdRegistry(),
+        { z, x: 55_247 >> (16 - z), y: 30_252 >> (16 - z) },
+        16,
+      ).fills.ids.length;
+    expect(strips(16)).toBeGreaterThan(0);
+    expect(strips(15)).toBeGreaterThan(0); // the parent stands in while a tile loads
+    expect(strips(14)).toBe(0);
+  });
+
   it('carries the variant byte for furniture and roofs', () => {
     expect(variantCode('furniture', 'fountain')).toBe(2);
     expect(variantCode('furniture', 'swing')).toBe(0);
@@ -425,29 +492,121 @@ describe('buildTileGeometry', () => {
     expect(meta[3]).toBe(3);
   });
 
-  it('extrudes buildings with a height: a wall quad per edge and a roof', () => {
-    const building = feature(3, { id: 'osm:way/30', class: 'building', height: 9 }, [
-      square(0, 0, 100),
-    ]);
-    const ground = feature(3, { id: 'osm:way/31', class: 'building_school' }, [square(200, 0, 50)]);
-    const { extrusions } = buildTileGeometry(
-      { buildings: layer([building, ground]) },
-      createIdRegistry(),
-    );
-    const v = vertices(extrusions);
-    // 4 edges × 4 wall vertices + 5 roof vertices (the closed ring); nothing for the ground.
-    expect(v).toHaveLength(4 * 4 + 5);
-    expect(extrusions.indices.length).toBe(4 * 6 + 2 * 3);
-    expect(v.every((p) => (p.flags! & Flags.extruded) !== 0 && p.height === 9)).toBe(true);
-    const tops = v.filter((p) => (p.flags! & Flags.top) !== 0);
-    expect(tops).toHaveLength(4 * 2 + 5);
-    expect(v.filter((p) => (p.flags! & Flags.roof) !== 0)).toHaveLength(5);
-  });
+  describe('trees', () => {
+    const tile = { z: 16, x: 55_194, y: 30_268 };
+    const units = (meters: number) => meters / metersPerUnit(tile);
+    const tree = (props: Record<string, unknown> = {}) =>
+      feature(1, { id: 'osm:node/40', class: 'tree', height: 10, crown: 8, ...props }, [
+        [[2000, 2000]],
+      ]);
+    const build = (f: TileFeatureLike) =>
+      buildTileGeometry({ poi: layer([f]) }, createIdRegistry(), tile);
 
-  it('shades walls by how directly they face the light (from the south-east)', () => {
-    expect(wallShade(0, 1)).toBeGreaterThan(wallShade(1, 0)); // south-facing brighter than east
-    expect(wallShade(0, 1)).toBeGreaterThan(wallShade(0, -1)); // than north-facing
-    expect(wallShade(0, -1)).toBeLessThan(40);
+    it('draws a crown of its diameter around the tree', () => {
+      const { crowns, fills, points } = build(tree());
+      // Crowns are kept apart from the ground: the crown pass redraws them as they sway.
+      expect(fills.positions).toHaveLength(0);
+      const crown = vertices(crowns);
+      expect(crown).toHaveLength(CROWN_SIDES + 1);
+      expect(crown.every((v) => v.cls === classId('tree_crown'))).toBe(true);
+      const radii = crown.slice(0, -1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
+      const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+      expect(mean / units(4)).toBeGreaterThan(0.96);
+      expect(mean / units(4)).toBeLessThan(1.04);
+      expect(crowns.indices).toHaveLength((CROWN_SIDES - 2) * 3);
+      // Each vertex carries its reach from the trunk, how far it swings.
+      Array.from(crowns.ridge).forEach((reach, i) => {
+        expect(reach).toBeCloseTo(Math.hypot(crown[i]!.x! - 2000, crown[i]!.y! - 2000), -0.5);
+      });
+      // The tree itself still claims the center cell, with its kind.
+      expect(vertices(points)).toEqual([expect.objectContaining({ cls: classId('tree') })]);
+    });
+
+    it('draws no crown without a size or a tile to measure it in', () => {
+      expect(build(tree({ crown: undefined })).crowns.positions).toHaveLength(0);
+      const { crowns } = buildTileGeometry({ poi: layer([tree()]) }, createIdRegistry());
+      expect(crowns.positions).toHaveLength(0);
+    });
+
+    it('spaces a tree row’s crowns a crown apart', () => {
+      const row = feature(2, { id: 'osm:way/41', class: 'tree', height: 10, crown: 8 }, [
+        [
+          [1000, 1000],
+          [1000 + Math.round(units(40)), 1000],
+        ],
+      ]);
+      const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
+      // At 0, 8, 16, 24, 32, and 40 m.
+      expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
+    });
+
+    it('gives each tree its own lumpy crown, the same wherever it is built', () => {
+      const ring = crownRing({ x: 0, y: 0 }, 100, 7);
+      expect(ring).toHaveLength(CROWN_SIDES + 1);
+      expect(ring.at(-1)).toEqual(ring[0]);
+      const radii = ring.slice(0, -1).map((p) => Math.hypot(p.x, p.y));
+      const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+      expect(mean).toBeCloseTo(100, 6);
+      for (const r of radii) {
+        expect(r).toBeGreaterThan(70);
+        expect(r).toBeLessThan(130);
+      }
+      // Not a circle.
+      expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(10);
+      expect(crownRing({ x: 0, y: 0 }, 100, 7)).toEqual(ring);
+      expect(crownRing({ x: 0, y: 0 }, 100, 8)).not.toEqual(ring);
+      expect(ringTriangles(ring)).toHaveLength((CROWN_SIDES - 2) * 3);
+    });
+
+    it('seeds a crown by its tree, so the same tree keeps its shape across tiles', () => {
+      const a = vertices(build(tree()).crowns);
+      const b = vertices(build(tree({ id: 'osm:node/41' })).crowns);
+      expect(vertices(build(tree()).crowns)).toEqual(a);
+      expect(b).not.toEqual(a);
+      expect(hashString('osm:node/40')).toBe(hashString('osm:node/40'));
+      expect(hashString('osm:node/40')).not.toBe(hashString('osm:node/41'));
+    });
+
+    it('gives the crowns along a tree row different shapes', () => {
+      const row = feature(2, { id: 'osm:way/42', class: 'tree', height: 10, crown: 8 }, [
+        [
+          [1000, 1000],
+          [1000 + Math.round(units(16)), 1000],
+        ],
+      ]);
+      const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
+      const v = vertices(crowns);
+      const size = CROWN_SIDES + 1;
+      // Each crown's shape relative to its own center (its trees are 8 m apart along x).
+      const shape = (i: number) =>
+        v.slice(i * size, (i + 1) * size).map((p) => [p.x! - v[i * size]!.x!, p.y!]);
+      expect(v.length).toBeGreaterThanOrEqual(2 * size);
+      expect(shape(1)).not.toEqual(shape(0));
+    });
+
+    it('walks a line in equal steps, around its bends', () => {
+      const line = [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ];
+      expect(pointsAlong(line, 4)).toEqual([
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 8, y: 0 },
+        { x: 10, y: 2 },
+        { x: 10, y: 6 },
+        { x: 10, y: 10 },
+      ]);
+      expect(pointsAlong(line, 0)).toEqual([]);
+    });
+
+    it('records the tree kind in the variant byte', () => {
+      expect(variantCode('tree', 'palm')).toBe(1);
+      expect(variantCode('tree', 'needleleaved')).toBe(2);
+      expect(variantCode('trees', 'broadleaved')).toBe(3);
+      expect(variantCode('tree', 'baobab')).toBe(0);
+    });
   });
 
   it('puts a pitched roof ridge along the footprint long axis, lit side positive', () => {
@@ -500,5 +659,251 @@ describe('buildTileGeometry', () => {
     expect([0, 5, 10].map(ridged)).toEqual([true, false, false]);
     expect([...fills.ridge.slice(0, 5)].some((d) => d !== 0)).toBe(true);
     expect([...fills.ridge.slice(5)].every((d) => d === 0)).toBe(true);
+  });
+});
+
+describe('buildTileGeometry life', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+
+  it('keeps roads, paths, and rivers as life lines, and parks as plazas and roosts', () => {
+    const g = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_major', id: 'r1', width: 12 }, [
+            [
+              [0, 10],
+              [100, 10],
+            ],
+          ]),
+          feature(2, { class: 'path', id: 'p1' }, [
+            [
+              [0, 20],
+              [50, 20],
+            ],
+          ]),
+          // Region-only features have no life.
+          feature(2, { class: 'road_major', id: 'r2', region: true }, [
+            [
+              [0, 30],
+              [100, 30],
+            ],
+          ]),
+        ]),
+        landuse: layer([feature(3, { class: 'park', id: 'k1' }, [square(1000, 1000, 200)])]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const { life } = g;
+    expect(Array.from(life.kinds)).toEqual([LifeLine.roadMajor, LifeLine.path, LifeLine.plaza]);
+    expect(Array.from(life.starts)).toEqual([0, 2, 4, 9]);
+    // Roads carry their width, for the lanes vehicles keep to.
+    expect(Array.from(life.widths)).toEqual([12, 0, 0]);
+    expect(Array.from(life.coords.slice(0, 4))).toEqual([0, 10, 100, 10]);
+    expect(Array.from(life.roosts)).toEqual([1100, 1100]);
+  });
+
+  it('lines major and secondary roads with streetlights, not side streets', () => {
+    const road = (cls: string, id: string, y: number) =>
+      feature(2, { class: cls, id }, [
+        [
+          [0, y],
+          [2000, y],
+        ],
+      ]);
+    const lampsOn = (cls: string) =>
+      buildTileGeometry({ roads: layer([road(cls, 'r', 500)]) }, createIdRegistry(), tile).life
+        .lamps.length;
+    expect(lampsOn('road_major')).toBeGreaterThan(0);
+    expect(lampsOn('road_mid')).toBeGreaterThan(0);
+    expect(lampsOn('road_minor')).toBe(0);
+  });
+
+  it('lights shops and markets, as areas or points, in the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building_market', id: 'm' }, [square(1000, 1000, 200)]),
+          feature(1, { class: 'building_market', id: 's' }, [[[3000, 3000]]]),
+          feature(3, { class: 'building', id: 'b' }, [square(2000, 2000, 200)]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const shops = Array.from(g.life.shops);
+    expect(shops).toHaveLength(6);
+    expect(shops.slice(0, 2)).toEqual([1100, 1100]);
+    expect(shops[2]).toBeCloseTo(Math.hypot(100, 100));
+    expect(shops.slice(3, 5)).toEqual([3000, 3000]);
+  });
+
+  it('floodlights landmarks over their footprint, in the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building_religious', id: 'c', landmark: true }, [
+            square(1000, 1000, 200),
+          ]),
+          feature(3, { class: 'building', id: 'b' }, [square(2000, 2000, 200)]),
+          // In the neighbor's buffer: that tile floodlights it.
+          feature(3, { class: 'building_religious', id: 'x', landmark: true }, [
+            square(-400, 1000, 200),
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const floods = Array.from(g.life.floods);
+    expect(floods).toHaveLength(3);
+    expect(floods[0]).toBeCloseTo(1100);
+    expect(floods[1]).toBeCloseTo(1100);
+    // Out to its corners.
+    expect(floods[2]).toBeCloseTo(Math.hypot(100, 100));
+  });
+
+  it('marks markets, as areas or points, where street vendors gather', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { id: 'm1', class: 'building_market' }, [square(100, 100, 200)]),
+          feature(3, { id: 'b1', class: 'building' }, [square(600, 600, 100)]),
+        ]),
+        poi: layer([feature(1, { id: 'm2', class: 'building_market' }, [[[900, 40]]])]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.markets).sort((a, b) => a - b)).toEqual([40, 200, 200, 900]);
+  });
+
+  it('marks places people gather at, owned by the tile that holds them', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { id: 'c1', class: 'building_religious', height: 12 }, [
+            square(100, 100, 200),
+          ]),
+          // Grounds: no height.
+          feature(3, { id: 's1', class: 'building_school' }, [square(1000, 1000, 400)]),
+          // In the neighbor's buffer: that tile has it.
+          feature(3, { id: 'c2', class: 'building_religious', height: 12 }, [
+            square(-400, 100, 200),
+          ]),
+          feature(3, { id: 'b1', class: 'building', height: 6 }, [square(600, 600, 100)]),
+        ]),
+        landuse: layer([feature(3, { id: 'f1', class: 'farmland' }, [square(2000, 2000, 800)])]),
+        poi: layer([
+          feature(1, { id: 'p1', class: 'furniture', variant: 'bench' }, [[[50, 60]]]),
+          feature(1, { id: 'p2', class: 'furniture', variant: 'fountain' }, [[[70, 80]]]),
+          feature(1, { id: 'p3', class: 'furniture', variant: 'flagpole' }, [[[90, 90]]]),
+          feature(1, { id: 'p4', class: 'monument' }, [[[300, 900]]]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    type Place = {
+      kind: string | undefined;
+      x?: number;
+      y?: number;
+      radius?: number;
+      building?: number;
+    };
+    const places: Place[] = [];
+    for (let i = 0; i < g.life.places.length; i += PLACE_STRIDE) {
+      const [x, y, code, radius, building] = g.life.places.slice(i, i + PLACE_STRIDE);
+      places.push({ kind: PLACE_CODES[code!], x, y, radius, building });
+    }
+    const byKind: Partial<Record<string, Place>> = Object.fromEntries(
+      places.map((p): [string, Place] => [p.kind ?? '', p]),
+    );
+    expect(places.map((p) => p.kind).sort()).toEqual(
+      ['bench', 'farm', 'fountain', 'monument', 'school', 'worship'].sort(),
+    );
+    expect(byKind.worship).toMatchObject({ x: 200, y: 200, building: 1 });
+    expect(byKind.worship!.radius).toBeCloseTo(200 / Math.sqrt(Math.PI));
+    expect(byKind.school).toMatchObject({ x: 1200, y: 1200, building: 0 });
+    expect(byKind.bench).toMatchObject({ x: 50, y: 60, radius: 0 });
+  });
+
+  it('gives canals, not other streams, to boats', () => {
+    const g = buildTileGeometry(
+      {
+        water: layer([
+          feature(2, { id: 'w1', class: 'water_stream', kind: 'waterway=canal' }, [
+            [
+              [0, 100],
+              [4000, 100],
+            ],
+          ]),
+          feature(2, { id: 'w2', class: 'water_stream', kind: 'waterway=stream' }, [
+            [
+              [0, 900],
+              [4000, 900],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.kinds)).toEqual([LifeLine.canal]);
+  });
+
+  it('skips roosts that fall in the tile buffer', () => {
+    const g = buildTileGeometry(
+      { landuse: layer([feature(3, { class: 'trees', id: 't1' }, [square(-300, 10, 100)])]) },
+      createIdRegistry(),
+      tile,
+    );
+    expect(g.life.roosts).toHaveLength(0);
+  });
+});
+
+describe('parkingStalls', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+  const unitMeters = metersPerUnit(tile);
+  const lot = (x: number, y: number, w: number, h: number) => [
+    [
+      { x, y },
+      { x: x + w, y },
+      { x: x + w, y: y + h },
+      { x, y: y + h },
+      { x, y },
+    ],
+  ];
+
+  it('lays rows of stalls along a lot’s long side, inside it', () => {
+    const stalls = parkingStalls(lot(1000, 1000, 600, 150), unitMeters);
+    const long = 600 * unitMeters;
+    const across = 150 * unitMeters;
+    expect(stalls.length).toBe(
+      Math.floor(long / STALL.width) * Math.max(1, Math.floor(across / STALL.row)),
+    );
+    for (const { p, hx, hy } of stalls) {
+      expect(p.x).toBeGreaterThan(1000);
+      expect(p.x).toBeLessThan(1600);
+      expect(p.y).toBeGreaterThan(1000);
+      expect(p.y).toBeLessThan(1150);
+      // Facing across the rows.
+      expect(Math.abs(hx)).toBeCloseTo(0);
+      expect(Math.abs(hy)).toBeCloseTo(1);
+    }
+  });
+
+  it('drops stalls in the tile buffer', () => {
+    expect(parkingStalls(lot(-400, 1000, 300, 150), unitMeters)).toHaveLength(0);
+  });
+
+  it('reaches the life geometry from parking areas', () => {
+    const g = buildTileGeometry(
+      { landuse: layer([feature(3, { class: 'parking', id: 'pk' }, [square(1000, 1000, 300)])]) },
+      createIdRegistry(),
+      tile,
+    );
+    expect(g.life.spots.length).toBeGreaterThan(0);
+    expect(g.life.spots.length % 4).toBe(0);
   });
 });

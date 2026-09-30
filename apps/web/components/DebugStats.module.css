@@ -1,0 +1,16 @@
+.stats {
+  position: fixed;
+  top: 104px;
+  left: 12px;
+  margin: 0;
+  padding: 4px 8px;
+  background: rgb(4 5 10 / 85%);
+  border: 1px solid #2a2c36;
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+  color: var(--fg-dim);
+  pointer-events: none;
+  z-index: 12;
+}

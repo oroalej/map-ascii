@@ -1,83 +1,147 @@
-import { REGION_TILE_MAX_ZOOM, type BBox, type CameraState } from '@atlas/shared';
-import * as twgl from 'twgl.js';
+import { bandVisibility, CLASS_ZOOM, shopHours, shopOpen, type ShopHours } from '@atlas/shared';
+import type {
+  BBox,
+  CameraState,
+  CityLifeConfig,
+  ClimateConfig,
+  ProcessionRoute,
+  TrafficMix,
+} from '@atlas/shared';
 import {
   clampCamera,
-  easeInOut,
   fitZoom,
-  flyPath,
-  isTilted,
   MAX_ZOOM,
   MIN_ZOOM,
-  multiply,
-  orbitBy,
-  panByView,
-  project,
-  TILE_SIZE,
+  panBy,
   viewportFor,
   zoomAround,
   type CameraLimits,
-  type FlyPath,
 } from './camera';
-import { classDepths, classId, classVisibility, MAX_CLASSES } from './classes';
-import { buildGlyphAtlas, DEFAULT_FONT, type GlyphAtlas } from './glyphs/atlas';
+import { classesIn, type RenderClass } from './classes';
+import { DEFAULT_FONT } from './glyphs/atlas';
+import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
-  buildGlyphTables,
-  MAX_VARIANTS,
-  roadMask,
-  seeThroughMask,
-  type GlyphTables,
-} from './glyphs/select';
+  cellStep,
+  DEFAULT_CELLS,
+  DEFAULT_LABEL_CELL,
+  detailZoom,
+  stepCell,
+  type CellSchedule,
+} from './density';
 import {
-  createCellTargets,
-  createProgram,
-  createTexture,
-  deleteCellTargets,
-  deleteTile,
-  drawExtrusions,
-  drawGround,
-  uploadOverlay,
-  uploadTile,
-  type CellTargets,
-  type TileMesh,
-} from './gpu';
+  createLabelGlyphs,
+  createMapGlyphs,
+  createPrograms,
+  deleteLabelGlyphs,
+  deleteMapGlyphs,
+  deletePrograms,
+  type LabelGlyphs,
+  type MapGlyphs,
+  type Programs,
+  type ThemeResources,
+} from './gpu-context';
+import { startFlight, stepFlight, type Flight } from './flight';
 import { attachInput } from './input';
 import {
-  createOverlay,
-  labelShows,
-  packOverlay,
-  placeLabels,
-  streetMode,
-  type LabelCandidate,
-} from './labels';
-import { MAX_HIGHLIGHT, pointerCell } from './picking';
-import { EXTENT, unpackId, type FeatureInfo, type TileLabel } from './raster/geometry';
-import { cellFragment, cellVertex } from './shaders/cell';
-import { fullscreenVertex } from './shaders/fullscreen';
-import { glyphFragment } from './shaders/glyph';
-import { selectFragment } from './shaders/select';
-import { themeGlyphs, themes, type ThemeName } from './theme';
+  cellPass,
+  crownPass,
+  glyphPass,
+  hasCrowns,
+  lifePass,
+  lightPass,
+  overlayPass,
+  placeGrid,
+  screenArea,
+  selectPass,
+  type Grid,
+  type GridPlacement,
+  type TileDraw,
+  type View,
+} from './passes';
+import { LabelRank } from './labels';
+import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
-  ancestorAt,
-  boundsTiles,
-  findAncestor,
-  LruCache,
-  tileKey,
-  TileSource,
-  tileZoom,
-  viewTiles,
-  type TileHeader,
-  type TileId,
-} from './tiles';
+  activityChanged,
+  activityLevels,
+  FLOOD,
+  SHOP,
+  STREETLIGHT,
+  type Activity,
+} from './life/config';
+import {
+  FLOOD_STRIDE,
+  LAMP_STRIDE,
+  LampState,
+  placeSeed,
+  SHOP_STRIDE,
+  type LampState as LampStateValue,
+  type VisibleLamp,
+} from './life/lights';
+import { moonlight } from './life/moon';
+import { liveProgress, type LngLatBounds } from './life/procession';
+import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
+import { treeGust } from './glyphs/select';
+import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
+import {
+  prevailingWind,
+  rainFor,
+  stillWind,
+  windAt,
+  type WindChoice,
+  type WindNow,
+} from './life/wind';
+import { animationDue, watchVisibility } from './pacing';
+import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
+import {
+  EXTENT,
+  metersPerUnit,
+  tileToLngLat,
+  type FeatureInfo,
+  type TileLabel,
+} from './raster/geometry';
+import { Readback } from './readback';
+import { themes, type ThemeName } from './theme';
+import { TileCache, type LoadedTile } from './tile-cache';
+import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
-export { legendEntries, type LegendEntry } from './legend';
+export { DEFAULT_CELLS, type CellSchedule } from './density';
+export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
+export type { RenderClass } from './classes';
+export type { WindChoice } from './life/wind';
+export { cityTime, type LocalTime } from './life/clock';
+
+/**
+ * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
+ * the time of day the map is lit for.
+ */
+export type LifeSettings = {
+  /** Show the agents (never with reduced motion, which keeps the map still). */
+  enabled: boolean;
+  /**
+   * The time of day in the city: `'live'` for its clock now, else a fixed time, in minutes past
+   * local midnight (today, in the city). The sun lights the map for it, and the daily rhythm
+   * sets how much traffic is out (life/config.ts `activityLevels`).
+   */
+  time: 'live' | number;
+  /**
+   * How hard the wind blows over grass, trees, and water: `'live'` for the season's (the city's
+   * `climate`), else a strength, from the season's direction.
+   */
+  wind: WindChoice;
+};
 
 export type AtlasOptions = {
   tilesUrl: string;
   theme?: ThemeName;
-  /** Cell size in CSS pixels (SPEC.md §2: fixed on screen; default 10×18). */
-  cell?: { width: number; height: number };
+  /**
+   * Map cell size in CSS pixels by zoom (SPEC.md §2 "Cell size"; default `DEFAULT_CELLS`:
+   * 8 px wide in wide views down to 5 px up close).
+   */
+  cells?: CellSchedule;
+  /** Label cell size in CSS pixels, fixed (default 10×18). */
+  labelCell?: { width: number; height: number };
   /** The camera is clamped to these [west, south, east, north] bounds (the city meta's `regionBounds`). */
   bounds: BBox;
   initialCamera: CameraState;
@@ -93,19 +157,49 @@ export type AtlasOptions = {
    * flights are short.
    */
   reducedMotion?: boolean;
+  /**
+   * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
+   * events report them. Anything else is treated as nothing. Default: every feature.
+   */
+  interactive?: (feature: FeatureInfo) => boolean;
   /** CSS font family for non-box-drawing glyphs. */
   font?: string;
+  /** Default: enabled, live time of day. */
+  life?: Partial<LifeSettings>;
+  /** The city's vehicle mix (its pack's `traffic`); default: life/vehicles.ts `DEFAULT_TRAFFIC`. */
+  traffic?: TrafficMix;
+  /** The city's winds by season (its pack's `climate`); default: a breeze from the east. */
+  climate?: ClimateConfig;
+  /**
+   * The city's IANA time zone (its pack's `timezone`), which its clock follows; default: the
+   * sun's time at the middle of `bounds`.
+   */
+  timezone?: string;
+  /** The city's daily rhythm (its pack's `life`); default: `DEFAULT_RHYTHM`. */
+  cityLife?: CityLifeConfig;
+  /** The clock for the live time of day (tests pin it). */
+  now?: () => Date;
+  /**
+   * The city's river processions (its `<slug>.processions.json`): played on request, and shown
+   * live while one is under way by its schedule (with the live time of day).
+   */
+  processions?: readonly ProcessionRoute[];
 };
+
+export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
   camerachange: CameraState;
-  /** The feature under the mouse changed. `point` is in CSS px from the canvas's top left. */
+  /**
+   * The interactive feature under the mouse changed (`AtlasOptions.interactive`). `point` is in
+   * CSS px from the canvas's top left.
+   */
   hover: {
     featureId: string | null;
     feature: FeatureInfo | null;
     point: [number, number] | null;
   };
-  /** A click or tap, on a feature or on nothing. */
+  /** A click or tap, on an interactive feature or on nothing. */
   click: {
     featureId: string | null;
     feature: FeatureInfo | null;
@@ -115,10 +209,28 @@ export type AtlasEventMap = {
   /** A flight reached its target (not sent when input cancels it). */
   flyend: CameraState;
   /**
-   * The visitor moved the camera (drag, wheel, pinch, orbit, or keys), which also ends any
+   * The visitor moved the camera (drag, wheel, pinch, or keys), which also ends any
    * flight. Clicks and hover don't count. A tour pauses on it.
    */
   input: CameraState;
+  /** The browser took the WebGL context away (the map stops drawing until it is restored). */
+  contextlost: undefined;
+  /** The WebGL context is back and the map is being rebuilt. */
+  contextrestored: undefined;
+  /**
+   * The classes drawn in at least one on-screen cell changed (for the legend, SPEC.md §5), in
+   * class id order. Checked at most every 250 ms, a frame or two after drawing.
+   */
+  classeschange: RenderClass[];
+  /** A procession started, ended, or went from played to live (null: none is under way). */
+  procession: ProcessionRun | null;
+  /** The streetlights came on (dusk or night, close enough to see them) or went (for the legend). */
+  lightschange: boolean;
+  /**
+   * The names of places, landmarks, and monuments on screen changed (street names aren't
+   * included), in placement order: most important first. For a text alternative to the map.
+   */
+  labelschange: LabelInView[];
 };
 
 export type FlyOptions = {
@@ -127,6 +239,34 @@ export type FlyOptions = {
 };
 
 export type AtlasEventName = keyof AtlasEventMap;
+
+/** A place, landmark, or monument whose name is on screen (the `labelschange` event). */
+export type LabelInView = {
+  featureId: string;
+  name: string;
+  kind: 'place' | 'landmark' | 'monument';
+  lngLat: [number, number];
+};
+
+/** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
+export type AtlasStats = {
+  /** Frames drawn in the last second (idle frames that draw nothing don't count). */
+  fps: number;
+  /** Main-thread time of a drawn frame, smoothed, in ms (GPU time isn't included). */
+  frameMs: number;
+  /** Main-thread time of a cell pass (tiles, cells, labels), smoothed, in ms. */
+  cellPassMs: number;
+  /** Main-thread time of a crown pass (the swaying tree crowns), smoothed, in ms. */
+  crownPassMs: number;
+  /** Main-thread time of the life layer (moving, placing, and packing its agents), smoothed, in ms. */
+  lifeMs: number;
+  tilesLoaded: number;
+  tilesPending: number;
+  /** Worker time to decode a tile, averaged over recent tiles, in ms. */
+  decodeMs: number;
+  /** Life layer agents on the grid in the last frame. */
+  agents: number;
+};
 
 export type Atlas = {
   /** Move the camera, or fly there with `animate`. */
@@ -142,38 +282,42 @@ export type Atlas = {
   setHighlighted(featureIds: readonly string[]): void;
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
+  getStats(): AtlasStats;
+  /** Turn the life layer on or off, or change the time of day. */
+  setLife(settings: Partial<LifeSettings>): void;
+  getLife(): LifeSettings;
+  /**
+   * Play a procession from its start as a time-lapse. False when it isn't one of the city's or
+   * the life layer is off.
+   */
+  playProcession(id: string): boolean;
+  stopProcession(): void;
   on<K extends AtlasEventName>(event: K, handler: (payload: AtlasEventMap[K]) => void): () => void;
   destroy(): void;
 };
 
-const DEFAULT_CELL = { width: 10, height: 18 };
-
-/** 0xRRGGBB → [r, g, b] in 0–1. */
-const rgb = (hex: number): [number, number, number] => [
-  ((hex >> 16) & 0xff) / 255,
-  ((hex >> 8) & 0xff) / 255,
-  (hex & 0xff) / 255,
-];
-
 const sameCamera = (a: CameraState, b: CameraState) =>
-  a.lat === b.lat &&
-  a.lng === b.lng &&
-  a.zoom === b.zoom &&
-  a.pitch === b.pitch &&
-  a.bearing === b.bearing;
-const TILE_CACHE_SIZE = 256;
-/** While idle, animation (water, landmark pulse) redraws at most this often. */
-const IDLE_FRAME_MS = 1000 / 30;
-/** How long after input the loop keeps drawing every frame. */
-const ACTIVE_MS = 500;
+  a.lat === b.lat && a.lng === b.lng && a.zoom === b.zoom;
+/** The on-screen classes are read back at most this often. */
+const CLASS_READ_MS = 250;
+/** How often the sun's position is worked out again. */
+const SUN_MS = 1000;
+/** Life agents come from tiles at least this deep (the shallowest life zoom band is 13.5). */
+const LIFE_TILE_MIN_ZOOM = 13;
+/** Smoothing for the timing stats: each new sample's weight. */
+const STATS_WEIGHT = 0.1;
+const smooth = (average: number, sample: number) =>
+  average === 0 ? sample : average + (sample - average) * STATS_WEIGHT;
 
 /**
  * Create the ASCII atlas on a canvas (ARCHITECTURE.md §3). Each frame:
- * 1. choose the visible tiles and ask the worker for missing ones
+ * 1. choose the visible tiles and ask the worker for missing ones (tile-cache.ts)
  * 2. cell pass: rasterize tiles into one pixel per cell (class, attributes, feature id)
- * 3. select pass: pick each cell's glyph from its class and neighbors
- * 4. glyph pass: draw the glyphs at full resolution
- * Steps 1–2 run only when the camera or tiles change.
+ * 3. overlay: place labels on the cell grid
+ * 4. select pass: pick each cell's glyph from its class and neighbors
+ * 5. glyph pass: draw the glyphs at full resolution
+ * 6. picking: read the id buffer under the pointer back, asynchronously (picking.ts)
+ * Steps 1–3 run only when the camera or tiles change (passes.ts has the passes).
  */
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
@@ -181,7 +325,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     throw new Error('ASCII Atlas requires WebGL2, which this browser does not support.');
   }
 
-  const cellCss = options.cell ?? DEFAULT_CELL;
+  const schedule = options.cells ?? DEFAULT_CELLS;
+  const labelCss = options.labelCell ?? DEFAULT_LABEL_CELL;
   const baseMinZoom = options.minZoom ?? MIN_ZOOM;
   const limits: CameraLimits = {
     bounds: options.bounds,
@@ -189,10 +334,34 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     maxZoom: options.maxZoom ?? MAX_ZOOM,
   };
   const reducedMotion = options.reducedMotion ?? false;
+  const interactive = options.interactive ?? (() => true);
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
+  let life: LifeSettings = { enabled: true, time: 'live', wind: 'live', ...options.life };
+  const now = options.now ?? (() => new Date());
+  /** Where the city's clock is (life/clock.ts). */
+  const zone: ClockZone = {
+    timezone: options.timezone,
+    lng: (options.bounds[0] + options.bounds[2]) / 2,
+  };
+  /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
+  let cityMonth = cityTime(now(), zone).month;
+  /**
+   * The wind at `time` seconds in world axes (x east, y south), which are the grid's (the map is
+   * north-up): the season's (or the chosen strength), veering and breathing; still with reduced
+   * motion.
+   */
+  const worldWind = (time: number): WindNow => {
+    const base = prevailingWind(life.wind, options.climate, cityMonth);
+    return reducedMotion ? stillWind(base) : windAt(time, base);
+  };
+  /** How hard it rains now: in a storm (the chosen or the season's), never with reduced motion. */
+  const currentRain = (): number =>
+    rainFor(prevailingWind(life.wind, options.climate, cityMonth), reducedMotion);
   let theme = themes[options.theme ?? 'dark'];
   let destroyed = false;
+  /** The WebGL context is lost: nothing draws, and no GPU handle is valid. */
+  let lost = false;
   const listeners = new Map<AtlasEventName, Set<(payload: never) => void>>();
 
   const emit = <K extends AtlasEventName>(event: K, payload: AtlasEventMap[K]) => {
@@ -201,65 +370,114 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
   };
 
-  // GPU programs
-  const cellProgram = createProgram(gl, cellVertex, cellFragment);
-  const selectProgram = createProgram(gl, fullscreenVertex, selectFragment);
-  const glyphProgram = createProgram(gl, fullscreenVertex, glyphFragment);
-  const emptyVao = gl.createVertexArray();
-  const depths = classDepths();
-  const seeThrough = seeThroughMask();
-  const roads = roadMask();
-
   // Frame state
   let cellDirty = true;
+  /**
+   * What the cells were last drawn for, in a flat view: the zoom, where the map and label grids
+   * start, and which of their cells are on screen. A pan that changes none of it (within a cell)
+   * leaves the cells as they are, only shifted (`shiftCells`). Null: draw them again.
+   */
+  let cellsFor: string | null = null;
+  let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
+  /** Timing stats (`getStats`): when recent frames were drawn, and smoothed durations. */
+  const drawTimes: number[] = [];
+  let frameMs = 0;
+  let cellPassMs = 0;
+  let crownPassMs = 0;
+  let lifeMs = 0;
 
-  // Theme resources depend on the device pixel ratio (glyph atlas resolution).
+  // GPU resources (gpu-context.ts). Glyphs depend on the device pixel ratio (atlas resolution)
+  // and, for the map's, on the cell size step (density.ts), so each step's are kept once built.
+  // The render targets are the map and label grids, each plus a one-cell margin on every side.
+  let programs: Programs | undefined = createPrograms(gl);
   let dpr = 0;
-  let cellDev = { w: 1, h: 1 };
-  let atlas: GlyphAtlas | undefined;
-  let atlasTex: WebGLTexture | undefined;
-  let tables: GlyphTables | undefined;
-  let tableTex: WebGLTexture | undefined;
+  /** The map cell size step (density.ts `cellStep`), set by `resize`. */
+  let step: number | undefined;
+  const mapGlyphs = new Map<number, MapGlyphs>();
+  let labelGlyphs: LabelGlyphs | undefined;
+  let themeRes: ThemeResources | undefined;
+  let targets: CellTargets | undefined;
+  /** Bumped when the targets are recreated, so reads from the old ones are dropped. */
+  let targetsGeneration = 0;
+  let grid: Grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  let labelGrid: Grid = grid;
+  let placement: GridPlacement | undefined;
+  /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
+  let crownTiles: TileDraw[] = [];
+  const readback = new Readback(gl);
 
-  const buildThemeResources = () => {
-    if (atlasTex) gl.deleteTexture(atlasTex);
-    if (tableTex) gl.deleteTexture(tableTex);
-    cellDev = {
-      w: Math.max(1, Math.round(cellCss.width * dpr)),
-      h: Math.max(1, Math.round(cellCss.height * dpr)),
-    };
-    atlas = buildGlyphAtlas(themeGlyphs(theme), cellDev.w, cellDev.h, font);
-    atlasTex = createTexture(gl, gl.R8, gl.RED, atlas.width, atlas.height, atlas.data);
-    tables = buildGlyphTables(theme, atlas.index);
-    tableTex = createTexture(gl, gl.R8, gl.RED, MAX_VARIANTS, MAX_CLASSES, tables.table);
-    cellDirty = true;
+  const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
+  const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
+  const view = (): View => ({
+    camera,
+    dpr,
+    cellDev: cellDev(),
+    labelDev: themeRes?.label.cellDev ?? { w: 1, h: 1 },
+    detailZoom: detailZoom(camera.zoom, stepCell(schedule, step ?? 0).width),
+    width: canvas.width,
+    height: canvas.height,
+  });
+
+  /** Forget every glyph atlas (a new theme or pixel ratio); `resize` builds what it needs. */
+  const dropGlyphs = (deleteTextures: boolean) => {
+    if (deleteTextures) {
+      for (const glyphs of mapGlyphs.values()) deleteMapGlyphs(gl, glyphs);
+      if (labelGlyphs) deleteLabelGlyphs(gl, labelGlyphs);
+    }
+    mapGlyphs.clear();
+    labelGlyphs = undefined;
+    themeRes = undefined;
   };
 
-  // Render targets, sized to the cell grid plus a one-cell margin on every side.
-  let targets: CellTargets | undefined;
-  let grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  /** The glyphs for the current step, built the first time it is used. */
+  const useGlyphs = () => {
+    const at = step ?? 0;
+    let map = mapGlyphs.get(at);
+    if (!map) {
+      map = createMapGlyphs(gl, theme, stepCell(schedule, at), dpr, font);
+      mapGlyphs.set(at, map);
+    }
+    labelGlyphs ??= createLabelGlyphs(gl, labelCss, dpr, font);
+    if (themeRes?.map !== map || themeRes.label !== labelGlyphs) {
+      themeRes = { map, label: labelGlyphs };
+      cellDirty = true;
+      cellsFor = null;
+    }
+  };
 
   const resize = () => {
     const nextDpr = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(canvas.clientWidth * nextDpr));
     const height = Math.max(1, Math.round(canvas.clientHeight * nextDpr));
     if (nextDpr !== dpr) {
+      dropGlyphs(dpr !== 0);
       dpr = nextDpr;
-      buildThemeResources();
     }
+    step = cellStep(schedule, camera.zoom, step);
+    useGlyphs();
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
     }
-    const cols = Math.ceil(width / cellDev.w) + 3;
-    const rows = Math.ceil(height / cellDev.h) + 3;
-    if (!targets || targets.cols !== cols || targets.rows !== rows) {
+    const cols = Math.ceil(width / cellDev().w) + 3;
+    const rows = Math.ceil(height / cellDev().h) + 3;
+    const labelDev = view().labelDev;
+    const labelCols = Math.ceil(width / labelDev.w) + 3;
+    const labelRows = Math.ceil(height / labelDev.h) + 3;
+    if (
+      !targets ||
+      targets.cols !== cols ||
+      targets.rows !== rows ||
+      targets.labelCols !== labelCols ||
+      targets.labelRows !== labelRows
+    ) {
       if (targets) deleteCellTargets(gl, targets);
-      targets = createCellTargets(gl, cols, rows);
+      targets = createCellTargets(gl, cols, rows, labelCols, labelRows);
+      targetsGeneration++;
     }
     // Zooming out stops where the bounds fill the view (SPEC.md §3).
     const size = cssSize();
@@ -270,255 +488,443 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     cellDirty = true;
+    cellsFor = null;
   };
 
   // Tiles
-  let header: TileHeader | null = null;
-  const failed = new Set<string>();
-  /** Loaded tiles: their GPU mesh and label candidates (null = the archive has no tile). */
-  const meshes = new LruCache<{ mesh: TileMesh; labels: TileLabel[] } | null>(
-    TILE_CACHE_SIZE,
-    (tile) => {
-      if (tile) deleteTile(gl, tile.mesh);
+  const tileCache = new TileCache(
+    gl,
+    new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
+    () => {
+      if (destroyed) return;
+      cellDirty = true;
+      cellsFor = null;
     },
   );
-  const source = new TileSource(new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href, {
-    header: (h) => {
-      header = h;
-      cellDirty = true;
-    },
-    tile: (key, geometry) => {
-      if (destroyed) return;
-      meshes.set(
-        key,
-        geometry ? { mesh: uploadTile(gl, geometry), labels: geometry.labels } : null,
-      );
-      cellDirty = true;
-    },
-    error: (message, key) => {
-      if (key) failed.add(key);
-      console.warn(`ASCII Atlas: ${key ? `tile ${key}: ` : ''}${message}`);
-    },
-  });
+  const { source } = tileCache;
 
-  const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
+  const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
+    const a = screenArea(v, map.grid);
+    const b = screenArea(v, labels.grid, v.labelDev);
+    return [
+      v.camera.zoom,
+      map.grid.originCol,
+      map.grid.originRow,
+      labels.grid.originCol,
+      labels.grid.originRow,
+      a.left,
+      a.top,
+      a.right,
+      a.bottom,
+      b.left,
+      b.top,
+      b.right,
+      b.bottom,
+    ].join(' ');
+  };
+  /** Shift the cells for a pan within a cell, if that is all it takes; whether it was. */
+  const shiftCells = (): boolean => {
+    if (!targets || cellsFor === null || cellsTargets !== targets) return false;
+    const v = view();
+    const next = placeGrid(v, v.cellDev, targets.cols, targets.rows);
+    const nextLabels = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
+    if (cellsKey(v, next, nextLabels) !== cellsFor) return false;
+    placement = next;
+    grid = next.grid;
+    labelGrid = nextLabels.grid;
+    // Keep asking for the view's tiles (one that arrives draws the cells again).
+    tileCache.tilesToDraw(camera, cssSize());
+    return true;
+  };
 
-  /** Tiles to draw for the view: loaded ones, else a loaded ancestor or loaded children. */
-  const tilesToDraw = (): TileId[] => {
-    if (!header) return [];
-    const minZoom = header.minZoom;
-    let view: TileId[];
-    if (isTilted(camera)) {
-      // The tilted view's ground footprint (the far edge is where the view reaches the ground).
-      const [[west, south], [east, north]] = viewportFor(camera, cssSize()).getBounds() as [
+  const drawCells = () => {
+    if (!targets || !programs || !themeRes) return;
+    const v = view();
+    placement = placeGrid(v, v.cellDev, targets.cols, targets.rows);
+    grid = placement.grid;
+    const labelPlacement = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
+    labelGrid = labelPlacement.grid;
+    cellsFor = cellsKey(v, placement, labelPlacement);
+    cellsTargets = targets;
+    const tiles = tileCache.tilesToDraw(camera, cssSize());
+    syncLife(tiles);
+    syncLamps(tiles);
+    const labels = new Map<number, TileLabel>();
+    const layer = (ids: readonly TileId[]): TileDraw[] => {
+      const out: TileDraw[] = [];
+      for (const tile of ids) {
+        const loaded = tileCache.get(tile);
+        if (!loaded) continue;
+        for (const label of loaded.labels) labels.set(label.id, label);
+        out.push({ tile, mesh: loaded.mesh });
+      }
+      return out;
+    };
+    // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
+    const region = layer(tileCache.regionTilesFor(tiles));
+    crownTiles = layer(tiles);
+    cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
+    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values());
+    reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
+    classesStale = true;
+  };
+
+  /** The last `labelschange` payload's feature ids, to send it only on change. */
+  let labelsKey = '';
+  const reportLabels = (placed: readonly TileLabel[]) => {
+    const inView: LabelInView[] = [];
+    for (const label of placed) {
+      const kind =
+        label.rank === LabelRank.landmark
+          ? 'landmark'
+          : label.rank === LabelRank.monument
+            ? 'monument'
+            : label.rank === LabelRank.street ||
+                label.rank === LabelRank.streetMinor ||
+                label.rank === LabelRank.roadMajor
+              ? null
+              : 'place';
+      const featureId = source.feature(label.id)?.id;
+      if (!kind || !featureId) continue;
+      inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+    }
+    const key = inView.map((l) => l.featureId).join('|');
+    if (key === labelsKey) return;
+    labelsKey = key;
+    emit('labelschange', inView);
+  };
+
+  // Which classes are on screen (the `classeschange` event): the on-screen part of the class
+  // buffer is read back after cell passes, throttled, so the last one is always read.
+  let classesStale = false;
+  let lastClassRead = -Infinity;
+  let presentKey = '';
+
+  const readClasses = (now: number) => {
+    if (!classesStale || !targets || now - lastClassRead < CLASS_READ_MS) return;
+    classesStale = false;
+    lastClassRead = now;
+    const area = screenArea(view(), grid);
+    const left = Math.max(0, area.left);
+    const top = Math.max(0, area.top);
+    const width = Math.min(targets.cols, area.right) - left;
+    const height = Math.min(targets.rows, area.bottom) - top;
+    if (width <= 0 || height <= 0) return;
+    const generation = targetsGeneration;
+    readback.request(
+      targets.cellFbo,
+      gl.COLOR_ATTACHMENT0,
+      { x: left, y: top, width, height },
+      (texels) => {
+        if (generation !== targetsGeneration) {
+          classesStale = true;
+          return;
+        }
+        const classes = classesIn(texels);
+        const key = classes.join(',');
+        if (key === presentKey) return;
+        presentKey = key;
+        emit('classeschange', classes);
+      },
+    );
+  };
+
+  // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
+  const world = new LifeWorld(options.traffic);
+  const processions = options.processions ?? [];
+  world.setProcessions(processions);
+  /** The procession last reported (`procession` event), as "id live". */
+  let processionKey = '';
+  const reportProcession = () => {
+    const run = world.procession();
+    const key = run ? `${run.id} ${run.live}` : '';
+    if (key === processionKey) return;
+    processionKey = key;
+    emit('procession', run ?? null);
+  };
+  const lifeActive = () => life.enabled && !reducedMotion;
+  let lastLifeStep = -Infinity;
+  /** Whether the life texture holds agents (so turning the layer off clears it once). */
+  let lifeShown = false;
+  let agentsDrawn = 0;
+
+  const syncLife = (tiles: readonly TileId[]) => {
+    const lifeTiles: LifeTile[] = [];
+    if (lifeActive()) {
+      for (const tile of tiles) {
+        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+        const loaded = tileCache.get(tile);
+        if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
+      }
+    }
+    world.sync(lifeTiles);
+  };
+
+  /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */
+  let bounds: { camera: CameraState; width: number; height: number; at: LngLatBounds } | null =
+    null;
+  const viewBounds = (): LngLatBounds => {
+    const { width, height } = cssSize();
+    if (bounds?.camera !== camera || bounds.width !== width || bounds.height !== height) {
+      const [[west, south], [east, north]] = viewportFor(camera, { width, height }).getBounds() as [
         [number, number],
         [number, number],
       ];
-      view = boundsTiles([west, south, east, north], tileZoom(camera.zoom, header), header, [
-        camera.lng,
-        camera.lat,
-      ]);
-    } else {
-      view = viewTiles(camera, cssSize(), header);
+      bounds = { camera, width, height, at: [west, south, east, north] };
     }
-    const out = new Map<string, TileId>();
-    for (const tile of view) {
-      const key = tileKey(tile);
-      if (meshes.has(key)) {
-        out.set(key, tile);
-        continue;
-      }
-      if (!failed.has(key)) source.request(tile);
-      const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
-      if (ancestor) {
-        out.set(tileKey(ancestor), ancestor);
-        continue;
-      }
-      for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
-          const child = { z: tile.z + 1, x: tile.x * 2 + dx, y: tile.y * 2 + dy };
-          if (meshes.has(tileKey(child))) out.set(tileKey(child), child);
+    return bounds.at;
+  };
+
+  /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
+  let lifeAgents: VisibleAgent[] = [];
+  const drawLife = (at: number, wind: WindNow) => {
+    if (!targets || !themeRes || !placement) return;
+    let agents: VisibleAgent[] = [];
+    if (lifeActive()) {
+      // How hard the wind blows in a tree's crown at a place, on the grid's cells (select pass);
+      // `wind` is the frame's, taken at this same `at`.
+      const time = (at - start) / 1000;
+      const grid = placement.grid;
+      const toCell = placement.toCell;
+      world.step(
+        (at - lastLifeStep) / 1000,
+        (lng, lat) => {
+          const [col, row] = toCell(lng, lat);
+          const x = grid.originCol + Math.floor(col);
+          const y = grid.originRow + Math.floor(row);
+          return wind.strength * treeGust(x, y, time, wind.dir);
+        },
+        camera.zoom,
+        viewBounds(),
+        // Circling flocks drift with it (in world axes, like the tiles).
+        worldWind(time),
+      );
+      lastLifeStep = at;
+      agents = world.visible(
+        camera.zoom,
+        activity,
+        [camera.lng, camera.lat],
+        { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+        viewBounds(),
+      );
+      reportProcession();
+    } else if (!lifeShown) {
+      return;
+    }
+    // Nothing out, and the texture already empty: nothing to upload.
+    if (agents.length === 0 && !lifeShown) {
+      agentsDrawn = 0;
+      lifeAgents = agents;
+      return;
+    }
+    agentsDrawn = lifePass(gl, targets, themeRes, theme, view(), placement, agents, sun);
+    lifeShown = agents.length > 0;
+    lifeAgents = agents;
+  };
+
+  // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
+  // lighting, like windows, so they show with the life layer off and with reduced motion too.
+  let lamps: VisibleLamp[] = [];
+  /** The shops on screen, each with its own hours, and which of them are open (by index). */
+  let shops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
+  let shopsKey = '';
+  /** The city's local time, minutes past midnight (`updateSun`), for shops' hours. */
+  let cityMinutes = 12 * 60;
+  /**
+   * The lamps lit now (street and flood lamps, and the open shops) and which shops are open, as
+   * a key; worked out again only when the lamps or the city's minute change.
+   */
+  let lit = { lamps, shops, minutes: NaN, all: [] as VisibleLamp[], key: '' };
+  const litNow = () => {
+    if (lit.lamps !== lamps || lit.shops !== shops || lit.minutes !== cityMinutes) {
+      const open = shops.map((s) => shopOpen(s.hours, cityMinutes));
+      lit = {
+        lamps,
+        shops,
+        minutes: cityMinutes,
+        all: [...lamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
+        key: open.map((o) => (o ? '1' : '0')).join(''),
+      };
+    }
+    return lit;
+  };
+  /** Whether the light texture holds lamps (so it is cleared once when they go). */
+  let lampsShown = false;
+  const lampShow = () => bandVisibility(STREETLIGHT.zoom, camera.zoom);
+  /** Each loaded tile's shops and lamps, placed once (by its life data, dropped with it). */
+  const tileLights = new WeakMap<
+    LoadedTile['life'],
+    { shops: { lamp: VisibleLamp; hours: ShopHours }[]; lamps: VisibleLamp[] }
+  >();
+  const lightsOf = (tile: TileId, life: LoadedTile['life']) => {
+    const cached = tileLights.get(life);
+    if (cached) return cached;
+    const tileShops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
+    const tileLamps: VisibleLamp[] = [];
+    // Shops and markets: lit while open, each by its own hours (shared rhythm.ts shopHours).
+    const shopsHere = life.shops;
+    for (let i = 0; shopsHere && i < shopsHere.length; i += SHOP_STRIDE) {
+      const x = shopsHere[i]!;
+      const y = shopsHere[i + 1]!;
+      const perMeter = 1 / metersPerUnit(tile);
+      const reach = Math.min(shopsHere[i + 2]!, SHOP.maxRadius * perMeter) + SHOP.spill * perMeter;
+      const at = tileToLngLat(tile, { x, y });
+      const seed = placeSeed((tile.x * EXTENT + x) / perMeter, (tile.y * EXTENT + y) / perMeter);
+      tileShops.push({
+        lamp: {
+          lng: at[0],
+          lat: at[1],
+          center: at,
+          pool: at,
+          east: tileToLngLat(tile, { x: x + reach, y }),
+          north: tileToLngLat(tile, { x, y: y - reach }),
+          state: LampState.shop,
+          seed: seed & 31,
+        },
+        hours: shopHours(seed, options.cityLife),
+      });
+    }
+    // Floodlit landmarks: a wash of light over each footprint, and a little past it.
+    const floods = life.floods;
+    for (let i = 0; floods && i < floods.length; i += FLOOD_STRIDE) {
+      const x = floods[i]!;
+      const y = floods[i + 1]!;
+      const perMeter = 1 / metersPerUnit(tile);
+      const reach = Math.min(floods[i + 2]!, FLOOD.maxRadius * perMeter) + FLOOD.spill * perMeter;
+      const at = tileToLngLat(tile, { x, y });
+      tileLamps.push({
+        lng: at[0],
+        lat: at[1],
+        center: at,
+        pool: at,
+        east: tileToLngLat(tile, { x: x + reach, y }),
+        north: tileToLngLat(tile, { x, y: y - reach }),
+        state: LampState.flood,
+        seed: 0,
+      });
+    }
+    const found = life.lamps;
+    const radius = STREETLIGHT.radius / metersPerUnit(tile);
+    for (let i = 0; i < found.length; i += LAMP_STRIDE) {
+      const [lng, lat] = tileToLngLat(tile, { x: found[i]!, y: found[i + 1]! });
+      // The pool, centered out over the road.
+      const x = found[i + 4]!;
+      const y = found[i + 5]!;
+      tileLamps.push({
+        lng,
+        lat,
+        center: tileToLngLat(tile, { x: found[i + 6]!, y: found[i + 7]! }),
+        pool: tileToLngLat(tile, { x, y }),
+        east: tileToLngLat(tile, { x: x + radius, y }),
+        north: tileToLngLat(tile, { x, y: y - radius }),
+        state: found[i + 2]! as LampStateValue,
+        seed: found[i + 3]!,
+      });
+    }
+    const placed = { shops: tileShops, lamps: tileLamps };
+    tileLights.set(life, placed);
+    return placed;
+  };
+  const syncLamps = (tiles: readonly TileId[]) => {
+    lamps = [];
+    shops = [];
+    shopsKey = '';
+    if (lampShow() <= 0) return;
+    for (const tile of tiles) {
+      if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      const loaded = tileCache.get(tile);
+      if (!loaded) continue;
+      const placed = lightsOf(tile, loaded.life);
+      for (const shop of placed.shops) shops.push(shop);
+      for (const lamp of placed.lamps) lamps.push(lamp);
+    }
+  };
+  /** Whether the light texture holds headlight beams (so they are cleared once they go). */
+  let beamsShown = false;
+  /**
+   * Put the lamps on the grid when it moves or they come on, and the moving vehicles' headlight
+   * beams every frame they are out; clear them once they go. Tells the legend when the lamps
+   * come on or go (`lightschange`).
+   */
+  const drawLights = (cellsDrawn: boolean) => {
+    if (!targets || !placement) return;
+    // Lit from dusk (shaders/glyph.ts `lamps()`).
+    const on = lampShow() > 0 && daylight < 0.75;
+    const beams = on && lifeAgents.length > 0;
+    const changed = on !== lampsShown;
+    // A shop opening or closing packs the lamps again.
+    const key = on ? litNow().key : '';
+    const shopsChanged = key !== shopsKey;
+    shopsKey = key;
+    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    lightPass(
+      gl,
+      targets,
+      view(),
+      placement,
+      on ? litNow().all : [],
+      beams ? lifeAgents : [],
+      changed || shopsChanged || cellsDrawn,
+    );
+    lampsShown = on;
+    beamsShown = beams;
+    if (changed) emit('lightschange', on);
+  };
+
+  // The time of day the map is lit for (life/sun.ts) and how much traffic is out
+  // (life/config.ts), worked out again every `SUN_MS`.
+  let daylight = 1;
+  /** How much moonlight falls (life/moon.ts), 0–1. */
+  let moon = 0;
+  let activity: Activity = activityLevels(1);
+  /** The sun the map's shadows fall from (none at night). */
+  let sun: Sun | null = null;
+  let lastSun = -Infinity;
+  const updateSun = (at: number) => {
+    if (at - lastSun < SUN_MS) return;
+    lastSun = at;
+    // A procession under way by its schedule, when the map follows the real clock.
+    let live: { id: string; progress: number } | undefined;
+    if (life.time === 'live') {
+      for (const route of processions) {
+        const progress = liveProgress(route.schedule, now());
+        if (progress !== undefined) {
+          live = { id: route.id, progress };
+          break;
         }
       }
     }
-    // Coarser tiles first, so finer ones overwrite them where both exist.
-    return [...out.values()].sort((a, b) => a.z - b.z);
-  };
-
-  /**
-   * Tiles whose region-only features to draw under the view's tiles: each view tile's
-   * ancestor at `REGION_TILE_MAX_ZOOM` (or the tile itself when it is that coarse), else, while
-   * that one loads, its nearest loaded ancestor.
-   */
-  const regionTilesFor = (tiles: readonly TileId[]): TileId[] => {
-    if (!header) return [];
-    const loaded = (key: string) => !!meshes.get(key);
-    const out = new Map<string, TileId>();
-    for (const tile of tiles) {
-      const region = ancestorAt(tile, Math.max(header.minZoom, REGION_TILE_MAX_ZOOM));
-      const key = tileKey(region);
-      if (loaded(key)) {
-        out.set(key, region);
-        continue;
-      }
-      if (!meshes.has(key) && !failed.has(key)) source.request(region);
-      const fallback = findAncestor(region, header.minZoom, loaded);
-      if (fallback) out.set(tileKey(fallback), fallback);
-    }
-    return [...out.values()].sort((a, b) => a.z - b.z);
-  };
-
-  /** Screen position (CSS px) of a point, for the overlay; set by each cell pass. */
-  let screenOf: (lng: number, lat: number) => [number, number] = () => [0, 0];
-
-  const cellPass = () => {
-    if (!targets) return;
-    const { cols, rows } = targets;
-    const tilted = isTilted(camera);
-    const view = viewportFor(camera, cssSize());
-    screenOf = (lng, lat) => view.project([lng, lat]) as [number, number];
-
-    /** Tile units and meters → cell-grid clip space, per tile. */
-    let tileMatrix: (tile: TileId) => number[];
-    if (tilted) {
-      // Perspective: the grid is fixed to the screen, with a one-cell margin on each side.
-      grid = { originCol: 0, originRow: 0, shiftX: cellDev.w, shiftY: cellDev.h };
-      const [w, h] = [canvas.width, canvas.height];
-      // prettier-ignore
-      const screenToGrid = [
-        w / (cellDev.w * cols), 0, 0, 0,
-        0, -h / (cellDev.h * rows), 0, 0,
-        0, 0, 1, 0,
-        (w + 2 * cellDev.w) / (cellDev.w * cols) - 1, (h + 2 * cellDev.h) / (cellDev.h * rows) - 1, 0, 1,
-      ];
-      const toGrid = multiply(screenToGrid, view.viewProjectionMatrix);
-      const unitsPerMeter = view.distanceScales.unitsPerMeter[2]!;
-      tileMatrix = ({ z, x, y }) => {
-        const size = TILE_SIZE / 2 ** z;
-        // prettier-ignore
-        return multiply(toGrid, [
-          size / EXTENT, 0, 0, 0,
-          0, -size / EXTENT, 0, 0,
-          0, 0, unitsPerMeter, 0,
-          x * size, TILE_SIZE - y * size, 0, 1,
-        ]);
-      };
-    } else {
-      // Flat north-up: the grid is anchored to the world, shifted by the sub-cell pan offset.
-      const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
-      const left = Math.round(cx * dpr - canvas.width / 2);
-      const top = Math.round(cy * dpr - canvas.height / 2);
-      const originCol = Math.floor(left / cellDev.w) - 1;
-      const originRow = Math.floor(top / cellDev.h) - 1;
-      grid = {
-        originCol,
-        originRow,
-        shiftX: left - originCol * cellDev.w,
-        shiftY: top - originRow * cellDev.h,
-      };
-      tileMatrix = (tile) => {
-        const tileDev = TILE_SIZE * 2 ** (camera.zoom - tile.z) * dpr;
-        // prettier-ignore
-        return [
-          ((tileDev / EXTENT / cellDev.w) * 2) / cols, 0, 0, 0,
-          0, ((tileDev / EXTENT / cellDev.h) * 2) / rows, 0, 0,
-          0, 0, 1, 0,
-          ((tile.x * tileDev) / cellDev.w - originCol) * (2 / cols) - 1,
-          ((tile.y * tileDev) / cellDev.h - originRow) * (2 / rows) - 1, 0, 1,
-        ];
-      };
-    }
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, targets.cellFbo);
-    gl.viewport(0, 0, cols, rows);
-    for (let i = 0; i < 3; i++) gl.clearBufferfv(gl.COLOR, i, [0, 0, 0, 0]);
-    gl.clearBufferfi(gl.DEPTH_STENCIL, 0, 1, 0);
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LESS);
-    gl.useProgram(cellProgram.program);
-    twgl.setUniforms(cellProgram, {
-      u_depth: depths,
-      u_vis: classVisibility(camera.zoom),
-      u_zoom: camera.zoom,
-      u_roadMask: roads,
-      u_origin: [grid.originCol, grid.originRow],
+    world.setLive(live?.id, live?.progress);
+    // The moment the map shows: now, or today at the fixed time in the city.
+    const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
+    const position = solarPosition(moment, camera.lng, camera.lat);
+    const next = daylightAt(position.altitude);
+    const nextMoon = moonlight(moment, camera.lng, camera.lat);
+    const local = cityTime(moment, zone);
+    cityMinutes = local.minutes;
+    cityMonth = cityTime(now(), zone).month;
+    const nextActivity = activityLevels(next, {
+      minutes: local.minutes,
+      weekday: local.weekday,
+      life: options.cityLife,
     });
-
-    const labels = new Map<number, TileLabel>();
-    const drawn: { mesh: TileMesh; matrix: number[] }[] = [];
-    const tiles = tilesToDraw();
-    // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
-    for (const tile of regionTilesFor(tiles)) {
-      const loaded = meshes.get(tileKey(tile));
-      if (!loaded) continue;
-      for (const label of loaded.labels) labels.set(label.id, label);
-      twgl.setUniforms(cellProgram, { u_matrix: tileMatrix(tile) });
-      drawGround(gl, loaded.mesh.region);
+    // Shadows follow the sun while it is up.
+    const nextSun = position.altitude > 0 ? position : null;
+    const moved = activityChanged(nextActivity, activity);
+    if (
+      moved ||
+      Math.abs(next - daylight) > 0.001 ||
+      Math.abs(nextMoon - moon) > 0.001 ||
+      Math.abs((nextSun?.azimuth ?? 0) - (sun?.azimuth ?? 0)) > 0.01 ||
+      Math.abs((nextSun?.altitude ?? 0) - (sun?.altitude ?? 0)) > 0.01 ||
+      !nextSun !== !sun
+    ) {
+      daylight = next;
+      moon = nextMoon;
+      activity = nextActivity;
+      sun = nextSun;
+      drawDirty = true;
     }
-    for (const tile of tiles) {
-      const loaded = meshes.get(tileKey(tile));
-      if (!loaded) continue;
-      for (const label of loaded.labels) labels.set(label.id, label);
-      const matrix = tileMatrix(tile);
-      twgl.setUniforms(cellProgram, { u_matrix: matrix });
-      drawGround(gl, loaded.mesh);
-      drawn.push({ mesh: loaded.mesh, matrix });
-    }
-    // 3D buildings stand up only in the tilted view.
-    if (tilted) {
-      for (const { mesh, matrix } of drawn) {
-        twgl.setUniforms(cellProgram, { u_matrix: matrix });
-        drawExtrusions(gl, mesh);
-      }
-    }
-    gl.bindVertexArray(null);
-    gl.disable(gl.DEPTH_TEST);
-    uploadOverlay(gl, targets, overlayTexels([...labels.values()]));
-  };
-
-  /** Place the names whose zoom band includes the camera zoom (labels.ts). */
-  const overlayTexels = (labels: TileLabel[]): Uint8Array => {
-    if (!targets || !atlas) return new Uint8Array(0);
-    const overlay = createOverlay(targets.cols, targets.rows);
-    const tilted = isTilted(camera);
-    const toCell = (lng: number, lat: number): [number, number] => {
-      if (tilted) {
-        // The grid starts one cell above and left of the screen.
-        const [x, y] = screenOf(lng, lat);
-        return [(x * dpr) / cellDev.w + 1, (y * dpr) / cellDev.h + 1];
-      }
-      const [x, y] = project(lng, lat, camera.zoom);
-      return [(x * dpr) / cellDev.w - grid.originCol, (y * dpr) / cellDev.h - grid.originRow];
-    };
-    // Only the cells actually on screen (the grid has a margin, and a sub-cell pan shift).
-    const area = {
-      left: Math.ceil(grid.shiftX / cellDev.w),
-      top: Math.ceil(grid.shiftY / cellDev.h),
-      right: Math.floor((grid.shiftX + canvas.width) / cellDev.w),
-      bottom: Math.floor((grid.shiftY + canvas.height) / cellDev.h),
-    };
-    const glyphs = atlas;
-    const glyphIndex = (char: string) => {
-      const index = glyphs.index(char);
-      return index === 0 ? undefined : index;
-    };
-
-    const candidates: LabelCandidate[] = [];
-    for (const label of labels) {
-      if (!labelShows(label.band, camera.zoom)) continue;
-      const [col, row] = toCell(label.lng, label.lat);
-      candidates.push({
-        id: label.id,
-        text: label.text,
-        rank: label.rank,
-        col: Math.floor(col),
-        row: Math.floor(row),
-        // Street names follow the street in flat views; tilted ones keep them beside it.
-        mode: label.angle !== undefined && !tilted ? streetMode(label.angle) : 'beside',
-      });
-    }
-    placeLabels(overlay, candidates, glyphIndex, area);
-    return packOverlay(overlay);
   };
 
   // Selection and highlights, by feature id; resolved to id-buffer indices each frame, since a
@@ -528,64 +934,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hoverIndex = 0;
   const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
 
-  const selectPass = (time: number) => {
-    if (!targets || !tables) return;
+  const highlights = () => {
     let highlightCount = 0;
     for (const id of highlightedIds) {
       const index = source.indexOf(id);
       if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
     }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
-    gl.viewport(0, 0, targets.cols, targets.rows);
-    gl.useProgram(selectProgram.program);
-    twgl.setUniforms(selectProgram, {
-      u_class: targets.classTex,
-      u_attr: targets.attrTex,
-      u_id: targets.idTex,
-      u_table: tableTex,
-      u_kind: tables.kinds,
-      u_count: tables.counts,
-      u_connect: tables.connects,
-      u_origin: [grid.originCol, grid.originRow],
-      u_time: reducedMotion ? 0 : time,
-      u_zoom: camera.zoom,
-      u_seeThrough: seeThrough,
-      u_roadMask: roads,
-      u_tilted: isTilted(camera),
-      u_cellAspect: cellDev.h / cellDev.w,
-      u_hover: hoverIndex,
-      u_selected: selectedId ? source.indexOf(selectedId) : 0,
-      u_highlight: highlightIndices,
-      u_highlightCount: highlightCount,
-    });
-    gl.bindVertexArray(emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  };
-
-  const glyphPass = (time: number) => {
-    if (!targets || !tables || !atlas) return;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.useProgram(glyphProgram.program);
-    twgl.setUniforms(glyphProgram, {
-      u_glyphs: targets.glyphTex,
-      u_atlas: atlasTex,
-      u_cell: [cellDev.w, cellDev.h],
-      u_shift: [grid.shiftX, grid.shiftY],
-      u_height: canvas.height,
-      u_columns: atlas.columns,
-      u_colors: tables.colors,
-      u_background: theme.background.slice(0, 3),
-      u_time: time,
-      u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
-      u_overlay: targets.overlayTex,
-      u_labelColor: rgb(theme.label),
-      u_accent: rgb(theme.accent),
-      u_shimmer: !reducedMotion,
-    });
-    gl.bindVertexArray(emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindVertexArray(null);
+    return {
+      hover: hoverIndex,
+      selected: selectedId ? source.indexOf(selectedId) : 0,
+      highlight: highlightIndices,
+      highlightCount,
+    };
   };
 
   let sizeDirty = true;
@@ -595,97 +955,204 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   observer.observe(canvas);
 
   // Flights (SPEC.md §3 "Fly-to").
-  let flight: { path: FlyPath; start: number } | null = null;
+  let flight: Flight | null = null;
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
-    const to = clampCamera({ ...camera, ...target }, limits, cssSize());
-    const path = flyPath(camera, to, cssSize(), { reducedMotion, duration: opts.duration });
-    flight = { path, start: performance.now() };
-    lastInput = performance.now();
+    const now = performance.now();
+    flight = startFlight(camera, target, limits, cssSize(), {
+      reducedMotion,
+      duration: opts.duration,
+      now,
+    });
+    lastInput = now;
   };
 
-  const stepFlight = (now: number) => {
+  const advanceFlight = (now: number) => {
     if (!flight) return;
-    const t = Math.min(1, (now - flight.start) / Math.max(1, flight.path.duration));
-    // Only the zoom is clamped mid-flight; the arc may pass over the edge of the region.
-    camera = clampCamera(flight.path.at(easeInOut(t)), limits);
+    const step = stepFlight(flight, now, limits, cssSize());
+    camera = step.camera;
     cellDirty = true;
     lastInput = now;
     emit('camerachange', { ...camera });
-    if (t >= 1) {
+    if (step.done) {
       flight = null;
-      camera = clampCamera(camera, limits, cssSize());
       emit('flyend', { ...camera });
     }
   };
 
   // Picking: at most one id-buffer read per frame, after drawing (ARCHITECTURE.md §3 step 7).
-  let pick: { point: [number, number]; click: boolean } | null = null;
-  const pixel = new Uint8Array(4);
-
-  const readFeatureIndex = (point: readonly [number, number]): number => {
-    if (!targets) return 0;
-    const [col, row] = pointerCell(point, dpr, {
-      shiftX: grid.shiftX,
-      shiftY: grid.shiftY,
-      cellWidth: cellDev.w,
-      cellHeight: cellDev.h,
-    });
-    if (col < 0 || row < 0 || col >= targets.cols || row >= targets.rows) return 0;
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, targets.cellFbo);
-    gl.readBuffer(gl.COLOR_ATTACHMENT2);
-    gl.readPixels(col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    return unpackId(pixel);
-  };
-
-  const resolvePick = () => {
-    if (!pick) return;
-    const { point, click } = pick;
-    pick = null;
-    const index = readFeatureIndex(point);
-    const feature = source.feature(index) ?? null;
-    const featureId = feature?.id ?? null;
-    if (click) {
-      const [lng, lat] = viewportFor(camera, cssSize()).unproject([...point]) as [number, number];
-      emit('click', { featureId, feature, point, lngLat: [lng, lat] });
-    } else if (index !== hoverIndex) {
-      hoverIndex = index;
-      drawDirty = true;
-      emit('hover', { featureId, feature, point });
-    }
-  };
+  /** Whether the mouse is over the canvas; a hover answered after it left is dropped. */
+  let pointerOver = false;
+  const picker = new Picker(
+    readback,
+    () => targetsGeneration,
+    ({ point, click, index: hit, camera: at, size }: PickResult) => {
+      // A feature that isn't interactive counts as a miss: no highlight, and no feature reported.
+      const found = source.feature(hit);
+      const feature = found && interactive(found) ? found : null;
+      const featureId = feature?.id ?? null;
+      const index = feature ? hit : 0;
+      if (click) {
+        const [lng, lat] = viewportFor(at, size).unproject([...point]) as [number, number];
+        emit('click', { featureId, feature, point, lngLat: [lng, lat] });
+      } else if (pointerOver && index !== hoverIndex) {
+        hoverIndex = index;
+        drawDirty = true;
+        emit('hover', { featureId, feature, point });
+      }
+    },
+  );
 
   let raf = 0;
   const frame = (now: number) => {
-    if (destroyed) return;
+    if (destroyed || lost) return;
     raf = requestAnimationFrame(frame);
+    readback.poll();
+    // Zooming across a cell size step rebuilds the grid at the new size (density.ts).
+    if (step !== undefined && cellStep(schedule, camera.zoom, step) !== step) sizeDirty = true;
     if (sizeDirty) {
       sizeDirty = false;
       resize();
     }
-    stepFlight(now);
-    const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
-    const animationDue = !reducedMotion && now - lastDraw >= interval;
-    if (!cellDirty && !drawDirty && !animationDue) return;
-    const time = (now - start) / 1000;
-    if (cellDirty) {
-      cellDirty = false;
-      cellPass();
+    advanceFlight(now);
+    if (cameraMoved) {
+      cameraMoved = false;
+      emit('camerachange', { ...camera });
     }
-    selectPass(time);
-    glyphPass(time);
-    drawDirty = false;
-    lastDraw = now;
-    resolvePick();
+    updateSun(now);
+    if (!targets || !programs || !themeRes) return;
+    const animating = animationDue(now, lastDraw, lastInput, {
+      reducedMotion,
+      watched: watch.watched(),
+    });
+    if (cellDirty || drawDirty || animating) {
+      const time = (now - start) / 1000;
+      const frameStart = performance.now();
+      let cellsDrawn = false;
+      if (cellDirty) {
+        cellDirty = false;
+        if (!shiftCells()) {
+          drawCells();
+          cellsDrawn = true;
+          cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
+        }
+      }
+      const v = view();
+      const wind = worldWind(time);
+      // Tree crowns go over the cells, and sway every frame while the wind blows through them.
+      const swaying =
+        !reducedMotion &&
+        wind.strength > 0 &&
+        hasCrowns(crownTiles) &&
+        bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
+      if (placement && (cellsDrawn || swaying)) {
+        const crownStart = performance.now();
+        crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
+        crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
+      }
+      selectPass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        grid,
+        reducedMotion ? 0 : time,
+        highlights(),
+        wind,
+        sun,
+      );
+      const lifeStart = performance.now();
+      drawLife(now, wind);
+      lifeMs = smooth(lifeMs, performance.now() - lifeStart);
+      drawLights(cellsDrawn);
+      glyphPass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        theme,
+        v,
+        grid,
+        labelGrid,
+        time,
+        reducedMotion,
+        daylight,
+        { rain: currentRain(), wind },
+        lampShow(),
+        moon,
+      );
+      drawDirty = false;
+      lastDraw = now;
+      frameMs = smooth(frameMs, performance.now() - frameStart);
+      drawTimes.push(now);
+    }
+    while (drawTimes.length > 0 && drawTimes[0]! <= now - 1000) drawTimes.shift();
+    // The cell targets keep the last drawn frame, so a pick doesn't need a redraw.
+    picker.issue({
+      fbo: targets.cellFbo,
+      attachment: gl.COLOR_ATTACHMENT2,
+      cols: targets.cols,
+      rows: targets.rows,
+      dpr,
+      grid: {
+        shiftX: grid.shiftX,
+        shiftY: grid.shiftY,
+        cellWidth: cellDev().w,
+        cellHeight: cellDev().h,
+      },
+      camera: { ...camera },
+      size: cssSize(),
+      generation: targetsGeneration,
+    });
+    readClasses(now);
   };
   raf = requestAnimationFrame(frame);
 
-  const applyCamera = (next: CameraState) => {
+  // A lost context (GPU reset, too many contexts, a backgrounded mobile tab) takes every GPU
+  // handle with it. Ask for it back, then rebuild everything; the tiles are fetched again.
+  const onContextLost = (event: Event) => {
+    event.preventDefault();
+    if (lost) return;
+    lost = true;
+    cancelAnimationFrame(raf);
+    programs = undefined;
+    dropGlyphs(false);
+    targets = undefined;
+    targetsGeneration++;
+    readback.reset(true);
+    tileCache.suspend();
+    emit('contextlost', undefined);
+  };
+  const onContextRestored = () => {
+    if (!lost || destroyed) return;
+    lost = false;
+    programs = createPrograms(gl);
+    tileCache.resume();
+    // `resize` rebuilds the theme resources and render targets.
+    sizeDirty = true;
+    cellDirty = true;
+    raf = requestAnimationFrame(frame);
+    emit('contextrestored', undefined);
+  };
+  canvas.addEventListener('webglcontextlost', onContextLost);
+  canvas.addEventListener('webglcontextrestored', onContextRestored);
+
+  // The map moves on its own only while someone can watch it (pacing.ts); back in view, the
+  // agents carry on from where they stood.
+  const watch = watchVisibility(canvas, (watched) => {
+    if (watched) lastLifeStep = performance.now();
+  });
+
+  /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
+  let cameraMoved = false;
+  /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
+  const applyCamera = (next: CameraState, batched = false) => {
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
     lastInput = performance.now();
-    emit('camerachange', { ...camera });
+    if (batched) cameraMoved = true;
+    else emit('camerachange', { ...camera });
   };
 
   /** Input takes over from any flight. */
@@ -698,28 +1165,25 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     };
 
   const detachInput = attachInput(canvas, {
-    pan: byUser((dx: number, dy: number) => applyCamera(panByView(camera, dx, dy, cssSize()))),
-    // Tilted views zoom around the center (the cursor anchor math is for flat views).
+    pan: byUser((dx: number, dy: number) => applyCamera(panBy(camera, dx, dy), true)),
     zoom: byUser((delta: number, anchor: [number, number]) => {
       const zoom = Math.min(limits.maxZoom, Math.max(limits.minZoom, camera.zoom + delta));
-      applyCamera(zoomAround(camera, zoom, isTilted(camera) ? [0, 0] : anchor));
+      applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
-    orbit: byUser((dBearing: number, dPitch: number) =>
-      applyCamera(orbitBy(camera, dBearing, dPitch)),
-    ),
     hover: (point) => {
+      pointerOver = point !== null;
       if (point) {
-        if (!pick?.click) pick = { point, click: false };
-      } else if (hoverIndex !== 0) {
-        hoverIndex = 0;
-        drawDirty = true;
-        emit('hover', { featureId: null, feature: null, point: null });
+        picker.hover(point);
+      } else {
+        picker.cancelHover();
+        if (hoverIndex !== 0) {
+          hoverIndex = 0;
+          drawDirty = true;
+          emit('hover', { featureId: null, feature: null, point: null });
+        }
       }
     },
-    tap: (point) => {
-      pick = { point, click: true };
-      drawDirty = true;
-    },
+    tap: (point) => picker.click(point),
   });
 
   return {
@@ -742,12 +1206,42 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawDirty = true;
     },
     getFeature: (featureId) => source.featureById(featureId),
+    getStats: () => ({
+      fps: drawTimes.length,
+      frameMs,
+      cellPassMs,
+      crownPassMs,
+      lifeMs,
+      tilesLoaded: tileCache.size,
+      tilesPending: source.pendingCount,
+      decodeMs: source.decodeMsAverage,
+      agents: agentsDrawn,
+    }),
+    setLife(settings) {
+      life = { ...life, ...settings };
+      lastSun = -Infinity;
+      // Spawn or drop agents for the tiles on screen.
+      cellDirty = true;
+      cellsFor = null;
+    },
+    getLife: () => ({ ...life }),
+    playProcession(id) {
+      if (!lifeActive() || !world.play(id)) return false;
+      drawDirty = true;
+      return true;
+    },
+    stopProcession() {
+      world.stop();
+      drawDirty = true;
+    },
     setYear() {
       // Phase 4: time filtering.
     },
     setTheme(name) {
       theme = themes[name];
-      buildThemeResources();
+      // `resize` builds the new theme's glyphs (on restore, while the context is lost).
+      dropGlyphs(!lost);
+      sizeDirty = true;
       drawDirty = true;
     },
     on(event, handler) {
@@ -762,14 +1256,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       destroyed = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      watch.detach();
       detachInput();
-      source.destroy();
-      meshes.clear();
-      if (targets) deleteCellTargets(gl, targets);
-      if (atlasTex) gl.deleteTexture(atlasTex);
-      if (tableTex) gl.deleteTexture(tableTex);
-      for (const p of [cellProgram, selectProgram, glyphProgram]) gl.deleteProgram(p.program);
-      gl.deleteVertexArray(emptyVao);
+      tileCache.destroy();
+      readback.reset(lost);
+      if (!lost) {
+        if (targets) deleteCellTargets(gl, targets);
+        dropGlyphs(true);
+        if (programs) deletePrograms(gl, programs);
+      }
       listeners.clear();
     },
   };

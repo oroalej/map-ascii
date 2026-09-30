@@ -17,7 +17,14 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { type: 'header'; header: TileHeader }
-  | { type: 'tile'; key: string; geometry: TileGeometry | null; newFeatures: FeatureInfo[] }
+  | {
+      type: 'tile';
+      key: string;
+      geometry: TileGeometry | null;
+      newFeatures: FeatureInfo[];
+      /** Time to decode and triangulate the tile (0 when the archive has none). */
+      decodeMs?: number;
+    }
   | { type: 'error'; key: string | null; message: string };
 
 export const tileKey = ({ z, x, y }: TileId) => `${z}/${x}/${y}`;
@@ -64,35 +71,6 @@ export function viewTiles(
   const [ccx, ccy] = [cx / tileSize, cy / tileSize];
   const dist = (t: TileId) => (t.x + 0.5 - ccx) ** 2 + (t.y + 0.5 - ccy) ** 2;
   return tiles.sort((a, b) => dist(a) - dist(b));
-}
-
-/**
- * Tiles at `z` covering `bounds` (e.g. a tilted view's ground footprint) plus `margin` tiles
- * on each side, limited to the archive's data, nearest to `center` first, at most `cap`.
- */
-export function boundsTiles(
-  bounds: BBox,
-  z: number,
-  header: TileHeader,
-  center: readonly [number, number],
-  cap = 256,
-  margin = 1,
-): TileId[] {
-  const [west, south, east, north] = bounds;
-  const [dw, ds, de, dn] = header.bounds;
-  if (west > de || east < dw || south > dn || north < ds) return [];
-  const [vx0, vy0] = tileAt(west, north, z);
-  const [vx1, vy1] = tileAt(east, south, z);
-  const [dx0, dy0] = tileAt(dw, dn, z);
-  const [dx1, dy1] = tileAt(de, ds, z);
-  const [x0, y0] = [Math.max(dx0, vx0 - margin), Math.max(dy0, vy0 - margin)];
-  const [x1, y1] = [Math.min(dx1, vx1 + margin), Math.min(dy1, vy1 + margin)];
-  const [px, py] = project(center[0], center[1], z);
-  const [cx, cy] = [px / TILE_SIZE, py / TILE_SIZE];
-  const tiles: TileId[] = [];
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) tiles.push({ z, x, y });
-  const dist = (t: TileId) => (t.x + 0.5 - cx) ** 2 + (t.y + 0.5 - cy) ** 2;
-  return tiles.sort((a, b) => dist(a) - dist(b)).slice(0, cap);
 }
 
 /** The nearest ancestor (down to `minZoom`) for which `has` is true. */
@@ -166,31 +144,98 @@ export type TileSourceHandlers = {
   error: (message: string, key: string | null) => void;
 };
 
+/** How many recent tile decodes `decodeMsAverage` covers. */
+const DECODE_SAMPLES = 50;
+
+/** At most this many tile requests are at the worker at once; the rest wait their turn. */
+export const MAX_IN_FLIGHT = 6;
+
+/** Who wants a tile: the region's coarser tiles go before the view's own. */
+export type RequestGroup = 'region' | 'view';
+
+/**
+ * Tile requests: at most `max` at the worker at once, the rest queued in the order they are
+ * wanted. Each group's queue is replaced whenever it is wanted again, so tiles the view has
+ * moved past (the zooms a fly-to passes through) are dropped before they are asked for.
+ */
+export class RequestQueue {
+  private readonly inFlight = new Set<string>();
+  private readonly queues: Record<RequestGroup, TileId[]> = { region: [], view: [] };
+
+  constructor(
+    private readonly send: (tile: TileId, key: string) => void,
+    private readonly max = MAX_IN_FLIGHT,
+  ) {}
+
+  /** The tiles `group` needs now, most wanted first: they replace its queue. */
+  want(tiles: readonly TileId[], group: RequestGroup) {
+    this.queues[group] = tiles.filter((t) => !this.inFlight.has(tileKey(t)));
+    this.pump();
+  }
+
+  /** The worker answered for `key` (a tile or an error): the next one can go. */
+  done(key: string) {
+    if (this.inFlight.delete(key)) this.pump();
+  }
+
+  /** Whether `key` is queued or at the worker. */
+  has(key: string) {
+    return (
+      this.inFlight.has(key) ||
+      this.queues.region.some((t) => tileKey(t) === key) ||
+      this.queues.view.some((t) => tileKey(t) === key)
+    );
+  }
+
+  /** Requests queued or at the worker. */
+  get size() {
+    return this.inFlight.size + this.queues.region.length + this.queues.view.length;
+  }
+
+  private pump() {
+    while (this.inFlight.size < this.max) {
+      const tile = this.queues.region.shift() ?? this.queues.view.shift();
+      if (!tile) return;
+      const key = tileKey(tile);
+      if (this.inFlight.has(key)) continue;
+      this.inFlight.add(key);
+      this.send(tile, key);
+    }
+  }
+}
+
 /** Requests tiles from the worker and tracks the feature id strings it registers. */
 export class TileSource {
   /** Features by index - 1 (the id buffer stores the index; 0 = none). */
   private readonly features: FeatureInfo[] = [];
   /** Feature id string → index. */
   private readonly indices = new Map<string, number>();
-  private readonly pending = new Set<string>();
+  private readonly requests: RequestQueue;
   private readonly worker: Worker;
+  /** Decode times of the most recent tiles, for `decodeMsAverage`. */
+  private readonly decodeTimes: number[] = [];
 
   constructor(url: string, handlers: TileSourceHandlers) {
+    this.requests = new RequestQueue((tile, key) => this.post({ type: 'tile', key, ...tile }));
     this.worker = new Worker(new URL('./tiles.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
       if (message.type === 'header') {
         handlers.header(message.header);
       } else if (message.type === 'tile') {
-        this.pending.delete(message.key);
+        this.requests.done(message.key);
+        if (message.decodeMs !== undefined) {
+          this.decodeTimes.push(message.decodeMs);
+          if (this.decodeTimes.length > DECODE_SAMPLES) this.decodeTimes.shift();
+        }
         for (const info of message.newFeatures) {
           this.features.push(info);
           this.indices.set(info.id, this.features.length);
         }
         handlers.tile(message.key, message.geometry);
       } else {
-        if (message.key) this.pending.delete(message.key);
         handlers.error(message.message, message.key);
+        if (message.key) this.requests.done(message.key);
       }
     };
     this.post({ type: 'init', url });
@@ -212,14 +257,23 @@ export class TileSource {
   }
 
   isPending(key: string) {
-    return this.pending.has(key);
+    return this.requests.has(key);
   }
 
-  request(tile: TileId) {
-    const key = tileKey(tile);
-    if (this.pending.has(key)) return;
-    this.pending.add(key);
-    this.post({ type: 'tile', key, ...tile });
+  /** Tiles wanted and not yet answered: queued, or at the worker. */
+  get pendingCount() {
+    return this.requests.size;
+  }
+
+  /** Mean decode time of the last tiles decoded, in ms (0 before any). */
+  get decodeMsAverage() {
+    const n = this.decodeTimes.length;
+    return n === 0 ? 0 : this.decodeTimes.reduce((a, b) => a + b, 0) / n;
+  }
+
+  /** The tiles `group` needs now, most wanted first (`RequestQueue.want`). */
+  want(tiles: readonly TileId[], group: RequestGroup) {
+    this.requests.want(tiles, group);
   }
 
   destroy() {

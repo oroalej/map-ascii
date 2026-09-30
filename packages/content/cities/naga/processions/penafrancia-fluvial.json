@@ -1,0 +1,31 @@
+{
+  "id": "procession/penafrancia-fluvial",
+  "title": {
+    "en": "Peñafrancia fluvial procession"
+  },
+  "story": {
+    "en": "TODO(verify): The image of Our Lady of Peñafrancia leaves Danlugan ni Ina on a pagoda barge, towed by voyadores in paddle boats, and goes up the Naga River to near the Peñafrancia Basilica. The route is from the project owner and needs a published source; the date and times are placeholders."
+  },
+  "status": "draft",
+  "kind": "fluvial",
+  "route": {
+    "from": "osm:node/6791580317",
+    "to": "osm:way/23670362"
+  },
+  "schedule": {
+    "month": 9,
+    "weekday": 0,
+    "nth": 3,
+    "offset_days": -1,
+    "start": "15:00",
+    "duration_min": 180,
+    "timezone": "Asia/Manila"
+  },
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/6791580317",
+      "note": "Locations and names only: Danlugan ni Ina (node/6791580317) and the Peñafrancia Basilica (way/23670362). The route between them, the schedule, and the formation are unsourced."
+    }
+  ]
+}

@@ -6,7 +6,7 @@ The engine is city-agnostic. Everything specific to a city lives in its city pac
 
 ```
 ascii-atlas/
-├─ CLAUDE.md
+├─ AGENTS.md                  guide for coding agents (CLAUDE.md imports it)
 ├─ docs/                      SPEC, ARCHITECTURE, DATA, ROADMAP
 │  └─ cities/                 one brief per city (naga.md, …)
 ├─ package.json               root scripts (dev, data:build, test, lint, typecheck)
@@ -45,6 +45,8 @@ ascii-atlas/
 │  │     ├─ events/*.json
 │  │     ├─ name-history/*.json
 │  │     ├─ tours/*.json
+│  │     ├─ plans/*.json, art/*.json   landmark plan-view parts, front-view art
+│  │     ├─ landcover/*.json   trees, grass, parking OSM doesn't map yet, traced from imagery (dropped as OSM catches up)
 │  │     ├─ historic-maps/*.json
 │  │     └─ media/            photos (or references to external hosting)
 │  └─ shared/                 zod schemas + TS types
@@ -57,7 +59,7 @@ ascii-atlas/
 const atlas = createAtlas(canvas, {
   tilesUrl: `/tiles/${city}.pmtiles`,      // e.g. /tiles/naga.pmtiles
   theme: 'dark',
-  cell: { width: 10, height: 18 },
+  cells: DEFAULT_CELLS,   // map cell width by zoom (density.ts); labels: labelCell, 10×18
   bounds: meta.regionBounds,
   initialCamera: urlCamera ?? meta.defaultCamera,
   year: 2026,
@@ -71,12 +73,14 @@ atlas.setTheme('dark' | 'light');
 atlas.setSelected(featureId | null);
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
+atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
-atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input', handler);
+atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input'
+  | 'classeschange' | 'labelschange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 
-`input` fires when the visitor moves the camera (drag, wheel, pinch, orbit, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom)` and `CLASS_LABELS` for the legend.
+`classeschange` sends the classes drawn in at least one on-screen cell (for the legend), and `labelschange` the places, landmarks, and monuments whose names are on screen (`{ featureId, name, kind, lngLat }`, for the "Places in view" list); both fire only on change. `contextlost` and `contextrestored` bracket a lost WebGL context (see §3). `input` fires when the visitor moves the camera (drag, wheel, pinch, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom, present?)` and `CLASS_LABELS` for the legend.
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
 
@@ -93,13 +97,12 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - Convert to typed arrays per layer (triangulate polygons with earcut, keep lines as polylines).
    - Runs in a Web Worker; results are cached in an LRU by tile key.
 3. **Cell pass (GPU).**
-   - Render geometry into an offscreen framebuffer whose resolution equals the cell grid (e.g. 192×54 for a 1920×972 canvas at 10×18).
+   - Render geometry into an offscreen framebuffer whose resolution equals the cell grid (e.g. 384×108 for a 1920×972 canvas at 5×9).
    - Uses MRT (multiple render targets):
-     - `classTex` (R8: feature class id)
+     - `classTex` (RGBA8, red only: feature class id; RGBA so the legend's readback needs no conversion)
      - `attrTex` (RGBA8: height, shade, time-visibility, flags)
      - `idTex` (RGBA8: 32-bit feature id packed)
    - Lines are drawn with width in cell units so roads stay 1 cell wide at every zoom.
-   - Orbit mode draws extruded building meshes with depth testing; face normals feed shade.
 4. **Neighborhood pass.**
    - A fragment shader samples each cell's 3×3 neighbors in `classTex` to get road connectivity bits (N/E/S/W and diagonals).
    - The bits index a lookup table of box-drawing glyphs.
@@ -111,7 +114,7 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
    - CPU placement on the cell grid with a greedy, priority-ordered collision grid.
    - Drawn as glyphs in the same pass, so they look native.
 7. **Picking.**
-   - On hover or click, read back a single texel from `idTex` at the pointer cell (`readPixels`, throttled).
+   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below). A feature that fails the `interactive` option (the web app passes "is a landmark") counts as a miss: it is neither highlighted nor reported.
 
 Rasterization runs only when the camera, year, or tiles change. When idle, only the glyph pass re-runs, for animation.
 
@@ -121,36 +124,70 @@ Rasterization runs only when the camera, year, or tiles change. When idle, only 
 - The cell grid is anchored to the world, and the glyph pass shifts it by the sub-cell pan offset, so panning scrolls smoothly instead of re-quantizing.
 - Zoom follows the 512-px tile convention (`@math.gl/web-mercator`, MapLibre).
 
-**Implementation notes (Place-level detail and orbit).**
+**Implementation notes (Place-level detail).**
 - **Overlay.** Labels are drawn from an RGBA8 overlay texture on the cell grid (a 16-bit glyph code per cell), over the map in the glyph pass. Map glyphs come first in the glyph atlas so their indices fit the byte-sized glyph table; label characters follow.
-- **Top-down only.** The map never mixes in front views: landmark detail comes from plan-view `building_part` footprints (pipeline step 04, from the city pack's `plans/`), which the renderer treats like any building (outlines, priority by height, 3D extrusion).
-- **One matrix path.** The cell pass maps tile units (and meters, for heights) to the cell grid with a per-tile 4×4 matrix. Flat north-up cameras use an affine matrix and the world-anchored grid; tilted or rotated cameras (orbit mode) use `WebMercatorViewport`'s view-projection with a screen-anchored grid.
-- **3D buildings.** The tile worker extrudes buildings with a height (a wall quad per footprint edge, the footprint's triangles as the roof); each wall's shade comes from its facing. In the tilted view, ground features keep their class-priority depth in the back of the depth range and extrusions use their real depth in front, so buildings hide what is behind them.
+- **Top-down only.** The map never mixes in front views: landmark detail comes from plan-view `building_part` footprints (pipeline step 04, from the city pack's `plans/`), which the renderer treats like any building (outlines, priority by height).
+- **One matrix path.** The camera is always flat and north-up (the map never tilts or rotates), so the cell pass maps tile units to the world-anchored cell grid with a per-tile affine matrix.
+
+**Life layer (SPEC.md §4).**
+- The tile worker also emits a tile's `LifeGeometry` (`life/geometry.ts`): road, path, plaza-outline, and river polylines in tile units (roads with their width in meters, so each vehicle keeps to a lane on its half: `life/config.ts` `laneOffset`), plus roost points for birds (park, woods, and water centroids inside the tile) and parking stalls (rows along each parking lot's principal axis, inside the lot and the tile: `raster/geometry.ts` `parkingStalls`). Loaded tiles keep it on the main thread.
+- `life/simulate.ts` is pure TS. `LifeWorld` holds a `TileLife` per drawn tile (z13 and deeper), synced when the cell pass runs and seeded from the tile key. Movers walk their polyline in tile units at meters-per-second speeds and pick another usable line meeting at a junction (an endpoint index per tile), else U-turn. Flocks circle a roost. Before moving, each vehicle and boat takes its speed from the nearest one ahead on its line, going its way, whose side-to-side span overlaps its own (`FOLLOW`: gap less a minimum, over a headway, capped at its own speed), so queues form. Parked vehicles are spawned once per tile on lot stalls and along the curbs of some wide roads, from their own random stream; those roads drive on the width left between the parking strips. `step(dt)` clamps `dt` to 100 ms and moves only what could be seen: the kinds that show at the zoom, and, given the view's bounds, the agents within 100 m of them (`STEP_MARGIN_M`). The others wait where they are, except trains, which run on from tile to tile. `visible()` places only those within 30 m of the view, and applies the zoom bands and time-of-day activity (`life/config.ts`), keeps movers inside their own tile (tiles overlap in their buffers), and caps the count.
+- Every drawn frame, the **life pass** (`passes.ts`, packing in `life/draw.ts`) projects the agents with the grid placement's `toCell` and writes an RGBA8 `lifeTex` on the cell grid (glyph index, life class id, agent kind bits, and for vehicles and boats their paint in alpha bits 0–3, their part in bits 4–6, and bit 7 for parked, lamps off). A vehicle or boat (`life/vehicles.ts`: kinds, sizes, paints, top-down plans, and the default traffic mix) that is at least `STAMP_MIN_CELLS` long on screen is stamped at its real footprint: the projected 1 m forward and 1 m right vectors give an affine map, each cell center in the footprint's bounding box is mapped back to the vehicle's own coordinates, and the plan gives its part. The glyph pass draws an agent over the map where the map class's `cellBits` allow it, and colors vehicle and boat cells from the theme's `vehiclePaints`, shaded by part. A vehicle's stamp may reach open ground beside the road; a boat's only water. Labels stay on top.
+- **Day/night** is a `u_daylight` uniform (0–1). It comes from the solar altitude over the camera, worked out once a second in `life/sun.ts`, or from a fixed value. The glyph pass tints colors with it and lights hash-chosen building cells as windows, by world cell, so they stay put as the map pans.
+
+- **Processions** (`life/procession.ts`): `ProcessionScene` places a procession's boats and crowds along its route (from `<city>.processions.json`) for a progress of 0–1, all in meters along the route and across it. `LifeWorld` plays one on request (`playProcession`, a time-lapse on its own clock) or shows the live one: once a second, with the sun, `liveProgress` checks each schedule in its time zone. Its agents go first in `visible()`, outside the cap, and other river boats are hidden while it runs. The `procession` event tells the web app which one is under way. Crowd people holding candles carry a flag (bit 7) in the life texel's alpha, which the glyph pass lights from dusk (`lamps()`), like vehicles' and boats' lamps. Motion runs on a seeded time warp (`motionProfile`: halts and surges, normalized so a run still ends at the landing), which each boat samples with its own lag behind the lead; boats sway on their own and are placed across the channel between the route's measured `banks`, never within a meter of either. Ropes and poles are line agents (`VisibleAgent.line`): polylines `packLife` rasterizes into line glyphs (`─ │ ╱ ╲`, by their direction on screen) over water only, painted in turn (a pole's stripes), with an optional tip glyph; lines under a cell long aren't drawn.
+
+**Module layout.** `index.ts` holds the public API and wires the frame together; `passes.ts` has the cell, overlay, select, life, and glyph passes; `life/` the life layer's geometry, simulation, tuning, drawing, and sun; `tile-cache.ts` the loaded tiles and which to draw; `gpu-context.ts` the programs, theme resources, and render targets; `flight.ts` fly-to; `picking.ts` the pointer picker; `readback.ts` asynchronous GPU reads.
 
 **Implementation notes (Phase 2).**
 - **Crossfades.** Each frame the cell pass gets every class's visibility (`bandVisibility` of its `CLASS_ZOOM` band, 0–1). A partly visible class keeps only the cells whose per-world-cell hash falls under its visibility and discards the rest, so it dissolves into the layer beneath and the dither stays put while panning.
 - **Region layers.** The sea, coastline, terrain, and admin boundaries are ordinary classes: terrain bands nest, and the band number in the height byte makes the higher band win (the `ramp` glyph kind picks `. : - = + * # %` from it). Admin lines are see-through for outlines and curbs.
-- **Picking.** The pointer maps to a cell by inverting the glyph pass (`picking.ts`). After a frame is drawn, one texel of `idTex` is read (`readBuffer(COLOR_ATTACHMENT2)` + `readPixels`), at most once per frame. The tile worker sends a `FeatureInfo` for each feature it registers, so an index resolves to a feature without keeping tiles on the main thread.
+- **Picking.** The pointer maps to a cell by inverting the glyph pass (`picking.ts`). After a frame is drawn, one texel of `idTex` is read, at most once per frame, without blocking: `readback.ts` issues `readPixels` into a pixel-pack buffer with a fence, and copies the data out a frame or two later, once the fence has signaled. A read from render targets that were recreated in between (a resize) is dropped. The tile worker sends a `FeatureInfo` for each feature it registers, so an index resolves to a feature without keeping tiles on the main thread.
 - **Selection.** The select pass compares each cell's feature index with the hovered, selected, and highlighted indices and writes a state into the glyph texture's spare channel; the glyph pass brightens hover and draws the accent color (with a shimmer for the selection, unless reduced motion is on).
 - **Fly-to.** Flights follow van Wijk and Nuij's zoom-and-pan path (as MapLibre's `flyTo`), eased, 0.8–3 s (≤0.3 s with reduced motion). Any input cancels one.
-- **Zoom-out limit.** On every resize, the minimum zoom becomes the zoom that fits `regionBounds` in the view, and flat views keep the whole screen over the region.
+- **Zoom-out limit.** On every resize, the minimum zoom becomes the zoom that fits `regionBounds` in the view, and the view keeps the whole screen over the region.
+
+**Implementation notes (post–Phase 2 hardening).**
+- **Legend of what is on screen.** After a cell pass (at most every 250 ms, and always after the last one), the on-screen part of `classTex` is read back the same asynchronous way, and the set of class ids present is sent as `classeschange`. `legendEntries` drops a zoom-visible class that the cell pass draws but that isn't present.
+- **Labels fade.** Labels use the classes' fade (`bandVisibility`, half a level at each band edge). A partly visible label keeps its whole box for collision, but only the share of its cells (text and halo) whose hash of (label, cell) falls under its visibility, so it dissolves like a class and the pattern holds while panning.
+- **Lines claim their vertices' cells.** GL_LINES skips a segment that never leaves one cell's center diamond, so a river of many short segments broke into dashes at the City level. The tile worker also emits a point at every line vertex, which always covers its cell.
+- **Lost context.** On `webglcontextlost` the renderer calls `preventDefault()`, stops its loop, and forgets every GPU handle without deleting it (the tile cache drops its meshes, and tiles that arrive meanwhile). On `webglcontextrestored` it recompiles the programs, rebuilds the glyph atlas and render targets, and asks for the view's tiles again; feature indices survive, since the worker keeps its id registry.
+
+**Implementation notes (legibility: two colors per cell, sub-cell edges).**
+- **Fill.** The select pass writes a fourth byte, the class whose fill is the cell's background (`fillClass`: the cell's own class, except carriageways drawn as 1-cell lines). The glyph pass mixes the background toward that class's color by its `fill` strength (`GlyphTables.fills`), then draws the glyph over it. Agents are drawn over the same fill.
+- **Sub-cell targets.** The cell pass runs its ground draw a second time into class, attribute, and id targets at `SUB` (2 × 3) samples per cell (`CellTargets.sub`). The crossfade hash divides the fragment position by the sample count, so both resolutions keep the same cells.
+- **Edges.** For an empty cell or an area cell (`subcellClasses`) that isn't walled, the select pass picks the foreground feature (the cell's own area, or a building among the samples), builds a 6-bit mask of the samples whose id matches it, and on a partial mask emits that sextant (two glyph-table rows, `SEXTANT_ROW`) with `EDGE_STATE` set in the state byte and the first other sample's class as the fill. The glyph pass draws an edge's ink between the feature's fill and its color (`EDGE_INK`).
+
+**Implementation notes (cell size by zoom).**
+- **Steps.** `density.ts` holds the schedule (`DEFAULT_CELLS`), `cellStep` (with `STEP_HYSTERESIS`), and `detailZoom`. Each frame, `index.ts` checks the camera zoom's step; a new step marks the size dirty, and `resize` switches to that step's map glyphs (atlas and glyph table, built the first time and kept per step until the theme or pixel ratio changes, or the context is lost) and recreates the targets at the new grid size. The grid re-quantizes at a step change; the step edges fall mid-zoom, while every cell is already re-rasterized.
+- **Two grids.** Labels have their own grid and atlas (`LabelGlyphs`, `labelCharacters` at `labelCell`), so they stay 10×18 while the map shrinks. `placeGrid` places either grid from its cell size (world-anchored); the overlay texture has the label grid's size, and the glyph pass finds a pixel's label cell from `u_labelCell` and `u_labelShift`. Map glyphs (`mapGlyphs`: styles, walls, sextants, vehicles, and people) have the map atlas to themselves, which keeps their indices within the byte-sized glyph table. Picking, the life layer, and the legend readback use the map grid.
+- **Detail zoom.** `View.detailZoom` goes to the cell and select shaders as `u_zoom`, so `OUTLINE_ZOOM`, `ROAD_AREA_ZOOM`, and `ROOF_ZOOM` are reached sooner with smaller cells; class visibility, labels, and life bands use the camera zoom. Below 8 device px, shade blocks lose their one-pixel gap (`SHADE_GAP_MIN_WIDTH`), which would otherwise draw a mesh over buildings.
 
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.
 
-- **Water:** alternates `~`/`≈` using `hash(cell) + time`, unless reduced-motion is on.
+- **Water:** alternates `~`/`≈` using `hash(cell) + time`, unless reduced-motion is on. Rivers and streams (styles with the six stroke glyphs) draw a 1-cell-wide run that isn't horizontal as a stroke instead: `(` and `)` alternating down a vertical run, `╱` / `╲` for a diagonal one, judged from which neighbors are any water class.
 - **Buildings:** luminance from shade × height factor maps onto the `░▒▓█` ramp.
 - **Roads:** connectivity bitmask → box-drawing LUT. Road hierarchy picks a single-line or double-line set.
-- **Area fills** (parks, farmland): patterned by `(x + y) mod n` so fields form rows.
+- **Area fills** (farmland, parking, pitches): patterned by `(x + y) mod n` so fields form rows.
+- **Grass and parks (`grass` kind):** tufts at rest, grown from a soft value noise (`GRASS.lushScale`) plus a hash per cell (`grassCell`: dense, medium, thin, or sparse), whose same noise tints the cell: deep green above `shadeAbove`, straw below `dryBelow`, and a few straw specks in the margin. `windFront` sweeps fronts downwind (`WIND`: from the northeast, a front every 56 cells at 7 cells/s), bent by value noise and gated by slowly drifting noise patches, and returns the `gust` and the `wake` just behind its crest; above `GUST_STEPS` a blade leans downwind (`/`, `\`, or upright `|` when the wind runs along the columns), then lies flat. Most cells are in neither the front nor its wake, so `windFront` returns before the patch noise (two thirds of its hashing). The select pass gets `u_wind` = 0 with reduced motion and then skips the wind math altogether. The noise stays in integers until its last step, so world coordinates at z21 stay exact in the shader (`shaders/vegetation.ts`).
+- **Woods (`canopy` kind):** a jittered crown center per 4 × 2 block of cells; the cell holding a center draws a crown glyph (by the wood's kind in the variant byte), cells around it foliage, and cells far from every center are clearings half the time (the gap dots are picked by the fixed world cell, so a moving clearing reveals them one by one). Foliage more than `CANOPY.lit` cells from its center toward the sun is lit, and away from it shaded.
+- **Trees:** the worker draws a `natural=tree` point's crown (`tree_crown`, a render-only class that follows `tree`'s zoom band) as a lumpy 24-gon (`crownRing`: two sine lobes, a little jitter, and an oval stretch, scaled so its mean radius is half the `crown` diameter), seeded by a hash of the tree's id so the same tree has the same shape in every tile, and triangulated with earcut, since the lobes aren't convex; a crown every crown's width along a tree row, each seeded by its index too.
+- **Trees in the wind:** trees read the grass's wind field `TREE_WIND.lag` (0.35 s) late (`treeFront`, `treeGust`). Crowns are kept out of the cell pass, in their own buffers (`TileGeometry.crowns`, each vertex's `ridge` its reach from the trunk). The cell pass draws everything else into base targets (`CellTargets.base` / `subBase`); the crown pass (`passes.ts crownPass`) blits the base into the live targets and draws the crowns over it. It runs after every cell pass and on every animated frame while crowns are on screen and the wind is on, so the per-frame cost is the base copy (`copyRaster`: up to four `blitFramebuffer` calls per grid, twice: the cell grid and the sub-cell grid) and the crowns' triangles, with each tile's matrix worked out once for both grids. In the cell vertex shader, each crown vertex swings downwind by the gust at its own cell times `SWAY.bend` × its reach in cells (at most `SWAY.max`), and springs back upwind of rest in the wake behind the gust (`SWAY.recoil`, rocking at `SWAY.bounce`), plus a flutter across the wind at its own phase (`gl_VertexID`). Where a crown swings away, the base shows the ground under it. Leaves flutter between `%` and `&` from `TREE_WIND.step` (`FLUTTER`); woods, which have no per-tree geometry, read their canopy pattern from up to `CANOPY.sway` cells upwind in a gust (a fractional offset: a whole shift plus a fraction, so the arithmetic stays exact in float32 and the clumps creep a cell at a time), so the clumps lean downwind and back. A flat crown draws a rim of `%` around an inside of `&` (with a dense `@` here and there), read from its neighbors in the class texture; its sunny side (toward `u_sun`, or the northwest at night) is lit and the far side shaded, and one crown in `CROWN.dryEvery` (by feature id) yellows. The wind level (`windLevel`, 0–3) and a tone (`Tone`: shade, light, dry) ride in the state byte, and the glyph pass lightens by `WIND_LIGHT[level]` and tints by `TONE`, relative to the class color so both themes work. `u_wind` = 0 (reduced motion) stills all of it, and the crown pass then runs only after cell passes.
+- **The wind is live state** (`life/wind.ts`): `prevailingWind` picks the season's wind from the city pack's `climate` for the month (or the HUD's chosen strength, from the season's direction), and `windAt` veers it up to `WIND_VARIATION.veer` degrees and breathes its strength on slow noise. Each frame `index.ts` passes `{ dir, strength }` to the crown and select passes as `u_windDir` (a unit vector) and `u_wind` (0 with reduced motion). Fronts are laid out on world cells taken modulo `WIND.wrap` (4096), so float32 stays exact at z21. Fields (`crop` kind) and water gust bands read the same field.
+- **Rain** (`RAIN`, `rainDrop`): with a storm, the glyph pass draws sparse streak cells falling `RAIN.speed` cells a second and drifting with the wind's x, in a glyph slanted by it (`theme.ts rainGlyphs`), over a slightly dimmed map. Rows are taken modulo `RAIN.wrap` first.
+- **Shadows** (`SHADOW`, `inShadow`): the select pass looks up to `SHADOW.steps` cell widths toward the sun (`u_sun`: its direction and the tangent of its altitude, from `life/sun.ts solarPosition`, or `fixedSun` for the fixed day and dusk) for a building, tree, or crown standing taller than the sun rises over that distance, and sets `SHADOW_STATE` (8); the glyph pass darkens the cell by `SHADOW.dark`. The state byte: bits 0–1 hover/highlight/selected, 2 sub-cell edge, 3 shadow, 4–5 wind level (`WIND_SHIFT`), 6–7 tone (`TONE_SHIFT`).
+- **Birds in trees:** the worker emits each tree point in a tile as a perch (`LifeGeometry.perches`, at most `MAX_TILE_PERCHES`). A flock picking where to go next flies to a tree with chance `PERCH.chance` and sits in it, still; `LifeWorld.step` takes a `gustAt(lng, lat)` (strength × `treeGust` on the grid's cells), and a gust over `PERCH.flush` flushes the flock, which scatters for `PERCH.scatter` seconds.
+- **Labels** draw `labelText(name)`: NFKC (`Ⅱ` → `II`) and ASCII punctuation, so names fit the label atlas; search folds with NFKD for the same reason.
 - **Terrain:** DEM luminance → `. : - = + * # %` ramp (Region level only).
-- **Priority:** when several classes fall in one cell, a fixed priority order decides (label > landmark > road > building > water > area > terrain).
+- **Priority:** when several classes fall in one cell, a fixed priority order decides (label > landmark > road > building > water > tree crown > area > grass > terrain).
 - **Road strips (Place level):** from `ROAD_AREA_ZOOM`, carriageways are drawn as strips of their real width (built in the worker) instead of lines; road cells next to a non-road cell become curbs via the same wall mask, with "outside" meaning any class that is neither road nor see-through.
 - **Roof ridges:** the tile worker gives each pitched-roof polygon a ridge along its principal axis, and each vertex its signed distance to it (positive on the lit slope). The cell pass marks a cell as ridge when `|d| ≤ fwidth(d) / 2` (the ridge line crosses it), else lit or shaded slope. From `ROOF_ZOOM`, interior cells draw `▓` / `▒` and the ridge as `─ ╲ │ ╱`, chosen from its angle in cell units (cells are 1.8× taller than wide). Flat roofs and landmark parts keep the height ramp.
-- **3D:** in the tilted view, extruded walls step `░▒▓` by shade and roofs are `█`; outlines and ridges are off.
 - **Outlines (Place level):** from `OUTLINE_ZOOM`, a cell of an outlined feature is a wall if any of its 8 neighbors belongs to another feature (per `idTex`; paths, statues, and markers are looked through). A wall joins its neighbor in a direction when that neighbor is in the same feature and a cell touching both is outside, which draws corners and concave corners correctly without false junctions in thin buildings. The join mask indexes the single- or double-line wall set. Grounds (no height) are never outlined.
+- **Sub-cell edges:** `subcellEdge` mirrors the select shader: only empty cells and areas take part (lines and markers win their cells whole); a building among the samples wins over the grounds, park, or water it stands in; walled features are left to their walls; a full or empty mask keeps the class glyph. The mask's bit `row × 2 + col` is the sample's sixth, from the top left, and indexes `sextantGlyphs`.
 - **Classes by zoom:** each class has a zoom band in the shared `CLASS_ZOOM` table (e.g. `monument` from z17, terrain until 9.5); the cell pass crossfades it at the band's edges (see the Phase 2 notes above).
-- **Labels:** place names (provinces, cities, subdivisions, smaller places, each with the band `featureZoomBand` gives it), curated landmarks (from z16), street names, and monuments (from z18) are placed greedily by rank, then feature id, inside the on-screen cells, never overlapping, with a one-cell halo. Names beside an anchor go below, above, right, or left of it, wrapped at 18 characters. A street's name sits at the middle of its longest straight run: along the street's row when the run is within 20° of horizontal, down its column when within 20° of vertical, else beside it; the same name within 30 cells is placed once. The result is a per-cell label texture drawn over the map in the glyph pass.
+- **Labels:** place names (provinces, cities, subdivisions, smaller places, each with the band `featureZoomBand` gives it), curated landmarks (from z16), street names (tiered by road class and OSM `highway` kind in `streetLabel`: major roads from z14, secondary from z15.5, tertiary from z17.5, other streets from z18, paths from z18.5), and monuments (from z18) are placed greedily by rank, then feature id, inside the on-screen cells, never overlapping, with a one-cell halo. Names beside an anchor go below, above, right, or left of it, wrapped at 18 characters. A street's name sits at the middle of its longest straight run: along the street's row when the run is within 20° of horizontal, down its column when within 20° of vertical, else beside it; the same name within 30 cells is placed once. The result is a per-cell label texture drawn over the map in the glyph pass.
 
 ## 5. Time model
 
@@ -169,8 +206,7 @@ The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be
 ```ts
 type AtlasState = {
   city: string;                 // slug, from the route
-  camera: CameraState;          // lat, lng, zoom, pitch, bearing
-  mode: 'map' | 'orbit' | 'walk';
+  camera: CameraState;          // lat, lng, zoom (always flat and north-up)
   year: number;
   timelineOpen: boolean;
   playing: boolean;
@@ -187,7 +223,7 @@ type AtlasState = {
 - The city is the path (`/<city>`), and everything else is in the query string.
 - Debounced (250 ms) `history.replaceState` for camera changes.
 - `pushState` for selections and tour starts, so the back button works.
-- Parameters: `lat, lng, z, pitch, bearing, year, sel, tour, step, mode`.
+- Parameters: `lat, lng, z, year, sel, tour, step`. Links from before the map went flat may carry `pitch`, `bearing`, or `mode`; they are ignored.
 
 ## 7. Search
 
@@ -207,6 +243,8 @@ type AtlasState = {
 | `<city>.pmtiles` size | < 40 MB per city (the city plus its region at low zoom) |
 | Tile decode | off main thread; < 16 ms per tile on desktop |
 
+Zod stays out of the browser bundle: the pipeline validates each generated file with its schema when it writes it, the web app checks only their shape (`apps/web/lib/guards.ts`), and `packages/shared` keeps the plain values the browser needs (class list, camera ranges, search options) in zod-free modules and is marked side-effect free. CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, and each `<city>.pmtiles`). Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
+
 ## 9. Testing
 
 - **Unit (Vitest):**
@@ -219,15 +257,17 @@ type AtlasState = {
 - **Pipeline:**
   - snapshot test on a small fixture OSM extract with a fixture city config (not tied to any real city)
   - asserts expected layers and properties
-- **E2E (Playwright):**
-  - `/` reaches a city, and the canvas is non-blank
-  - for each registered city, search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral")
-  - timeline scrub changes the rendered cell hash
+- **E2E (Playwright):** a small smoke suite (`apps/web/e2e/smoke.spec.ts`) for what unit tests can't see, run against the static export on desktop Chromium; tests tagged `@mobile` also run on a Pixel 7 (touch and the bottom sheet). Logic (tour player, URL state, life preferences) is unit-tested instead. For each registered city:
+  - `/` reaches a city, and the canvas draws with attribution
+  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"), and a click on a place opens the panel
   - share URL round-trips
+  - the map redraws after a lost WebGL context is restored
+  - the city's first tour plays end to end
+  - timeline scrub changes the rendered cell hash (Phase 4)
 - **Visual regression:** screenshot a few fixed camera states per theme, with a tolerance threshold.
 
 ## 10. Deployment
 
-- `next build` with `output: 'export'` produces a static site on Vercel.
+- `next build` with `output: 'export'` produces a static site on Vercel. The web app's `build` script reuses an unchanged, complete export; when rebuilding, it fetches each city's published tiles first (the GitHub release its `tiles.lock.json` names, DATA.md §9) into `public/tiles/`. Its fingerprint in `.next/cache/atlas-export.json` covers build inputs and export file hashes and is saved only after a successful build with stable inputs. E2E prepares the export before Playwright can reuse a running static server. `pnpm build:force` bypasses export reuse. The repository is private, so the Vercel project needs a `GITHUB_TOKEN` environment variable with read access to its contents; CI uses the workflow's token.
 - PMTiles and imagery are static files. If they exceed Vercel limits, host them on Cloudflare R2 or similar with CORS and range requests enabled.
 - Set long cache headers on tiles, and add a content hash in the filename (e.g. `<city>.<hash>.pmtiles`) for cache busting.

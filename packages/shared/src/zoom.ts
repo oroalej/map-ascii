@@ -20,6 +20,7 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   coastline: { min: 0 },
   water_area: { min: 0 },
   road_major: { min: 0 },
+  rail: { min: 0 },
   // City. Rivers start here: at Region zoom the region's thousands of rivers, each a line of
   // water glyphs, would cover the land.
   water_river: { min: 9.5 },
@@ -30,12 +31,14 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   water_stream: { min: 12.5 },
   park: { min: 12.5 },
   trees: { min: 12.5 },
+  grass: { min: 12.5 },
   farmland: { min: 12.5 },
   road_minor: { min: 13 },
   building: { min: 13 },
   building_religious: { min: 13 },
   building_school: { min: 13 },
   building_market: { min: 13 },
+  building_station: { min: 13 },
   // Street
   path: { min: 15.5 },
   parking: { min: 16 },

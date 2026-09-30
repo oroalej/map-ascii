@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/build.ts",
+    "build:force": "tsx scripts/build.ts --force",
+    "check:budgets": "tsx scripts/check-budgets.ts",
     "serve": "serve out -l 3100",
-    "test:e2e": "playwright test",
+    "test:e2e": "tsx scripts/test-e2e.ts",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

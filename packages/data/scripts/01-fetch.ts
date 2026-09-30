@@ -1,12 +1,13 @@
 import { join } from 'node:path';
 import type { BBox, City } from '@atlas/shared';
 import { downloadDem } from './lib/dem';
-import { bufferBbox, fromOverpassBounds, toOverpassBbox } from './lib/geo';
+import { bufferBbox, fromOverpassBounds, intersectBbox, toOverpassBbox } from './lib/geo';
 import { writeJson } from './lib/io';
 import {
   onlyRelation,
   overpass,
   quote,
+  type FetchOptions,
   type OsmElement,
   type OverpassResponse,
 } from './lib/overpass';
@@ -37,7 +38,9 @@ const detailQuery = (
   nwr["water"];
   nwr["landuse"~"^(forest|farmland|paddy)$"];
   way["crop"="rice"];
-  nwr["leisure"~"^(park|garden|playground)$"];
+  nwr["leisure"~"^(park|garden|playground|recreation_ground)$"];
+  nwr["landuse"~"^(grass|meadow|village_green)$"];
+  nwr["natural"="grassland"];
   way["place"="square"];
   nwr["amenity"~"^(place_of_worship|school|university|college|marketplace)$"];
   nwr["shop"~"^(mall|supermarket)$"];
@@ -57,6 +60,24 @@ const detailQuery = (
 out body;
 >;
 out skel qt;`;
+
+/**
+ * Railway track and stations in the detail bbox. Asked for on its own, not as part of
+ * `detailQuery`: it is small, so the servers answer it when the big query times out, and adding
+ * it left the saved detail download valid.
+ */
+export const railQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(
+  way["railway"~"^(rail|narrow_gauge|light_rail)$"];
+  nwr["railway"~"^(station|halt)$"];
+  nwr["building"="train_station"];
+);
+out body;
+>;
+out skel qt;`;
+
+/** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
+const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
 /** Admin level of the province/state names at Region level, when the city doesn't say. */
 export const DEFAULT_PROVINCE_LEVEL = 4;
@@ -95,6 +116,10 @@ export function regionQueries(city: City, bbox: BBox): string[] {
   queries.push(
     `${header(bbox)}\nrel["boundary"="administrative"]["admin_level"="${city.province_admin_level ?? DEFAULT_PROVINCE_LEVEL}"];\nout tags center;`,
   );
+  // Last, so the parts before keep their numbers (and their saved downloads).
+  for (const part of splitBbox(bbox, 2)) {
+    queries.push(`${header(part)}\n${regionRail}\nout body;\n>;\nout skel qt;`);
+  }
   return queries;
 }
 
@@ -116,7 +141,7 @@ export function mergeResponses(responses: readonly OverpassResponse[]): Overpass
 }
 
 /** The region's bounds: its relation's bbox, or the configured bbox. */
-async function regionBounds(city: City, rawDir: string, offline: boolean): Promise<BBox> {
+async function regionBounds(city: City, rawDir: string, cache: FetchOptions): Promise<BBox> {
   if ('bbox' in city.region) return city.region.bbox;
   const { name, osm_relation } = city.region;
   const selector = osm_relation
@@ -127,7 +152,7 @@ async function regionBounds(city: City, rawDir: string, offline: boolean): Promi
 ${selector};
 out tags bb;`,
     join(rawDir, files.rawRegionRelation),
-    { offline },
+    cache,
   );
   const match = osm_relation
     ? onlyRelation(region, 'Region', {})
@@ -141,10 +166,13 @@ out tags bb;`,
 // into raw/<city>/
 export const step: Step = {
   name: '01-fetch',
-  async run({ city, rawDir, offline }) {
-    const boundaryData = await overpass(boundaryQuery(city), join(rawDir, files.rawBoundary), {
-      offline,
-    });
+  async run({ city, rawDir, offline, refresh }) {
+    const cache: FetchOptions = { offline, refresh };
+    const boundaryData = await overpass(
+      boundaryQuery(city),
+      join(rawDir, files.rawBoundary),
+      cache,
+    );
     const boundary = onlyRelation(boundaryData, 'Boundary', {
       boundary: 'administrative',
       name: city.boundary.name,
@@ -153,22 +181,32 @@ export const step: Step = {
     if (!boundary.bounds) throw new Error('Boundary relation came back without bounds');
     console.log(`  boundary: relation/${boundary.id}`);
 
-    const detailBbox = bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km);
+    // Detail outside the region can't be seen (the camera is clamped to it), so don't fetch it.
+    const regionBbox = await regionBounds(city, rawDir, cache);
+    const detailBbox = intersectBbox(
+      bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km),
+      regionBbox,
+    );
     const detail = await overpass(
       detailQuery(city, toOverpassBbox(detailBbox)),
       join(rawDir, files.rawDetail),
-      { offline },
+      cache,
     );
     console.log(`  detail: ${detail.elements.length} elements`);
+    const rail = await overpass(
+      railQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailRail),
+      cache,
+    );
+    console.log(`  railways: ${rail.elements.length} elements`);
 
-    const regionBbox = await regionBounds(city, rawDir, offline);
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {
       const cacheFile = join(
         rawDir,
         files.rawRegion.replace('.osm.json', `-part-${i + 1}.osm.json`),
       );
-      parts.push(await overpass(query, cacheFile, { offline }));
+      parts.push(await overpass(query, cacheFile, cache));
     }
     const region = mergeResponses(parts);
     await writeJson(join(rawDir, files.rawRegion), region);

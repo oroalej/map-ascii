@@ -21,7 +21,6 @@ function currentUrl(): string | null {
     defaultYear: DEFAULT_YEAR,
     sel: s.selectedId,
     tour: s.tour,
-    mode: s.mode,
   });
   return `${window.location.pathname}?${query}${window.location.hash}`;
 }

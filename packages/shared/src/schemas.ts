@@ -1,4 +1,15 @@
-import { z } from 'zod';
+import * as z from 'zod';
+import { WIND_STRENGTHS, type ClimateConfig } from './climate';
+import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import {
+  artChars,
+  ATLAS_CLASSES,
+  CAMERA_RANGES,
+  BOAT_TYPES,
+  VEHICLE_TYPES,
+  YEAR_RANGE,
+  type TrafficMix,
+} from './constants';
 
 /** A BCP 47-style language code: "fil", "bcl", "pt-BR". */
 export const LanguageCode = z
@@ -49,7 +60,7 @@ export type Certainty = z.infer<typeof Certainty>;
 export const DateCertainty = z.enum(['exact', 'circa']);
 export type DateCertainty = z.infer<typeof DateCertainty>;
 
-export const Year = z.int().min(1000).max(3000);
+export const Year = z.int().min(YEAR_RANGE[0]).max(YEAR_RANGE[1]);
 
 export const OsmId = z.string().regex(/^osm:(node|way|relation)\/\d+$/, 'expected osm:<type>/<id>');
 
@@ -69,12 +80,13 @@ export const GeoJsonGeometry = z.looseObject({
 });
 export type GeoJsonGeometry = z.infer<typeof GeoJsonGeometry>;
 
-export const CameraState = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  zoom: z.number().min(0).max(22),
-  pitch: z.number().min(0).max(60),
-  bearing: z.number().min(-180).max(180),
+const inRange = ([min, max]: readonly [number, number]) => z.number().min(min).max(max);
+
+/** The map is always flat and north-up (SPEC.md §3), so a camera is just where and how close. */
+export const CameraState = z.strictObject({
+  lat: inRange(CAMERA_RANGES.lat),
+  lng: inRange(CAMERA_RANGES.lng),
+  zoom: inRange(CAMERA_RANGES.zoom),
 });
 export type CameraState = z.infer<typeof CameraState>;
 
@@ -94,6 +106,7 @@ export const LandmarkType = z.enum([
   'market',
   'government',
   'bridge',
+  'station',
   'monument',
   'other',
 ]);
@@ -138,9 +151,6 @@ export const ArtRole = z.enum([
   'accent',
 ]);
 export type ArtRole = z.infer<typeof ArtRole>;
-
-/** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
-export const artChars = (row: string): string[] => [...row];
 
 /**
  * One size of an art piece. `rows` is the drawing; `colors` has the same shape, each character
@@ -199,6 +209,79 @@ export const PlanPart = z.object({
   offset_m: z.tuple([z.number(), z.number()]).optional(),
 });
 export type PlanPart = z.infer<typeof PlanPart>;
+
+/** A position as `[lng, lat]`, GeoJSON order. */
+export const LngLat = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
+export type LngLat = z.infer<typeof LngLat>;
+
+/** Tree kinds with their own glyphs (SPEC.md §4); unset draws the generic tree. */
+export const TreeKind = z.enum(['broadleaved', 'palm', 'needleleaved']);
+export type TreeKind = z.infer<typeof TreeKind>;
+
+const treeShape = {
+  kind: TreeKind.optional(),
+  /** Crown diameter in meters (default: typical for the kind). */
+  crown_m: z.number().positive().max(60).optional(),
+  height_m: z.number().positive().max(255).optional(),
+};
+
+/** One curated tree (`Landcover`). */
+export const CuratedTree = z.strictObject({ at: LngLat, ...treeShape });
+
+/** A curated line of trees, drawn a crown every crown's width (`Landcover`). */
+export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
+
+/** What a curated area is: its atlas class is `grass`, `parking`, or `trees` (woods). */
+export const LandCover = z.enum(['grass', 'parking', 'woods']);
+export type LandCover = z.infer<typeof LandCover>;
+
+/**
+ * A curated area (`Landcover`): a closed ring (first position repeated last) and what covers
+ * it. Only woods have a tree `kind`.
+ */
+export const CuratedArea = z
+  .strictObject({ ring: z.array(LngLat).min(4), cover: LandCover, kind: TreeKind.optional() })
+  .refine(({ ring }) => ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1], {
+    message: 'the ring must end where it starts',
+    path: ['ring'],
+  })
+  .refine(({ cover, kind }) => kind === undefined || cover === 'woods', {
+    message: 'only woods have a tree kind',
+    path: ['kind'],
+  });
+
+/** When a procession runs (the `Procession` schema's `schedule`). */
+/** An IANA time zone, e.g. "Asia/Manila". */
+export const TimeZone = z
+  .string()
+  .regex(/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/, 'expected an IANA time zone');
+
+export const ProcessionSchedule = z.strictObject({
+  month: z.int().min(1).max(12),
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: z.int().min(0).max(6),
+  /** Which one of that weekday in the month, 1–5. */
+  nth: z.int().min(1).max(5),
+  /** Days after that weekday; -1 is the day before. */
+  offset_days: z.int().min(-31).max(31),
+  /** Local start time, HH:MM. */
+  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM'),
+  duration_min: z
+    .int()
+    .positive()
+    .max(24 * 60),
+  /** IANA time zone the start time is in, e.g. "Asia/Manila". */
+  timezone: TimeZone,
+});
+export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
+
+/** A procession's boats: paddle-boat columns and ranks ahead of the pagoda, and escorts. */
+export const ProcessionFormation = z.strictObject({
+  columns: z.int().min(1).max(6).optional(),
+  ranks: z.int().min(1).max(20).optional(),
+  escorts: z.int().min(0).max(40).optional(),
+});
+export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
 
 /**
  * Schemas for a city pack's content. Pass the city's declared `languages` to reject localized
@@ -371,11 +454,103 @@ export function contentSchemas(languages?: readonly string[]) {
       },
     );
 
-  return { Landmark, NameHistory, Event, TourStep, Tour, LandmarkArt, LandmarkPlan };
+  /**
+   * Trees and land cover (grass, parking, woods) that OSM doesn't have yet, traced from imagery
+   * (DATA.md §2 step 04). The pipeline adds them as features of their atlas class and drops a
+   * tree once OSM maps one at the same spot. `credit` is shown with the map attribution;
+   * `status` stays `draft` until someone has checked the tracing on the ground or against
+   * newer imagery.
+   */
+  const Landcover = z
+    .object({
+      id: z.string().regex(/^landcover\/[a-z0-9-]+$/, 'expected landcover/<slug>'),
+      title: z.string().min(1),
+      trees: z.array(CuratedTree).default([]),
+      rows: z.array(CuratedTreeRow).default([]),
+      areas: z.array(CuratedArea).default([]),
+      status: z.enum(['draft', 'verified']),
+      credit: z.string().min(1),
+      sources: Sources,
+    })
+    .refine((v) => v.trees.length + v.rows.length + v.areas.length > 0, {
+      message: 'needs at least one tree, row, or area',
+      path: ['trees'],
+    });
+
+  /**
+   * A river procession the life layer stages (SPEC.md §4 "Processions"): a pagoda barge and
+   * columns of paddle boats along a river, crowds on its banks. The pipeline follows the river in
+   * OSM from `route.from` (or `upstream_m` upstream of `to`) down to `route.to` (DATA.md §2 step
+   * 07). It runs when a visitor plays it, and live on the day `schedule` names: `offset_days`
+   * after the `nth` `weekday` (0 = Sunday) of `month`, at `start` in `timezone`. Like a tour, it
+   * stays `draft` (and may hold `TODO(verify)`) until its route and schedule are sourced.
+   */
+  const Procession = z
+    .object({
+      id: z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>'),
+      title: text,
+      story: text,
+      status: z.enum(['draft', 'verified']),
+      kind: z.literal('fluvial'),
+      route: z
+        .strictObject({
+          to: OsmId,
+          from: OsmId.optional(),
+          upstream_m: z.number().positive().max(20_000).optional(),
+        })
+        .refine((r) => (r.from === undefined) !== (r.upstream_m === undefined), {
+          message: 'give exactly one of from and upstream_m',
+        }),
+      schedule: ProcessionSchedule,
+      formation: ProcessionFormation.optional(),
+      sources: Sources.optional(),
+    })
+    .superRefine((p, ctx) => {
+      if (p.status !== 'verified') return;
+      if (
+        [...Object.values(p.title), ...Object.values(p.story)].some((t) => t.includes(TODO_VERIFY))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['story'],
+          message: `a verified procession cannot contain ${TODO_VERIFY}`,
+        });
+      }
+      if (!p.sources) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sources'],
+          message: 'a verified procession needs sources',
+        });
+      }
+    });
+
+  return {
+    Landmark,
+    NameHistory,
+    Event,
+    TourStep,
+    Tour,
+    LandmarkArt,
+    LandmarkPlan,
+    Landcover,
+    Procession,
+  };
 }
 
-export const { Landmark, NameHistory, Event, TourStep, Tour, LandmarkArt, LandmarkPlan } =
-  contentSchemas();
+export const {
+  Landmark,
+  NameHistory,
+  Event,
+  TourStep,
+  Tour,
+  LandmarkArt,
+  LandmarkPlan,
+  Landcover,
+  Procession,
+} = contentSchemas();
+export type Procession = z.infer<typeof Procession>;
+export type Landcover = z.infer<typeof Landcover>;
 export type LandmarkPlan = z.infer<typeof LandmarkPlan>;
 export type LandmarkArt = z.infer<typeof LandmarkArt>;
 export type Landmark = z.infer<typeof Landmark>;
@@ -383,6 +558,34 @@ export type NameHistory = z.infer<typeof NameHistory>;
 export type Event = z.infer<typeof Event>;
 export type TourStep = z.infer<typeof TourStep>;
 export type Tour = z.infer<typeof Tour>;
+
+/**
+ * A city's generated `<slug>.processions.json` (DATA.md §2 step 07): each procession with its
+ * route resolved along the river, from its start down to where it lands.
+ */
+export const CityProcessions = z.object({
+  processions: z.array(
+    z.object({
+      id: z.string().min(1),
+      title: LocalizedText,
+      status: z.enum(['draft', 'verified']),
+      kind: z.literal('fluvial'),
+      /** [lng, lat] points from the start to the landing. */
+      route: z.array(z.tuple([z.number(), z.number()])).min(2),
+      length_m: z.number().positive(),
+      /**
+       * Per route point, how far the water reaches to its left and right (m, across the
+       * direction of travel); absent where the river is mapped only as a line.
+       */
+      banks: z.array(z.tuple([z.number(), z.number()])).optional(),
+      schedule: ProcessionSchedule,
+      formation: ProcessionFormation.optional(),
+      sources: Sources.optional(),
+    }),
+  ),
+});
+export type CityProcessions = z.infer<typeof CityProcessions>;
+export type ProcessionRoute = CityProcessions['processions'][number];
 
 /** [west, south, east, north] in degrees. */
 export const BBox = z
@@ -394,6 +597,106 @@ export const BBox = z
   ])
   .refine(([, south, , north]) => south < north, { message: 'south must be less than north' });
 export type BBox = z.infer<typeof BBox>;
+
+/**
+ * A city's traffic mix for the life layer (SPEC.md §4): per road class, relative weights of the
+ * vehicle types seen there. It sets the look of simulated traffic; it is not traffic data.
+ */
+const weights = <T extends string>(types: readonly [T, ...T[]]) =>
+  z
+    .partialRecord(z.enum(types), z.number().min(0))
+    .refine((w) => Object.values(w).some((v) => ((v as number | undefined) ?? 0) > 0), {
+      message: 'at least one type needs a weight above 0',
+    })
+    .optional();
+const VehicleWeights = weights(VEHICLE_TYPES);
+const Compass = z.number().min(0).lt(360);
+
+const PrevailingWindSchema = z.strictObject({
+  /** Where the wind blows from, in compass degrees (0 north, 90 east). */
+  from: Compass,
+  strength: z.enum(WIND_STRENGTHS),
+});
+
+/** A city's winds by season (climate.ts); the renderer's wind follows the current month. */
+export const Climate = z
+  .strictObject({
+    wind: z.array(
+      PrevailingWindSchema.extend({
+        name: z.string().min(1).optional(),
+        months: z.array(z.int().min(1).max(12)).min(1),
+      }),
+    ),
+    default: PrevailingWindSchema,
+    source: z.string().min(1),
+  })
+  .superRefine((climate, ctx) => {
+    const seen = new Set<number>();
+    climate.wind.forEach((season, i) => {
+      for (const month of season.months) {
+        if (seen.has(month)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['wind', i, 'months'],
+            message: `month ${month} is in two seasons`,
+          });
+        }
+        seen.add(month);
+      }
+    });
+  }) satisfies z.ZodType<ClimateConfig>;
+
+/** A daily rhythm curve (rhythm.ts): [hour 0–24, share 0–1] points, hours ascending. */
+const RhythmCurve = z
+  .array(z.tuple([z.number().min(0).lt(24), z.number().min(0).max(1)]))
+  .min(1)
+  .refine((points) => points.every(([hour], i) => i === 0 || hour > points[i - 1]![0]), {
+    message: 'hours must be ascending',
+  });
+
+const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
+const Weekdays = z
+  .array(z.int().min(0).max(6))
+  .min(1)
+  .refine((days) => new Set(days).size === days.length, { message: 'duplicate weekday' });
+
+/**
+ * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
+ * (rhythm.ts).
+ */
+export const CityLife = z.strictObject({
+  rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
+  schedules: z
+    .strictObject({
+      /** Services at places of worship: weekdays (0 = Sunday) and local start times. */
+      worship: z
+        .array(z.strictObject({ weekdays: Weekdays, times: z.array(ClockTime).min(1) }))
+        .optional(),
+      /** School days and hours. */
+      school: z
+        .strictObject({ weekdays: Weekdays, in: ClockTime, out: ClockTime })
+        .refine((s) => s.in < s.out, { message: 'classes must end after they start' })
+        .optional(),
+      /** Shops' typical opening and closing times (each keeps its own around them). */
+      shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
+    })
+    .optional(),
+  source: z.string().min(1),
+}) satisfies z.ZodType<CityLifeConfig>;
+export type CityLife = z.infer<typeof CityLife>;
+
+export const Traffic = z.strictObject({
+  road_major: VehicleWeights,
+  road_mid: VehicleWeights,
+  road_minor: VehicleWeights,
+  /** Boats on rivers. */
+  river: weights(BOAT_TYPES),
+  /** Boats on canals. */
+  canal: weights(BOAT_TYPES),
+  /** Vehicles in parking lots and along curbs. */
+  parked: VehicleWeights,
+}) satisfies z.ZodType<TrafficMix>;
+export type Traffic = z.infer<typeof Traffic>;
 
 /**
  * A city pack's config (`cities/<slug>/city.json`). Geography is looked up in OSM by the
@@ -442,6 +745,17 @@ export const City = z
      * countries).
      */
     province_admin_level: z.int().min(2).max(11).optional(),
+    /** The simulated traffic's vehicle mix (default: cars, motorcycles, buses, and trucks). */
+    traffic: Traffic.optional(),
+    /** The winds by season (default: a breeze from the east all year). */
+    climate: Climate.optional(),
+    /**
+     * The city's time zone: the clock its daily rhythm, fixed times of day, and seasons follow
+     * (default: the sun's time at the city's longitude).
+     */
+    timezone: TimeZone.optional(),
+    /** The daily rhythm of the life layer (default: rhythm.ts `DEFAULT_RHYTHM`). */
+    life: CityLife.optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.
@@ -476,6 +790,24 @@ export const CityMeta = z.object({
 });
 export type CityMeta = z.infer<typeof CityMeta>;
 
+const Sha256 = z.string().regex(/^[0-9a-f]{64}$/, 'expected a hex sha256');
+
+/**
+ * A city pack's `tiles.lock.json` (DATA.md §9): which GitHub release holds the city's generated
+ * files, and each file's sha256, so builds fetch exactly the tiles that were published.
+ */
+export const TilesLock = z.object({
+  /** `owner/name` of the GitHub repository with the release. */
+  repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected owner/name'),
+  /** The release tag, e.g. `tiles-naga-20260929-1930`. */
+  tag: z.string().regex(/^tiles-[a-z0-9-]+$/, 'expected tiles-<slug>-<stamp>'),
+  /** Release asset name (a file in `apps/web/public/tiles/`) → its sha256. */
+  files: z
+    .record(z.string().regex(/^\w[\w.-]*$/, 'expected a plain file name'), Sha256)
+    .refine((files) => Object.keys(files).length > 0, 'at least one file'),
+});
+export type TilesLock = z.infer<typeof TilesLock>;
+
 /**
  * A city's generated `<slug>.art.json`: its landmark art, placed. `bbox` is the feature's
  * footprint (or, for a point, its `footprint_m` around it) and `anchor` its label anchor.
@@ -498,37 +830,7 @@ export const CityArt = z.object({
 export type CityArt = z.infer<typeof CityArt>;
 
 /** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
-export const AtlasClass = z.enum([
-  'water_river',
-  'water_area',
-  'water_sea',
-  'coastline',
-  'terrain',
-  'road_major',
-  'road_mid',
-  'road_minor',
-  'path',
-  'building',
-  'building_religious',
-  'building_school',
-  'building_market',
-  'park',
-  'trees',
-  'farmland',
-  'monument',
-  'building_part',
-  'tree',
-  'barrier',
-  'entrance',
-  'furniture',
-  'parking',
-  'pitch',
-  'admin_city',
-  'admin_subdivision',
-  'place_label',
-  // Appended so the classes above keep their renderer ids (glyphs/select.ts class masks).
-  'water_stream',
-]);
+export const AtlasClass = z.enum(ATLAS_CLASSES);
 export type AtlasClass = z.infer<typeof AtlasClass>;
 
 /** Vector tile layers, one per class group. */

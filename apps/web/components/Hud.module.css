@@ -61,6 +61,14 @@
   overflow: hidden;
 }
 
+/* Pictures of what is drawn pixel by pixel (people), the size of the glyphs beside them. */
+.icon {
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.2em;
+  vertical-align: -0.1em;
+}
+
 .bottomLeft {
   position: fixed;
   left: 12px;
@@ -109,6 +117,16 @@
   border-color: var(--fg-dim);
 }
 
+/* A toggle that is off (the life layer). */
+.toggle[aria-pressed='false'] {
+  color: var(--fg-dim);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
@@ -118,7 +136,7 @@
   white-space: nowrap;
 }
 
-/* Phones: the search box takes the top row, so the zoom and compass sit below it. */
+/* Phones: the search box takes the top row, so the zoom readout sits below it. */
 @media (max-width: 640px) {
   .topRight {
     top: 56px;
@@ -128,9 +146,9 @@
     font-size: 12px;
   }
 
-  /* Above the attribution, which wraps to a few lines on phones. */
+  /* Above the attribution, which wraps to a few lines on phones (Attribution.tsx publishes its height). */
   .bottomLeft {
-    bottom: 64px;
+    bottom: calc(var(--attribution-height, 52px) + 12px);
   }
 
   /* The tour's sheet takes the bottom of the screen. */

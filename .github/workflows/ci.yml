@@ -10,15 +10,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -31,4 +34,52 @@ jobs:
 
       - run: pnpm typecheck
 
+      - run: pnpm --filter @atlas/content validate
+
       - run: pnpm test
+
+  # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
+  # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8).
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      # Release assets of a private repository download through the API with this token.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm data:fetch
+
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @atlas/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
+
+      # Prepares the static export before Playwright starts or reuses its web server.
+      - run: pnpm test:e2e
+
+      - run: pnpm check:budgets
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          # Traces of failed tests (retried once in CI, traced on the retry).
+          name: playwright-results
+          path: apps/web/test-results/
+          retention-days: 7

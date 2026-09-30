@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialAtlasState, useAtlasStore } from './store';
 import { setTourRunner, tourControls, useTourStore, type TourRunner } from './tour';
 
-const camera = { lat: 1, lng: 2, zoom: 15, pitch: 0, bearing: 0 };
+const camera = { lat: 1, lng: 2, zoom: 15 };
 const tour: Tour = {
   id: 'tour/example',
   title: { en: 'Example' },

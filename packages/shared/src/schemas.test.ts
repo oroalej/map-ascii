@@ -5,11 +5,14 @@ import {
   City,
   contentSchemas,
   Event,
+  Landcover,
   Landmark,
   LandmarkArt,
   LandmarkPlan,
   LocalizedText,
   NameHistory,
+  TilesLock,
+  Procession,
   Tour,
 } from './schemas';
 
@@ -25,7 +28,7 @@ const landmark = {
   sources: [source],
 };
 
-const camera = { lat: 13.6218, lng: 123.1948, zoom: 13, pitch: 0, bearing: 0 };
+const camera = { lat: 13.6218, lng: 123.1948, zoom: 13 };
 
 describe('Landmark', () => {
   it('accepts a valid landmark', () => {
@@ -105,9 +108,60 @@ describe('Event', () => {
 });
 
 describe('CameraState', () => {
-  it('limits pitch to 0-60', () => {
+  it('is flat and north-up: rejects pitch and bearing', () => {
     expect(CameraState.safeParse(camera).success).toBe(true);
-    expect(CameraState.safeParse({ ...camera, pitch: 61 }).success).toBe(false);
+    expect(CameraState.safeParse({ ...camera, pitch: 60 }).success).toBe(false);
+    expect(CameraState.safeParse({ ...camera, bearing: 15 }).success).toBe(false);
+  });
+});
+
+describe('Procession', () => {
+  const procession = {
+    id: 'procession/river',
+    title: { en: 'River procession' },
+    story: { en: 'TODO(verify)' },
+    status: 'draft',
+    kind: 'fluvial',
+    route: { to: 'osm:node/1', upstream_m: 1200 },
+    schedule: {
+      month: 9,
+      weekday: 0,
+      nth: 3,
+      offset_days: -1,
+      start: '15:00',
+      duration_min: 180,
+      timezone: 'Asia/Manila',
+    },
+  };
+  const ok = (p: unknown) => Procession.safeParse(p).success;
+
+  it('accepts a draft with placeholders', () => {
+    expect(ok(procession)).toBe(true);
+    expect(ok({ ...procession, route: { to: 'osm:node/1', from: 'osm:way/2' } })).toBe(true);
+  });
+
+  it('needs exactly one way to find its start', () => {
+    expect(ok({ ...procession, route: { to: 'osm:node/1' } })).toBe(false);
+    expect(
+      ok({ ...procession, route: { to: 'osm:node/1', from: 'osm:way/2', upstream_m: 5 } }),
+    ).toBe(false);
+  });
+
+  it('checks the schedule', () => {
+    const at = (schedule: object) =>
+      ok({ ...procession, schedule: { ...procession.schedule, ...schedule } });
+    expect(at({ start: '25:00' })).toBe(false);
+    expect(at({ weekday: 7 })).toBe(false);
+    expect(at({ timezone: 'Manila' })).toBe(false);
+  });
+
+  it('is verified only without placeholders and with sources', () => {
+    const verified = { ...procession, status: 'verified' };
+    expect(ok(verified)).toBe(false);
+    expect(ok({ ...verified, story: { en: 'The image returns by river.' } })).toBe(false);
+    expect(
+      ok({ ...verified, story: { en: 'The image returns by river.' }, sources: [source] }),
+    ).toBe(true);
   });
 });
 
@@ -201,8 +255,40 @@ describe('City', () => {
     expect(City.safeParse({ ...city, focus: { ...focus, lat: 1 } }).success).toBe(false);
   });
 
+  it('takes a time zone and a daily rhythm', () => {
+    const life = { rhythm: { vehicle: [[7, 1]] }, source: 'x' };
+    expect(City.safeParse({ ...city, timezone: 'Asia/Manila', life }).success).toBe(true);
+    expect(City.safeParse({ ...city, timezone: 'Manila' }).success).toBe(false);
+    expect(City.safeParse({ ...city, life: { rhythm: {} } }).success).toBe(false);
+  });
+
+  it('takes when places fill up', () => {
+    const ok = (schedules: unknown) =>
+      City.safeParse({ ...city, life: { schedules, source: 'x' } }).success;
+    expect(ok({ worship: [{ weekdays: [0, 6], times: ['06:00', '18:30'] }] })).toBe(true);
+    expect(ok({ school: { weekdays: [1, 2, 3, 4, 5], in: '07:30', out: '16:30' } })).toBe(true);
+    expect(ok({ worship: [{ weekdays: [7], times: ['06:00'] }] })).toBe(false);
+    expect(ok({ worship: [{ weekdays: [0, 0], times: ['06:00'] }] })).toBe(false);
+    expect(ok({ worship: [{ weekdays: [0], times: ['6am'] }] })).toBe(false);
+    expect(ok({ school: { weekdays: [1], in: '16:30', out: '07:30' } })).toBe(false);
+  });
+
   it('rejects an inverted bbox', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 15, 125, 10] } }).success).toBe(false);
+  });
+
+  it('takes a traffic mix of known vehicle types by road class', () => {
+    const ok = (traffic: unknown) => City.safeParse({ ...city, traffic }).success;
+    expect(ok({ road_major: { car: 3, jeepney: 2, bus: 0 }, road_minor: { tricycle: 1 } })).toBe(
+      true,
+    );
+    expect(ok({ road_major: { hovercraft: 1 } })).toBe(false);
+    expect(ok({ road_major: { car: -1 } })).toBe(false);
+    expect(ok({ road_major: { car: 0 } })).toBe(false);
+    expect(ok({ path: { car: 1 } })).toBe(false);
+    expect(ok({ river: { banca: 2, rowboat: 1 }, parked: { car: 1, bicycle: 1 } })).toBe(true);
+    expect(ok({ river: { car: 1 } })).toBe(false);
+    expect(ok({ river: { banca: 0 } })).toBe(false);
   });
 });
 
@@ -288,5 +374,79 @@ describe('LandmarkPlan', () => {
     const neither = { kind: 'dome', shape: 'circle', size_m: 5, height_m: 5 };
     expect(LandmarkPlan.safeParse({ ...plan, parts: [both] }).success).toBe(false);
     expect(LandmarkPlan.safeParse({ ...plan, parts: [neither] }).success).toBe(false);
+  });
+});
+
+describe('Landcover', () => {
+  const ring = [
+    [123.1, 13.6],
+    [123.101, 13.6],
+    [123.101, 13.601],
+    [123.1, 13.6],
+  ];
+  const pack = {
+    id: 'landcover/test-grounds',
+    title: 'Test grounds',
+    trees: [
+      { at: [123.1, 13.6], crown_m: 9 },
+      { at: [123.1002, 13.6], kind: 'palm' },
+    ],
+    rows: [{ line: [ring[0], ring[1]], kind: 'palm' }],
+    areas: [
+      { ring, cover: 'woods', kind: 'broadleaved' },
+      { ring, cover: 'parking' },
+    ],
+    status: 'draft',
+    credit: 'Tree positions: Example imagery',
+    sources: [{ title: 'Example imagery' }],
+  };
+
+  it('accepts a valid pack, with missing collections defaulting to empty', () => {
+    expect(Landcover.safeParse(pack).success).toBe(true);
+    const onlyTrees = Landcover.parse({ ...pack, rows: undefined, areas: undefined });
+    expect(onlyTrees.rows).toEqual([]);
+    expect(onlyTrees.areas).toEqual([]);
+  });
+
+  it('needs something to draw, sources, and a credit', () => {
+    expect(Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, sources: [] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, credit: '' }).success).toBe(false);
+  });
+
+  it('rejects unclosed rings, unknown covers, and tree kinds on non-woods', () => {
+    const open = { ring: ring.slice(0, 3).concat([[123.2, 13.7]]), cover: 'grass' };
+    expect(Landcover.safeParse({ ...pack, areas: [open] }).success).toBe(false);
+    expect(Landcover.safeParse({ ...pack, areas: [{ ring, cover: 'lawn' }] }).success).toBe(false);
+    const kindedGrass = { ring, cover: 'grass', kind: 'palm' };
+    expect(Landcover.safeParse({ ...pack, areas: [kindedGrass] }).success).toBe(false);
+  });
+
+  it('rejects bad tree kinds and positions off the globe', () => {
+    expect(Landcover.safeParse({ ...pack, trees: [{ at: [0, 0], kind: 'oak' }] }).success).toBe(
+      false,
+    );
+    expect(Landcover.safeParse({ ...pack, trees: [{ at: [13.6, 123.1] }] }).success).toBe(false);
+  });
+});
+
+describe('TilesLock', () => {
+  const sha = 'a'.repeat(64);
+  const lock = {
+    repo: 'owner/name',
+    tag: 'tiles-naga-20260929-1930',
+    files: { 'naga.pmtiles': sha },
+  };
+
+  it('accepts a release tag and hashed files', () => {
+    expect(TilesLock.parse(lock)).toEqual(lock);
+  });
+
+  it('rejects paths, bad hashes, and empty file lists', () => {
+    expect(TilesLock.safeParse({ ...lock, files: { '../x.pmtiles': sha } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: { '..': sha } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: { 'naga.pmtiles': 'abc' } }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, files: {} }).success).toBe(false);
+    expect(TilesLock.safeParse({ ...lock, repo: 'name-only' }).success).toBe(false);
   });
 });

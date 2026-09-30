@@ -1,5 +1,6 @@
 /** Small WebGL2 helpers: programs, textures, framebuffers, and per-tile meshes. */
 import * as twgl from 'twgl.js';
+import { SUB } from './glyphs/select';
 import type { GeometryArrays, GroundGeometry, TileGeometry } from './raster/geometry';
 
 export type GL = WebGL2RenderingContext;
@@ -30,19 +31,48 @@ export function createTexture(
   return texture;
 }
 
-/** The cell-resolution render targets. */
+/** The cell-resolution render targets: the map's grid, and the labels' coarser one. */
 export type CellTargets = {
   cols: number;
   rows: number;
+  /** The label grid (density.ts: labels keep their own cell size). */
+  labelCols: number;
+  labelRows: number;
   classTex: WebGLTexture;
   attrTex: WebGLTexture;
   idTex: WebGLTexture;
   glyphTex: WebGLTexture;
-  /** RGBA8 overlay (art and labels): 16-bit glyph code, color index (labels.ts). */
+  /** RGBA8 overlay on the label grid: 16-bit label glyph code, color index (labels.ts). */
   overlayTex: WebGLTexture;
+  /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
+  lifeTex: WebGLTexture;
+  /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
+  lightTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
+  /**
+   * The cell pass again at `SUB.cols × SUB.rows` samples per cell, for sub-cell
+   * edges: class, attributes, and feature id, like the cell-resolution targets.
+   */
+  sub: RasterTargets;
+  /**
+   * The cell pass without tree crowns, at cell and sub-cell resolution: the crown pass copies
+   * them into the live targets and draws the crowns over them, every frame they sway.
+   */
+  base: RasterTargets;
+  subBase: RasterTargets;
+};
+
+/** Class, attribute, and id textures with a depth buffer, drawn to together by the cell pass. */
+export type RasterTargets = {
+  width: number;
+  height: number;
+  classTex: WebGLTexture;
+  attrTex: WebGLTexture;
+  idTex: WebGLTexture;
+  depth: WebGLRenderbuffer;
+  fbo: WebGLFramebuffer;
 };
 
 function checkComplete(gl: GL, what: string) {
@@ -52,24 +82,78 @@ function checkComplete(gl: GL, what: string) {
   }
 }
 
-export function createCellTargets(gl: GL, cols: number, rows: number): CellTargets {
-  const classTex = createTexture(gl, gl.R8, gl.RED, cols, rows);
-  const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+function createRasterTargets(gl: GL, width: number, height: number, what: string): RasterTargets {
+  // RGBA8 rather than R8 (only red is used): the legend reads it back as RGBA, which then needs
+  // no format conversion.
+  const classTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
+  const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
+  const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
   const depth = gl.createRenderbuffer();
   gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, cols, rows);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
 
-  const cellFbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, cellFbo);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, classTex, 0);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, attrTex, 0);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, idTex, 0);
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
   gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-  checkComplete(gl, 'cell');
+  checkComplete(gl, what);
+  return { width, height, classTex, attrTex, idTex, depth, fbo };
+}
+
+/**
+ * Copy one set of raster targets (class, attribute, and id textures and depth) into another of
+ * the same size.
+ */
+export function copyRaster(
+  gl: GL,
+  from: WebGLFramebuffer,
+  to: WebGLFramebuffer,
+  width: number,
+  height: number,
+) {
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, from);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, to);
+  const all = [gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2];
+  // A blit copies the read buffer to every draw buffer, so one attachment at a time.
+  all.forEach((attachment, i) => {
+    gl.readBuffer(attachment);
+    gl.drawBuffers(all.map((a, j) => (j === i ? a : gl.NONE)));
+    gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  });
+  gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+  gl.drawBuffers(all);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+}
+
+function deleteRasterTargets(gl: GL, t: RasterTargets) {
+  for (const tex of [t.classTex, t.attrTex, t.idTex]) gl.deleteTexture(tex);
+  gl.deleteRenderbuffer(t.depth);
+  gl.deleteFramebuffer(t.fbo);
+}
+
+export function createCellTargets(
+  gl: GL,
+  cols: number,
+  rows: number,
+  labelCols: number,
+  labelRows: number,
+): CellTargets {
+  const cell = createRasterTargets(gl, cols, rows, 'cell');
+  const sub = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell');
+  const base = createRasterTargets(gl, cols, rows, 'cell base');
+  const subBase = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell base');
+  const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
+  const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const lightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
@@ -77,21 +161,74 @@ export function createCellTargets(gl: GL, cols: number, rows: number): CellTarge
   checkComplete(gl, 'glyph');
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  return { cols, rows, classTex, attrTex, idTex, glyphTex, overlayTex, depth, cellFbo, glyphFbo };
+  return {
+    cols,
+    rows,
+    labelCols,
+    labelRows,
+    classTex: cell.classTex,
+    attrTex: cell.attrTex,
+    idTex: cell.idTex,
+    glyphTex,
+    overlayTex,
+    lifeTex,
+    lightTex,
+    depth: cell.depth,
+    cellFbo: cell.fbo,
+    glyphFbo,
+    sub,
+    base,
+    subBase,
+  };
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
-  for (const tex of [t.classTex, t.attrTex, t.idTex, t.glyphTex, t.overlayTex]) {
+  for (const tex of [
+    t.classTex,
+    t.attrTex,
+    t.idTex,
+    t.glyphTex,
+    t.overlayTex,
+    t.lifeTex,
+    t.lightTex,
+  ]) {
     gl.deleteTexture(tex);
   }
   gl.deleteRenderbuffer(t.depth);
   gl.deleteFramebuffer(t.cellFbo);
   gl.deleteFramebuffer(t.glyphFbo);
+  deleteRasterTargets(gl, t.sub);
+  deleteRasterTargets(gl, t.base);
+  deleteRasterTargets(gl, t.subBase);
 }
 
 /** Replace the overlay's contents (RGBA8 texels from labels.ts `packOverlay`). */
 export function uploadOverlay(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.overlayTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(
+    gl.TEXTURE_2D,
+    0,
+    0,
+    0,
+    t.labelCols,
+    t.labelRows,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    texels,
+  );
+}
+
+/** Replace the life layer's contents (RGBA8 texels from passes.ts `lifePass`). */
+export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.lifeTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the streetlights' contents (RGBA8 texels from passes.ts `lightPass`). */
+export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.lightTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }
@@ -101,7 +238,10 @@ type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number
 type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
 
 /** A tile's geometry on the GPU; `region` holds its region-only features. */
-export type TileMesh = GroundMesh & { extrusions: Mesh; region: GroundMesh };
+export type TileMesh = GroundMesh & {
+  crowns: Mesh;
+  region: GroundMesh;
+};
 
 function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
   const vao = gl.createVertexArray();
@@ -144,7 +284,7 @@ const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({
 export function uploadTile(gl: GL, geometry: TileGeometry): TileMesh {
   return {
     ...uploadGround(gl, geometry),
-    extrusions: uploadMesh(gl, geometry.extrusions, geometry.extrusions.indices),
+    crowns: uploadMesh(gl, geometry.crowns, geometry.crowns.indices),
     region: uploadGround(gl, geometry.region),
   };
 }
@@ -153,7 +293,7 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
   const { region } = mesh;
   for (const m of [
     mesh.fills,
-    mesh.extrusions,
+    mesh.crowns,
     mesh.lines,
     mesh.points,
     region.fills,
@@ -165,11 +305,12 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
   }
 }
 
-/** Draw a tile's 3D buildings (tilted cameras only). */
-export function drawExtrusions(gl: GL, mesh: TileMesh) {
-  if (mesh.extrusions.count === 0) return;
-  gl.bindVertexArray(mesh.extrusions.vao);
-  gl.drawElements(gl.TRIANGLES, mesh.extrusions.count, gl.UNSIGNED_INT, 0);
+/** Draw a tile's tree crowns. */
+export function drawCrowns(gl: GL, mesh: TileMesh) {
+  const { crowns } = mesh;
+  if (crowns.count === 0) return;
+  gl.bindVertexArray(crowns.vao);
+  gl.drawElements(gl.TRIANGLES, crowns.count, gl.UNSIGNED_INT, 0);
 }
 
 /**

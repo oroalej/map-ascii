@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { loadCityPacks } from './validate';
 
 /**
- * The engine must stay city-agnostic (CLAUDE.md, ROADMAP Phase 1): no registered city's slug or
+ * The engine must stay city-agnostic (AGENTS.md, ROADMAP Phase 1): no registered city's slug or
  * name may appear in the renderer or the web app's source. City specifics come from the city
  * pack and the generated meta. Tests are exempt, since they may use a city as a fixture.
  */

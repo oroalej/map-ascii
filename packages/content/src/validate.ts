@@ -1,7 +1,7 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { City, contentSchemas } from '@atlas/shared';
+import { City, contentSchemas, TilesLock } from '@atlas/shared';
 import type { z } from 'zod';
 
 /**
@@ -19,14 +19,19 @@ const collections = {
   tours: 'Tour',
   art: 'LandmarkArt',
   plans: 'LandmarkPlan',
+  landcover: 'Landcover',
+  processions: 'Procession',
 } as const satisfies Record<string, keyof Schemas>;
 
 type Collections = typeof collections;
 
 export type ContentBundle = { [K in keyof Collections]: z.infer<Schemas[Collections[K]]>[] };
 
-/** A registered city: its validated config and content. */
-export type CityPack = { city: City; content: ContentBundle };
+/**
+ * A registered city: its validated config and content, and where its published tiles are
+ * (`tiles.lock.json`, written by `pnpm data:publish`), if they have been published.
+ */
+export type CityPack = { city: City; content: ContentBundle; tilesLock?: TilesLock };
 
 export type ContentError = { file: string; message: string };
 
@@ -40,6 +45,15 @@ async function listJson(dir: string): Promise<string[]> {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -122,6 +136,8 @@ export async function loadCityPacks(
       tours: [],
       art: [],
       plans: [],
+      landcover: [],
+      processions: [],
     };
     const seenIds = new Map<string, string>();
     const before = errors.length;
@@ -146,7 +162,12 @@ export async function loadCityPacks(
       }
     }
 
-    if (errors.length === before) packs.push({ city, content });
+    const lockPath = join(dir, 'tiles.lock.json');
+    const tilesLock = (await exists(lockPath))
+      ? await readValid(lockPath, TilesLock, toFile(lockPath), errors)
+      : undefined;
+
+    if (errors.length === before) packs.push({ city, content, ...(tilesLock && { tilesLock }) });
   }
 
   return { packs, errors };

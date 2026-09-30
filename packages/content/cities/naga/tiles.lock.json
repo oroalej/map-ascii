@@ -1,0 +1,12 @@
+{
+  "repo": "oroalej/map-ascii",
+  "tag": "tiles-naga-20260929-1630",
+  "files": {
+    "naga.art.json": "85fc5638f5cbc9904ad64b1cea4d33014ae59881ab6b121bb63618f4d833b15a",
+    "naga.meta.json": "c5ced22b14400d17db8909de05ac9a73ca4b15d8fc8644c385772e29bc11faf7",
+    "naga.pmtiles": "6e982741d4d7ba01948e451b5d9add6b50ded33dc2110a713d1e6d7dc41174c6",
+    "naga.processions.json": "1fbdbcf68cfa48dd73b1a42fc0f0c11f0b4b3e3fae3e75115255bfd51ac01355",
+    "naga.search-index.json": "778d07d2a73d2bf62488b6d7e972de7e03e2f945de7521754819ae21ac262805",
+    "naga.subdivisions.json": "3c06362fb01c695d59187b2caf44ad4bd6b595898d6950a6df12db5b701c2ba6"
+  }
+}

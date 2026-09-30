@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsx scripts/build.ts",
+    "fetch-tiles": "tsx scripts/fetch-tiles.ts",
+    "publish-tiles": "tsx scripts/publish-tiles.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

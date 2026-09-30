@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { buildingHeight, classify, variantOf, layerFor, roadWidth } from './classify';
+import {
+  buildingHeight,
+  classify,
+  kindOf,
+  layerFor,
+  roadWidth,
+  treeKind,
+  treeSize,
+  variantOf,
+} from './classify';
 import { parseOsmDate } from './dates';
-import { bufferBbox, toOverpassBbox } from './geo';
+import {
+  bboxContains,
+  bboxesOverlap,
+  bufferBbox,
+  inBbox,
+  intersectBbox,
+  splitOverpassBbox,
+  toOverpassBbox,
+} from './geo';
 
 describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);
@@ -34,6 +51,24 @@ describe('classify', () => {
     expect(area({ landuse: 'forest' })).toBe('trees');
     expect(area({ landuse: 'farmland', crop: 'rice' })).toBe('farmland');
     expect(area({ landuse: 'residential' })).toBeNull();
+  });
+
+  it('maps railway track and stations', () => {
+    expect(line({ railway: 'rail' })).toBe('rail');
+    expect(line({ railway: 'rail', service: 'siding' })).toBe('rail');
+    expect(line({ railway: 'narrow_gauge' })).toBe('rail');
+    expect(line({ railway: 'abandoned' })).toBeNull();
+    expect(layerFor('rail', 'line')).toBe('roads');
+    expect(area({ building: 'train_station', railway: 'station' })).toBe('building_station');
+    expect(area({ building: 'yes', public_transport: 'station', train: 'yes' })).toBe(
+      'building_station',
+    );
+    expect(classify({ railway: 'halt', name: 'X' }, 'point', 10)).toBe('building_station');
+    expect(buildingHeight({ building: 'train_station' }, 'building_station')).toBe(8);
+    expect(kindOf({ railway: 'rail' })).toBe('railway=rail');
+    expect(variantOf({ railway: 'rail', service: 'spur' }, 'rail')).toBe('spur');
+    expect(variantOf({ railway: 'rail', service: 'siding' }, 'rail')).toBe('siding');
+    expect(variantOf({ railway: 'rail', usage: 'main' }, 'rail')).toBeUndefined();
   });
 
   it('keeps only the configured subdivision level of admin boundaries', () => {
@@ -87,6 +122,40 @@ describe('classify: street-level detail', () => {
     expect(classify({ barrier: 'fence' }, 'line', 10)).toBe('barrier');
     expect(classify({ barrier: 'gate' }, 'point', 10)).toBe('barrier');
     expect(classify({ barrier: 'bollard' }, 'point', 10)).toBeNull();
+  });
+
+  it('classifies grass under parks', () => {
+    for (const tags of [
+      { landuse: 'grass' },
+      { landuse: 'meadow' },
+      { landuse: 'village_green' },
+      { natural: 'grassland' },
+      { leisure: 'recreation_ground' },
+    ]) {
+      expect(classify(tags, 'area', 10)).toBe('grass');
+    }
+    expect(classify({ leisure: 'park', landuse: 'grass' }, 'area', 10)).toBe('park');
+    expect(layerFor('grass', 'area')).toBe('landuse');
+  });
+
+  it('tells palms, needleleaved, and broadleaved trees apart', () => {
+    expect(treeKind({ natural: 'tree', genus: 'Cocos' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', species: 'Roystonea regia' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', 'species:en': 'Coconut Palm' })).toBe('palm');
+    expect(treeKind({ natural: 'tree', leaf_type: 'needleleaved' })).toBe('needleleaved');
+    expect(treeKind({ natural: 'tree', leaf_type: 'broadleaved' })).toBe('broadleaved');
+    expect(treeKind({ natural: 'tree', genus: 'Pterocarpus' })).toBeUndefined();
+    expect(treeKind({ natural: 'tree' })).toBeUndefined();
+    expect(variantOf({ genus: 'Areca' }, 'tree')).toBe('palm');
+    expect(variantOf({ leaf_type: 'needleleaved' }, 'trees')).toBe('needleleaved');
+  });
+
+  it("sizes trees from their tags, else their kind's typical size", () => {
+    expect(treeSize({ height: '14', diameter_crown: '11.5' })).toEqual({ height: 14, crown: 11.5 });
+    expect(treeSize({ genus: 'Cocos' })).toEqual({ height: 12, crown: 6 });
+    expect(treeSize({})).toEqual({ height: 10, crown: 8 });
+    expect(treeSize({ height: 'tall', diameter_crown: '-3' })).toEqual({ height: 10, crown: 8 });
+    expect(treeSize({ height: '400' }).height).toBe(255);
   });
 
   it('classifies parking and pitches', () => {
@@ -173,5 +242,31 @@ describe('geo', () => {
 
   it('formats bboxes in Overpass order (south, west, north, east)', () => {
     expect(toOverpassBbox([123, 13, 124, 14])).toBe('13.000000,123.000000,14.000000,124.000000');
+  });
+
+  it('intersects bboxes, and refuses ones that do not overlap', () => {
+    expect(intersectBbox([0, 0, 2, 2], [1, -1, 3, 1])).toEqual([1, 0, 2, 1]);
+    expect(() => intersectBbox([0, 0, 1, 1], [2, 2, 3, 3])).toThrow(/don't overlap/);
+  });
+
+  it('reads the bbox setting back out of a query, and the query without it', () => {
+    const query = `[out:json][bbox:${toOverpassBbox([123, 13, 124, 14])}];\nway;`;
+    expect(splitOverpassBbox(query)).toEqual({
+      bbox: [123, 13, 124, 14],
+      rest: '[out:json];\nway;',
+    });
+    expect(splitOverpassBbox('[out:json];\nrel(1);')).toBeNull();
+  });
+
+  it('tests bbox containment and overlap', () => {
+    expect(bboxContains([0, 0, 2, 2], [0.5, 0.5, 2, 2])).toBe(true);
+    expect(bboxContains([0, 0, 2, 2], [1, 1, 3, 3])).toBe(false);
+    expect(bboxesOverlap([0, 0, 1, 1], [1, 1, 2, 2])).toBe(true);
+    expect(bboxesOverlap([0, 0, 1, 1], [1.1, 0, 2, 1])).toBe(false);
+  });
+
+  it('tests points against a bbox, edges included', () => {
+    expect(inBbox(1, 1, [0, 0, 1, 1])).toBe(true);
+    expect(inBbox(1.1, 0.5, [0, 0, 1, 1])).toBe(false);
   });
 });

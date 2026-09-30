@@ -6,7 +6,7 @@ ASCII Atlas is a generic engine for explorable, ASCII-rendered city maps. Each c
 
 A city opens on its surrounding region drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through the region and into the city's subdivisions, its center, and individual streets and buildings. (For Naga: Bicol peninsula → Camarines Sur → barangays → the Centro → streets.) Visitors can:
 
-- drag and orbit around the map
+- drag and zoom around the map
 - tap a place to fly to it
 - search with `/`
 - take a guided tour
@@ -22,28 +22,18 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 | Region | 7–9.5 | Regional coastline, major peaks, major lakes and rivers, terrain shading | Provinces/states, major cities |
 | City | 9.5–13 | City boundary, subdivision outlines, main rivers, highways | City and subdivision names |
 | District | 13–15.5 | All roads, building blocks as solid fill, parks, water | Districts, major roads, key landmarks |
-| Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Street names, POIs |
-| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything; info panel auto-suggests |
+| Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Key street names (primary to secondary roads), POIs |
+| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything, including the other street names; info panel auto-suggests |
 
-**Fixed cell size.** Characters are always the same size on screen (default 10×18 CSS px; configurable). Zooming changes how much ground each cell represents, not the glyph size.
+**Cell size.** Map characters get smaller as the visitor zooms in, in steps, so closer views fit more cells and more detail: 8 CSS px wide below z13, 7 from z13, 6 from z15, and 5 from z16.5, each 1.8× as tall as it is wide (configurable; small screens keep at least 6 px). A step switches only once the zoom is 0.15 past its edge, so it doesn't flicker there. Detail that is about cell size (building walls, road strips, roof ridges) follows the ground each cell covers, a "detail zoom" one level higher for every halving of the cell width, so at z17 with 5 px cells buildings already have walls. What shows at each level (the table above) still follows the zoom. Labels keep a fixed, readable 10×18 cell on their own grid.
 
-## 3. Camera modes
+## 3. Camera
 
-1. **Map (default).**
-   - Top-down, north-up. Pitch is 0–15° and bearing is locked unless the visitor rotates.
-   - Controls: drag to pan, scroll or pinch to zoom around the cursor or pinch center.
-2. **Orbit.**
-   - Right-drag, Ctrl+drag, or a two-finger twist/tilt changes pitch (0–60°) and bearing.
-   - Buildings extrude: walls are stacked `▓`/`▒` shaded by face orientation, roofs are `▀`/`█`. Height comes from OSM `height` or `building:levels × 3 m`, with a class default otherwise.
-   - A compass button resets to north-up and flat.
-3. **Street walk (phase 6).**
-   - The visitor snaps to the nearest road segment and moves along the road graph with WASD or the arrow keys. At junctions they choose a branch with left/right.
-   - Low camera (eye height about 10 m, pitch about 75°, looking along the road), rendered as pseudo-3D ASCII with buildings on both sides.
-   - Escape returns to Map mode at the current location.
+The map is strictly top-down and north-up: it never tilts or rotates, and there is one camera mode. Drag to pan; scroll or pinch to zoom around the cursor or pinch center.
 
 **Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom that fits the whole region in the viewport (never below 7), so the visitor can't lose the region in empty space.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom where the region fills the viewport, so no space outside it shows (never below 7). On a screen shaped differently from the region, the widest view crops the region on one axis, and the visitor pans to see the rest.
 
 ## 4. Visual language
 
@@ -51,23 +41,26 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 | Feature class | Glyphs | Color idea |
 |---|---|---|
-| Water — river/stream | `~ ≈` (slowly animated) | cyan |
+| Water — river/stream | `~ ≈` (slowly animated); a thin run down the screen is `( )`, a diagonal one `╱ ╲` | cyan |
 | Water — lake/sea | `≈ ~ ·` | deep blue |
 | Road — primary/trunk | `═ ║ ╔ ╗ ╚ ╝ ╬ ╠ ╣ ╦ ╩` | warm white |
 | Road — secondary/tertiary | `─ │ ┌ ┐ └ ┘ ┼ ├ ┤ ┬ ┴` | light grey |
 | Road — residential/service | `─ │ ┼` dimmer | grey |
 | Path/alley/footway | `· :` | dim grey |
-| Building — generic | `█ ▓ ▒ ░` (by shade/height) | amber-grey |
+| Railway | `╪` across, `╫` up and down: two rails with crossties, turning and branching with the double-line joins (`╔ ╠ ╬`); a road crossing it keeps the road's glyph | steel grey |
+| Building — generic | `█ ▓ ▒ ░` (by shade/height; height from OSM `height` or `building:levels × 3 m`, else a class default) | amber-grey |
 | Religious building | `†` marker plus fill | gold |
 | School/university | `⌂` marker | soft blue |
 | Market/commercial | `$` marker | orange |
-| Park/plaza | `" ' ,` | green |
-| Trees/forest | `♣ ♠ ↑` | green |
-| Farmland/rice fields | `≡ '` in rows | yellow-green |
+| Train station | `Ħ` marker | brick red |
+| Park/plaza | grown tufts, dense to sparse (`" ' , .`), in patches of deeper green and straw rather than a regular stripe; gusts of wind sweep across, and blades stir, then lean with the wind (`/` or `\`; upright `\|` when it blows north or south), then lie flat `~`, lightening as the gust strengthens and again fading in its wake | green, with darker and straw patches |
+| Grass (lawns, meadows, grassland) | as parks, wind included | light yellow-green, with darker and straw patches |
+| Trees/forest | clumped crowns: a `♣ ♠` center (`Ψ` in palm woods, `↑ ♠` in conifer woods) in `&` foliage, with small clearings; the sunny side of each crown is lit and the far side shaded; in the same gusts as the grass, a moment later, the crowns lean downwind, creeping across cells rather than jumping, and their foliage flutters (`& %`) | green |
+| Farmland/rice fields | `≡ '` in rows, with ripe patches of straw; in a gust the crop rows lean (`/` or `\`) and the furrows ripple (`~`) | yellow-green |
 | Terrain (Region level) | `. : - = + * # %` luminance ramp | brown-grey |
 | Landmark (curated) | `◆` pulsing glow | accent color |
 | Monument / statue / memorial | `▲` (from the Place level) | stone |
-| Tree (OSM `natural=tree`, tree rows) | `♣` (from z17) | green |
+| Tree (OSM `natural=tree`, tree rows) | `♣` by kind: `Ψ` palm, `↑` needleleaved (from z17); a crown around it (a rim of `%`, `&` inside with a dense `@` here and there, its sunny side lit, its far side shaded, and now and then a yellowing one) as wide as the tree's `diameter_crown` (else a typical width for its kind), lumpy and a little oval, each tree its own shape, a crown every crown's width along a tree row; in the wind its branches swing: the crown's outline bends downwind with each gust, the tips most, the lobes a little out of step, and its leaves flutter (`% &`) | green |
 | Fence / wall / hedge | `┄ ┆` dashed | grey-brown |
 | Street furniture | bench `╥`, fountain `○`, flagpole `¶` (from z18) | light grey |
 | Entrance | `▪` (from z18) | stone |
@@ -76,12 +69,16 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 **Road glyphs follow edge direction.** The renderer computes each road cell's orientation and neighbor connectivity, and picks the matching box-drawing character. Straight segments get `─`/`│`, junctions get `┼`/`├` and so on, and diagonals get `╱ ╲` or stair-stepped runs.
 
+**Two colors per cell.** A cell draws its glyph over a background. For areas (buildings, water, parks, woods, farmland, parking, pitches, and carriageways once they are strips of their real width), that background is a faint fill of the class color (the theme's `fill`), so a footprint reads as one shape and adjoining features stay distinct. Lines, markers, and labels keep the plain background, which gives labels their halo. A selected or highlighted feature's fill takes the accent too.
+
+**Edges.** Where an area's edge crosses a cell, the cell draws the sextant block (`🬀`…`🬻`, `▌ ▐`) of the part inside the area, over the fill of whatever is on the other side. Edges and diagonals then keep their shape at a sixth of a cell (2 × 3 per cell) instead of stepping a whole cell at a time. A building standing in a park or plaza keeps its shape over it. Features drawn with walls at the Place level (§2) keep their walls instead.
+
 **Labels** are real text snapped to the cell grid.
 - Placement is by priority and zoom band, with collision detection so labels never overlap.
-- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Names of major roads show from the District level (z14), other streets from the Street level (z15.5), and paths from z17. One name per street shows in a given stretch of screen.
+- Street names run along the street direction when horizontal or vertical within ±20°. Otherwise they are horizontal next to the street. Only the key streets are named before the Place level, picked by OSM road class. Major roads (motorway, trunk, primary) show from the District level (z14), and secondary roads from the Street level (z15.5). Tertiary roads show from z17.5, other streets from z18, and paths from z18.5. When names collide, key streets win. One name per street shows in a given stretch of screen.
 - Place names show by what they name: provinces at the Region level, cities and towns until the District level, subdivisions from z10.5 to z16, and smaller places from z13.5.
 - Labels have a 1-cell dark halo.
-- Labels switch on and off at their band's edges. Map layers crossfade instead: over half a zoom level, a layer's cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping.
+- Labels and map layers fade at their band's edges: over half a zoom level, their cells appear or dissolve one by one in a fixed scattered order (a dither), so levels blend without popping. A fading label keeps its place, so its neighbors don't jump.
 
 **Place-level detail.** Zooming in adds detail rather than only enlarging cells:
 - Curated landmarks show their name from z16, and statues and monuments from z18.
@@ -89,10 +86,37 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Statues, memorials, and monuments (`▲`) appear from z17, and trees, benches, fountains, flagpoles, fences, and entrances wherever OSM maps them.
 - From z18, roads are drawn at their real width (the OSM `width`, else `lanes` × 3.2 m, else a class default) as strips with curbs, instead of 1-cell lines.
 - From z19, pitched roofs show their ridge (`─ │ ╱ ╲`, along the footprint's long axis) between a lit slope `▓` and a shaded slope `▒`; flat roofs and landmark parts keep the height shading. The ridge is derived from the footprint shape, so it is a stylized reading of the roof.
-- **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings and rise in the tilted 3D view. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong in the info panel (Phase 2).
+- **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong in the info panel (Phase 2).
 - The Place level reaches z21, where a cell is about 0.4 × 0.7 m.
 
-**Hover and selection.** Hovering brightens the feature's cells. The selected feature gets an accent color and a slow shimmer.
+**Hover and selection.** Only landmarks respond to the pointer: hovering one brightens its cells, and other features don't react. The selected feature gets an accent color and a slow shimmer.
+
+**Life layer.** The map is inhabited by simulated agents drawn over it. They are decoration, not data, and the legend labels them "(simulated)". They are derived only from the OSM geometry in the tiles, so they work for any city.
+
+| Agent | Glyph | Moves along | From zoom |
+|---|---|---|---|
+| Vehicle | `▬` across the screen, `▮` up or down (`•` motorcycle, `▪` tricycle, `·` bicycle); drawn at real size once it covers a couple of cells | major, secondary, and minor roads, keeping right in a lane that fits the road's width (bicycles by the curb), through junctions | 15 |
+| Person | a top-down figure: head and shoulders in its shirt's color, turned with its heading and stepping as it walks; at its real size, like vehicles | minor roads, paths, and around parks and plazas, alone or in small groups; pauses and turns back now and then | 17 |
+| Boat | `◊`; drawn at real size once it covers a couple of cells | rivers | 13.5 |
+| Train | `▬` / `▮` per car; drawn at real size once a car covers a couple of cells | running lines, keeping to the straightest track at junctions; stops at stations, and waits at the end of the track before heading back. Trains also stand by on sidings, spurs, and yard tracks, lamps off | 13.5 |
+| Bird | far out `v` / `-` (wing beat), `·` when perched; closer, a top-down silhouette turned with its heading (wings spread, raised, or folded), and at its real size (its wingspan) up close, in its species' colors | flocks of one species, picked by the roost's habitat: maya (tree sparrows) around trees and parks, swallows sweeping over water and fields, pigeons over parks, and egrets over water and fields (never in trees). They circle over parks, woods, fields, and water, pushed downwind by the wind, and land in trees; pigeons and egrets also settle on the ground at their roost. A strong gust through a tree, or someone walking or driving close by (a dog from further), flushes a sitting flock, which scatters before it regroups. In heavy rain, flocks that perch sit it out in the trees and those that land stay down; swallows keep flying. By day, a flying bird casts a small shadow away from the sun | 13.5 |
+| Bat | as birds (silhouettes, and at real size up close, with scalloped wings), dim violet | small flocks flitting over trees, water, and parks, only from dusk to dawn | 13.5 |
+| Dog | a top-down silhouette (nose, ears, legs stepping as it walks) in its coat's color (tan, white, cream, black, or brown), turned with its heading; at its real size up close. Drawn in the people's class, so the legend counts dogs with people | street dogs (askals) roaming minor roads and paths, alone; they stop to sniff, turn back, trot in short bursts, and now and then lie down a long while. Some are out at any hour | 17 |
+
+- Agents move at real-world speeds (cars about 8 m/s, people about 1.2 m/s), so motion reads the same at any zoom.
+- **Vehicles** come in kinds: car, motorcycle, tricycle, jeepney, bus, truck, and bicycle. Each has a real length and width, a speed, and a paint picked from its own set (jeepneys in chrome and bright colors, tricycles in their bright colors). A vehicle smaller than two cells on screen is one glyph in its paint. Bigger, it covers its real footprint, turned with its heading, with its parts drawn from a top-down plan: body, roof, windows, head- and taillights, trim, and a jeepney's striped roof sides. Which kinds drive on which road class is the city pack's `traffic` mix (DATA.md §3), over a default of cars, motorcycles, buses, trucks, and bicycles.
+- **Boats** come in kinds too: rowboat, motorboat, and banca (an outrigger boat). Up close they are drawn the same way, from a plan: hull, canopy, windscreen, bow light, and a banca's outriggers. They are painted in colors that stand out from the water (white, cream, red, yellow, orange, near-black) and drawn solid, so the water doesn't show through. The city's `traffic.river` sets the mix, over a default of motorboats and rowboats.
+- **Queues.** A vehicle or boat slows behind the one ahead in its lane, keeping a short gap, rather than passing through it. A bicycle by the curb and a car in the lane beside it pass each other. Queues don't reach across junctions or tile edges.
+- **Trains** are a locomotive and two to four coaches, all in one paint (orange, blue, or cream). Their cars follow the track behind the locomotive, bending round curves. They are sparse (about one per 3 km of track), and stop 20–40 s at a train station they come to. A train stands by on every siding, spur, and yard track (OSM `service`), a locomotive and as many coaches (up to three) as fit, clear of the switch; running trains keep off those tracks. They run both ways, on through the city from one map tile into the next, and leave the map where the track leaves the part that is loaded. At a real end of the track a train waits, then heads back with its locomotive leading. Trains on the same track don't queue behind each other.
+- **People** are drawn pixel by pixel, not from the font, so they read as figures at any cell size. Each wears a shirt in one of a dozen colors (skin in the theme's person color). About a third walk in twos, threes, or fours, side by side and one behind the other, and a companion may be a child (a smaller figure). Some carry an open umbrella (payong, mostly black), drawn from above as its canopy: a few at any time, more under a high midday sun, and most in a storm. A figure is drawn at its real size in proportion to the vehicles around it (0.6 m across the shoulders, a child 0.45 m, an umbrella 1 m): part of a cell, a whole one, 2×2 cells, and closest up stamped over every cell it covers, each showing the sixths of it the figure fills, in its shirt or skin color (or a canopy and its ribs). Zoomed out, it never shrinks below a legible few pixels, so it is larger than life there, as a one-glyph vehicle is. Figures are solid (filled shoulders, the head in their middle, arms swinging forward and back), so they have the weight of the cars beside them. Street vendors stand beside their carts (a striped awning in a bright paint, with a lantern that glows from dusk) along side streets, paths, and around parks, several times as many within about 120 m of a market, and fewer at night like everyone else.
+- **Parked vehicles** fill about two-thirds of the stalls in parking lots (rows along each lot's long side) and line both curbs of about half the roads at least 10 m wide, where traffic keeps to the lanes left between them. They show from z17, day and night, with their lamps off. The city's `traffic.parked` sets the mix, over a default of cars and motorcycles.
+- **Places.** People gather where the map says they would, from z17. At churches and schools they stand and mill about on the grounds and around the buildings, never on the roofs. At a school most are children. Players run about sports pitches, a few people stand at monuments and fountains, and one or two sit on each bench. In the fields, farm workers walk the rows, about half leading a carabao. How many are out follows each place's own hours. Churches fill from 20 minutes before each service in the city pack's `life.schedules.worship` to an hour after; without any, they only have a few visitors. School gates crowd in the 45 minutes before classes and after them, on school days (the pack's `life.schedules.school`, else weekdays 07:00–16:00). Pitches are busiest in the late afternoon, fields have a morning and a late-afternoon shift, and benches, fountains and monuments follow the city's rhythm for people. Canals (not natural streams) carry a few small boats (the city's `traffic.canal`, else rowboats and bancas).
+- Each tile's agents start from a seed made of the tile's key, so they are the same for every visitor. At most 1,200 are drawn, nearest the center first.
+- An agent shows only where the cell under it allows: vehicles on roads, boats on water, people off roofs and water. A vehicle drawn at real size may hang over open ground at a narrow road's edge, but never over roofs or water, and a boat's hull never leaves the water.
+- **Time of day.** The map follows the city's clock (its pack's `timezone`, else the sun's time at its longitude), whatever the visitor's own time zone: live, or a fixed hour in the city today (05:30, 08:00, 12:00, 18:00, 22:00). It is lit for the sun over the view at that moment. Dusk warms the colors. Night dims them toward blue, lights some building cells as windows, and turns on vehicles' headlights and taillights (a one-glyph vehicle glows whole). From dusk, streetlights line major and secondary roads: a lamp head every 30 m or so on a fixed world spacing (so none bunch where roads or tiles meet), alternating sides, plus one on a corner of each junction, always at the roadside (never mid-road or in a divided road's median), each casting a smooth warm pool out over the road that fades across the edges of the areas around it. They switch on one by one as it gets dark, and off the same way at dawn. In rain the pools shine brighter on the wet road and drops glint as they fall through them. Lamps by the river reflect in wavering, rippled streaks on the water, and moving vehicles throw short cones of headlight onto the road ahead. Candles carried in a procession each glow and flicker, so the crowd reads as a river of light. Landmarks are floodlit from early dusk. Shops and markets glow warm from inside and spill light onto the street while they are open, each with its own hours around the city's typical ones (by default most close by about 21:00, a few stay open late, and a very few all night); vendors' carts carry a bulb. The night follows the real moon: brighter and silvery when it is full and high, darkest when it is new or down, with glints on the water. About one in ten is out (a grey head, no pool) and about one in ten flickers (steady with reduced motion). They show from zoom 15. Zoomed out, those roads glow as a warm corridor instead. They are lighting, like windows, so they stay on with the life layer off. How many people, vehicles, boats, and trains are out follows the city's daily rhythm (its pack's `life.rhythm`, else a generic working day): busiest in the morning and evening rush hours, quieter after lunch, and thinnest in the small hours. Birds roost after dusk. By day and dusk, buildings and trees cast shadows away from the sun (a cell is in shadow if something within six cells toward the sun stands taller than the sun rises over that distance), and there are no shadows at night.
+- **Wind.** One wind moves the whole map: grass and parks, tree crowns and woods, fields, and water (gust bands on lakes and wide rivers). It comes from the city pack's `climate` for the current month (Naga: the amihan from the northeast November to March, the habagat from the southwest June to September, light easterlies between), veers up to 25° either way over a minute or two, and breathes in strength. A gust is a front sweeping downwind with a calmer wake behind it: grass lightens as the front arrives and fades as it passes, and tree crowns swing downwind with the front and spring back upwind of rest in its wake before settling. The HUD's Wind chip shows an arrow the way it blows and cycles live → calm → breeze → gusty → storm (a viewer preference, remembered like the Life toggle).
+- **Rain** falls in a storm: sparse streaks down the screen, slanting with the wind (`|`, `\`, `/`), over a slightly dimmed map. It is simulated weather, not a forecast (the site is static).
+- **Processions.** A city pack can stage river processions (e.g. Naga's Peñafrancia fluvial procession, departing from Danlugan ni Ina and going up the Naga River to near the Peñafrancia Basilica): a pagoda barge towed by columns of long paddle boats (voyadores) in team colors, escort bancas and motorboats clearing the way ahead, a flotilla of small boats (dugout barotos, rowboats, motorboats, small sailboats) following the pagoda, and crowds along both banks and on the bridges, thickest around the pagoda, at the departure, and at the landing. The route follows the river in OSM (DATA.md §2 step 07). A HUD button plays each one as a time-lapse at 10 m/s, at least three minutes long (the camera flies to its start once), and it also runs live, at real speed, during its scheduled window when the map follows the real clock. It moves the way a towed procession does: in surges, with halts along the way; the lead boats set off first and the pagoda and flotilla follow a moment later, so the line stretches when it moves and closes up when it stops. Tow ropes run from the pagoda's bow through each column of voyadores, pulled straight while the line is stretched and sagging at halts; tall striped poles with white pennants (`¶`) lean out from the pagoda's sides and sway. The voyadores keep loose, staggered columns that sway and turn a little on their own, closing up where the river narrows, and every boat keeps inside the river's banks. From about z19.5, each voyador carries two files of paddlers (ten a side) in its team color, their paddles out over the water, each boat pulling in time. While one runs, the river is closed to other boats. From dusk, the pagoda's lights, the boats' bow lamps, and many of the crowd's candles glow. A caption names it, marks it "(simulated)", says when it is happening now, and says "draft: route and schedule not yet verified" until the pack's route and schedule are sourced.
 
 ## 5. Interactions
 
@@ -100,18 +124,17 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 |---|---|
 | Drag | Pan |
 | Scroll / pinch | Zoom (anchored at cursor) |
-| Right-drag / two-finger rotate | Orbit (pitch and bearing) |
-| Click / tap feature | Fly to it and open the info panel |
-| Hover | Highlight and tooltip with the name |
+| Click / tap landmark | Fly to it and open the info panel (anywhere else: close it) |
+| Hover landmark | Highlight and tooltip with the name |
 | `/` | Focus search |
 | `+` / `-` | Zoom |
 | `T` | Open tours menu |
 | `Y` | Toggle timeline |
 | `Space` | Pause/resume tour or timeline playback |
-| `Esc` | Close panel, exit walk mode, cancel fly |
+| `Esc` | Close panel, cancel fly |
 
 **Search**
-- Fuzzy search over the current city's landmarks, streets, subdivisions, schools, places of worship, and markets.
+- Fuzzy search over the current city's landmarks, streets, subdivisions, schools, places of worship, markets, and train stations.
 - Results are grouped by type and show the subdivision.
 - Enter flies to the top result. Arrow keys move through results.
 
@@ -121,33 +144,36 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - "Show on timeline" jumps the slider to the feature's key years.
 
 **Share**
-- Copies a URL whose path is the city (`/<city>`) and whose query encodes `lat`, `lng`, `z`, `pitch`, `bearing`, `year`, `tour`, `step`, and `sel` (selected feature id).
+- Copies a URL whose path is the city (`/<city>`) and whose query encodes `lat`, `lng`, `z`, `year`, `tour`, `step`, and `sel` (selected feature id).
 - Loading that URL restores the exact view.
 
 **HUD**
-- Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs visible at the current zoom and what they mean. The legend is built from the theme, so it always matches the map.
+- Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs on screen and what they mean. The legend is built from the theme and lists only the classes the renderer reports in view, so it always matches the map. With the life layer on, "Street vendors" (a cart and the vendor) follows "People". It lists "Streetlights" while they are lit and the roads they line are in view.
 - Scale indicator (the "ruler").
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
+- A "Life" toggle for the life layer (§4) and a time chip that cycles live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00 (the city's local time). Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
 - Attribution line, always visible.
 
 ## 6. Tours
 
 A tour is an ordered list of steps. Each step has:
-- camera state: lat, lng, zoom, pitch, bearing
-- duration
+- camera state: lat, lng, zoom
+- duration: how long the step holds once the camera arrives
 - narration text
-- optional: `year`, `select` (feature id), `audio` clip, `highlight` (feature ids)
+- optional: a flight duration (`fly_ms`, up to 15 s, for slow establishing shots; otherwise the fly-to rule in §3), `year`, `select` (feature id), `audio` clip, `highlight` (feature ids), and `sources`
 
 Tours belong to a city and live in its city pack. Each city brief lists that city's launch set (for Naga, see `docs/cities/naga.md` §3). Every city should ship at least one establishing tour that flies from Region level down to street level.
 
-Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`.
+Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`. A tour is `draft` or `verified`: a verified tour has no `TODO(verify)` left and cites sources on every step (the validator enforces this). Draft tours play, marked "draft", with their placeholders showing.
 
 **Player behavior**
-- Steps auto-advance. Narration appears in a caption card.
-- Controls: pause, next, previous, exit, plus a progress bar.
-- If the visitor grabs the camera, the tour pauses and a "Resume tour" chip appears. Resuming flies back to the current step.
+- `T` or the Tours button opens the tours menu.
+- Steps auto-advance: each flies to its camera, then holds for its duration. Narration appears in a caption card (a bottom sheet on phones, in place of the info panel).
+- Controls: pause, next, previous, exit, plus a progress bar. `Space` pauses or resumes, and `Esc` exits.
+- If the visitor grabs the camera (drag, zoom, or selecting something else), the tour pauses and a "Resume tour" chip appears. Resuming flies back to the current step. A hidden browser tab pauses the tour too.
 - A step can set the timeline year. The slider animates to it.
+- Starting a tour adds a history entry; its steps don't. A shared URL with `tour` and `step` reopens the tour at that step, paused, so the link shows the view without playing on its own.
 
 ## 7. Timeline
 
@@ -169,9 +195,12 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 
 ## 8. Responsiveness and accessibility
 
-- Mobile first-class: touch gestures, bottom-sheet panels, a larger default cell size on small screens.
-- `prefers-reduced-motion`: no water animation, instant cell transitions, shorter fly-to.
+- Mobile first-class: touch gestures, bottom-sheet panels, a larger minimum map cell size on small screens.
+- `prefers-reduced-motion`: no water animation, no wind (the Wind chip is disabled) and no rain, instant cell transitions, shorter fly-to, and no life layer agents (the "Life" toggle is disabled). The time-of-day lighting still applies, without the window flicker.
+- While the tab is hidden or not focused, or the map is scrolled off screen, nothing on it moves on its own: water, wind, rain, and the life layer's agents pause, and pick up where they were when it is watched again. The map still redraws for anything new (tiles arriving, the camera, the time of day).
 - Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
+- **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there, like a click.
+- **Debug overlay.** `?debug=1` shows the renderer's frame rate, frame and cell-pass times, tile counts, and tile decode time, for checking the performance budgets on real devices. It is not part of the view state, so share URLs leave it out.
 - Text-size setting adjusts the cell size.
 - Languages: English first and always required. Each city declares extra content languages in its config (Naga: `fil` and `bcl`), and names and narration can carry those fields.
 

@@ -1,0 +1,35 @@
+{
+  "elements": [
+    {
+      "type": "node",
+      "id": 22,
+      "lat": 0.001,
+      "lon": 0
+    },
+    {
+      "type": "node",
+      "id": 23,
+      "lat": 0.001,
+      "lon": 0.01
+    },
+    {
+      "type": "node",
+      "id": 24,
+      "lat": 0.0012,
+      "lon": 0.005,
+      "tags": {
+        "railway": "station",
+        "name": "Fixture Station"
+      }
+    },
+    {
+      "type": "way",
+      "id": 109,
+      "nodes": [22, 23],
+      "tags": {
+        "railway": "rail",
+        "name": "Fixture Line"
+      }
+    }
+  ]
+}

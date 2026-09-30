@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { classId, MAX_CLASSES, type RenderClass } from '../classes';
-import { buildingRamp, doubleLine, singleLine, themes } from '../theme';
+import { buildingRamp, doubleLine, sextantGlyphs, singleLine, themes } from '../theme';
 import {
   buildGlyphTables,
   buildingVariant,
   cellHash,
   connects,
   Dir,
-  EXTRUDE_ROW,
-  extrusionVariant,
   FALLING,
   kindCodes,
   MAX_VARIANTS,
@@ -16,6 +14,7 @@ import {
   patternVariant,
   rampVariant,
   RIDGE_VARIANT,
+  ROOF_ROW,
   ridgeGlyphs,
   ridgeVariant,
   RISING,
@@ -29,6 +28,11 @@ import {
   seeThrough,
   seeThroughMask,
   selectGlyph,
+  SEXTANT_ROW,
+  sextantMask,
+  isEdgeMask,
+  subcellEdge,
+  type Sample,
   WALL_DOUBLE_ROW,
   WALL_SINGLE_ROW,
   wallGlyph,
@@ -140,6 +144,24 @@ describe('boundaries and the coast', () => {
   });
 });
 
+describe('railway track', () => {
+  it('joins only other track, so a level crossing does not merge it into the road', () => {
+    expect(connects('rail', 'rail')).toBe(true);
+    expect(connects('rail', 'road_minor')).toBe(false);
+    expect(connects('road_minor', 'rail')).toBe(false);
+    expect(connects('path', 'rail')).toBe(false);
+  });
+
+  it('draws runs with crossties and turns with the double-line joins', () => {
+    const glyphs = themes.dark.styles.rail!.glyphs;
+    expect(glyphs[Dir.E | Dir.W]).toBe('╪');
+    expect(glyphs[Dir.N | Dir.S]).toBe('╫');
+    expect(glyphs[Dir.S | Dir.E]).toBe('╔');
+    expect(glyphs[Dir.N | Dir.E | Dir.S | Dir.W]).toBe('╬');
+    expect(glyphs[FALLING]).toBe('⑊');
+  });
+});
+
 describe('area patterns', () => {
   it('forms diagonals and rows from world cell coordinates', () => {
     expect([0, 1, 2, 3].map((x) => patternVariant('diagonal', x, 0, 3))).toEqual([0, 1, 2, 0]);
@@ -180,6 +202,35 @@ describe('water', () => {
   it('holds still with reduced motion (time 0)', () => {
     expect(waterVariant(5, 5, 0)).toBe(cellHash(5, 5) % 2);
   });
+
+  const riverAt = (rows: string[], y = 0, cls: RenderClass = 'water_river') =>
+    selectGlyph(themes.dark, cls, {
+      ...sketch(rows, { w: 'water_river', s: 'water_sea', l: 'water_area' }),
+      y,
+    });
+
+  it('draws a thin river that runs down the screen as a wavy stroke', () => {
+    expect(riverAt(['.w.', '.w.', '.w.'], 0)).toBe('(');
+    expect(riverAt(['.w.', '.w.', '...'], 1)).toBe(')');
+  });
+
+  it('draws a diagonal thin river with slashes', () => {
+    expect(riverAt(['..w', '.w.', 'w..'])).toBe('╱');
+    expect(riverAt(['w..', '.w.', '..w'])).toBe('╲');
+  });
+
+  it('keeps animated water for horizontal runs, areas, and lone cells', () => {
+    const animated = ['~', '≈'];
+    expect(animated).toContain(riverAt(['...', 'www', '...']));
+    expect(animated).toContain(riverAt(['www', 'www', 'www']));
+    expect(animated).toContain(riverAt(['...', '.w.', '...']));
+    // Any water counts as a neighbor: a river meeting the sea is part of it.
+    expect(animated).toContain(riverAt(['.w.', 'sws', '...']));
+  });
+
+  it('draws lakes and the sea as animated water even where they are thin', () => {
+    expect(['≈', '~']).toContain(riverAt(['.l.', '.l.', '.l.'], 0, 'water_area'));
+  });
 });
 
 describe('glyph tables', () => {
@@ -204,11 +255,81 @@ describe('glyph tables', () => {
     expect(tables.kinds[classId('admin_city')]).toBe(kindCodes.road);
     // Place names are labels (the overlay), never cells.
     expect(tables.kinds[classId('place_label')]).toBe(0);
-    expect(tables.counts[classId('park')]).toBe(3);
+    expect(tables.counts[classId('park')]).toBe(8);
     const mask = tables.connects[classId('path')]!;
     expect(mask & (1 << classId('road_major'))).not.toBe(0);
     expect(mask & (1 << classId('building'))).toBe(0);
     expect(tables.colors[classId('marker_landmark') * 3]).toBeCloseTo(0xff / 255);
+  });
+
+  it('records each class fill, none for lines and markers', () => {
+    expect(tables.fills[classId('building')]).toBeGreaterThan(0);
+    expect(tables.fills[classId('water_sea')]).toBeGreaterThan(0);
+    expect(tables.fills[classId('path')]).toBe(0);
+    expect(tables.fills[classId('marker_landmark')]).toBe(0);
+  });
+
+  it('holds the sextants by mask in two rows past the classes', () => {
+    const at = (mask: number) =>
+      tables.table[(SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31)];
+    for (const mask of [1, 21, 31, 32, 42, 62]) expect(at(mask)).toBe(index(sextantGlyphs[mask]!));
+    expect(SEXTANT_ROW + 1).toBeLessThan(ROOF_ROW);
+  });
+});
+
+describe('sub-cell edges', () => {
+  const B: Sample = { cls: 'building', id: 7 };
+  const B2: Sample = { cls: 'building_school', id: 8 };
+  const P: Sample = { cls: 'park', id: 3 };
+  const R: Sample = { cls: 'road_mid', id: 5 };
+  const _: Sample = { cls: null, id: 0 };
+  const never = () => false;
+
+  it('packs samples row by row from the top left', () => {
+    expect(sextantMask((col) => col === 0)).toBe(21); // ▌
+    expect(sextantMask((_col, row) => row === 0)).toBe(3);
+    expect(sextantMask(() => true)).toBe(63);
+    expect([isEdgeMask(0), isEdgeMask(63), isEdgeMask(21)]).toEqual([false, false, true]);
+  });
+
+  it("draws an area's edge with the other class behind it", () => {
+    // Building on the left half, park on the right.
+    expect(subcellEdge(B, [B, P, B, P, B, P], never)).toEqual({ fg: B, mask: 21, bg: 'park' });
+    // Two buildings side by side keep their own shapes.
+    expect(subcellEdge(B, [B, B2, B, B2, B, B], never)).toEqual({
+      fg: B,
+      mask: 0b110101,
+      bg: 'building_school',
+    });
+  });
+
+  it('keeps the glyph inside an area and where a line wins the cell', () => {
+    expect(subcellEdge(B, [B, B, B, B, B, B], never)).toBeNull();
+    expect(subcellEdge(R, [B, B, R, R, B, B], never)).toBeNull();
+    expect(subcellEdge(_, [_, _, _, _, _, _], never)).toBeNull();
+  });
+
+  it('gives an empty cell the edge of an area that reaches into it', () => {
+    expect(subcellEdge(_, [_, _, _, _, P, P], never)).toEqual({ fg: P, mask: 48, bg: null });
+  });
+
+  it('draws the lawn inside a campus over its grounds (no height)', () => {
+    const G: Sample = { cls: 'building_school', id: 9, height: 0 };
+    const L: Sample = { cls: 'grass', id: 4 };
+    expect(subcellEdge(L, [L, G, L, G, L, G], never)).toEqual({
+      fg: L,
+      mask: 21,
+      bg: 'building_school',
+    });
+  });
+
+  it('draws a building over the park it stands in', () => {
+    expect(subcellEdge(P, [P, P, P, B, P, B], never)).toEqual({ fg: B, mask: 40, bg: 'park' });
+  });
+
+  it('leaves outlined features to their walls', () => {
+    const outlined = (s: Sample) => s.cls === 'building';
+    expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
   });
 });
 
@@ -316,14 +437,14 @@ describe('Place-level ground detail', () => {
     expect(ridgeGlyphs[ridgeVariant(Math.round(0.25 * 255), 1) - RIDGE_VARIANT]).toBe('╲');
   });
 
-  it('puts the ridge glyphs after the ramp in the building row', () => {
+  it('puts the ridge glyphs in the roof row', () => {
     const glyphs = new Map<string, number>();
     const index = (g: string) => {
       if (!glyphs.has(g)) glyphs.set(g, glyphs.size + 1);
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[EXTRUDE_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
+    expect(table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
   });
 
   it('picks furniture glyphs by variant, falling back to a dot', () => {
@@ -338,16 +459,5 @@ describe('Place-level ground detail', () => {
     expect(at(['.b.', '.b.', '.b.'])).toBe('┆');
     expect(at(['...', 'bbb', '...'])).toBe('┄');
     expect(connects('barrier', 'road_minor')).toBe(false);
-  });
-});
-
-describe('3D buildings', () => {
-  it('draws roofs solid and shades walls ░▒▓ by facing', () => {
-    expect(buildingRamp[extrusionVariant(0, true)]).toBe('█');
-    expect([10, 100, 200].map((shade) => buildingRamp[extrusionVariant(shade, false)])).toEqual([
-      '░',
-      '▒',
-      '▓',
-    ]);
   });
 });

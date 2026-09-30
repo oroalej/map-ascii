@@ -3,7 +3,7 @@
  * greedily in priority order, with collision so they never overlap: place names (provinces,
  * cities, subdivisions, smaller places), landmarks, and monuments.
  */
-import type { ZoomBand } from '@atlas/shared';
+import { bandVisibility, type ZoomBand } from '@atlas/shared';
 
 /** Label priority: lower ranks are placed first. */
 export const LabelRank = {
@@ -15,16 +15,51 @@ export const LabelRank = {
   monument: 5,
   street: 6,
   place: 7,
+  /** Tertiary and smaller streets and paths, named only up close. */
+  streetMinor: 8,
 } as const;
 export type LabelRank = (typeof LabelRank)[keyof typeof LabelRank];
+
+/** Punctuation the label atlas lacks, spelled with the ASCII it has. */
+const LABEL_ASCII: Readonly<Record<string, string>> = {
+  '–': '-',
+  '—': '-',
+  '‘': "'",
+  '’': "'",
+  '“': '"',
+  '”': '"',
+};
+
+/**
+ * A name as a label draws it: compatibility characters spelled out (`Ⅱ` → `II`, ligatures, full
+ * width forms) and typographic punctuation made ASCII, so it fits the label atlas (theme.ts
+ * `labelCharacters`) instead of showing `?`. Accented Latin letters stay.
+ */
+export const labelText = (name: string): string =>
+  name.normalize('NFKC').replace(/[–—‘’“”]/g, (c) => LABEL_ASCII[c] ?? c);
 
 /** When curated names show (SPEC.md §4 Place-level detail); place names use their own band. */
 export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
 export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };
 
-/** Whether a label's band includes `zoom`. Labels switch at the band's edges; they don't fade. */
-export const labelShows = (band: ZoomBand, zoom: number) =>
-  zoom >= band.min && (band.max === undefined || zoom <= band.max);
+/**
+ * How much of a label shows at `zoom`, 0–1. Labels fade in and out over the same half level as
+ * the classes (`bandVisibility`): a partly shown label keeps that share of its cells.
+ */
+export const labelVisibility = (band: ZoomBand, zoom: number) => bandVisibility(band, zoom);
+
+/**
+ * Whether a label's cell `k` (counted across its halo box) shows at visibility `vis`: a fixed
+ * hash of the label and the cell, so the dissolve pattern stays put while the camera moves.
+ */
+export function labelCellShows(id: number, k: number, vis: number): boolean {
+  if (vis >= 1) return true;
+  let h = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 8) / 0x1000000 < vis;
+}
 
 /** Longest line before a label wraps, in cells. */
 export const LABEL_WIDTH = 18;
@@ -42,14 +77,59 @@ export type Overlay = {
   glyphs: Uint16Array;
   /** Boxes taken so far, which later placements avoid. */
   taken: Box[];
+  /**
+   * The same boxes by cell, 1 where taken, over the grid and `TAKEN_PAD` cells around it, so a
+   * placement checks its own cells instead of every box placed.
+   */
+  takenCells?: Uint8Array;
 };
+
+/** How far past the grid's edges `takenCells` reaches (at least a label's halo). */
+const TAKEN_PAD = 4;
 
 export const createOverlay = (cols: number, rows: number): Overlay => ({
   cols,
   rows,
   glyphs: new Uint16Array(cols * rows),
   taken: [],
+  takenCells: new Uint8Array((cols + 2 * TAKEN_PAD) * (rows + 2 * TAKEN_PAD)),
 });
+
+/** Whether `box` is within `takenCells` (the grid and its pad). */
+const inTakenCells = (o: Overlay, b: Box) =>
+  b.left >= -TAKEN_PAD &&
+  b.top >= -TAKEN_PAD &&
+  b.left + b.width <= o.cols + TAKEN_PAD &&
+  b.top + b.height <= o.rows + TAKEN_PAD;
+
+/** Whether `box` overlaps any box taken so far. */
+function isTaken(o: Overlay, b: Box): boolean {
+  const cells = o.takenCells;
+  if (!cells || !inTakenCells(o, b)) return o.taken.some((p) => overlaps(p, b));
+  const stride = o.cols + 2 * TAKEN_PAD;
+  for (let y = b.top; y < b.top + b.height; y++) {
+    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
+    for (let x = b.left; x < b.left + b.width; x++) if (cells[row + x]) return true;
+  }
+  return false;
+}
+
+/** Take `box`, so later placements avoid it. */
+function take(o: Overlay, b: Box) {
+  o.taken.push(b);
+  const cells = o.takenCells;
+  if (!cells) return;
+  const stride = o.cols + 2 * TAKEN_PAD;
+  // A box past the pad stays out of the cells: `isTaken` checks the list for boxes that reach it.
+  const x0 = Math.max(b.left, -TAKEN_PAD);
+  const x1 = Math.min(b.left + b.width, o.cols + TAKEN_PAD);
+  const y0 = Math.max(b.top, -TAKEN_PAD);
+  const y1 = Math.min(b.top + b.height, o.rows + TAKEN_PAD);
+  for (let y = y0; y < y1; y++) {
+    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
+    for (let x = x0; x < x1; x++) cells[row + x] = 1;
+  }
+}
 
 /** The overlay as RGBA8 texels: glyph code low byte, high byte, 0, 0. */
 export function packOverlay(overlay: Overlay): Uint8Array {
@@ -86,6 +166,11 @@ export type LabelCandidate = {
   col: number;
   row: number;
   /**
+   * How much of the label shows, 0–1 (default 1). A partly shown label still takes its whole
+   * box, so its neighbors don't jump as it fades.
+   */
+  vis?: number;
+  /**
    * How the text sits: `beside` the anchor (below, above, right, or left), or on one line
    * `along` a horizontal street or `down` a vertical one, over the street's own cells.
    */
@@ -110,6 +195,20 @@ export function streetMode(angle: number): LabelMode {
 
 /** Labels with the same text closer than this (cells) are one: the first placed wins. */
 export const DUPLICATE_DISTANCE = 30;
+
+/** Each label text's lines at `LABEL_WIDTH`, and their width in characters, wrapped once. */
+const wrapped = new Map<string, { lines: string[]; width: number }>();
+const WRAPPED_MAX = 20_000;
+function wrapOnce(text: string) {
+  let found = wrapped.get(text);
+  if (!found) {
+    const lines = wrapText(text);
+    found = { lines, width: Math.max(0, ...lines.map((l) => [...l].length)) };
+    if (wrapped.size >= WRAPPED_MAX) wrapped.clear();
+    wrapped.set(text, found);
+  }
+  return found;
+}
 
 /** Split text into lines of at most `width` characters at word boundaries. */
 export function wrapText(text: string, width = LABEL_WIDTH): string[] {
@@ -149,14 +248,15 @@ const withHalo = (b: Box, mode: LabelMode): Box =>
  * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
  * one-cell halo; a label whose text fits nowhere inside `area` (e.g. the on-screen cells)
  * without overlapping what is already placed is dropped, and so is one whose text was already
- * placed nearby (a street's other ways).
+ * placed nearby (a street's other ways). Returns the labels placed, in placement order.
  */
 export function placeLabels(
   overlay: Overlay,
   candidates: readonly LabelCandidate[],
   glyphIndex: (char: string) => number | undefined,
   area: LabelArea = fullArea(overlay),
-) {
+): LabelCandidate[] {
+  const out: LabelCandidate[] = [];
   const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
   const question = glyphIndex('?') ?? 0;
   const placed = new Map<string, { col: number; row: number }[]>();
@@ -170,9 +270,11 @@ export function placeLabels(
       continue;
     }
     // Text on a street is one line; text beside an anchor wraps.
-    const lines = mode === 'beside' ? wrapText(label.text) : [label.text.trim()];
+    const { lines, width } =
+      mode === 'beside'
+        ? wrapOnce(label.text)
+        : { lines: [label.text.trim()], width: [...label.text.trim()].length };
     if (lines.length === 0 || !lines[0]) continue;
-    const width = Math.max(...lines.map((l) => [...l].length));
     const boxes =
       mode === 'along'
         ? [{ left: label.col - Math.floor(width / 2), top: label.row, width, height: 1 }]
@@ -185,25 +287,35 @@ export function placeLabels(
         b.top >= area.top &&
         b.left + b.width <= area.right &&
         b.top + b.height <= area.bottom;
-      const halo = withHalo(b, mode);
-      return inside && !overlay.taken.some((p) => overlaps(p, halo));
+      return inside && !isTaken(overlay, withHalo(b, mode));
     });
     if (!box) continue;
     const halo = withHalo(box, mode);
-    overlay.taken.push(halo);
-    placed.set(label.text, [...nearby, { col: label.col, row: label.row }]);
+    take(overlay, halo);
+    if (nearby.length === 0) placed.set(label.text, nearby);
+    nearby.push({ col: label.col, row: label.row });
+    out.push(label);
 
+    // A fading label keeps only some of its cells (text and halo alike); the map shows through
+    // the rest.
+    const vis = label.vis ?? 1;
+    const shows = (x: number, y: number) =>
+      labelCellShows(label.id, (y - halo.top) * halo.width + (x - halo.left), vis);
+    const put = (x: number, y: number, glyph: number) => {
+      if (shows(x, y)) write(overlay, x, y, glyph);
+    };
     for (let y = halo.top; y < halo.top + halo.height; y++) {
-      for (let x = halo.left; x < halo.left + halo.width; x++) write(overlay, x, y, OVERLAY_BLANK);
+      for (let x = halo.left; x < halo.left + halo.width; x++) put(x, y, OVERLAY_BLANK);
     }
     if (mode === 'down') {
-      [...lines[0]].forEach((char, j) => write(overlay, box.left, box.top + j, glyphOf(char)));
+      [...lines[0]].forEach((char, j) => put(box.left, box.top + j, glyphOf(char)));
       continue;
     }
     lines.forEach((line, i) => {
       const chars = [...line];
       const start = box.left + Math.floor((width - chars.length) / 2);
-      chars.forEach((char, j) => write(overlay, start + j, box.top + i, glyphOf(char)));
+      chars.forEach((char, j) => put(start + j, box.top + i, glyphOf(char)));
     });
   }
+  return out;
 }

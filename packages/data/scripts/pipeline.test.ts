@@ -7,7 +7,7 @@ import type { City, CityArt } from '@atlas/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
-import { step as mergeContent } from './04-merge-content';
+import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
 import { files, type StepContext } from './step';
@@ -51,6 +51,18 @@ const content: ContentBundle = {
       sources: [{ title: 'Fixture source' }],
     },
   ],
+  landcover: [
+    {
+      id: 'landcover/fixture-grounds',
+      title: 'Fixture grounds',
+      trees: [{ at: [0.004, 0.004], crown_m: 10 }],
+      rows: [],
+      areas: [],
+      status: 'draft',
+      credit: 'Fixture imagery',
+      sources: [{ title: 'Fixture imagery' }],
+    },
+  ],
   art: [
     {
       id: 'art/fixture-statue',
@@ -63,6 +75,7 @@ const content: ContentBundle = {
       sources: [{ title: 'Fixture source' }],
     },
   ],
+  processions: [],
 };
 
 let ctx: StepContext;
@@ -77,6 +90,7 @@ beforeAll(async () => {
     buildDir,
     outDir: join(buildDir, 'out'),
     offline: true,
+    refresh: false,
   };
   for (const step of [convert, normalize, mergeContent]) await step.run(ctx);
   features = [];
@@ -95,7 +109,9 @@ describe('pipeline (02–04) on the fixture extract', () => {
       .map((f) => [f.properties.id, f.properties.class, f.tippecanoe.layer])
       .sort(([a], [b]) => String(a).localeCompare(String(b)));
     expect(summary).toEqual([
+      ['cover:fixture-grounds/tree-1', 'tree', 'poi'],
       ['osm:node/19', 'place_label', 'labels'],
+      ['osm:node/24', 'building_station', 'poi'],
       ['osm:node/90', 'monument', 'poi'],
       ['osm:relation/200', 'admin_city', 'admin'],
       ['osm:relation/201', 'admin_subdivision', 'admin'],
@@ -104,6 +120,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
       ['osm:way/104', 'building_religious', 'buildings'],
       ['osm:way/105', 'park', 'landuse'],
       ['osm:way/106', 'water_river', 'water'],
+      ['osm:way/109', 'rail', 'roads'],
       ['plan:fixture-statue/1', 'building_part', 'buildings'],
     ]);
   });
@@ -165,6 +182,36 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(meta.regionBounds).toEqual([-0.1, -0.1, 0.1, 0.1]);
     expect(meta.defaultCamera.lat).toBeCloseTo(0.007, 6);
     expect(meta.defaultCamera.lng).toBeCloseTo(0.007, 6);
-    expect(meta.defaultCamera).toMatchObject({ zoom: 16, pitch: 0, bearing: 0 });
+    expect(Object.keys(meta.defaultCamera).sort()).toEqual(['lat', 'lng', 'zoom']);
+    expect(meta.defaultCamera.zoom).toBe(16);
+    const credited = buildMeta(
+      city,
+      { ...geography, attribution: ['DEM'] },
+      [1890, 2026],
+      ['Imagery', 'DEM'],
+    );
+    expect(credited.attribution).toEqual(['DEM', 'Imagery']);
+  });
+
+  it('checks that tours point at features in the data and stay in the region', () => {
+    const step = (camera: { lat: number; lng: number }, extra = {}) => ({
+      camera: { ...camera, zoom: 16 },
+      duration_ms: 4000,
+      narration: { en: 'TODO(verify)' },
+      ...extra,
+    });
+    const tour = {
+      id: 'tour/fixture',
+      title: { en: 'Fixture tour' },
+      status: 'draft' as const,
+      steps: [
+        step({ lat: 0.005, lng: 0.005 }, { select: 'osm:way/104' }),
+        step({ lat: 5, lng: 0.005 }, { highlight: ['osm:way/104', 'osm:way/999999'] }),
+      ],
+    };
+    expect(checkTours(features, [tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
+      'tour/fixture step 2: camera 5, 0.005 is outside the region',
+      'tour/fixture step 2: osm:way/999999 is not in the data',
+    ]);
   });
 });

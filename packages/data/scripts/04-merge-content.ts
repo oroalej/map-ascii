@@ -1,11 +1,14 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
+import type { BBox } from '@atlas/shared';
 import turfCentroid from '@turf/centroid';
+import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
-import { readFeatures, writeFeatures, writeJson } from './lib/io';
+import { landcoverFeatures } from './lib/landcover';
+import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
 /**
@@ -63,6 +66,32 @@ export function addLabelAnchor(feature: AtlasFeature) {
   p.label_lat = Math.round(lat * 1e7) / 1e7;
 }
 
+/**
+ * Problems with the city's tours against its data: steps that select or highlight a feature
+ * that isn't there, or whose camera is outside the region (where the atlas can't go).
+ */
+export function checkTours(
+  features: readonly AtlasFeature[],
+  tours: ContentBundle['tours'],
+  [west, south, east, north]: BBox,
+): string[] {
+  const ids = new Set(features.map((f) => f.properties.id));
+  const problems: string[] = [];
+  for (const tour of tours) {
+    tour.steps.forEach((step, i) => {
+      const where = `${tour.id} step ${i + 1}`;
+      const { lng, lat } = step.camera;
+      if (lng < west || lng > east || lat < south || lat > north) {
+        problems.push(`${where}: camera ${lat}, ${lng} is outside the region`);
+      }
+      for (const id of [...(step.select ? [step.select] : []), ...(step.highlight ?? [])]) {
+        if (!ids.has(id)) problems.push(`${where}: ${id} is not in the data`);
+      }
+    });
+  }
+  return problems;
+}
+
 // Join the city pack's curated content onto features
 export const step: Step = {
   name: '04-merge-content',
@@ -72,11 +101,23 @@ export const step: Step = {
       features.push(f as AtlasFeature);
     }
     const merged = mergeContent(features, content);
+    const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const tourProblems = checkTours(merged, content.tours, regionBounds);
+    if (tourProblems.length > 0) {
+      throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
+    }
     // Plan-view landmark parts (belfries, domes, tiered bases) as their own small footprints.
     const { parts, warnings } = planParts(merged, content.plans);
-    for (const warning of warnings) console.warn(`  warning: ${warning}`);
-    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts]);
-    console.log(`  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts`);
+    // Curated trees and land cover that OSM doesn't have yet.
+    const landcover = landcoverFeatures(merged, content.landcover);
+    for (const warning of [...warnings, ...landcover.warnings]) {
+      console.warn(`  warning: ${warning}`);
+    }
+    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts, ...landcover.features]);
+    console.log(
+      `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +
+        `${landcover.features.length} curated trees and areas; checked ${content.tours.length} tours`,
+    );
 
     // Landmark art, placed on its features, for the renderer (<city>.art.json).
     const art = placeArt(features, content.art);
