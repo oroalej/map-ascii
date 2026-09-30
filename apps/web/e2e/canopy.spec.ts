@@ -18,13 +18,14 @@ import {
 } from '../../../packages/renderer/src/glyphs/select';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { PersonPart, personByte } from '../../../packages/renderer/src/life/people';
 import { cellFragment, cellVertex } from '../../../packages/renderer/src/shaders/cell';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
-test('tree canopy overlap hides covered car parts and compares roof heights', async ({ page }) => {
+test('tree canopy overlap hides non-bird Life and compares roof heights', async ({ page }) => {
   // Exercise the real shaders with controlled geometry, rather than city data or timing.
   const glyphs = [' ', ...mapGlyphs(themes.dark).filter((g) => g !== ' ')];
   const index = (g: string) => glyphs.indexOf(g);
@@ -279,8 +280,10 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
         );
       const lifeTex = texture(cols, rows, life);
       const colors = new Array(input.maxClasses * 3).fill(0);
-      colors[input.crown * 3 + 1] = 1;
+      for (const cls of input.occluders) colors[cls * 3 + 1] = 1;
       colors[input.roof * 3 + 2] = 1;
+      colors[input.person * 3] = 1;
+      colors[input.bird * 3] = 1;
       const render = (zoom = 20) => {
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.viewport(0, 0, cols, rows);
@@ -325,6 +328,10 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
           u_subAttr: sub.textures[1]!,
           u_cellBits: input.bits,
           u_vehicle: input.vehicle,
+          u_person: input.person,
+          u_bird: input.bird,
+          u_boat: input.boat,
+          u_train: input.train,
           u_vehicleOccluders: input.occluders,
           u_paints: [1, 0, 0, ...new Array<number>(45).fill(0)],
         });
@@ -354,15 +361,38 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
       gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, joined);
       const joinAt = (7 * cols + 2) * 4;
       const roadJoinGlyph = joined[joinAt]! + ((joined[joinAt + 1]! >> 6) << 8);
+      const saved = {
+        clearCar: pixel(still, 2, 2 * ch + 4),
+        edgeClear: pixel(still, cw + 1, 2 * ch + 4),
+        edgeCovered: pixel(still, cw + 4, 2 * ch + 4),
+        coveredCar: pixel(still, 2 * cw + 2, 2 * ch + 4),
+      };
+      const upload = (tex: WebGLTexture, width: number, height: number, bytes: Uint8Array) => {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+      };
+      const setAgent = (cls: number, bit: number, byte: number) => {
+        life.fill(0);
+        for (let x = 0; x < 6; x++)
+          life.set(
+            [input.carGlyph & 255, cls | ((input.carGlyph >> 8) << 6), bit, byte],
+            (2 * cols + x) * 4,
+          );
+        upload(lifeTex, cols, rows, life);
+      };
       crowns(0, 0, true);
       const readIds = read(live, 2);
       const orderIndependent = ids.every((b, i) => b === readIds[i]);
       let revealedRoad = false,
-        revealedCar = false;
+        revealedCar = false,
+        revealedPerson = false;
       for (const time of [0, 5, 10, 15, 20, 30, 45, 60]) {
         crowns(time, 1);
         const moved = read(sub),
           pixels = render();
+        setAgent(input.person, input.personBit, 0);
+        const people = render();
+        setAgent(input.vehicle, input.vehicleBit, input.carPart << 4);
         for (let y = 0; y < sub.h; y++)
           for (let x = 0; x < sub.w; x++) {
             const at = (y * sub.w + x) * 4;
@@ -371,9 +401,47 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
               if (Math.floor(y / 3) === 2 && Math.floor(x / 2) < 6) {
                 const p = pixel(pixels, x * 3 + 1, y * 3 + 1);
                 if (p[0]! > 100 && p[1]! < 10) revealedCar = true;
+                const person = pixel(people, x * 3 + 1, y * 3 + 1);
+                if (person[0]! > 100 && person[1]! < 10) revealedPerson = true;
               }
             }
           }
+      }
+      // Feed exact visible surfaces to the real select/glyph passes. This isolates Life
+      // compositing for every encoded agent class, including a boat beside a wooded bank.
+      const occlusion = [];
+      for (const occluder of input.occluders) {
+        for (const agent of input.agents) {
+          for (const [target, partial] of [
+            [live, false],
+            [sub, true],
+          ] as const) {
+            const surfaces = new Uint8Array(target.w * target.h * 4);
+            for (let y = 0; y < target.h; y++)
+              for (let x = 0; x < target.w; x++) {
+                const col = partial ? x / 2 : x;
+                surfaces[(y * target.w + x) * 4] =
+                  col >= (partial ? 1.5 : 1) && col < 6 ? occluder : agent.surface;
+              }
+            upload(target.textures[0]!, target.w, target.h, surfaces);
+            upload(target.textures[1]!, target.w, target.h, new Uint8Array(surfaces.length));
+          }
+          setAgent(0, 0, 0);
+          const withoutLife = render();
+          setAgent(agent.cls, agent.bit, agent.byte);
+          const pixels = render();
+          occlusion.push({
+            name: agent.name,
+            bird: agent.cls === input.bird,
+            occluder,
+            clear: pixel(pixels, 2, 2 * ch + 4),
+            edgeClear: pixel(pixels, cw + 1, 2 * ch + 4),
+            edgeCovered: pixel(pixels, cw + 4, 2 * ch + 4),
+            covered: pixel(pixels, 2 * cw + 2, 2 * ch + 4),
+            edgeWithoutLife: pixel(withoutLife, cw + 4, 2 * ch + 4),
+            coveredWithoutLife: pixel(withoutLife, 2 * cw + 2, 2 * ch + 4),
+          });
+        }
       }
       if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
       return {
@@ -386,15 +454,14 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
         ],
         higherCrown: ids[(4 * cols + 4) * 4],
         orderIndependent,
-        clearCar: pixel(still, 2, 2 * ch + 4),
-        edgeClear: pixel(still, cw + 1, 2 * ch + 4),
-        edgeCovered: pixel(still, cw + 4, 2 * ch + 4),
-        coveredCar: pixel(still, 2 * cw + 2, 2 * ch + 4),
+        ...saved,
         falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
         lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
         roadJoinGlyph,
         revealedRoad,
         revealedCar,
+        revealedPerson,
+        occlusion,
       };
     },
     {
@@ -426,6 +493,48 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
       counts: Array.from(tables.counts),
       connects: Array.from(tables.connects),
       vehicle: classId('life_vehicle'),
+      person: classId('life_person'),
+      bird: classId('life_bird'),
+      boat: classId('life_boat'),
+      train: classId('life_train'),
+      personBit: CellBit.person,
+      agents: [
+        ...['walker', 'seated person', 'vendor attendant', 'cat', 'dog'].map((name) => ({
+          name,
+          cls: classId('life_person'),
+          bit: CellBit.person,
+          byte: personByte(0, PersonPart.canopy),
+          surface: classId('paving'),
+        })),
+        ...['vehicle', 'vendor cart'].map((name) => ({
+          name,
+          cls: classId('life_vehicle'),
+          bit: CellBit.vehicle,
+          byte: VehiclePart.body << 4,
+          surface: classId('road_mid'),
+        })),
+        {
+          name: 'train',
+          cls: classId('life_train'),
+          bit: CellBit.train,
+          byte: VehiclePart.body << 4,
+          surface: classId('rail'),
+        },
+        {
+          name: 'boat',
+          cls: classId('life_boat'),
+          bit: CellBit.boat,
+          byte: VehiclePart.body << 4,
+          surface: classId('water_river'),
+        },
+        {
+          name: 'bird',
+          cls: classId('life_bird'),
+          bit: CellBit.bird,
+          byte: 255,
+          surface: classId('paving'),
+        },
+      ],
       vehicleBit: CellBit.vehicle,
       carPart: VehiclePart.body,
       carGlyph: index('█'),
@@ -454,4 +563,28 @@ test('tree canopy overlap hides covered car parts and compares roof heights', as
   expect(result.roadJoinGlyph).toBe(index('┼'));
   expect(result.revealedRoad).toBe(true);
   expect(result.revealedCar).toBe(true);
+  expect(result.revealedPerson).toBe(true);
+  for (const sample of result.occlusion) {
+    for (const p of [sample.clear, ...(sample.bird ? [sample.edgeCovered, sample.covered] : [])]) {
+      expect(p[0], `${sample.name}: visible against surface ${sample.occluder}`).toBeGreaterThan(
+        100,
+      );
+      expect(p[1]).toBeLessThan(10);
+    }
+    if (!sample.bird) {
+      expect(
+        sample.edgeCovered,
+        `${sample.name}: hidden at surface ${sample.occluder} edge`,
+      ).toEqual(sample.edgeWithoutLife);
+      expect(sample.covered, `${sample.name}: hidden by surface ${sample.occluder}`).toEqual(
+        sample.coveredWithoutLife,
+      );
+    }
+    if (sample.occluder !== classId('tree') || sample.bird) {
+      expect(sample.edgeClear[0], `${sample.name}: visible outside canopy edge`).toBeGreaterThan(
+        100,
+      );
+      expect(sample.edgeClear[1]).toBeLessThan(10);
+    }
+  }
 });

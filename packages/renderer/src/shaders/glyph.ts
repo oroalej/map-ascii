@@ -89,7 +89,7 @@ uniform int u_crownClass;
 uniform vec3 u_crownSun;
 uniform float u_daylight;
 uniform int u_vehicle;
-uniform ivec3 u_vehicleOccluders; // trunks, crowns, and woods cover vehicle cells
+uniform ivec3 u_vehicleOccluders; // trunks, crowns, and woods cover all non-bird Life
 uniform int u_boat;
 uniform int u_train;
 uniform int u_person;
@@ -473,15 +473,18 @@ void main() {
   if (lifeBit == 0 && int(life.a * 255.0 + 0.5) == ${LIFE_SHADOW}) {
     back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
   }
-  bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[cls] & ${CellBit.grounds}) != 0 &&
-    texelFetch(u_attr, cell, 0).r == 0.0;
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   int lifeSurface = cls;
-  if (lifeClass == u_vehicle && cls != u_vehicleOccluders.x) {
+  bool nonBird = lifeBit != 0 && lifeClass != u_bird;
+  bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
+  if (sampleSurface) {
     lifeSurface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
   }
-  bool behindTrees = lifeClass == u_vehicle &&
+  // Foliage hides only covered pixels; agents continue underneath, and birds stay above it.
+  bool behindTrees = nonBird &&
     (lifeSurface == u_vehicleOccluders.x || lifeSurface == u_vehicleOccluders.y || lifeSurface == u_vehicleOccluders.z);
+  bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[lifeSurface] & ${CellBit.grounds}) != 0 &&
+    (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r == 0.0;
   if (lifeBit != 0 && !behindTrees && ((u_cellBits[lifeSurface] & lifeBit) != 0 || onGrounds)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
