@@ -1,3 +1,4 @@
+import { makeCellGuard } from './cell-guard';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -3221,26 +3222,26 @@ export class LifeWorld {
     };
   }
 
+  /** A versioned, immutable view of the terrain needed by the main-thread cell packer. */
+  cellTerrain() {
+    const ref = this.tiles.values().next().value;
+    const terrain = this.groundTerrain;
+    if (!ref || !terrain) return undefined;
+    return {
+      version: terrain,
+      ref: { tile: ref.tile, perMeter: ref.perMeter },
+      forbidden: terrain.roadAccess.forbidden.polygons,
+      roads: terrain.roadAccess.roads.polygons,
+      trees: terrain.trees.polygons,
+    };
+  }
+
   /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
   groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
     const ref = this.tiles.values().next().value;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
-    const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
-    const [c1, r1] = toCell(...tileToLngLat(ref.tile, { x: ref.perMeter, y: ref.perMeter }));
-    const width = 1 / (c1 - c0),
-      height = 1 / (r1 - r0);
-    const body: Body = { x: 0, y: 0, hx: 1, hy: 0, length: width, width: height };
-    const sample = [body];
-    return (agent: VisibleAgent, col: number, row: number) => {
-      if (agent.aboard) return true;
-      body.x = (col + 0.5 - c0) * width;
-      body.y = (row + 0.5 - r0) * height;
-      if (isWalker(agent.kind)) return terrain.roadAccess.allows(sample, agent.vehicle !== 'cart');
-      return (
-        agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !terrain.trees.hits(sample)
-      );
-    };
+    return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell);
   }
 
   /**

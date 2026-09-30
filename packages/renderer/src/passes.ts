@@ -1,12 +1,12 @@
+import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
  * the glyph pass draws the glyphs at full resolution. The life pass puts the life layer's agents
  * on the grid every frame.
  */
-import type { CameraState } from '@atlas/shared';
 import * as twgl from 'twgl.js';
-import { project, TILE_SIZE } from './camera';
 import {
   classDepths,
   classId,
@@ -48,7 +48,7 @@ import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lig
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
-import { EXTENT, MERCATOR_METERS, type TileLabel } from './raster/geometry';
+import { type TileLabel } from './raster/geometry';
 import { rainGlyphs, type Theme } from './theme';
 import {
   packFixtures,
@@ -72,82 +72,6 @@ const seeThrough = seeThroughMask();
 const roads = roadMask();
 const areas = subcellAreas();
 const lifeCellBits = cellBits();
-/** Meters per CSS pixel at the camera's center. */
-export const metersPerCssPx = (camera: CameraState) =>
-  (MERCATOR_METERS * Math.cos((camera.lat * Math.PI) / 180)) / (TILE_SIZE * 2 ** camera.zoom);
-
-/** What the passes need to know about the view. */
-export type View = {
-  camera: CameraState;
-  dpr: number;
-  /** Map cell size (density.ts: it shrinks as the camera zooms in). */
-  cellDev: CellSize;
-  /** Label cell size, fixed. */
-  labelDev: CellSize;
-  /**
-   * The zoom cell-sized detail follows (density.ts `detailZoom`): outlines, road strips, and
-   * roofs. What shows (class bands, labels) follows the camera zoom.
-   */
-  detailZoom: number;
-  /** Canvas size in device pixels. */
-  width: number;
-  height: number;
-};
-
-/**
- * Where the cell grid sits: the world cell of texel (0, 0), and the device-pixel offset of the
- * screen's top-left corner inside the grid.
- */
-export type Grid = { originCol: number; originRow: number; shiftX: number; shiftY: number };
-
-/** The grid for a view, and how tiles and points map onto it. */
-export type GridPlacement = {
-  grid: Grid;
-  /** Tile units → cell-grid clip space. */
-  tileMatrix: (tile: TileId) => number[];
-  /** A point's position on the grid, in (fractional) cells. */
-  toCell: (lng: number, lat: number) => [number, number];
-};
-
-export function placeGrid(
-  view: View,
-  cellDev: CellSize,
-  cols: number,
-  rows: number,
-): GridPlacement {
-  const { camera, dpr, width: w, height: h } = view;
-  // The map is flat and north-up (SPEC.md §3): the grid is anchored to the world, shifted by the
-  // sub-cell pan offset.
-  const [cx, cy] = project(camera.lng, camera.lat, camera.zoom);
-  const left = Math.round(cx * dpr - w / 2);
-  const top = Math.round(cy * dpr - h / 2);
-  const originCol = Math.floor(left / cellDev.w) - 1;
-  const originRow = Math.floor(top / cellDev.h) - 1;
-  return {
-    grid: {
-      originCol,
-      originRow,
-      shiftX: left - originCol * cellDev.w,
-      shiftY: top - originRow * cellDev.h,
-    },
-    tileMatrix: (tile) => {
-      const tileDev = TILE_SIZE * 2 ** (camera.zoom - tile.z) * dpr;
-      // prettier-ignore
-      return [
-        ((tileDev / EXTENT / cellDev.w) * 2) / cols, 0, 0, 0,
-        0, ((tileDev / EXTENT / cellDev.h) * 2) / rows, 0, 0,
-        0, 0, 1, 0,
-        ((tile.x * tileDev) / cellDev.w - originCol) * (2 / cols) - 1,
-        ((tile.y * tileDev) / cellDev.h - originRow) * (2 / rows) - 1, 0, 1,
-      ];
-    },
-    toCell: (lng, lat) => {
-      const [x, y] = project(lng, lat, camera.zoom);
-      return [(x * dpr) / cellDev.w - originCol, (y * dpr) / cellDev.h - originRow];
-    },
-  };
-}
-
 /**
  * The grid cells actually on screen (the grid has a margin, and a sub-cell pan shift):
  * [left, top] inclusive to [right, bottom] exclusive.
