@@ -93,6 +93,16 @@ Roads also carry `width` (meters: the `width` tag, else `lanes` × 3.2, else 14 
 | `admin_subdivision` | boundaries at the city's `subdivision.admin_level` (10 for Naga's barangays) |
 | `place_label` | named `place=city|town|village|suburb|quarter|neighbourhood` nodes |
 
+### Street enrichment
+
+Road normalization reads `sidewalk`, `sidewalk:both`, `sidewalk:left`, and `sidewalk:right`. Side-specific tags override `sidewalk:both`, which overrides the general tag; `no`, `none`, and `separate` suppress the band on that side. Widths use `sidewalk:width`, then `sidewalk:both:width`, with side-specific widths overriding each side independently; the fallback is 2 m. Tiles retain `sidewalk`, `sidewalk_width`, `sidewalk_left_width`, `sidewalk_right_width`, and `sidewalk_src: "mapped"`. Left/right follow the original OSM way direction; in downward-positive tile coordinates the left normal is `(dy, -dx)`.
+
+Step 04 may add both sidewalks to untagged, non-region `road_major` and `road_mid` features at 2 m per side, with `sidewalk_src: "derived"`. `city.streets.sidewalks.derive` defaults to true; an explicit sidewalk policy requires a nonempty `source`. A false policy keeps mapped bands only. The legend receives this policy from the city pack. Logs report sidewalk-side kilometers separately from the road kilometers they cover. Naga explicitly disables derivation pending a sourced survey.
+
+`oneway=yes|true|1` becomes 1, `oneway=-1|reverse` becomes -1, and `no|reversible|alternating` becomes 0. Without an explicit `oneway`, `junction=roundabout|circular` implies 1; other roads default to 0. Nonzero direction is retained in tiles and carried on life polylines for future routing; current simulated traffic behavior is unchanged. Arrow anchors are baked from complete original segments before tippecanoe clips them. Their world-meter phase gives 30 m spacing, with an 8 m exclusion at real segment vertices; tile seams do not restart the phase or add exclusions. The worker draws each anchor as an exact 3 m by at most 3 m quad.
+
+The small traffic query also fetches `highway=stop` nodes. Resolved signals generate stop lines on inbound approaches only, at `signal_radius + 1.5 m` from the shared vertex; outgoing one-way arms and approaches shorter than the setback are skipped. Two-way lines cover half the road, centered one quarter-width to the right of travel; one-way lines cover the full road. Driving side currently defaults to right: the city schema has no driving-side setting. Mapped stop nodes must match a road vertex. A `direction=forward|backward` sign resolves one approach; at an ambiguous shared vertex the lowest road rank, then narrower width and stable id resolve the tie. An undirected junction sign covers approaches of the lowest-ranked road; undirected mid-block nodes are skipped and counted. Coincident lines are deduplicated, preferring mapped provenance. Stop anchors carry `stop_bearing`, `stop_width`, `stop_road`, and `stop_src`; they produce an exact 0.5 m long quad and never a point glyph. Positions, line dimensions and arrow spacing are illustrative rather than surveyed road paint.
+
 ## 4. Content schemas (defined in `packages/shared`)
 
 ```ts
@@ -122,6 +132,8 @@ City {                           // cities/<slug>/city.json
   // The city's IANA time zone, e.g. "Asia/Manila": the life layer's clock, fixed times of day,
   // and seasons follow it. Without it: the sun's time at the city's longitude.
   timezone?: string;
+  // Street enrichment. An explicit sidewalk policy requires its decision/survey source.
+  streets?: { sidewalks?: { derive?: boolean; source: string } }; // derive defaults to true
   // The daily rhythm (SPEC.md §4 "Time of day"): per kind (vehicle, person, boat, train), how
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
@@ -306,7 +318,7 @@ Generated files are gitignored (never commit tiles), so builds get them from Git
 - The lock is validated with the city pack (`TilesLock` in `packages/shared`).
 ### Traffic enrichment
 
-`01-fetch` saves a separate `detail-traffic.osm.json` node query for `highway=traffic_signals|crossing`, `crossing`, and `crossing:markings`, preserving existing download caches. Tagged nodes win over skeletal way members when responses merge. Marked crossing nodes and signals use furniture variants; `footway=crossing` ways keep their path class and receive point stripe anchors in `lib/traffic.ts`. That resolver uses exact shared road vertices, snaps mapped signals within 30 m, derives signals only at four-arm mid/major intersections, suppresses nearby duplicates, and adds crossing anchors on their approaches. Tiles carry crossing bearing/width/road and signal axes/radius/provenance from z15. `life.signals` supports `derive`, sourced `add` positions, and sourced `remove` targets by node ID or position. Phases and derived crossings are simulated, not surveyed traffic timings.
+`01-fetch` saves a separate `detail-traffic.osm.json` node query for `highway=traffic_signals|crossing|stop`, `crossing`, and `crossing:markings`, preserving existing download caches. Tagged nodes win over skeletal way members when responses merge. Marked crossing nodes and signals use furniture variants; `footway=crossing` ways keep their path class and receive point stripe anchors in `lib/traffic.ts`. That resolver uses exact shared road vertices, snaps mapped signals within 30 m, derives signals only at four-arm mid/major intersections, suppresses nearby duplicates, and adds crossing anchors on their approaches. Tiles carry crossing bearing/width/road and signal axes/radius/provenance from z15. `life.signals` supports `derive`, sourced `add` positions, and sourced `remove` targets by node ID or position. Phases and derived crossings are simulated, not surveyed traffic timings.
 
 ### Neighborhood enrichment
 

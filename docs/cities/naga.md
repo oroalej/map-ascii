@@ -53,6 +53,7 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 - Founding and key dates for the Basilica Minore, the Naga Metropolitan Cathedral, Plaza Quince Martires, Plaza Rizal, the Naga City Hall, the public market, and the major bridges over the Naga River.
 - Street renamings in the Centro.
+- Survey which major and secondary roads have sidewalks, including side, width and separated footways, and record sources before enabling derived bands. Naga's pack explicitly sets `streets.sidewalks.derive: false` (project decision, 2026-09-30), so the map shows OSM-tagged sidewalks only. The cached candidate roads would otherwise imply about 119 km of sidewalk sides, exceeding this handoff's 40 km guard.
 - The Peñafrancia Traslación and fluvial procession routes, including how they changed over time. The fluvial procession (`processions/penafrancia-fluvial.json`) is a draft: per the project owner, it departs from Danlugan ni Ina (OSM node 6791580317) and goes up the Naga River to the point nearest the Peñafrancia Basilica (way/23670362). That route needs a published source, and the date rule (now the Saturday before the third Sunday of September), start time (15:00), duration, and formation are placeholders, before it can be `verified`.
 - When the railway (the Manila Railroad's line to Legazpi, now the PNR South Main Line) reached Naga, and when Naga Station (`landmarks/naga-station.json`, no date yet) opened and was rebuilt.
 - Growth of the university belt.
@@ -70,3 +71,5 @@ Record each item in `packages/content/cities/naga/` with its sources:
 Traffic research: the pack currently supplies no signal overrides. Verify which junctions have operating signals before adding sourced overrides; the renderer's phases and derived signal locations are simulated. The September 30 local rebuild resolved 6 mapped and 30 derived signals, plus 88 mapped crossing anchors and 93 derived crossings.
 
 Shop research: OSM shop coverage remains uneven; survey and map missing Centro shops before treating the decorative activity as evidence of real commerce. The local neighborhood rebuild identifies 98 food, 73 retail, 53 service and 18 generic commercial frontage buildings, plus 57 food, 79 retail and 46 service standalone markers.
+
+Street detail: the September 30 rebuild retains 4.691 km of mapped sidewalk sides over 2.617 km of roads and derives none. It tags 146 one-way ways and adds 187 illustrative arrow anchors plus 120 signalized stop lines. No mapped stop line resolves: the single undirected mid-block stop node is skipped, as are four signal approaches shorter than their setback. Tiles are rebuilt locally and await publication.
