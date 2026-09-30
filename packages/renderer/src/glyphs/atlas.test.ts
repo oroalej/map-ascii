@@ -1,6 +1,8 @@
+import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import {
   doubleLine,
+  arrowGlyphs,
   doubleWall,
   labelCharacters,
   mapGlyphs,
@@ -14,9 +16,10 @@ import {
 } from '../theme';
 import { birdGlyphs } from '../life/birds';
 import { dogGlyphs } from '../life/dogs';
+import { catGlyphs } from '../life/cats';
 import { FIGURE_TONE, figureGlyph, figureOf, MIN_FIGURE_PX, personGlyphs } from '../life/people';
 import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
-import { drawProcedural, shadeCoverage } from './atlas';
+import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
 
 const W = 10;
 const H = 18;
@@ -36,6 +39,19 @@ function draw(glyph: string) {
 }
 
 describe('procedural glyphs', () => {
+  it('rejects a map atlas larger than its ten-bit index before allocating a canvas', () => {
+    expect(() =>
+      buildGlyphAtlas(
+        Array.from({ length: MAX_GLYPHS + 1 }, (_, i) => `g${i}`),
+        10,
+        18,
+        undefined,
+        MAX_GLYPHS + 1,
+      ),
+    ).toThrow('1025 > 1024');
+    for (const theme of Object.values(themes))
+      expect(mapGlyphs(theme).length).toBeLessThanOrEqual(MAX_GLYPHS + 1);
+  });
   it('draws every road glyph as shapes', () => {
     for (const g of [...singleLine, ...doubleLine]) expect(draw(g).drawn, g).toBe(true);
     expect(draw('~').drawn).toBe(false);
@@ -234,10 +250,11 @@ describe('people', () => {
 });
 
 describe('glyph set', () => {
-  it('fits every map glyph (styles, walls, sextants) in the 256 slots the glyph table holds', () => {
+  it('fits every map glyph (styles, walls, sextants) in the 1024 slots the glyph table holds', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
+        ...arrowGlyphs,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,
         ...doubleWall,
@@ -247,11 +264,15 @@ describe('glyph set', () => {
         ...personGlyphs(),
         ...birdGlyphs(),
         ...dogGlyphs(),
+        ...catGlyphs(),
         streetlightGlyph,
+        '\u2584',
+        '\u263c',
+        '\u2605',
       ]);
       expect(new Set(glyphs)).toEqual(expected);
       // Index 0 of the atlas is blank, so the glyphs take indices 1 on.
-      expect(glyphs.length).toBeLessThan(256);
+      expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS);
     }
   });
 

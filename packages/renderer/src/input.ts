@@ -58,6 +58,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   const onPointerDown = (e: PointerEvent) => {
     // Only the main mouse button drags; the map never tilts or rotates (SPEC.md §3).
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    intents.hover(null);
     canvas.setPointerCapture(e.pointerId);
     const p = local(e);
     pointers.set(e.pointerId, p);

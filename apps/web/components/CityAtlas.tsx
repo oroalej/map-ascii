@@ -9,11 +9,11 @@ import type {
   Tour,
 } from '@atlas/shared';
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
 import { useTourPlayer } from '@/state/useTourPlayer';
 import { useUrlSync } from '@/state/useUrlSync';
-import { AtlasCanvas } from './AtlasCanvas';
 import { Attribution } from './Attribution';
 import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
@@ -23,6 +23,14 @@ import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
+
+// WebGL starts on the client; load its engine separately from the HUD and page content.
+const loadCanvas = () => import('./AtlasCanvas');
+// Start the renderer download in parallel with hydration when this module runs in the browser.
+if (typeof window !== 'undefined') void loadCanvas();
+const AtlasCanvas = dynamic(() => loadCanvas().then((m) => m.AtlasCanvas), {
+  ssr: false,
+});
 
 export type CityAtlasProps = {
   slug: string;
@@ -37,6 +45,8 @@ export type CityAtlasProps = {
   timezone?: string | undefined;
   /** The daily rhythm of simulated traffic (the city pack's `life`). */
   cityLife?: CityLifeConfig | undefined;
+  /** Whether the city's street layer supplements mapped sidewalks. */
+  sidewalksDerived?: boolean;
   landmarks: readonly Landmark[];
   art: readonly LandmarkArt[];
   tours: readonly Tour[];
@@ -51,6 +61,7 @@ export function CityAtlas({
   climate,
   timezone,
   cityLife,
+  sidewalksDerived = true,
   landmarks,
   art,
   tours,
@@ -74,7 +85,13 @@ export function CityAtlas({
         timezone={timezone}
         cityLife={cityLife}
       />
-      <Hud city={slug} subdivisionLabel={subdivisionLabel} climate={climate} timezone={timezone} />
+      <Hud
+        city={slug}
+        subdivisionLabel={subdivisionLabel}
+        climate={climate}
+        timezone={timezone}
+        sidewalksDerived={sidewalksDerived}
+      />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
       <HoverTooltip />

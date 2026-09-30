@@ -11,6 +11,24 @@
   font-variant-numeric: tabular-nums;
   white-space: pre;
   color: var(--fg-dim);
-  pointer-events: none;
   z-index: 12;
+  pointer-events: none;
+  max-width: calc(100vw - 24px);
+  overflow: auto;
+}
+
+.stats pre {
+  margin: 0;
+  pointer-events: none;
+}
+.controls {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.controls button {
+  font: inherit;
+  cursor: pointer;
 }

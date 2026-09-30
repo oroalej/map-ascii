@@ -85,30 +85,51 @@ const STEP_5: readonly (readonly string[])[] = [
   ],
 ];
 
+/** Resting with paws tucked beside the body, rather than stepping legs. */
+// prettier-ignore
+const LYING_10 = [
+  '..........',
+  '....oo....',
+  '..o####o..',
+  '..######..',
+  '..######..',
+  '..######..',
+  '...####...',
+  '...####...',
+  '....###...',
+  '..........',
+];
 const MASTERS = [0, 1].map((frame) => ({
   5: STEP_5[frame]!,
   10: STEP_10[frame]!,
   20: doubled(STEP_10[frame]!),
 }));
+MASTERS.push({
+  5: ['.....', '.o#o.', '.###.', '.###.', '..##.'],
+  10: LYING_10,
+  20: doubled(LYING_10),
+});
+
+export type DogFrame = 0 | 1 | 2;
 
 /** A stamped dog's ink at (`u` forward, `v` to the right) over its square (life/masters.ts `inkAt`). */
-export const dogInk = (frame: 0 | 1, u: number, v: number, detail: number) =>
+export const dogInk = (frame: DogFrame, u: number, v: number, detail: number) =>
   inkAt(MASTERS[frame]!, u, v, detail);
 
 /** A one-cell dog glyph: which step, and which way it faces on screen. */
-export type DogGlyph = { frame: 0 | 1; heading: Heading };
+export type DogGlyph = { frame: DogFrame; heading: Heading };
 
 const FIRST_CODE = 0xe200;
 const glyphOf = ({ frame, heading }: DogGlyph) =>
   String.fromCharCode(FIRST_CODE + frame * 4 + heading);
 const byGlyph = new Map<string, DogGlyph>();
-for (const frame of [0, 1] as const) {
+for (const frame of [0, 1, 2] as const) {
   for (const heading of [0, 1, 2, 3] as const) {
     byGlyph.set(glyphOf({ frame, heading }), { frame, heading });
   }
 }
 
-export const dogGlyph = (frame: 0 | 1, heading: Heading) => glyphOf({ frame, heading });
+export const dogGlyph = (frame: DogFrame, heading: Heading) => glyphOf({ frame, heading });
 
 /** Which dog a glyph draws, if it is one. */
 export const dogOf = (glyph: string): DogGlyph | undefined => byGlyph.get(glyph);
@@ -119,5 +140,8 @@ export function dogGlyphs(): string[] {
 }
 
 /** A one-cell dog's pixels in a `box` × `box` square: '#' coat, 'o' nose and ears, '.' empty. */
+/** The legend's dog: standing, facing up (`dogPixels` of frame 0 at 10 px). */
+export const DOG_ICON = STEP_10[0]!;
+
 export const dogPixels = (g: DogGlyph, box: number) =>
   turnedPixels(MASTERS[g.frame]!, box, g.heading);

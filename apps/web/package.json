@@ -9,6 +9,7 @@
     "build:force": "tsx scripts/build.ts --force",
     "check:budgets": "tsx scripts/check-budgets.ts",
     "serve": "serve out -l 3100",
+    "perf:browser": "pnpm build && tsx scripts/perf-browser.ts",
     "test:e2e": "tsx scripts/test-e2e.ts",
     "typecheck": "next typegen && tsc --noEmit"
   },

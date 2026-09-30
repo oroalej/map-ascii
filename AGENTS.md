@@ -49,6 +49,7 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 
 - Run the whole e2e suite (both projects) only when asked.
 - Keep e2e a small smoke suite: add a Playwright test only for what unit tests can't see (the static export boots, the map draws, a core flow works end to end). Logic goes in Vitest.
+- Keep CI fast: jobs run in parallel and time out at 6 minutes (`.github/workflows/ci.yml`). Feature work proves itself with unit tests, not pixel-level Playwright specs. Vitest runs in `node`; a test file opts into jsdom (`// @vitest-environment jsdom`) only when it needs the DOM.
 - Build preparation compares content hashes for runtime code, city packs, public assets, build configuration, dependencies, and build environment/toolchain inputs. Docs, tests, test configuration, and pipeline-only edits do not invalidate the export; regenerated public assets do. Missing or changed export files trigger rebuilding too. The fingerprint is saved only after a successful, stable build.
 - E2E checks export freshness before Playwright reuses an existing server (`reuseExistingServer`). When e2e is needed more than once, keep `pnpm --filter @atlas/web serve` running in the background to also avoid server startup. Run tests against the server serving this checkout's `apps/web/out`; use `E2E_PORT` if another app owns the port. `--list` and `--help` do not prepare an export.
 - Rerun a failing e2e test with `--last-failed`, not the whole spec.
@@ -69,6 +70,7 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 ## Git
 
 - Several agent sessions (Claude Code, Codex) often edit this working tree at once, so `git status` can show someone else's half-finished edits, sometimes in the files you're changing.
+- Continue working when another session has uncommitted edits, including in files needed for your task. Preserve those edits and keep your changes scoped to your task. Concurrent edits alone must not trigger a pause or permission request.
 - Before each commit, run `git status` and `git branch`: another session may have switched branches.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`. If a file you must commit also holds another session's uncommitted edits, ask before committing it.
 - Commit messages are gitmoji + conventional commits, lowercase and imperative: `✨ feat(life): …`, `🐛 fix(renderer): …`, `⚡️ perf(web): …`, `📝 docs(roadmap): …`. Match `git log`.

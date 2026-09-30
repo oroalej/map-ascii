@@ -54,7 +54,7 @@ export const renderClasses: readonly RenderClass[] = [
  * Size of the per-class uniform arrays and the glyph table's class axis. The table's last five
  * rows hold sextant, roof-ridge, and wall glyphs (glyphs/select.ts).
  */
-export const MAX_CLASSES = 48;
+export const MAX_CLASSES = 56;
 if (renderClasses.length >= MAX_CLASSES - 5) throw new Error('too many render classes');
 
 const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
@@ -106,15 +106,20 @@ export const priority: readonly (readonly RenderClass[])[] = [
     'building_market',
     'building_station',
     'building_part',
+    'building_woodwork',
   ],
   ['water_river', 'water_stream'],
   ['coastline'],
   ['water_area', 'water_sea'],
-  // Crowns over the parks and grounds they stand in, under roads and buildings.
+  // Baseline crown depth. The crown pass overrides it over roads and lower roofs.
   ['tree_crown'],
+  ['seating'],
+  ['shrubs'],
+  ['planting'],
   ['park', 'trees', 'farmland', 'parking', 'pitch'],
   // Under the parks, woods, and fields drawn on it.
   ['grass'],
+  ['paving'],
   ['terrain'],
 ];
 
@@ -130,6 +135,15 @@ export const groundClasses: readonly RenderClass[] = [
   'building_market',
   'building_station',
 ];
+
+/** Surfaces crowns may cover: roads (1), or roofs only when the crown is taller (2). */
+export function crownSurfaces(): Int32Array {
+  const surfaces = new Int32Array(MAX_CLASSES);
+  for (const cls of ['road_major', 'road_mid', 'road_minor']) surfaces[classId(cls)] = 1;
+  for (const cls of [...groundClasses, 'building_part', 'building_woodwork'])
+    surfaces[classId(cls)] = 2;
+  return surfaces;
+}
 
 /** Clip-space depth between tiers. */
 export const TIER_STEP = 2 / (priority.length + 1);
@@ -150,7 +164,7 @@ export function classDepths(): Float32Array {
 /** The cell pass's depth for grounds: under grass, above terrain. */
 export function groundDepth(): number {
   const depths = classDepths();
-  return (depths[classId('grass')]! + depths[classId('terrain')]!) / 2;
+  return (depths[classId('paving')]! + depths[classId('terrain')]!) / 2;
 }
 
 /**
@@ -174,9 +188,36 @@ export const Flags = {
   landmark: 1,
   /** A road drawn as a strip of its real width (Place level), not as a 1-cell line. */
   corridor: 2,
+  crossing: 4,
+  /** A paved sidewalk band outside the carriageway; reuses the path class. */
+  sidewalk: 128,
+  frontage: 8,
+  frontageLow: 16,
+  frontageHigh: 64,
   /** A pitched roof: the vertex carries its signed distance to the ridge, and the ridge angle. */
   ridged: 32,
 } as const;
+
+export const Marking = { crosswalk: 0, stop: 1, arrow: 2 } as const;
+/** Kind in the high two bits; clockwise bearing from north in 64 steps. */
+export function markingByte(kind: number, bearingDeg: number): number {
+  const bearing = ((bearingDeg % 360) + 360) % 360;
+  let bin = Math.round((bearing / 360) * 64) & 63;
+  if (kind === Marking.crosswalk) {
+    // Retain the old stripe orientation at its 8-bit boundaries. Moving to the adjacent
+    // bin avoids changing a crosswalk's glyph while keeping error below one bearing step.
+    const axis = bearing % 180;
+    const old = Math.round((axis / 180) * 255);
+    const vertical = old < 64 || old >= 191;
+    const q = bin & 31;
+    if (vertical !== (q < 8 || q >= 24)) bin = (bin + (vertical === axis >= 90 ? 1 : -1)) & 63;
+  }
+  return (kind << 6) | bin;
+}
+export const markingOf = (byte: number) => ({
+  kind: byte >> 6,
+  bearingDeg: (byte & 63) * (360 / 64),
+});
 
 /** Tree kinds by variant byte (the pipeline's `variant`); 0 is unknown. */
 export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
@@ -188,7 +229,25 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
  */
 export function variantCode(className: string, variant: unknown): number {
   if (typeof variant !== 'string') return 0;
-  if (className === 'furniture') return ['bench', 'fountain', 'flagpole'].indexOf(variant) + 1;
+  if (className === 'furniture')
+    return (
+      [
+        'bench',
+        'fountain',
+        'flagpole',
+        'stop',
+        'terminal',
+        'shelter',
+        'crossing',
+        'signals',
+        'shop_food',
+        'shop_retail',
+        'shop_service',
+        'stop_line',
+        'oneway_arrow',
+        'lamp',
+      ].indexOf(variant) + 1
+    );
   if (className === 'tree' || className === 'trees') {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }

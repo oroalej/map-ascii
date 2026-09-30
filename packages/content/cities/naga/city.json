@@ -21,6 +21,59 @@
   },
   "languages": ["fil", "bcl"],
   "timezone": "Asia/Manila",
+  "streets": {
+    "directions": [
+      {
+        "osm_id": "osm:way/23519261",
+        "oneway": 1,
+        "source": "Project owner annotated atlas images (2026-09-30): Kinastillohan Street, General Luna to Elias Angeles, one-way east/southeast."
+      },
+      {
+        "osm_id": "osm:way/23519407",
+        "oneway": -1,
+        "source": "Project owner annotated atlas images (2026-09-30): P. Diaz Street, Barlin to Elias Angeles, one-way southeast."
+      },
+      {
+        "osm_id": "osm:way/1529540511",
+        "oneway": 0,
+        "source": "Project owner annotated atlas images (2026-09-30): Penafrancia Avenue, Arana to P. Diaz, green two-way stretch."
+      },
+      {
+        "osm_id": "osm:way/224702397",
+        "oneway": 0,
+        "source": "Project owner annotated atlas images (2026-09-30): curved General Luna to P. Burgos connector beside Plaza Quezon, two-way under the unmarked-road rule."
+      },
+      {
+        "osm_id": "osm:way/23520783",
+        "oneway": 0,
+        "source": "Project owner additional annotated atlas image (2026-09-30): Caceres Street, General Luna to the Elias Angeles/Dinaga junction, green two-way stretch."
+      },
+      {
+        "osm_id": "osm:way/1314531797",
+        "oneway": 1,
+        "source": "Project owner additional annotated atlas image (2026-09-30): market connection opposite Caceres, General Luna to J. Hernandez, one-way westbound."
+      },
+      {
+        "osm_id": "osm:way/1314531796",
+        "oneway": 1,
+        "source": "Project owner additional annotated atlas image (2026-09-30): market connection opposite Caceres, General Luna to J. Hernandez, one-way westbound."
+      },
+      {
+        "osm_id": "osm:way/1314531798",
+        "oneway": 1,
+        "source": "Project owner additional annotated atlas image (2026-09-30): market connection opposite Caceres, General Luna to J. Hernandez, one-way westbound."
+      },
+      {
+        "osm_id": "osm:way/23521047",
+        "oneway": 1,
+        "source": "Project owner additional annotated atlas image (2026-09-30): short connector immediately east of General Luna, Riverside to Caceres, one-way northbound."
+      }
+    ],
+    "sidewalks": {
+      "derive": false,
+      "source": "Project decision (2026-09-30): show OSM-tagged sidewalks pending a sourced survey; docs/cities/naga.md section 4."
+    }
+  },
   "smoke_landmark": "Naga Metropolitan Cathedral",
   "focus": {
     "osm_id": "osm:way/201276958",
@@ -59,6 +112,72 @@
       "motorcycle": 25,
       "tricycle": 20
     }
+  },
+  "life": {
+    "source": "OpenStreetMap transit features; modes are identified by the mapped terminal names. These sites stage simulated local scenes. Traffic signal locations follow project-owner corrections (2026-10-01), including the follow-ups restoring Magsaysay Avenue's junctions on either side of the bridge: Penafrancia/M. T. Villanueva (OSM node 254709879) and Dayangdang/Balatas-Cararayan (OSM node 254713607), and Panganiban Drive at Misericordia/Lerma (OSM node 254716718).",
+    "signals": {
+      "derive": false,
+      "add": [
+        {
+          "id": "elias-angeles-santonja",
+          "position": [123.1875958, 13.6280162],
+          "source": "Project owner follow-up annotated atlas image (2026-10-01): add traffic lights at Elias Angeles Street/Santonja Street beside Naga Metropolitan Cathedral. Position is the shared OSM road vertex of ways 724187422 and 282035194. This adds a third location to the earlier two-junction downtown correction."
+        },
+        {
+          "id": "panganiban-blumentritt",
+          "position": [123.187526, 13.6229391],
+          "source": "Project owner annotated Panganiban Drive atlas images (2026-10-01), image 1 western circle: Blumentritt Street junction east of the bridge. Position is the shared OSM road vertex of ways 23519483 and 23520880."
+        },
+        {
+          "id": "panganiban-ninoy-cory",
+          "position": [123.1897811, 13.6226451],
+          "linked_junctions": [[123.1898794, 13.6226393]],
+          "source": "Project owner annotated Panganiban Drive atlas images and approved coordinated signal logic (2026-10-01), image 2: Ninoy and Cory Avenue and the slightly offset Palomares Street approach share one controller. Position is the shared OSM road vertex of ways 23519483, 836685805 and 23520484; linked_junctions identifies the Palomares vertex on way 836685805."
+        },
+        {
+          "id": "panganiban-mayon",
+          "position": [123.1947076, 13.6219479],
+          "source": "Project owner annotated Panganiban Drive atlas images (2026-10-01), image 3: Mayon Avenue junction east of Seton Road, north of the railway. Position is the shared OSM road vertex of ways 836685800 and 23522098."
+        }
+      ],
+      "remove": [
+        {
+          "id": "bagumbayan-norte",
+          "osm_id": 254709673,
+          "source": "Project owner annotated atlas image (2026-10-01): retain downtown traffic lights only at Elias Angeles/Arana (OSM node 254716165) and Elias Angeles/P. Burgos (OSM node 254715532); remove the other locations."
+        }
+      ]
+    },
+    "sites": [
+      {
+        "id": "milaor-jeepney-terminal",
+        "kind": "terminal",
+        "osm_id": "osm:node/4545730692",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Milaor Jeepney Terminal. https://www.openstreetmap.org/node/4545730692"
+      },
+      {
+        "id": "dinaga-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850021524",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangays Concepcion and Del Rosario, Dinaga Street. https://www.openstreetmap.org/node/4850021524"
+      },
+      {
+        "id": "carolina-panicuason-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850021531",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangays Carolina and Panicuason. https://www.openstreetmap.org/node/4850021531"
+      },
+      {
+        "id": "pacol-jeepney-station",
+        "kind": "terminal",
+        "osm_id": "osm:node/4850042233",
+        "modes": ["jeepney"],
+        "source": "OpenStreetMap: Jeepney Station to Barangay Pacol. https://www.openstreetmap.org/node/4850042233"
+      }
+    ]
   },
   "climate": {
     "wind": [

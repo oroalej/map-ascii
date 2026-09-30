@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import type { AtlasProfile } from '@atlas/renderer';
 import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from './helpers';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('atlas.quality', JSON.stringify('high')));
+});
 
 /** The view parameters currently in the address bar. */
 const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParams);
@@ -108,6 +114,16 @@ for (const city of cities) {
           const position = { x: box.width / 2, y: box.height / 2 };
           const panel = page.getByRole('complementary', { name: 'Selected place' });
           await expect(panel).toHaveCount(0);
+          const legend = page
+            .locator('details')
+            .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
+          await expect(legend).toBeVisible();
+          if (!hasTouch) {
+            await canvas.hover({ position });
+            await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 20_000 });
+            await page.mouse.move(-10, -10);
+            await expect(canvas).not.toHaveCSS('cursor', 'pointer');
+          }
           // Drawing may begin before this landmark's tile arrives. Retry the same point, with
           // enough time for asynchronous picking (and beyond the double-tap interval).
           await expect(async () => {
@@ -118,8 +134,10 @@ for (const city of cities) {
             });
           }).toPass({ timeout: 20_000 });
           await expect.poll(() => query(page).sel).toBe(place.id);
+          await expect(legend).toBeHidden();
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
+          await expect(legend).toBeVisible();
         },
       );
 
@@ -187,6 +205,55 @@ for (const city of cities) {
           .poll(async () => drawnShare(page, await mapShot(canvas)), drawn)
           .toBeGreaterThan(MIN_DRAWN);
         expect(errors).toEqual([]);
+      });
+
+      test('follows a changed motion preference and shows GPU timing on request', async ({
+        page,
+      }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.goto(`/${city.slug}?debug=1&z=18`);
+        await mapReady(page);
+        const life = page.getByRole('button', { name: 'Life', exact: true });
+        await expect(life).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('pre')).toContainText(/gpu\s+(?:n\/a|\d+\.\d+) ms/);
+        const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await expect(life).toBeDisabled();
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await expect(life).toHaveAttribute('aria-pressed', 'true');
+        // The preference pauses Life without changing the viewer's saved settings.
+        expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
+        expect(errors).toEqual([]);
+      });
+
+      test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
+        await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
+        await mapReady(page);
+        await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
+        const button = page.getByRole('button', { name: 'Download profile', exact: true });
+        await expect(button).toBeEnabled({ timeout: 5_000 });
+        const downloading = page.waitForEvent('download');
+        await button.click();
+        const download = await downloading;
+        const report = JSON.parse(await readFile(await download.path(), 'utf8')) as {
+          version: number;
+          start: { city: string; viewport: { dpr: number }; gpuBackend: string | null };
+          profile: AtlasProfile;
+        };
+        expect(report.version).toBe(1);
+        expect(report.start.city).toBe(`/${city.slug}`);
+        expect(report.start.viewport.dpr).toBeGreaterThan(0);
+        expect(report.start).toHaveProperty('gpuBackend');
+        expect(report.profile.gpuRenderer).toBe(report.start.gpuBackend);
+        expect(report.profile.dropped).toBe(0);
+        expect(report.profile.spanMs).toBeGreaterThan(0);
+        expect(report.profile.samples.length).toBeGreaterThan(0);
+        expect(report.profile.samples.length).toBeLessThanOrEqual(4096);
+        expect(report.profile.stages.callback.medianMs).not.toBeNull();
+        await page.getByRole('button', { name: 'Reset profile', exact: true }).click();
+        await expect(button).toBeDisabled();
       });
 
       // One tour stands for the player; its controls are unit-tested (state/tour.test.ts).

@@ -18,6 +18,7 @@ import type {
   Geometry,
   MultiLineString,
   MultiPolygon,
+  Point,
   Polygon,
   Position,
 } from 'geojson';
@@ -29,12 +30,16 @@ import {
   kindOf,
   layerFor,
   roadWidth,
+  sidewalkOf,
+  onewayOf,
   treeSize,
   variantOf,
   type GeometryKind,
   type Tags,
 } from './lib/classify';
 import { parseOsmDate } from './lib/dates';
+import { assignFrontages, frontageOf, type Frontage } from './lib/frontage';
+import { markSite, siteOfTags } from './lib/life-sites';
 import { bboxesOverlap } from './lib/geo';
 import { readJson, writeFeatures, writeJson } from './lib/io';
 import { areaAt, isSubdivisionPlace, subdivisionAreas, type Area } from './lib/subdivisions';
@@ -45,6 +50,48 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  detail_route?: boolean;
+  detail_blocked?: boolean;
+  /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
+  detail_overhead?: boolean;
+  seat_bearing?: number;
+  /** Country flag design explicitly supplied by a city detail pack. */
+  flag?: 'PH';
+  lamp_bearing?: number;
+  lamp_reach?: number;
+  lamp_heads?: number;
+  lamp_style?: 'streetlight' | 'lantern';
+  sidewalk?: 'both' | 'left' | 'right' | 'none';
+  sidewalk_width?: number;
+  sidewalk_left_width?: number;
+  sidewalk_right_width?: number;
+  sidewalk_src?: 'mapped' | 'derived';
+  oneway?: -1 | 1;
+  oneway_source?: string;
+  stop_direction?: 'forward' | 'backward';
+  stop_bearing?: number;
+  stop_width?: number;
+  stop_road?: AtlasClass;
+  stop_src?: 'mapped' | 'signalized';
+  arrow_bearing?: number;
+  arrow_width?: number;
+  arrow_road?: AtlasClass;
+  frontage?: Frontage;
+  crossing_bearing?: number;
+  crossing_width?: number;
+  crossing_road?: AtlasClass;
+  life_signal?: 'mapped' | 'derived';
+  signal_a?: number;
+  signal_b?: number;
+  signal_radius?: number;
+  /** JSON-encoded SignalLayout; scalar string survives vector tile encoding. */
+  signal_layout?: string;
+  source?: string;
+  life_site?: 'stop' | 'terminal' | 'shelter';
+  life_modes?: number;
+  life_covered?: boolean;
+  life_lng?: number;
+  life_lat?: number;
   id: string;
   class: AtlasClass;
   name?: string;
@@ -122,6 +169,15 @@ function classifyAll(osm: FeatureCollection, subdivisionLevel: number): Classifi
     const tags = tagsOf(feature);
     const cls = classify(tags, kind, subdivisionLevel);
     if (cls) out.push({ feature, kind, cls, tags });
+    // A transit site mapped as an area or line with no class of its own (a station's grounds, a
+    // platform) still gets its glyph: as a point at its center, never filling its grounds.
+    else if (kind !== 'point') {
+      const point = classify(tags, 'point', subdivisionLevel);
+      if (point && siteOfTags(tags)) {
+        const geometry: Point = { type: 'Point', coordinates: centerOf(feature) };
+        out.push({ feature: { ...feature, geometry }, kind: 'point', cls: point, tags });
+      }
+    }
   }
   return out;
 }
@@ -167,7 +223,7 @@ export function normalize(
     derived: [],
   },
 ): { features: AtlasFeature[]; areas: Area[] } {
-  const detail = classifyAll(osm, subdivisionLevel);
+  const detail = classifyAll(assignFrontages(osm), subdivisionLevel);
   const detailIds = new Set(detail.map((c) => String(c.feature.id)));
   const regional = classifyAll(region.osm, subdivisionLevel).filter(
     (c) => !detailIds.has(String(c.feature.id)) && c.cls !== 'admin_subdivision',
@@ -203,6 +259,10 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
+    if (cls.startsWith('building')) {
+      const frontage = (tags.frontage as Frontage | undefined) ?? frontageOf(tags);
+      if (frontage) properties.frontage = frontage;
+    }
     if (tags.name) properties.name = tags.name;
     const featureKind = kindOf(tags);
     if (featureKind) properties.kind = featureKind;
@@ -215,6 +275,21 @@ export function normalize(
     if (cls === 'tree') Object.assign(properties, treeSize(tags));
     const width = roadWidth(tags, cls);
     if (width !== undefined) properties.width = width;
+    if (cls.startsWith('road_')) {
+      const sidewalk = sidewalkOf(tags);
+      if (sidewalk)
+        Object.assign(properties, {
+          sidewalk: sidewalk.sidewalk,
+          sidewalk_width: sidewalk.width,
+          sidewalk_left_width: sidewalk.leftWidth,
+          sidewalk_right_width: sidewalk.rightWidth,
+          sidewalk_src: 'mapped',
+        });
+      const oneway = onewayOf(tags);
+      if (oneway) properties.oneway = oneway;
+    }
+    if (tags.highway === 'stop' && (tags.direction === 'forward' || tags.direction === 'backward'))
+      properties.stop_direction = tags.direction;
     const variant = variantOf(tags, cls);
     if (variant !== undefined) properties.variant = variant;
     if (cls === 'place_label') {
@@ -251,6 +326,8 @@ export function normalize(
         subdivision_label: properties.subdivision_label,
       }),
     );
+    const site = siteOfTags(tags);
+    if (site) markSite(tiled, site, centerOf(feature));
     out.push(fromRegion.has(item) ? regionOnly(tiled) : tiled);
   }
 

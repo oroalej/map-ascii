@@ -3,6 +3,7 @@ import { classId, MAX_CLASSES, type RenderClass } from '../classes';
 import { buildingRamp, doubleLine, sextantGlyphs, singleLine, themes } from '../theme';
 import {
   buildGlyphTables,
+  tableGlyph,
   buildingVariant,
   cellHash,
   connects,
@@ -17,6 +18,7 @@ import {
   ROOF_ROW,
   ridgeGlyphs,
   ridgeVariant,
+  rippleSpeed,
   RISING,
   ROAD_AREA_ZOOM,
   roadClasses,
@@ -188,19 +190,41 @@ describe('water', () => {
     expect(cellHash(0x7fffffff, 1)).toBeGreaterThanOrEqual(0);
   });
 
-  it('alternates each cell over time, at different phases', () => {
-    const flips = (x: number, y: number) => {
-      const seen = new Set<number>();
-      for (let t = 0; t < 10; t += 0.25) seen.add(waterVariant(x, y, t));
-      return seen;
-    };
-    expect(flips(3, 4)).toEqual(new Set([0, 1]));
-    const atZero = Array.from({ length: 20 }, (_, x) => waterVariant(x, 0, 0));
-    expect(new Set(atZero)).toEqual(new Set([0, 1]));
+  it("drifts crests east at the row's speed", () => {
+    for (let y = -10; y <= 10; y++) {
+      for (let x = -30; x <= 30; x++) {
+        for (const time of [0, 3, 7.5]) {
+          expect(waterVariant(x + 1, y, time + 1 / rippleSpeed(y))).toBe(waterVariant(x, y, time));
+        }
+      }
+    }
+  });
+
+  const field = Array.from(
+    { length: 60 * 40 },
+    (_, i) => [(i % 60) - 30, Math.floor(i / 60) - 20] as const,
+  );
+
+  it('changes few cells per second', () => {
+    const changed = field.filter(
+      ([x, y]) => waterVariant(x, y, 10) !== waterVariant(x, y, 11),
+    ).length;
+    const share = changed / field.length;
+    expect(share).toBeGreaterThan(0);
+    expect(share).toBeLessThan(0.15);
+  });
+
+  it('crests are a minority', () => {
+    const crests = field.filter(([x, y]) => waterVariant(x, y, 0) === 1).length;
+    const share = crests / field.length;
+    expect(share).toBeGreaterThan(0.1);
+    expect(share).toBeLessThan(0.35);
   });
 
   it('holds still with reduced motion (time 0)', () => {
-    expect(waterVariant(5, 5, 0)).toBe(cellHash(5, 5) % 2);
+    const atZero = Array.from({ length: 60 }, (_, i) => waterVariant(i - 30, 0, 0));
+    expect(Array.from({ length: 60 }, (_, i) => waterVariant(i - 30, 0, 0))).toEqual(atZero);
+    expect(new Set(atZero)).toEqual(new Set([0, 1]));
   });
 
   const riverAt = (rows: string[], y = 0, cls: RenderClass = 'water_river') =>
@@ -242,12 +266,13 @@ describe('glyph tables', () => {
   const tables = buildGlyphTables(themes.dark, index);
 
   it('fills a row per class with its glyphs, padding with the last one', () => {
-    const row = (cls: RenderClass) => [
-      ...tables.table.slice(classId(cls) * MAX_VARIANTS, classId(cls) * MAX_VARIANTS + 20),
-    ];
+    const row = (cls: RenderClass) =>
+      Array.from({ length: 20 }, (_, v) =>
+        tableGlyph(tables.table, classId(cls) * MAX_VARIANTS + v),
+      );
     expect(row('road_major').slice(0, 18)).toEqual(doubleLine.map(index));
     expect(row('building').slice(0, 5)).toEqual(['░', '▒', '▓', '█', '█'].map(index));
-    expect(tables.table.length).toBe(MAX_VARIANTS * MAX_CLASSES);
+    expect(tables.table.length).toBe(MAX_VARIANTS * MAX_CLASSES * 2);
   });
 
   it('records kinds, counts, connectivity, and colors', () => {
@@ -271,7 +296,7 @@ describe('glyph tables', () => {
 
   it('holds the sextants by mask in two rows past the classes', () => {
     const at = (mask: number) =>
-      tables.table[(SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31)];
+      tableGlyph(tables.table, (SEXTANT_ROW + (mask >> 5)) * MAX_VARIANTS + (mask & 31));
     for (const mask of [1, 21, 31, 32, 42, 62]) expect(at(mask)).toBe(index(sextantGlyphs[mask]!));
     expect(SEXTANT_ROW + 1).toBeLessThan(ROOF_ROW);
   });
@@ -330,6 +355,47 @@ describe('sub-cell edges', () => {
   it('leaves outlined features to their walls', () => {
     const outlined = (s: Sample) => s.cls === 'building';
     expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
+  });
+
+  it('shows crowns reaching into road cells without promoting unrelated ground areas', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    expect(subcellEdge(R, [crown, R, crown, R, crown, R], never)).toEqual({
+      fg: crown,
+      mask: 21,
+      bg: 'road_mid',
+    });
+    expect(subcellEdge(R, [P, R, P, R, P, R], never)).toBeNull();
+  });
+
+  it('picks foliage over lower roofs and ground, but preserves taller and equal-height roofs', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    const roof = (height: number): Sample => ({ cls: 'building_part', id: 11, height });
+    for (const height of [6, 10, 15]) {
+      const building = roof(height);
+      const samples = [crown, building, crown, building, crown, building];
+      for (const center of [crown, building])
+        expect(subcellEdge(center, samples, never)).toEqual(
+          height < 10
+            ? { fg: crown, mask: 21, bg: 'building_part' }
+            : { fg: building, mask: 42, bg: 'tree_crown' },
+        );
+    }
+    expect(subcellEdge(P, [P, crown, P, crown, P, crown], never)).toEqual({
+      fg: crown,
+      mask: 42,
+      bg: 'park',
+    });
+    const lower = { ...crown, height: 6, id: 12 };
+    expect(subcellEdge(lower, [lower, crown, lower, crown, lower, crown], never)?.fg).toEqual(
+      crown,
+    );
+    const outlined = (sample: Sample) => sample.cls === 'building_part';
+    expect(
+      subcellEdge(roof(6), [crown, roof(6), crown, roof(6), crown, roof(6)], outlined)?.fg,
+    ).toEqual(crown);
+    expect(
+      subcellEdge(roof(10), [crown, roof(10), crown, roof(10), crown, roof(10)], outlined),
+    ).toBeNull();
   });
 });
 
@@ -395,9 +461,9 @@ describe('building outlines', () => {
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[WALL_SINGLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S)]).toBe(index('┌'));
-    expect(table[WALL_DOUBLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S)]).toBe(index('╔'));
-    expect(table[WALL_SINGLE_ROW * MAX_VARIANTS]).toBe(index('□'));
+    expect(tableGlyph(table, WALL_SINGLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S))).toBe(index('┌'));
+    expect(tableGlyph(table, WALL_DOUBLE_ROW * MAX_VARIANTS + (Dir.E | Dir.S))).toBe(index('╔'));
+    expect(tableGlyph(table, WALL_SINGLE_ROW * MAX_VARIANTS)).toBe(index('□'));
   });
 });
 
@@ -444,13 +510,23 @@ describe('Place-level ground detail', () => {
       return glyphs.get(g)!;
     };
     const { table } = buildGlyphTables(themes.dark, index);
-    expect(table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2]).toBe(index('│'));
+    expect(tableGlyph(table, ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + 2)).toBe(index('│'));
   });
 
   it('picks furniture glyphs by variant, falling back to a dot', () => {
     const at = (variant: number) =>
       selectGlyph(themes.dark, 'furniture', { ...sketch(['.'], {}), variant });
-    expect([0, 1, 2, 3, 9].map(at)).toEqual(['•', '╥', '○', '¶', '¶']);
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(at)).toEqual([
+      '•',
+      '╥',
+      '○',
+      '¶',
+      '┬',
+      '▤',
+      '⌂',
+      '═',
+      '•',
+    ]);
   });
 
   it('dashes barriers and joins them only to each other', () => {

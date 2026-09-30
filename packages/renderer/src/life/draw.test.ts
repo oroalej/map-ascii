@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
+import { unpackGlyph } from '../glyphs/select';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
+import { catGlyphs } from './cats';
 import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
 import { Heading } from './masters';
-import { packLife, vehicleByte, type LifeGrid } from './draw';
+import { buildLifeGlyphs, packLife, vehicleByte, type LifeGrid } from './draw';
 import {
   CANDLE_BIT,
   figureGlyph,
+  figureOf,
   PAINT_NONE,
   PersonPart,
   personByte,
@@ -35,6 +38,7 @@ const glyphs = [
   ...personGlyphs(),
   ...birdGlyphs(),
   ...dogGlyphs(),
+  ...catGlyphs(),
   STALL_GLYPH,
   ...sextantGlyphs.slice(1),
 ];
@@ -51,6 +55,56 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it('packs high glyph indices with the class without changing agent attributes', () => {
+    for (const glyph of [255, 256, 1023]) {
+      const out = new Uint8Array(grid.cols * grid.rows * 4);
+      expect(
+        packLife(
+          out,
+          grid,
+          [{ kind: 'vehicle', lng: 2.5, lat: 1.2, flap: 0 }],
+          themes.dark,
+          () => glyph,
+        ),
+      ).toBe(1);
+      const [lo, packed, bits, byte] = cell(out, 2, 1);
+      expect(unpackGlyph(lo!, packed!)).toEqual({ glyph, cls: classId('life_vehicle') });
+      expect(bits).toBe(agentBit.vehicle);
+      expect(byte).toBe(255);
+    }
+  });
+  it('reuses an atlas lookup without changing packed vehicles', () => {
+    let lookups = 0;
+    const lookup = (glyph: string) => {
+      lookups++;
+      return glyphIndex(glyph);
+    };
+    const cached = buildLifeGlyphs(lookup);
+    const before = lookups;
+    const agents: VisibleAgent[] = [
+      {
+        kind: 'vehicle',
+        vehicle: 'car',
+        paint: Paint.red,
+        lng: 3,
+        lat: 2,
+        ahead: [4, 2],
+        side: [3, 3],
+        flap: 0,
+      },
+    ];
+    const old = new Uint8Array(200),
+      next = new Uint8Array(200);
+    expect(packLife(next, grid, agents, themes.dark, lookup, undefined, cached)).toBe(
+      packLife(old, grid, agents, themes.dark, glyphIndex),
+    );
+    expect(lookups).toBe(before);
+    expect(next).toEqual(old);
+    const other = buildLifeGlyphs(() => 123);
+    expect(other.parts).not.toBe(cached.parts);
+    expect(other.parts.every((glyph) => glyph === 123)).toBe(true);
+  });
+
   it('writes the glyph, the life class, and the agent bit', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const drawn = packLife(
@@ -200,6 +254,25 @@ describe('packLife dogs and shadows', () => {
       CellBit.person,
       personByte(Paint.orange, PersonPart.canopy),
     ]);
+  });
+
+  it('reserves whole ground agents including dogs and cats in either drawing order', () => {
+    const car = (lng: number): VisibleAgent => ({
+      kind: 'vehicle',
+      vehicle: 'car',
+      lng,
+      lat: 15,
+      ahead: [lng + 0.5, 15],
+      flap: 0,
+    });
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    for (const pet of [dog(0.5), { ...dog(0.5), kind: 'cat' as const }]) {
+      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(1);
+      expect(cellOf(out, 20, 15)[1]).toBe(classId('life_person'));
+      expect(packLife(out, big, [car(20), pet], themes.dark, glyphIndex)).toBe(1);
+      expect(cellOf(out, 20, 15)[1]).toBe(classId('life_vehicle'));
+    }
+    expect(packLife(out, big, [car(20), car(20.2)], themes.dark, glyphIndex)).toBe(1);
   });
 
   it('stamps a dog at its real size up close', () => {
@@ -578,6 +651,50 @@ describe('packLife people', () => {
     const { cells } = pack(person(1, 0, 0.2, { people: [look({ figure: 'umbrella' })] }));
     expect(cells[0]!.texel[0]).toBe(glyphIndex(figureGlyph('umbrella', false, 0, { scale: 0 })));
     expect(cells[0]!.texel[3]).toBe(personByte(Paint.red, PersonPart.canopy));
+  });
+
+  it('draws static seated people at every size and heading, retaining whole-agent rollback', () => {
+    for (const theme of Object.values(themes))
+      for (const scale of [0.2, 3, 8])
+        for (const [dx, dy, heading] of [
+          [0, -1, 0],
+          [1, 0, 1],
+          [0, 1, 2],
+          [-1, 0, 3],
+        ] as const) {
+          const [g, m] = person(dx, dy, scale, { people: [look({ figure: 'seated' })] });
+          const out = new Uint8Array(g.cols * g.rows * 4);
+          expect(packLife(out, g, [m], theme, glyphIndex)).toBe(1);
+          const cells = Array.from({ length: g.cols * g.rows }, (_, i) => i).filter(
+            (i) => out[i * 4 + 2],
+          );
+          expect(cells.length).toBeGreaterThan(0);
+          if (scale * (dx === 0 ? 1.8 : 1) * 0.6 < 3) {
+            for (const i of cells) {
+              const { glyph } = unpackGlyph(out[i * 4]!, out[i * 4 + 1]!);
+              expect(figureOf(glyphs[glyph]!)!).toMatchObject({
+                figure: 'seated',
+                heading,
+                frame: 0,
+              });
+            }
+          } else {
+            expect(new Set(cells.map((i) => (out[i * 4 + 3]! >> 4) & 7))).toEqual(
+              new Set([PersonPart.figure, PersonPart.skin]),
+            );
+          }
+          const denied = cells[cells.length - 1]!;
+          expect(
+            packLife(
+              out,
+              { ...g, allowsGroundCell: (_a, c, r) => r * g.cols + c !== denied },
+              [m],
+              theme,
+              glyphIndex,
+            ),
+          ).toBe(0);
+          expect(out.every((v) => v === 0)).toBe(true);
+        }
   });
 
   it('draws a figure at its real size: part of a cell, a whole one, then 2×2 cells', () => {

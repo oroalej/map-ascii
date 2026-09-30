@@ -2,18 +2,41 @@ import { describe, expect, it } from 'vitest';
 import {
   packOverlay,
   createOverlay,
+  resetOverlay,
   type LabelArea,
   type LabelCandidate,
   LabelRank,
+  LABEL_GAP,
   labelText,
   labelVisibility,
   placeLabels,
-  streetMode,
   wrapText,
 } from './labels';
 
 // A toy glyph index: ASCII letters and '?' map to their char code; anything else is unknown.
 const index = (c: string) => (/^[A-Za-z?]$/.test(c) ? c.charCodeAt(0) : undefined);
+
+it('reuses and clears overlay storage with the same packed bytes as a fresh overlay', () => {
+  const reused = createOverlay(40, 20);
+  const glyphs = reused.glyphs,
+    collisions = reused.takenCells;
+  const packed = new Uint8Array(40 * 20 * 4);
+  const candidates = [{ id: 1, text: 'Alpha', rank: 0, col: 10, row: 10 }];
+  placeLabels(reused, candidates, index);
+  expect(packOverlay(reused, packed)).toBe(packed);
+  resetOverlay(reused);
+  expect(reused.glyphs).toBe(glyphs);
+  expect(reused.takenCells).toBe(collisions);
+  expect(reused.taken).toHaveLength(0);
+  const fresh = createOverlay(40, 20);
+  placeLabels(reused, candidates, index);
+  placeLabels(fresh, candidates, index);
+  expect(packOverlay(reused, packed)).toEqual(packOverlay(fresh));
+  packed.fill(255);
+  resetOverlay(reused);
+  expect(packOverlay(reused, packed).every((v) => v === 0)).toBe(true);
+  expect(() => packOverlay(reused, new Uint8Array(1))).toThrow(RangeError);
+});
 
 /** Render a placed grid back to text: '.' empty, '_' halo or space, letters as themselves. */
 function render(grid: ArrayLike<number>, cols: number): string[] {
@@ -69,12 +92,22 @@ describe('labelText', () => {
 describe('labelVisibility', () => {
   it('is full inside the band and fades over half a level outside it', () => {
     expect(labelVisibility({ min: 16 }, 15.4)).toBe(0);
-    expect(labelVisibility({ min: 16 }, 15.75)).toBeCloseTo(0.5);
-    expect(labelVisibility({ min: 16 }, 16)).toBe(1);
+    expect(labelVisibility({ min: 16 }, 15.75)).toBe(0);
+    expect(labelVisibility({ min: 16 }, 16)).toBe(0);
     expect(labelVisibility({ min: 16 }, 21)).toBe(1);
     expect(labelVisibility({ min: 0, max: 9.5 }, 9.5)).toBe(1);
     expect(labelVisibility({ min: 0, max: 9.5 }, 9.75)).toBeCloseTo(0.5);
     expect(labelVisibility({ min: 0, max: 9.5 }, 10)).toBe(0);
+  });
+  it('hides every rank throughout zooms 15 and 16, restoring ordinary bands at 17', () => {
+    const { min, max } = LABEL_GAP;
+    expect(LABEL_GAP).toEqual({ min: 15, max: 17 });
+    for (const band of [{ min: 0 }, { min: 14 }, { min: 16 }, { min: 18 }])
+      for (const zoom of [min, min + 0.99, max - 1, max - 0.01])
+        expect(labelVisibility(band, zoom)).toBe(0);
+    expect(labelVisibility({ min: 14 }, min - 0.01)).toBe(1);
+    expect(labelVisibility({ min: 14 }, max)).toBe(1);
+    expect(labelVisibility({ min: 18 }, max)).toBe(0);
   });
 });
 
@@ -115,45 +148,13 @@ describe('wrapText', () => {
   });
 });
 
-describe('streetMode', () => {
-  const deg = (d: number) => (d * Math.PI) / 180;
-
-  it('puts names on near-horizontal and near-vertical streets, beside the rest', () => {
-    expect([0, 15, 180, -170, 200].map((d) => streetMode(deg(d)))).toEqual(Array(5).fill('along'));
-    expect([90, 75, -95, 270].map((d) => streetMode(deg(d)))).toEqual(Array(4).fill('down'));
-    expect([30, 45, 135, -45].map((d) => streetMode(deg(d)))).toEqual(Array(4).fill('beside'));
-  });
-});
-
 describe('placeLabels on streets', () => {
-  it('writes a name along a horizontal street, over its cells', () => {
-    const grid = placeLabelsGrid(
-      [label({ text: 'Elias', col: 5, row: 1, mode: 'along' })],
-      11,
-      3,
-      index,
-    );
-    expect(render(grid, 11)).toEqual(['...........', '.._Elias_..', '...........']);
-  });
-
-  it('writes a name down a vertical street, one letter per row', () => {
-    const grid = placeLabelsGrid(
-      [label({ text: 'Abc', col: 1, row: 2, mode: 'down' })],
-      3,
-      5,
-      index,
-    );
-    expect(render(grid, 3)).toEqual(['._.', '.A.', '.b.', '.c.', '._.']);
-  });
-
   it('places one name per street nearby, and again far away', () => {
-    const ways = [
-      label({ id: 1, text: 'Elias', col: 5, row: 1, mode: 'along' }),
-      label({ id: 2, text: 'Elias', col: 20, row: 1, mode: 'along' }),
-      label({ id: 3, text: 'Elias', col: 50, row: 1, mode: 'along' }),
-    ];
-    const row = render(placeLabelsGrid(ways, 60, 3, index), 60)[1]!;
-    expect(row.match(/Elias/g)).toHaveLength(2);
+    const ways = [1, 2, 3].map((id, i) =>
+      label({ id, text: 'Elias', col: [5, 20, 50][i]!, row: 3, mode: 'rotated', angle: 0 }),
+    );
+    const placed = placeLabels(createOverlay(60, 7), ways, index);
+    expect(placed.map((l) => l.id)).toEqual([1, 3]);
   });
 });
 
@@ -246,7 +247,7 @@ describe('placeLabels by taken cells', () => {
     let seed = 7;
     const rng = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
     const words = ['A', 'BC', 'DEF', 'GHIJ', 'KLMNO', 'PQ RS', 'TUV WXY Z'];
-    const modes = ['beside', 'along', 'down'] as const;
+    const modes = ['beside', 'rotated'] as const;
     const labels: LabelCandidate[] = Array.from({ length: 400 }, (_, id) => ({
       id,
       text: words[Math.floor(rng() * words.length)]!,

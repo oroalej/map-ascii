@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { classId, Flags, variantCode } from '../classes';
+import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
+import { lifeTransferables } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
+import { pointInside } from '../life/occupancy';
+import { swayOffset } from '../glyphs/select';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import {
   buildTileGeometry,
   classifyRings,
@@ -22,6 +26,7 @@ import {
   streetLabel,
   tileToLngLat,
   ringCentroid,
+  sidewalkLine,
   unpackId,
   type TileFeatureLike,
   type TileLayerLike,
@@ -64,7 +69,378 @@ const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
     flags: g.meta[i * 4 + 2],
   }));
 
+describe('mapped sidewalk joins', () => {
+  it('keeps straight and right-angle offsets on either side, including reversed ways', () => {
+    const way = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    expect(sidewalkLine(way, 5)).toEqual([
+      { x: 0, y: -5 },
+      { x: 105, y: -5 },
+      { x: 105, y: 100 },
+    ]);
+    expect(sidewalkLine([...way].reverse(), -5)).toEqual(sidewalkLine(way, 5).reverse());
+  });
+  it('bevels acute bends and hairpins instead of spiking or returning to the centerline', () => {
+    for (const last of [
+      { x: 0, y: 0 },
+      { x: 0, y: 10 },
+      { x: 1, y: -1 },
+    ]) {
+      const way = [{ x: 0, y: 0 }, { x: 100, y: 0 }, last];
+      for (const offset of [-5, 5]) {
+        const result = sidewalkLine(way, offset);
+        expect(result).toHaveLength(4);
+        for (const p of result.slice(1, -1)) {
+          const distance = Math.hypot(p.x - 100, p.y);
+          expect(distance).toBeGreaterThanOrEqual(5 - 1e-8);
+          expect(distance).toBeLessThanOrEqual(10);
+          expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+        }
+      }
+    }
+  });
+  it('handles empty, single-point, and repeated-point ways without invalid coordinates', () => {
+    expect(sidewalkLine([], 5)).toEqual([]);
+    expect(
+      sidewalkLine(
+        [
+          { x: 1, y: 2 },
+          { x: 1, y: 2 },
+        ],
+        5,
+      ),
+    ).toEqual([{ x: 1, y: 2 }]);
+    expect(
+      sidewalkLine(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        5,
+      ),
+    ).toEqual([
+      { x: 0, y: -5 },
+      { x: 10, y: -5 },
+    ]);
+  });
+});
+
 describe('classifyRings', () => {
+  it('puts mapped sidewalk bands on the correct side of the way with unequal widths', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const unit = metersPerUnit(tile);
+    for (const [coords, axis, center, leftSign] of [
+      [
+        [
+          [1000, 2000],
+          [3000, 2000],
+        ],
+        'y',
+        2000,
+        -1,
+      ],
+      [
+        [
+          [2000, 3000],
+          [2000, 1000],
+        ],
+        'x',
+        2000,
+        -1,
+      ],
+      [
+        [
+          [2000, 1000],
+          [2000, 3000],
+        ],
+        'x',
+        2000,
+        1,
+      ],
+    ] as const) {
+      const result = buildTileGeometry(
+        {
+          roads: layer([
+            feature(
+              2,
+              {
+                id: 'walk',
+                class: 'road_mid',
+                width: 10,
+                sidewalk: 'left',
+                sidewalk_left_width: 2,
+                oneway: -1,
+              },
+              [[...coords].map((p) => [p[0], p[1]])],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+      );
+      const band = vertices(result.fills).filter((v) => v.cls === classId('path'));
+      expect(band).toHaveLength(4);
+      expect(band.every((v) => Math.sign(v[axis]! - center) === leftSign)).toBe(true);
+      const distances = band.map((v) => Math.abs(v[axis]! - center) * unit);
+      expect(Math.min(...distances)).toBeCloseTo(5, 0);
+      expect(Math.max(...distances)).toBeCloseTo(7, 0);
+      expect(band.every((v) => v.flags === (Flags.corridor | Flags.sidewalk))).toBe(true);
+      expect(Array.from(result.life.oneway!)).toEqual([-1, 0]);
+      expect(Array.from(result.life.kinds)).toEqual([LifeLine.roadMid, LifeLine.path]);
+      const walkY = result.life.coords[axis === 'y' ? 5 : 4]!;
+      expect((walkY - center) * unit).toBeCloseTo(leftSign * 6);
+      expect(result.life.widths[1]).toBe(2);
+      expect(lifeTransferables(result.life)).toContain(result.life.oneway!.buffer);
+    }
+    const both = buildTileGeometry(
+      {
+        roads: layer([
+          feature(
+            2,
+            {
+              id: 'both',
+              class: 'road_mid',
+              width: 10,
+              sidewalk: 'both',
+              sidewalk_left_width: 2,
+              sidewalk_right_width: 3,
+            },
+            [
+              [
+                [1000, 2000],
+                [3000, 2000],
+              ],
+            ],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const band = vertices(both.fills).filter((v) => v.cls === classId('path'));
+    expect(band).toHaveLength(8);
+    expect((Math.max(...band.map((v) => v.y!)) - 2000) * unit).toBeCloseTo(8, 0);
+  });
+
+  it('retains road and crossing access in coarse tiles and uses only mapped sidewalks', () => {
+    const tile = { z: 14, x: 13798, y: 7566 };
+    for (const source of ['mapped', 'derived']) {
+      const result = buildTileGeometry(
+        {
+          roads: layer([
+            feature(
+              2,
+              { id: 'road', class: 'road_mid', width: 10, sidewalk: 'both', sidewalk_src: source },
+              [
+                [
+                  [1000, 2000],
+                  [3000, 2000],
+                ],
+              ],
+            ),
+          ]),
+          poi: layer([
+            feature(
+              1,
+              {
+                id: 'cross',
+                class: 'furniture',
+                variant: 'crossing',
+                crossing_bearing: 90,
+                crossing_width: 10,
+              },
+              [[[2000, 2000]]],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+        16,
+      );
+      expect(result.fills.positions).toHaveLength(0);
+      expect(result.life.areas?.map((a) => a.kind)).toEqual(['carriageway', 'crossing']);
+      expect(Array.from(result.life.kinds)).toEqual(
+        source === 'mapped'
+          ? [LifeLine.roadMid, LifeLine.path, LifeLine.path, LifeLine.path]
+          : [LifeLine.roadMid, LifeLine.path],
+      );
+      const crossing = result.life.areas!.find((a) => a.kind === 'crossing')!;
+      const unit = metersPerUnit(tile);
+      expect(pointInside({ x: 2000, y: 2000 + 4 / unit }, crossing.rings)).toBe(true);
+      expect(pointInside({ x: 2000 + 2 / unit, y: 2000 }, crossing.rings)).toBe(false);
+    }
+  });
+
+  it('draws exact marking quads without point glyphs and hides them in coarse tiles', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    for (const [variant, kind, length, width] of [
+      ['stop_line', Marking.stop, 0.5, 5],
+      ['oneway_arrow', Marking.arrow, 3, 3],
+    ] as const) {
+      const f = feature(
+        1,
+        {
+          id: variant,
+          class: 'furniture',
+          variant,
+          stop_bearing: 90,
+          stop_width: 5,
+          stop_road: 'road_mid',
+          arrow_bearing: 90,
+          arrow_width: 3,
+          arrow_road: 'road_mid',
+        },
+        [[[2000, 2000]]],
+      );
+      const result = buildTileGeometry({ poi: layer([f]) }, createIdRegistry(), tile, 16);
+      const vs = vertices(result.fills);
+      expect(vs).toHaveLength(4);
+      expect(result.points.positions).toHaveLength(0);
+      expect(result.life.coords).toHaveLength(0);
+      expect(markingOf(result.fills.meta[3]!).kind).toBe(kind);
+      expect(
+        (Math.max(...vs.map((v) => v.x!)) - Math.min(...vs.map((v) => v.x!))) * metersPerUnit(tile),
+      ).toBeCloseTo(length, 0);
+      expect(
+        (Math.max(...vs.map((v) => v.y!)) - Math.min(...vs.map((v) => v.y!))) * metersPerUnit(tile),
+      ).toBeCloseTo(width, 0);
+      const coarse = buildTileGeometry(
+        { poi: layer([f]) },
+        createIdRegistry(),
+        { ...tile, z: 14 },
+        16,
+      );
+      expect(coarse.fills.positions).toHaveLength(0);
+      expect(coarse.points.positions).toHaveLength(0);
+    }
+  });
+
+  it('keeps a baked arrow at the same world position in neighboring tile buffers', () => {
+    const west = { z: 16, x: 55192, y: 30266 },
+      east = { ...west, x: west.x + 1 };
+    const anchor = tileToLngLat(west, { x: 4100, y: 2000 });
+    const centers = [west, east].map((tile) => {
+      const p = lngLatToTile(tile, anchor[0], anchor[1]);
+      const result = buildTileGeometry(
+        {
+          poi: layer([
+            feature(
+              1,
+              {
+                id: 'stable-arrow',
+                class: 'furniture',
+                variant: 'oneway_arrow',
+                arrow_bearing: 90,
+                arrow_width: 3,
+                arrow_road: 'road_mid',
+              },
+              [[[p.x, p.y]]],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+        16,
+      );
+      const vs = vertices(result.fills);
+      expect(vs).toHaveLength(4);
+      return tileToLngLat(tile, {
+        x: vs.reduce((s, v) => s + v.x!, 0) / 4,
+        y: vs.reduce((s, v) => s + v.y!, 0) / 4,
+      });
+    });
+    expect(
+      Math.hypot(
+        (centers[0]![0] - centers[1]![0]) * 111320 * Math.cos((anchor[1] * Math.PI) / 180),
+        (centers[0]![1] - centers[1]![1]) * 111320,
+      ),
+    ).toBeLessThan(0.1);
+  });
+
+  it('packs frontage kind bits on flat and ridged buildings and retains commerce in the buffer', () => {
+    const result = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(
+            3,
+            { id: 'flat-shop', class: 'building', height: 5, variant: 'flat', frontage: 'retail' },
+            [square(1000, 1000, 100)],
+          ),
+          feature(
+            3,
+            {
+              id: 'pitched-shop',
+              class: 'building',
+              height: 5,
+              variant: 'gabled',
+              frontage: 'service',
+            },
+            [square(1300, 1000, 100)],
+          ),
+        ]),
+        poi: layer([
+          feature(1, { id: 'buffer-shop', class: 'furniture', variant: 'shop_food' }, [
+            [[-10, 1000]],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+    const flags = vertices(result.fills).map((v) => v.flags!);
+    expect(flags).toContain(Flags.frontage | Flags.frontageLow);
+    expect(flags).toContain(Flags.frontage | Flags.frontageHigh | Flags.ridged);
+    expect(Array.from(result.life.commerce!)).toContain(-10);
+    expect(result.life.shops.length).toBe(6);
+  });
+  it('rasterizes crossing anchors as road quads and transfers buffered signals without point glyphs', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const result = buildTileGeometry(
+      {
+        poi: layer([
+          feature(
+            1,
+            {
+              id: 'cross',
+              class: 'furniture',
+              variant: 'crossing',
+              crossing_bearing: 90,
+              crossing_width: 10,
+              crossing_road: 'road_mid',
+            },
+            [[[2048, 2048]]],
+          ),
+          feature(
+            1,
+            {
+              id: 'signal',
+              class: 'furniture',
+              variant: 'signals',
+              signal_radius: 6,
+              signal_a: 0,
+              signal_b: 90,
+              life_signal: 'mapped',
+            },
+            [[[-10, 2048]]],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(result.points.positions).toHaveLength(0);
+    expect(
+      vertices(result.fills).every(
+        (v) => v.cls === classId('road_mid') && v.flags === (Flags.corridor | Flags.crossing),
+      ),
+    ).toBe(true);
+    expect(result.fills.positions.length).toBeGreaterThan(0);
+    expect(Array.from(result.life.signals!)).toEqual([-10, 2048, 6, 0, 90, 1]);
+  });
   const pts = (ring: [number, number][]): TilePoint[] => ring.map(([x, y]) => ({ x, y }));
 
   it('groups holes with their outer ring and starts a polygon per outer ring', () => {
@@ -492,6 +868,27 @@ describe('buildTileGeometry', () => {
     expect(meta[3]).toBe(3);
   });
 
+  it('extracts explicitly authored flag designs without guessing flags on other poles', () => {
+    const { life } = buildTileGeometry(
+      {
+        poi: layer([
+          feature(1, { id: 'osm:node/21', class: 'furniture', variant: 'flagpole', flag: 'PH' }, [
+            [[100, 200]],
+          ]),
+          feature(1, { id: 'osm:node/22', class: 'furniture', variant: 'flagpole' }, [
+            [[300, 400]],
+          ]),
+          feature(1, { id: 'osm:node/23', class: 'furniture', variant: 'flagpole', flag: 'PH' }, [
+            [[-100, 200]],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+    expect([...life.flagpoles!]).toEqual([100, 200, 1]);
+  });
+
   describe('trees', () => {
     const tile = { z: 16, x: 55_194, y: 30_268 };
     const units = (meters: number) => meters / metersPerUnit(tile);
@@ -509,11 +906,15 @@ describe('buildTileGeometry', () => {
       const crown = vertices(crowns);
       expect(crown).toHaveLength(CROWN_SIDES + 1);
       expect(crown.every((v) => v.cls === classId('tree_crown'))).toBe(true);
-      const radii = crown.slice(0, -1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
+      const radii = crown.slice(1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
       const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
       expect(mean / units(4)).toBeGreaterThan(0.96);
       expect(mean / units(4)).toBeLessThan(1.04);
-      expect(crowns.indices).toHaveLength((CROWN_SIDES - 2) * 3);
+      expect(crowns.indices).toHaveLength(CROWN_SIDES * 3);
+      expect(Array.from(crowns.surface.slice(0, 2))).toEqual([0, 0]);
+      expect(crowns.surface).toHaveLength(crown.length * 2);
+      for (let i = 2; i < crowns.surface.length; i += 2)
+        expect(Math.hypot(crowns.surface[i]!, crowns.surface[i + 1]!)).toBeCloseTo(1);
       // Each vertex carries its reach from the trunk, how far it swings.
       Array.from(crowns.ridge).forEach((reach, i) => {
         expect(reach).toBeCloseTo(Math.hypot(crown[i]!.x! - 2000, crown[i]!.y! - 2000), -0.5);
@@ -528,6 +929,42 @@ describe('buildTileGeometry', () => {
       expect(crowns.positions).toHaveLength(0);
     });
 
+    it('keeps the visible crown inside the parking exclusion through storm wind and recoil', () => {
+      const { crowns, life } = build(tree());
+      const exclusions = life.areas!.filter((a) => a.kind === 'parking-exclusion');
+      expect(exclusions).toHaveLength(1);
+      const maxWind = WIND_PRESETS.storm * (1 + WIND_VARIATION.breathe);
+      for (const metersPerCell of [0.2, 0.6, 1.5]) {
+        const unitsPerCell = units(metersPerCell);
+        for (let i = 1; i < crowns.positions.length / 2; i++) {
+          for (const [gust, wake] of [
+            [maxWind, 0],
+            [0, maxWind],
+            [maxWind / 2, maxWind / 2],
+          ]) {
+            for (const time of [0, 0.3, 1]) {
+              const [dx, dy] = swayOffset(
+                crowns.ridge[i]! / unitsPerCell,
+                gust!,
+                wake!,
+                time,
+                i % 13,
+              );
+              expect(
+                pointInside(
+                  {
+                    x: crowns.positions[2 * i]! + dx * unitsPerCell,
+                    y: crowns.positions[2 * i + 1]! + dy * unitsPerCell,
+                  },
+                  exclusions[0]!.rings,
+                ),
+              ).toBe(true);
+            }
+          }
+        }
+      }
+    });
+
     it('spaces a tree row’s crowns a crown apart', () => {
       const row = feature(2, { id: 'osm:way/41', class: 'tree', height: 10, crown: 8 }, [
         [
@@ -535,9 +972,14 @@ describe('buildTileGeometry', () => {
           [1000 + Math.round(units(40)), 1000],
         ],
       ]);
-      const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
+      const { crowns, life } = buildTileGeometry(
+        { landuse: layer([row]) },
+        createIdRegistry(),
+        tile,
+      );
       // At 0, 8, 16, 24, 32, and 40 m.
       expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
+      expect(life.areas!.filter((a) => a.kind === 'parking-exclusion')).toHaveLength(6);
     });
 
     it('gives each tree its own lumpy crown, the same wherever it is built', () => {
@@ -905,5 +1347,55 @@ describe('parkingStalls', () => {
     );
     expect(g.life.spots.length).toBeGreaterThan(0);
     expect(g.life.spots.length % 4).toBe(0);
+  });
+});
+
+describe('local scene geometry', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+  it('owns a stable site anchor once, independent of clipped render geometry', () => {
+    const [lng, lat] = tileToLngLat(tile, { x: 1000, y: 2000 });
+    const stop = feature(
+      1,
+      {
+        class: 'furniture',
+        id: 's',
+        life_site: 'stop',
+        life_modes: 2,
+        life_covered: true,
+        life_lng: lng,
+        life_lat: lat,
+      },
+      [[[3000, 3000]]],
+    );
+    const g = buildTileGeometry({ poi: layer([stop]) }, createIdRegistry(), tile);
+    expect(Array.from(g.life.sites)).toEqual([1000, 2000, 0, 2, 1]);
+    const adjacent = buildTileGeometry({ poi: layer([stop]) }, createIdRegistry(), {
+      ...tile,
+      x: tile.x + 1,
+    });
+    expect(adjacent.life.sites).toHaveLength(0);
+  });
+  it('emits solid buildings, water, and fences as walking obstacles, but not grounds', () => {
+    const g = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building', height: 6 }, [square(100, 100, 30)]),
+          feature(3, { class: 'building_school' }, [square(200, 100, 30)]),
+        ]),
+        water: layer([feature(3, { class: 'water_area' }, [square(300, 100, 30)])]),
+        poi: layer([
+          feature(2, { class: 'barrier' }, [
+            [
+              [400, 100],
+              [400, 200],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(g.life.obstacleClosed)).toEqual([1, 1, 0]);
+    expect(g.life.obstacleStarts).toHaveLength(4);
   });
 });

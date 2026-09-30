@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { legendEntries } from './legend';
+import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+
+it("shows the map's own standing dog in the legend", () => {
+  const dog = dogPixels({ frame: 0, heading: 0 }, 10);
+  const drawn = Array.from({ length: 10 }, (_, y) =>
+    Array.from({ length: 10 }, (_, x) => dog(x, y)).join(''),
+  );
+  expect(drawn).toEqual(DOG_ICON);
+});
 
 describe('legendEntries', () => {
   it('lists only what the map shows at the zoom', () => {
@@ -11,8 +20,8 @@ describe('legendEntries', () => {
     expect(labels(7)).not.toContain('Building');
     expect(labels(16)).toContain('Building');
     expect(labels(16)).not.toContain('Terrain (by elevation)');
-    expect(labels(16)).not.toContain('Bench, fountain, or flagpole');
-    expect(labels(18.5)).toContain('Bench, fountain, or flagpole');
+    expect(labels(16)).not.toContain('Street furniture, transit stop, or shelter');
+    expect(labels(18.5)).toContain('Street furniture, transit stop, or shelter');
   });
 
   it('counts classes that are fading in', () => {
@@ -115,4 +124,37 @@ describe('legendEntries life', () => {
     expect(lit(['road_mid'], false)).not.toContain('Streetlights');
     expect(lit(['road_minor', 'building'], true)).not.toContain('Streetlights');
   });
+});
+
+it('lists visible hardware during daytime with Life off and honors explicit absence', () => {
+  const fixtures = { streetlights: true, trafficSignals: true };
+  const entries = legendEntries('dark', 20, ['road_mid'], { life: false, lights: false, fixtures });
+  expect(entries.map((e) => e.label)).toEqual(
+    expect.arrayContaining(['Streetlights', 'Traffic signals (simulated phases)']),
+  );
+  expect(entries.find((e) => e.label === 'Streetlights')!.glyphs).toBe('▪─▫');
+  const absent = legendEntries('dark', 20, ['road_mid'], {
+    life: true,
+    lights: true,
+    fixtures: { streetlights: false, trafficSignals: false },
+  });
+  expect(absent.map((e) => e.label)).not.toContain('Streetlights');
+  expect(absent.map((e) => e.label)).not.toContain('Traffic signals (simulated phases)');
+});
+
+it('lists static street details at strip zoom with the city sidewalk policy', () => {
+  const details = (zoom: number, roads: boolean, sidewalksDerived: boolean) =>
+    legendEntries('dark', zoom, roads ? ['road_mid'] : ['building'], {
+      life: false,
+      sidewalksDerived,
+    }).map((e) => e.label);
+  expect(details(18, true, false)).toEqual(
+    expect.arrayContaining(['Sidewalks (mapped)', 'Stop lines', 'One-way']),
+  );
+  expect(details(18, true, true)).toContain('Sidewalks (partly derived)');
+  for (const entries of [details(16, true, false), details(18, false, false)]) {
+    expect(entries).not.toContain('Sidewalks (mapped)');
+    expect(entries).not.toContain('Stop lines');
+    expect(entries).not.toContain('One-way');
+  }
 });

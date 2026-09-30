@@ -5,6 +5,7 @@ import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { landcoverCredits } from './lib/landcover';
+import { detailCredits } from './lib/site-detail';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
 
@@ -50,7 +51,10 @@ export const step: Step = {
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
     const years = await yearRange(merged, new Date().getFullYear());
-    const meta = buildMeta(city, geography, years, landcoverCredits(content.landcover));
+    const meta = buildMeta(city, geography, years, [
+      ...landcoverCredits(content.landcover),
+      ...detailCredits(content.details),
+    ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     tippecanoe(merged, pmtiles, [

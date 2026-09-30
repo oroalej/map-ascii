@@ -44,6 +44,7 @@ describe('landcoverFeatures', () => {
             { ring, cover: 'woods', kind: 'broadleaved' },
             { ring, cover: 'grass' },
             { ring, cover: 'parking' },
+            { ring, cover: 'shrubs' },
           ],
         }),
       ],
@@ -56,6 +57,7 @@ describe('landcoverFeatures', () => {
       ['cover:test/area-1', 'trees', 'Polygon'],
       ['cover:test/area-2', 'grass', 'Polygon'],
       ['cover:test/area-3', 'parking', 'Polygon'],
+      ['cover:test/area-4', 'shrubs', 'Polygon'],
     ]);
     const [measured, palm, row, wood, grass] = features.map((f) => f.properties);
     expect(measured).toMatchObject({ crown: 12, height: 10 });
@@ -70,7 +72,10 @@ describe('landcoverFeatures', () => {
       'landuse',
       'landuse',
       'landuse',
+      'landuse',
     ]);
+    expect(features.at(-1)!.properties).toMatchObject({ class: 'shrubs', detail_blocked: true });
+    expect(features.at(-1)!.properties.crown).toBeUndefined();
   });
 
   it('drops a curated tree once OSM has a tree at the same spot', () => {
@@ -82,6 +87,17 @@ describe('landcoverFeatures', () => {
     );
     expect(features.map((f) => f.properties.id)).toEqual(['cover:test/tree-2']);
     expect(warnings).toEqual(['landcover/test tree 1 is now in OSM; remove it from the pack']);
+  });
+
+  it('keeps raised soil-and-ground-cover beds blocked without inventing tree crowns', () => {
+    const { features } = landcoverFeatures(
+      [],
+      [pack({ areas: [{ ring, cover: 'planting', raised: true }] })],
+    );
+    expect(features[0]!.properties).toMatchObject({ class: 'planting', detail_blocked: true });
+    expect(features[0]!.properties.crown).toBeUndefined();
+    expect(features[0]!.geometry.type).toBe('Polygon');
+    expect(features[0]!.tippecanoe.layer).toBe('landuse');
   });
 
   it('warns about OSM areas of the same class inside a curated area, but keeps it', () => {

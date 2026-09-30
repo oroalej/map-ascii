@@ -1,0 +1,339 @@
+import { describe, expect, it } from 'vitest';
+import { metersPerUnit } from '../raster/geometry';
+import { LifeBuilder, LifeLine } from './geometry';
+import { TileLife, LifeWorld, type Mover } from './simulate';
+import { compatible, type JunctionTable } from './junctions';
+import { FOLLOW } from './config';
+import { worldTiles } from './testing/scenarios';
+import { VEHICLES } from './vehicles';
+
+const tile = { z: 16, x: 55192, y: 30266 };
+const pm = 1 / metersPerUnit(tile);
+function corner(split: boolean) {
+  const b = new LifeBuilder();
+  const points = [
+    { x: 1000, y: 1000 },
+    { x: 1000 + 100 * pm, y: 1000 },
+    { x: 1000 + 100 * pm, y: 1000 + 100 * pm },
+  ];
+  if (split) {
+    b.line(points.slice(0, 2), LifeLine.roadMinor, 8);
+    b.line(points.slice(1), LifeLine.roadMinor, 8);
+  } else b.line(points, LifeLine.roadMinor, 8);
+  const life = new TileLife(tile, b.finish(), 1);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  const m: Mover = {
+    kind: 'vehicle',
+    vehicle: 'car',
+    line: 0,
+    from: 0,
+    dir: 1,
+    d: 80 * pm,
+    speed: 1 * pm,
+    v: 1 * pm,
+    paint: 0,
+    lane: 0,
+    pause: 0,
+    rank: 0,
+    x: 1000 + 80 * pm,
+    y: 1000,
+    hx: 1,
+    hy: 0,
+  };
+  life.movers.push(m);
+  return { life, m };
+}
+
+describe('curved traffic', () => {
+  for (const split of [false, true])
+    it(`keeps pose and clearance continuous across ${split ? 'line ends' : 'interior bends'}`, () => {
+      const { life, m } = corner(split);
+      let previous = life.pose(m);
+      for (let i = 0; i < 800; i++) {
+        life.step(0.05);
+        const before = structuredClone(m);
+        const p = life.pose(m);
+        expect(Math.hypot(p.x - previous.x, p.y - previous.y) / pm).toBeLessThanOrEqual(
+          1.5 * 0.05 + 1e-6,
+        );
+        const body = life.groundBodies(m)[0]!;
+        expect(body.x).toBeCloseTo(p.x / pm, 10);
+        expect(body.y).toBeCloseTo(p.y / pm, 10);
+        expect(body.hx).toBe(p.hx);
+        expect(body.hy).toBe(p.hy);
+        expect(m).toEqual(before);
+        previous = p;
+      }
+    });
+
+  it('brakes before the curve and respects its lateral speed at the midpoint', () => {
+    const { life, m } = corner(true);
+    m.d = 40 * pm;
+    m.x = 1000 + m.d;
+    m.speed = m.v = 15 * pm;
+    for (let i = 0; i < 1000 && m.line === 0; i++) life.step(0.01);
+    // 8m road, inner lane 2m: R = 10 - 2 = 8m.
+    expect(m.line).toBe(1);
+    expect(m.v / pm).toBeLessThanOrEqual(Math.sqrt(2.5 * 8) + 0.03);
+  });
+
+  it('holds its heading at a disconnected one-way exit, even when already past the setback', () => {
+    const { life, m } = corner(true);
+    life.geo.oneway![0] = 1;
+    life.geo.oneway![1] = -1;
+    m.d = 99.99 * pm;
+    m.x = 1000 + m.d;
+    for (let i = 0; i < 100; i++) life.step(0.1);
+    expect(m.line).toBe(0);
+    expect(m.dir).toBe(1);
+    expect(m.d / pm).toBeCloseTo(99.99);
+    expect(m.v).toBe(0);
+    expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+    expect(m.routing?.turns ?? 0).toBe(0);
+  });
+
+  for (const vehicle of ['car', 'bicycle'] as const)
+    for (const dir of [-1, 1] as const)
+      it(`brakes and holds ${vehicle} in ${dir} one-way flow at a clipped endpoint`, () => {
+        const b = new LifeBuilder();
+        b.line(
+          [
+            { x: -100, y: 1000 },
+            { x: 4300, y: 1000 },
+          ],
+          LifeLine.roadMinor,
+          8,
+          1,
+          dir,
+        );
+        const life = new TileLife(tile, b.finish(), 4);
+        life.movers.length = life.parked.length = life.stalls.length = 0;
+        life.scenes.sites.length = 0;
+        const { m } = corner(true);
+        Object.assign(m, {
+          vehicle,
+          dir,
+          from: dir === 1 ? 0 : 1,
+          d: 0,
+          x: dir === 1 ? -100 : 4300,
+          hx: dir,
+          speed: 10 * pm,
+          v: 10 * pm,
+        });
+        life.movers.push(m);
+        let previous = m.x;
+        let braking = false;
+        for (let i = 0; i < 1200; i++) {
+          life.step(0.1);
+          expect(m.dir).toBe(dir);
+          expect((m.x - previous) * dir).toBeGreaterThanOrEqual(-1e-8);
+          expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+          if (m.v! > 0 && m.v! < 9 * pm) braking = true;
+          previous = m.x;
+        }
+        expect(braking).toBe(true);
+        expect(m.v! / pm).toBeLessThan(0.001);
+        const front = VEHICLES[vehicle].length / 2;
+        expect((dir === 1 ? 4300 - m.x : m.x + 100) / pm).toBeGreaterThanOrEqual(
+          front + FOLLOW.minGap - 1e-6,
+        );
+      });
+
+  it('never reverses one-way vehicles while retrying obstructed initial placement', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 1000, y: 1000 },
+        { x: 1200, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      1,
+      -1,
+    );
+    const life = new TileLife(tile, b.finish(), 7);
+    const { m } = corner(true);
+    Object.assign(m, { from: 1, dir: -1, d: 190, x: 1010, hx: -1 });
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.movers.push(m);
+    let checks = 0;
+    life.settleGround((owner) => {
+      if (owner === m) {
+        checks++;
+        expect(m.dir).toBe(-1);
+        expect(Number.isFinite(m.x)).toBe(true);
+      }
+      return false;
+    });
+    expect(checks).toBeGreaterThan(1);
+    expect(life.movers).toHaveLength(0);
+  });
+
+  it('still turns around at a two-way dead end', () => {
+    const { life, m } = corner(false);
+    m.from = 1;
+    m.d = 99.99 * pm;
+    life.step(0.1);
+    expect(m.dir).toBe(-1);
+  });
+
+  it('keeps one-way state intact through rejected movement and shorter collision retries', () => {
+    const { life, m } = corner(true);
+    life.geo.oneway![0] = 1;
+    life.geo.oneway![1] = -1;
+    m.d = 90 * pm;
+    m.x = 1000 + m.d;
+    m.speed = m.v = 20 * pm;
+    let trials = 0;
+    for (let frame = 0; frame < 10; frame++)
+      life.step(0.1, undefined, undefined, undefined, undefined, (owner) => {
+        if (owner === m) {
+          trials++;
+          expect(m.dir).toBe(1);
+          expect(Number.isFinite(m.x + m.y + m.hx + m.hy)).toBe(true);
+        }
+        return false;
+      });
+    expect(trials).toBeGreaterThan(10);
+    expect(m.d / pm).toBeCloseTo(90);
+    expect(m.dir).toBe(1);
+    expect(m.v).toBe(0);
+    expect(m.routing?.turns ?? 0).toBe(0);
+  });
+  it('keeps vehicles in legal flow for 120 seconds on a connected one-way loop', () => {
+    const b = new LifeBuilder();
+    const points = [
+      { x: 800, y: 800 },
+      { x: 3000, y: 800 },
+      { x: 3000, y: 3000 },
+      { x: 800, y: 3000 },
+    ];
+    for (let i = 0; i < 4; i++) b.line([points[i]!, points[(i + 1) % 4]!], LifeLine.roadMajor, 12);
+    const geo = b.finish();
+    geo.oneway!.fill(1);
+    const life = new TileLife(tile, geo, 3);
+    life.parked.length = life.stalls.length = 0;
+    for (let frame = 0; frame < 120 * 30; frame++) {
+      life.step(1 / 30);
+      for (const m of life.movers) if (m.kind === 'vehicle') expect(m.dir).toBe(1);
+    }
+  });
+  it('queues behind a leader on the planned exit without compressing the bumper gap', () => {
+    const { life, m } = corner(true);
+    m.d = 90 * pm;
+    m.x = 1000 + m.d;
+    m.speed = m.v = 10 * pm;
+    const leader: Mover = {
+      ...m,
+      line: 1,
+      from: 2,
+      d: 10 * pm,
+      x: 1000 + 100 * pm,
+      y: 1000 + 10 * pm,
+      hx: 0,
+      hy: 1,
+      speed: 0,
+      v: 0,
+    };
+    life.movers.push(leader);
+    for (let frame = 0; frame < 600; frame++) {
+      life.step(0.1);
+      const separation = m.line === 0 ? 100 + leader.d / pm - m.d / pm : (leader.d - m.d) / pm;
+      expect(separation - 4.4).toBeGreaterThanOrEqual(FOLLOW.minGap - 1e-6);
+    }
+  });
+});
+
+describe('crossroads traffic', () => {
+  it('clears every arm with compatible holds, safe stops and bounded waits over 180 seconds', () => {
+    const b = new LifeBuilder();
+    const center = { x: 2048, y: 2048 };
+    for (const [dx, dy] of [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+    ])
+      b.line(
+        [center, { x: center.x + dx! * 220 * pm, y: center.y + dy! * 220 * pm }],
+        LifeLine.roadMajor,
+        12,
+      );
+    const world = new LifeWorld();
+    world.sync([{ key: 'cross', tile, life: b.finish() }]);
+    const life = worldTiles(world).get('cross')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    for (let arm = 0; arm < 4; arm++)
+      for (let n = 0; n < 3; n++) {
+        const angle = (arm * Math.PI) / 2,
+          hx = -Math.cos(angle),
+          hy = -Math.sin(angle);
+        const remaining = 35 + 28 * n;
+        life.movers.push({
+          kind: 'vehicle',
+          vehicle: 'car',
+          line: arm,
+          from: arm * 2 + 1,
+          dir: -1,
+          d: (220 - remaining) * pm,
+          x: 2048 - hx * remaining * pm,
+          y: 2048 - hy * remaining * pm,
+          hx,
+          hy,
+          speed: 8 * pm,
+          v: 8 * pm,
+          paint: 0,
+          lane: 0,
+          pause: 0,
+          rank: 0,
+        });
+      }
+    const table = (world as unknown as { junctions: JunctionTable }).junctions;
+    const crossed = new Set<number>();
+    let maxWait = 0;
+    for (let frame = 0; frame < 180 * 30; frame++) {
+      const before = life.movers.map((m) => ({
+        line: m.line,
+        turns: m.routing?.turns ?? 0,
+        movement: table.movement(m),
+        granted: table.granted(m),
+      }));
+      world.step(1 / 30, undefined, 18);
+      const holders = table.snapshot().filter((r) => r.since !== undefined);
+      for (let a = 0; a < holders.length; a++)
+        for (let c = a + 1; c < holders.length; c++)
+          expect(compatible(holders[a]!.movement, holders[c]!.movement)).toBe(true);
+      for (let i = 0; i < life.movers.length; i++) {
+        const m = life.movers[i]!;
+        maxWait = Math.max(maxWait, table.waited(m));
+        if ((m.routing?.turns ?? 0) > before[i]!.turns) crossed.add(before[i]!.line);
+        const move = table.movement(m);
+        if (
+          move &&
+          !table.granted(m) &&
+          move.ahead >= 0 &&
+          m.line === move.line &&
+          m.dir === move.dir
+        ) {
+          const distance = Math.hypot(m.x - center.x, m.y - center.y);
+          expect(distance / pm).toBeGreaterThanOrEqual(
+            move.junction.radius / pm + 1.5 + 2.2 - 0.05,
+          );
+        }
+        // Same lane cars never compress a queued leader's bumper gap.
+        for (let j = i + 1; j < life.movers.length; j++) {
+          const other = life.movers[j]!;
+          if (other.line === m.line && other.dir === m.dir)
+            expect(Math.abs(other.d - m.d) / pm - 4.4).toBeGreaterThanOrEqual(FOLLOW.minGap - 1e-6);
+        }
+      }
+      if ((frame + 1) % (60 * 30) === 0) {
+        expect(crossed.size).toBe(4);
+        crossed.clear();
+      }
+    }
+    expect(maxWait).toBeLessThanOrEqual(50);
+  }, 30000);
+});

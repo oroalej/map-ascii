@@ -41,6 +41,34 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   features,
 });
 
+it('retains road tags and directed stop anchors through normalization', () => {
+  const tagged = road('way/10', 'secondary', 0.005);
+  tagged.properties = {
+    ...tagged.properties,
+    sidewalk: 'both',
+    'sidewalk:left:width': '1.5',
+    oneway: '-1',
+  };
+  const stop: Feature = {
+    type: 'Feature',
+    id: 'node/11',
+    geometry: { type: 'Point', coordinates: [0.005, 0] },
+    properties: { highway: 'stop', direction: 'forward' },
+  };
+  const { features } = normalize(collection(tagged, stop), boundary, 10);
+  expect(features.find((f) => f.properties.id === 'osm:way/10')?.properties).toMatchObject({
+    sidewalk: 'both',
+    sidewalk_left_width: 1.5,
+    sidewalk_right_width: 2,
+    sidewalk_src: 'mapped',
+    oneway: -1,
+  });
+  expect(features.find((f) => f.properties.id === 'osm:node/11')?.properties).toMatchObject({
+    variant: 'traffic_stop',
+    stop_direction: 'forward',
+  });
+});
+
 describe('normalize: region-only features', () => {
   const { features } = normalize(collection(road('way/1', 'primary', 0.005)), boundary, 10, {
     osm: collection(road('way/1', 'primary', 0.005), road('way/2', 'trunk', 0.5)),

@@ -42,11 +42,15 @@ export const labelText = (name: string): string =>
 export const LANDMARK_LABEL_BAND: ZoomBand = { min: 16 };
 export const MONUMENT_LABEL_BAND: ZoomBand = { min: 18 };
 
+/** Hard label blackout over district zooms, including fractional levels. */
+export const LABEL_GAP = { min: 15, max: 17 } as const satisfies ZoomBand;
+
 /**
  * How much of a label shows at `zoom`, 0–1. Labels fade in and out over the same half level as
  * the classes (`bandVisibility`): a partly shown label keeps that share of its cells.
  */
-export const labelVisibility = (band: ZoomBand, zoom: number) => bandVisibility(band, zoom);
+export const labelVisibility = (band: ZoomBand, zoom: number) =>
+  zoom >= LABEL_GAP.min && zoom < LABEL_GAP.max ? 0 : bandVisibility(band, zoom);
 
 /**
  * Whether a label's cell `k` (counted across its halo box) shows at visibility `vis`: a fixed
@@ -72,6 +76,8 @@ type Box = { left: number; top: number; width: number; height: number };
 
 /** The overlay grid (the same size as the cell grid) and what has been placed on it. */
 export type Overlay = {
+  /** Street names placed whole and rotated with their street (`rotatedLabelVertices`). */
+  rotated: RotatedLabel[];
   cols: number;
   rows: number;
   glyphs: Uint16Array;
@@ -88,12 +94,21 @@ export type Overlay = {
 const TAKEN_PAD = 4;
 
 export const createOverlay = (cols: number, rows: number): Overlay => ({
+  rotated: [],
   cols,
   rows,
   glyphs: new Uint16Array(cols * rows),
   taken: [],
   takenCells: new Uint8Array((cols + 2 * TAKEN_PAD) * (rows + 2 * TAKEN_PAD)),
 });
+
+/** Start another placement without allocating grids or keeping old collision boxes. */
+export function resetOverlay(overlay: Overlay) {
+  overlay.rotated.length = 0;
+  overlay.glyphs.fill(0);
+  overlay.takenCells?.fill(0);
+  overlay.taken.length = 0;
+}
 
 /** Whether `box` is within `takenCells` (the grid and its pad). */
 const inTakenCells = (o: Overlay, b: Box) =>
@@ -132,8 +147,13 @@ function take(o: Overlay, b: Box) {
 }
 
 /** The overlay as RGBA8 texels: glyph code low byte, high byte, 0, 0. */
-export function packOverlay(overlay: Overlay): Uint8Array {
-  const out = new Uint8Array(overlay.glyphs.length * 4);
+export function packOverlay(
+  overlay: Overlay,
+  out: Uint8Array = new Uint8Array(overlay.glyphs.length * 4),
+): Uint8Array {
+  if (out.length !== overlay.glyphs.length * 4)
+    throw new RangeError('Overlay output has the wrong size');
+  out.fill(0);
   overlay.glyphs.forEach((glyph, i) => {
     out[i * 4] = glyph & 0xff;
     out[i * 4 + 1] = glyph >> 8;
@@ -172,25 +192,86 @@ export type LabelCandidate = {
   vis?: number;
   /**
    * How the text sits: `beside` the anchor (below, above, right, or left), or on one line
-   * `along` a horizontal street or `down` a vertical one, over the street's own cells.
+   * `rotated` to the street's `angle` (radians, y down), over the street itself.
    */
   mode?: LabelMode;
+  angle?: number;
+  /** Straight-run length in horizontal label-cell widths. */
+  runCells?: number;
 };
 
-export type LabelMode = 'beside' | 'along' | 'down';
+export type LabelMode = 'beside' | 'rotated';
+export type RotatedLabel = {
+  id: number;
+  col: number;
+  row: number;
+  angle: number;
+  codes: number[];
+  vis: number;
+};
 
-/** Streets within this many degrees of horizontal or vertical carry their name on them. */
-export const STREET_ALIGN_DEG = 20;
+/** The whole word rotates; its baseline never points upside down. */
+export function uprightStreetAngle(angle: number): number {
+  return ((((angle + Math.PI / 2) % Math.PI) + Math.PI) % Math.PI) - Math.PI / 2;
+}
+
+export function rotatedLabelBox(
+  col: number,
+  row: number,
+  width: number,
+  angle: number,
+  aspect = 1.8,
+): Box {
+  const c = Math.abs(Math.cos(angle)),
+    s = Math.abs(Math.sin(angle));
+  const w = c * (width + 2) + s * aspect * 1.4;
+  const h = (s * (width + 2)) / aspect + c * 1.4;
+  const left = Math.floor(col + 0.5 - w / 2),
+    top = Math.floor(row + 0.5 - h / 2);
+  return {
+    left,
+    top,
+    width: Math.ceil(col + 0.5 + w / 2) - left,
+    height: Math.ceil(row + 0.5 + h / 2) - top,
+  };
+}
+
+/** A quad's two triangles, as (u, v) corners. */
+const QUAD_UV = [0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1] as const;
 
 /**
- * How a street's name sits, from the street's direction on screen (radians, any sign; y down):
- * along it when it is near horizontal, down it when near vertical, else beside it.
+ * Two triangles per glyph cell, each vertex its position, UV, and glyph index (0: the halo),
+ * for the street text pass; rebuilt only when label placement changes.
  */
-export function streetMode(angle: number): LabelMode {
-  const deg = ((((angle * 180) / Math.PI) % 180) + 180) % 180; // 0–180
-  if (deg <= STREET_ALIGN_DEG || deg >= 180 - STREET_ALIGN_DEG) return 'along';
-  if (Math.abs(deg - 90) <= STREET_ALIGN_DEG) return 'down';
-  return 'beside';
+export function rotatedLabelVertices(
+  labels: readonly RotatedLabel[],
+  cellWidth: number,
+  cellHeight: number,
+): Float32Array {
+  const data: number[] = [];
+  for (const label of labels) {
+    const c = Math.cos(label.angle),
+      s = Math.sin(label.angle);
+    const centerX = (label.col + 0.5) * cellWidth,
+      centerY = (label.row + 0.5) * cellHeight;
+    const quad = (x0: number, height: number, code: number) => {
+      for (let k = 0; k < QUAD_UV.length; k += 2) {
+        const u = QUAD_UV[k]!,
+          v = QUAD_UV[k + 1]!;
+        const x = x0 + u * cellWidth,
+          y = (v - 0.5) * height;
+        data.push(centerX + c * x - s * y, centerY + s * x + c * y, u, v, code);
+      }
+    };
+    // One cell of halo before and after the text.
+    for (let i = -1; i <= label.codes.length; i++) {
+      if (!labelCellShows(label.id, i + 1, label.vis)) continue;
+      const x0 = (i - label.codes.length / 2) * cellWidth;
+      quad(x0, cellHeight * 1.4, 0);
+      if (label.codes[i]) quad(x0, cellHeight, label.codes[i]!);
+    }
+  }
+  return Float32Array.from(data);
 }
 
 /** Labels with the same text closer than this (cells) are one: the first placed wins. */
@@ -238,11 +319,8 @@ function besideBoxes(col: number, row: number, width: number, height: number): B
   ];
 }
 
-/** A box grown by the one-cell halo: left and right of horizontal text, above and below `down`. */
-const withHalo = (b: Box, mode: LabelMode): Box =>
-  mode === 'down'
-    ? { ...b, top: b.top - 1, height: b.height + 2 }
-    : { ...b, left: b.left - 1, width: b.width + 2 };
+/** A box grown by the one-cell halo, left and right of the text. */
+const withHalo = (b: Box): Box => ({ ...b, left: b.left - 1, width: b.width + 2 });
 
 /**
  * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
@@ -255,6 +333,7 @@ export function placeLabels(
   candidates: readonly LabelCandidate[],
   glyphIndex: (char: string) => number | undefined,
   area: LabelArea = fullArea(overlay),
+  aspect = 1.8,
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
@@ -263,38 +342,50 @@ export function placeLabels(
   const glyphOf = (char: string) =>
     char === ' ' ? OVERLAY_BLANK : (glyphIndex(char) ?? question) + 1;
 
+  const inArea = (b: Box) =>
+    b.left >= area.left &&
+    b.top >= area.top &&
+    b.left + b.width <= area.right &&
+    b.top + b.height <= area.bottom;
+
   for (const label of sorted) {
-    const mode = label.mode ?? 'beside';
     const nearby = placed.get(label.text) ?? [];
     if (nearby.some((p) => Math.hypot(p.col - label.col, p.row - label.row) < DUPLICATE_DISTANCE)) {
       continue;
     }
-    // Text on a street is one line; text beside an anchor wraps.
-    const { lines, width } =
-      mode === 'beside'
-        ? wrapOnce(label.text)
-        : { lines: [label.text.trim()], width: [...label.text.trim()].length };
+    const accept = (box: Box) => {
+      take(overlay, box);
+      if (nearby.length === 0) placed.set(label.text, nearby);
+      nearby.push({ col: label.col, row: label.row });
+      out.push(label);
+    };
+    if (label.mode === 'rotated') {
+      const chars = [...label.text.trim()];
+      const angle = uprightStreetAngle(label.angle ?? 0);
+      const box = rotatedLabelBox(label.col, label.row, chars.length, angle, aspect);
+      const fitsRun = label.runCells === undefined || chars.length + 2 <= label.runCells;
+      if (chars.length && fitsRun && inArea(box) && !isTaken(overlay, box)) {
+        accept(box);
+        overlay.rotated.push({
+          id: label.id,
+          col: label.col,
+          row: label.row,
+          angle,
+          codes: chars.map((c) => (c === ' ' ? 0 : (glyphIndex(c) ?? question))),
+          vis: label.vis ?? 1,
+        });
+        continue;
+      }
+      // Short runs, screen edges and collisions get a readable horizontal fallback.
+    }
+    const { lines, width } = wrapOnce(label.text);
     if (lines.length === 0 || !lines[0]) continue;
-    const boxes =
-      mode === 'along'
-        ? [{ left: label.col - Math.floor(width / 2), top: label.row, width, height: 1 }]
-        : mode === 'down'
-          ? [{ left: label.col, top: label.row - Math.floor(width / 2), width: 1, height: width }]
-          : besideBoxes(label.col, label.row, width, lines.length);
-    const box = boxes.find((b) => {
-      const inside =
-        b.left >= area.left &&
-        b.top >= area.top &&
-        b.left + b.width <= area.right &&
-        b.top + b.height <= area.bottom;
-      return inside && !isTaken(overlay, withHalo(b, mode));
-    });
+    const box = besideBoxes(label.col, label.row, width, lines.length).find(
+      (b) => inArea(b) && !isTaken(overlay, withHalo(b)),
+    );
     if (!box) continue;
-    const halo = withHalo(box, mode);
-    take(overlay, halo);
-    if (nearby.length === 0) placed.set(label.text, nearby);
-    nearby.push({ col: label.col, row: label.row });
-    out.push(label);
+    const halo = withHalo(box);
+    accept(halo);
 
     // A fading label keeps only some of its cells (text and halo alike); the map shows through
     // the rest.
@@ -306,10 +397,6 @@ export function placeLabels(
     };
     for (let y = halo.top; y < halo.top + halo.height; y++) {
       for (let x = halo.left; x < halo.left + halo.width; x++) put(x, y, OVERLAY_BLANK);
-    }
-    if (mode === 'down') {
-      [...lines[0]].forEach((char, j) => put(box.left, box.top + j, glyphOf(char)));
-      continue;
     }
     lines.forEach((line, i) => {
       const chars = [...line];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { UMBRELLA, umbrellaShare } from './config';
+import { Heading } from './masters';
 import {
   CANDLE_BIT,
   FIGURE_MASTERS,
@@ -31,7 +32,7 @@ describe('people', () => {
       expect(g.charCodeAt(0)).toBeLessThan(0xf900);
       const f = figureOf(g)!;
       const at = f.slice === undefined ? { scale: f.scale! } : { slice: f.slice };
-      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0)).toBe(g);
+      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0, f.heading)).toBe(g);
     }
     expect(figureOf('☺')).toBeUndefined();
   });
@@ -42,7 +43,7 @@ describe('people', () => {
         expect(rows, `${figure} ${size}`).toHaveLength(Number(size));
         for (const row of rows) expect(row).toMatch(new RegExp(`^[#o.]{${size}}$`));
         // A paddler turned round is the other side's paddler at the other end of the stroke.
-        if (figure === 'rower') continue;
+        if (figure === 'rower' || figure === 'seated') continue;
         const turned = [...rows].reverse().map((row) => [...row].reverse().join(''));
         expect(turned, `${figure} ${size}`).toEqual(rows);
       }
@@ -76,5 +77,27 @@ describe('people', () => {
     expect(umbrellaShare(0, 70)).toBeGreaterThan(umbrellaShare(0, 40));
     expect(umbrellaShare(0, 40)).toBeGreaterThan(umbrellaShare(0, 20));
     expect(umbrellaShare(0, -10)).toBe(UMBRELLA.base);
+  });
+
+  it('keeps legacy characters and turns the static seated silhouette through all headings', () => {
+    expect(figureGlyph('adult', false, 0, { scale: 0 }).charCodeAt(0)).toBe(0xe000);
+    expect(figureGlyph('umbrella', false, 0, { scale: 0 }).charCodeAt(0)).toBe(0xe008);
+    for (const box of [5, 10, 20]) {
+      const rows = (heading: Heading) => {
+        const at = figurePixels({ figure: 'seated', across: false, frame: 0, heading }, box);
+        return Array.from({ length: box }, (_, y) =>
+          Array.from({ length: box }, (_, x) => at(x, y)).join(''),
+        );
+      };
+      const up = rows(Heading.up);
+      expect(rows(Heading.down)).toEqual([...up].reverse().map((r) => [...r].reverse().join('')));
+      expect(rows(Heading.right)).toEqual(
+        Array.from({ length: box }, (_, y) =>
+          Array.from({ length: box }, (_, x) => up[box - 1 - x]![y]).join(''),
+        ),
+      );
+      expect(new Set([0, 1, 2, 3].map((h) => rows(h as Heading).join(''))).size).toBe(4);
+      expect(up).not.toEqual(FIGURE_MASTERS.adult[box]);
+    }
   });
 });

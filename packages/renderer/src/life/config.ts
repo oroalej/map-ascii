@@ -14,7 +14,10 @@ import {
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
 
-export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog';
+export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog' | 'cat';
+
+/** Ground walkers share routing, crossing, and clearance rules. */
+export const isWalker = (kind: AgentKind) => kind === 'person' || kind === 'dog' || kind === 'cat';
 
 /** The zoom band in which each kind shows. */
 export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
@@ -24,6 +27,7 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   vehicle: { min: 15 },
   person: { min: 17 },
   dog: { min: 17 },
+  cat: { min: 17 },
 };
 
 /** At most this many agents are drawn, those nearest the view's center first. */
@@ -65,6 +69,36 @@ export function laneOffset(
  */
 export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
 
+/** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
+ * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
+export type Kinematics = { accel: number; brake: number; maxBrake: number; lateral: number };
+export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
+  default: { accel: 1.5, brake: 2.5, maxBrake: 5, lateral: 2 },
+  car: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5 },
+  motorcycle: { accel: 2.5, brake: 3.5, maxBrake: 7, lateral: 3 },
+  tricycle: { accel: 1.2, brake: 2.5, maxBrake: 5, lateral: 1.8 },
+  jeepney: { accel: 1, brake: 2, maxBrake: 5, lateral: 1.5 },
+  bus: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
+  truck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
+  bicycle: { accel: 1, brake: 2, maxBrake: 4, lateral: 2 },
+  rowboat: { accel: 0.3, brake: 0.4, maxBrake: 0.8, lateral: 1 },
+  motorboat: { accel: 0.8, brake: 0.8, maxBrake: 1.5, lateral: 1.5 },
+  banca: { accel: 0.5, brake: 0.6, maxBrake: 1.2, lateral: 1.2 },
+  locomotive: { accel: 0.8, brake: 0.9, maxBrake: 1.5, lateral: 1 },
+};
+export const kinematicsOf = (craft?: string): Kinematics =>
+  KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
+export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
+export const JUNCTION = {
+  gap: 1.5,
+  margin: 1,
+  tie: 1,
+  maxWait: 10,
+  giveUp: 30,
+  holdMax: 20,
+} as const;
+export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
+
 /**
  * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of the roads at least
  * `minWidth` m wide, in a strip `strip` m wide, one every vehicle length plus `gap` m with
@@ -78,13 +112,16 @@ export const PARKED = {
   gap: 1.5,
   taken: 0.6,
   lotTaken: 0.65,
+  junctionGap: 5,
 } as const;
 
+const WALKING_LINES = [LifeLine.path, LifeLine.plaza] as const;
 /** The line kinds each moving kind may use, at junctions too. */
 export const usableLines: Readonly<Record<Exclude<AgentKind, 'bird'>, readonly LifeLine[]>> = {
   vehicle: [LifeLine.roadMajor, LifeLine.roadMid, LifeLine.roadMinor],
-  person: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
-  dog: [LifeLine.roadMinor, LifeLine.path, LifeLine.plaza],
+  person: WALKING_LINES,
+  dog: WALKING_LINES,
+  cat: WALKING_LINES,
   boat: [LifeLine.river, LifeLine.canal],
   train: [LifeLine.rail],
 };
@@ -99,6 +136,7 @@ export const TRAIN_SPACING_M = 3000;
  * track, where it pulls back out the way it came.
  */
 export const TRAIN = {
+  arrivals: [60, 120] as const,
   coaches: [2, 4] as const,
   coupling: 1,
   dwell: [20, 40] as const,
@@ -127,17 +165,21 @@ export type SpawnRule = {
 export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
   [LifeLine.roadMajor]: [{ kind: 'vehicle', spacing: 30, speed: [7, 12] }],
   [LifeLine.roadMid]: [{ kind: 'vehicle', spacing: 50, speed: [6, 10] }],
-  // Side streets: tricycles, people on foot, and street dogs.
+  // Consume the legacy person stream on side streets, but spawnOn rejects those candidates.
+  // This preserves unrelated traffic seeds while people use mapped walking lines only.
   [LifeLine.roadMinor]: [
     { kind: 'vehicle', spacing: 100, speed: [3, 6] },
     { kind: 'person', spacing: 50, speed: [0.9, 1.5] },
-    { kind: 'dog', spacing: 150, speed: [0.9, 1.5] },
   ],
   [LifeLine.path]: [
     { kind: 'person', spacing: 20, speed: [0.9, 1.4] },
     { kind: 'dog', spacing: 180, speed: [0.8, 1.3] },
+    { kind: 'cat', spacing: 300, speed: [0.5, 0.9] },
   ],
-  [LifeLine.plaza]: [{ kind: 'person', spacing: 10, speed: [0.6, 1.2] }],
+  [LifeLine.plaza]: [
+    { kind: 'person', spacing: 10, speed: [0.6, 1.2] },
+    { kind: 'cat', spacing: 300, speed: [0.5, 0.9] },
+  ],
   [LifeLine.river]: [{ kind: 'boat', spacing: 200, speed: [1, 2.5] }],
   // Canals: a few small boats, slowly (the city's `traffic.canal` mix).
   [LifeLine.canal]: [{ kind: 'boat', spacing: 250, speed: [0.6, 1.4] }],
@@ -162,6 +204,16 @@ export const DOG = {
   trot: { chance: 0.02, speed: 2.6, seconds: [2, 5] as const },
   lie: { chance: 0.004, seconds: [30, 120] as const },
   stride: 0.35,
+} as const;
+
+/** Cats walk slowly, pause to rest or groom, and occupy at most six slots per tile. */
+export const CAT = {
+  initialPause: [15, 40],
+  pause: { chance: 0.08, seconds: [10, 45] },
+  groomChance: 0.4,
+  blockedPause: 2,
+  stride: 0.25,
+  maxPerTile: 6,
 } as const;
 
 /**
@@ -203,6 +255,7 @@ export const VENDORS = {
   curb: 0.9,
   beside: 1.2,
 } as const;
+export const COMMERCE = { reach: 60, perShop: 0.5, max: 2 } as const;
 
 /**
  * How people use a place (life/simulate.ts `Gatherer`): stand about and mill (`gather`), sit on a
@@ -348,6 +401,8 @@ export function activity(kind: AgentKind, daylight: number): number {
       return 0.5 + 0.5 * daylight;
     case 'dog':
       return 0.5 + 0.5 * daylight;
+    case 'cat':
+      return 0.7 + 0.3 * daylight;
   }
 }
 
@@ -388,6 +443,7 @@ export function activityLevels(
     train: byRhythm('train'),
     bird: activity('bird', daylight),
     dog: Math.max(byRhythm('person'), activity('dog', 0)),
+    cat: activity('cat', daylight),
     night: nightActivity(daylight),
     places,
   };
@@ -395,7 +451,7 @@ export function activityLevels(
 
 /** Whether two activities differ by more than `epsilon` for any kind or place. */
 export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): boolean {
-  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train', 'dog'];
+  const kinds: readonly AgentKind[] = ['vehicle', 'person', 'boat', 'bird', 'train', 'dog', 'cat'];
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
     Math.abs(a.night - b.night) > epsilon ||
@@ -409,6 +465,7 @@ export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
   // Dogs are drawn as people are (their own figures, life/dogs.ts): the classes are all taken.
   // Listed before people, so a lookup from the class finds people.
   dog: 'life_person',
+  cat: 'life_person',
   person: 'life_person',
   boat: 'life_boat',
   bird: 'life_bird',
@@ -495,6 +552,7 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
   train: CellBit.train,
   // Dogs go where people go.
   dog: CellBit.person,
+  cat: CellBit.person,
 };
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
@@ -507,7 +565,14 @@ const lit = [
   'building_station',
 ];
 /** Where people can't stand: roofs, water, and walls. */
-const noWalking = new Set([...lit, 'building_part', ...water, 'barrier', 'coastline']);
+const noWalking = new Set([
+  ...lit,
+  'building_part',
+  'building_woodwork',
+  ...water,
+  'barrier',
+  'coastline',
+]);
 
 /**
  * Per class id, the `CellBit`s of its cells. Vehicles keep to roads, trains to track (and the
@@ -531,3 +596,14 @@ export function cellBits(): Int32Array {
   }
   return bits;
 }
+export const SIGNAL = {
+  greenA: [20, 35],
+  greenB: [15, 30],
+  amber: 3,
+  allRed: 2,
+  midBlock: { green: 40, walk: 12 },
+  gap: 1.5,
+  lookahead: 40,
+  brake: 3,
+  walkMin: 5,
+} as const;

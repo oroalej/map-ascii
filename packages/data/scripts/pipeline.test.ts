@@ -76,6 +76,7 @@ const content: ContentBundle = {
     },
   ],
   processions: [],
+  details: [],
 };
 
 let ctx: StepContext;

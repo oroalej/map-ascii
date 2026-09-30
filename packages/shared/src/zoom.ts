@@ -30,6 +30,7 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   // District
   water_stream: { min: 12.5 },
   park: { min: 12.5 },
+  paving: { min: 12.5 },
   trees: { min: 12.5 },
   grass: { min: 12.5 },
   farmland: { min: 12.5 },
@@ -50,6 +51,10 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   barrier: { min: 17 },
   entrance: { min: 18 },
   furniture: { min: 18 },
+  seating: { min: 18 },
+  shrubs: { min: 19 },
+  planting: { min: 18 },
+  building_woodwork: { min: 18 },
   // Labels have their own zoom bands (the renderer's labels.ts).
   place_label: { min: 0 },
 };

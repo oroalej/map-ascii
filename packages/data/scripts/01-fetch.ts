@@ -53,6 +53,7 @@ const detailQuery = (
   node["entrance"];
   nwr["amenity"~"^(bench|fountain|parking)$"];
   node["man_made"="flagpole"];
+  node["highway"="street_lamp"];
   nwr["leisure"="pitch"];
   node["place"];
   relation["boundary"="administrative"]["admin_level"="${city.subdivision.admin_level}"];
@@ -75,6 +76,31 @@ export const railQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}
 out body;
 >;
 out skel qt;`;
+
+/**
+ * Transit stops, terminals, and covered shelters in the detail bbox, asked for on its own like
+ * `railQuery` so adding it left the saved detail download valid (`--offline` needs it saved too).
+ * Covered entrances repeat part of `detailQuery` so this download stands alone.
+ */
+export const lifeQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(
+  nwr["highway"="bus_stop"];
+  nwr["public_transport"~"^(platform|stop_position)$"];
+  nwr["amenity"~"^(bus_station|taxi|shelter)$"];
+  node["entrance"]["covered"="yes"];
+);
+out body;
+>;
+out skel qt;`;
+
+/** Tagged traffic nodes, queried separately to preserve the detail download cache. */
+export const trafficQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(node["highway"~"^(traffic_signals|crossing)$"]; node["highway"="stop"]; node["crossing"]; node["crossing:markings"];);
+out body;`;
+export const neighborhoodQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+(nwr["shop"]; nwr["amenity"~"^(restaurant|fast_food|cafe|bar|pub|food_court|ice_cream|pharmacy|bank|clinic|dentist|internet_cafe)$"];
+nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"];);
+out body; >; out skel qt;`;
 
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
@@ -199,6 +225,24 @@ export const step: Step = {
       cache,
     );
     console.log(`  railways: ${rail.elements.length} elements`);
+    const sites = await overpass(
+      lifeQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailLife),
+      cache,
+    );
+    console.log(`  life sites: ${sites.elements.length} elements`);
+    const traffic = await overpass(
+      trafficQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailTraffic),
+      cache,
+    );
+    console.log(`  traffic nodes: ${traffic.elements.length} elements`);
+    const neighborhood = await overpass(
+      neighborhoodQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailNeighborhood),
+      cache,
+    );
+    console.log(`  neighborhood: ${neighborhood.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

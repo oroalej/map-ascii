@@ -1,6 +1,7 @@
 import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
+import { catGlyphs } from './life/cats';
 import { personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
@@ -11,7 +12,7 @@ export type RGBA = readonly [number, number, number, number];
 /**
  * How a class picks among its glyphs (the rules live in `glyphs/select.ts`):
  * - `road`: 18 glyphs indexed by the N/E/S/W connectivity mask (0–15), then `╱` and `╲`
- * - `water`: alternates between the glyphs per cell over time
+ * - `water`: glyph 0 at rest, with drifting crests of glyph 1
  * - `building`: a height ramp, lowest first
  * - `diagonal` / `rows` / `scatter`: area patterns by `(x + y) mod n`, `y mod n`, or a cell hash
  * - `single`: always the first glyph
@@ -41,7 +42,9 @@ export type GlyphKind =
   | 'grass'
   | 'canopy'
   | 'foliage'
-  | 'crop';
+  | 'crop'
+  | 'seating'
+  | 'planting';
 
 export type ClassStyle = {
   kind: GlyphKind;
@@ -54,9 +57,14 @@ export type ClassStyle = {
    * shape; lines and markers leave it unset and draw over the plain background.
    */
   fill?: number;
+  /** Optional 0xRRGGBB background pigment, independent of the glyph color. */
+  fillColor?: number;
 };
 
 export type Theme = {
+  /** Hardware, housing, warm lamp, and red/amber/green lenses. */
+  fixturePaints: readonly number[];
+  awningPaints: readonly number[];
   /** Canvas background as linear 0–1 RGBA. */
   background: RGBA;
   /** Label text, 0xRRGGBB (drawn over the background, which doubles as its halo). */
@@ -115,6 +123,7 @@ export const railLine = ['╪', '╫', '╪', '╚', '╫', '╫', '╔', '╠',
 
 /** Building outlines at close zoom: the line sets with `□` for a one-cell building. */
 export const singleWall = ['□', ...singleLine.slice(1)] as const;
+export const arrowGlyphs = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'] as const;
 export const doubleWall = ['□', ...doubleLine.slice(1)] as const;
 
 /** Admin boundaries: the city's dashed, subdivisions' dotted. */
@@ -143,6 +152,21 @@ export const rainGlyphs = ['|', '\\', '/'] as const;
 
 /** A streetlight's head (life/lights.ts), lit warm from dusk, grey when it is out. */
 export const streetlightGlyph = '*';
+/** Reuse line, casing, and lens glyphs for static street hardware. */
+export const fixtureGlyphs = [
+  '\u2584',
+  '\u263c',
+  '\u2605',
+  '▪',
+  '─',
+  '│',
+  '╱',
+  '╲',
+  '▫',
+  '○',
+  '•',
+  '*',
+] as const;
 
 /**
  * Grass and parks: dense, medium, and thin tufts at rest; then leaning right, leaning left, and
@@ -214,7 +238,15 @@ function makeTheme(background: number, c: Palette): Theme {
     background: rgb(background),
     label: c.label,
     accent: c.accent,
+    fixturePaints:
+      background > 0x7fffff
+        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f]
+        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87],
     vehiclePaints: c.vehiclePaints,
+    awningPaints:
+      background > 0x7fffff
+        ? [0x9f382d, 0x746344, 0x17695a, 0x746344, 0x315e9d, 0x746344, 0x87611d, 0x746344]
+        : [0xeb8876, 0xf2deb5, 0x71b6a2, 0xf2deb5, 0x85a8e0, 0xf2deb5, 0xd8b56b, 0xf2deb5],
     birdPaints: c.birdPaints,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
@@ -248,7 +280,28 @@ function makeTheme(background: number, c: Palette): Theme {
       building_station: { kind: 'building', glyphs: buildingRamp, color: c.station, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
       building_part: { kind: 'building', glyphs: buildingRamp, color: c.part, fill: 0.3 },
+      building_woodwork: {
+        kind: 'building',
+        glyphs: buildingRamp,
+        color: background > 0x7fffff ? 0x70513b : 0xb99570,
+        fill: 0.3,
+      },
       park: { kind: 'grass', glyphs: grassGlyphs, color: c.park, fill: 0.12 },
+      paving: { kind: 'scatter', glyphs: [' ', ' ', ' ', '·'], color: c.furniture, fill: 0.14 },
+      seating: {
+        kind: 'seating',
+        glyphs: ['▒'],
+        color: background > 0x7fffff ? 0x676d70 : 0xb8bec2,
+        fill: 0.65,
+      },
+      shrubs: { kind: 'scatter', glyphs: ['%', '*', '%'], color: c.trees, fill: 0.25 },
+      planting: {
+        kind: 'planting',
+        glyphs: [...grassGlyphs, ' '],
+        color: c.grass,
+        fillColor: background > 0x7fffff ? 0x826a50 : 0x95734e,
+        fill: 0.4,
+      },
       grass: { kind: 'grass', glyphs: grassGlyphs, color: c.grass, fill: 0.08 },
       trees: {
         kind: 'canopy',
@@ -277,7 +330,11 @@ function makeTheme(background: number, c: Palette): Theme {
       barrier: { kind: 'road', glyphs: barrierLine, color: c.barrier },
       entrance: { kind: 'single', glyphs: ['▪'], color: c.monument },
       // Variant 0 is unknown furniture; then bench, fountain, flagpole (classes.ts variantCode).
-      furniture: { kind: 'variant', glyphs: ['•', '╥', '○', '¶'], color: c.furniture },
+      furniture: {
+        kind: 'variant',
+        glyphs: ['•', '╥', '○', '¶', '┬', '▤', '⌂', '═', '•', '¤', '¤', '¤', '─', '•', '*'],
+        color: c.furniture,
+      },
       parking: { kind: 'rows', glyphs: ['▫', '·'], color: c.parking, fill: 0.1 },
       pitch: { kind: 'rows', glyphs: ['─', ' '], color: c.pitch, fill: 0.12 },
       // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
@@ -426,7 +483,12 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building_market: 'Market or shop',
   building_station: 'Train station',
   building_part: 'Landmark part',
+  building_woodwork: 'Pergola or timber structure',
   park: 'Park or plaza',
+  paving: 'Paved plaza',
+  seating: 'Stone seating or planter edge',
+  shrubs: 'Shrubs',
+  planting: 'Soil and ground cover',
   trees: 'Woods',
   grass: 'Grass',
   tree_crown: 'Tree',
@@ -435,7 +497,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   tree: 'Tree',
   barrier: 'Fence or wall',
   entrance: 'Entrance',
-  furniture: 'Bench, fountain, or flagpole',
+  furniture: 'Street furniture, transit stop, or shelter',
   parking: 'Parking',
   pitch: 'Sports pitch',
   admin_city: 'City boundary',
@@ -463,7 +525,7 @@ export const labelCharacters: readonly string[] = [
 /**
  * Every glyph a theme draws on the map, deduplicated: class styles, walls, sextants, vehicles,
  * and people. They
- * share the map atlas, whose indices must fit the byte-sized glyph table. Labels have their own
+ * share the map atlas, whose indices must fit the ten-bit glyph table. Labels have their own
  * atlas (`labelCharacters`), at the label cell size.
  */
 export function mapGlyphs(theme: Theme): string[] {
@@ -477,8 +539,11 @@ export function mapGlyphs(theme: Theme): string[] {
     ...personGlyphs(),
     ...birdGlyphs(),
     ...dogGlyphs(),
+    ...catGlyphs(),
     ...rainGlyphs,
     streetlightGlyph,
+    ...fixtureGlyphs,
+    ...arrowGlyphs,
   ];
   for (const g of extras) set.add(g);
   return [...set];

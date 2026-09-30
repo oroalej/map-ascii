@@ -12,6 +12,10 @@ export function random(seed: number): () => number {
   };
 }
 
+/** A value in `[lo, hi)`. */
+export const between = (rng: () => number, [lo, hi]: readonly [number, number]) =>
+  lo + (hi - lo) * rng();
+
 /** A string's FNV-1a hash, for seeds. */
 export function hashString(s: string): number {
   let h = 0x811c9dc5;

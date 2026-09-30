@@ -1,6 +1,8 @@
 import * as z from 'zod';
+import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
   ATLAS_CLASSES,
@@ -231,8 +233,8 @@ export const CuratedTree = z.strictObject({ at: LngLat, ...treeShape });
 /** A curated line of trees, drawn a crown every crown's width (`Landcover`). */
 export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
 
-/** What a curated area is: its atlas class is `grass`, `parking`, or `trees` (woods). */
-export const LandCover = z.enum(['grass', 'parking', 'woods']);
+/** A curated ground cover; woods use the atlas `trees` class. */
+export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs', 'planting']);
 export type LandCover = z.infer<typeof LandCover>;
 
 /**
@@ -240,7 +242,13 @@ export type LandCover = z.infer<typeof LandCover>;
  * it. Only woods have a tree `kind`.
  */
 export const CuratedArea = z
-  .strictObject({ ring: z.array(LngLat).min(4), cover: LandCover, kind: TreeKind.optional() })
+  .strictObject({
+    ring: z.array(LngLat).min(4),
+    cover: LandCover,
+    kind: TreeKind.optional(),
+    /** A raised planting bed, inaccessible to ground agents. */
+    raised: z.boolean().optional(),
+  })
   .refine(({ ring }) => ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1], {
     message: 'the ring must end where it starts',
     path: ['ring'],
@@ -249,6 +257,175 @@ export const CuratedArea = z
     message: 'only woods have a tree kind',
     path: ['kind'],
   });
+
+const DetailKey = z.string().regex(/^[a-z0-9-]+$/);
+const DetailLine = z
+  .array(LngLat)
+  .min(2)
+  .refine(
+    (line) => line.slice(1).every((p, i) => p[0] !== line[i]![0] || p[1] !== line[i]![1]),
+    'consecutive positions must differ',
+  );
+
+/** A plan-view beam, support, platform, or roof; overhead parts leave the ground walkable. */
+export const SiteStructure = z.strictObject({
+  id: DetailKey,
+  ring: z
+    .array(LngLat)
+    .min(4)
+    .superRefine((ring, ctx) => {
+      if (ring.length < 4) return;
+      const first = ring[0]!,
+        last = ring.at(-1)!;
+      const fail = () =>
+        ctx.addIssue({ code: 'custom', message: 'expected a simple, closed, nonzero-area ring' });
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        fail();
+        return;
+      }
+      const cross = (a: LngLat, b: LngLat, c: LngLat) =>
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      const on = (a: LngLat, b: LngLat, p: LngLat) =>
+        cross(a, b, p) === 0 &&
+        p[0] >= Math.min(a[0], b[0]) &&
+        p[0] <= Math.max(a[0], b[0]) &&
+        p[1] >= Math.min(a[1], b[1]) &&
+        p[1] <= Math.max(a[1], b[1]);
+      let area = 0;
+      const count = ring.length - 1;
+      for (let i = 0; i < count; i++) {
+        const a = ring[i]!,
+          b = ring[i + 1]!;
+        if (a[0] === b[0] && a[1] === b[1]) {
+          fail();
+          return;
+        }
+        area += cross(first, a, b);
+        for (let j = i + 2; j < count; j++) {
+          if (i === 0 && j === count - 1) continue;
+          const c = ring[j]!,
+            d = ring[j + 1]!;
+          if (
+            (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) ||
+            on(a, b, c) ||
+            on(a, b, d) ||
+            on(c, d, a) ||
+            on(c, d, b)
+          ) {
+            fail();
+            return;
+          }
+        }
+      }
+      if (area === 0) fail();
+    }),
+  height_m: z.number().positive().max(255),
+  material: z.enum(['wood', 'stone', 'roof']),
+  overhead: z.boolean(),
+});
+export type SiteStructure = z.infer<typeof SiteStructure>;
+
+/** Sourced outdoor detail, anchored to an existing OSM area; coordinates are GeoJSON order. */
+export const SiteDetail = z
+  .strictObject({
+    id: z.string().regex(/^detail\/[a-z0-9-]+$/),
+    osm_id: OsmId,
+    title: z.string().min(1),
+    surface: z.literal('paving'),
+    structures: z.array(SiteStructure).default([]),
+    /** Curated positions for existing mapped flagpoles, retaining their OSM identity. */
+    flagpoles: z
+      .array(z.strictObject({ osm_id: OsmId, at: LngLat, flag: z.literal('PH').optional() }))
+      .default([]),
+    walks: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          line: DetailLine,
+          width_m: z.number().positive().max(20),
+        }),
+      )
+      .default([]),
+    seating: z
+      .array(
+        z
+          .strictObject({
+            id: DetailKey,
+            line: DetailLine,
+            width_m: z.number().positive().max(3),
+            height_m: z.number().positive().max(2),
+            /** Which side of the directed seating line faces accessible paving. */
+            facing: z.enum(['left', 'right']),
+            /** Inclusive vertex indices for wider seating sections; [] is a rim without seats. */
+            bench_spans: z
+              .array(
+                z.strictObject({
+                  id: DetailKey,
+                  start: z.int().nonnegative(),
+                  end: z.int().positive(),
+                  width_m: z.number().positive().max(3),
+                }),
+              )
+              .optional(),
+          })
+          .superRefine((seat, ctx) => {
+            const spans = seat.bench_spans ?? [];
+            if (new Set(spans.map((span) => span.id)).size !== spans.length)
+              ctx.addIssue({
+                code: 'custom',
+                path: ['bench_spans'],
+                message: 'duplicate bench span id',
+              });
+            for (const [i, span] of spans.entries()) {
+              if (span.start >= span.end || span.end >= seat.line.length)
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i],
+                  message: 'invalid bench span vertex range',
+                });
+              if (span.width_m < seat.width_m)
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i, 'width_m'],
+                  message: 'bench must be at least as wide as the rim',
+                });
+              if (
+                spans.slice(0, i).some((other) => span.start < other.end && span.end > other.start)
+              )
+                ctx.addIssue({
+                  code: 'custom',
+                  path: ['bench_spans', i],
+                  message: 'overlapping bench spans',
+                });
+            }
+          }),
+      )
+      .default([]),
+    lamps: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          at: LngLat,
+          bearing: z.number().min(0).lt(360),
+          reach_m: z.number().positive().max(3),
+          heads: z.int().min(1).max(4),
+          style: z.enum(['streetlight', 'lantern']).default('streetlight'),
+        }),
+      )
+      .default([]),
+    status: z.enum(['draft', 'verified']),
+    credit: z.string().min(1),
+    sources: Sources,
+  })
+  .superRefine((v, ctx) => {
+    if (new Set(v.flagpoles.map((pole) => pole.osm_id)).size !== v.flagpoles.length)
+      ctx.addIssue({ code: 'custom', path: ['flagpoles'], message: 'duplicate flagpole target' });
+    for (const key of ['walks', 'seating', 'lamps', 'structures'] as const) {
+      if (new Set(v[key].map((item) => item.id)).size !== v[key].length)
+        ctx.addIssue({ code: 'custom', path: [key], message: 'duplicate detail id' });
+    }
+  });
+export type SiteDetail = z.infer<typeof SiteDetail>;
 
 /** When a procession runs (the `Procession` schema's `schedule`). */
 /** An IANA time zone, e.g. "Asia/Manila". */
@@ -455,7 +632,7 @@ export function contentSchemas(languages?: readonly string[]) {
     );
 
   /**
-   * Trees and land cover (grass, parking, woods) that OSM doesn't have yet, traced from imagery
+   * Trees and land cover (grass, parking, woods, shrubs) that OSM doesn't have yet, traced from imagery
    * (DATA.md §2 step 04). The pipeline adds them as features of their atlas class and drops a
    * tree once OSM maps one at the same spot. `credit` is shown with the map attribution;
    * `status` stays `draft` until someone has checked the tracing on the ground or against
@@ -534,6 +711,7 @@ export function contentSchemas(languages?: readonly string[]) {
     LandmarkArt,
     LandmarkPlan,
     Landcover,
+    SiteDetail,
     Procession,
   };
 }
@@ -660,11 +838,94 @@ const Weekdays = z
   .min(1)
   .refine((days) => new Set(days).size === days.length, { message: 'duplicate weekday' });
 
+/** An interaction site: a mapped OSM feature annotated by the city pack, or a sourced point. */
+export const LifeSite = z
+  .strictObject({
+    id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'expected a kebab-case id'),
+    kind: z.enum(LIFE_SITE_KINDS),
+    osm_id: z
+      .string()
+      .regex(/^osm:(node|way|relation)\/\d+$/)
+      .optional(),
+    position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]).optional(),
+    modes: z.array(z.enum(TRANSIT_MODES)).min(1).optional(),
+    covered: z.boolean().optional(),
+    source: z.string().min(1),
+  })
+  .superRefine((site, ctx) => {
+    if (!!site.osm_id === !!site.position)
+      ctx.addIssue({ code: 'custom', message: 'provide either osm_id or position' });
+    if (site.kind !== 'shelter' && !site.modes?.length)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['modes'],
+        message: 'transit sites require vehicle modes',
+      });
+    if (site.kind === 'shelter' && site.covered === false)
+      ctx.addIssue({ code: 'custom', path: ['covered'], message: 'a shelter is covered' });
+  }) satisfies z.ZodType<LifeSiteConfig>;
+
 /**
  * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
  * (rhythm.ts).
  */
 export const CityLife = z.strictObject({
+  signals: z
+    .strictObject({
+      derive: z.boolean().optional(),
+      add: z
+        .array(
+          z.strictObject({
+            id: z.string().min(1),
+            position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+            linked_junctions: z
+              .array(SignalPosition)
+              .min(1)
+              .refine(
+                (points) => new Set(points.map((p) => p.join(','))).size === points.length,
+                'duplicate linked junction',
+              )
+              .optional(),
+            source: z.string().min(1),
+          }),
+        )
+        .refine(
+          (items) => new Set(items.map((i) => i.id)).size === items.length,
+          'duplicate signal id',
+        )
+        .optional(),
+      remove: z
+        .array(
+          z
+            .strictObject({
+              id: z.string().min(1),
+              osm_id: z.int().positive().optional(),
+              position: z
+                .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+                .optional(),
+              source: z.string().min(1),
+            })
+            .refine(
+              (item) => !!item.osm_id !== !!item.position,
+              'provide either osm_id or position',
+            ),
+        )
+        .optional(),
+    })
+    .optional(),
+  sites: z
+    .array(LifeSite)
+    .refine((sites) => new Set(sites.map((s) => s.id)).size === sites.length, {
+      message: 'duplicate life site id',
+    })
+    .refine(
+      (sites) => {
+        const ids = sites.flatMap((s) => (s.osm_id ? [s.osm_id] : []));
+        return new Set(ids).size === ids.length;
+      },
+      { message: 'duplicate life site osm_id' },
+    )
+    .optional(),
   rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
   schedules: z
     .strictObject({
@@ -700,9 +961,33 @@ export type Traffic = z.infer<typeof Traffic>;
 
 /**
  * A city pack's config (`cities/<slug>/city.json`). Geography is looked up in OSM by the
- * pipeline; the only coordinates allowed here are a region bbox, when the region has no usable
- * OSM relation.
+ * pipeline. Coordinates are allowed for a region bbox without a usable OSM relation, and for
+ * independently sourced life sites missing from OSM.
  */
+/** Optional city policy for derived street details; explicit policy is sourced. */
+export const CityStreets = z.strictObject({
+  directions: z
+    .array(
+      z.strictObject({
+        osm_id: z.string().regex(/^osm:way\/\d+$/, 'expected osm:way/<id>'),
+        /** Relative to the original OSM coordinate order; zero explicitly restores two-way. */
+        oneway: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+        source: z.string().trim().min(1),
+      }),
+    )
+    .refine(
+      (items) => new Set(items.map((item) => item.osm_id)).size === items.length,
+      'duplicate road direction target',
+    )
+    .optional(),
+  sidewalks: z
+    .strictObject({
+      derive: z.boolean().default(true),
+      source: z.string().trim().min(1),
+    })
+    .optional(),
+});
+
 export const City = z
   .strictObject({
     slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug'),
@@ -756,6 +1041,7 @@ export const City = z
     timezone: TimeZone.optional(),
     /** The daily rhythm of the life layer (default: rhythm.ts `DEFAULT_RHYTHM`). */
     life: CityLife.optional(),
+    streets: CityStreets.optional(),
   })
   .superRefine((city, ctx) => {
     // The city's own localized fields follow the same language rule as its content.

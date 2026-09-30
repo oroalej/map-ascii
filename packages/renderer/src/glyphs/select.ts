@@ -2,8 +2,23 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
-import { classId, MAX_CLASSES, renderClasses, type RenderClass } from '../classes';
-import { doubleWall, sextantGlyphs, singleWall, type GlyphKind, type Theme } from '../theme';
+import {
+  classId,
+  Flags,
+  Marking,
+  markingOf,
+  MAX_CLASSES,
+  renderClasses,
+  type RenderClass,
+} from '../classes';
+import {
+  arrowGlyphs,
+  doubleWall,
+  sextantGlyphs,
+  singleWall,
+  type GlyphKind,
+  type Theme,
+} from '../theme';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {
@@ -20,13 +35,50 @@ export const kindCodes: Record<GlyphKind, number> = {
   canopy: 11,
   foliage: 12,
   crop: 13,
+  seating: 14,
+  planting: 15,
 };
 
 /** Width of the glyph table: the most variants any class can have. */
 export const MAX_VARIANTS = 32;
 
+export const GLYPH_BITS = 10;
+/** Highest index; slot zero is blank. */
+export const MAX_GLYPHS = (1 << GLYPH_BITS) - 1;
+/** RGBA8 map/life texels share the class byte with the glyph's two high bits. */
+export const packGlyph = (glyph: number, cls: number) =>
+  [glyph & 255, (cls & 63) | ((glyph >> 8) << 6)] as const;
+export const unpackGlyph = (lo: number, clsByte: number) => ({
+  glyph: lo | ((clsByte >> 6) << 8),
+  cls: clsByte & 63,
+});
+/** Decode one RG8 lookup-table entry (not a packed class byte). */
+export const tableGlyph = (table: Uint8Array, entry: number) =>
+  table[entry * 2]! | (table[entry * 2 + 1]! << 8);
+
 /** Connectivity bits, with north toward the top of the screen. */
 export const Dir = { N: 1, E: 2, S: 4, W: 8 } as const;
+/** First outside side with mapped street/path adjacency within three cells, N/E/S/W order. */
+export function awningSide(
+  outside: readonly boolean[],
+  streetAt: (side: number, distance: number) => boolean,
+  blockedAt: (side: number, distance: number) => boolean = () => false,
+): number {
+  for (let side = 0; side < 4; side++)
+    if (outside[side])
+      for (let distance = 1; distance <= 3; distance++) {
+        if (streetAt(side, distance)) return side;
+        if (blockedAt(side, distance)) break;
+      }
+  return -1;
+}
+export const awningCode = (kind: number, parity: number) => 1 + kind * 2 + (parity & 1);
+/** Stripe orientation and fine-scale alternation, matching the select shader. */
+export function crossingGlyph(bearingByte: number, cellMeters: number, parity: number): string {
+  if (cellMeters < 1.2 && parity & 1) return ' ';
+  const axis = bearingByte & 31;
+  return axis < 8 || axis >= 24 ? '═' : '║';
+}
 /** Road variants past the 16 masks: an isolated diagonal step. */
 export const RISING = 16; // ╱ (neighbor to the NE or SW)
 export const FALLING = 17; // ╲ (neighbor to the NW or SE)
@@ -46,7 +98,41 @@ export const WALL_DOUBLE_ROW = MAX_CLASSES - 1;
  */
 export const ROOF_ROW = MAX_CLASSES - 3;
 export const RIDGE_VARIANT = 4;
+export const ARROW_VARIANT = 8;
 export const ridgeGlyphs = ['─', '╲', '│', '╱'] as const;
+
+/** Bearing is clockwise from north; compensate for the cell grid's taller characters. */
+export function arrowVariant(bearing: number, aspect: number): number {
+  const theta = (bearing * Math.PI) / 180;
+  const angle = Math.atan2(Math.sin(theta), Math.cos(theta) / aspect);
+  return ARROW_VARIANT + (((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8);
+}
+
+export function markingGlyph(
+  byte: number,
+  cellMeters: number,
+  parity: number,
+  aspect: number,
+): string {
+  const marking = markingOf(byte);
+  if (marking.kind === Marking.crosswalk) return crossingGlyph(byte, cellMeters, parity);
+  if (marking.kind === Marking.stop) {
+    const axis = byte & 31;
+    return axis < 8 || axis >= 24 ? '─' : '│';
+  }
+  return marking.kind === Marking.arrow
+    ? arrowGlyphs[arrowVariant(marking.bearingDeg, aspect) - ARROW_VARIANT]!
+    : ' ';
+}
+
+/** Curbs look through ordinary paths, but remain against a paved sidewalk band. */
+export function curbOutside(cls: RenderClass | null, flags = 0): boolean {
+  return (
+    (flags & Flags.sidewalk) !== 0 ||
+    cls === null ||
+    (!roadClasses.includes(cls) && !seeThrough.includes(cls))
+  );
+}
 
 /** Glyph-table rows for the sextants (two rows of 32, indexed by mask). */
 export const SEXTANT_ROW = MAX_CLASSES - 5;
@@ -66,6 +152,7 @@ export const subcellClasses: readonly RenderClass[] = [
   'building_market',
   'building_station',
   'building_part',
+  'building_woodwork',
   'water_area',
   'water_sea',
   'park',
@@ -75,6 +162,10 @@ export const subcellClasses: readonly RenderClass[] = [
   'farmland',
   'parking',
   'pitch',
+  'paving',
+  'seating',
+  'shrubs',
+  'planting',
 ];
 
 /** Per class id, 1 for `subcellClasses`, for the select shader (ids past 31 included). */
@@ -179,14 +270,23 @@ export type SubcellEdge = {
 /** A building standing (not grounds, which have no height). */
 const isBuilding = (s: Sample) => s.cls !== null && s.cls.startsWith('building') && s.height !== 0;
 
+/** Crowns and roofs share height precedence at their edge; equal heights favor the roof. */
+export function edgeForegroundWins(candidate: Sample, current: Sample): boolean {
+  const crown = candidate.cls === 'tree_crown';
+  const underCrown = current.cls === 'tree_crown';
+  if (crown && (isBuilding(current) || underCrown))
+    return (candidate.height ?? 0) > (current.height ?? 0);
+  if (underCrown && isBuilding(candidate)) return (candidate.height ?? 0) >= (current.height ?? 0);
+  return crown || (!isBuilding(current) && isBuilding(candidate));
+}
+
 /**
  * A cell's sub-cell edge, or null if it keeps its glyph. `center` is the cell pass's winner,
  * `samples` the cell's `SUB` samples in mask-bit order, and `outlined` whether a sample's
  * feature is drawn with walls at this zoom (walls trace its edge instead).
  *
- * Only an empty cell or an area (`subcellClasses`) takes part: lines and markers win their cells
- * whole. The sextant draws the cell's own area, unless it isn't a building and a sample is:
- * buildings keep their shape over the grounds, parks, and water they stand in.
+ * Lines and markers keep their cells, except a crown can reach into a road cell. Buildings
+ * keep their shape over ground areas; crowns and roofs compare heights.
  */
 export function subcellEdge(
   center: Sample,
@@ -194,10 +294,11 @@ export function subcellEdge(
   outlined: (sample: Sample) => boolean,
 ): SubcellEdge | null {
   const isArea = (s: Sample) => s.cls !== null && subcellClasses.includes(s.cls);
-  if (center.cls !== null && !isArea(center)) return null;
+  if (center.cls !== null && !isArea(center) && !roadClasses.includes(center.cls)) return null;
   let fg: Sample | null = isArea(center) ? center : null;
   for (const s of samples) {
-    if (isArea(s) && (fg === null || (!isBuilding(fg) && isBuilding(s)))) fg = s;
+    if (center.cls !== null && !isArea(center) && s.cls !== 'tree_crown') continue;
+    if (isArea(s) && (fg === null || edgeForegroundWins(s, fg))) fg = s;
   }
   if (fg === null || outlined(fg)) return null;
   const { id } = fg;
@@ -255,6 +356,7 @@ export function wallStyle(
   height: number,
   zoom: number,
 ): WallStyle | null {
+  if (kind === 'seating' && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
   if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
   return null;
@@ -326,8 +428,20 @@ export const seeThroughMask = (): number =>
 export const wallGlyph = (style: WallStyle, mask: number): string =>
   (style === 'double' ? doubleWall : singleWall)[mask]!;
 
-/** How fast each water cell flips between its glyphs, in flips per second. */
-export const WATER_RATE = 0.5;
+/**
+ * Open water: short crests (variant 1) drift east along each row over the resting glyph
+ * (variant 0). Rows are offset and move at one of two speeds; some crests are left out.
+ */
+export const WATER_RIPPLE = {
+  period: 10, // cells from one crest slot to the next along a row
+  crest: 3, // cells in a crest
+  speeds: [0.5, 0.25], // cells per second, picked per row
+  salt: 0x9e37, // row hash is cellHash(y, salt), apart from the slot hash cellHash(slot, y)
+} as const;
+
+/** The drift speed of a row's crests, in cells per second. */
+export const rippleSpeed = (y: number): number =>
+  WATER_RIPPLE.speeds[cellHash(y, WATER_RIPPLE.salt) & 1]!;
 
 /** Carriageways: they connect to each other, and become strips with curbs at Place level. */
 export const roadClasses: readonly RenderClass[] = ['road_major', 'road_mid', 'road_minor'];
@@ -393,14 +507,20 @@ export function cellHash(x: number, y: number): number {
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
-/** Water alternates glyphs; each cell flips at its own phase. `time` is 0 with reduced motion. */
+/** Water's short crests drift east along each row. `time` is 0 with reduced motion. */
 export function waterVariant(x: number, y: number, time: number, gust = 0): number {
   // A gust ruffles the water in its bands: the strong part one glyph, the edges the other, so
   // the band reads as it runs downwind (`gust` already scaled by the wind).
   if (gust >= GUST_STEPS[0]) return gust >= GUST_STEPS[1] ? 0 : 1;
-  const h = cellHash(x, y);
-  const phase = ((h >>> 8) & 255) / 255;
-  return (h + Math.floor(time * WATER_RATE + phase)) % 2;
+  const { period, crest } = WATER_RIPPLE;
+  const row = cellHash(y, WATER_RIPPLE.salt);
+  const shifted = x + ((row >>> 8) % period);
+  const pos = mod(shifted, period) - time * rippleSpeed(y);
+  const cycles = Math.floor(pos / period);
+  const along = pos - cycles * period; // [0, period)
+  const slot = Math.floor(shifted / period) + cycles;
+  // About three in four slots carry a crest.
+  return along < crest && (cellHash(slot, y) & 3) !== 0 ? 1 : 0;
 }
 
 /**
@@ -577,6 +697,14 @@ export const GRASS = {
   uprightBelow: 0.4,
 } as const;
 
+/** Broad bare-earth patches between ground cover, stable in world cells. */
+export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
+export function plantingCell(x: number, y: number, gust: number, dir: WindDir = DEFAULT_WIND_DIR) {
+  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
+    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
+    : grassCell(x, y, gust, dir);
+}
+
 /** A grass cell's glyph and tone: the tufts at rest, leaning downwind in a gust, then flat. */
 export function grassCell(
   x: number,
@@ -721,10 +849,30 @@ export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 /** Crown glyphs by role (theme.ts `tree_crown`): the rim's leaf, a thick interior, a dense core. */
 export const CrownGlyph = { rim: 0, interior: 1, core: 4 } as const;
 /**
- * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, one
- * in `coreEvery` is a dense `@`, the rest `&`. One crown in `dryEvery` is yellowing (`Tone.dry`).
+ * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, a
+ * dense `@` where value noise (`scale`, `seed`) is over `above`, except one cell in `skip`, and
+ * `&` elsewhere. One crown in `dryEvery` is yellowing (`Tone.dry`).
  */
-export const CROWN = { coreEvery: 4, dryEvery: 12 } as const;
+export const CROWN = {
+  core: { scale: 3, seed: 17, above: 0.62, skip: 3 },
+  dryEvery: 12,
+} as const;
+
+/**
+ * A crown lit as a rounded canopy (shaders/glyph.ts): its surface normal leans outward by `tilt`
+ * with at least `minZ` up, and the light is `base + gain · (normal · sun)`, within [min, max].
+ */
+export const CROWN_LIGHT = { tilt: 1.2, minZ: 0.08, base: 0.55, gain: 0.7, min: 0.38, max: 1.25 };
+
+/** `CROWN_LIGHT` at crown-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
+export function crownLight(x: number, y: number, [sx, sy, sz]: readonly number[]): number {
+  const { tilt, minZ, base, gain, min, max } = CROWN_LIGHT;
+  const z = Math.sqrt(Math.max(minZ, 1 - x * x - y * y));
+  const norm = Math.hypot(x * tilt, y * tilt, z);
+  const light = Math.hypot(sx!, sy!, sz!) || 1;
+  const dot = (x * tilt * sx! + y * tilt * sy! + z * sz!) / norm / light;
+  return Math.max(min, Math.min(max, base + gain * dot));
+}
 
 /**
  * A crown cell's glyph (theme.ts `tree_crown`): at rest the rim (`rim`: some neighbor isn't
@@ -735,21 +883,14 @@ export function foliageVariant(x: number, y: number, time = 0, gust = 0, rim = t
   const h = cellHash(x, y);
   if (gust >= TREE_WIND.step) return flutters(h, gust, time) ? 0 : 1;
   if (rim) return CrownGlyph.rim;
-  return h % CROWN.coreEvery === 0 ? CrownGlyph.core : CrownGlyph.interior;
+  const { scale, seed, above, skip } = CROWN.core;
+  return valueNoise(x, y, scale, seed) > above && h % skip !== 0
+    ? CrownGlyph.core
+    : CrownGlyph.interior;
 }
 
 /** Whether the crown of feature `id` is yellowing: one in `CROWN.dryEvery`. */
 export const crownIsDry = (id: number): boolean => cellHash(id, 5) % CROWN.dryEvery === 0;
-
-/**
- * A crown cell's tone from the sun: lit when the cell toward the sun isn't crown (`sunOpen`),
- * shaded when the one away from it isn't (`farOpen`), else the crown's own (`dry`: yellowing).
- */
-export function crownTone(sunOpen: boolean, farOpen: boolean, dry: boolean): number {
-  if (sunOpen) return Tone.light;
-  if (farOpen) return Tone.shade;
-  return dry ? Tone.dry : Tone.none;
-}
 
 /**
  * Woods as clumped crowns (SPEC.md §4): a crown per `cols × rows` block of cells, centered on a
@@ -911,7 +1052,7 @@ export function variantFor(
         return n !== null && waterClasses.includes(n);
       };
       const stroke = count >= WATER_STROKE_GLYPHS ? waterStrokeVariant(isWater, ctx.y) : null;
-      // Without a wind given, water just flips (its gust bands need the wind to be named).
+      // Without a wind given, water just ripples (its gust bands need the wind to be named).
       const gust = (ctx.wind ?? 0) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
       return stroke ?? waterVariant(ctx.x, ctx.y, ctx.time, gust);
     }
@@ -922,11 +1063,16 @@ export function variantFor(
     case 'scatter':
       return patternVariant(kind, ctx.x, ctx.y, count);
     case 'single':
+    case 'seating':
       return 0;
     case 'variant':
       return Math.min(ctx.variant ?? 0, count - 1);
     case 'ramp':
       return rampVariant(ctx.height, count);
+    case 'planting': {
+      const gust = (ctx.wind ?? 1) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
+      return Math.min(plantingCell(ctx.x, ctx.y, gust, ctx.windDir).variant, count - 1);
+    }
     case 'grass':
       return Math.min(grassVariant(ctx.x, ctx.y, ctx.time, ctx.wind, ctx.windDir), count - 1);
     case 'canopy': {
@@ -963,7 +1109,7 @@ export function selectGlyph(theme: Theme, cls: RenderClass, ctx: CellContext): s
 }
 
 export type GlyphTables = {
-  /** R8, MAX_VARIANTS × MAX_CLASSES: glyph atlas index per (variant, class id). */
+  /** RG8, MAX_VARIANTS × MAX_CLASSES: low/high glyph bytes per (variant, class id). */
   table: Uint8Array;
   /** Kind code per class id (0 = not drawn). */
   kinds: Int32Array;
@@ -973,23 +1119,31 @@ export type GlyphTables = {
   connects: Int32Array;
   /** Linear RGB per class id. */
   colors: Float32Array;
+  /** Background pigments; default to each class's glyph color. */
+  fillColors: Float32Array;
   /** Background fill strength per class id (theme.ts `ClassStyle.fill`, 0 = none). */
   fills: Float32Array;
 };
 
 /** Build the select shader's lookup tables from a theme and the glyph atlas's index. */
 export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => number): GlyphTables {
-  // The table is a byte texture, so map glyphs must come first in the atlas (theme.ts).
   const glyphIndex = (glyph: string) => {
     const index = atlasIndex(glyph);
-    if (index > 255) throw new Error(`map glyph ${glyph} has atlas index ${index}, over 255`);
+    if (index < 0 || index > MAX_GLYPHS)
+      throw new Error(`map glyph ${glyph} has atlas index ${index}, outside 0–${MAX_GLYPHS}`);
     return index;
   };
-  const table = new Uint8Array(MAX_VARIANTS * MAX_CLASSES);
+  const table = new Uint8Array(MAX_VARIANTS * MAX_CLASSES * 2);
+  const setGlyph = (entry: number, glyph: string) => {
+    const index = glyphIndex(glyph);
+    table[entry * 2] = index & 255;
+    table[entry * 2 + 1] = index >> 8;
+  };
   const kinds = new Int32Array(MAX_CLASSES);
   const counts = new Int32Array(MAX_CLASSES);
   const connectMasks = new Int32Array(MAX_CLASSES);
   const colors = new Float32Array(MAX_CLASSES * 3);
+  const fillColors = new Float32Array(MAX_CLASSES * 3);
   const fills = new Float32Array(MAX_CLASSES);
 
   for (const cls of renderClasses) {
@@ -1000,23 +1154,28 @@ export function buildGlyphTables(theme: Theme, atlasIndex: (glyph: string) => nu
     counts[id] = style.glyphs.length;
     for (let v = 0; v < MAX_VARIANTS; v++) {
       const glyph = style.glyphs[Math.min(v, style.glyphs.length - 1)]!;
-      table[id * MAX_VARIANTS + v] = glyphIndex(glyph);
+      setGlyph(id * MAX_VARIANTS + v, glyph);
     }
     for (const other of connectsTo[cls] ?? []) connectMasks[id]! |= classBit(other);
     colors[id * 3] = ((style.color >> 16) & 0xff) / 255;
     colors[id * 3 + 1] = ((style.color >> 8) & 0xff) / 255;
     colors[id * 3 + 2] = (style.color & 0xff) / 255;
+    const fillColor = style.fillColor ?? style.color;
+    fillColors[id * 3] = ((fillColor >> 16) & 0xff) / 255;
+    fillColors[id * 3 + 1] = ((fillColor >> 8) & 0xff) / 255;
+    fillColors[id * 3 + 2] = (fillColor & 0xff) / 255;
     fills[id] = style.fill ?? 0;
   }
   ridgeGlyphs.forEach((glyph, i) => {
-    table[ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i] = glyphIndex(glyph);
+    setGlyph(ROOF_ROW * MAX_VARIANTS + RIDGE_VARIANT + i, glyph);
   });
+  arrowGlyphs.forEach((glyph, i) => setGlyph(ROOF_ROW * MAX_VARIANTS + ARROW_VARIANT + i, glyph));
   for (let mask = 0; mask < 16; mask++) {
-    table[WALL_SINGLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('single', mask));
-    table[WALL_DOUBLE_ROW * MAX_VARIANTS + mask] = glyphIndex(wallGlyph('double', mask));
+    setGlyph(WALL_SINGLE_ROW * MAX_VARIANTS + mask, wallGlyph('single', mask));
+    setGlyph(WALL_DOUBLE_ROW * MAX_VARIANTS + mask, wallGlyph('double', mask));
   }
   sextantGlyphs.forEach((glyph, mask) => {
-    table[SEXTANT_ROW * MAX_VARIANTS + mask] = glyphIndex(glyph);
+    setGlyph(SEXTANT_ROW * MAX_VARIANTS + mask, glyph);
   });
-  return { table, kinds, counts, connects: connectMasks, colors, fills };
+  return { table, kinds, counts, connects: connectMasks, colors, fillColors, fills };
 }

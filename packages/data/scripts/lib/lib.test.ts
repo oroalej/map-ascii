@@ -117,6 +117,7 @@ describe('classify: street-level detail', () => {
     expect(classify({ natural: 'tree_row' }, 'line', 10)).toBe('tree');
     expect(classify({ amenity: 'bench' }, 'point', 10)).toBe('furniture');
     expect(classify({ man_made: 'flagpole' }, 'point', 10)).toBe('furniture');
+    expect(classify({ highway: 'street_lamp' }, 'point', 10)).toBe('furniture');
     expect(classify({ amenity: 'fountain' }, 'area', 10)).toBe('furniture');
     expect(classify({ entrance: 'main' }, 'point', 10)).toBe('entrance');
     expect(classify({ barrier: 'fence' }, 'line', 10)).toBe('barrier');
@@ -175,6 +176,7 @@ describe('classify: street-level detail', () => {
   it('records the kind of furniture, barrier, or roof', () => {
     expect(variantOf({ amenity: 'bench' }, 'furniture')).toBe('bench');
     expect(variantOf({ man_made: 'flagpole' }, 'furniture')).toBe('flagpole');
+    expect(variantOf({ highway: 'street_lamp' }, 'furniture')).toBe('lamp');
     expect(variantOf({ barrier: 'hedge' }, 'barrier')).toBe('hedge');
     expect(variantOf({ building: 'yes', 'roof:shape': 'gabled' }, 'building')).toBe('gabled');
     expect(variantOf({ building: 'yes' }, 'building')).toBeUndefined();

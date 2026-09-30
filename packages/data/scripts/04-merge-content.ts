@@ -1,13 +1,16 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import type { BBox } from '@atlas/shared';
+import { SubdivisionAreas, type BBox } from '@atlas/shared';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
 import { landcoverFeatures } from './lib/landcover';
+import { mergeSiteDetails } from './lib/site-detail';
+import { mergeLifeSites } from './lib/life-sites';
+import { mergeTraffic } from './lib/traffic';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
@@ -100,8 +103,13 @@ export const step: Step = {
     for await (const f of readFeatures(join(buildDir, files.normalized))) {
       features.push(f as AtlasFeature);
     }
-    const merged = mergeContent(features, content);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const merged = mergeTraffic(
+      mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+      city.life?.signals,
+      city.streets,
+      (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
+    );
     const tourProblems = checkTours(merged, content.tours, regionBounds);
     if (tourProblems.length > 0) {
       throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
@@ -110,10 +118,16 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    for (const warning of [...warnings, ...landcover.warnings]) {
+    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    const detail = mergeSiteDetails(
+      [...merged, ...parts, ...landcover.features],
+      content.details,
+      subdivisions,
+    );
+    for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }
-    await writeFeatures(join(buildDir, files.merged), [...merged, ...parts, ...landcover.features]);
+    await writeFeatures(join(buildDir, files.merged), detail.features);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +
         `${landcover.features.length} curated trees and areas; checked ${content.tours.length} tours`,

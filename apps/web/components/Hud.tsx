@@ -4,6 +4,7 @@ import {
   cityTime,
   legendEntries,
   type Atlas,
+  type FixtureVisibility,
   type LegendIcon,
   type RenderClass,
   type WindChoice,
@@ -17,13 +18,41 @@ import {
 } from '@atlas/shared';
 import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
+import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
+import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function QualityControl() {
+  const choice = useQualityStore((s) => s.choice);
+  const atlas = useAtlasInstance((s) => s.atlas);
+  const name = useSyncExternalStore(
+    (change) => atlas?.on('qualitychange', change) ?? (() => {}),
+    () => atlas?.getStats().quality.name ?? 'high',
+    () => 'high',
+  );
+  return (
+    <button
+      type="button"
+      className={styles.button}
+      title={
+        choice === 'auto' ? `Automatic quality: ${name}` : `${capitalize(choice)} drawing quality`
+      }
+      onClick={() =>
+        useQualityStore.setState({
+          choice: QUALITY_CHOICES[(QUALITY_CHOICES.indexOf(choice) + 1) % QUALITY_CHOICES.length]!,
+        })
+      }
+    >
+      Quality: {capitalize(choice)}
+    </button>
+  );
+}
 
 const WIDE = '(min-width: 640px)';
 const isWide = () => window.matchMedia(WIDE).matches;
@@ -95,7 +124,15 @@ const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
   );
 });
 
-function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
+function Legend({
+  subdivisionLabel,
+  sidewalksDerived,
+  hidden,
+}: {
+  subdivisionLabel: string;
+  sidewalksDerived: boolean;
+  hidden: boolean;
+}) {
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.05));
   const theme = useAtlasStore((s) => s.theme);
@@ -109,9 +146,17 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const [lit, setLit] = useState<{ atlas: Atlas; on: boolean } | null>(null);
   useEffect(() => atlas?.on('lightschange', (on) => setLit({ atlas, on })), [atlas]);
   const lights = lit?.atlas === atlas && lit.on;
+  const [hardware, setHardware] = useState<{ atlas: Atlas; fixtures: FixtureVisibility } | null>(
+    null,
+  );
+  useEffect(
+    () => atlas?.on('fixtureschange', (fixtures) => setHardware({ atlas, fixtures })),
+    [atlas],
+  );
+  const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life, lights }),
-    [theme, rounded, onScreen, life, lights],
+    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
@@ -121,6 +166,7 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   return (
     <details
       className={styles.legend}
+      hidden={hidden}
       open={open}
       onToggle={(e) => {
         const next = (e.target as HTMLDetailsElement).open;
@@ -147,14 +193,6 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
     </details>
   );
 }
-
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
-const prefersReducedMotion = () => window.matchMedia(REDUCED_MOTION).matches;
-const subscribeReducedMotion = (onChange: () => void) => {
-  const query = window.matchMedia(REDUCED_MOTION);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-};
 
 /** Whether the life layer's agents are on screen (never with reduced motion). */
 function useLifeShown() {
@@ -385,12 +423,14 @@ export function Hud({
   subdivisionLabel,
   climate,
   timezone,
+  sidewalksDerived = true,
 }: {
   city: string;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (its pack's `timezone`). */
   timezone?: string | undefined;
+  sidewalksDerived?: boolean;
 }) {
   useSubdivisionTracking(city);
   const hasCamera = useAtlasStore((s) => s.camera !== null);
@@ -405,7 +445,11 @@ export function Hud({
         <div className={styles.row}>
           <ZoomReadout />
         </div>
-        {!panelOpen && <Legend subdivisionLabel={subdivisionLabel} />}
+        <Legend
+          subdivisionLabel={subdivisionLabel}
+          sidewalksDerived={sidewalksDerived}
+          hidden={panelOpen}
+        />
       </div>
       <div className={styles.bottomLeft} data-touring={touring}>
         <ScaleBar />
@@ -424,6 +468,7 @@ export function Hud({
         </div>
         <div className={styles.row}>
           <LifeControls climate={climate} timezone={timezone} />
+          <QualityControl />
         </div>
         <ProcessionControls />
       </div>

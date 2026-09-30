@@ -5,9 +5,17 @@
  * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
-import { featureZoomBand, type ZoomBand } from '@atlas/shared';
+import { featureZoomBand, LIFE_SITE_KINDS, SignalLayout, type ZoomBand } from '@atlas/shared';
 import earcut from 'earcut';
-import { classId, Flags, markerFor, variantCode, type RenderClass } from '../classes';
+import {
+  classId,
+  Flags,
+  Marking,
+  markingByte,
+  markerFor,
+  variantCode,
+  type RenderClass,
+} from '../classes';
 import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '../labels';
 import {
   CANAL_KIND,
@@ -20,15 +28,24 @@ import {
   roostClasses,
   type LifeGeometry,
 } from '../life/geometry';
-import { ROAD_AREA_ZOOM, ROOF_ZOOM } from '../glyphs/select';
-import { FLOOD, SHOP } from '../life/config';
+import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
+import { stripRing } from '../life/terrain';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
+import { DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP } from '../life/config';
 import { habitatOf } from '../life/birds';
-import { placeTileLamps, type LitLine } from '../life/lights';
+import { LampState, placeSeed, placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
 const FLAT_ROOF = 1;
+const CROWN_SWEEP_FACTOR =
+  1 +
+  Math.max(...Object.values(WIND_PRESETS)) *
+    (1 + WIND_VARIATION.breathe) *
+    Math.hypot(SWAY.bend, SWAY.flutter * 0.8);
 
 export const EXTENT = 4096;
+/** The world's width in mercator meters. */
+export const MERCATOR_METERS = 40_075_016.686;
 
 /** Layers the renderer doesn't draw yet: event pins arrive with the timeline (Phase 4). */
 export const skippedLayers: ReadonlySet<string> = new Set(['events']);
@@ -57,6 +74,8 @@ export type TileLabel = {
   band: ZoomBand;
   /** Streets: the direction of the run the name sits on (radians, tile y down). */
   angle?: number;
+  /** Straight-run endpoints, so a label is never longer than the road beneath it. */
+  run?: readonly [readonly [number, number], readonly [number, number]];
 };
 
 const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
@@ -94,10 +113,9 @@ const RUN_BEND = (15 * Math.PI) / 180;
  * The longest nearly straight run of a line (consecutive segments within `RUN_BEND` of the
  * run's first one): its midpoint, direction, and length, where a street's name goes.
  */
-export function longestRun(
-  line: readonly TilePoint[],
-): { mid: TilePoint; angle: number; length: number } | null {
-  let best: { mid: TilePoint; angle: number; length: number } | null = null;
+type Run = { mid: TilePoint; angle: number; length: number; from: TilePoint; to: TilePoint };
+export function longestRun(line: readonly TilePoint[]): Run | null {
+  let best: Run | null = null;
   let start = 0;
   while (start < line.length - 1) {
     const a = line[start]!;
@@ -115,7 +133,13 @@ export function longestRun(
     const last = line[end]!;
     const length = Math.hypot(last.x - a.x, last.y - a.y);
     if (length > 0 && (!best || length > best.length)) {
-      best = { mid: { x: (a.x + last.x) / 2, y: (a.y + last.y) / 2 }, angle, length };
+      best = {
+        mid: { x: (a.x + last.x) / 2, y: (a.y + last.y) / 2 },
+        angle,
+        length,
+        from: a,
+        to: last,
+      };
     }
     start = end;
   }
@@ -143,7 +167,7 @@ export type TileGeometry = GroundGeometry & {
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
    * trunk in tile units, how far it swings.
    */
-  crowns: GeometryArrays & { indices: Uint32Array };
+  crowns: GeometryArrays & { indices: Uint32Array; surface: Float32Array };
   /**
    * Region-only features (the pipeline's `region` flag), kept apart: they are tiled only to
    * `REGION_TILE_MAX_ZOOM`, and deeper views draw them from that zoom's tile under the
@@ -157,6 +181,30 @@ export type TileGeometry = GroundGeometry & {
 
 /** Structural subset of `@mapbox/vector-tile`, so tests can pass plain objects. */
 export type TilePoint = { x: number; y: number };
+
+/** Offset a mapped sidewalk's continuous center line, including its bends. */
+export function sidewalkLine(line: readonly TilePoint[], offset: number): TilePoint[] {
+  const points = line.filter((p, i) => i === 0 || p.x !== line[i - 1]!.x || p.y !== line[i - 1]!.y);
+  if (points.length < 2) return points.map((p) => ({ ...p }));
+  const normal = (a: TilePoint, b: TilePoint) => {
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
+  };
+  return points.flatMap((p, i) => {
+    const before = normal(points[Math.max(0, i - 1)]!, points[Math.max(1, i)]!);
+    const after = normal(
+      points[Math.min(i, points.length - 2)]!,
+      points[Math.min(i + 1, points.length - 1)]!,
+    );
+    const x = before.x + after.x,
+      y = before.y + after.y;
+    const dot = x * after.x + y * after.y;
+    const scale = dot > 0 ? offset / dot : Infinity;
+    if (dot > 0 && Math.hypot(x * scale, y * scale) <= 2 * Math.abs(offset))
+      return [{ x: p.x + x * scale, y: p.y + y * scale }];
+    return [before, after].map((n) => ({ x: p.x + n.x * offset, y: p.y + n.y * offset }));
+  });
+}
 export type TileFeatureLike = {
   type: 0 | 1 | 2 | 3;
   properties: Record<string, string | number | boolean>;
@@ -336,6 +384,7 @@ const LIGHT = { x: 0.45, y: 0.89 };
 
 /** Sides of the polygon a tree's crown is drawn as. */
 export const CROWN_SIDES = 24;
+const CROWN_CIRCUMSCRIPTION = 1 / Math.cos(Math.PI / CROWN_SIDES);
 
 /** A 32-bit FNV-1a hash of a string: a feature's seed, the same in every tile. */
 export function hashString(text: string): number {
@@ -529,7 +578,7 @@ export function lngLatToTile({ z, x, y }: TileAddress, lng: number, lat: number)
 export function metersPerUnit({ z, y }: TileAddress): number {
   const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
   const lat = Math.atan(Math.sinh(n));
-  return (40_075_016.686 * Math.cos(lat)) / 2 ** z / EXTENT;
+  return (MERCATOR_METERS * Math.cos(lat)) / 2 ** z / EXTENT;
 }
 
 /**
@@ -558,6 +607,56 @@ function addStrip(
   fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
 
+/** Side of the way in downward-positive tile Y: left is (dy, -dx). */
+function addSideStrip(
+  fills: Builder,
+  a: TilePoint,
+  b: TilePoint,
+  inner: number,
+  outer: number,
+  side: number,
+  vertex: (p: TilePoint) => void,
+) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!length) return;
+  const dx = (b.x - a.x) / length,
+    dy = (b.y - a.y) / length;
+  const nx = dy * side,
+    ny = -dx * side;
+  const base = fills.count;
+  for (const [end, along, across] of [
+    [a, -inner, inner],
+    [a, -inner, outer],
+    [b, inner, outer],
+    [b, inner, inner],
+  ] as const)
+    vertex({ x: end.x + dx * along + nx * across, y: end.y + dy * along + ny * across });
+  fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/** Exact dimensions; marking quads must not inherit road strips' extended caps. */
+function addMarkingQuad(
+  fills: Builder,
+  p: TilePoint,
+  bearing: number,
+  length: number,
+  width: number,
+  vertex: (p: TilePoint) => void,
+) {
+  const theta = (bearing * Math.PI) / 180,
+    dx = Math.sin(theta),
+    dy = -Math.cos(theta);
+  const base = fills.count;
+  for (const [along, across] of [
+    [-length / 2, -width / 2],
+    [-length / 2, width / 2],
+    [length / 2, width / 2],
+    [length / 2, -width / 2],
+  ])
+    vertex({ x: p.x + dx * along! - dy * across!, y: p.y + dy * along! + dx * across! });
+  fills.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
 /**
  * Convert a tile's layers into fill triangles, line segments, and points.
  * - Polygons are triangulated with earcut.
@@ -583,8 +682,11 @@ export function buildTileGeometry(
   const main = ground();
   const regional = ground();
   const crowns = new Builder();
+  const crownSurface: number[] = [];
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
+  // Append new walking lines after the original lines to retain their stable indices/seeds.
+  const walkingLines: { points: TilePoint[]; width: number; id: number }[] = [];
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
 
@@ -604,7 +706,7 @@ export function buildTileGeometry(
       );
       const rawHeight = Number(feature.properties.height ?? 0);
       const height = Number.isFinite(rawHeight)
-        ? Math.max(0, Math.min(255, Math.round(rawHeight)))
+        ? Math.max(rawHeight > 0 ? 1 : 0, Math.min(255, Math.round(rawHeight)))
         : 0;
       const landmark = feature.properties.landmark === true;
       const { name: featureName, label_lng: lng, label_lat: lat } = feature.properties;
@@ -645,11 +747,37 @@ export function buildTileGeometry(
       ) {
         labels.push({ id, text, lng, lat, ...curated });
       }
-      const flags = landmark ? Flags.landmark : 0;
+      let flags = landmark ? Flags.landmark : 0;
+      const frontage = ['food', 'retail', 'service', 'commercial'].indexOf(
+        String(feature.properties.frontage),
+      );
+      if (frontage >= 0 && isBuilding(className))
+        flags |=
+          Flags.frontage |
+          (frontage & 1 ? Flags.frontageLow : 0) |
+          (frontage & 2 ? Flags.frontageHigh : 0);
       const variant = variantCode(className, feature.properties.variant);
       const width = Number(feature.properties.width ?? 0);
       const marker = markerFor[className as keyof typeof markerFor];
       const place = isRegion ? undefined : placeFor(className, variant);
+      const siteKind = LIFE_SITE_KINDS.indexOf(
+        feature.properties.life_site as (typeof LIFE_SITE_KINDS)[number],
+      );
+      if (
+        !isRegion &&
+        tile &&
+        siteKind >= 0 &&
+        typeof feature.properties.life_lng === 'number' &&
+        typeof feature.properties.life_lat === 'number'
+      ) {
+        const p = lngLatToTile(tile, feature.properties.life_lng, feature.properties.life_lat);
+        life.site(
+          p,
+          siteKind,
+          Number(feature.properties.life_modes ?? 0),
+          !!feature.properties.life_covered,
+        );
+      }
 
       const addPoint = (p: TilePoint, klass: number) =>
         points.vertex(p.x, p.y, klass, height, flags, id, variant);
@@ -666,13 +794,30 @@ export function buildTileGeometry(
       const addCrown = (p: TilePoint, index = 0) => {
         if (!unitMeters || !(crown > 0)) return;
         const ring = crownRing(p, crown / 2 / unitMeters, crownSeed + Math.imul(index, 0x9e3779b9));
-        const triangles = ringTriangles(ring);
+        // A conservative swept crown envelope: branches lean and flutter in any wind direction.
+        // The flutter bound follows swayOffset, including its wake term, independently of cells.
+        const radius = Math.max(...ring.map((q) => Math.hypot(q.x - p.x, q.y - p.y)));
+        const sweptRadius = radius * CROWN_SWEEP_FACTOR;
+        const envelope = Array.from({ length: CROWN_SIDES + 1 }, (_, i) => {
+          const angle = (i * 2 * Math.PI) / CROWN_SIDES;
+          const r = sweptRadius * CROWN_CIRCUMSCRIPTION;
+          return { x: p.x + Math.cos(angle) * r, y: p.y + Math.sin(angle) * r };
+        });
+        life.area('parking-exclusion', [envelope]);
         const crownCls = classId('tree_crown' satisfies RenderClass);
         const reach = (q: TilePoint) => Math.hypot(q.x - p.x, q.y - p.y);
         const first = crowns.count;
-        for (const q of ring)
-          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, reach(q));
-        for (const i of triangles) crowns.indices.push(first + i);
+        // A center vertex gives both wind reach and canopy lighting an interior, rather
+        // than interpolating only between rim vertices. The radial outline is star-shaped.
+        crowns.vertex(p.x, p.y, crownCls, height, flags, id, variant, 0);
+        crownSurface.push(0, 0);
+        for (const q of ring.slice(0, -1)) {
+          const r = reach(q);
+          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, r);
+          crownSurface.push((q.x - p.x) / (r || 1), (q.y - p.y) / (r || 1));
+        }
+        for (let i = 0; i < CROWN_SIDES; i++)
+          crowns.indices.push(first, first + 1 + i, first + 1 + ((i + 1) % CROWN_SIDES));
       };
       const isTree = className === 'tree' && !isRegion;
 
@@ -680,11 +825,144 @@ export function buildTileGeometry(
         .loadGeometry()
         .map((ring) => ring.map((p) => ({ x: p.x * scale, y: p.y * scale })));
 
+      if (!isRegion && feature.properties.detail_route) {
+        for (const line of rings) life.line(line, LifeLine.path, width, id);
+        continue;
+      }
+
       if (feature.type === 1) {
         for (const ring of rings) {
           for (const p of ring) {
+            if (
+              !isRegion &&
+              className === 'furniture' &&
+              variant === 3 &&
+              feature.properties.flag === 'PH'
+            ) {
+              life.flagpole(p, 1);
+            }
+            if (className === 'furniture' && variant === 14 && unitMeters && tile) {
+              if (!isRegion && inTileAt(p)) {
+                const heads = Math.max(1, Math.min(4, Number(feature.properties.lamp_heads ?? 1)));
+                const reach = Number(feature.properties.lamp_reach ?? 0.7) / unitMeters;
+                const worldScale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
+                const seed =
+                  (placeSeed(
+                    (tile.x * EXTENT + p.x) * worldScale,
+                    (tile.y * EXTENT + p.y) * worldScale,
+                  ) >>>
+                    8) &
+                  31;
+                for (let h = 0; h < heads; h++) {
+                  const angle =
+                    ((Number(feature.properties.lamp_bearing ?? 0) + (h * 360) / heads) * Math.PI) /
+                    180;
+                  const x = p.x + Math.sin(angle) * reach,
+                    y = p.y - Math.cos(angle) * reach;
+                  life.addLamps(
+                    [p.x, p.y, LampState.working, seed, x, y, p.x, p.y],
+                    true,
+                    feature.properties.lamp_style === 'lantern' ? 'lantern' : 'streetlight',
+                  );
+                }
+              }
+              continue;
+            }
+            if (className === 'furniture' && (variant === 12 || variant === 13)) {
+              if (strips && unitMeters && !isRegion) {
+                const stop = variant === 12;
+                const bearing = Number(
+                  feature.properties[stop ? 'stop_bearing' : 'arrow_bearing'] ?? 0,
+                );
+                const road = classId(
+                  String(feature.properties[stop ? 'stop_road' : 'arrow_road'] ?? 'road_minor'),
+                );
+                const width = Number(feature.properties[stop ? 'stop_width' : 'arrow_width'] ?? 3);
+                addMarkingQuad(
+                  fills,
+                  p,
+                  bearing,
+                  (stop ? 0.5 : 3) / unitMeters,
+                  width / unitMeters,
+                  (q) =>
+                    fills.vertex(
+                      q.x,
+                      q.y,
+                      road,
+                      0,
+                      Flags.corridor | Flags.crossing,
+                      id,
+                      markingByte(stop ? Marking.stop : Marking.arrow, bearing),
+                    ),
+                );
+              }
+              continue;
+            }
+            if (className === 'furniture' && variant === 7) {
+              if (unitMeters && !isRegion) {
+                const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
+                const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
+                const along = 1.5 / unitMeters;
+                life.area('crossing', [
+                  stripRing(
+                    { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along },
+                    { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along },
+                    halfWidth,
+                  ),
+                ]);
+                // Extend to the curb so mapped sidewalks and walking ways can attach safely.
+                const reach = halfWidth + 1 / unitMeters;
+                walkingLines.push({
+                  points: [
+                    { x: p.x - Math.cos(theta) * reach, y: p.y - Math.sin(theta) * reach },
+                    { x: p.x + Math.cos(theta) * reach, y: p.y + Math.sin(theta) * reach },
+                  ],
+                  width: 3,
+                  id: hashString(`${featureId}/crossing`),
+                });
+              }
+              if (strips && unitMeters) {
+                const bearing = Number(feature.properties.crossing_bearing ?? 0);
+                const theta = (bearing * Math.PI) / 180;
+                const reach = 1.5 / unitMeters;
+                const a = { x: p.x - Math.sin(theta) * reach, y: p.y + Math.cos(theta) * reach };
+                const b = { x: p.x + Math.sin(theta) * reach, y: p.y - Math.cos(theta) * reach };
+                const road = classId(String(feature.properties.crossing_road ?? 'road_minor'));
+                addStrip(
+                  fills,
+                  a,
+                  b,
+                  Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters,
+                  (q) =>
+                    fills.vertex(
+                      q.x,
+                      q.y,
+                      road,
+                      0,
+                      Flags.corridor | Flags.crossing,
+                      id,
+                      markingByte(Marking.crosswalk, bearing),
+                    ),
+                );
+              }
+              continue;
+            }
+            if (className === 'furniture' && variant === 8) {
+              if (!isRegion)
+                life.signal(
+                  p,
+                  Number(feature.properties.signal_radius ?? 4),
+                  Number(feature.properties.signal_a ?? -1),
+                  Number(feature.properties.signal_b ?? 90),
+                  feature.properties.life_signal === 'mapped',
+                  feature.properties.signal_layout === undefined
+                    ? undefined
+                    : SignalLayout.parse(JSON.parse(String(feature.properties.signal_layout))),
+                );
+              continue;
+            }
             if (marker || landmark) addMarkers(p);
-            else addPoint(p, cls);
+            else if (!Number.isFinite(Number(feature.properties.seat_bearing))) addPoint(p, cls);
             if (landmark && !isRegion && unitMeters && inTileAt(p)) {
               life.flood(p, FLOOD.pointRadius / 2 / unitMeters);
             }
@@ -694,10 +972,21 @@ export function buildTileGeometry(
             if (isTree && inTile) life.perch(p);
             if (className === 'building_station' && !isRegion) life.station(p);
             if (className === 'building_market' && !isRegion) life.market(p);
+            if (
+              !isRegion &&
+              className === 'furniture' &&
+              variant >= 9 &&
+              variant <= 11 &&
+              unitMeters
+            ) {
+              life.commerceAt(p);
+              life.shop(p, SHOP.pointRadius / 2 / unitMeters);
+            }
             if (className === 'building_market' && !isRegion && unitMeters && inTile) {
               life.shop(p, SHOP.pointRadius / 2 / unitMeters);
             }
-            if (place && inTile) life.place(p, place, 0);
+            if (place && inTile)
+              life.place(p, place, 0, false, Number(feature.properties.seat_bearing ?? NaN));
           }
         }
       } else if (feature.type === 2) {
@@ -715,6 +1004,7 @@ export function buildTileGeometry(
               lng: slng,
               lat: slat,
               angle: run.angle,
+              run: [tileToLngLat(tile, run.from), tileToLngLat(tile, run.to)],
             });
           }
         }
@@ -732,6 +1022,33 @@ export function buildTileGeometry(
               addStrip(fills, a, b, width / 2 / unitMeters, (p) =>
                 fills.vertex(p.x, p.y, cls, 0, flags | Flags.corridor, id),
               );
+              const sidewalk = feature.properties.sidewalk;
+              for (const side of ['left', 'right'] as const) {
+                if (sidewalk !== 'both' && sidewalk !== side) continue;
+                const sidewalkWidth = Number(
+                  feature.properties[`sidewalk_${side}_width`] ??
+                    feature.properties.sidewalk_width ??
+                    2,
+                );
+                if (sidewalkWidth > 0)
+                  addSideStrip(
+                    fills,
+                    a,
+                    b,
+                    width / 2 / unitMeters,
+                    (width / 2 + sidewalkWidth) / unitMeters,
+                    side === 'left' ? 1 : -1,
+                    (p) =>
+                      fills.vertex(
+                        p.x,
+                        p.y,
+                        classId('path'),
+                        0,
+                        flags | Flags.corridor | Flags.sidewalk,
+                        id,
+                      ),
+                  );
+              }
             }
           }
         }
@@ -751,7 +1068,49 @@ export function buildTileGeometry(
             : isCanal
               ? LifeLine.canal
               : lifeLineFor[className];
-        if (lifeLine !== undefined) for (const line of rings) life.line(line, lifeLine, width);
+        if (!isRegion && unitMeters && lifeLine !== undefined && lifeLine <= LifeLine.roadMinor) {
+          for (const line of rings) {
+            for (let i = 1; i < line.length; i++) {
+              const ring = stripRing(
+                line[i - 1]!,
+                line[i]!,
+                (width || DEFAULT_ROAD_WIDTH_M) / 2 / unitMeters,
+              );
+              if (ring.length) life.area('carriageway', [ring]);
+            }
+            if (feature.properties.sidewalk_src === 'derived') continue;
+            for (const side of ['left', 'right'] as const) {
+              if (feature.properties.sidewalk !== 'both' && feature.properties.sidewalk !== side)
+                continue;
+              const sidewalkWidth = Number(
+                feature.properties[`sidewalk_${side}_width`] ??
+                  feature.properties.sidewalk_width ??
+                  2,
+              );
+              if (!(sidewalkWidth > 0)) continue;
+              walkingLines.push({
+                points: sidewalkLine(
+                  line,
+                  (((width || DEFAULT_ROAD_WIDTH_M) / 2 + sidewalkWidth / 2) / unitMeters) *
+                    (side === 'left' ? 1 : -1),
+                ),
+                width: sidewalkWidth,
+                id: hashString(`${featureId}/sidewalk-${side}`),
+              });
+            }
+          }
+        }
+        if (lifeLine !== undefined) {
+          const oneway =
+            feature.properties.oneway === -1 ? -1 : feature.properties.oneway === 1 ? 1 : 0;
+          for (const line of rings) life.line(line, lifeLine, width, hashString(featureId), oneway);
+        }
+        if (
+          !isRegion &&
+          (className === 'barrier' || className === 'water_river' || className === 'water_stream')
+        ) {
+          for (const line of rings) life.obstacle(line, false);
+        }
         // Streetlights line major and secondary roads (life/lights.ts), placed once all are in.
         if (lifeLine === LifeLine.roadMajor || lifeLine === LifeLine.roadMid) {
           for (const line of rings) litLines.push({ points: line, width });
@@ -760,7 +1119,24 @@ export function buildTileGeometry(
         if (landmark && first && first.length > 0) addMarkers(first[Math.floor(first.length / 2)]!);
       } else if (feature.type === 3) {
         let largest: { ring: TilePoint[]; area: number } | undefined;
+        // What walkers and parked cars keep out of: solid buildings (not grounds) and water.
+        const overhead = feature.properties.detail_overhead === true;
+        const solid = !overhead && isBuilding(className) && height > 0;
+        const standingWater = className === 'water_area' || className === 'water_sea';
+        const obstacle =
+          !!feature.properties.detail_blocked ||
+          solid ||
+          standingWater ||
+          (!overhead && className === 'building_part') ||
+          className === 'water_river' ||
+          className === 'water_stream';
         for (const polygon of classifyRings(rings)) {
+          if (!isRegion) {
+            if (className === 'parking') life.area('parking', polygon);
+            else if (solid || standingWater || feature.properties.detail_blocked)
+              life.area('blocked', polygon, standingWater);
+            else if (className === 'trees') life.area('parking-exclusion', polygon);
+          }
           const base = fills.count;
           const coords: number[] = [];
           const holes: number[] = [];
@@ -797,6 +1173,7 @@ export function buildTileGeometry(
           const triangles = earcut(coords, holes.length > 0 ? holes : null, 2);
           for (const i of triangles) fills.indices.push(base + i);
           const outer = polygon[0]!;
+          if (!isRegion && obstacle) life.obstacle(outer, true);
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           if (!isRegion && className === 'parking' && unitMeters) {
             for (const { p, hx, hy } of parkingStalls(polygon, unitMeters)) life.spot(p, hx, hy);
@@ -816,7 +1193,8 @@ export function buildTileGeometry(
             life.flood(center, reach);
           }
           // A shop or market glows while it is open (life/lights.ts), from its tile.
-          if (!isRegion && className === 'building_market' && inTileAt(center)) {
+          if (!isRegion && (className === 'building_market' || frontage >= 0)) {
+            life.commerceAt(center);
             const reach = Math.max(
               ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
             );
@@ -840,6 +1218,9 @@ export function buildTileGeometry(
     }
   }
 
+  for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
+  if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
+
   if (unitMeters && tile) {
     const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };
     life.addLamps(placeTileLamps(litLines, unitMeters, EXTENT, origin));
@@ -852,7 +1233,11 @@ export function buildTileGeometry(
   });
   return {
     ...finish(main),
-    crowns: { ...crowns.finish(), indices: Uint32Array.from(crowns.indices) },
+    crowns: {
+      ...crowns.finish(),
+      indices: Uint32Array.from(crowns.indices),
+      surface: Float32Array.from(crownSurface),
+    },
     region: finish(regional),
     labels,
     life: life.finish(),
@@ -882,6 +1267,7 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
   out.push(
     geometry.fills.indices.buffer as ArrayBuffer,
     geometry.crowns.indices.buffer as ArrayBuffer,
+    geometry.crowns.surface.buffer as ArrayBuffer,
     region.fills.indices.buffer as ArrayBuffer,
     ...lifeTransferables(geometry.life),
   );

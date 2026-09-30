@@ -1,4 +1,6 @@
 import type { AtlasClass, TileLayer } from '@atlas/shared';
+import { siteOfTags } from './life-sites';
+import { frontageOf } from './frontage';
 
 export type Tags = Readonly<Record<string, string | undefined>>;
 export type GeometryKind = 'point' | 'line' | 'area';
@@ -57,7 +59,14 @@ const PALM =
  * (OSM's `leaf_type` has no palm value), else its `leaf_type`, else unknown.
  */
 export function treeKind(tags: Tags): TreeKind | undefined {
-  const taxonomy = [tags.genus, tags.species, tags['species:en'], tags.taxon, tags['taxon:en']];
+  const taxonomy = [
+    tags.genus,
+    tags.species,
+    tags['species:en'],
+    tags.taxon,
+    tags['taxon:en'],
+    tags.trees,
+  ];
   if (taxonomy.some((value) => value !== undefined && PALM.test(value))) return 'palm';
   if (tags.leaf_type === 'needleleaved' || tags.leaf_type === 'broadleaved') return tags.leaf_type;
   return undefined;
@@ -95,9 +104,20 @@ export function treeSize(tags: Tags): { height: number; crown: number } {
  * when it is a siding, spur, or yard, if any.
  */
 export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefined {
+  if (atlasClass === 'path' && tags.footway === 'crossing' && tags.crossing !== 'unmarked')
+    return 'crossing';
   if (atlasClass === 'tree' || atlasClass === 'trees') return treeKind(tags);
   if (atlasClass === 'furniture') {
-    return furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k);
+    if (tags.highway === 'street_lamp') return 'lamp';
+    if (tags.highway === 'stop') return 'traffic_stop';
+    if (tags.highway === 'traffic_signals') return 'signals';
+    if (markedCrossing(tags)) return 'crossing';
+    const frontage = frontageOf(tags);
+    if (frontage && frontage !== 'commercial') return `shop_${frontage}`;
+    return (
+      siteOfTags(tags)?.kind ??
+      furnitureKinds.find((k) => tags.amenity === k || tags.man_made === k)
+    );
   }
   if (atlasClass === 'barrier') return barrierKinds.find((k) => tags.barrier === k);
   // Sidings, spurs, and yards, where trains stand by (the renderer's life layer).
@@ -107,7 +127,12 @@ export function variantOf(tags: Tags, atlasClass: AtlasClass): string | undefine
 }
 
 const isFurniture = (tags: Tags) =>
-  oneOf(tags.amenity, 'bench', 'fountain') || tags.man_made === 'flagpole';
+  oneOf(tags.amenity, 'bench', 'fountain') ||
+  tags.man_made === 'flagpole' ||
+  tags.highway === 'street_lamp';
+export const markedCrossing = (tags: Tags) =>
+  oneOf(tags.crossing, 'zebra', 'marked', 'uncontrolled', 'traffic_signals') ||
+  (tags['crossing:markings'] !== undefined && tags['crossing:markings'] !== 'no');
 const isBarrier = (tags: Tags) => oneOf(tags.barrier, ...barrierKinds);
 
 const placeLabels = ['city', 'town', 'village', 'suburb', 'quarter', 'neighbourhood'];
@@ -121,6 +146,10 @@ export function classify(
   kind: GeometryKind,
   subdivisionLevel: number,
 ): AtlasClass | null {
+  // A transit point draws as its furniture glyph; areas (a station's grounds) classify as usual
+  // and keep only their site anchor (03-normalize.ts).
+  if (kind === 'point' && !tags.building && siteOfTags(tags))
+    return tags.entrance ? 'entrance' : 'furniture';
   if (tags.boundary === 'administrative') {
     return kind === 'area' && tags.admin_level === String(subdivisionLevel)
       ? 'admin_subdivision'
@@ -128,12 +157,15 @@ export function classify(
   }
 
   if (kind === 'point') {
+    if (frontageOf(tags) && tags.atlas_in_building === 'yes') return null;
+    if (oneOf(tags.highway, 'traffic_signals', 'stop') || markedCrossing(tags)) return 'furniture';
     if (oneOf(tags.place, ...placeLabels) && tags.name) return 'place_label';
     const building = buildingKind(tags);
     if (building) return building;
     if (isMonument(tags)) return 'monument';
     if (tags.natural === 'tree') return 'tree';
     if (isFurniture(tags)) return 'furniture';
+    if (frontageOf(tags)) return 'furniture';
     if (tags.entrance !== undefined) return 'entrance';
     if (isBarrier(tags)) return 'barrier';
     return null;
@@ -160,7 +192,9 @@ export function classify(
   if (tags.natural === 'water' || tags.water !== undefined) return 'water_area';
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
-  if (tags.natural === 'wood' || tags.landuse === 'forest') return 'trees';
+  if (tags.natural === 'wood' || oneOf(tags.landuse, 'forest', 'orchard')) return 'trees';
+  if (oneOf(tags.natural, 'scrub', 'heath') || oneOf(tags.landuse, 'plant_nursery', 'cemetery'))
+    return 'grass';
   if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
   if (tags.natural === 'grassland' || tags.leisure === 'recreation_ground') return 'grass';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';
@@ -172,11 +206,58 @@ export function classify(
 }
 
 /** Typical carriageway widths in meters, when OSM gives neither `width` nor `lanes`. */
-const defaultRoadWidths: Partial<Record<AtlasClass, number>> = {
+export const defaultRoadWidths: Readonly<Partial<Record<AtlasClass, number>>> = {
   road_major: 14,
   road_mid: 10,
   road_minor: 6,
 };
+
+export function onewayOf(tags: Tags): -1 | 0 | 1 {
+  if (oneOf(tags.oneway, 'yes', 'true', '1')) return 1;
+  if (oneOf(tags.oneway, '-1', 'reverse')) return -1;
+  if (tags.oneway !== undefined) return 0;
+  return oneOf(tags.junction, 'roundabout', 'circular') ? 1 : 0;
+}
+
+/** A tagged side, including explicit absence, prevents speculative derivation. */
+export function sidewalkOf(tags: Tags):
+  | {
+      sidewalk: 'both' | 'left' | 'right' | 'none';
+      width: number;
+      leftWidth: number;
+      rightWidth: number;
+    }
+  | undefined {
+  if (
+    !['sidewalk', 'sidewalk:both', 'sidewalk:left', 'sidewalk:right'].some(
+      (k) => tags[k] !== undefined,
+    )
+  )
+    return undefined;
+  const present = (tag: string | undefined, fallback: boolean) =>
+    tag === undefined ? fallback : oneOf(tag, 'yes', 'both', 'left', 'right');
+  const general = tags.sidewalk;
+  const both = present(tags['sidewalk:both'], general === 'both' || general === 'yes');
+  const left = present(
+    tags['sidewalk:left'],
+    tags['sidewalk:both'] !== undefined ? both : both || general === 'left',
+  );
+  const right = present(
+    tags['sidewalk:right'],
+    tags['sidewalk:both'] !== undefined ? both : both || general === 'right',
+  );
+  const meters = (tag: string | undefined, fallback: number) => {
+    const value = Number.parseFloat(tag ?? '');
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 10) / 10 : fallback;
+  };
+  const width = meters(tags['sidewalk:both:width'], meters(tags['sidewalk:width'], 2));
+  return {
+    sidewalk: left && right ? 'both' : left ? 'left' : right ? 'right' : 'none',
+    width,
+    leftWidth: meters(tags['sidewalk:left:width'], width),
+    rightWidth: meters(tags['sidewalk:right:width'], width),
+  };
+}
 
 /** Road width in meters: `width`, else `lanes` × 3.2, else a class default. */
 export function roadWidth(tags: Tags, atlasClass: AtlasClass): number | undefined {

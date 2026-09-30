@@ -1,5 +1,5 @@
 import type { PlaceKind } from '@atlas/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import {
   activityLevels,
@@ -92,6 +92,56 @@ describe('random', () => {
   });
 });
 
+describe('inactive walkers', () => {
+  for (const kind of ['person', 'dog', 'cat'] as const)
+    it(`freezes an inactive ${kind} without clearance work and resumes when active`, () => {
+      const { life, m } = alone(
+        geometry([
+          [
+            LifeLine.path,
+            [
+              [0, 1000],
+              [4096, 1000],
+            ],
+            2,
+          ],
+        ]),
+        { kind, x: 1000, y: 1000, d: 1000, speed: perMeter, rank: 0.9, pause: 1 },
+      );
+      const guard = vi.fn(() => true);
+      const before = structuredClone(m);
+      for (let i = 0; i < 20; i++)
+        life.step(
+          0.1,
+          undefined,
+          undefined,
+          undefined,
+          {
+            rain: 0,
+            levels: { ...activityLevels(1), [kind]: 0.1 },
+          },
+          guard,
+        );
+      expect(m).toEqual(before);
+      expect(guard).not.toHaveBeenCalled();
+
+      for (let i = 0; i < 20; i++)
+        life.step(
+          0.1,
+          undefined,
+          undefined,
+          undefined,
+          {
+            rain: 0,
+            levels: { ...activityLevels(1), [kind]: 1 },
+          },
+          guard,
+        );
+      expect(m.d).toBeGreaterThan(before.d);
+      expect(guard).toHaveBeenCalled();
+    });
+});
+
 describe('laneOffset', () => {
   it('drives down the middle of the right half of a two-lane street', () => {
     expect(laneOffset(6, 1.8, 0.3)).toBeCloseTo(1.5);
@@ -129,6 +179,17 @@ describe('TileLife', () => {
     const a = new TileLife(tile, road, 42);
     const b = new TileLife(tile, road, 42);
     expect(a.movers.map((m) => [m.x, m.y, m.dir])).toEqual(b.movers.map((m) => [m.x, m.y, m.dir]));
+  });
+
+  it('uses one-way spawn flow without consuming additional random draws', () => {
+    const { oneway: _unused, ...legacy } = road;
+    const a = new TileLife(tile, legacy, 42);
+    const b = new TileLife(tile, { ...road, oneway: Int8Array.of(-1) }, 42);
+    const draws = (life: TileLife) =>
+      life.movers.map((m) => [m.vehicle, m.speed, m.paint, m.lane, m.rank, m.d, m.routing]);
+    expect(draws(b)).toEqual(draws(a));
+    expect(b.movers.every((m) => m.dir === -1)).toBe(true);
+    expect(b.parked).toEqual(a.parked);
   });
 
   it('spawns vehicles by the length of road', () => {
@@ -480,7 +541,7 @@ describe('birds and the world', () => {
 describe('street dogs', () => {
   const street = geometry([
     [
-      LifeLine.roadMinor,
+      LifeLine.path,
       [
         [0, 2048],
         [4095, 2048],
@@ -488,8 +549,9 @@ describe('street dogs', () => {
     ],
   ]);
 
-  it('roam minor roads in their coats, sniffing and turning', () => {
+  it('roam walking paths in their coats, sniffing and turning', () => {
     const life = new TileLife(tile, street, 11);
+    life.scenes.sites.length = 0;
     const dogs = life.movers.filter((m) => m.kind === 'dog');
     expect(dogs.length).toBeGreaterThan(0);
     for (const d of dogs) expect(DOG_PAINTS).toContain(d.paint);
@@ -603,7 +665,7 @@ describe('LifeWorld', () => {
     expect(kinds(12)).toEqual(new Set());
     expect(kinds(14)).toEqual(new Set(['boat']));
     expect(kinds(16)).toEqual(new Set(['boat', 'vehicle']));
-    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person', 'dog']));
+    expect(kinds(18)).toEqual(new Set(['boat', 'vehicle', 'person', 'dog', 'cat']));
   });
 
   it('has fewer people and vehicles out at night', () => {
@@ -631,7 +693,7 @@ describe('LifeWorld', () => {
       activityLevels(1, { minutes: 480, weekday: 1, life: empty }),
       center,
     );
-    expect(none.filter((a) => a.kind !== 'boat' && a.kind !== 'dog')).toHaveLength(0);
+    expect(none.filter((a) => !['boat', 'dog', 'cat'].includes(a.kind))).toHaveLength(0);
   });
 
   it('clamps a long frame so agents do not jump', () => {
@@ -824,6 +886,34 @@ describe('vehicles and boats', () => {
     life.step(0.1);
     expect((follower.x - before) / perMeter / 0.1).toBeCloseTo(2, 1);
     expect(gap()).toBeLessThan(FOLLOW.minGap + 2 * FOLLOW.headway + 0.5);
+  });
+
+  it('accelerates from rest and records only clearance-accepted path distance', () => {
+    const life = road({ v: 0 });
+    const m = life.movers[0]!;
+    for (let i = 0; i < 50; i++) {
+      const previous = m.v!;
+      life.step(0.1);
+      expect(m.v! - previous).toBeLessThanOrEqual(2 * perMeter * 0.1 + 1e-9);
+    }
+    expect(m.v! / perMeter).toBeCloseTo(10);
+    const before = m.d;
+    let tries = 0;
+    life.step(0.1, undefined, undefined, undefined, undefined, () => ++tries === 3);
+    expect(m.v! / perMeter).toBeCloseTo(2.5);
+    expect(m.v!).toBeCloseTo((m.d - before) / 0.1);
+    life.step(0.1, undefined, undefined, undefined, undefined, () => false);
+    expect(m.v).toBe(0);
+  });
+
+  it('ignores inactive leaders using each craft kind activity', () => {
+    const life = road({ d: 30, rank: 0.9, speed: 0 }, { d: 0 });
+    life.step(0.1, undefined, undefined, undefined, {
+      rain: 0,
+      levels: { ...activityLevels(1), vehicle: 0.5 },
+    });
+    expect(life.movers[1]!.v! / perMeter).toBeCloseTo(10);
+    expect(life.movers[0]!.d).toBe(30);
   });
 
   it('passes a bicycle riding by the curb', () => {
@@ -1326,14 +1416,17 @@ describe('people', () => {
     expect(share(0, -10)).toBeLessThanOrEqual(UMBRELLA.base + 0.1);
   });
 
-  it('set up vendors’ carts by the curb, more of them near a market', () => {
-    const plain = new TileLife(tile, across(LifeLine.roadMinor, 8), 3);
-    const market = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
+  it('sets up carts beside walking paths, more of them near a market, and omits road vendors', () => {
+    const road = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
+    expect(road.stalls).toHaveLength(0);
+    expect(road.movers.some((m) => m.kind === 'person')).toBe(false);
+    const plain = new TileLife(tile, across(LifeLine.path), 3);
+    const market = new TileLife(tile, across(LifeLine.path, 0, [[2048, 2100]]), 3);
     expect(plain.stalls.length).toBeGreaterThan(0);
     expect(market.stalls.length).toBeGreaterThan(plain.stalls.length);
     expect(market.stalls.length).toBeLessThanOrEqual(VENDORS.maxPerTile);
     for (const s of plain.stalls) {
-      expect(Math.abs(s.y - 2048) / perMeter).toBeCloseTo(4 - VENDORS.curb, 3);
+      expect(Math.abs(s.y - 2048) / perMeter).toBeCloseTo(VENDORS.beside, 3);
     }
   });
 

@@ -20,6 +20,8 @@ const coverClass: Record<LandCover, AtlasClass> = {
   grass: 'grass',
   parking: 'parking',
   woods: 'trees',
+  shrubs: 'shrubs',
+  planting: 'planting',
 };
 
 /** How close (meters) an OSM tree must be to a curated one to count as the same tree. */
@@ -127,7 +129,15 @@ export function landcoverFeatures(
         );
       }
       const geometry: Geometry = { type: 'Polygon', coordinates: [area.ring] };
-      out.push(feature(`cover:${slug}/area-${i + 1}`, cls, 'area', geometry, tagsFor(area.kind)));
+      const placed = feature(
+        `cover:${slug}/area-${i + 1}`,
+        cls,
+        'area',
+        geometry,
+        tagsFor(area.kind),
+      );
+      if (area.raised || area.cover === 'shrubs') placed.properties.detail_blocked = true;
+      out.push(placed);
     });
   }
   return { features: out, warnings };

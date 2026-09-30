@@ -48,6 +48,10 @@ export type CellTargets = {
   lifeTex: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
   lightTex: WebGLTexture;
+  /** Static fixtures: ten-bit glyph, part, lamp/phase state, opacity. */
+  fixtureTex: WebGLTexture;
+  /** Signal light source offsets, approach direction, and occupancy. */
+  signalLightTex: WebGLTexture;
   depth: WebGLRenderbuffer;
   cellFbo: WebGLFramebuffer;
   glyphFbo: WebGLFramebuffer;
@@ -155,6 +159,9 @@ export function createCellTargets(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+  const fixtureTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const signalLightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
@@ -173,6 +180,8 @@ export function createCellTargets(
     overlayTex,
     lifeTex,
     lightTex,
+    fixtureTex,
+    signalLightTex,
     depth: cell.depth,
     cellFbo: cell.fbo,
     glyphFbo,
@@ -191,6 +200,8 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
     t.overlayTex,
     t.lifeTex,
     t.lightTex,
+    t.fixtureTex,
+    t.signalLightTex,
   ]) {
     gl.deleteTexture(tex);
   }
@@ -233,7 +244,21 @@ export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }
 
-type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number };
+/** Replace the independent street-hardware texture. */
+export function uploadFixtures(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.fixtureTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Replace the cached signal-light source lookup. */
+export function uploadSignalLights(gl: GL, t: CellTargets, texels: Uint8Array) {
+  gl.bindTexture(gl.TEXTURE_2D, t.signalLightTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+type Mesh = { vao: WebGLVertexArrayObject | null; buffers: WebGLBuffer[]; count: number };
 
 type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
 
@@ -243,7 +268,13 @@ export type TileMesh = GroundMesh & {
   region: GroundMesh;
 };
 
-function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
+function uploadMesh(
+  gl: GL,
+  arrays: GeometryArrays & { surface?: Float32Array },
+  indices?: Uint32Array,
+): Mesh {
+  const count = indices ? indices.length : arrays.ids.length;
+  if (count === 0) return { vao: null, buffers: [], count };
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   const buffer = (target: number, data: ArrayBufferView) => {
@@ -270,9 +301,14 @@ function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh
   gl.bindBuffer(gl.ARRAY_BUFFER, buffers[3]!);
   gl.enableVertexAttribArray(3);
   gl.vertexAttribPointer(3, 1, gl.SHORT, false, 0, 0);
+  if (arrays.surface) {
+    buffers.push(buffer(gl.ARRAY_BUFFER, arrays.surface));
+    gl.enableVertexAttribArray(4);
+    gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 0, 0);
+  }
   if (indices) buffers.push(buffer(gl.ELEMENT_ARRAY_BUFFER, indices));
   gl.bindVertexArray(null);
-  return { vao, buffers, count: indices ? indices.length : arrays.ids.length };
+  return { vao, buffers, count };
 }
 
 const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({
@@ -300,7 +336,7 @@ export function deleteTile(gl: GL, mesh: TileMesh) {
     region.lines,
     region.points,
   ]) {
-    gl.deleteVertexArray(m.vao);
+    if (m.vao) gl.deleteVertexArray(m.vao);
     for (const b of m.buffers) gl.deleteBuffer(b);
   }
 }

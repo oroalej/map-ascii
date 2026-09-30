@@ -11,7 +11,10 @@ import {
 } from '@atlas/shared';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
+import { isDebugRequested } from '@/lib/debug';
+import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
+import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
@@ -135,14 +138,19 @@ export function AtlasCanvas({
     // The life layer's settings are remembered in this browser, not in the URL.
     const lifePrefs = loadLifePrefs();
     useLifeStore.setState(lifePrefs);
+    const quality = loadQualityPref();
+    useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
+      quality,
       tilesUrl: `/tiles/${slug}.pmtiles`,
       theme: store.theme,
       cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
       bounds: meta.regionBounds,
       initialCamera: camera,
       year: store.year,
-      reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      reducedMotion: prefersReducedMotion(),
+      gpuTiming: isDebugRequested(),
+      profiling: isDebugRequested(),
       interactive: isPickable,
       life: lifeSettings(lifePrefs),
       traffic,
@@ -155,6 +163,11 @@ export function AtlasCanvas({
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas });
     const offs = [
+      useQualityStore.subscribe(({ choice }) => {
+        atlas.setQuality(choice);
+        saveQualityPref(choice);
+      }),
+      listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('contextlost', () => setContextLost(true)),
       atlas.on('contextrestored', () => setContextLost(false)),

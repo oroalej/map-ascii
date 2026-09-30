@@ -6,6 +6,20 @@
     {
       "kind": "tier",
       "shape": "circle",
+      "size_m": 10.8,
+      "height_m": 0.3,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "tier",
+      "shape": "circle",
+      "size_m": 9.5,
+      "height_m": 0.65,
+      "offset_m": [0, 0]
+    },
+    {
+      "kind": "tier",
+      "shape": "circle",
       "size_m": 9.5,
       "height_m": 1,
       "offset_m": [0, 0]
@@ -23,6 +37,13 @@
       "size_m": 4,
       "height_m": 6,
       "offset_m": [0, 0]
+    },
+    {
+      "kind": "tier",
+      "shape": "circle",
+      "size_m": 4.4,
+      "height_m": 6.6,
+      "offset_m": [0, 0]
     }
   ],
   "sources": [
@@ -34,6 +55,11 @@
     {
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/node/642912170"
+    },
+    {
+      "title": "Ralff Nestor Nacor: Quince Martires Monument, 14 December 2025",
+      "url": "https://commons.wikimedia.org/wiki/File:Quince_Martires_Monument,_Naga_City,_Dec_2025.jpg",
+      "note": "CC BY-SA 4.0. Independent photograph confirms the stepped circular apron and projecting circular capital. These added widths and heights are estimates; no construction dates are inferred."
     }
   ],
   "status": "draft"

@@ -238,6 +238,38 @@ describe('City', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
   });
 
+  it('accepts sourced sidewalk policy and defaults derivation only when configured', () => {
+    expect(City.parse(city).streets).toBeUndefined();
+    const policy = { sidewalks: { source: 'Project policy' } };
+    expect(City.parse({ ...city, streets: policy }).streets?.sidewalks?.derive).toBe(true);
+    expect(
+      City.parse({ ...city, streets: { sidewalks: { derive: false, source: 'Survey pending' } } })
+        .streets?.sidewalks?.derive,
+    ).toBe(false);
+    expect(City.safeParse({ ...city, streets: { sidewalks: { derive: false } } }).success).toBe(
+      false,
+    );
+    expect(City.safeParse({ ...city, streets: { sidewalks: { source: ' ' } } }).success).toBe(
+      false,
+    );
+    expect(City.safeParse({ ...city, streets: { driving_side: 'left' } }).success).toBe(false);
+  });
+
+  it('validates sourced road direction overrides and rejects duplicate targets', () => {
+    const entry = { osm_id: 'osm:way/1', oneway: 1, source: 'Owner survey' };
+    const parse = (directions: unknown[]) => City.safeParse({ ...city, streets: { directions } });
+    for (const oneway of [-1, 0, 1]) expect(parse([{ ...entry, oneway }]).success).toBe(true);
+    for (const invalid of [
+      { ...entry, oneway: 2 },
+      { ...entry, oneway: 'yes' },
+      { ...entry, osm_id: 'osm:node/1' },
+      { ...entry, source: ' ' },
+      { osm_id: entry.osm_id, oneway: 1 },
+    ])
+      expect(parse([invalid]).success).toBe(false);
+    expect(parse([entry, entry]).success).toBe(false);
+  });
+
   it('rejects localized fields in undeclared languages', () => {
     const result = City.safeParse({ ...city, languages: [] });
     expect(result.error?.issues[0]?.path).toEqual(['subdivision', 'label', 'xx']);
@@ -412,6 +444,16 @@ describe('Landcover', () => {
     expect(Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [] }).success).toBe(false);
     expect(Landcover.safeParse({ ...pack, sources: [] }).success).toBe(false);
     expect(Landcover.safeParse({ ...pack, credit: '' }).success).toBe(false);
+  });
+
+  it('accepts shrub polygons without a tree kind', () => {
+    expect(
+      Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [{ ring, cover: 'shrubs' }] })
+        .success,
+    ).toBe(true);
+    expect(
+      Landcover.safeParse({ ...pack, areas: [{ ring, cover: 'shrubs', kind: 'palm' }] }).success,
+    ).toBe(false);
   });
 
   it('rejects unclosed rings, unknown covers, and tree kinds on non-woods', () => {

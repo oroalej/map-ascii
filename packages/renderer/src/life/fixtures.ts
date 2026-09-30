@@ -1,0 +1,566 @@
+/** Static street hardware, independent of the life population and lighting texture. */
+import { bandVisibility } from '@atlas/shared';
+import { MAX_GLYPHS, packGlyph, wallGlyph } from '../glyphs/select';
+import {
+  EXTENT,
+  MERCATOR_METERS,
+  metersPerUnit,
+  tileToLngLat,
+  lngLatToTile,
+} from '../raster/geometry';
+import type { TileId } from '../tiles';
+import { SIGNAL_STRIDE, type LifeGeometry } from './geometry';
+import {
+  LAMP_STRIDE,
+  type LampState,
+  lightByte,
+  placeSeed,
+  SIDE_CELLS,
+  type LightGrid,
+} from './lights';
+import { signalState } from './signals';
+
+type Point = [number, number];
+type FixtureBody = { base: Point; tip: Point; forward: Point; right: Point; seed: number };
+export type StreetFixture = FixtureBody &
+  (
+    | {
+        kind: 'streetlight';
+        state: LampState;
+        roadCenter: Point;
+        site?: boolean;
+        style?: 'streetlight' | 'lantern';
+      }
+    | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
+    | { kind: 'flagpole'; flag: 'PH' }
+  );
+export type FixtureVisibility = { streetlights: boolean; trafficSignals: boolean };
+export type FixtureGrid = LightGrid & {
+  cellWidth: number;
+  cellHeight: number;
+  /** Only the viewport, excluding the render grid's offscreen margin. */
+  visible?: (col: number, row: number) => boolean;
+};
+
+/** Low six bits of G; the high two bits retain the glyph's ten-bit index. */
+export const FixturePart = {
+  base: 1,
+  arm: 2,
+  housing: 3,
+  lamp: 4,
+  red: 5,
+  amber: 6,
+  green: 7,
+  signal: 8,
+  casing: 9,
+  flagBlue: 10,
+  flagRed: 11,
+  flagWhite: 12,
+  flagGold: 13,
+  flagMast: 14,
+  flagPlinth: 15,
+  flagFoot: 16,
+} as const;
+const signalColor = { red: 0, amber: 1, green: 2 } as const;
+
+/** Compact screen-space rays; cars retain their separate metric headlight settings. */
+export const SIGNAL_LIGHT = {
+  dayLength: 4,
+  nightLength: 14,
+  dayStrength: 0.04,
+  nightStrength: 0.35,
+  halfWidth: 1.2,
+  spread: 0.15,
+  haloRadius: 6,
+  haloStrength: 0.35,
+} as const;
+
+/** Retain tile ownership and the existing curb positions, directions, and phase seeds. */
+export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
+  const out: StreetFixture[] = [];
+  const perMeter = 1 / metersPerUnit(tile);
+  const scale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
+  const body = (x: number, y: number, dx: number, dy: number, reach: number): FixtureBody => {
+    const length = Math.hypot(dx, dy) || 1;
+    const hx = dx / length;
+    const hy = dy / length;
+    return {
+      base: tileToLngLat(tile, { x, y }),
+      tip: tileToLngLat(tile, { x: x + hx * reach, y: y + hy * reach }),
+      forward: tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter }),
+      right: tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter }),
+      seed: placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
+    };
+  };
+  for (let i = 0; i < geo.lamps.length; i += LAMP_STRIDE) {
+    const x = geo.lamps[i]!,
+      y = geo.lamps[i + 1]!;
+    if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT) continue;
+    const dx = geo.lamps[i + 4]! - x,
+      dy = geo.lamps[i + 5]! - y;
+    const fixture = body(x, y, dx || dy ? dx : 0, dx || dy ? dy : -1, Math.hypot(dx, dy));
+    // Lamp flicker and the staggered switch-on use the original five-bit seed.
+    out.push({
+      ...fixture,
+      kind: 'streetlight',
+      site: geo.lampSites?.[i / LAMP_STRIDE] === 1,
+      style: geo.lampStyles?.[i / LAMP_STRIDE] === 1 ? 'lantern' : 'streetlight',
+      state: geo.lamps[i + 2]! as LampState,
+      seed: geo.lamps[i + 3]!,
+      roadCenter: tileToLngLat(tile, { x: geo.lamps[i + 6]!, y: geo.lamps[i + 7]! }),
+    });
+  }
+  const poles = geo.flagpoles ?? [];
+  for (let i = 0; i < poles.length; i += 3) {
+    const x = poles[i]!,
+      y = poles[i + 1]!;
+    if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT || poles[i + 2] !== 1) continue;
+    out.push({ ...body(x, y, 0, -1, perMeter), kind: 'flagpole', flag: 'PH' });
+  }
+  const signals = geo.signals ?? [];
+  for (let i = 0; i < signals.length; i += SIGNAL_STRIDE) {
+    const x = signals[i]!,
+      y = signals[i + 1]!,
+      radius = signals[i + 2]!;
+    if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT) continue;
+    const seed = placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale);
+    const midBlock = signals[i + 3]! < 0;
+    const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
+    if (layout) {
+      for (const arm of layout.arms) {
+        if (!arm.inbound || !arm.stop) continue;
+        const junction = lngLatToTile(tile, ...arm.junction);
+        // Outward bearing: the housing and its ray face the approaching driver.
+        const theta = ((arm.bearing + 180) * Math.PI) / 180;
+        const hx = Math.sin(theta),
+          hy = -Math.cos(theta);
+        const lateral = arm.width / 2 + 0.5;
+        const bx = junction.x + (hx * radius - hy * lateral) * perMeter;
+        const by = junction.y + (hy * radius + hx * lateral) * perMeter;
+        out.push({
+          ...body(bx, by, hy, -hx, perMeter),
+          kind: 'signal',
+          group: arm.group,
+          midBlock,
+          seed,
+        });
+      }
+      continue;
+    }
+    for (const [bearing, group] of [
+      [midBlock ? 0 : signals[i + 3]!, 'a'],
+      [signals[i + 4]!, 'b'],
+    ] as const) {
+      const theta = (bearing * Math.PI) / 180;
+      const hx = Math.sin(theta),
+        hy = -Math.cos(theta);
+      for (const sign of [-1, 1]) {
+        const bx = x + sign * (hx * radius - hy * (radius - 1.5)) * perMeter;
+        const by = y + sign * (hy * radius + hx * (radius - 1.5)) * perMeter;
+        // A short bracket projects from the existing curb anchor toward the road.
+        out.push({
+          ...body(bx, by, sign * hy, -sign * hx, perMeter),
+          kind: 'signal',
+          group,
+          midBlock,
+          seed,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+type SignalCells = {
+  seed: number;
+  group: 'a' | 'b';
+  midBlock: boolean;
+  cells: number[];
+  color: number;
+  /** Actual lens cells after hardware ownership resolves, including the compact dot. */
+  emitters: number[];
+  /** Pixel-space approach direction, one turn quantized to a byte. */
+  direction: number;
+};
+export type PackedFixtures = {
+  texels: Uint8Array;
+  visibility: FixtureVisibility;
+  signals: SignalCells[];
+};
+
+/** Update only phase bytes, without reprojecting or stamping static hardware. */
+export function updateFixtureSignals(packed: PackedFixtures, clock: number): boolean {
+  let changed = false;
+  for (const signal of packed.signals) {
+    const color = signalColor[signalState(signal.seed, clock, signal.midBlock)[signal.group]];
+    if (color === signal.color) continue;
+    signal.color = color;
+    for (const at of signal.cells) packed.texels[at + 2] = color;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * R/G encode a ten-bit glyph and fixture part, B lamp condition/seed, signal phase or cloth shading, A opacity.
+ * Geometry is in meters, with readable minimum housings. A position-seeded dissolve switches
+ * whole fixtures between compact and detailed plans from z18 to z18.5.
+ */
+export function packFixtures(
+  out: Uint8Array,
+  grid: FixtureGrid,
+  fixtures: readonly StreetFixture[],
+  zoom: number,
+  glyphIndex: (glyph: string) => number,
+  clock: number,
+): PackedFixtures {
+  out.fill(0);
+  const packed: PackedFixtures = {
+    texels: out,
+    visibility: { streetlights: false, trafficSignals: false },
+    signals: [],
+  };
+  // Signal lenses own their cells before streetlight arms. Only heads on the same authored
+  // lantern post share hardware ownership, so their short brackets may meet at the base.
+  const ordered = [
+    ...fixtures.filter((f) => f.kind === 'signal'),
+    ...fixtures.filter((f) => f.kind === 'streetlight'),
+    ...fixtures.filter((f) => f.kind === 'flagpole'),
+  ];
+  const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
+  const posts = new Map<string, number>();
+  for (const [index, fixture] of ordered.entries()) {
+    let owner = index;
+    if (fixture.kind === 'streetlight' && fixture.site && fixture.style === 'lantern') {
+      const key = fixture.base.join(',');
+      owner = posts.get(key) ?? index;
+      posts.set(key, owner);
+    }
+    const min =
+      fixture.kind === 'flagpole'
+        ? 18
+        : fixture.kind === 'streetlight'
+          ? fixture.site
+            ? 18
+            : 15
+          : 17;
+    if (zoom < min) continue;
+    const opacity = bandVisibility({ min }, zoom);
+    if (opacity <= 0) continue;
+    const base = grid.toCell(...fixture.base);
+    const tip = grid.toCell(...fixture.tip);
+    const forward = grid.toCell(...fixture.forward),
+      right = grid.toCell(...fixture.right);
+    const ax = forward[0] - base[0],
+      ay = forward[1] - base[1];
+    const bx = right[0] - base[0],
+      by = right[1] - base[1];
+    const length = Math.hypot(ax, ay),
+      breadth = Math.hypot(bx, by);
+    if (!Number.isFinite(length + breadth) || length < 1e-9 || breadth < 1e-9) continue;
+    const detail = Math.max(0, Math.min(1, (zoom - 18) / 0.5));
+    const detailed =
+      detail >= 1 ||
+      (detail > 0 && (placeSeed(fixture.seed, fixture.seed + 1) & 255) / 256 < detail);
+    const signal: SignalCells | undefined =
+      fixture.kind === 'signal'
+        ? {
+            seed: fixture.seed,
+            group: fixture.group,
+            midBlock: fixture.midBlock,
+            cells: [],
+            color: signalColor[signalState(fixture.seed, clock, fixture.midBlock)[fixture.group]],
+            emitters: [],
+            direction:
+              (Math.round(
+                (Math.atan2(by * grid.cellHeight, bx * grid.cellWidth) * 256) / (2 * Math.PI),
+              ) +
+                256) %
+              256,
+          }
+        : undefined;
+    const info =
+      fixture.kind === 'streetlight'
+        ? lightByte(fixture.state, fixture.seed)
+        : (signal?.color ?? 0);
+    const write = (x: number, y: number, glyph: string, part: number, tone = info) => {
+      const c = Math.floor(x),
+        r = Math.floor(y);
+      if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) return;
+      const cell = r * grid.cols + c,
+        at = cell * 4;
+      if (owners[cell] !== -1 && owners[cell] !== owner) return;
+      const code = glyphIndex(glyph);
+      if (code <= 0 || code > MAX_GLYPHS) return;
+      owners[cell] = owner;
+      [out[at], out[at + 1]] = packGlyph(code, part);
+      out[at + 2] = tone;
+      out[at + 3] = Math.round(opacity * 255);
+      if (signal) signal.cells.push(at);
+      if (fixture.kind !== 'flagpole' && (!grid.visible || grid.visible(c, r)))
+        packed.visibility[fixture.kind === 'signal' ? 'trafficSignals' : 'streetlights'] = true;
+    };
+    // Avoid expensive offscreen loops, including malformed geometry.
+    const line = (from: Point, to: Point, part: number) => {
+      const dx = to[0] - from[0],
+        dy = to[1] - from[1];
+      const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 2);
+      if (steps > 512) return;
+      const px = dx * grid.cellWidth,
+        py = dy * grid.cellHeight;
+      const glyph =
+        Math.abs(py) < Math.abs(px) * 0.4
+          ? '─'
+          : Math.abs(px) < Math.abs(py) * 0.4
+            ? '│'
+            : px * py < 0
+              ? '╱'
+              : '╲';
+      for (let i = 0; i <= steps; i++) {
+        const t = steps ? i / steps : 0;
+        write(from[0] + dx * t, from[1] + dy * t, glyph, part);
+      }
+    };
+    if (fixture.kind === 'flagpole') {
+      // A symbolic elevation anchored to the map position. The taller shaft, stepped
+      // plinth and folded cloth remain readable on the rectangular ASCII cell grid.
+      const rows = zoom >= 20 ? 6 : 3;
+      const cols = Math.round((rows * grid.cellHeight * 2) / grid.cellWidth);
+      const x = Math.floor(base[0]),
+        y = Math.floor(base[1]);
+      const top = y - rows - (zoom >= 20 ? 8 : 4);
+      const lift = (c: number) => {
+        const u = c / Math.max(1, cols - 1);
+        return Math.round(-Math.sin(u * Math.PI * 2) * (rows / 5) + u * 0.7);
+      };
+      const tone = (c: number) =>
+        Math.round(155 + 100 * (0.5 + 0.5 * Math.cos((c / cols) * Math.PI * 4 - 0.4)));
+      for (let r = top - 1; r <= y - 1; r++) write(x, r, '\u2551', FixturePart.flagMast);
+      write(x, top - 2, '\u2022', FixturePart.flagMast);
+      // A light tapered pedestal, a broad foot, and a bright cap around the pole.
+      for (let c = -2; c <= 2; c++) write(x + c, y + 1, '\u2584', FixturePart.flagFoot);
+      for (let c = -1; c <= 1; c++) {
+        write(x + c, y, '\u2588', FixturePart.flagPlinth);
+        write(x + c, y - 1, '\u2580', FixturePart.flagMast);
+      }
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const u = (c + 0.5) / cols,
+            v = (r + 0.5) / rows;
+          const triangle = u < (Math.sqrt(3) / 2) * Math.min(v, 1 - v);
+          write(
+            x + 1 + c,
+            top + r + lift(c),
+            '\u2588',
+            triangle
+              ? FixturePart.flagWhite
+              : r < rows / 2
+                ? FixturePart.flagBlue
+                : FixturePart.flagRed,
+            tone(c),
+          );
+        }
+      }
+      if (rows >= 6) {
+        const emblem = (c: number, r: number, mark: string) =>
+          write(x + 1 + c, top + r + lift(c), mark, FixturePart.flagGold, tone(c));
+        emblem(2, 2, '\u263c');
+        emblem(0, 0, '\u2605');
+        emblem(0, rows - 1, '\u2605');
+        emblem(Math.floor(cols * 0.32), 3, '\u2605');
+      }
+      continue;
+    }
+    if (!detailed) {
+      let [x, y] = base;
+      if (fixture.kind === 'streetlight') {
+        // The compact lamp remains outside the one-cell-wide road, as before.
+        const [mx, my] = grid.toCell(...fixture.roadCenter);
+        const side = Math.hypot(x - mx, y - my);
+        if (side > 0 && side < SIDE_CELLS) {
+          x = mx + ((x - mx) / side) * SIDE_CELLS;
+          y = my + ((y - my) / side) * SIDE_CELLS;
+        }
+      }
+      write(
+        x,
+        y,
+        fixture.kind === 'streetlight' ? '*' : '•',
+        fixture.kind === 'streetlight' ? FixturePart.lamp : FixturePart.signal,
+      );
+    } else {
+      const lantern = fixture.kind === 'streetlight' && fixture.style === 'lantern';
+      const long = lantern
+        ? Math.max(0.45 * length, 1.1)
+        : Math.max(
+            fixture.kind === 'streetlight' ? 1.2 * length : 2.2 * length,
+            fixture.kind === 'streetlight' ? 2 : 5,
+          );
+      // Leave a visible casing on either side of the lens/glass strip at close zoom.
+      const wide = lantern ? Math.max(0.45 * breadth, 1.1) : Math.max(0.65 * breadth, 2.1);
+      const arm: Point = [tip[0] - base[0], tip[1] - base[1]];
+      const reach = Math.hypot(...arm);
+      const armScale = reach > 0 ? Math.max(1, (long / 2 + (lantern ? 0.65 : 1.5)) / reach) : 0;
+      const head: Point = [base[0] + arm[0] * armScale, base[1] + arm[1] * armScale];
+      line(base, head, FixturePart.arm);
+      write(...base, '▪', FixturePart.base);
+      const a: Point = [ax / length, ay / length],
+        b: Point = [bx / breadth, by / breadth];
+      const det = a[0] * b[1] - a[1] * b[0];
+      if (Math.abs(det) < 1e-9) continue;
+      const cx = Math.floor(head[0]) + 0.5,
+        cy = Math.floor(head[1]) + 0.5;
+      const rx = (Math.abs(a[0]) * long + Math.abs(b[0]) * wide) / 2;
+      const ry = (Math.abs(a[1]) * long + Math.abs(b[1]) * wide) / 2;
+      if ((rx * 2 + 3) * (ry * 2 + 3) > 20000) continue;
+      const inside = (c: number, r: number) => {
+        const dx = c + 0.5 - cx,
+          dy = r + 0.5 - cy;
+        const u = (dx * b[1] - dy * b[0]) / det,
+          v = (dy * a[0] - dx * a[1]) / det;
+        return Math.abs(u) <= long / 2 && Math.abs(v) <= wide / 2;
+      };
+      const boundary = (c: number, r: number) =>
+        inside(c, r) &&
+        (!inside(c, r - 1) || !inside(c + 1, r) || !inside(c, r + 1) || !inside(c - 1, r));
+      for (
+        let r = Math.max(0, Math.floor(cy - ry));
+        r <= Math.min(grid.rows - 1, Math.ceil(cy + ry));
+        r++
+      ) {
+        for (
+          let c = Math.max(0, Math.floor(cx - rx));
+          c <= Math.min(grid.cols - 1, Math.ceil(cx + rx));
+          c++
+        ) {
+          if (!inside(c, r)) continue;
+          if (!boundary(c, r)) {
+            write(c + 0.5, r + 0.5, '█', FixturePart.casing);
+          } else {
+            const mask =
+              Number(boundary(c, r - 1)) |
+              (Number(boundary(c + 1, r)) << 1) |
+              (Number(boundary(c, r + 1)) << 2) |
+              (Number(boundary(c - 1, r)) << 3);
+            write(c + 0.5, r + 0.5, wallGlyph('single', mask), FixturePart.housing);
+          }
+        }
+      }
+      if (fixture.kind === 'streetlight') {
+        if (lantern) {
+          write(cx, cy, '*', FixturePart.lamp);
+        } else {
+          const spacing = Math.max(0.5, (long - 1) / 2);
+          line(
+            [cx - a[0] * spacing, cy - a[1] * spacing],
+            [cx + a[0] * spacing, cy + a[1] * spacing],
+            FixturePart.lamp,
+          );
+        }
+      } else {
+        // Three separate lens glyphs; darkness of the inactive lenses distinguishes the phase.
+        const pitch = Math.max(1.1, (long - 2) / 3);
+        for (let lens = 0; lens < 3; lens++) {
+          const offset = (lens - 1) * pitch;
+          write(cx + a[0] * offset, cy + a[1] * offset, '○', FixturePart.red + lens);
+        }
+      }
+    }
+    if (signal?.cells.length) {
+      signal.emitters = [...new Set(signal.cells)].filter((at) => {
+        const part = out[at + 1]! & 63;
+        return (
+          part === FixturePart.signal || (part >= FixturePart.red && part <= FixturePart.green)
+        );
+      });
+      packed.signals.push(signal);
+    }
+  }
+  return packed;
+}
+
+export type SignalLightGrid = Pick<FixtureGrid, 'cols' | 'rows' | 'cellWidth' | 'cellHeight'> & {
+  dpr: number;
+};
+
+/**
+ * R/G point to the source cell (signed offsets biased by 128), B is direction, A occupancy.
+ * Cache the maximum nighttime footprint; the shader varies length and strength with daylight.
+ * One strongest active emitter owns each cell, avoiding a full-resolution neighborhood scan.
+ */
+export function packSignalLights(
+  out: Uint8Array,
+  packed: PackedFixtures,
+  grid: SignalLightGrid,
+  scores: Float32Array = new Float32Array(grid.cols * grid.rows),
+): void {
+  out.fill(0);
+  scores.fill(0);
+  const { cols, rows, cellWidth: cw, cellHeight: ch, dpr } = grid;
+  if (!Number.isFinite(cw + ch + dpr) || cw <= 0 || ch <= 0 || dpr <= 0) return;
+  const length = SIGNAL_LIGHT.nightLength * dpr;
+  const radius = SIGNAL_LIGHT.haloRadius * dpr;
+  const half = SIGNAL_LIGHT.halfWidth * dpr;
+  const reach = Math.max(radius, Math.hypot(length, half + length * SIGNAL_LIGHT.spread));
+  const padding = Math.hypot(cw, ch) / 2;
+  const smooth = (t: number) => {
+    const v = Math.max(0, Math.min(1, t));
+    return v * v * (3 - 2 * v);
+  };
+  for (const signal of packed.signals) {
+    const angle = (signal.direction * Math.PI * 2) / 256;
+    const hx = Math.cos(angle),
+      hy = Math.sin(angle);
+    for (const source of signal.emitters) {
+      const part = packed.texels[source + 1]! & 63;
+      if (part !== FixturePart.signal && part - FixturePart.red !== signal.color) continue;
+      const index = source / 4,
+        sc = index % cols,
+        sr = Math.floor(index / cols);
+      const cx = (sc + 0.5) * cw,
+        cy = (sr + 0.5) * ch;
+      for (
+        let r = Math.max(0, Math.floor((cy - reach) / ch));
+        r <= Math.min(rows - 1, Math.floor((cy + reach) / ch));
+        r++
+      ) {
+        for (
+          let c = Math.max(0, Math.floor((cx - reach) / cw));
+          c <= Math.min(cols - 1, Math.floor((cx + reach) / cw));
+          c++
+        ) {
+          const dx = (c + 0.5) * cw - cx,
+            dy = (r + 0.5) * ch - cy;
+          const distance = Math.hypot(dx, dy);
+          const forward = dx * hx + dy * hy,
+            across = Math.abs(-dx * hy + dy * hx);
+          const width = half + Math.max(0, Math.min(length, forward)) * SIGNAL_LIGHT.spread;
+          // Include cells straddling the thin ray or halo; the shader clips each pixel exactly.
+          const nearHalo = distance < radius + padding;
+          const nearBeam =
+            forward > -padding && forward < length + padding && across < width + padding;
+          if (!nearHalo && !nearBeam) continue;
+          const halo = (1 - smooth(distance / radius)) ** 2 * SIGNAL_LIGHT.haloStrength;
+          const beam =
+            forward >= 0 && forward < length
+              ? (1 - smooth(forward / length)) *
+                (1 - smooth(across / width)) *
+                SIGNAL_LIGHT.nightStrength
+              : 0;
+          const score = Math.fround(((halo + beam + 1e-6) * packed.texels[source + 3]!) / 255);
+          const cell = r * cols + c;
+          if (score <= scores[cell]!) continue;
+          const ox = sc - c,
+            oy = sr - r;
+          if (Math.abs(ox) > 127 || Math.abs(oy) > 127) continue;
+          scores[cell] = score;
+          const at = cell * 4;
+          out[at] = ox + 128;
+          out[at + 1] = oy + 128;
+          out[at + 2] = signal.direction;
+          out[at + 3] = 255;
+        }
+      }
+    }
+  }
+}
