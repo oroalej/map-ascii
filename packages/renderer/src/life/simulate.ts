@@ -3128,12 +3128,35 @@ export class LifeWorld {
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) return false;
       let distance = 0,
         turns = 1;
+      let x0 = Infinity,
+        y0 = Infinity,
+        x1 = -Infinity,
+        y1 = -Infinity,
+        radius = 0;
       for (let i = 0; i < next.length; i++) {
         const b = next[i]!,
           a = previous[i]!;
         distance = Math.max(distance, Math.hypot(b.x - a.x, b.y - a.y));
         turns = Math.max(turns, Math.ceil(Math.hypot(b.hx - a.hx, b.hy - a.hy) * 8));
+        x0 = Math.min(x0, a.x, b.x);
+        y0 = Math.min(y0, a.y, b.y);
+        x1 = Math.max(x1, a.x, b.x);
+        y1 = Math.max(y1, a.y, b.y);
+        radius = Math.max(
+          radius,
+          Math.hypot(a.length, a.width) / 2,
+          Math.hypot(b.length, b.width) / 2,
+        );
       }
+      // The half-diagonal encloses every intermediate heading along the whole move.
+      x0 -= radius;
+      y0 -= radius;
+      x1 += radius;
+      y1 += radius;
+      const crossing = 'kind' in owner || 'walker' in owner;
+      const blockedNear = blocked.near(x0, y0, x1, y1);
+      const waterNear = onFoot && water.near(x0, y0, x1, y1);
+      const roadNear = onFoot && roadAccess.near(x0, y0, x1, y1, crossing);
       const steps = Math.max(1, Math.ceil(distance / 0.3), turns);
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
@@ -3154,9 +3177,9 @@ export class LifeWorld {
           s.width = b.width;
         }
         if (
-          blocked.hits(sample) ||
-          (onFoot && water.hits(sample)) ||
-          (onFoot && !roadAccess.allows(sample, 'kind' in owner || 'walker' in owner))
+          (blockedNear && blocked.hits(sample)) ||
+          (waterNear && water.hits(sample)) ||
+          (roadNear && !roadAccess.allows(sample, crossing))
         )
           return false;
         if (oldScore === 0 && occupied.conflicts(owner, sample) > 0) return false;

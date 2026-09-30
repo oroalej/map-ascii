@@ -225,13 +225,41 @@ export class Occupancy {
 }
 
 /** Polygon holes remain usable; index only the bounds and check the actual shape on query. */
+// Covers segmentCrossing's 1e-6 parametric tolerance on long edges, plus float rounding.
+const BOUNDS_PAD_M = 0.01;
 export class PolygonIndex {
+  readonly polygons: Polygon[] = [];
+  private bounds = new Map<Polygon, [number, number, number, number]>();
   private bins = new Map<number, Set<Polygon>>();
   private readonly corners: Point[] = [];
   private readonly keys: number[] = [];
   private readonly tested = new Set<Polygon>();
   add(polygon: Polygon) {
-    for (const key of binKeys(polygon.flat())) put(this.bins, key, polygon);
+    const points = polygon.flat();
+    this.polygons.push(polygon);
+    this.bounds.set(polygon, boundsOf(points));
+    for (const key of binKeys(points)) put(this.bins, key, polygon);
+  }
+  near(x0: number, y0: number, x1: number, y1: number): boolean {
+    for (const key of binKeys(
+      [
+        { x: x0, y: y0 },
+        { x: x1, y: y1 },
+      ],
+      BOUNDS_PAD_M,
+      this.keys,
+    ))
+      for (const polygon of this.bins.get(key) ?? []) {
+        const [a0, b0, a1, b1] = this.bounds.get(polygon)!;
+        if (
+          a0 <= x1 + BOUNDS_PAD_M &&
+          a1 >= x0 - BOUNDS_PAD_M &&
+          b0 <= y1 + BOUNDS_PAD_M &&
+          b1 >= y0 - BOUNDS_PAD_M
+        )
+          return true;
+      }
+    return false;
   }
   hits(bodies: readonly Body[]): boolean {
     const tested = this.tested;
@@ -239,10 +267,19 @@ export class PolygonIndex {
       for (const b of bodies) {
         tested.clear();
         const corners = bodyCorners(b, this.corners);
+        const [x0, y0, x1, y1] = boundsOf(corners);
         for (const key of binKeys(corners, 0, this.keys))
           for (const polygon of this.bins.get(key) ?? []) {
             if (tested.has(polygon)) continue;
             tested.add(polygon);
+            const [a0, b0, a1, b1] = this.bounds.get(polygon)!;
+            if (
+              a0 > x1 + BOUNDS_PAD_M ||
+              a1 < x0 - BOUNDS_PAD_M ||
+              b0 > y1 + BOUNDS_PAD_M ||
+              b1 < y0 - BOUNDS_PAD_M
+            )
+              continue;
             if (bodyHitsPolygon(b, polygon, corners)) return true;
           }
       }

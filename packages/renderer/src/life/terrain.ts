@@ -158,6 +158,10 @@ export class RoadAccess {
     return !(crossing ? this.forbidden : this.roads).hits(bodies);
   }
 
+  near(x0: number, y0: number, x1: number, y1: number, crossing = true): boolean {
+    return (crossing ? this.forbidden : this.roads).near(x0, y0, x1, y1);
+  }
+
   clear(a: Point, b: Point): boolean {
     const length = Math.hypot(b.x - a.x, b.y - a.y);
     return this.allows([

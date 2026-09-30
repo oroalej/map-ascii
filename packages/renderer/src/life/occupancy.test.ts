@@ -6,6 +6,7 @@ import {
   Occupancy,
   PolygonIndex,
   type Body,
+  type Polygon,
 } from './occupancy';
 
 const box = (x: number, y: number, length = 4, width = 2): Body => ({
@@ -25,6 +26,49 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 
 describe('ground footprints', () => {
+  it('matches exhaustive tests around a concave polygon with a hole', () => {
+    const polygons: Polygon[] = [
+      [
+        [
+          { x: -20, y: -20 },
+          { x: 20, y: -20 },
+          { x: 20, y: 0 },
+          { x: 0, y: 0 },
+          { x: 0, y: 20 },
+          { x: -20, y: 20 },
+          { x: -20, y: -20 },
+        ],
+        ring(-15, -15, 8, 8),
+      ],
+      [ring(40, 40, 6, 6)],
+    ];
+    const index = new PolygonIndex();
+    polygons.forEach((p) => index.add(p));
+    let seed = 123;
+    const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+    for (let i = 0; i < 2000; i++) {
+      const heading = random() * Math.PI * 2;
+      const body = {
+        ...box(random() * 100 - 40, random() * 100 - 40, random() * 12, random() * 8),
+        hx: Math.cos(heading),
+        hy: Math.sin(heading),
+      };
+      expect(index.hits([body])).toBe(polygons.some((p) => bodyHitsPolygon(body, p)));
+    }
+  });
+  it('retains near-touch tolerance and queries padded bounds across bins', () => {
+    const polygon = [ring(1, 1, 10, 10)];
+    const index = new PolygonIndex();
+    index.add(polygon);
+    const body = box(12 + 1e-7, 5, 2, 2);
+    expect(bodyHitsPolygon(body, polygon)).toBe(true);
+    expect(index.hits([body])).toBe(true);
+    expect(index.near(11, 3, 12, 4)).toBe(true);
+    expect(index.near(24, 3, 25, 4)).toBe(false);
+    const seam = new PolygonIndex();
+    seam.add([ring(12, 1, 1, 1)]);
+    expect(seam.near(11.999, 1, 11.999, 2)).toBe(true);
+  });
   it('checks rotated vehicles, including their ends rather than only centers', () => {
     expect(bodiesOverlap(box(0, 0), box(3, 0))).toBe(true);
     expect(bodiesOverlap(box(0, 0), box(0, 3))).toBe(false);
