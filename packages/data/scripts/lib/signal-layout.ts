@@ -2,8 +2,8 @@ import { SignalLayout, type SignalArm } from '@atlas/shared';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { signalStop, type RoadArm, type RoadVertex } from './streets';
+import { key, lines, SIGNAL_STOP_GAP_M, width } from './road-geometry';
 
-const key = (p: Position) => p.join(',');
 const position = (p: Position): [number, number] => [p[0]!, p[1]!];
 const angle = (a: number, b: number) => {
   const d = Math.abs((a % 180) - (b % 180));
@@ -29,14 +29,8 @@ export function resolveSignalLayout(
   }
   const edges = new Map<string, Set<string>>();
   function internal(p: Position, arm: RoadArm) {
-    const lines =
-      arm.road.geometry.type === 'LineString'
-        ? [arm.road.geometry.coordinates]
-        : arm.road.geometry.type === 'MultiLineString'
-          ? arm.road.geometry.coordinates
-          : [];
     const step = arm.forward ? 1 : -1;
-    for (const line of lines) {
+    for (const line of lines(arm.road)) {
       const start = line.findIndex(
         (q, i) => key(q) === key(p) && line[i + step] && key(line[i + step]!) === key(arm.toward),
       );
@@ -63,7 +57,7 @@ export function resolveSignalLayout(
       const dx = (p[0]! - arm.toward[0]!) * Math.cos((p[1]! * Math.PI) / 180);
       const dy = p[1]! - arm.toward[1]!;
       const bearing = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      const stop = signalStop(p, arm, signal.properties.signal_radius! + 1.5);
+      const stop = signalStop(p, arm, signal.properties.signal_radius! + SIGNAL_STOP_GAP_M);
       arms.push({
         road_id: arm.road.properties.id,
         junction: position(p),
@@ -72,12 +66,7 @@ export function resolveSignalLayout(
         inbound: !flow || flow === direction,
         outbound: !flow || flow === -direction,
         bearing,
-        width:
-          arm.road.properties.width ??
-          { road_major: 14, road_mid: 10, road_minor: 6 }[
-            arm.road.properties.class as 'road_major'
-          ] ??
-          6,
+        width: width(arm.road),
         group:
           angle(bearing, signal.properties.signal_a!) <= angle(bearing, signal.properties.signal_b!)
             ? 'a'

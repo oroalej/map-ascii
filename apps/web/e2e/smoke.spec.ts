@@ -114,6 +114,10 @@ for (const city of cities) {
           const position = { x: box.width / 2, y: box.height / 2 };
           const panel = page.getByRole('complementary', { name: 'Selected place' });
           await expect(panel).toHaveCount(0);
+          const legend = page
+            .locator('details')
+            .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
+          await expect(legend).toBeVisible();
           if (!hasTouch) {
             await canvas.hover({ position });
             await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 20_000 });
@@ -130,8 +134,10 @@ for (const city of cities) {
             });
           }).toPass({ timeout: 20_000 });
           await expect.poll(() => query(page).sel).toBe(place.id);
+          await expect(legend).toBeHidden();
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
+          await expect(legend).toBeVisible();
         },
       );
 

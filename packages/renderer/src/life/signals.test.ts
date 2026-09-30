@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { metersPerUnit } from '../raster/geometry';
+import { hashString, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { signalState } from './signals';
 import { TileLife, LifeWorld, type Mover } from './simulate';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
+import type { JunctionTable } from './junctions';
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
 function geography(signal = true, shared = true) {
@@ -57,6 +58,45 @@ const car = (): Mover => ({
   rank: 0,
 });
 describe('signals', () => {
+  it('uses legacy red and green gates when a layout has no matching local approach', () => {
+    const geo = geography(true, false);
+    geo.lineIds = Uint32Array.from([hashString('road/main'), hashString('road/side')]);
+    const center = tileToLngLat(tile, { x: 2048, y: 2048 });
+    geo.signalLayouts = [
+      {
+        members: [center],
+        arms: [
+          {
+            road_id: 'road/main',
+            junction: center,
+            toward: tileToLngLat(tile, { x: 0, y: 2048 }),
+            direction: 1,
+            inbound: true,
+            outbound: true,
+            bearing: 90,
+            width: 14,
+            group: 'a',
+            stop: tileToLngLat(tile, { x: 2048 - 9.5 * pm, y: 2048 }),
+            stop_width: 7,
+          },
+        ],
+      },
+    ];
+    const life = new TileLife(tile, geo, 1);
+    const legacy = new TileLife(tile, { ...geo, signalLayouts: undefined }, 1);
+    expect(life.signals.signals[0]!.approaches).toEqual([]);
+    const m = { ...car(), d: 2048 - 15 * pm, x: 2048 - 15 * pm };
+    for (const color of ['red', 'green'] as const) {
+      const clock = Array.from({ length: 140 }, (_, t) => t).find(
+        (t) => signalState(life.signals.signals[0]!.seed, t).a === color,
+      )!;
+      expect(life.signals.allows(m, 2048, 2048, clock, 15 * pm)).toBe(color === 'green');
+      const speed = life.signals.vehicleSpeed(m, 0.1, clock);
+      expect(speed).toBe(legacy.signals.vehicleSpeed(m, 0.1, clock));
+      if (color === 'red') expect(speed).toBeLessThan(m.speed);
+      else expect(speed).toBe(m.speed);
+    }
+  });
   it('cycles both axes with amber and all-red gaps, with mid-block pedestrian clearance', () => {
     const colors = new Set(
       Array.from({ length: 1000 }, (_, i) => {
@@ -126,6 +166,32 @@ describe('signals', () => {
   }, 30000);
 });
 describe('junction reservations', () => {
+  it('does not prepare or reserve zoom-hidden vehicles and releases their previous grants', () => {
+    const world = new LifeWorld();
+    world.sync([{ tile, key: 'zoom', life: geography(false) }]);
+    const life = worldTiles(world).get('zoom')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const m = { ...car(), d: 2048 - 10 * pm, x: 2048 - 10 * pm, v: 0 };
+    life.movers.push(m);
+    const table = (world as unknown as { junctions: JunctionTable }).junctions;
+    const before = structuredClone(m);
+    world.step(0.1, undefined, 14);
+    expect(m).toEqual(before);
+    expect(table.snapshot()).toEqual([]);
+
+    world.step(0.1, undefined, 18);
+    expect(table.granted(m)).toBe(true);
+    expect(m.x).toBeGreaterThan(before.x);
+    const paused = structuredClone(m);
+    world.step(0.1, undefined, 14);
+    expect(m).toEqual(paused);
+    expect(table.snapshot()).toEqual([]);
+
+    world.step(0.1, undefined, 18);
+    expect(table.granted(m)).toBe(true);
+    expect(m.x).toBeGreaterThan(paused.x);
+  });
   it('clears a real shared junction within thirty seconds with collision protection enabled', () => {
     const world = new LifeWorld();
     world.sync([{ tile, key: 'yield', life: geography(false) }]);

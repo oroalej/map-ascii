@@ -35,12 +35,7 @@ export type LampState = (typeof LampState)[keyof typeof LampState];
 /** A light's byte in the texture's G channel: its state (bits 0–2) and seed (3–7, 0–31). */
 export const lightByte = (state: LampState, seed: number) => (state & 7) | ((seed & 31) << 3);
 
-/**
- * Floats per lamp in a tile's `lamps`: the head's x, y (tile units), state, seed (0–31), the x, y
- * of the pool's center (out over the road, where the lamp's arm reaches), and the x, y of the
- * road's center line beside it.
- */
-export const LAMP_STRIDE = 8;
+export { LAMP_STRIDE } from './geometry';
 
 /** Floats per floodlight in a tile's `floods`: its center x, y and radius (tile units). */
 export const FLOOD_STRIDE = 3;

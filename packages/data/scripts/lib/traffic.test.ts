@@ -90,9 +90,50 @@ describe('traffic resolution', () => {
     way.properties = { id: 'walk', class: 'path', variant: 'crossing' };
     const out = mergeTraffic([cross()[0]!, way]);
     expect(out).toContain(way);
-    expect(out.find((f) => f.properties.id === 'walk:crossing')!.properties.crossing_bearing).toBe(
-      90,
+    expect(
+      out.find((f) => f.properties.id === 'walk:crossing:0,0')!.properties.crossing_bearing,
+    ).toBe(90);
+  });
+  it('gives crossing-way anchors distinct stable IDs and deduplicates repeated vertices', () => {
+    const roads = [0, 0.0002].map((x, i) =>
+      road(`road/${i}`, [
+        [x, -0.001],
+        [x, 0],
+        [x, 0.001],
+      ]),
     );
+    const way = road('walk', [
+      [0, 0],
+      [0.0002, 0],
+      [0, 0],
+    ]);
+    way.properties = { id: 'walk', class: 'path', variant: 'crossing' };
+    const anchors = (features: AtlasFeature[]) =>
+      mergeTraffic(features, { derive: false })
+        .filter((f) => f.properties.crossing_bearing !== undefined)
+        .sort((a, b) => a.properties.id.localeCompare(b.properties.id));
+    const first = anchors([...roads, way]);
+    expect(first).toHaveLength(2);
+    expect(new Set(first.map((f) => f.properties.id)).size).toBe(2);
+    expect(first.map((f) => f.geometry)).toEqual([
+      { type: 'Point', coordinates: [0, 0] },
+      { type: 'Point', coordinates: [0.0002, 0] },
+    ]);
+    expect(anchors([way, ...[...roads].reverse()])).toEqual(first);
+    expect(mergeTraffic([...roads, way], { derive: false })).toContain(way);
+  });
+
+  it('preserves a mapped point crossing identity', () => {
+    const mapped: AtlasFeature = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { id: 'osm:node/7', class: 'furniture', variant: 'crossing' },
+      tippecanoe: { layer: 'poi', minzoom: 15, maxzoom: 16 },
+    };
+    const crossings = mergeTraffic([cross()[0]!, mapped], { derive: false }).filter(
+      (f) => f.properties.crossing_bearing !== undefined,
+    );
+    expect(crossings.map((f) => f.properties.id)).toEqual(['osm:node/7']);
   });
   it('classifies marked nodes and keeps crossing ways in the path class', () => {
     expect(classify({ highway: 'traffic_signals' }, 'point', 10)).toBe('furniture');

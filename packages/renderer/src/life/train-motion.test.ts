@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { metersPerUnit } from '../raster/geometry';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, TileLife, trainLength, type Mover } from './simulate';
 import { trainLimits } from './train-motion';
 import { frameBetween } from './frames';
 import { worldTiles } from './testing/scenarios';
+import { activityLevels } from './config';
 
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
@@ -49,6 +50,37 @@ function train(x: number, speed = 12, dir: 1 | -1 = 1): Mover {
   };
 }
 describe('train motion', () => {
+  for (const state of ['moving', 'dwelling'] as const)
+    it(`keeps an existing ${state} train active at zero activity`, () => {
+      const world = new LifeWorld();
+      world.sync([{ key: 'rail', tile, life: rail(state === 'dwelling') }]);
+      const life = worldTiles(world).get('rail')!;
+      const m = train((state === 'dwelling' ? 350 : 100) * pm);
+      life.movers.splice(0, life.movers.length, m);
+      if (state === 'dwelling') {
+        m.pause = 0.2;
+        m.v = 0;
+        m.train!.stopX = m.x;
+        m.train!.stopY = m.y;
+      }
+      const center = tileToLngLat(tile, { x: 2048, y: 2048 });
+      const visible = () =>
+        world
+          .visible(18, { ...activityLevels(1), train: 0 }, center)
+          .filter((a) => a.kind === 'train');
+      expect(visible().map((a) => a.vehicle)).toEqual(['locomotive', 'coach']);
+      const before = m.x;
+      world.step(0.1, undefined, 18);
+      if (state === 'dwelling') {
+        expect(m.pause).toBeCloseTo(0.1);
+        expect(m.x).toBe(before);
+      } else expect(m.x).toBeGreaterThan(before);
+      for (let i = 0; i < 10; i++) world.step(0.1, undefined, 18);
+      expect(m.pause).toBeLessThanOrEqual(0);
+      expect(m.x).toBeGreaterThan(before);
+      expect(visible().map((a) => a.vehicle)).toEqual(['locomotive', 'coach']);
+    });
+
   it('transforms frames at different zooms and samples track without mutation', () => {
     const to = { z: 17, x: tile.x * 2 + 1, y: tile.y * 2 };
     const f = frameBetween(tile, to),

@@ -2371,7 +2371,7 @@ export class TileLife {
     for (const { i, m } of order) {
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
-      if (m.vehicle && env?.levels && m.rank >= env.levels[m.kind]) continue;
+      if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
@@ -3238,7 +3238,7 @@ export class LifeWorld {
     for (const tile of this.tiles.values()) {
       const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
-        (m.kind === 'vehicle' || !shows || shows(m.kind)) &&
+        (!shows || shows(m.kind)) &&
         near(m.x, m.y) &&
         (!env.levels || m.rank < env.levels[m.kind]) &&
         !tile.scenes.hidden(m);

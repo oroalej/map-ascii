@@ -127,9 +127,11 @@ const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
 function Legend({
   subdivisionLabel,
   sidewalksDerived,
+  hidden,
 }: {
   subdivisionLabel: string;
   sidewalksDerived: boolean;
+  hidden: boolean;
 }) {
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.05));
@@ -164,6 +166,7 @@ function Legend({
   return (
     <details
       className={styles.legend}
+      hidden={hidden}
       open={open}
       onToggle={(e) => {
         const next = (e.target as HTMLDetailsElement).open;
@@ -442,9 +445,11 @@ export function Hud({
         <div className={styles.row}>
           <ZoomReadout />
         </div>
-        {!panelOpen && (
-          <Legend subdivisionLabel={subdivisionLabel} sidewalksDerived={sidewalksDerived} />
-        )}
+        <Legend
+          subdivisionLabel={subdivisionLabel}
+          sidewalksDerived={sidewalksDerived}
+          hidden={panelOpen}
+        />
       </div>
       <div className={styles.bottomLeft} data-touring={touring}>
         <ScaleBar />

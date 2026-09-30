@@ -1,5 +1,5 @@
 import type { PlaceKind } from '@atlas/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import {
   activityLevels,
@@ -90,6 +90,56 @@ describe('random', () => {
       expect(n).toBeLessThan(1);
     }
   });
+});
+
+describe('inactive walkers', () => {
+  for (const kind of ['person', 'dog', 'cat'] as const)
+    it(`freezes an inactive ${kind} without clearance work and resumes when active`, () => {
+      const { life, m } = alone(
+        geometry([
+          [
+            LifeLine.path,
+            [
+              [0, 1000],
+              [4096, 1000],
+            ],
+            2,
+          ],
+        ]),
+        { kind, x: 1000, y: 1000, d: 1000, speed: perMeter, rank: 0.9, pause: 1 },
+      );
+      const guard = vi.fn(() => true);
+      const before = structuredClone(m);
+      for (let i = 0; i < 20; i++)
+        life.step(
+          0.1,
+          undefined,
+          undefined,
+          undefined,
+          {
+            rain: 0,
+            levels: { ...activityLevels(1), [kind]: 0.1 },
+          },
+          guard,
+        );
+      expect(m).toEqual(before);
+      expect(guard).not.toHaveBeenCalled();
+
+      for (let i = 0; i < 20; i++)
+        life.step(
+          0.1,
+          undefined,
+          undefined,
+          undefined,
+          {
+            rain: 0,
+            levels: { ...activityLevels(1), [kind]: 1 },
+          },
+          guard,
+        );
+      expect(m.d).toBeGreaterThan(before.d);
+      expect(guard).toHaveBeenCalled();
+    });
 });
 
 describe('laneOffset', () => {

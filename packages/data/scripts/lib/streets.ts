@@ -1,6 +1,7 @@
 import { SignalLayout, type City } from '@atlas/shared';
 import type { Position } from 'geojson';
-import type { AtlasFeature, AtlasProperties } from '../03-normalize';
+import type { AtlasFeature } from '../03-normalize';
+import { delta, key, lines, point, SIGNAL_STOP_GAP_M, width } from './road-geometry';
 
 export type RoadArm = { road: AtlasFeature; bearing: number; toward: Position; forward: boolean };
 export type RoadVertex = { p: Position; arms: RoadArm[] };
@@ -18,19 +19,6 @@ export type StreetStats = {
   shortApproaches: number;
 };
 
-const lines = (f: AtlasFeature): Position[][] =>
-  f.geometry.type === 'LineString'
-    ? [f.geometry.coordinates]
-    : f.geometry.type === 'MultiLineString'
-      ? f.geometry.coordinates
-      : [];
-const key = (p: Position) => `${p[0]},${p[1]}`;
-const delta = (a: Position, b: Position) =>
-  [(b[0]! - a[0]!) * 111320 * Math.cos((a[1]! * Math.PI) / 180), (b[1]! - a[1]!) * 111320] as const;
-const width = (road: AtlasFeature) =>
-  road.properties.width ??
-  { road_major: 14, road_mid: 10, road_minor: 6 }[road.properties.class as 'road_major'] ??
-  6;
 const road = (f: AtlasFeature) => !f.properties.region && f.properties.class.startsWith('road_');
 
 /** Apply sourced city corrections before resolving junction approaches and arrow anchors. */
@@ -57,16 +45,6 @@ export function applyRoadDirections(
     if (!matched.has(id)) throw new Error(`Road direction target not found in detail data: ${id}`);
   return result;
 }
-const point = (
-  id: string,
-  position: Position,
-  properties: Partial<AtlasProperties>,
-): AtlasFeature => ({
-  type: 'Feature',
-  geometry: { type: 'Point', coordinates: position },
-  properties: { id, class: 'furniture', ...properties },
-  tippecanoe: { layer: 'poi', minzoom: 15, maxzoom: 16 },
-});
 
 export function deriveSidewalks(features: AtlasFeature[], enabled = true): AtlasFeature[] {
   if (!enabled) return features;
@@ -207,8 +185,6 @@ export function mergeStreetDetails(
     undirectedMidblockStops = 0,
     shortApproaches = 0;
   const radius = (v: RoadVertex) => Math.max(3, ...v.arms.map((a) => width(a.road) / 2)) + 1;
-  // Matches life/config.ts SIGNAL.gap, the gap before the signal's stopping envelope.
-  const gap = 1.5;
   function stop(p: Position, arm: RoadArm, setback: number, mapped: boolean, id: string) {
     const direction = arm.forward ? -1 : 1;
     if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
@@ -265,7 +241,7 @@ export function mergeStreetDetails(
       stop(
         v!.p,
         arm,
-        (signal.properties.signal_radius ?? radius(v!)) + gap,
+        (signal.properties.signal_radius ?? radius(v!)) + SIGNAL_STOP_GAP_M,
         false,
         signal.properties.id,
       );
@@ -301,7 +277,7 @@ export function mergeStreetDetails(
           .slice(0, 1)
       : candidates;
     for (const arm of arms)
-      stop(v.p, arm, v.arms.length >= 3 ? radius(v) + gap : 0, true, f.properties.id);
+      stop(v.p, arm, v.arms.length >= 3 ? radius(v) + SIGNAL_STOP_GAP_M : 0, true, f.properties.id);
   }
   const base = deriveSidewalks(
     features.filter((f) => f.properties.variant !== 'traffic_stop'),

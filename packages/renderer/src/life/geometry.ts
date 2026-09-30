@@ -7,6 +7,12 @@ import type { PlaceKind, SignalLayout } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
+/**
+ * Floats per lamp: head x/y, state, seed, pool center x/y, and road center x/y.
+ * Kept with the geometry format so builders do not import lighting and simulation tuning.
+ */
+export const LAMP_STRIDE = 8;
+
 /** The kind of a life polyline; agents keep to lines of kinds they can use (life/config.ts). */
 export const LifeLine = {
   roadMajor: 0,
@@ -364,8 +370,9 @@ export class LifeBuilder {
     style: 'streetlight' | 'lantern' = 'streetlight',
   ) {
     for (const v of values) this.lamps.push(v);
-    for (let i = 0; i < values.length; i += 8) this.lampSites.push(site ? 1 : 0);
-    for (let i = 0; i < values.length; i += 8) this.lampStyles.push(style === 'lantern' ? 1 : 0);
+    for (let i = 0; i < values.length; i += LAMP_STRIDE) this.lampSites.push(site ? 1 : 0);
+    for (let i = 0; i < values.length; i += LAMP_STRIDE)
+      this.lampStyles.push(style === 'lantern' ? 1 : 0);
   }
 
   /** A floodlit landmark centered at `p`, `radius` tile units across. */

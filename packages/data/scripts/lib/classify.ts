@@ -206,7 +206,7 @@ export function classify(
 }
 
 /** Typical carriageway widths in meters, when OSM gives neither `width` nor `lanes`. */
-const defaultRoadWidths: Partial<Record<AtlasClass, number>> = {
+export const defaultRoadWidths: Readonly<Partial<Record<AtlasClass, number>>> = {
   road_major: 14,
   road_mid: 10,
   road_minor: 6,

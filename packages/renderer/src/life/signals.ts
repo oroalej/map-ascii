@@ -96,7 +96,7 @@ export class SignalControl {
       if (geo.kinds[line]! > LifeLine.path) continue;
       const stops: Stop[] = [];
       for (const s of this.signals) {
-        if (s.approaches) {
+        if (s.approaches?.length) {
           for (const a of s.approaches) {
             if (a.line === line && a.arm.inbound && a.stopAlong !== undefined)
               stops.push({
@@ -155,7 +155,7 @@ export class SignalControl {
   }
   allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
     for (const s of this.signals) {
-      if (s.approaches) {
+      if (s.approaches?.length) {
         const entry = s.approaches.find(
           (a) =>
             a.arm.inbound &&

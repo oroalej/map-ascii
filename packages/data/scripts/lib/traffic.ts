@@ -1,40 +1,18 @@
 import type { City, CityLifeConfig } from '@atlas/shared';
 import { applyRoadDirections, mergeStreetDetails, type RoadArm, type StreetStats } from './streets';
 import type { Position } from 'geojson';
-import type { AtlasFeature, AtlasProperties } from '../03-normalize';
+import type { AtlasFeature } from '../03-normalize';
 import { resolveSignalLayout } from './signal-layout';
+import { delta, key, lines, point, width } from './road-geometry';
 
 type Arm = RoadArm;
 type Junction = { p: Position; arms: Arm[] };
-const key = (p: Position) => `${p[0]},${p[1]}`;
-const delta = (a: Position, b: Position) => [
-  (b[0]! - a[0]!) * 111320 * Math.cos((a[1]! * Math.PI) / 180),
-  (b[1]! - a[1]!) * 111320,
-];
 const distance = (a: Position, b: Position) => Math.hypot(...delta(a, b));
 const bearing = (a: Position, b: Position) => {
   const [x, y] = delta(a, b);
-  return ((Math.atan2(x!, y!) * 180) / Math.PI + 180) % 180;
+  return ((Math.atan2(x, y) * 180) / Math.PI + 180) % 180;
 };
 const angle = (a: number, b: number) => Math.min(Math.abs(a - b), 180 - Math.abs(a - b));
-const lines = (f: AtlasFeature): Position[][] =>
-  f.geometry.type === 'LineString'
-    ? [f.geometry.coordinates]
-    : f.geometry.type === 'MultiLineString'
-      ? f.geometry.coordinates
-      : [];
-const width = (f: AtlasFeature) =>
-  f.properties.width ??
-  { road_major: 14, road_mid: 10, road_minor: 6 }[f.properties.class as 'road_major'] ??
-  6;
-function point(id: string, p: Position, properties: Partial<AtlasProperties>): AtlasFeature {
-  return {
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [...p] },
-    properties: { id, class: 'furniture', ...properties },
-    tippecanoe: { layer: 'poi', minzoom: 15, maxzoom: 16 },
-  };
-}
 
 /** Exact road vertices only: a geometric intersection may be a bridge. */
 function roadVertexArms(features: readonly AtlasFeature[]): Map<string, Junction> {
@@ -108,7 +86,8 @@ export function mergeTraffic(
       for (const line of lines(f))
         for (const p of line) {
           const match = roadVertices.get(key(p));
-          if (match) crossing(p, match.road, match.bearing, true, `${f.properties.id}:crossing`);
+          if (match)
+            crossing(p, match.road, match.bearing, true, `${f.properties.id}:crossing:${key(p)}`);
         }
       continue;
     }
@@ -121,7 +100,7 @@ export function mergeTraffic(
             b = line[i]!;
           const [x, y] = delta(a, b),
             [px, py] = delta(a, p);
-          const t = Math.max(0, Math.min(1, (px! * x! + py! * y!) / (x! * x! + y! * y! || 1)));
+          const t = Math.max(0, Math.min(1, (px * x + py * y) / (x * x + y * y || 1)));
           const q = [a[0]! + (b[0]! - a[0]!) * t, a[1]! + (b[1]! - a[1]!) * t];
           const d = distance(p, q);
           if (d <= 20 && (!nearest || d < nearest.d))
