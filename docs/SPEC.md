@@ -202,6 +202,8 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 
 ## 8. Responsiveness and accessibility
 
+The HUD cycles Quality through Auto (default), High, and Low, remembering the choice in this browser rather than the share URL. Auto reduces drawing density, effects and finally drawing pixel ratio when frames run long, then tries higher quality after sustained recovery. It waits until camera input and flights have been quiet for one second. Quality does not change the simulation or the map's detail schedule. The debug panel reports the applied tier; reduced motion keeps its existing precedence.
+
 - Mobile first-class: touch gestures, bottom-sheet panels, a larger minimum map cell size on small screens.
 - `prefers-reduced-motion`: no water animation, no wind (the Wind chip is disabled) and no rain, instant cell transitions, shorter fly-to, and no life layer agents (the "Life" toggle is disabled). The time-of-day lighting still applies, without the window flicker.
 - While the tab is hidden or not focused, or the map is scrolled off screen, nothing on it moves on its own: water, wind, rain, and the life layer's agents pause, and pick up where they were when it is watched again. The map still redraws for anything new (tiles arriving, the camera, the time of day).

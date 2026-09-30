@@ -172,6 +172,8 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 
 ## Log
 
+- **2026-09-30 — Adaptive drawing quality.** Auto reduces drawn crowd, effects and DPR with bounded frame-timing samples, quiet-input deferral, cooldown and backed-off recovery. High and Low are saved browser preferences; debug capture includes the applied tier. CSS-based simulation clearance and gust coordinates stay independent of drawing DPR. Recovery retains normal pacing and diagnostics remain optional.
+
 <!-- Append one short entry per completed phase: date, what shipped, known issues. -->
 
 - **2026-09-29 — Phase 0 (scaffold).** pnpm monorepo (`apps/web`, `packages/{renderer,data,content,shared}`); Next 16 static export showing a blank dark WebGL2 canvas with OSM attribution; renderer `createAtlas` stub; zod schemas for Landmark, NameHistory, Event, Tour, CameraState; content validator; pipeline step stubs; ESLint/Prettier/Vitest/Playwright; GitHub Actions CI. Known: Node 22.13+ required (Vitest 5), TypeScript pinned to ~6.0 (typescript-eslint), CI green pending first push.

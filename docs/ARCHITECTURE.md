@@ -251,6 +251,8 @@ Zod stays out of the browser bundle: the pipeline validates each generated file 
 
 ### Frame preparation and diagnostics
 
+Adaptive quality changes drawing only: Auto first thins drawn agents (1,200 → 700 → 500), then disables crown sway, ground wind, shadows, water detail, fish and beams, then caps DPR at 1.25. High pins the original drawing settings; Low pins the last tier. CSS-scheduled simulation clearance and gust coordinates remain independent of drawing DPR. Auto samples the next rAF callback after each draw, including callbacks that skip drawing; idle 30 fps pacing is not an overload signal. A bounded ten-second window requires 45 samples. Sustained p75 intervals above 25 ms for three seconds, or 40 ms for 1.5 seconds, lower quality after input has been quiet for one second. An eight-second cooldown and delayed, backed-off recovery trials prevent oscillation. Recovery requires healthy interval and CPU samples, changes no draw cadence, and does not require diagnostic profiling.
+
 - Empty tile meshes have `count: 0`, a null VAO, and no buffers. Drawing and disposal skip them.
 - Theme palettes are converted to RGB once per theme change. Vehicle part glyph indices belong to each map glyph atlas, rebuilt for theme, density, DPR, or context changes.
 - Crown filtering and matrices are reused while tiles, meshes, zoom, DPR, cell dimensions, grid origin, and target dimensions stay the same. A shift inside a cell does not change a matrix.
