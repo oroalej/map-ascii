@@ -7,7 +7,7 @@ type CityLink = { slug: string; name: string };
 
 /**
  * Sends `/` to the only city, keeping any view parameters, so `/?lat=…` links still work.
- * With several cities it lists them (Phase 7 replaces the list with the ASCII city picker).
+ * With several cities it lists them (Phase 6 replaces the list with the ASCII city picker).
  */
 export function CityRedirect({ cities }: { cities: CityLink[] }) {
   const only = cities.length === 1 ? cities[0] : undefined;

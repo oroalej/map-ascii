@@ -1,6 +1,6 @@
 # Roadmap — ASCII Atlas
 
-ASCII Atlas is a generic engine for ASCII city maps. **Naga City is the first city.** Phases 1–6 build the engine using Naga as the working example, and Phase 7 proves the engine is generic by onboarding a second city. Naga-specific tasks and acceptance criteria are marked **(Naga)**. Details are in [`docs/cities/naga.md`](cities/naga.md).
+ASCII Atlas is a generic engine for ASCII city maps. **Naga City is the first city.** Phases 1–5 build the engine using Naga as the working example, and Phase 6 proves the engine is generic by onboarding a second city. Naga-specific tasks and acceptance criteria are marked **(Naga)**. Details are in [`docs/cities/naga.md`](cities/naga.md).
 
 Work phase by phase. Each phase ends with its acceptance criteria met, tests green, and a short note appended to the "Log" at the bottom of this file.
 
@@ -66,17 +66,19 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - Zooming out stops at the view that fits the whole region.
 - The legend lists what is on screen, and the zoom readout tracks the camera.
 
-## Phase 3 — Orbit, 3D buildings, tours
+## Phase 3 — Tours
+
+Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings). It was removed on 2026-09-30, when the map became strictly flat and north-up (see Open decisions).
 
 **Tasks**
-- [x] Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset. Tilted views thin out their labels so the skyline shows.
+- [x] ~~Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset. Tilted views thin out their labels so the skyline shows.~~ Removed 2026-09-30: the map is flat and north-up.
 - [x] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
 - [x] Tours live in the city pack (`cities/<slug>/tours/`).
 - [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced). "From Isarog to the river" was removed when the map was limited to downtown; it comes back when the map extends past it.
 - [x] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Checked tilted at z17.5–19: the parts sit and rise where their plans put them, so no numbers changed. Plans and art stay `draft` until someone who knows the places reviews them.
 
 **Accept when**
-- **(Naga)** Tilting to 60° shows the Centro skyline in ASCII.
+- ~~**(Naga)** Tilting to 60° shows the Centro skyline in ASCII.~~ Removed 2026-09-30 with orbit mode.
 - Both tours play end to end on desktop and mobile.
 
 ## Phase 4 — Timeline v1
@@ -108,16 +110,6 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 **Accept when**
 - **(Naga)** At least one pre-2000 era has a coherent historical underlay plus dated features.
 - Every historical claim shows its sources.
-
-## Phase 6 — Street walk mode
-
-**Tasks**
-- [ ] Road graph built from OSM in the pipeline (nodes and edges with names), shipped as a compact binary.
-- [ ] Walk camera: snap to the nearest edge, move with WASD/arrows, choose branches at junctions, low eye-level pitch.
-- [ ] Pseudo-3D rendering along the road, with building facades on both sides.
-
-**Accept when**
-- **(Naga)** A visitor can walk from the Basilica to the Cathedral along real streets at ≥30 fps on mobile.
 
 ## Side quest — Living city
 
@@ -155,7 +147,7 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - **(Naga)** At 08:00 the Centro is visibly busier than at 14:00, and dusk falls at Naga's dusk from any visitor time zone.
 - Each milestone's agents fit inside the existing draw caps (1,200 drawn, 600 per tile), at 60 fps with Life on.
 
-## Phase 7 — Second city
+## Phase 6 — Second city
 
 **Tasks**
 - [ ] Choose the second city (see Open decisions), and write its brief at `docs/cities/<slug>.md`.
@@ -170,7 +162,8 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 
 ## Open decisions
 
-- Pure ASCII vs hybrid. Default: hybrid (photos and panels render normally). **Settled for the map (2026-09-29):** the map stays ASCII, and its legibility limits are fixed inside the engine (two colors per cell, sub-cell edges; SPEC.md §4) rather than by moving to a 3D library such as Three.js, which would replace none of the ASCII pipeline. A non-ASCII 3D view is still possible outside the map (e.g. a landmark model in the info panel), and Phase 6 street walk gets a spike before its renderer is chosen.
+- Pure ASCII vs hybrid. Default: hybrid (photos and panels render normally). **Settled for the map (2026-09-29):** the map stays ASCII, and its legibility limits are fixed inside the engine (two colors per cell, sub-cell edges; SPEC.md §4) rather than by moving to a 3D library such as Three.js, which would replace none of the ASCII pipeline.
+- ~~Which other views to offer (orbit, street walk).~~ **Settled (2026-09-30):** the map is strictly top-down and north-up. Tilt, rotation, 3D buildings, street walk, and 3D landmark models are out of scope.
 - Which imagery source is allowed for the timeline underlay. This must be settled before Phase 4.
 - Hosting for large tile and imagery files: Vercel or R2. **Settled for tiles for now:** each city's generated files are GitHub release assets pinned by its `tiles.lock.json`, fetched before every build and served by Vercel as static files (`DATA.md` §9). Revisit (R2) when imagery underlays arrive in Phase 4.
 - Final product name ("ASCII Atlas" is the working name) and domain name.
@@ -221,3 +214,4 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
   - Seated people are drawn as standing figures (a seated figure waits on the people-sprite work in progress).
   - Place radii are circles, so people around an L-shaped building can stand beyond its short wing.
 - **2026-09-30 — Smaller e2e suite.** Playwright is now a smoke suite for what unit tests can't see: one spec (`smoke.spec.ts`) with 7 desktop tests (the `/` redirect, the map loading and drawing with attribution, search to the panel, a click on a place opening the panel, the share-URL round trip, recovery from a lost WebGL context, and the first tour played end to end). Only the 2 tests tagged `@mobile` (drawing, and tap to open the bottom sheet) also run on the Pixel 7. That is 9 runs instead of about 44. Dropped: the HUD, URL-mirroring, 60° tilt, tour-control, "Places in view", `?debug=1`, and life-layer e2e tests. Tour controls and URL state were already unit-tested (`state/tour.test.ts`, `state/url.test.ts`), and the life preferences, including the `day` → 12:00 migration, now are too (`state/life.test.ts`).
+- **2026-09-30 — Flat map only (decision).** The map is strictly top-down and north-up from now on. Orbit mode (tilt to 60°, rotation, the compass, extruded buildings, standing tree crowns and trunks, tilted roof rims, and label thinning when tilted) is removed. So are the planned street walk mode (the old Phase 6), map mode's 0–15° pitch, and the idea of a 3D landmark model in the info panel. The second city is now Phase 6. Building and tree heights stay, since the flat map uses them for the shade ramp, walls, ridges, and shadows. The code removal follows in its own commits.

@@ -6,7 +6,7 @@ The engine is city-agnostic. Each city is added as a **city pack** (`packages/co
 
 Read these before doing substantial work:
 
-- `docs/SPEC.md` — product behavior: viewpoint, camera modes, zoom levels, visual language, interactions, tours, timeline, cities
+- `docs/SPEC.md` — product behavior: viewpoint, camera, zoom levels, visual language, interactions, tours, timeline, cities
 - `docs/ARCHITECTURE.md` — monorepo layout, renderer pipeline, data model, state, performance budgets
 - `docs/DATA.md` — data sources, pipeline steps, schemas, date tagging, licensing/attribution, adding a city
 - `docs/ROADMAP.md` — phased plan with tasks and acceptance criteria. **Work phase by phase; do not start a phase until the previous one meets its acceptance criteria.**
