@@ -41,6 +41,14 @@ import {
   type AgentKind,
   type PlaceBehavior,
 } from './config';
+import {
+  BIRD_SPECIES,
+  BirdPose,
+  Habitat,
+  HABITAT_NAMES,
+  pickSpecies,
+  type BirdSpecies,
+} from './birds';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
@@ -269,9 +277,13 @@ export type Parked = {
 export type Bird = { ox: number; oy: number; phase: number };
 
 export type Flock = {
+  species: BirdSpecies;
   /** The flock's center, in tile units. */
   x: number;
   y: number;
+  /** Which way it last flew (a unit vector, tile units). */
+  hx: number;
+  hy: number;
   /** The roost it circles (an index into `roosts` pairs). */
   roost: number;
   /** The tree it flies to or sits in (an index into `perches` pairs), or -1. */
@@ -310,6 +322,8 @@ export class TileLife {
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
   private readonly placeRng: () => number;
+  /** Birds' species: their own stream, so no one else moves for them. */
+  private readonly birdRng: () => number;
   /** Road lines with vehicles parked along their curbs; traffic drives on what is left. */
   private readonly parkingLines = new Set<number>();
   /** Per vertex, the distance along its line from the line's first vertex, in tile units. */
@@ -328,6 +342,7 @@ export class TileLife {
     this.rng = random(seed);
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
+    this.birdRng = random(seed ^ 0x165667b1);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
     for (let line = 0; line < lines; line++) {
@@ -788,22 +803,29 @@ export class TileLife {
       const perch = inTree ? Math.floor(rng() * perches) : -1;
       const home = inTree ? geo.perches : geo.roosts;
       const at = inTree ? perch : roost;
-      const size = Math.round(between(rng, BIRDS.flockSize));
+      // The species that gather over its home.
+      const habitat = inTree ? Habitat.trees : ((geo.roostHabitats[roost] ?? 0) as Habitat);
+      const species = pickSpecies(habitat, this.birdRng);
+      const spec = BIRD_SPECIES[species];
+      const size = Math.round(between(rng, spec.flockSize));
       const birds: Bird[] = [];
       for (let b = 0; b < size; b++) {
         const angle = rng() * 2 * Math.PI;
-        const spread = between(rng, BIRDS.spread) * this.perMeter;
+        const spread = between(rng, spec.spread) * this.perMeter;
         birds.push({ ox: Math.cos(angle) * spread, oy: Math.sin(angle) * spread, phase: rng() });
       }
       this.flocks.push({
+        species,
         x: home[at * 2]!,
         y: home[at * 2 + 1]!,
+        hx: 0,
+        hy: -1,
         roost,
         perch,
         perched: inTree,
         scatter: 0,
         angle: rng() * 2 * Math.PI,
-        radius: between(rng, BIRDS.orbit) * this.perMeter,
+        radius: between(rng, spec.orbit) * this.perMeter,
         stay: between(rng, BIRDS.stay),
         rank: rng(),
         birds,
@@ -1145,19 +1167,38 @@ export class TileLife {
   }
 
   /**
-   * Where a flock goes next: a tree to land in (with chance `PERCH.chance`, or always if the
-   * tile has no roost), else a roost to circle.
+   * Where a flock goes next: a tree to land in (with its species' chance, life/birds.ts
+   * `BirdSpec.perch`, or always if the tile has no roost), else a roost to circle, more likely
+   * one of a habitat its species favors.
    */
   private pickDestination(flock: Flock) {
     const roosts = this.geo.roosts.length / 2;
     const perches = this.geo.perches.length / 2;
+    const spec = BIRD_SPECIES[flock.species];
     flock.stay = between(this.rng, BIRDS.stay);
-    if (perches > 0 && (roosts === 0 || this.rng() < PERCH.chance)) {
+    if (perches > 0 && (roosts === 0 || this.rng() < spec.perch)) {
       flock.perch = Math.floor(this.rng() * perches);
     } else {
       flock.perch = -1;
-      if (roosts > 1) flock.roost = Math.floor(this.rng() * roosts);
+      if (roosts > 1) flock.roost = this.pickRoost(flock.species);
     }
+  }
+
+  /** A roost for a flock of `species`, weighted by how much it favors each one's habitat. */
+  private pickRoost(species: BirdSpecies): number {
+    const { habitats } = BIRD_SPECIES[species];
+    const kinds = this.geo.roostHabitats;
+    const weight = (i: number) =>
+      // Any roost now and then, so a flock is never stuck over one.
+      0.1 + habitats[HABITAT_NAMES[kinds[i] ?? Habitat.park]!];
+    let total = 0;
+    for (let i = 0; i < kinds.length; i++) total += weight(i);
+    let pick = this.rng() * total;
+    for (let i = 0; i < kinds.length; i++) {
+      pick -= weight(i);
+      if (pick < 0) return i;
+    }
+    return kinds.length - 1;
   }
 
   private stepFlocks(
@@ -1167,9 +1208,9 @@ export class TileLife {
   ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
-    const speed = BIRDS.speed * this.perMeter;
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
+      const speed = BIRD_SPECIES[flock.species].speed * this.perMeter;
       flock.scatter = Math.max(0, flock.scatter - dt);
       flock.stay -= dt;
       // In a tree: stay a while, unless a gust through the crown flushes the flock out.
@@ -1200,6 +1241,7 @@ export class TileLife {
           flock.x += (dx / distance) * step;
           flock.y += (dy / distance) * step;
         }
+        if (distance > 0) [flock.hx, flock.hy] = [dx / distance, dy / distance];
         continue;
       }
       if (count === 0) continue;
@@ -1215,6 +1257,7 @@ export class TileLife {
       if (distance > 0) {
         flock.x += (dx / distance) * reach;
         flock.y += (dy / distance) * reach;
+        [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
     }
   }
@@ -1284,6 +1327,8 @@ export type VisibleAgent = {
   line?: LifeLineShape;
   /** Birds: which wing glyph (0 or 1). */
   flap: number;
+  /** Birds: their species and pose (life/birds.ts); `ahead` is where they face. */
+  bird?: { species: BirdSpecies; pose: BirdPose };
 };
 
 export type LifeTile = { key: string; tile: TileId; life: LifeGeometry };
@@ -1592,21 +1637,35 @@ export class LifeWorld {
       for (const flock of life.flocks) {
         if (flock.rank >= birdsOut || !inView(flock.x, flock.y)) continue;
         const wobble = life.elapsed * 0.8;
+        const spec = BIRD_SPECIES[flock.species];
+        const heading = Math.atan2(flock.hy, flock.hx);
         // Perched, the birds sit still and close in the crown; flushed, they scatter outward.
-        const perchSpread = PERCH.spread / BIRDS.spread[1];
+        const perchSpread = PERCH.spread / spec.spread[1];
         const spread = flock.perched ? perchSpread : 1 + (3 * flock.scatter) / PERCH.scatter;
         for (const bird of flock.birds) {
           const turn = flock.perched ? bird.phase * 6 : wobble + bird.phase * 6;
           const cos = Math.cos(turn) * spread;
           const sin = Math.sin(turn) * spread;
-          const [lng, lat] = tileToLngLat(tile, {
-            x: flock.x + bird.ox * cos - bird.oy * sin,
-            y: flock.y + bird.ox * sin + bird.oy * cos,
-          });
+          const x = flock.x + bird.ox * cos - bird.oy * sin;
+          const y = flock.y + bird.ox * sin + bird.oy * cos;
+          const [lng, lat] = tileToLngLat(tile, { x, y });
           const flap = flock.perched
             ? 0
-            : Math.floor(life.elapsed * BIRDS.flap + bird.phase * 2) & 1;
-          out.push({ kind: 'bird', lng, lat, flap });
+            : Math.floor(life.elapsed * spec.flap + bird.phase * 2) & 1;
+          const pose = flock.perched
+            ? BirdPose.perched
+            : flap === 1
+              ? BirdPose.raised
+              : BirdPose.spread;
+          // Flying, each faces a little off the flock's way; sitting, each its own way.
+          const face = flock.perched
+            ? bird.phase * 2 * Math.PI
+            : heading + (bird.phase - 0.5) * 0.6;
+          const ahead = tileToLngLat(tile, {
+            x: x + Math.cos(face) * perMeter,
+            y: y + Math.sin(face) * perMeter,
+          });
+          out.push({ kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } });
         }
       }
     }

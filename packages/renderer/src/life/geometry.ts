@@ -5,6 +5,7 @@
  */
 import type { PlaceKind } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
+import { Habitat } from './birds';
 
 /** The kind of a life polyline; agents keep to lines of kinds they can use (life/config.ts). */
 export const LifeLine = {
@@ -75,8 +76,14 @@ export function placeFor(className: string, variant: number): PlaceKind | undefi
 /** Area classes whose outline people stroll around. */
 export const plazaClasses: ReadonlySet<string> = new Set(['park']);
 
-/** Area classes birds gather over. */
-export const roostClasses: ReadonlySet<string> = new Set(['park', 'trees', 'grass', 'water_area']);
+/** Area classes birds gather over (each a life/birds.ts `Habitat`, `habitatOf`). */
+export const roostClasses: ReadonlySet<string> = new Set([
+  'park',
+  'trees',
+  'grass',
+  'farmland',
+  'water_area',
+]);
 
 export type LifeGeometry = {
   /** Polyline vertices: x, y in tile units. */
@@ -89,6 +96,8 @@ export type LifeGeometry = {
   widths: Float32Array;
   /** Where birds gather: x, y in tile units. */
   roosts: Float32Array;
+  /** Each roost's life/birds.ts `Habitat`, which picks the species that gather there. */
+  roostHabitats: Uint8Array;
   /** Trees birds can land in: x, y pairs (tile units). */
   perches: Float32Array;
   /** Parking lots' stalls: x, y, then the heading (a unit vector), in tile units. */
@@ -126,6 +135,7 @@ export class LifeBuilder {
   private kinds: number[] = [];
   private widths: number[] = [];
   private roosts: number[] = [];
+  private roostHabitats: number[] = [];
   private perches: number[] = [];
   private spots: number[] = [];
   private stations: number[] = [];
@@ -143,8 +153,9 @@ export class LifeBuilder {
     for (const p of points) this.coords.push(p.x, p.y);
   }
 
-  roost(p: TilePoint) {
+  roost(p: TilePoint, habitat: Habitat = Habitat.park) {
     this.roosts.push(p.x, p.y);
+    this.roostHabitats.push(habitat);
   }
 
   /** A tree birds can land in. Past `MAX_TILE_PERCHES`, dropped. */
@@ -198,6 +209,7 @@ export class LifeBuilder {
       kinds: Uint8Array.from(this.kinds),
       widths: Float32Array.from(this.widths),
       roosts: Float32Array.from(this.roosts),
+      roostHabitats: Uint8Array.from(this.roostHabitats),
       perches: Float32Array.from(this.perches),
       spots: Float32Array.from(this.spots),
       stations: Float32Array.from(this.stations),
@@ -216,6 +228,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   g.kinds.buffer as ArrayBuffer,
   g.widths.buffer as ArrayBuffer,
   g.roosts.buffer as ArrayBuffer,
+  g.roostHabitats.buffer as ArrayBuffer,
   g.perches.buffer as ArrayBuffer,
   g.spots.buffer as ArrayBuffer,
   g.stations.buffer as ArrayBuffer,

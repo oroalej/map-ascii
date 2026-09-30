@@ -14,6 +14,7 @@ import {
   UMBRELLA,
   VENDORS,
 } from './config';
+import { BirdPose, Habitat } from './birds';
 import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
 import {
   alongTrail,
@@ -328,6 +329,40 @@ describe('birds in trees', () => {
     for (let i = 0; i < 20; i++) life.step(0.1, () => 0.9);
     expect(flock.scatter).toBe(0);
     expect(Math.hypot(flock.x - tree[0], flock.y - tree[1])).toBeGreaterThan(0);
+  });
+
+  it('picks each flock’s species by its roost, and egrets never land in trees', () => {
+    const b = new LifeBuilder();
+    b.roost({ x: 2048, y: 2048 }, Habitat.water);
+    b.perch({ x: tree[0], y: tree[1] });
+    const species = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const life = new TileLife(tile, b.finish(), seed);
+      for (const f of life.flocks) species.add(f.species);
+      const egrets = life.flocks.filter((f) => f.species === 'egret');
+      for (let i = 0; i < 200; i++) life.step(0.5);
+      expect(egrets.every((f) => !f.perched)).toBe(true);
+    }
+    expect(species.has('egret')).toBe(true);
+    // Trees alone never draw egrets.
+    for (let seed = 1; seed <= 40; seed++) {
+      const life = new TileLife(tile, geometry([], [], [tree]), seed);
+      expect(life.flocks.some((f) => f.species === 'egret')).toBe(false);
+    }
+  });
+
+  it('shows birds with their species, pose, and heading', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: '16/55192/30266', tile, life: geometry([], [[2048, 2048]], [tree]) }]);
+    world.step(0.1);
+    const birds = world.visible(18, 1, tileToLngLat(tile, { x: 2048, y: 2048 }));
+    const shown = birds.filter((a) => a.kind === 'bird');
+    expect(shown.length).toBeGreaterThan(0);
+    for (const b of shown) {
+      expect(b.bird).toBeDefined();
+      expect(b.ahead).toBeDefined();
+      expect([BirdPose.spread, BirdPose.raised, BirdPose.perched]).toContain(b.bird!.pose);
+    }
   });
 
   it('never perches where there are no trees', () => {

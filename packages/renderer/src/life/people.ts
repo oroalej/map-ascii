@@ -10,6 +10,7 @@
  * and `FIGURE_TONE` for its skin (the theme's person color) or a canopy's ribs, which the glyph
  * shader tells apart (shaders/glyph.ts `personColor`).
  */
+import { doubled } from './masters';
 import { Paint } from './vehicles';
 
 /** Someone walking, a child, an umbrella from above, or a paddler in a boat with their paddle. */
@@ -134,13 +135,6 @@ const ADULT_10 = [
   '........oo',
   '..........',
 ];
-
-/** A master at twice the size, each pixel doubled. */
-const doubled = (rows: readonly string[]) =>
-  rows.flatMap((row) => {
-    const wide = [...row].map((c) => c + c).join('');
-    return [wide, wide];
-  });
 
 // prettier-ignore
 const ADULT: Readonly<Record<number, readonly string[]>> = {

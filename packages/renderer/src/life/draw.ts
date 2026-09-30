@@ -5,6 +5,15 @@
  */
 import { classId } from '../classes';
 import { sextantGlyphs, type Theme } from '../theme';
+import {
+  birdByte,
+  birdFit,
+  birdGlyph,
+  BirdHeading,
+  birdInk,
+  BirdPose,
+  BIRD_SPECIES,
+} from './birds';
 import { agentBit, CellBit, lifeClassFor, type AgentKind } from './config';
 import {
   FIGURE_SIZE_M,
@@ -63,7 +72,8 @@ const MAX_STAMP_CELLS = 20_000;
  * than `STAMP_MIN_CELLS` along its length is one glyph that follows its heading on screen (the
  * first glyph across, the second up or down); a bigger one is drawn at its real size from its
  * plan. People are figures (`drawPeople`); a vendor's cart is drawn like a vehicle, but stands
- * only where people may. A bird's glyph follows its wing beat. Later agents win a shared cell.
+ * only where people may. A bird is drawn at its real size too (`drawBird`); one without a
+ * species takes the theme's glyph for its wing beat. Later agents win a shared cell.
  * Returns how many agents (each person in a group) landed on the grid.
  */
 export function packLife(
@@ -114,6 +124,10 @@ export function packLife(
         }
         continue;
       }
+    }
+    if (agent.bird && agent.ahead) {
+      if (drawBird(out, grid, agent, [col, row], theme, glyphIndex)) drawn++;
+      continue;
     }
     if (agent.people) drawn += drawPeople(out, grid, agent, [col, row], glyphIndex);
     const c = Math.floor(col);
@@ -305,25 +319,61 @@ function drawPeople(
 function stampFigure(
   out: Uint8Array,
   grid: LifeGrid,
+  center: [number, number],
+  along: [number, number],
+  right: [number, number],
+  look: PersonLook,
+  stroke: 0 | 1,
+  glyphIndex: (glyph: string) => number,
+  texel: (tone: boolean) => [number, number, number],
+): boolean {
+  const frame = look.flap === 1 ? 1 : 0;
+  // A canopy's thin ribs show in a cell where they are a third of its ink.
+  const toneShare = look.figure === 'umbrella' ? 1 / 3 : 1 / 2;
+  return stampMaster(
+    out,
+    grid,
+    center,
+    along,
+    right,
+    FIGURE_SIZE_M[look.figure],
+    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke),
+    toneShare,
+    glyphIndex,
+    texel,
+  );
+}
+
+/**
+ * Stamp a square master `size` m across, centered on `center` with `along` and `right` the
+ * screen vectors (in cells) of a meter forward and a meter to the right: each cell it covers
+ * shows the sixths of it `ink` marks (`ink(u forward, v right, detail)`, both 0–1 across the
+ * square, `detail` how many sixths it spans the fewer way; '.' is empty, 'o' tone), as a
+ * sextant glyph, in tone where more than `toneShare` of its ink is. Returns whether any cell
+ * landed on the grid.
+ */
+function stampMaster(
+  out: Uint8Array,
+  grid: LifeGrid,
   [cx, cy]: [number, number],
   [ax, ay]: [number, number],
   [sx, sy]: [number, number],
-  look: PersonLook,
-  stroke: 0 | 1,
+  size: number,
+  ink: (u: number, v: number, detail: number) => string,
+  toneShare: number,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
   if (Math.abs(det) < 1e-9) return false;
-  const half = FIGURE_SIZE_M[look.figure] / 2;
+  const half = size / 2;
   const c0 = Math.max(0, Math.floor(cx - (Math.abs(ax) + Math.abs(sx)) * half));
   const c1 = Math.min(cols - 1, Math.floor(cx + (Math.abs(ax) + Math.abs(sx)) * half));
   const r0 = Math.max(0, Math.floor(cy - (Math.abs(ay) + Math.abs(sy)) * half));
   const r1 = Math.min(rows - 1, Math.floor(cy + (Math.abs(ay) + Math.abs(sy)) * half));
   if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_STAMP_CELLS) return false;
-  const frame = look.flap === 1 ? 1 : 0;
-  // How many sixths (2 across a cell, 3 down it) the figure spans, the fewer way.
+  // How many sixths (2 across a cell, 3 down it) the master spans, the fewer way.
   const detail = 2 * half * Math.min(Math.hypot(2 * ax, 3 * ay), Math.hypot(2 * sx, 3 * sy));
   let any = false;
   for (let r = r0; r <= r1; r++) {
@@ -332,22 +382,20 @@ function stampFigure(
       let inked = 0;
       let tone = 0;
       for (let bit = 0; bit < 6; bit++) {
-        // The sixth's center, in meters forward and to the right of the figure's center.
+        // The sixth's center, in meters forward and to the right of the master's center.
         const px = c + ((bit & 1) + 0.5) / 2 - cx;
         const py = r + ((bit >> 1) + 0.5) / 3 - cy;
         const forward = (px * sy - py * sx) / det;
         const side = (ax * py - ay * px) / det;
         if (Math.abs(forward) >= half || Math.abs(side) >= half) continue;
-        const u = forward / half / 2 + 0.5;
-        const ink = figureInk(look.figure, frame, u, side / half / 2 + 0.5, detail, stroke);
-        if (ink === '.') continue;
+        const mark = ink(forward / half / 2 + 0.5, side / half / 2 + 0.5, detail);
+        if (mark === '.') continue;
         mask |= 1 << bit;
         inked++;
-        if (ink === 'o') tone++;
+        if (mark === 'o') tone++;
       }
       if (mask === 0) continue;
-      // A canopy's thin ribs show in a cell where they are a third of its ink.
-      const [cls, bits, byte] = texel(tone * (look.figure === 'umbrella' ? 3 : 2) > inked);
+      const [cls, bits, byte] = texel(tone > inked * toneShare);
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > 255) continue;
       const at = (r * cols + c) * 4;
@@ -359,6 +407,74 @@ function stampFigure(
     }
   }
   return any;
+}
+
+/**
+ * Draw a bird at its real size (life/birds.ts `birdFit`, its wingspan on screen): far out the
+ * theme's glyph for its pose, then a silhouette filling its cell turned to its heading on screen,
+ * and closest up stamped over the cells it covers (`stampMaster`), in its species' colors.
+ * Returns whether it landed on the grid.
+ */
+function drawBird(
+  out: Uint8Array,
+  grid: LifeGrid,
+  agent: VisibleAgent,
+  [col, row]: [number, number],
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+): boolean {
+  const { cols, rows, toCell, cellWidth, cellHeight } = grid;
+  const { species, pose } = agent.bird!;
+  const cls = classId(lifeClassFor.bird);
+  const bits = agentBit.bird;
+  const [aheadCol, aheadRow] = toCell(agent.ahead![0], agent.ahead![1]);
+  const along: [number, number] = [aheadCol - col, aheadRow - row];
+  const x = along[0] * cellWidth;
+  const y = along[1] * cellHeight;
+  const fit = birdFit((BIRD_SPECIES[species].wingspan * Math.hypot(x, y)) / cellWidth);
+  if (fit === 'stamp') {
+    // A quarter turn clockwise on screen, in pixels (rows run down the screen).
+    const right: [number, number] = [-y / cellWidth, x / cellHeight];
+    return stampMaster(
+      out,
+      grid,
+      [col, row],
+      along,
+      right,
+      BIRD_SPECIES[species].wingspan,
+      (u, v, detail) => birdInk(species, pose, u, v, detail),
+      1 / 2,
+      glyphIndex,
+      (tone) => [cls, bits, birdByte(species, tone)],
+    );
+  }
+  const c = Math.floor(col);
+  const r = Math.floor(row);
+  if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
+  let glyph: string | undefined;
+  if (fit === 'cell') {
+    const heading =
+      Math.abs(x) >= Math.abs(y)
+        ? x >= 0
+          ? BirdHeading.right
+          : BirdHeading.left
+        : y > 0
+          ? BirdHeading.down
+          : BirdHeading.up;
+    glyph = birdGlyph(pose, heading);
+  } else {
+    // The theme's: wings spread, raised, and sitting.
+    const glyphs = theme.styles[lifeClassFor.bird]?.glyphs ?? [];
+    glyph = glyphs[Math.min(pose === BirdPose.perched ? 2 : pose, glyphs.length - 1)];
+  }
+  const index = glyph ? glyphIndex(glyph) : 0;
+  if (index <= 0 || index > 255) return false;
+  const at = (r * cols + c) * 4;
+  out[at] = index;
+  out[at + 1] = cls;
+  out[at + 2] = bits;
+  out[at + 3] = birdByte(species, false, fit === 'cell');
+  return true;
 }
 
 /**

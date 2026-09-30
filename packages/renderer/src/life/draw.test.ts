@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
 import { sextantGlyphs, themes } from '../theme';
+import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit } from './config';
 import { packLife, vehicleByte, type LifeGrid } from './draw';
 import {
@@ -30,6 +31,7 @@ const glyphs = [
   '▪',
   '·',
   ...personGlyphs(),
+  ...birdGlyphs(),
   STALL_GLYPH,
   ...sextantGlyphs.slice(1),
 ];
@@ -96,6 +98,74 @@ describe('packLife', () => {
     expect(drawn).toBe(1);
     expect(cell(out, 3, 3)[0]).toBe(glyphIndex('-'));
     expect(cell(out, 0, 0)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe('packLife birds', () => {
+  const big: LifeGrid = { ...grid, cols: 40, rows: 30 };
+  /** A bird at (20, 15) facing along (`dx`, `dy`), `scale` cells per meter across. */
+  const bird = (
+    species: keyof typeof BIRD_SPECIES,
+    pose: BirdPose,
+    scale: number,
+    [dx, dy]: [number, number] = [0, -1],
+  ): VisibleAgent => ({
+    kind: 'bird',
+    lng: 20,
+    lat: 15,
+    ahead: [20 + dx * scale, 15 + dy * scale],
+    flap: 0,
+    bird: { species, pose },
+  });
+  const inked = (out: Uint8Array) => {
+    let n = 0;
+    for (let i = 2; i < out.length; i += 4) if (out[i]) n++;
+    return n;
+  };
+  const cell = (out: Uint8Array, col: number, row: number) =>
+    Array.from(out.subarray((row * big.cols + col) * 4, (row * big.cols + col) * 4 + 4));
+  const draw = (agent: VisibleAgent) => {
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    const drawn = packLife(out, big, [agent], themes.dark, glyphIndex);
+    return { out, drawn };
+  };
+
+  it('stays one font glyph far out, by its pose', () => {
+    const { out, drawn } = draw(bird('maya', BirdPose.raised, 0.5));
+    expect(drawn).toBe(1);
+    expect(inked(out)).toBe(1);
+    expect(cell(out, 20, 15)[0]).toBe(glyphIndex('-'));
+    expect(cell(draw(bird('maya', BirdPose.perched, 0.5)).out, 20, 15)[0]).toBe(glyphIndex('·'));
+  });
+
+  it('fills its cell with a silhouette turned to its heading on screen', () => {
+    // An egret about a cell across.
+    const scale = 1 / BIRD_SPECIES.egret.wingspan;
+    const { out } = draw(bird('egret', BirdPose.spread, scale, [-1, 0]));
+    expect(inked(out)).toBe(1);
+    expect(cell(out, 20, 15)).toEqual([
+      glyphIndex(birdGlyph(BirdPose.spread, BirdHeading.left)),
+      classId('life_bird'),
+      agentBit.bird,
+      birdByte('egret', false, true),
+    ]);
+  });
+
+  it('is stamped at its real size up close, bigger for bigger species', () => {
+    const scale = 8;
+    const egret = draw(bird('egret', BirdPose.spread, scale));
+    const maya = draw(bird('maya', BirdPose.spread, scale));
+    expect(egret.drawn).toBe(1);
+    expect(inked(egret.out)).toBeGreaterThan(inked(maya.out));
+    expect(inked(maya.out)).toBeGreaterThan(1);
+    // In sextants, some of them the egret's bill.
+    const texels = [];
+    for (let i = 0; i < egret.out.length; i += 4) {
+      if (egret.out[i + 2]) texels.push(Array.from(egret.out.subarray(i, i + 4)));
+    }
+    expect(texels.every(([g]) => sextantGlyphs.includes(glyphs[g!]!))).toBe(true);
+    expect(texels.some(([, , , byte]) => byte === birdByte('egret', true))).toBe(true);
+    expect(texels.some(([, , , byte]) => byte === birdByte('egret'))).toBe(true);
   });
 });
 

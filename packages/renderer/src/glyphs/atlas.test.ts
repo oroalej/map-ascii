@@ -12,6 +12,7 @@ import {
   streetlightGlyph,
   themes,
 } from '../theme';
+import { birdGlyphs } from '../life/birds';
 import { FIGURE_TONE, figureGlyph, figureOf, MIN_FIGURE_PX, personGlyphs } from '../life/people';
 import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
 import { drawProcedural, shadeCoverage } from './atlas';
@@ -243,6 +244,7 @@ describe('glyph set', () => {
         ...rainGlyphs,
         ...vehicleGlyphs(),
         ...personGlyphs(),
+        ...birdGlyphs(),
         streetlightGlyph,
       ]);
       expect(new Set(glyphs)).toEqual(expected);

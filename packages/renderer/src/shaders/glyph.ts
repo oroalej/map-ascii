@@ -15,6 +15,7 @@
  * Vehicles take their colors from their paint and the part each cell shows.
  */
 import { Flags, MAX_CLASSES } from '../classes';
+import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import { CellBit } from '../life/config';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
@@ -68,6 +69,8 @@ uniform int u_vehicle;            // the vehicles' class id (paints, lights)
 uniform int u_boat;               // the boats' class id (paints, lights)
 uniform int u_train;              // the trains' class id (paints, lights)
 uniform int u_person;             // the people's class id (candles)
+uniform int u_bird;               // the birds' class id (species colors)
+uniform vec3 u_birdPaints[${BIRD_SPECIES_ORDER.length * 2}]; // per species: body, accent
 uniform vec3 u_paints[${PAINT_COUNT}];   // vehicle paints (theme.ts vehiclePaints)
 uniform float u_rain;             // how hard it rains, 0–1 (life/wind.ts RAIN)
 uniform float u_rainSlant;        // columns a drop drifts per two rows (the wind's x)
@@ -258,6 +261,16 @@ vec3 personColor(int byte, float coverage) {
   return daylit(tone ? u_colors[u_person] : paint);
 }
 
+// A bird's color (life/birds.ts): its species' body, or its accent where a stamped cell says so
+// or a silhouette's tone ink is. A bird without a species (byte 255), the theme's bird color.
+vec3 birdColor(int byte, float coverage) {
+  if (byte == 255) return daylit(u_colors[u_bird]);
+  int species = min(byte & 15, ${BIRD_SPECIES_ORDER.length - 1});
+  bool accent = (byte & ${BIRD_ACCENT_BIT}) != 0 ||
+    ((byte & ${BIRD_SILHOUETTE_BIT}) != 0 && coverage < 0.7);
+  return daylit(u_birdPaints[species * 2 + (accent ? 1 : 0)]);
+}
+
 int imodRain(int a, int n) {
   return ((a % n) + n) % n;
 }
@@ -363,11 +376,15 @@ void main() {
     int lifeByte = int(life.a * 255.0 + 0.5);
     bool painted = lifeClass == u_vehicle || lifeClass == u_boat || lifeClass == u_train;
     bool person = lifeClass == u_person;
+    bool bird = lifeClass == u_bird;
     vec3 color = painted
       ? vehicleColor(lifeByte, night)
-      : person ? personColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
-    // A figure's two inks are both solid (glyphs/atlas.ts drawFigure).
-    if (person) coverage = coverage > 0.0 ? 1.0 : 0.0;
+      : person ? personColor(lifeByte, coverage)
+      : bird ? birdColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
+    // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.
+    if (person || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
+      coverage = coverage > 0.0 ? 1.0 : 0.0;
+    }
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
       // A candle, from dusk: warm, each flickering on its own beat.
       float beat = float(cellHash(u_origin + cell) & 7u) + 3.0;

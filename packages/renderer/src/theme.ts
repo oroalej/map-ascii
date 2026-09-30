@@ -1,4 +1,5 @@
 import type { RenderClass } from './classes';
+import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
@@ -64,6 +65,11 @@ export type Theme = {
   styles: Partial<Record<RenderClass, ClassStyle>>;
   /** The life layer's vehicle paints, 0xRRGGBB, in life/vehicles.ts `Paint` order. */
   vehiclePaints: readonly number[];
+  /**
+   * The birds' colors, 0xRRGGBB: body, then accent (a bill, a cap, a throat), per species in
+   * life/birds.ts `BIRD_SPECIES_ORDER`.
+   */
+  birdPaints: readonly (readonly [number, number])[];
 };
 
 /** Connectivity-mask order: 0 none, 1 N, 2 E, 3 NE, 4 S, …, 15 all; then 16 `╱`, 17 `╲`. */
@@ -191,16 +197,20 @@ type Palette = Record<
 > & {
   /** In life/vehicles.ts `Paint` order. */
   vehiclePaints: readonly number[];
+  /** In life/birds.ts `BIRD_SPECIES_ORDER`. */
+  birdPaints: readonly (readonly [number, number])[];
 };
 
 /** Glyphs and classes from SPEC.md §4; only the colors differ between themes. */
 function makeTheme(background: number, c: Palette): Theme {
   if (c.vehiclePaints.length !== PAINT_COUNT) throw new Error('one color per vehicle paint');
+  if (c.birdPaints.length !== BIRD_SPECIES_ORDER.length) throw new Error('colors per bird species');
   return {
     background: rgb(background),
     label: c.label,
     accent: c.accent,
     vehiclePaints: c.vehiclePaints,
+    birdPaints: c.birdPaints,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
       water_river: {
@@ -268,12 +278,13 @@ function makeTheme(background: number, c: Palette): Theme {
       // The life layer (life/simulate.ts) picks among these itself: a vehicle by its heading on
       // screen (across, then up or down), a bird by its wing beat. Vehicles take their glyphs
       // and paints from life/vehicles.ts and `vehiclePaints`, and people their figures from
-      // life/people.ts; these are the legend's.
+      // life/people.ts, and birds theirs from life/birds.ts; these are the legend's (a bird's far
+      // out: wings spread, raised, and sitting).
       life_vehicle: { kind: 'single', glyphs: ['▬', '▮'], color: c.vehicle },
       life_person: { kind: 'single', glyphs: ['☺'], color: c.person },
       life_boat: { kind: 'single', glyphs: ['◊'], color: c.boat },
       life_train: { kind: 'single', glyphs: ['▬', '▮'], color: c.train },
-      life_bird: { kind: 'single', glyphs: ['v', '-'], color: c.bird },
+      life_bird: { kind: 'single', glyphs: ['v', '-', '·'], color: c.bird },
     },
   };
 }
@@ -324,6 +335,13 @@ export const themes: Record<ThemeName, Theme> = {
       0xeeeeea, 0xb4bac4, 0x6c7380, 0xe8483c, 0xa8303a, 0x3f7ee8, 0x7cc4ef, 0xf2c62e,
       0x3fb56a, 0xf08a2c, 0xa66ee0, 0xd8dde6, 0xe9dcb8, 0x2fb5a8, 0xf07aa8,
     ],
+    // maya, swallow, pigeon, egret
+    birdPaints: [
+      [0xb58a5c, 0x4a3426],
+      [0x5a7cc8, 0xe0874a],
+      [0x9aa3b4, 0x5e6a80],
+      [0xf4f6f2, 0xf2c62e],
+    ],
   }),
   light: makeTheme(0xf4f1e8, {
     river: 0x137f9a,
@@ -368,6 +386,13 @@ export const themes: Record<ThemeName, Theme> = {
     vehiclePaints: [
       0xc9c5ba, 0x9aa0aa, 0x3d434c, 0xc8321f, 0x7e1f2a, 0x1f57c0, 0x3a8fc8, 0xd1a000,
       0x2b8a4a, 0xd06a10, 0x7a3fb8, 0x8a93a0, 0xc9b88a, 0x178a80, 0xd04a86,
+    ],
+    // Egrets a warm gray, so they still show on the pale map.
+    birdPaints: [
+      [0x7a5230, 0x2a1c12],
+      [0x1f3f80, 0xb8501a],
+      [0x5c6476, 0x2e343e],
+      [0xa8a396, 0xc89a00],
     ],
   }),
 };
@@ -443,6 +468,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...sextantGlyphs,
     ...vehicleGlyphs(),
     ...personGlyphs(),
+    ...birdGlyphs(),
     ...rainGlyphs,
     streetlightGlyph,
   ];

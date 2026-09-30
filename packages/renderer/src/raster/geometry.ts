@@ -22,6 +22,7 @@ import {
 } from '../life/geometry';
 import { ROAD_AREA_ZOOM, ROOF_ZOOM } from '../glyphs/select';
 import { FLOOD, SHOP } from '../life/config';
+import { habitatOf } from '../life/birds';
 import { placeTileLamps, type LitLine } from '../life/lights';
 
 /** The variant code of a flat roof (classes.ts `variantCode`). */
@@ -898,7 +899,9 @@ export function buildTileGeometry(
           }
           // A roost belongs to the tile that holds it, not to its neighbors' buffers.
           const inside = center.x >= 0 && center.x < EXTENT && center.y >= 0 && center.y < EXTENT;
-          if (!isRegion && inside && roostClasses.has(className)) life.roost(center);
+          if (!isRegion && inside && roostClasses.has(className)) {
+            life.roost(center, habitatOf(className));
+          }
           if (!isRegion && className === 'building_station') life.station(center);
           if (!isRegion && className === 'building_market') life.market(center);
           // A place people gather at, owned by the tile that holds its center.

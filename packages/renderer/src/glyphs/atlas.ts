@@ -3,6 +3,7 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import {
   FIGURE_SCALES,
   FIGURE_TONE,
@@ -241,6 +242,25 @@ function drawFigure(slot: Slot, g: FigureGlyph) {
   }
 }
 
+/**
+ * A bird filling its cell (life/birds.ts `birdPixels`): square, centered, as wide as the cell
+ * (or as tall, if that is less), in the same two inks as a figure.
+ */
+function drawBird(slot: Slot, g: BirdGlyph) {
+  const { data, stride, w, h } = slot;
+  const box = Math.min(w, h);
+  const ox = Math.floor((w - box) / 2);
+  const oy = Math.floor((h - box) / 2);
+  const pixel = birdPixels(g, box);
+  for (let y = 0; y < box; y++) {
+    for (let x = 0; x < box; x++) {
+      const ink = pixel(x, y);
+      if (ink === '.') continue;
+      data[(slot.y0 + oy + y) * stride + slot.x0 + ox + x] = ink === '#' ? 255 : FIGURE_TONE;
+    }
+  }
+}
+
 /** A vendor's cart (life/vehicles.ts `STALL_GLYPH`): a square awning in stripes. */
 function drawStall(slot: Slot) {
   const { w, h } = slot;
@@ -254,7 +274,7 @@ function drawStall(slot: Slot) {
 
 /**
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
- * figure, or a vendor's cart.
+ * figure, a bird, or a vendor's cart.
  */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
@@ -267,6 +287,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if ('█▓▒░▀'.includes(glyph)) drawBlock(slot, glyph);
   else if (sextantMasks.has(glyph)) drawSextant(slot, sextantMasks.get(glyph)!);
   else if (figureOf(glyph)) drawFigure(slot, figureOf(glyph)!);
+  else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
   else if (glyph === STALL_GLYPH) drawStall(slot);
   else return false;
   return true;

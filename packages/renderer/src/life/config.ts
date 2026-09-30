@@ -272,29 +272,23 @@ export const MAX_TILE_GATHERERS = 150;
 /** The share of farm workers who lead a carabao. */
 export const CARABAO_SHARE = 0.5;
 
-/** Birds: flocks per tile (at most one per roost), birds per flock, and how they fly. */
+/**
+ * Birds: flocks per tile (at most one per roost or tree) and how long a flock stays over one
+ * roost, s. Each flock's species sets the rest (life/birds.ts `BIRD_SPECIES`).
+ */
 export const BIRDS = {
   flocksPerTile: 5,
-  flockSize: [3, 7] as const,
-  /** m/s */
-  speed: 9,
-  /** Circles over a roost, m. */
-  orbit: [15, 40] as const,
-  /** How far birds spread around the flock's center, m. */
-  spread: [2, 8] as const,
-  /** How long a flock stays over one roost, s. */
   stay: [15, 45] as const,
-  /** Wing beats per second (the glyph alternates). */
-  flap: 3,
 };
 
 /**
  * Birds in trees: a flock picking where to go next lands in a tree (a perch, raster/geometry.ts)
- * with chance `chance`, settles within `spread` m of its trunk, and stays its `stay`. A gust in
- * the crown of at least `flush` (life/wind.ts strength × glyphs/select.ts treeGust) sends it up
- * at once, its birds scattering outward for `scatter` seconds before they regroup.
+ * with its species' chance (life/birds.ts `BirdSpec.perch`), settles within `spread` m of its
+ * trunk, and stays its `stay`. A gust in the crown of at least `flush` (life/wind.ts strength ×
+ * glyphs/select.ts treeGust) sends it up at once, its birds scattering outward for `scatter`
+ * seconds before they regroup.
  */
-export const PERCH = { chance: 0.5, spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
+export const PERCH = { spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
 
 /**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):
