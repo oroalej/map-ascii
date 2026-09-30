@@ -42,13 +42,42 @@ function inPolygon(point: [number, number], rings: Ring[]): boolean {
   return !!outer && inRing(point, outer) && !holes.some((h) => inRing(point, h));
 }
 
+/** Each area's bounding box, [west, south, east, north], worked out once. */
+const boxes = new WeakMap<SubdivisionArea, [number, number, number, number]>();
+function boxOf(area: SubdivisionArea) {
+  let box = boxes.get(area);
+  if (!box) {
+    box = [Infinity, Infinity, -Infinity, -Infinity];
+    const { geometry } = area;
+    const polygons =
+      geometry.type === 'Polygon'
+        ? [geometry.coordinates as Ring[]]
+        : geometry.type === 'MultiPolygon'
+          ? (geometry.coordinates as Ring[][])
+          : [];
+    for (const [outer] of polygons) {
+      for (const [x, y] of (outer ?? []) as [number, number][]) {
+        box[0] = Math.min(box[0], x);
+        box[1] = Math.min(box[1], y);
+        box[2] = Math.max(box[2], x);
+        box[3] = Math.max(box[3], y);
+      }
+    }
+    boxes.set(area, box);
+  }
+  return box;
+}
+
 /** The subdivision area containing a point, if any (`<city>.subdivisions.json`). */
 export function areaAt(
   areas: readonly SubdivisionArea[],
   lng: number,
   lat: number,
 ): SubdivisionArea | undefined {
-  return areas.find(({ geometry }) => {
+  return areas.find((area) => {
+    const [west, south, east, north] = boxOf(area);
+    if (lng < west || lng > east || lat < south || lat > north) return false;
+    const { geometry } = area;
     if (geometry.type === 'Polygon') return inPolygon([lng, lat], geometry.coordinates as Ring[]);
     if (geometry.type === 'MultiPolygon') {
       return (geometry.coordinates as Ring[][]).some((p) => inPolygon([lng, lat], p));

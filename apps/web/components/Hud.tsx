@@ -15,7 +15,7 @@ import {
   type ClimateConfig,
   type SubdivisionArea,
 } from '@atlas/shared';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
@@ -34,10 +34,16 @@ const subscribeWide = (onChange: () => void) => {
   return () => query.removeEventListener('change', onChange);
 };
 
+/** A camera value rounded to `step`, so a component re-renders only when what it shows moves. */
+const round = (value: number, step: number) => Math.round(value / step) * step;
+
 /** Load `<city>.subdivisions.json` and keep the subdivision under the view's center current. */
 function useSubdivisionTracking(city: string) {
   const [areas, setAreas] = useState<readonly SubdivisionArea[]>([]);
-  const center = useAtlasStore((s) => (s.camera ? `${s.camera.lng},${s.camera.lat}` : null));
+  // To about 10 m: the name under the center doesn't need looking up every frame of a pan.
+  const center = useAtlasStore((s) =>
+    s.camera ? `${round(s.camera.lng, 1e-4)},${round(s.camera.lat, 1e-4)}` : null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +71,7 @@ function useSubdivisionTracking(city: string) {
 }
 
 /** A legend picture drawn pixel by pixel, one run of same-colored pixels per rect. */
-function PixelIcon({ icon }: { icon: LegendIcon }) {
+const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
   const { pixels, paint, tone } = icon;
   const runs: { x: number; y: number; width: number; fill: string }[] = [];
   pixels.forEach((row, y) => {
@@ -88,10 +94,11 @@ function PixelIcon({ icon }: { icon: LegendIcon }) {
       ))}
     </svg>
   );
-}
+});
 
 function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
-  const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
+  // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
+  const rounded = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.05));
   const theme = useAtlasStore((s) => s.theme);
   const atlas = useAtlasInstance((s) => s.atlas);
   const life = useLifeShown();
@@ -103,8 +110,6 @@ function Legend({ subdivisionLabel }: { subdivisionLabel: string }) {
   const [lit, setLit] = useState<{ atlas: Atlas; on: boolean } | null>(null);
   useEffect(() => atlas?.on('lightschange', (on) => setLit({ atlas, on })), [atlas]);
   const lights = lit?.atlas === atlas && lit.on;
-  // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
-  const rounded = Math.round(zoom * 20) / 20;
   const entries = useMemo(
     () => legendEntries(theme, rounded, onScreen, { life, lights }),
     [theme, rounded, onScreen, life, lights],
@@ -204,9 +209,10 @@ function LifeControls({
   const enabled = useLifeStore((s) => s.enabled);
   const time = useLifeStore((s) => s.time);
   const wind = useLifeStore((s) => s.wind);
+  // With no time zone, the sun's time at the view's longitude, to the degree (4 minutes).
   const month = useCityMonth(
     timezone,
-    useAtlasStore((s) => s.camera?.lng ?? 0),
+    useAtlasStore((s) => (timezone ? 0 : Math.round(s.camera?.lng ?? 0))),
   );
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
   const nextTime = TIME_CHOICES[(TIME_CHOICES.indexOf(time) + 1) % TIME_CHOICES.length]!;
@@ -302,6 +308,49 @@ function ProcessionControls() {
   );
 }
 
+function ZoomReadout() {
+  const zoom = useAtlasStore((s) => (s.camera?.zoom ?? 0).toFixed(1));
+  const level = useAtlasStore((s) => zoomLevel(s.camera?.zoom ?? 0));
+  return (
+    <p className={styles.zoom} aria-label="Zoom">
+      z {zoom} · {level}
+    </p>
+  );
+}
+
+function ScaleBar() {
+  const lat = useAtlasStore((s) => round(s.camera?.lat ?? 0, 1e-3));
+  const zoom = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.01));
+  const bar = scaleBar(lat, zoom);
+  return (
+    <div className={styles.scale} aria-label={`Scale: ${bar.label}`}>
+      <span className={styles.bar} style={{ width: `${bar.pixels}px` }} />
+      <span>{bar.label}</span>
+    </div>
+  );
+}
+
+/** The view center's coordinates, shown on demand (subscribed to only while shown). */
+function CoordinatesButton() {
+  const [show, setShow] = useState(false);
+  return (
+    <button
+      type="button"
+      className={styles.button}
+      aria-pressed={show}
+      onClick={() => setShow((v) => !v)}
+    >
+      {show ? <Coordinates /> : 'Coordinates'}
+    </button>
+  );
+}
+
+function Coordinates() {
+  const lat = useAtlasStore((s) => s.camera?.lat ?? 0);
+  const lng = useAtlasStore((s) => s.camera?.lng ?? 0);
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
 function ShareButton() {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   useEffect(() => {
@@ -345,14 +394,12 @@ export function Hud({
   timezone?: string | undefined;
 }) {
   useSubdivisionTracking(city);
-  const camera = useAtlasStore((s) => s.camera);
+  const hasCamera = useAtlasStore((s) => s.camera !== null);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
   const touring = useAtlasStore((s) => s.tour !== null);
   const subdivision = useUiStore((s) => s.subdivision);
-  const [showCoords, setShowCoords] = useState(false);
-  if (!camera) return null;
+  if (!hasCamera) return null;
 
-  const bar = scaleBar(camera.lat, camera.zoom);
   const resetView = () =>
     useAtlasInstance.getState().atlas?.setCamera({ pitch: 0, bearing: 0 }, { animate: true });
 
@@ -360,18 +407,13 @@ export function Hud({
     <>
       <div className={styles.topRight}>
         <div className={styles.row}>
-          <p className={styles.zoom} aria-label="Zoom">
-            z {camera.zoom.toFixed(1)} · {zoomLevel(camera.zoom)}
-          </p>
+          <ZoomReadout />
           <Compass onReset={resetView} />
         </div>
         {!panelOpen && <Legend subdivisionLabel={subdivisionLabel} />}
       </div>
       <div className={styles.bottomLeft} data-touring={touring}>
-        <div className={styles.scale} aria-label={`Scale: ${bar.label}`}>
-          <span className={styles.bar} style={{ width: `${bar.pixels}px` }} />
-          <span>{bar.label}</span>
-        </div>
+        <ScaleBar />
         {subdivision && (
           <p className={styles.line}>
             {capitalize(subdivisionLabel)}{' '}
@@ -382,14 +424,7 @@ export function Hud({
           </p>
         )}
         <div className={styles.row}>
-          <button
-            type="button"
-            className={styles.button}
-            aria-pressed={showCoords}
-            onClick={() => setShowCoords((v) => !v)}
-          >
-            {showCoords ? `${camera.lat.toFixed(5)}, ${camera.lng.toFixed(5)}` : 'Coordinates'}
-          </button>
+          <CoordinatesButton />
           <ShareButton />
         </div>
         <div className={styles.row}>
