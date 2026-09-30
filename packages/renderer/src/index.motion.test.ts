@@ -142,6 +142,50 @@ describe('live motion preference', () => {
     expect(atlas.getProfile()!.samples).toHaveLength(1);
   });
 
+  it('applies quality DPR caps and restores High without changing simulation clearance', () => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const changed = vi.fn();
+    atlas.on('qualitychange', changed);
+    draw(10);
+    const minimum = step.mock.calls.at(-1)![6];
+    expect(canvas.width).toBe(800);
+    atlas.setQuality('low');
+    draw(1010);
+    expect(canvas.width).toBe(500);
+    expect(step.mock.calls.at(-1)![6]).toBe(minimum);
+    expect(atlas.getQuality()).toBe('low');
+    expect(atlas.getStats().quality).toEqual({ choice: 'low', tier: 3, name: 'pixels' });
+    expect(changed).toHaveBeenCalledWith({ choice: 'low', tier: 3, name: 'pixels' });
+    atlas.setQuality('high');
+    draw(2010);
+    expect(canvas.width).toBe(800);
+    expect(step.mock.calls.at(-1)![6]).toBe(minimum);
+  });
+
+  it('recovers Auto with skipped idle callbacks and keeps the idle draw cadence', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    for (let at = 50; at <= 4500; at += 50) draw(at);
+    expect(atlas.getStats().quality.tier).toBe(1);
+    for (let at = 4516; at < 19_500; at += 16) draw(at);
+    step.mockClear();
+    for (let at = 19_500; at < 24_500; at += 16) draw(at);
+    expect(atlas.getStats().quality.tier).toBe(0);
+    expect(step.mock.calls.length).toBeLessThanOrEqual(151);
+  });
+
+  it('defers manual quality while a camera flight is active', () => {
+    draw(10);
+    atlas.flyTo({ lng: 0.2 }, { duration: 2000 });
+    atlas.setQuality('low');
+    draw(100);
+    expect(atlas.getStats().quality.tier).toBe(0);
+    draw(2100);
+    expect(atlas.getStats().quality.tier).toBe(0);
+    draw(3200);
+    expect(atlas.getStats().quality.tier).toBe(3);
+  });
+
   it('reads GPU metadata only for profiling and refreshes it after context restoration', () => {
     expect(defaultGetExtension).not.toHaveBeenCalled();
     const extension = { UNMASKED_RENDERER_WEBGL: 123 };

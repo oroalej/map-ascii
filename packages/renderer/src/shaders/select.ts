@@ -59,6 +59,7 @@ uniform ivec2 u_origin;           // world cell of texel (0, 0)
 uniform float u_time;             // seconds; 0 with reduced motion
 uniform float u_wind;             // wind over grass: 1, or 0 with reduced motion
 uniform float u_zoom;
+uniform bool u_shadows;
 uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
 uniform float u_cellAspect;       // cell height / width, for ridge directions
@@ -256,7 +257,7 @@ float castsAt(ivec2 q) {
 // Whether the cell is in shadow (glyphs/select.ts inShadow): looking toward the sun a cell
 // width at a time, something stands taller than the sun rises over that distance.
 bool inShadow(ivec2 p) {
-  if (u_sun.z <= 0.0) return false;
+  if (!u_shadows || u_sun.z <= 0.0) return false;
   float self = castsAt(p);
   vec2 perStep = u_sun.xy * u_cellMeters.x / u_cellMeters;
   for (int k = 1; k <= ${SHADOW.steps}; k++) {

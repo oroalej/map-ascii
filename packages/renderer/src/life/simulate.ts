@@ -2312,6 +2312,8 @@ export class LifeWorld {
     center: [number, number],
     weather: LifeWeather = { rain: 0, sunAltitude: 0 },
     bounds?: LngLatBounds,
+    crowd = 1,
+    maxAgents = MAX_VISIBLE_AGENTS,
   ): VisibleAgent[] {
     // A bare number is the daylight, with no clock (config.ts `activityLevels`).
     const levels =
@@ -2337,7 +2339,7 @@ export class LifeWorld {
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (life.scenes.hidden(m)) continue;
-        if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind])) continue;
+        if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
@@ -2390,7 +2392,7 @@ export class LifeWorld {
         }
       }
       if (shows('person')) {
-        const vendorsOut = levels.person;
+        const vendorsOut = levels.person * crowd;
         for (const s of life.stalls) {
           if (s.open === false) continue;
           if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
@@ -2413,7 +2415,7 @@ export class LifeWorld {
       }
       if (shows('person')) {
         for (const g of life.gatherers) {
-          if (g.rank >= levels.places[g.place] || !inView(g.x, g.y)) continue;
+          if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
           const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
           const still = g.pause > 0 || g.behavior === 'sit';
@@ -2487,7 +2489,7 @@ export class LifeWorld {
       for (const flock of life.flocks) {
         const spec = BIRD_SPECIES[flock.species];
         const out_ = spec.nocturnal ? levels.night : levels.bird;
-        if (flock.rank >= out_ || !inView(flock.x, flock.y)) continue;
+        if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
@@ -2518,7 +2520,7 @@ export class LifeWorld {
         }
       }
     }
-    if (out.length <= MAX_VISIBLE_AGENTS) return [...staged, ...out];
+    if (out.length <= maxAgents) return [...staged, ...out];
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
     const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
@@ -2535,7 +2537,11 @@ export class LifeWorld {
     const kept = staged.slice();
     let count = 0;
     for (const group of nearest) {
-      if (count + group.agents.length > MAX_VISIBLE_AGENTS) continue;
+      if (group.agents[0]!.kind === 'train') {
+        kept.push(...group.agents);
+        continue;
+      }
+      if (count + group.agents.length > maxAgents) continue;
       kept.push(...group.agents);
       count += group.agents.length;
     }

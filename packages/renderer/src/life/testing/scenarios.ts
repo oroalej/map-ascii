@@ -132,6 +132,8 @@ export function makeScenario(
 export function scenarioState(world: LifeWorld) {
   return [...worldTiles(world)].map(([key, tile]) => ({
     key,
+    elapsed: tile.elapsed,
+    flocks: tile.flocks,
     movers: tile.movers,
     gatherers: tile.gatherers,
     parked: tile.parked,
@@ -140,4 +142,17 @@ export function scenarioState(world: LifeWorld) {
     services: [...tile.scenes.services].map(([m, s]) => ({ owner: tile.movers.indexOf(m), ...s })),
     queues: tile.scenes.sites.map((s) => s.queue.map((m) => tile.movers.indexOf(m))),
   }));
+}
+
+/** Includes global clocks for equivalence checks; respawn checks intentionally compare tiles only. */
+export function completeScenarioState(world: LifeWorld) {
+  const internal = world as unknown as {
+    clock: number;
+    arrivals: Map<string, { left: number; occupied: boolean }>;
+  };
+  return {
+    clock: internal.clock,
+    arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
+    tiles: scenarioState(world),
+  };
 }

@@ -400,6 +400,7 @@ export function selectPass(
   highlights: Highlights,
   wind: WindNow,
   sun: Sun | null = null,
+  shadows = true,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -407,6 +408,7 @@ export function selectPass(
   gl.useProgram(programs.select.program);
   twgl.setUniforms(programs.select, {
     u_class: targets.classTex,
+    u_shadows: shadows,
     u_attr: targets.attrTex,
     u_id: targets.idTex,
     u_table: themeRes.map.tableTex,
