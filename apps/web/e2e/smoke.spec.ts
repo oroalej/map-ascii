@@ -129,6 +129,16 @@ for (const city of cities) {
           await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
           await expect(coordsButton(page)).toBeVisible();
           await coordsButton(page).click();
+          if (!hasTouch) {
+            const focus = legend.getByRole('button').first();
+            await focus.focus();
+            await page.keyboard.press('Enter');
+            await expect(focus).toHaveAttribute('aria-pressed', 'true');
+            await expect(focus).toHaveCSS('outline-style', 'solid');
+            await legend.locator('summary').click();
+            await legend.locator('summary').click();
+            await expect(focus).toHaveAttribute('aria-pressed', 'true');
+          }
           // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
           // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {
@@ -149,6 +159,7 @@ for (const city of cities) {
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
+          if (!hasTouch) await expect(legend.locator('button[aria-pressed="true"]')).toHaveCount(0);
         },
       );
 
