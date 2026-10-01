@@ -1,0 +1,32 @@
+{
+  "id": "landcover/ateneo-de-naga-university",
+  "title": "Ateneo de Naga University grounds",
+  "trees": [],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.18437768, 13.63090329],
+        [123.18438877, 13.63090329],
+        [123.18438877, 13.63096617],
+        [123.18437768, 13.63096617],
+        [123.18437768, 13.63090329]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Ateneo de Naga University — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/222268858",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.adnu.edu.ph/college-of-law/wp-content/uploads/sites/34/2022/07/2022-AdNU-COL-Manual.pdf",
+      "note": "Official main-campus map identifies covered walks, parks and car parking. A short covered walk and seating near the central quadrangle are schematic. Four Pillars exact placement and a named Bonoan Walk are unverified and omitted; do not confuse Bonoan campus in Pacol with this campus. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

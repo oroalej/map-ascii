@@ -1,0 +1,59 @@
+{
+  "id": "detail/ateneo-de-naga-university",
+  "osm_id": "osm:way/222268858",
+  "title": "Ateneo de Naga University",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "covered-walk",
+      "ring": [
+        [123.18438322, 13.6310048],
+        [123.18451263, 13.6310048],
+        [123.18451263, 13.63102636],
+        [123.18438322, 13.63102636],
+        [123.18438322, 13.6310048]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "court-access",
+      "line": [
+        [123.1844849, 13.63088982],
+        [123.1844849, 13.63099762]
+      ],
+      "width_m": 1.5
+    }
+  ],
+  "seating": [
+    {
+      "id": "court-seat",
+      "line": [
+        [123.18442944, 13.63091677],
+        [123.18446642, 13.63091677]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Ateneo de Naga University — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/222268858",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.adnu.edu.ph/college-of-law/wp-content/uploads/sites/34/2022/07/2022-AdNU-COL-Manual.pdf",
+      "note": "Official main-campus map identifies covered walks, parks and car parking. A short covered walk and seating near the central quadrangle are schematic. Four Pillars exact placement and a named Bonoan Walk are unverified and omitted; do not confuse Bonoan campus in Pacol with this campus. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred. The proposed paved quad is omitted because the OSM lawn is preserved."
+    }
+  ]
+}
