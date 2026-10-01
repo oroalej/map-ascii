@@ -38,6 +38,27 @@ describe('site structure content', () => {
     expect(SiteDetail.safeParse({ ...detail, structures: [part, part] }).success).toBe(false);
   });
 
+  it('accepts explicit paving overrides without changing legacy records', () => {
+    expect(SiteStructure.parse(part).ground_override).toBeUndefined();
+    expect(SiteStructure.safeParse({ ...part, ground_override: true }).success).toBe(false);
+    expect(SiteStructure.safeParse({ ...part, ground_override: false }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'paving',
+        overhead: false,
+        ground_override: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'paving',
+        ground_override: true,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects open, collapsed and self-intersecting footprints before triangulation', () => {
     for (const ring of [
       [],

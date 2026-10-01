@@ -8,7 +8,14 @@
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
  */
-import { classId, Flags, Marking, MAX_CLASSES } from '../classes';
+import {
+  classId,
+  Flags,
+  Marking,
+  MAX_CLASSES,
+  PavingVariant,
+  pavingOverrideBase,
+} from '../classes';
 import { CellState, MAX_HIGHLIGHT } from '../picking';
 import {
   BUILDING_STEPS,
@@ -182,6 +189,15 @@ bool isBuilding(int c) {
 }
 
 // CPU twin: glyphs/select.ts edgeForegroundWins.
+bool pavingOverride(int c, vec4 attr) {
+  return c == ${classId('paving')} && int(attr.b * 255.0 + 0.5) == ${PavingVariant.override};
+}
+bool belowPavingOverride(int c, vec4 attr) {
+  return !pavingOverride(c, attr) && (
+    ${pavingOverrideBase.map((cls) => `c == ${classId(cls)}`).join(' || ')} ||
+    (isBuilding(c) && attr.r == 0.0)
+  );
+}
 bool edgeForegroundWins(int c, vec4 attr, int fg, vec4 fgAttr) {
   bool crown = c == ${classId('tree_crown')};
   bool underCrown = fg == ${classId('tree_crown')};
@@ -189,6 +205,8 @@ bool edgeForegroundWins(int c, vec4 attr, int fg, vec4 fgAttr) {
   bool underRoof = isBuilding(fg) && fgAttr.r > 0.0;
   if (crown && (underRoof || underCrown)) return attr.r > fgAttr.r;
   if (underCrown && standing) return attr.r >= fgAttr.r;
+  if (pavingOverride(c, attr)) return belowPavingOverride(fg, fgAttr);
+  if (pavingOverride(fg, fgAttr)) return c != 0 && !belowPavingOverride(c, attr);
   return crown || (!underRoof && standing);
 }
 
@@ -200,14 +218,28 @@ int subClassAt(ivec2 q) {
 // false if the cell keeps its glyph. cls is the cell's class (0 for none), id its feature.
 bool subcellEdge(ivec2 p, int cls, vec4 id) {
   ivec2 base = p * ivec2(${SUB.cols}, ${SUB.rows});
+  vec4 centerAttr = texelFetch(u_attr, p, 0);
+  // Non-area ground (terrain) participates only beside an opt-in paving surface.
+  // Keep its legacy edge behavior when no override reaches this cell.
+  if (cls != 0 && !isArea(cls) && maskBit(u_roadMask, cls) == 0) {
+    bool adjacentOverride = false;
+    if (belowPavingOverride(cls, centerAttr)) {
+      for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
+        ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
+        if (pavingOverride(subClassAt(q), texelFetch(u_subAttr, q, 0))) adjacentOverride = true;
+      }
+    }
+    if (!adjacentOverride) return false;
+  }
   int fg = isArea(cls) ? cls : 0;
   vec4 fgId = id;
-  vec4 fgAttr = texelFetch(u_attr, p, 0);
+  vec4 fgAttr = centerAttr;
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
     ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
     int c = subClassAt(q);
-    if (cls != 0 && !isArea(cls) && c != ${classId('tree_crown')}) continue;
     vec4 sampleAttr = texelFetch(u_subAttr, q, 0);
+    if (cls != 0 && !isArea(cls) && c != ${classId('tree_crown')} &&
+        !(belowPavingOverride(cls, centerAttr) && pavingOverride(c, sampleAttr))) continue;
     if (isArea(c) && (fg == 0 || edgeForegroundWins(c, sampleAttr, fg, fgAttr))) {
       fg = c;
       fgId = texelFetch(u_subId, q, 0);
@@ -361,7 +393,7 @@ void main() {
   int variant = int(attr.b * 255.0 + 0.5);
 
   // Test crown edges before road curbs and roof walls, including centers outside the crown.
-  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls)) && subcellEdge(p, cls, id)) return;
+  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls) || belowPavingOverride(cls, attr)) && subcellEdge(p, cls, id)) return;
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {

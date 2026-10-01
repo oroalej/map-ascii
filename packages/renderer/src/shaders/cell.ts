@@ -8,7 +8,14 @@
  * its cells, picked by a per-cell hash of the world cell, so it dissolves into what is under it
  * and the pattern stays put while panning.
  */
-import { classId, Flags, MAX_CLASSES, TIER_STEP } from '../classes';
+import {
+  classId,
+  Flags,
+  MAX_CLASSES,
+  TIER_STEP,
+  PavingVariant,
+  pavingOverrideDepth,
+} from '../classes';
 import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
@@ -69,6 +76,8 @@ void main() {
   // A terrace is still paving: its sub-meter surface beats the parent plaza without
   // gaining the priority of a roof or covering planted islands.
   if (cls == ${classId('paving')} && a_meta.w > 0.0) depth -= ${TIER_STEP * 0.01};
+  if (cls == ${classId('paving')} && a_meta.w == ${float(PavingVariant.override)})
+    depth = ${float(pavingOverrideDepth())};
   if ((int(a_meta.z + 0.5) & ${Flags.crossing}) != 0) depth -= ${TIER_STEP * 0.01};
   // Grounds (no height) go under the grass, parks, and water on them.
   if (maskBit(u_groundMask, cls) == 1 && a_meta.y == 0.0) depth = u_groundDepth;

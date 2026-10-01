@@ -254,6 +254,18 @@ export function mergeSiteDetails(
       // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
       if (difference([part.ring], parentClip).length > 0)
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+      // Opt-in ground replacements must not paint a court through a standing footprint.
+      // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
+      if (part.ground_override)
+        for (const obstacle of blocked)
+          if (
+            bboxesOverlap(bbox(shape) as [number, number, number, number], obstacle.bounds) &&
+            intersection([part.ring], clip(obstacle.feature.geometry as Polygon | MultiPolygon))
+              .length
+          )
+            throw new Error(
+              `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
+            );
       return feature(`${prefix}/structure-${part.id}`, shape, {
         class:
           part.material === 'paving'
@@ -262,7 +274,12 @@ export function mergeSiteDetails(
               ? 'building_woodwork'
               : 'building_part',
         height: part.height_m,
-        variant: part.material === 'paving' ? 'terrace' : 'flat',
+        variant:
+          part.material === 'paving'
+            ? part.ground_override
+              ? 'terrace_override'
+              : 'terrace'
+            : 'flat',
         detail_overhead: part.overhead,
         ...((part.material === 'paving' || metadata) && link),
         ...(!part.overhead && part.material !== 'paving' && { detail_blocked: true }),

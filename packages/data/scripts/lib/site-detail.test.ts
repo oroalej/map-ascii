@@ -41,6 +41,56 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('keeps ordinary terraces and emits opt-in overriding paving with canonical selection', () => {
+    const pack = {
+      ...detail,
+      structures: [false, true].map((ground_override, i) => ({
+        id: `court-${i}`,
+        ring: [p(5, 35), p(15, 35), p(15, 40), p(5, 40), p(5, 35)],
+        height_m: 0.15,
+        material: 'paving' as const,
+        overhead: false,
+        ground_override,
+      })),
+    };
+    const parts = mergeSiteDetails([parent], [pack]).features.filter((f) =>
+      f.properties.id.startsWith('detail:test/structure-'),
+    );
+    expect(parts.map((f) => f.properties.variant)).toEqual(['terrace', 'terrace_override']);
+    expect(parts.map((f) => f.properties.detail_parent)).toEqual(['osm:way/1', 'osm:way/1']);
+  });
+  it('rejects a ground override enclosing a standing building, but permits an overhead canopy', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(8, 37), p(10, 37), p(10, 39), p(8, 39), p(8, 37)]],
+      },
+      properties: { id: 'osm:way/roof', class: 'building', height: 6 },
+    };
+    const court = {
+      id: 'court',
+      ring: [p(5, 35), p(15, 35), p(15, 40), p(5, 40), p(5, 35)],
+      height_m: 0.15,
+      material: 'paving' as const,
+      overhead: false,
+      ground_override: true,
+    };
+    expect(() =>
+      mergeSiteDetails([parent, building], [{ ...detail, structures: [court] }]),
+    ).toThrow('structure court: crosses osm:way/roof');
+    const { ground_override: _override, ...canopy } = court;
+    expect(() =>
+      mergeSiteDetails(
+        [parent, building],
+        [{ ...detail, structures: [{ ...canopy, material: 'roof', overhead: true }] }],
+      ),
+    ).not.toThrow();
+    // Legacy terraces retain their previous semantics.
+    expect(() =>
+      mergeSiteDetails([parent, building], [{ ...detail, structures: [canopy] }]),
+    ).not.toThrow();
+  });
   const flagpole: AtlasFeature = {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: p(-5, 5) },

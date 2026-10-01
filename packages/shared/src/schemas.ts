@@ -342,10 +342,16 @@ export const SiteStructure = z
     height_m: z.number().positive().max(255),
     material: z.enum(['wood', 'stone', 'roof', 'paving']),
     overhead: z.boolean(),
+    /** Explicit paving replacing a coarse ground fill; omitted preserves legacy priority. */
+    ground_override: z.boolean().optional(),
   })
   .refine((part) => part.material !== 'paving' || !part.overhead, {
     path: ['overhead'],
     message: 'walkable paving cannot be overhead',
+  })
+  .refine((part) => part.ground_override === undefined || part.material === 'paving', {
+    path: ['ground_override'],
+    message: 'only paving can override ground fill',
   });
 export type SiteStructure = z.infer<typeof SiteStructure>;
 

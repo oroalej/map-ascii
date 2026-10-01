@@ -280,6 +280,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
     material: 'wood' | 'stone' | 'roof' | 'paving'; overhead: boolean;
+    ground_override?: boolean; // paving only; omitted/false retains ordinary terrace priority
   }[]; // default []; simple closed footprints wholly inside the parent area
   flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
@@ -308,7 +309,15 @@ their vertices lie inside. Existing detail records need no changes.
 `overhead: false`, and creates no ground obstacle. It emits the `paving` class with
 `variant: 'terrace'`, retaining fractional `height` values and a `detail_parent` selection
 identity. Its connected outlines show from z18. Adjacent treads use non-overlapping
-footprints so their boundaries remain distinct even at equal quantized heights.
+  footprints so their boundaries remain distinct even at equal quantized heights.
+
+  Optional `ground_override: true` emits `variant: 'terrace_override'`. Use it for sourced
+  paving replacing a coarse grass, park, parking or other ground fill. It draws above those
+  fills and campus grounds, below planting, shrubs, benches, water, standing buildings,
+  paths and roads. The CPU and GPU partial-cell rules preserve that order at edges. The
+  merge rejects an override intersecting a standing footprint, even when the obstacle is
+  wholly enclosed by the court. Content guards also check full-width carriageway clearance.
+  Ordinary terraces and existing plaza packs retain their previous draw behavior.
 
 LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
   id: string;                    // "art/<slug>"
