@@ -254,6 +254,8 @@ for (const city of cities) {
       test('follows a changed motion preference and shows GPU timing on request', async ({
         page,
       }) => {
+        // Bound animated software-WebGL work while exercising startup and motion toggles.
+        await page.setViewportSize({ width: 640, height: 480 });
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });
