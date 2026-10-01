@@ -1,0 +1,27 @@
+{
+  "id": "plan/civic-center-robredo",
+  "osm_id": "osm:node/13958319312",
+  "title": "Jesse Robredo Monument",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    }
+  ],
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/462785043",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
+      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

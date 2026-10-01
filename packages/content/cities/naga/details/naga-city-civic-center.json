@@ -1,0 +1,63 @@
+{
+  "id": "detail/naga-city-civic-center",
+  "osm_id": "osm:way/462785043",
+  "title": "Naga City Civic Center",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "museum-forecourt",
+      "ring": [
+        [123.1971266, 13.62841542],
+        [123.19723752, 13.62841542],
+        [123.19723752, 13.62851424],
+        [123.1971266, 13.62851424],
+        [123.1971266, 13.62841542]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [
+    {
+      "osm_id": "osm:node/13958491943",
+      "at": [123.197387, 13.6284016],
+      "flag": "PH"
+    }
+  ],
+  "walks": [
+    {
+      "id": "museum-access",
+      "line": [
+        [123.1972745, 13.62846483],
+        [123.19732072, 13.62852771]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "seating": [],
+  "lamps": [
+    {
+      "id": "museum-access",
+      "at": [123.19720979, 13.628375],
+      "bearing": 0,
+      "reach_m": 0.5,
+      "heads": 1,
+      "style": "streetlight"
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga City Civic Center — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/462785043",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
+      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

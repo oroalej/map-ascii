@@ -1,0 +1,32 @@
+{
+  "id": "landcover/naga-city-civic-center",
+  "title": "Naga City Civic Center grounds",
+  "trees": [],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "grass",
+      "ring": [
+        [123.19648881, 13.62836602],
+        [123.19659973, 13.62836602],
+        [123.19659973, 13.62843788],
+        [123.19648881, 13.62843788],
+        [123.19648881, 13.62836602]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga City Civic Center — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/462785043",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
+      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}
