@@ -9,6 +9,7 @@
   "scripts": {
     "perf:life": "tsx packages/renderer/scripts/perf-life.ts",
     "perf:world": "tsx packages/renderer/scripts/perf-world.ts",
+    "perf:tiles": "tsx packages/renderer/scripts/perf-tiles.ts",
     "perf:browser": "pnpm --filter @atlas/web perf:browser",
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",

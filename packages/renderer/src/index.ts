@@ -542,6 +542,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // Tiles
+  const profiler = options.profiling ? new FrameProfiler() : undefined;
   const tileCache = new TileCache(
     gl,
     new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
@@ -550,6 +551,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellDirty = true;
       cellsFor = null;
     },
+    profiler,
   );
   const { source } = tileCache;
 
@@ -681,7 +683,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
-  const profiler = options.profiling ? new FrameProfiler() : undefined;
   const processions = options.processions ?? [];
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'

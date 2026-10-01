@@ -1,4 +1,4 @@
-/** Capture a visible desktop browser. Static export freshness is prepared by the command wrapper. */
+﻿/** Capture a visible desktop browser. Static export freshness is prepared by the command wrapper. */
 import { chromium, type Browser } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync, spawn } from 'node:child_process';
@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { cities } from '../e2e/helpers';
 // This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
+
+type LongTask = { startTime: number; duration: number };
+type ProfileWindow = Window & { atlasLongTasks: LongTask[] };
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const port = Number(process.env.E2E_PORT ?? 3198);
@@ -55,6 +58,13 @@ try {
     });
     await page.addInitScript(
       (wind) => {
+        const target = window as unknown as ProfileWindow;
+        target.atlasLongTasks = [];
+        const observer = new PerformanceObserver((list) => {
+          for (const { startTime, duration } of list.getEntries())
+            target.atlasLongTasks.push({ startTime, duration });
+        });
+        observer.observe({ type: 'longtask', buffered: true });
         localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon', wind }));
         localStorage.setItem('atlas.quality', JSON.stringify('high'));
       },
@@ -102,6 +112,23 @@ try {
     await mkdir(dirname(output), { recursive: true });
     await download.saveAs(output);
     const report = JSON.parse(await readFile(output, 'utf8')) as Record<string, unknown>;
+    const capture = report as { start: { at: string }; end: { at: string } };
+    const tasks = await page.evaluate(
+      ({ start, end }) => {
+        return (window as unknown as ProfileWindow).atlasLongTasks.filter(({ startTime }) => {
+          const at = performance.timeOrigin + startTime;
+          return at >= start && at <= end;
+        });
+      },
+      { start: Date.parse(capture.start.at), end: Date.parse(capture.end.at) },
+    );
+    const durations = tasks.map((task) => task.duration).sort((a, b) => a - b);
+    report.longTasks = {
+      count: tasks.length,
+      p95Ms: durations[Math.min(durations.length - 1, Math.floor(durations.length * 0.95))] ?? null,
+      maxMs: durations.at(-1) ?? null,
+      samples: tasks,
+    };
     report.source = {
       revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
       hash: await currentSourceHash(root),

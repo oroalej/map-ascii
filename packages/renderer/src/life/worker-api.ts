@@ -121,7 +121,13 @@ export function createLifeWorkerApi() {
           buffers = encoded.transferables;
         } else result.terrain = null;
       }
-      if (profiler) result.profile = profiler.drain();
+      if (profiler) {
+        // Profiling only: serialization plus deserialization bounds the reply's clone cost.
+        const start = profiler.time();
+        structuredClone({ agents: result.agents, procession: result.procession });
+        profiler.add('replyClone', profiler.time() - start);
+        result.profile = profiler.drain();
+      }
       return Comlink.transfer(result, buffers);
     },
     setLive(id: string | undefined, progress?: number) {

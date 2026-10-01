@@ -5,6 +5,7 @@
  */
 import { REGION_TILE_MAX_ZOOM, type CameraState } from '@atlas/shared';
 import type { Size } from './camera';
+import type { FrameProfiler } from './profile';
 import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
 import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
@@ -44,6 +45,7 @@ export class TileCache {
     url: string,
     /** Called when the header or a tile arrives, so the view redraws. */
     onChange: () => void,
+    profiler?: FrameProfiler,
   ) {
     this.meshes = this.createCache();
     this.source = new TileSource(url, {
@@ -54,12 +56,12 @@ export class TileCache {
       tile: (key, geometry) => {
         if (this.suspended) return;
         this.failed.delete(key);
-        this.meshes.set(
-          key,
-          geometry
-            ? { mesh: uploadTile(gl, geometry), labels: geometry.labels, life: geometry.life }
-            : null,
-        );
+        if (geometry) {
+          const start = profiler?.time();
+          const mesh = uploadTile(gl, geometry);
+          if (start !== undefined) profiler!.record('tileUpload', profiler!.time() - start);
+          this.meshes.set(key, { mesh, labels: geometry.labels, life: geometry.life });
+        } else this.meshes.set(key, null);
         onChange();
       },
       error: (message, key) => {

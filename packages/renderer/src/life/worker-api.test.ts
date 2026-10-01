@@ -123,6 +123,7 @@ describe('life worker protocol', () => {
       expect(result.procession).toEqual(direct.procession());
       expect(result.signalClock).toBe(direct.signalClock);
       expect(result.profile?.ms.step).toBeGreaterThanOrEqual(0);
+      expect(result.profile?.ms.replyClone).toBeGreaterThanOrEqual(0);
       if (frame === 0 || frame === 40 || frame === 81) expect(result.terrain).toBeTruthy();
       else if (frame === 80) expect(result.terrain).toBeNull();
       else expect(result).not.toHaveProperty('terrain');

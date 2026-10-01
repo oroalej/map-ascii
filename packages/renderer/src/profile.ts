@@ -17,6 +17,8 @@ export const PROFILE_STAGES = [
   'settle',
   'terrainRoads',
   'terrainRevalidate',
+  'tileUpload',
+  'replyClone',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {
