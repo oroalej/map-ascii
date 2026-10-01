@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createOverlay, LabelRank, resetOverlay, type LabelCandidate } from './labels';
+import {
+  createOverlay,
+  LabelRank,
+  repeatDistance,
+  resetOverlay,
+  type LabelCandidate,
+} from './labels';
 import { labelFitsArea, labelIntersectsArea, labelTouchesArea, layoutLabels } from './label-layout';
 import {
   KEEP_OVERHANG,
@@ -17,10 +23,7 @@ const label = (over: Partial<LabelCandidate> = {}): LabelCandidate => ({
   row: 0,
   ...over,
 });
-const repeat = (rank: number) =>
-  [LabelRank.roadMajor, LabelRank.street, LabelRank.streetMinor].includes(rank as 4 | 6 | 8)
-    ? STREET_REPEAT
-    : Infinity;
+const repeat = repeatDistance;
 const ids = (labels: readonly { label: LabelCandidate }[]) => labels.map(({ label }) => label.id);
 const place = (candidates: LabelCandidate[], stability: PlaceStability = {}, at = area) =>
   layoutLabels(createOverlay(at.right, at.bottom), candidates, at, 1.8, stability, repeat);
