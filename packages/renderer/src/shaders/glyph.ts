@@ -43,6 +43,7 @@ import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
+import { buntingMotionGlsl } from '../life/bunting-motion';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -80,6 +81,8 @@ uniform int u_labelColumns;
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
+uniform float u_buntingWind;
+uniform vec2 u_buntingWindDir;
 uniform sampler2D u_life;
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
@@ -360,15 +363,19 @@ vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
   return u_fixturePaints[3 + min(phase, 2)] * (beam + halo) * fixture.a;
 }
 
+${buntingMotionGlsl}
+
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
-vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo) {
+vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
   if (!allowed || fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
-  float ink = texelFetch(u_atlas, at + inCell, 0).r;
+  float buntingFold = 1.0;
+  float ink = part == ${FixturePart.bunting} ? buntingInk(at, inCell, cell, info >> 3, buntingFold) :
+    texelFetch(u_atlas, at + inCell, 0).r;
   vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
   if (part >= ${FixturePart.flagBlue} && part <= ${FixturePart.flagGold}) {
     vec3 paint = part == ${FixturePart.flagBlue} ? vec3(0.04, 0.22, 0.70) :
@@ -403,8 +410,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
     color = mix(lampLit(daylit(u_fixturePaints[9]), rainLight), u_fixturePaints[2], lit);
   }
   if (part == ${FixturePart.bunting}) {
-    float fold = u_shimmer ? 0.88 + 0.12 * sin(u_time * 2.0 + float(info >> 3)) : 1.0;
-    color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * fold), rainLight);
+    color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * buntingFold), rainLight);
   }
   return mix(under, color, ink * fixture.a) + halo;
 }
@@ -536,12 +542,12 @@ void main() {
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
-    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
@@ -608,6 +614,6 @@ void main() {
   // shape reads as one area with a crisp rim.
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
-  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;

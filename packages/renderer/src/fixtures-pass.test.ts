@@ -6,6 +6,54 @@ import type { StreetFixture } from './life/fixtures';
 import { signalState } from './life/signals';
 import * as utilities from './life/utilities';
 
+it('keeps seasonal geometry, ownership and texture uploads cached while wind and time change', () => {
+  const upload = vi.fn();
+  const gl = { bindTexture: vi.fn(), pixelStorei: vi.fn(), texSubImage2D: upload } as unknown as GL;
+  const targets = { cols: 100, rows: 100, fixtureTex: {}, signalLightTex: {} } as CellTargets;
+  const resources = { map: { atlas: { index: () => 300 } } } as unknown as ThemeResources;
+  const view: View = {
+    camera: { lng: 0, lat: 0, zoom: 19.5 },
+    dpr: 1,
+    width: 500,
+    height: 500,
+    cellDev: { w: 5, h: 9 },
+    labelDev: { w: 10, h: 18 },
+    detailZoom: 20,
+  };
+  const project = vi.fn((x: number, y: number): [number, number] => [x, y]);
+  const placement = { ...placeGrid(view, view.cellDev, 100, 100), toCell: project };
+  const fixtures: StreetFixture[] = [
+    {
+      kind: 'season-bunting',
+      id: 'row',
+      from: [20, 30],
+      to: [70, 30],
+      seed: 7,
+      style: 'red-yellow-rectangles',
+      priority: { width: 9, corridor: 0, road: 'r' },
+    },
+  ];
+  const visibility = fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 0,
+    strength: 0.7,
+  });
+  const bytes = (upload.mock.calls[0]!.at(-1) as Uint8Array).slice();
+  expect(visibility.seasonal?.bunting).toBe(true);
+  expect(upload).toHaveBeenCalledTimes(2);
+  project.mockClear();
+  for (const strength of [0, 0.25, 0.7, 1.5]) {
+    expect(
+      fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+        time: 100,
+        strength,
+      }),
+    ).toEqual(visibility);
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(project).not.toHaveBeenCalled();
+  }
+  expect(upload.mock.calls[0]!.at(-1)).toEqual(bytes);
+});
+
 it('caches viewport utility visibility and updates it when only the visible bounds change', () => {
   const scan = vi.spyOn(utilities, 'utilityViewportVisibility');
   const upload = vi.fn();

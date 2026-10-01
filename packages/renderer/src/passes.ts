@@ -53,6 +53,7 @@ import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lig
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
+import { buntingWindResponse } from './life/bunting-motion';
 import { type TileLabel } from './raster/geometry';
 import { rainGlyphs, type Theme } from './theme';
 import {
@@ -699,6 +700,8 @@ export function glyphPass(
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
+    u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
+    u_buntingWindDir: weather.wind?.dir ?? [0, 0],
     u_waterDetail: !!weather.detail && !reducedMotion,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,

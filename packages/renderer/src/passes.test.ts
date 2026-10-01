@@ -1,11 +1,19 @@
 import { expect, it, vi } from 'vitest';
-import { overlayPass, placeGrid, prepareCrowns, type TileDraw, type View } from './passes';
+import {
+  glyphPass,
+  overlayPass,
+  placeGrid,
+  prepareCrowns,
+  type TileDraw,
+  type View,
+} from './passes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
+import { buntingWindResponse } from './life/bunting-motion';
 
 const view: View = {
   camera: { lat: 13, lng: 123, zoom: 18 },
@@ -16,6 +24,65 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('supplies wind-driven bunting independently of Life and stills it for Calm or reduced motion', () => {
+  const strength = vi.fn(),
+    direction = vi.fn(),
+    shimmer = vi.fn();
+  const programs = {
+    glyph: {
+      program: {},
+      uniformSetters: { u_buntingWind: strength, u_buntingWindDir: direction, u_shimmer: shimmer },
+    },
+    emptyVao: null,
+  } as unknown as Programs;
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (
+    wind: { strength: number; dir: [number, number]; from: number } | null,
+    reduced = false,
+  ) =>
+    glyphPass(
+      gl,
+      programs,
+      { sub: {} } as CellTargets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      7,
+      reduced,
+      1,
+      { rain: 0, wind },
+    );
+  draw({ strength: 0.7, dir: [-1, 0], from: 90 });
+  expect(strength).toHaveBeenLastCalledWith(buntingWindResponse(0.7));
+  expect(direction).toHaveBeenLastCalledWith([-1, 0]);
+  expect(shimmer).toHaveBeenLastCalledWith(true);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(1);
+  expect(direction).toHaveBeenLastCalledWith([0, 1]);
+  draw({ strength: 0.325, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(0);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 }, true);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(shimmer).toHaveBeenLastCalledWith(false);
+  draw(null);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(direction).toHaveBeenLastCalledWith([0, 0]);
+});
 
 it('reuses crown matrices through sub-cell shifts and invalidates every matrix input', () => {
   const tiles = [
