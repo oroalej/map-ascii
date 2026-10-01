@@ -32,6 +32,14 @@ const distance = (a: XY, b: XY) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const same = (a: Position, b: Position) => a[0] === b[0] && a[1] === b[1];
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Utilities cover every visible local street, including map regions extending past the city. */
+export const utilityCoverageBounds = (city: BBox, region: BBox): BBox => [
+  Math.min(city[0], region[0]),
+  Math.min(city[1], region[1]),
+  Math.max(city[2], region[2]),
+  Math.max(city[3], region[3]),
+];
+
 export function utilityProjection(bounds: BBox) {
   const latitude = (bounds[1] + bounds[3]) / 2;
   const longitude = (bounds[0] + bounds[2]) / 2;
@@ -157,6 +165,18 @@ export function generateUtilities(
     spans: 0,
     crossings: 0,
     junctions: 0,
+    continuity: {
+      repairPoles: 0,
+      junctionGroups: 0,
+      connectedGroups: 0,
+      unresolvedGroups: 0,
+      corridorGaps: 0,
+      unresolved: [] as {
+        components: string[];
+        points: UtilityPoint[];
+        reason: 'support-distance' | 'span-limit';
+      }[],
+    },
     rejected: { blocked: 0, carriageway: 0, median: 0, bounds: 0, endpoint: 0 },
   };
   const roads = features.filter(
@@ -390,6 +410,88 @@ export function generateUtilities(
       });
     }
   }
+  const vertices = new Map<string, { c: Component; along: number }[]>();
+  for (const c of selected)
+    c.geographic.forEach((p, i) => {
+      const key = JSON.stringify(p),
+        list = vertices.get(key) ?? [];
+      list.push({ c, along: c.distances[i]! });
+      vertices.set(key, list);
+    });
+  const mainByComponent = new Map(
+    selected.map((c) => [c, placed.filter((p) => p.component === c && !p.pole.partner)]),
+  );
+  // Regular slots restart at OSM way boundaries. Supply safe supports at real joins and
+  // in long rejected-slot gaps rather than leaving each way as an isolated decoration.
+  const repair = (c: Component, target: number, suffix: string) => {
+    const chain = mainByComponent.get(c)!;
+    const margin = Math.min(UTILITY.setback, c.length / 2);
+    const side = utilitySeed(c.id) & 1 ? 1 : -1;
+    for (const candidateSide of [side, -side])
+      for (const shift of [0, -3, 3, -6, 6, -9, 9, -12, 12]) {
+        const along = Math.max(margin, Math.min(c.length - margin, target + shift));
+        if (chain.some((p) => Math.abs(p.along - along) < 12)) continue;
+        const pose = at(c, along),
+          normal: XY = [-pose.h[1] * candidateSide, pose.h[0] * candidateSide];
+        const lateral = c.width / 2 + (UTILITY.lateral[0] + UTILITY.lateral[1]) / 2;
+        const p: XY = [pose.p[0] + normal[0] * lateral, pose.p[1] + normal[1] * lateral];
+        if (rejection(p, c, pose.h, normal)) continue;
+        const id = `utility:pole:${c.id}/${suffix}`;
+        const support: Placed = {
+          component: c,
+          p,
+          along,
+          pole: {
+            id,
+            road: c.road,
+            component: c.id,
+            at: projection.unproject(p),
+            heading: pose.h,
+            normal,
+            transformer: utilityRandom(id, 'transformer') < UTILITY.transformer,
+          },
+        };
+        placed.push(support);
+        chain.push(support);
+        stats.continuity.repairPoles++;
+        return;
+      }
+  };
+  for (const [key, touches] of vertices) {
+    if (new Set(touches.map((t) => t.c)).size < 2) continue;
+    for (const touch of touches) {
+      const c = touch.c,
+        chain = mainByComponent.get(c)!;
+      const arms = touch.along === 0 ? [1] : touch.along === c.length ? [-1] : [-1, 1];
+      for (const arm of arms) {
+        if (
+          chain.some(
+            (p) => (p.along - touch.along) * arm >= 0 && Math.abs(p.along - touch.along) <= 18,
+          )
+        )
+          continue;
+        const target = c.length < 2 * UTILITY.setback ? c.length / 2 : touch.along + arm * 12;
+        repair(c, target, `join:${key}:${arm}`);
+      }
+    }
+  }
+  for (const c of selected) {
+    const chain = mainByComponent
+      .get(c)!
+      .slice()
+      .sort((a, b) => a.along - b.along);
+    for (let i = 1; i < chain.length; i++) {
+      const left = chain[i - 1]!,
+        right = chain[i]!;
+      if (right.along - left.along <= UTILITY.maxSpan) continue;
+      for (
+        let along = left.along + UTILITY.spacing;
+        along < right.along - 12;
+        along += UTILITY.spacing
+      )
+        repair(c, along, `gap:${left.pole.id}:${right.pole.id}:${Math.round(along)}`);
+    }
+  }
   const spans = new Map<string, UtilitySpan>();
   const connect = (
     a: Placed,
@@ -407,12 +509,15 @@ export function generateUtilities(
   };
   const byId = new Map(placed.map((p) => [p.pole.id, p]));
   for (const p of placed) if (p.pole.partner) connect(p, byId.get(p.pole.partner)!, 'crossing');
-  const mains = placed.filter((p) => !p.pole.partner);
   for (const c of selected) {
-    const chain = mains.filter((p) => p.component === c).sort((a, b) => a.along - b.along);
+    const chain = mainByComponent
+      .get(c)!
+      .slice()
+      .sort((a, b) => a.along - b.along);
     for (let i = 1; i < chain.length; i++)
       if (chain[i]!.along - chain[i - 1]!.along <= UTILITY.maxSpan)
         connect(chain[i - 1]!, chain[i]!, 'corridor');
+      else stats.continuity.corridorGaps++;
     if (
       c.closed &&
       chain.length > 1 &&
@@ -420,49 +525,75 @@ export function generateUtilities(
     )
       connect(chain.at(-1)!, chain[0]!, 'corridor');
   }
-  const vertices = new Map<string, { c: Component; along: number; end: boolean }[]>();
+  // A very short source connector may have no safe place for a pole. Its actual
+  // topology still connects its endpoint junctions; never infer links by proximity.
+  const nodeParents = new Map([...vertices.keys()].map((key) => [key, key]));
+  const nodeRoot = (key: string): string => {
+    const parent = nodeParents.get(key)!;
+    if (parent === key) return key;
+    const root = nodeRoot(parent);
+    nodeParents.set(key, root);
+    return root;
+  };
   for (const c of selected)
-    c.geographic.forEach((p, i) => {
-      const key = JSON.stringify(p),
-        list = vertices.get(key) ?? [];
-      list.push({
-        c,
-        along: c.distances[i]!,
-        end: !c.closed && (i === 0 || i === c.points.length - 1),
-      });
-      vertices.set(key, list);
+    if (!mainByComponent.get(c)!.length && c.length <= UTILITY.junctionLink) {
+      const root = nodeRoot(JSON.stringify(c.geographic[0]));
+      for (const point of c.geographic) nodeParents.set(nodeRoot(JSON.stringify(point)), root);
+    }
+  const groups = new Map<string, { c: Component; along: number }[]>();
+  for (const [key, touches] of vertices) {
+    const root = nodeRoot(key),
+      group = groups.get(root) ?? [];
+    group.push(...touches);
+    groups.set(root, group);
+  }
+  for (const touches of groups.values()) {
+    const branches = [...new Set(touches.map((t) => t.c))];
+    if (branches.length < 2) continue;
+    const terminals = branches.filter((c) => mainByComponent.get(c)!.length);
+    if (terminals.length < 2) continue;
+    stats.continuity.junctionGroups++;
+    const anchors = terminals.flatMap((c) => {
+      const positions = touches.filter((t) => t.c === c).map((t) => t.along);
+      const gap = (p: Placed) => Math.min(...positions.map((along) => Math.abs(p.along - along)));
+      const anchor = mainByComponent
+        .get(c)!
+        .filter((p) => gap(p) <= UTILITY.maxSpan)
+        .sort((a, b) => gap(a) - gap(b) || compare(a.pole.id, b.pole.id))[0];
+      return anchor ? [anchor] : [];
     });
-  const junctions: { a: Placed; b: Placed; d: number }[] = [];
-  for (const touches of vertices.values()) {
-    if (new Set(touches.map((t) => t.c.road)).size < 2) continue;
-    for (const end of touches.filter((t) => t.end)) {
-      const a = mains
-        .filter(
-          (p) => p.component === end.c && Math.abs(p.along - end.along) <= UTILITY.junctionLink,
-        )
-        .sort((p, q) => Math.abs(p.along - end.along) - Math.abs(q.along - end.along))[0];
-      if (!a) continue;
-      for (const other of touches.filter((t) => t.c.road !== end.c.road))
-        for (const b of mains)
-          if (b.component === other.c && Math.abs(b.along - other.along) <= UTILITY.junctionLink)
-            junctions.push({ a, b, d: distance(a.p, b.p) });
+    const parents = new Map(terminals.map((c) => [c, c]));
+    const root = (c: Component): Component => {
+      const parent = parents.get(c)!;
+      if (parent === c) return c;
+      const found = root(parent);
+      parents.set(c, found);
+      return found;
+    };
+    const candidates = anchors
+      .flatMap((a, i) => anchors.slice(i + 1).map((b) => ({ a, b, d: distance(a.p, b.p) })))
+      .sort(
+        (a, b) =>
+          a.d - b.d ||
+          compare(utilitySpanId(a.a.pole.id, a.b.pole.id), utilitySpanId(b.a.pole.id, b.b.pole.id)),
+      );
+    for (const { a, b } of candidates)
+      if (
+        root(a.component) !== root(b.component) &&
+        (spans.has(utilitySpanId(a.pole.id, b.pole.id)) ||
+          connect(a, b, 'junction', UTILITY.maxSpan))
+      )
+        parents.set(root(a.component), root(b.component));
+    if (new Set(terminals.map(root)).size === 1) stats.continuity.connectedGroups++;
+    else {
+      stats.continuity.unresolvedGroups++;
+      stats.continuity.unresolved.push({
+        components: terminals.map((c) => c.id),
+        points: touches.map((t) => projection.unproject(at(t.c, t.along).p)),
+        reason: anchors.length < terminals.length ? 'support-distance' : 'span-limit',
+      });
     }
   }
-  const linked = new Set<string>();
-  junctions.sort(
-    (a, b) =>
-      a.d - b.d ||
-      compare(utilitySpanId(a.a.pole.id, a.b.pole.id), utilitySpanId(b.a.pole.id, b.b.pole.id)),
-  );
-  for (const { a, b } of junctions)
-    if (
-      !linked.has(a.pole.id) &&
-      !linked.has(b.pole.id) &&
-      connect(a, b, 'junction', UTILITY.junctionLink)
-    ) {
-      linked.add(a.pole.id);
-      linked.add(b.pole.id);
-    }
   const records: UtilityRecord[] = [
     ...placed.map(({ pole }): UtilityRecord => ({ version: 1, kind: 'pole', pole })),
     ...[...spans.values()].map((span): UtilityRecord => ({ version: 1, kind: 'span', span })),
