@@ -11,12 +11,22 @@ import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-site
 import {
   artChars,
   ATLAS_CLASSES,
+  FRONTAGE_KINDS,
   CAMERA_RANGES,
   BOAT_TYPES,
   VEHICLE_TYPES,
   YEAR_RANGE,
   type TrafficMix,
 } from './constants';
+
+export const Frontage = z.enum(FRONTAGE_KINDS);
+/** Scalars retained through vector-tile clipping; all three must be supplied together. */
+export const ShopAnchor = z.object({
+  shop_lng: z.number().finite().min(-180).max(180),
+  shop_lat: z.number().finite().min(-85.051129).max(85.051129),
+  shop_radius_m: z.number().finite().positive(),
+});
+export type ShopAnchor = z.infer<typeof ShopAnchor>;
 
 /** A BCP 47-style language code: "fil", "bcl", "pt-BR". */
 export const LanguageCode = z
@@ -273,61 +283,66 @@ const DetailLine = z
   );
 
 /** A plan-view beam, support, platform, or roof; overhead parts leave the ground walkable. */
-export const SiteStructure = z.strictObject({
-  id: DetailKey,
-  ring: z
-    .array(LngLat)
-    .min(4)
-    .superRefine((ring, ctx) => {
-      if (ring.length < 4) return;
-      const first = ring[0]!,
-        last = ring.at(-1)!;
-      const fail = () =>
-        ctx.addIssue({ code: 'custom', message: 'expected a simple, closed, nonzero-area ring' });
-      if (first[0] !== last[0] || first[1] !== last[1]) {
-        fail();
-        return;
-      }
-      const cross = (a: LngLat, b: LngLat, c: LngLat) =>
-        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-      const on = (a: LngLat, b: LngLat, p: LngLat) =>
-        cross(a, b, p) === 0 &&
-        p[0] >= Math.min(a[0], b[0]) &&
-        p[0] <= Math.max(a[0], b[0]) &&
-        p[1] >= Math.min(a[1], b[1]) &&
-        p[1] <= Math.max(a[1], b[1]);
-      let area = 0;
-      const count = ring.length - 1;
-      for (let i = 0; i < count; i++) {
-        const a = ring[i]!,
-          b = ring[i + 1]!;
-        if (a[0] === b[0] && a[1] === b[1]) {
+export const SiteStructure = z
+  .strictObject({
+    id: DetailKey,
+    ring: z
+      .array(LngLat)
+      .min(4)
+      .superRefine((ring, ctx) => {
+        if (ring.length < 4) return;
+        const first = ring[0]!,
+          last = ring.at(-1)!;
+        const fail = () =>
+          ctx.addIssue({ code: 'custom', message: 'expected a simple, closed, nonzero-area ring' });
+        if (first[0] !== last[0] || first[1] !== last[1]) {
           fail();
           return;
         }
-        area += cross(first, a, b);
-        for (let j = i + 2; j < count; j++) {
-          if (i === 0 && j === count - 1) continue;
-          const c = ring[j]!,
-            d = ring[j + 1]!;
-          if (
-            (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) ||
-            on(a, b, c) ||
-            on(a, b, d) ||
-            on(c, d, a) ||
-            on(c, d, b)
-          ) {
+        const cross = (a: LngLat, b: LngLat, c: LngLat) =>
+          (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        const on = (a: LngLat, b: LngLat, p: LngLat) =>
+          cross(a, b, p) === 0 &&
+          p[0] >= Math.min(a[0], b[0]) &&
+          p[0] <= Math.max(a[0], b[0]) &&
+          p[1] >= Math.min(a[1], b[1]) &&
+          p[1] <= Math.max(a[1], b[1]);
+        let area = 0;
+        const count = ring.length - 1;
+        for (let i = 0; i < count; i++) {
+          const a = ring[i]!,
+            b = ring[i + 1]!;
+          if (a[0] === b[0] && a[1] === b[1]) {
             fail();
             return;
           }
+          area += cross(first, a, b);
+          for (let j = i + 2; j < count; j++) {
+            if (i === 0 && j === count - 1) continue;
+            const c = ring[j]!,
+              d = ring[j + 1]!;
+            if (
+              (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) ||
+              on(a, b, c) ||
+              on(a, b, d) ||
+              on(c, d, a) ||
+              on(c, d, b)
+            ) {
+              fail();
+              return;
+            }
+          }
         }
-      }
-      if (area === 0) fail();
-    }),
-  height_m: z.number().positive().max(255),
-  material: z.enum(['wood', 'stone', 'roof']),
-  overhead: z.boolean(),
-});
+        if (area === 0) fail();
+      }),
+    height_m: z.number().positive().max(255),
+    material: z.enum(['wood', 'stone', 'roof', 'paving']),
+    overhead: z.boolean(),
+  })
+  .refine((part) => part.material !== 'paving' || !part.overhead, {
+    path: ['overhead'],
+    message: 'walkable paving cannot be overhead',
+  });
 export type SiteStructure = z.infer<typeof SiteStructure>;
 
 /** Sourced outdoor detail, anchored to an existing OSM area; coordinates are GeoJSON order. */
@@ -626,6 +641,8 @@ export function contentSchemas(languages?: readonly string[]) {
       front: z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']).optional(),
       parts: z.array(PlanPart).min(1),
       status: z.enum(['draft', 'verified']),
+      /** Attribution for reference imagery, shown with the map credits. */
+      credit: z.string().trim().min(1).optional(),
       sources: Sources,
     })
     .refine(

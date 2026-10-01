@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas } from './index';
 import { LifeWorld } from './life/simulate';
-import { cellPass, glyphPass, lifePass, lightPass, selectPass } from './passes';
+import { cellPass, fixturePass, glyphPass, lifePass, lightPass, selectPass } from './passes';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 
@@ -282,6 +282,20 @@ describe('live motion preference', () => {
     atlas.setReducedMotion(true);
     draw(200);
     expect(vi.mocked(lightPass).mock.calls.at(-1)![5]).toEqual([]);
+  });
+
+  it('drives flag motion from renderer time with Life off and freezes it with reduced motion', () => {
+    atlas.setLife({ enabled: false, wind: 'breeze' });
+    draw(100);
+    const first = vi.mocked(fixturePass).mock.calls.at(-1)!;
+    expect(first[6]).toBe(0);
+    expect(first[8]!.time).toBeCloseTo(0.1);
+    expect(first[8]!.strength).toBeGreaterThan(0);
+    draw(1100);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![8]!.time).toBeCloseTo(1.1);
+    atlas.setReducedMotion(true);
+    draw(1200);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![8]!.strength).toBe(0);
   });
 
   it('rebuilds cached palettes on a theme change', () => {

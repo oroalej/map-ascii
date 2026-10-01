@@ -4,6 +4,8 @@ export * from './life-sites';
 export * from './rhythm';
 export * from './schemas';
 export * from './signal-layout';
+export * from './roof-plan';
+export * from './roof-plan-schema';
 export * from './search';
 export * from './search-options';
 export * from './zoom';

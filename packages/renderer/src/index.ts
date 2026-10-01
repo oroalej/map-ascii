@@ -957,7 +957,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       : [];
     fixtures.push(...cachedUtilities(utilityGroups));
   };
-  const drawFixtures = (cellsDrawn: boolean) => {
+  const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
     const visible = fixturePass(
       gl,
@@ -968,6 +968,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       fixtures,
       host.latest()?.signalClock ?? 0,
       cellsDrawn,
+      { time, strength: wind.strength },
     );
     const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities}`;
     if (key !== fixturesKey) {
@@ -1124,10 +1125,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     () => targetsGeneration,
     ({ point, click, index: hit, camera: at, size }: PickResult) => {
       // A feature that isn't interactive counts as a miss: no highlight, and no feature reported.
-      const found = source.feature(hit);
+      const picked = source.feature(hit);
+      const found = picked?.parentId ? source.featureById(picked.parentId) : picked;
       const feature = found && interactive(found) ? found : null;
       const featureId = feature?.id ?? null;
-      const index = feature ? hit : 0;
+      const index = feature ? source.indexOf(feature.id) : 0;
       if (click) {
         const [lng, lat] = viewportFor(at, size).unproject([...point]) as [number, number];
         emit('click', { featureId, feature, point, lngLat: [lng, lat] });
@@ -1233,7 +1235,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawLife(now, wind);
       lifeMs = smooth(lifeMs, performance.now() - lifeStart);
       drawLights(cellsDrawn);
-      drawFixtures(cellsDrawn);
+      drawFixtures(cellsDrawn, time, wind);
       glyphPass(
         gl,
         programs,

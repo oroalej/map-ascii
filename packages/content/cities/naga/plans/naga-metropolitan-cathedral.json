@@ -59,7 +59,7 @@
     {
       "title": "Wikipedia: Naga Metropolitan Cathedral",
       "url": "https://en.wikipedia.org/wiki/Naga_Metropolitan_Cathedral",
-      "note": "\"Two short, symmetric hexagonal belfries on both ends\" of the façade; \"a pediment surmounted by a round cupola\"; \"above the crossing is a rectangular dome topped by a cupola\"."
+      "note": "\"Two short, symmetric hexagonal belfries on both ends\" of the façade; \"a pediment surmounted by a round cupola\"; \"above the crossing is a rectangular dome topped by a cupola\". Dimensions and placement are visual estimates, not surveyed measurements; retained as draft in the 2026-10-01 review."
     },
     {
       "title": "Wikimedia Commons: CATHEDRAL.jpg",
@@ -72,5 +72,6 @@
       "note": "Footprint: the nave runs south-west to north-east, with the transept (the crossing) about 55% of the way back from the south-west front, which faces the Cathedral Grounds."
     }
   ],
-  "status": "draft"
+  "status": "draft",
+  "credit": "Roof reference: CATHEDRAL.jpg by Dilindin (CC BY-SA 4.0, Wikimedia Commons)."
 }

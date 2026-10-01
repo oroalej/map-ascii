@@ -1,13 +1,13 @@
 import type { LandmarkPlan } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
-import { footprintAxis, partOutline, planParts } from './plan';
+import { footprintAxis, partOutline, planParts, planCredits } from './plan';
 
 const METERS = 111_320;
 
 /** A 100 m (east–west) × 40 m building at the equator, as lng/lat. */
 const building = {
   type: 'Feature' as const,
-  properties: { id: 'osm:way/1' },
+  properties: { id: 'osm:way/1', class: 'building', height: 10 },
   geometry: {
     type: 'Polygon' as const,
     coordinates: [
@@ -156,4 +156,22 @@ describe('planParts', () => {
     });
     expect(() => planParts([statue], [onPoint])).toThrow(/needs an area/);
   });
+});
+
+it('rejects rooftop plans anchored to grounds and collects unique reference credits', () => {
+  const roof = plan({
+    parts: [
+      { kind: 'dome', shape: 'circle', size_m: 5, height_m: 10, at: { along: 0, across: 0 } },
+    ],
+  });
+  expect(() =>
+    planParts([{ ...building, properties: { ...building.properties, height: 0 } }], [roof]),
+  ).toThrow(/standing building/);
+  expect(
+    planCredits([
+      roof,
+      { ...roof, credit: 'Author, CC BY-SA 4.0' },
+      { ...roof, credit: 'Author, CC BY-SA 4.0' },
+    ]),
+  ).toEqual(['Author, CC BY-SA 4.0']);
 });

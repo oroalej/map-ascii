@@ -23,6 +23,23 @@ function setup(shops: boolean, seed: number) {
   return { world, life: worldTiles(world).values().next().value! };
 }
 describe('commerce admission', () => {
+  it('deduplicates and caps shop identities independently of feature order', () => {
+    const build = (ids: number[]) => {
+      const b = new LifeBuilder();
+      for (const i of ids)
+        for (let copy = 0; copy < 2; copy++) {
+          b.commerceAt({ x: i, y: 1 }, `shop/${i}`);
+          b.shop({ x: i, y: 1 }, 5, `shop/${i}`);
+        }
+      return b.finish();
+    };
+    const ids = Array.from({ length: 200 }, (_, i) => i);
+    const a = build(ids),
+      b = build([...ids].reverse());
+    expect(a.commerce).toEqual(b.commerce);
+    expect(a.shops).toEqual(b.shops);
+    expect(a.commerce!.length).toBe(MAX_TILE_SHOPS * 2);
+  });
   it('does not add commerce walkers or vendors to a road with no mapped walking route', () => {
     const b = new LifeBuilder();
     b.line(
@@ -83,6 +100,12 @@ describe('commerce admission', () => {
       const count = extra.life.movers.length;
       extra.world.sync([{ tile, key: `commerce-${seed}`, life: extra.life.geo }]);
       expect(extra.life.movers.length).toBe(count);
+      extra.world.sync([]);
+      expect(worldTiles(extra.world).size).toBe(0);
+      extra.world.sync([{ tile, key: `commerce-${seed}`, life: extra.life.geo }]);
+      const reloaded = worldTiles(extra.world).values().next().value!;
+      expect(reloaded.movers).toEqual(extra.life.movers);
+      expect(reloaded.stalls).toEqual(extra.life.stalls);
     });
   it('caps buffered commerce and owned light centers and transfers their storage', () => {
     const b = new LifeBuilder();

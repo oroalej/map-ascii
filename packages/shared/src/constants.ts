@@ -4,6 +4,21 @@
  * schemas build on them, so each value has one source.
  */
 
+/** Shopfront kinds shared without importing build-time validation into the renderer. */
+export const FRONTAGE_KINDS = ['food', 'retail', 'service', 'commercial'] as const;
+export type FrontageKind = (typeof FRONTAGE_KINDS)[number];
+
+/** Point-shop footprint radius in meters; pipeline anchors and renderer fallback agree. */
+export const SHOP_POINT_RADIUS_M = 5;
+
+/** Stable building variant bytes, shared by the pipeline and renderer. */
+export const RoofShape = { flat: 1, gabled: 2, hipped: 3, pyramidal: 4 } as const;
+export const foldRoofAngle = (angle: number) => ((angle % Math.PI) + Math.PI) % Math.PI;
+export const ROOF_PLAN_MAX_LEAVES = 4;
+export const ROOF_PLAN_MAX_NODES = ROOF_PLAN_MAX_LEAVES * 2 - 1;
+/** Archive z16 and its loading parent are the first tiles carrying detailed roof plans. */
+export const ROOF_PLAN_MIN_TILE_ZOOM = 15;
+
 /** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
 export const ATLAS_CLASSES = [
   'water_river',

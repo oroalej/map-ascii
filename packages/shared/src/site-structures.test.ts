@@ -25,6 +25,13 @@ const detail = {
 };
 
 describe('site structure content', () => {
+  it('accepts walkable raised paving and rejects overhead paving', () => {
+    expect(
+      SiteStructure.safeParse({ ...part, material: 'paving', height_m: 0.15, overhead: false })
+        .success,
+    ).toBe(true);
+    expect(SiteStructure.safeParse({ ...part, material: 'paving' }).success).toBe(false);
+  });
   it('keeps older outdoor records valid and rejects ambiguous structure identities', () => {
     expect(SiteDetail.parse(detail).structures).toEqual([]);
     expect(SiteDetail.safeParse({ ...detail, structures: [part] }).success).toBe(true);

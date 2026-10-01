@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import {
   CLASS_ZOOM,
+  Frontage as FrontageSchema,
+  type ShopAnchor,
   featureZoomBand,
   REGION_TILE_MAX_ZOOM,
   tileZoomRange,
@@ -38,7 +40,7 @@ import {
   type Tags,
 } from './lib/classify';
 import { parseOsmDate } from './lib/dates';
-import { assignFrontages, frontageOf, type Frontage } from './lib/frontage';
+import { assignFrontages, frontageOf, shopAnchor, type Frontage } from './lib/frontage';
 import { markSite, siteOfTags } from './lib/life-sites';
 import { bboxesOverlap } from './lib/geo';
 import { readJson, writeFeatures, writeJson } from './lib/io';
@@ -49,13 +51,17 @@ import { files, type Step } from './step';
 export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
-export type AtlasProperties = {
+export type AtlasProperties = Partial<ShopAnchor> & {
+  /** Versioned RoofPlan JSON, calculated on the complete footprint before tiling. */
+  roof_plan?: string;
   /** Original road classification, independent of display tag precedence. */
   highway?: string;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
   detail_overhead?: boolean;
+  /** Selection identity of a walkable surface authored inside an OSM area. */
+  detail_parent?: string;
   seat_bearing?: number;
   /** Country flag design explicitly supplied by a city detail pack. */
   flag?: 'PH';
@@ -263,9 +269,17 @@ export function normalize(
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
     if (cls.startsWith('road_') && tags.highway) properties.highway = tags.highway;
     if (cls.startsWith('building')) {
-      const frontage = (tags.frontage as Frontage | undefined) ?? frontageOf(tags);
-      if (frontage) properties.frontage = frontage;
+      const frontage = fromRegion.has(item)
+        ? frontageOf(tags)
+        : (tags.frontage ?? frontageOf(tags));
+      if (frontage) properties.frontage = FrontageSchema.parse(frontage);
     }
+    if (
+      properties.frontage ||
+      cls === 'building_market' ||
+      (cls === 'furniture' && variantOf(tags, cls)?.startsWith('shop_'))
+    )
+      Object.assign(properties, shopAnchor(feature));
     if (tags.name) properties.name = tags.name;
     const featureKind = kindOf(tags);
     if (featureKind) properties.kind = featureKind;

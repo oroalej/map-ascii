@@ -9,6 +9,7 @@ import {
   packFixtures,
   tileFixtures,
   updateFixtureSignals,
+  updateFixtureFlags,
   type FixtureGrid,
   type StreetFixture,
 } from './fixtures';
@@ -58,6 +59,48 @@ const cells = (out: Uint8Array) => {
 };
 
 describe('street fixtures', () => {
+  it('waves cloth and its emblems without moving hardware or leaving stale cells', () => {
+    const pole: StreetFixture = { ...lamp, kind: 'flagpole', flag: 'PH' };
+    const packed = pack([pole], 20.5);
+    const hardware = cells(packed.texels).filter((c) => c.part >= FixturePart.flagMast);
+    const hoist = cells(packed.texels).filter((c) => (c.at / 4) % grid.cols === 41);
+    const before = [...packed.cloth.cells];
+    expect(updateFixtureFlags(packed, { time: 0.7, strength: 0.7 })).toBe(true);
+    expect(packed.cloth.cells).not.toEqual(before);
+    expect(cells(packed.texels).filter((c) => c.part >= FixturePart.flagMast)).toEqual(hardware);
+    expect(
+      cells(packed.texels)
+        .filter((c) => (c.at / 4) % grid.cols === 41)
+        .map((c) => c.at),
+    ).toEqual(hoist.map((c) => c.at));
+    for (const at of before.filter((at) => !packed.cloth.cells.includes(at)))
+      expect(packed.texels[at + 3]).toBe(0);
+    expect(cells(packed.texels).filter((c) => c.part === FixturePart.flagGold)).toHaveLength(4);
+    const frame = packed.texels.slice();
+    expect(updateFixtureFlags(packed, { time: 0.7, strength: 0.7 })).toBe(false);
+    expect(packed.texels).toEqual(frame);
+    updateFixtureFlags(packed, { time: 5, strength: 0 });
+    const still = packed.texels.slice();
+    expect(updateFixtureFlags(packed, { time: 50, strength: 0 })).toBe(false);
+    expect(packed.texels).toEqual(still);
+  });
+
+  it('never erases other fixtures when a waving flag crosses their cells', () => {
+    const pole: StreetFixture = { ...lamp, kind: 'flagpole', flag: 'PH' };
+    const neighbor: StreetFixture = {
+      ...signal,
+      base: [50.5, 28.5],
+      tip: [51.5, 28.5],
+      forward: [51.5, 28.5],
+      right: [50.5, 29.5],
+    };
+    const packed = pack([pole, neighbor], 20.5);
+    const fixed = cells(packed.texels).filter((c) => c.part < FixturePart.flagBlue);
+    for (const time of [0.2, 0.8, 1.4, 2.1]) {
+      updateFixtureFlags(packed, { time, strength: 1.5 });
+      expect(cells(packed.texels).filter((c) => c.part < FixturePart.flagBlue)).toEqual(fixed);
+    }
+  });
   it('draws authored Philippine flags with a base, pole, bicolor cloth and gold hoist details', () => {
     const pole: StreetFixture = { ...lamp, kind: 'flagpole', flag: 'PH' };
     expect(cells(pack([pole], 17.9).texels)).toHaveLength(0);

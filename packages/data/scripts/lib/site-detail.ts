@@ -144,11 +144,17 @@ export function mergeSiteDetails(
       if (difference([part.ring], parentClip).length > 0)
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
       return feature(`${prefix}/structure-${part.id}`, shape, {
-        class: part.material === 'wood' ? 'building_woodwork' : 'building_part',
+        class:
+          part.material === 'paving'
+            ? 'paving'
+            : part.material === 'wood'
+              ? 'building_woodwork'
+              : 'building_part',
         height: part.height_m,
-        variant: 'flat',
+        variant: part.material === 'paving' ? 'terrace' : 'flat',
         detail_overhead: part.overhead,
-        ...(!part.overhead && { detail_blocked: true }),
+        ...(part.material === 'paving' && { detail_parent: pack.osm_id }),
+        ...(!part.overhead && part.material !== 'paving' && { detail_blocked: true }),
       });
     });
     features.push(...structures);
@@ -162,7 +168,7 @@ export function mergeSiteDetails(
       ...seating.map(({ seat, shape }) =>
         feature(`${prefix}/seating-${seat.id}`, shape, { detail_blocked: true }),
       ),
-      ...structures.filter((f) => !f.properties.detail_overhead),
+      ...structures.filter((f) => f.properties.detail_blocked),
     ];
     const requireClear = (points: Position[], item: string) => {
       requireInside(points, item);

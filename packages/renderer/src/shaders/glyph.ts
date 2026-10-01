@@ -98,7 +98,6 @@ uniform int u_bird;
 uniform vec3 u_birdPaints[${BIRD_SPECIES_ORDER.length * 2}];
 uniform vec3 u_paints[${PAINT_COUNT}];
 uniform vec3 u_awningPaints[8];
-uniform int u_frontageMask;
 uniform float u_rain;
 uniform float u_rainSlant;
 uniform int u_rainGlyph;
@@ -433,7 +432,7 @@ void main() {
   bool edge = (rawState & ${EDGE_STATE}) != 0;
   int windLevel = (rawState >> ${WIND_SHIFT}) & 3;
   int tone = (rawState >> ${TONE_SHIFT}) & 3;
-  int awning = maskBit(u_frontageMask, cls) != 0 ? (rawState >> ${WIND_SHIFT}) & 15 : 0;
+  int awning = (u_cellBits[cls] & ${CellBit.frontage}) != 0 ? (rawState >> ${WIND_SHIFT}) & 15 : 0;
   bool shaded = (rawState & ${SHADOW_STATE}) != 0;
   int state = rawState & ${EDGE_STATE - 1};
   int bgClass = int(g.a * 255.0 + 0.5);

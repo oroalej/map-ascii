@@ -196,12 +196,96 @@ type SignalCells = {
   /** Pixel-space approach direction, one turn quantized to a byte. */
   direction: number;
 };
+export type FixtureMotion = { time: number; strength: number };
+type FlagCloth = {
+  x: number;
+  top: number;
+  rows: number;
+  cols: number;
+  seed: number;
+  opacity: number;
+};
 export type PackedFixtures = {
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
   utilityCells: number[];
+  /** Projected cloth envelopes; hardware owns its cells throughout the animation. */
+  flags: FlagCloth[];
+  cloth: {
+    cols: number;
+    rows: number;
+    owners: Int32Array;
+    cells: number[];
+    glyphs: { block: number; sun: number; star: number };
+    frame: number;
+    strength: number;
+  };
 };
+
+/** Restamp only cloth cells, using renderer time even while the Life simulation is off. */
+export function updateFixtureFlags(packed: PackedFixtures, motion: FixtureMotion): boolean {
+  if (!packed.flags.length) return false;
+  const { cloth, texels } = packed;
+  const strength = Math.max(0, Math.min(1.5, Math.round(motion.strength * 10) / 10));
+  const frame = strength > 0 ? Math.floor(motion.time * 15) : -1;
+  if (cloth.frame === frame && cloth.strength === strength) return false;
+  cloth.frame = frame;
+  cloth.strength = strength;
+  for (const at of cloth.cells) texels.fill(0, at, at + 4);
+  cloth.cells.length = 0;
+  // Earlier flags retain ownership where their envelopes meet. Gold details may replace
+  // their own cloth, but no cloth can erase a lamp, a signal, or a mast.
+  const occupied = new Map<number, number>();
+  for (const [index, flag] of packed.flags.entries()) {
+    const phase = strength > 0 ? (frame / 15) * (2.4 + strength) + (flag.seed & 31) * 0.2 : 0;
+    const amplitude = (flag.rows / 3) * (0.45 + strength * 0.7);
+    const lift = (c: number) => {
+      const u = c / Math.max(1, flag.cols - 1);
+      return Math.round(u * Math.sin(u * Math.PI * 2 - phase) * amplitude + u * 0.7);
+    };
+    const tone = (c: number) =>
+      Math.round(155 + 100 * (0.5 + 0.5 * Math.cos((c / flag.cols) * Math.PI * 4 - phase)));
+    const write = (c: number, r: number, glyph: number, part: number) => {
+      const x = flag.x + 1 + c;
+      const y = flag.top + r + lift(c);
+      if (x < 0 || y < 0 || x >= cloth.cols || y >= cloth.rows || glyph <= 0 || glyph > MAX_GLYPHS)
+        return;
+      const cell = y * cloth.cols + x;
+      if (cloth.owners[cell] !== -1 || (occupied.has(cell) && occupied.get(cell) !== index)) return;
+      const at = cell * 4;
+      if (!occupied.has(cell)) cloth.cells.push(at);
+      occupied.set(cell, index);
+      [texels[at], texels[at + 1]] = packGlyph(glyph, part);
+      texels[at + 2] = tone(c);
+      texels[at + 3] = flag.opacity;
+    };
+    for (let r = 0; r < flag.rows; r++) {
+      for (let c = 0; c < flag.cols; c++) {
+        const u = (c + 0.5) / flag.cols;
+        const v = (r + 0.5) / flag.rows;
+        const triangle = u < (Math.sqrt(3) / 2) * Math.min(v, 1 - v);
+        write(
+          c,
+          r,
+          cloth.glyphs.block,
+          triangle
+            ? FixturePart.flagWhite
+            : r < flag.rows / 2
+              ? FixturePart.flagBlue
+              : FixturePart.flagRed,
+        );
+      }
+    }
+    if (flag.rows >= 6) {
+      write(2, 2, cloth.glyphs.sun, FixturePart.flagGold);
+      write(0, 0, cloth.glyphs.star, FixturePart.flagGold);
+      write(0, flag.rows - 1, cloth.glyphs.star, FixturePart.flagGold);
+      write(Math.floor(flag.cols * 0.32), 3, cloth.glyphs.star, FixturePart.flagGold);
+    }
+  }
+  return true;
+}
 
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
 export function updateFixtureSignals(packed: PackedFixtures, clock: number): boolean {
@@ -228,13 +312,25 @@ export function packFixtures(
   zoom: number,
   glyphIndex: (glyph: string) => number,
   clock: number,
+  motion: FixtureMotion = { time: 0, strength: 0 },
 ): PackedFixtures {
   out.fill(0);
+  const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
   const packed: PackedFixtures = {
     texels: out,
     visibility: { streetlights: false, trafficSignals: false, utilities: false },
     signals: [],
     utilityCells: [],
+    flags: [],
+    cloth: {
+      cols: grid.cols,
+      rows: grid.rows,
+      owners,
+      cells: [],
+      glyphs: { block: glyphIndex('█'), sun: glyphIndex('☼'), star: glyphIndex('★') },
+      frame: NaN,
+      strength: NaN,
+    },
   };
   // Signal lenses own their cells before streetlight arms. Only heads on the same authored
   // lantern post share hardware ownership, so their short brackets may meet at the base.
@@ -243,7 +339,6 @@ export function packFixtures(
     ...fixtures.filter((f) => f.kind === 'streetlight'),
     ...fixtures.filter((f) => f.kind === 'flagpole'),
   ];
-  const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
   const posts = new Map<string, number>();
   for (const [index, fixture] of ordered.entries()) {
     let owner = index;
@@ -345,12 +440,6 @@ export function packFixtures(
       const x = Math.floor(base[0]),
         y = Math.floor(base[1]);
       const top = y - rows - (zoom >= 20 ? 8 : 4);
-      const lift = (c: number) => {
-        const u = c / Math.max(1, cols - 1);
-        return Math.round(-Math.sin(u * Math.PI * 2) * (rows / 5) + u * 0.7);
-      };
-      const tone = (c: number) =>
-        Math.round(155 + 100 * (0.5 + 0.5 * Math.cos((c / cols) * Math.PI * 4 - 0.4)));
       for (let r = top - 1; r <= y - 1; r++) write(x, r, '\u2551', FixturePart.flagMast);
       write(x, top - 2, '\u2022', FixturePart.flagMast);
       // A light tapered pedestal, a broad foot, and a bright cap around the pole.
@@ -359,32 +448,16 @@ export function packFixtures(
         write(x + c, y, '\u2588', FixturePart.flagPlinth);
         write(x + c, y - 1, '\u2580', FixturePart.flagMast);
       }
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const u = (c + 0.5) / cols,
-            v = (r + 0.5) / rows;
-          const triangle = u < (Math.sqrt(3) / 2) * Math.min(v, 1 - v);
-          write(
-            x + 1 + c,
-            top + r + lift(c),
-            '\u2588',
-            triangle
-              ? FixturePart.flagWhite
-              : r < rows / 2
-                ? FixturePart.flagBlue
-                : FixturePart.flagRed,
-            tone(c),
-          );
-        }
-      }
-      if (rows >= 6) {
-        const emblem = (c: number, r: number, mark: string) =>
-          write(x + 1 + c, top + r + lift(c), mark, FixturePart.flagGold, tone(c));
-        emblem(2, 2, '\u263c');
-        emblem(0, 0, '\u2605');
-        emblem(0, rows - 1, '\u2605');
-        emblem(Math.floor(cols * 0.32), 3, '\u2605');
-      }
+      // Keep off-grid poles out of the animation cache.
+      if (x + cols >= 0 && x + 1 < grid.cols && top + rows + 4 >= 0 && top - 4 < grid.rows)
+        packed.flags.push({
+          x,
+          top,
+          rows,
+          cols,
+          seed: fixture.seed,
+          opacity: Math.round(opacity * 255),
+        });
       continue;
     }
     if (!detailed) {
@@ -524,6 +597,9 @@ export function packFixtures(
     grid.cols,
     grid.visible,
   );
+  // Animated cloth must retain the utility cells stamped after legacy hardware.
+  for (const cell of packed.utilityCells) owners[cell] = -2;
+  updateFixtureFlags(packed, motion);
   return packed;
 }
 

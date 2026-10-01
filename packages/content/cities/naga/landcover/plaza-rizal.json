@@ -57,9 +57,9 @@
       "height_m": 16
     },
     {
-      "at": [123.18501437, 13.62331424],
+      "at": [123.18498801, 13.62332233],
       "kind": "broadleaved",
-      "crown_m": 16,
+      "crown_m": 11,
       "height_m": 16
     },
     {
@@ -3110,6 +3110,10 @@
     {
       "title": "Project owner: Plaza Rizal reference views, 1 October 2026",
       "note": "Owner-requested full plaza detail: northern open paving, curved planted seating islands, mature crowns, perimeter timber pergolas with planting, and a southern bandstand. Supplied Google Maps/Street View screenshots are not distributed, georeferenced or traced; the authored layout is a schematic estimate anchored to the OSM plaza and independently photographed features. Pergola dimensions and individual planting positions need a ground survey."
+    },
+    {
+      "title": "Project owner: forecourt flag visibility, 1 October 2026",
+      "note": "One estimated forecourt crown is adjusted to keep the flag and stairs readable. Mature tree height remains 16 m and natural foliage masking applies. This is a schematic atlas layout estimate, not a surveyed tree relocation or historical claim."
     }
   ]
 }

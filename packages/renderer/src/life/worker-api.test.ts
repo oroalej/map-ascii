@@ -9,6 +9,9 @@ import type { ProcessionRoute } from '@atlas/shared';
 describe('life worker protocol', () => {
   it('matches a direct world over 120 frames, weather changes, eviction and reload', () => {
     const scenario = makeScenario('rain', 2, false);
+    // Buffered commerce must survive cloning, repeated sync and eviction on both paths.
+    for (const tile of scenario.tiles)
+      tile.life.commerce = new Float32Array([1000, 2100, 2000, 2100, 3000, 2100]);
     const traffic = { road_major: { jeepney: 1 } };
     const direct = new LifeWorld(traffic);
     const route: ProcessionRoute = {

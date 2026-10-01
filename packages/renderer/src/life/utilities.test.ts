@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { offsetUtility, utilitySpanId, type UtilityPole, type UtilityRecord } from '@atlas/shared';
-import { packFixtures, FixturePart, type FixtureGrid, type StreetFixture } from './fixtures';
+import {
+  packFixtures,
+  updateFixtureFlags,
+  FixturePart,
+  type FixtureGrid,
+  type StreetFixture,
+} from './fixtures';
 import {
   clipUtilityLine,
   createUtilityFixtureCache,
@@ -45,6 +51,31 @@ const pack = (fixtures: StreetFixture[], zoom = 20, g = grid) =>
   packFixtures(new Uint8Array(g.cols * g.rows * 4), g, fixtures, zoom, glyph, 0);
 
 describe('utility fixture composition', () => {
+  it('preserves poles and wires when animated flag cloth crosses their cells', () => {
+    const base = offsetUtility(origin, -10, 14);
+    const flag: StreetFixture = {
+      kind: 'flagpole',
+      flag: 'PH',
+      base,
+      tip: offsetUtility(base, 0, -1),
+      forward: offsetUtility(base, 0, -1),
+      right: offsetUtility(base, 1, 0),
+      seed: 17,
+    };
+    const clothOnly = pack([flag]);
+    const packed = pack([flag, ...utilityFixtures([span])]);
+    expect(packed.utilityCells.length).toBeGreaterThan(0);
+    expect(clothOnly.cloth.cells.some((at) => packed.utilityCells.includes(at / 4))).toBe(true);
+    const snapshot = () =>
+      packed.utilityCells.map((cell) => packed.texels.slice(cell * 4, cell * 4 + 4));
+    const fixed = snapshot();
+    for (const time of [0.2, 0.8, 1.4, 2.1]) {
+      expect(updateFixtureFlags(packed, { time, strength: 1.5 })).toBe(true);
+      expect(snapshot()).toEqual(fixed);
+      expect(packed.cloth.cells.every((at) => !packed.utilityCells.includes(at / 4))).toBe(true);
+    }
+  });
+
   it('retains both supports from a span alone, deduplicates buffered copies and invalidates on eviction', () => {
     const cache = createUtilityFixtureCache();
     const group = [span];

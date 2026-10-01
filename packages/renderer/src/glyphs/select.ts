@@ -19,6 +19,8 @@ import {
   type GlyphKind,
   type Theme,
 } from '../theme';
+import { RoofCode, roofSlopeVariant, roofSurfaceCode } from './roofs';
+export { RoofCode, roofSlopeVariant, roofSurfaceCode } from './roofs';
 
 /** Numeric kind codes shared with the select shader. 0 means "not drawn". */
 export const kindCodes: Record<GlyphKind, number> = {
@@ -310,7 +312,6 @@ export function subcellEdge(
 }
 
 /** Roof code per cell (the attribute buffer's alpha): which slope, or the ridge. */
-export const RoofCode = { none: 0, lit: 1, shaded: 2, ridge: 3 } as const;
 
 /**
  * A pitched-roof cell: on the ridge if the ridge line passes through it (|distance| within half
@@ -318,8 +319,7 @@ export const RoofCode = { none: 0, lit: 1, shaded: 2, ridge: 3 } as const;
  * the same with `fwidth`.
  */
 export function roofCode(distance: number, changePerCell: number): number {
-  if (Math.abs(distance) <= 0.5 * changePerCell) return RoofCode.ridge;
-  return distance > 0 ? RoofCode.lit : RoofCode.shaded;
+  return roofSurfaceCode([0, distance, 1, 0], changePerCell, changePerCell);
 }
 
 /**
@@ -337,10 +337,16 @@ export function ridgeVariant(angleByte: number, aspect: number): number {
  * A roof cell's glyph variant in the building row (lit ▓, shaded ▒, ridge by angle), or null
  * where there is no ridge (flat roofs, landmark parts) and the height ramp stays.
  */
-export function roofVariant(code: number, angleByte: number, aspect: number): number | null {
+export function roofVariant(
+  code: number,
+  angleByte: number,
+  aspect: number,
+  sun: readonly [number, number] = DEFAULT_SUN,
+): number | null {
   if (code === RoofCode.none) return null;
-  if (code === RoofCode.ridge) return ridgeVariant(angleByte, aspect);
-  return code === RoofCode.shaded ? 1 : 2;
+  if (code === RoofCode.ridge || code === RoofCode.hipPos || code === RoofCode.hipNeg)
+    return ridgeVariant(angleByte, aspect);
+  return roofSlopeVariant(code, angleByte, sun);
 }
 
 export type WallStyle = 'single' | 'double';
@@ -355,7 +361,9 @@ export function wallStyle(
   landmark: boolean,
   height: number,
   zoom: number,
+  terrace = false,
 ): WallStyle | null {
+  if (terrace && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (kind === 'seating' && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
   if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
