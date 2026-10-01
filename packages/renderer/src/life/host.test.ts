@@ -4,6 +4,10 @@ import { FrameProfiler } from '../profile';
 import { createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
+import type { LifeTile } from './simulate';
+const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
+  { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
+];
 
 const mock = vi.hoisted(() => ({
   init: vi.fn(),
@@ -73,6 +77,32 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('accepts an atomic in-flight frame while new geometry queues, but drops it after an empty view', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    const view = { bounds: s.bounds, spawnMarginM: 12 };
+    host.sync(s.tiles, s.center, view);
+    await flush();
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementation(
+      () =>
+        new Promise<FrameResult>((r) => {
+          resolve = r;
+        }),
+    );
+    host.request(s.input);
+    host.sync(scenarioNeighbor(s.tiles[0]!), s.center, view);
+    resolve(result(7));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(7);
+    host.request(s.input);
+    host.sync([], s.center, view);
+    resolve(result(8));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(7);
+    expect(host.latest()?.agents).toEqual([]);
+    host.dispose();
+  });
   it('measures accepted frame age on the posting clock and ignores stale diagnostics', async () => {
     let now = 100;
     const p = new FrameProfiler(() => now),

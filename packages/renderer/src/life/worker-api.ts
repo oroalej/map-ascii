@@ -8,6 +8,7 @@ import type { LifeGeometry } from './geometry';
 import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import type { LifeViewContext } from './births';
+import { LifePreparation } from './preparation';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -74,9 +75,10 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
 }
 
 /** Plain API for both Comlink and deterministic tests; no DOM or GL dependencies. */
-export function createLifeWorkerApi() {
+export function createLifeWorkerApi(preparationClock?: () => number) {
   let world: LifeWorld;
   let profiler: FrameProfiler | undefined;
+  let preparation: LifePreparation;
   let lastTerrain: object | undefined;
   let terrainSent = false;
   const geometries = new Map<string, LifeGeometry>();
@@ -84,6 +86,7 @@ export function createLifeWorkerApi() {
     init(options: LifeInit) {
       profiler = options.profiling ? new FrameProfiler() : undefined;
       world = new LifeWorld(options.traffic, profiler);
+      preparation = new LifePreparation(world, profiler, preparationClock);
       world.setProcessions(options.processions);
       geometries.clear();
       lastTerrain = undefined;
@@ -100,19 +103,25 @@ export function createLifeWorkerApi() {
       for (const key of geometries.keys()) if (!keep.has(key)) geometries.delete(key);
       // Sync happens between frame requests. Carry its timing into the next frame result.
       profiler?.begin(0);
-      world.sync(resolved, focus, view);
+      preparation.sync(resolved, focus, view);
       const sample = profiler?.drain();
       if (sample) profiler!.merge(sample);
       if (!tiles.length) terrainSent = false;
     },
     clearTiles() {
       world.clearTiles();
+      preparation.clear();
       geometries.clear();
       lastTerrain = undefined;
       terrainSent = false;
     },
     frame(input: FrameInput): FrameResult {
       profiler?.begin(input.gust.time * 1000);
+      preparation.camera(
+        input.step.bounds,
+        2 * (input.step.cellMeters ?? 0) * Math.max(1, input.gust.cssCell.h / input.gust.cssCell.w),
+      );
+      preparation.commit();
       const result: FrameResult = runLifeFrame(world, input, profiler);
       for (const agent of result.agents) delete agent.consist;
       const terrain = world.cellTerrain();
@@ -133,8 +142,9 @@ export function createLifeWorkerApi() {
         const start = profiler.time();
         structuredClone({ agents: result.agents, procession: result.procession });
         profiler.add('replyClone', profiler.time() - start);
-        result.profile = profiler.drain();
       }
+      preparation.slice();
+      if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },
     setLive(id: string | undefined, progress?: number) {

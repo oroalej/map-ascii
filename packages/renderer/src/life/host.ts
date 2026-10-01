@@ -6,6 +6,7 @@ import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api'
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import type { LifeViewContext } from './births';
+import { LifePreparation } from './preparation';
 
 export type FrameView = {
   agents: VisibleAgent[];
@@ -25,35 +26,60 @@ export interface LifeHost {
   dispose(): void;
 }
 
-export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): LifeHost {
-  let agents: VisibleAgent[] = [];
+export function createInlineHost(
+  world: LifeWorld,
+  profiler?: FrameProfiler,
+  preparationClock?: () => number,
+): LifeHost {
+  let view: FrameView | undefined;
+  const preparation = new LifePreparation(world, profiler, preparationClock);
   let disposed = false;
   let acceptedPost: number | undefined;
   return {
-    sync: (tiles, focus, view) => {
+    sync: (tiles, focus, context) => {
       if (disposed) return;
-      world.sync(tiles, focus, view);
-      if (!tiles.length) agents = [];
+      preparation.sync(tiles, focus, context);
+      if (!tiles.length) view = undefined;
     },
     clearTiles() {
       world.clearTiles();
-      agents = [];
+      preparation.clear();
+      view = undefined;
       acceptedPost = undefined;
     },
     request(input) {
       if (disposed) return false;
       acceptedPost = profiler?.time();
-      agents = runLifeFrame(world, input, profiler).agents;
+      preparation.camera(
+        input.step.bounds,
+        2 * (input.step.cellMeters ?? 0) * Math.max(1, input.gust.cssCell.h / input.gust.cssCell.w),
+      );
+      preparation.commit();
+      const result = runLifeFrame(world, input, profiler);
+      const terrain = world.cellTerrain();
+      view = {
+        ...result,
+        cellGuard: (toCell) =>
+          terrain &&
+          makeCellGuard(
+            terrain.ref,
+            { roads: terrain.roads, forbidden: terrain.forbidden },
+            terrain.trees,
+            toCell,
+          ),
+      };
+      preparation.slice();
       return true;
     },
     latest: () => {
       if (acceptedPost !== undefined)
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return {
-        agents,
-        procession: world.procession(),
+        agents: [],
         signalClock: world.signalClock,
-        cellGuard: (toCell) => world.groundCellGuard(toCell),
+        cellGuard: () => undefined,
+        ...view,
+        procession: world.procession(),
       };
     },
     setLive: (id, progress) => world.setLive(id, progress),
@@ -62,7 +88,8 @@ export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): Li
     dispose: () => {
       disposed = true;
       world.clearTiles();
-      agents = [];
+      preparation.clear();
+      view = undefined;
     },
   };
 }
@@ -132,8 +159,10 @@ export function createWorkerHost(
       }
       const keep = new Set(next.map((tile) => tile.key));
       if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
-        generation++;
-        terrain = undefined;
+        if (!nextView || !keep.size) {
+          generation++;
+          terrain = undefined;
+        }
         // Keep the last complete frame while nonempty geometry loads. It is never combined
         // with a different generation; the next valid reply replaces agents and guard together.
         if (!keep.size && view) view = { ...view, agents: [], cellGuard: () => undefined };

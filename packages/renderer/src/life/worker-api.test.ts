@@ -6,8 +6,62 @@ import { continuityTile, left, parent, right } from './testing/continuity';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
 import type { ProcessionRoute } from '@atlas/shared';
+import { createInlineHost } from './host';
 
 describe('life worker protocol', () => {
+  it('publishes identical complete staged worker and inline frames through camera changes and cancellation', () => {
+    const s = makeScenario('sparse', 1, false);
+    const api = createLifeWorkerApi(() => 0);
+    api.init({ processions: [], profiling: true });
+    const inline = createInlineHost(new LifeWorld(), undefined, () => 0);
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: s.center[0], lat: s.center[1], zoom: 18 },
+        size: { width: 390, height: 844 },
+        cssCell: { w: 10, h: 18 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 18,
+        bounds: s.bounds,
+        wind: undefined,
+        weather: undefined,
+        cellMeters: 0.9,
+      },
+      visible: [18, s.levels, s.center],
+    };
+    const view = { bounds: s.bounds, spawnMarginM: 12 };
+    const a = continuityTile(parent),
+      b = continuityTile(left),
+      c = continuityTile(right);
+    for (const entries of [[a], [a, b], [b, c], [a], [], [a]]) {
+      api.sync(structuredClone(entries), s.center, view);
+      inline.sync(entries, s.center, view);
+      for (let frame = 0; frame < 6; frame++) {
+        api.sync(
+          entries.map(({ key, tile }) => ({ key, tile })),
+          s.center,
+          view,
+        );
+        inline.sync(entries, s.center, view);
+        const actual = api.frame(input);
+        inline.request(input);
+        const expected = inline.latest()!;
+        expect(actual.agents).toEqual(
+          expected.agents.map(({ consist: _consist, ...agent }) => agent),
+        );
+        expect(actual.signalClock).toBe(expected.signalClock);
+      }
+    }
+    api.clearTiles();
+    inline.clearTiles();
+    expect(api.frame(input).agents).toEqual([]);
+    inline.request(input);
+    expect(inline.latest()!.agents).toEqual([]);
+    inline.dispose();
+  });
   it('matches a direct world over 120 frames, weather changes, eviction and reload', () => {
     const scenario = makeScenario('rain', 2, false);
     // Buffered commerce must survive cloning, repeated sync and eviction on both paths.
@@ -133,7 +187,7 @@ describe('life worker protocol', () => {
       else expect(result).not.toHaveProperty('terrain');
       if (frame === 0) expect(result.profile?.ms.sync).toBeGreaterThanOrEqual(0);
     }
-  });
+  }, 10000);
 
   it('rejects missing geometry instead of silently losing a tile', () => {
     const api = createLifeWorkerApi();

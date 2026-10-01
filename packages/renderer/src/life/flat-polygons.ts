@@ -1,14 +1,23 @@
 import type { Polygon, Point } from './occupancy';
+import { complete } from './cooperate';
 
 /** Sentinel offsets: polygon -> rings -> points. Float64 retains simulation coordinates. */
 export type FlatPolygons = { coords: Float64Array; rings: Uint32Array; polys: Uint32Array };
 export function flattenPolygons(polygons: readonly Polygon[]): FlatPolygons {
+  return complete(flattenPolygonSteps(polygons));
+}
+export function* flattenPolygonSteps(
+  polygons: readonly Polygon[],
+): Generator<void, FlatPolygons, void> {
   const coords: number[] = [],
     rings = [0],
     polys = [0];
   for (const polygon of polygons) {
     for (const ring of polygon) {
-      for (const point of ring) coords.push(point.x, point.y);
+      for (const point of ring) {
+        coords.push(point.x, point.y);
+        if ((coords.length & 511) === 0) yield;
+      }
       rings.push(coords.length / 2);
     }
     polys.push(rings.length - 1);

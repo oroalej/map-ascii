@@ -10,6 +10,7 @@ import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames'
 import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
 import type { ContinuityRejection } from './diagnostics';
 import { seamAhead } from './seams';
+import { complete } from './cooperate';
 import {
   BIRTHS,
   outsideView,
@@ -123,7 +124,7 @@ import {
   type Polygon,
 } from './occupancy';
 import {
-  prepareRoadTerrain,
+  prepareRoadTerrainSteps,
   RoadAccess,
   WorldRoadCache,
   transformPolygon,
@@ -435,13 +436,13 @@ export class TileLife {
   private readonly commerceStallsRng: () => number;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
-  readonly junctionIndex: JunctionIndex;
+  junctionIndex!: JunctionIndex;
   private readonly localJunctions = new JunctionTable();
   private readonly trafficGroups = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
-  readonly signals: SignalControl;
-  readonly scenes: LocalScenes;
+  signals!: SignalControl;
+  scenes!: LocalScenes;
   private readonly catRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
@@ -516,7 +517,7 @@ export class TileLife {
   }
   /** Tile units per meter. */
   readonly perMeter: number;
-  readonly roadTerrain: PreparedRoadTerrain;
+  roadTerrain!: PreparedRoadTerrain;
   private idleGuard?: (owner: GroundAgent) => boolean;
   private readonly idleBodies: Body[] = [];
   private readonly rng: () => number;
@@ -550,9 +551,9 @@ export class TileLife {
     readonly geo: LifeGeometry,
     seed: number,
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
+    deferred = false,
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
-    this.roadTerrain = prepareRoadTerrain(geo, this.perMeter);
     this.rng = random(seed);
     this.routingSeed = seed;
     this.routeRng = random(seed ^ 0x2545f491);
@@ -565,35 +566,56 @@ export class TileLife {
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
+    this.curvable = new Uint8Array(lines);
+    if (!deferred) complete(this.prepare());
+  }
+
+  /** The instance remains private to its preparation job until this iterator completes. */
+  *prepare(): Generator<void, TileLife, void> {
+    const { tile, geo, routingSeed: seed } = this;
+    const lines = geo.kinds.length;
+    this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
       for (let v = this.first(line) + 1; v <= this.last(line); v++) {
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
+        if ((v & 127) === 0) yield;
       }
+      yield;
     }
-    this.curvable = new Uint8Array(lines);
     for (let line = 0; line < lines; line++)
       this.curvable[line] = Number(
         this.last(line) - this.first(line) > 1 ||
           (this.ends.get(this.endKey(this.first(line)))?.length ?? 0) > 1 ||
           (this.ends.get(this.endKey(this.last(line)))?.length ?? 0) > 1,
       );
-    this.signals = new SignalControl(tile, geo, this.perMeter, this.along);
-    this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along);
+    this.signals = new SignalControl(tile, geo, this.perMeter, this.along, true);
+    yield* this.signals.prepare(tile, geo);
+    this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along, true);
+    yield* this.junctionIndex.prepare(tile);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
-    this.findJunctions();
-    this.spawnParked(random(seed ^ 0x9e3779b9));
-    this.spawnStandby(random(seed ^ 0x85ebca6b));
-    for (let line = 0; line < lines; line++) this.spawnOn(line);
+    yield* this.findJunctions();
+    yield* this.spawnParked(random(seed ^ 0x9e3779b9));
+    yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
+    for (let line = 0; line < lines; line++) yield* this.spawnOn(line);
     // Dogs last, on their own stream: they don't change who else is out.
-    for (let line = 0; line < lines; line++) this.spawnOn(line, true);
-    this.spawnStalls();
-    this.spawnGatherers();
-    this.spawnFlocks();
-    this.scenes = new LocalScenes(geo, this.perMeter, seed, this.stalls, (m) => this.canIdle(m));
-    this.spawnCats();
+    for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
+    yield* this.spawnStalls();
+    yield* this.spawnGatherers();
+    yield* this.spawnFlocks();
+    this.scenes = new LocalScenes(
+      geo,
+      this.perMeter,
+      seed,
+      this.stalls,
+      (m) => this.canIdle(m),
+      true,
+    );
+    yield* this.scenes.prepare(geo, this.stalls);
+    yield* this.spawnCats();
+    return this;
   }
 
   private first(line: number) {
@@ -628,7 +650,7 @@ export class TileLife {
   }
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
-  private spawnOn(line: number, dogs = false) {
+  private *spawnOn(line: number, dogs = false): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
@@ -641,6 +663,7 @@ export class TileLife {
       if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
       for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
+        yield;
         let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
         const flow = this.geo.oneway?.[line];
         if (rule.kind === 'vehicle' && flow) dir = flow === 1 ? 1 : -1;
@@ -911,25 +934,32 @@ export class TileLife {
 
   /** Resolve invalid initial positions instead of leaving an overlapping agent stuck. */
   settleGround(guard: GroundGuard) {
+    complete(this.settleGroundSteps(guard));
+  }
+  *settleGroundSteps(guard: GroundGuard): Generator<void, void, void> {
     for (let i = this.stalls.length - 1; i >= 0; i--)
       if (!guard(this.stalls[i]!)) {
         this.scenes.removeStall(this.stalls[i]!);
         this.stalls.splice(i, 1);
       }
     for (let i = this.movers.length - 1; i >= 0; i--) {
+      yield;
       const m = this.movers[i]!;
       if (m.kind !== 'vehicle' && m.kind !== 'person') continue;
       let fits = guard(m);
       for (let attempt = 0; !fits && attempt < 24; attempt++) {
+        yield;
         this.advance(m, (3 + attempt) * this.perMeter, false);
         fits = inTile(m) && guard(m);
       }
       if (!fits) this.movers.splice(i, 1);
     }
     for (let i = this.gatherers.length - 1; i >= 0; i--) {
+      yield;
       const g = this.gatherers[i]!;
       let fits = this.canIdle(g) && guard(g);
       for (let attempt = 0; !fits && g.behavior !== 'sit' && attempt < 24; attempt++) {
+        yield;
         this.nextTarget(g);
         g.x = g.tx;
         g.y = g.ty;
@@ -941,11 +971,16 @@ export class TileLife {
 
   /** Animals reserve only the space left after all legacy ground actors settle. */
   settleAnimals(guard: GroundGuard) {
+    complete(this.settleAnimalsSteps(guard));
+  }
+  *settleAnimalsSteps(guard: GroundGuard): Generator<void, void, void> {
     for (let i = this.movers.length - 1; i >= 0; i--) {
+      yield;
       const m = this.movers[i]!;
       if (m.kind !== 'cat' && m.kind !== 'dog') continue;
       let fits = inTile(m) && guard(m);
       for (let attempt = 0; !fits && attempt < 24; attempt++) {
+        yield;
         this.advance(m, (3 + attempt) * this.perMeter, false);
         fits = inTile(m) && guard(m);
       }
@@ -955,6 +990,9 @@ export class TileLife {
 
   /** Legacy actors settle first. New streams only append candidates that fit the reserved scene. */
   admitCommerce(guard: GroundGuard) {
+    complete(this.admitCommerceSteps(guard));
+  }
+  *admitCommerceSteps(guard: GroundGuard): Generator<void, void, void> {
     if (this.commerceAdmitted) return;
     this.commerceAdmitted = true;
     const commerce = this.geo.commerce ?? [];
@@ -962,6 +1000,7 @@ export class TileLife {
     for (const shoppers of [false, true]) {
       const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
       for (let line = 0; line < this.geo.kinds.length; line++) {
+        yield;
         const kind = this.geo.kinds[line];
         if (kind !== LifeLine.path && kind !== LifeLine.plaza) continue;
         const length = this.lineLength(line),
@@ -971,6 +1010,7 @@ export class TileLife {
         for (let i = 0; i < commerce.length; i += 2) {
           const p = { x: commerce[i]!, y: commerce[i + 1]! };
           for (let v = this.first(line); v < this.last(line); v++) {
+            if ((v & 63) === 0) yield;
             const x = this.geo.coords[v * 2]!,
               y = this.geo.coords[v * 2 + 1]!,
               dx = this.geo.coords[(v + 1) * 2]! - x,
@@ -990,6 +1030,7 @@ export class TileLife {
           Math.floor((meters / 100) * Math.min(COMMERCE.max, shops * COMMERCE.perShop) + rng()),
         );
         for (let i = 0; i < count; i++) {
+          yield;
           if (
             shoppers
               ? this.movers.length >= MAX_TILE_AGENTS
@@ -1067,10 +1108,11 @@ export class TileLife {
     }
   }
 
-  private spawnCats() {
+  private *spawnCats(): Generator<void, void, void> {
     const rng = this.catRng;
     let count = 0;
     for (let line = 0; line < this.geo.kinds.length && count < CAT.maxPerTile; line++) {
+      yield;
       if (!usableLines.cat.includes(this.geo.kinds[line]! as LifeLine)) continue;
       const rule = spawnRules[this.geo.kinds[line]! as LifeLine].find((r) => r.kind === 'cat');
       if (!rule) continue;
@@ -1081,6 +1123,7 @@ export class TileLife {
         i < cats && count < CAT.maxPerTile && this.movers.length < MAX_TILE_AGENTS;
         i++
       ) {
+        yield;
         const dir = rng() < 0.5 ? 1 : -1;
         const m: Mover = {
           kind: 'cat',
@@ -1207,7 +1250,7 @@ export class TileLife {
    * Street vendors beside walking paths and parks. Legacy road candidates consume their
    * appearance stream but are omitted, keeping the other vendors deterministic.
    */
-  private spawnStalls() {
+  private *spawnStalls(): Generator<void, void, void> {
     const { geo, looks, perMeter } = this;
     const reach = VENDORS.marketReach * perMeter;
     const nearMarket = (x: number, y: number) => {
@@ -1226,6 +1269,7 @@ export class TileLife {
       const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
       const count = Math.floor(((length / perMeter) * boost) / spacing + looks());
       for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
+        yield;
         const p = this.pointAt(line, looks() * length);
         const side = looks() < 0.5 ? 1 : -1;
         // Right of the line's direction for `side` 1; the vendor stands on the far side.
@@ -1254,10 +1298,11 @@ export class TileLife {
    * around their buildings), running about pitches, at monuments and fountains, on benches, and
    * working the fields, at most `MAX_TILE_GATHERERS`. At a school, most are children.
    */
-  private spawnGatherers() {
+  private *spawnGatherers(): Generator<void, void, void> {
     const { geo, perMeter } = this;
     const rng = this.placeRng;
     for (let i = 0; i < geo.places.length; i += PLACE_STRIDE) {
+      yield;
       const place = PLACE_CODES[geo.places[i + 2]!];
       if (!place) continue;
       const rule = PLACES[place];
@@ -1274,6 +1319,7 @@ export class TileLife {
       );
       const row = rng() * Math.PI;
       for (let n = 0; n < count && this.gatherers.length < MAX_TILE_GATHERERS; n++) {
+        yield;
         const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
         const g: Gatherer = {
           place,
@@ -1464,13 +1510,13 @@ export class TileLife {
    * Parked vehicles (config.ts `PARKED`): on parking lots' stalls, and along both curbs of
    * some wide roads, facing the traffic on their side.
    */
-  private spawnParked(rng: () => number) {
+  private *spawnParked(rng: () => number): Generator<void, void, void> {
     const { geo, perMeter } = this;
     const shares = this.traffic.parked;
     const excluded = new PolygonIndex();
     for (const a of geo.areas ?? [])
       if (a.kind === 'blocked' || a.kind === 'parking-exclusion')
-        excluded.add(transformPolygon(a.rings, 0, 0, 1 / perMeter));
+        yield* excluded.addSteps(transformPolygon(a.rings, 0, 0, 1 / perMeter));
     const sample: Body[] = [];
     const bodyOf = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => ({
       x,
@@ -1502,6 +1548,7 @@ export class TileLife {
     };
     const lots = geo.areas?.filter((a) => a.kind === 'parking');
     for (let i = 0; i < geo.spots.length; i += 4) {
+      yield;
       const vehicle = pickVehicle(shares, rng());
       if (rng() < PARKED.lotTaken) {
         const [x, y, hx, hy] = [
@@ -1524,6 +1571,7 @@ export class TileLife {
       const length = this.along[this.last(line)]!;
       for (const side of [1, -1]) {
         for (let at = 0; ;) {
+          yield;
           const vehicle = pickVehicle(shares, rng());
           const spec = VEHICLES[vehicle];
           const center = at + (spec.length / 2) * perMeter;
@@ -1560,7 +1608,7 @@ export class TileLife {
   }
 
   /** Shared vertices, T-junctions and crossings; two continuation arms are just a bend. */
-  private findJunctions() {
+  private *findJunctions(): Generator<void, void, void> {
     const { geo } = this;
     const segments: {
       line: number;
@@ -1571,6 +1619,7 @@ export class TileLife {
     for (let line = 0; line < geo.kinds.length; line++) {
       if (geo.kinds[line]! > LifeLine.roadMinor) continue;
       for (let v = this.first(line); v < this.last(line); v++) {
+        if ((v & 127) === 0) yield;
         segments.push({
           line,
           a: { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! },
@@ -1580,8 +1629,10 @@ export class TileLife {
       }
     }
     const found = new Map<string, { x: number; y: number; radius: number; arms: Set<number> }>();
+    let pairs = 0;
     for (let i = 0; i < segments.length; i++)
       for (let j = i + 1; j < segments.length; j++) {
+        if ((++pairs & 127) === 0) yield;
         const a = segments[i]!,
           b = segments[j]!;
         if (a.line === b.line) continue;
@@ -1614,10 +1665,11 @@ export class TileLife {
    * belongs to the tile holding its first vertex, so each gets one train, however many tiles'
    * buffers it reaches into.
    */
-  private spawnStandby(rng: () => number) {
+  private *spawnStandby(rng: () => number): Generator<void, void, void> {
     const { geo, perMeter } = this;
     const { margin, coaches } = TRAIN.standby;
     for (let line = 0; line < geo.kinds.length; line++) {
+      yield;
       if (geo.kinds[line] !== LifeLine.siding) continue;
       const x = geo.coords[this.first(line) * 2]!;
       const y = geo.coords[this.first(line) * 2 + 1]!;
@@ -1682,12 +1734,13 @@ export class TileLife {
     return false;
   }
 
-  private spawnFlocks() {
+  private *spawnFlocks(): Generator<void, void, void> {
     const { rng, geo } = this;
     const roosts = geo.roosts.length / 2;
     const perches = geo.perches.length / 2;
     const flocks = Math.min(BIRDS.flocksPerTile, roosts + perches);
     for (let f = 0; f < flocks; f++) {
+      yield;
       // A tile with only trees starts its flocks in them.
       const inTree = roosts === 0;
       const roost = inTree ? 0 : Math.floor(rng() * roosts);
@@ -3091,7 +3144,54 @@ export type LifeLineShape = {
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
+type GroundTerrain = {
+  key: string;
+  blocked: PolygonIndex;
+  water: PolygonIndex;
+  roadAccess: RoadAccess;
+  trees: PolygonIndex;
+  origins: Map<TileLife, { x: number; y: number; scale: number }>;
+  ref?: TileLife;
+};
+
 export class LifeWorld {
+  preparationEpoch = 0;
+  hasBootstrapped() {
+    return this.bootstrapped;
+  }
+  updateView(view: LifeViewContext) {
+    this.viewContext = view;
+  }
+  *prepareTile(entry: LifeTile): Generator<void, TileLife, void> {
+    const life = yield* new TileLife(
+      entry.tile,
+      entry.life,
+      hashString(entry.key),
+      this.traffic,
+      true,
+    ).prepare();
+    if (this.profiler) {
+      this.profiler.registerPopulation(entry.key, life.movers);
+      (this.preparedRegistered ??= new WeakSet()).add(life);
+    }
+    return life;
+  }
+  resident(key: string): TileLife | undefined {
+    const saved = this.retired.get(key);
+    return (
+      this.tiles.get(key) ??
+      (saved && this.clock - saved.at < RETIRE.seconds ? saved.life : undefined)
+    );
+  }
+  active(key: string): TileLife | undefined {
+    return this.tiles.get(key);
+  }
+  preparedExpired(key: string, life: TileLife) {
+    return this.history.has(life) && this.resident(key) !== life;
+  }
+  activeEntries(): LifeTile[] {
+    return [...this.tiles].map(([key, life]) => ({ key, tile: life.tile, life: life.geo }));
+  }
   private viewContext?: LifeViewContext;
   private bootstrapped = false;
   private previouslyVisible = new WeakSet<Mover>();
@@ -3116,14 +3216,10 @@ export class LifeWorld {
     key: string;
     routes: { life: TileLife; line: number; id: number; ends: string[] }[][];
   };
-  private groundTerrain?: {
-    key: string;
-    blocked: PolygonIndex;
-    water: PolygonIndex;
-    roadAccess: RoadAccess;
-    trees: PolygonIndex;
-    origins: Map<TileLife, { x: number; y: number; scale: number }>;
-  };
+  private groundTerrain?: GroundTerrain;
+  private preparedTerrain = new WeakMap<TileLife, GroundTerrain>();
+  private preparedSettled = new WeakSet<TileLife>();
+  private preparedRegistered?: WeakSet<TileLife>;
   private readonly idleSample: Body[] = [];
 
   private canIdle(life: TileLife, owner: GroundAgent): boolean {
@@ -3173,6 +3269,10 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.preparationEpoch++;
+    this.preparedTerrain = new WeakMap();
+    this.preparedSettled = new WeakSet();
+    this.preparedRegistered = undefined;
     this.profiler?.clearContinuity();
     this.tiles.clear();
     this.retired.clear();
@@ -3203,9 +3303,15 @@ export class LifeWorld {
   }
 
   /** Revive frozen tiles, then reconcile only regions whose zoom ownership changed. */
-  sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext) {
+  sync(
+    tiles: readonly LifeTile[],
+    focus?: readonly [number, number],
+    view?: LifeViewContext,
+    prepared?: ReadonlyMap<string, TileLife>,
+    bootstrap = false,
+  ) {
     if (view) this.viewContext = view;
-    const gradual = !!this.viewContext && this.bootstrapped;
+    const gradual = !!this.viewContext && this.bootstrapped && !bootstrap;
     const start = this.profiler?.time();
     try {
       this.pruneRetired(false);
@@ -3232,11 +3338,15 @@ export class LifeWorld {
         keep.add(key);
         if (!this.tiles.has(key)) {
           const saved = this.retired.get(key);
-          const fresh = saved?.life ?? new TileLife(tile, life, hashString(key), this.traffic);
+          const fresh =
+            saved?.life ??
+            prepared?.get(key) ??
+            new TileLife(tile, life, hashString(key), this.traffic);
           this.retired.delete(key);
           this.tiles.set(key, fresh);
           if (!saved) {
-            this.profiler?.registerPopulation(key, fresh.movers);
+            if (!this.preparedRegistered?.has(fresh))
+              this.profiler?.registerPopulation(key, fresh.movers);
             added.add(fresh);
             this.history.set(fresh, { ceded: [], quotas: {} });
           } else this.profiler?.countContinuity('revivals', fresh.movers.length);
@@ -3255,6 +3365,10 @@ export class LifeWorld {
         }
       if (changed) {
         this.groundTerrain = undefined;
+        for (const life of prepared?.values() ?? []) {
+          const terrain = this.preparedTerrain.get(life);
+          if (terrain?.key === [...this.tiles.keys()].join('|')) this.groundTerrain = terrain;
+        }
         this.railTopology = undefined;
         this.covers = new Map();
         const live = [...this.tiles.values()];
@@ -3270,12 +3384,19 @@ export class LifeWorld {
           }
         }
       }
+      if (changed && this.groundTerrain) this.revalidateTerrain();
       if (added.size) {
         const guard = this.groundGuard(0, added);
         const settleStart = this.profiler?.time();
-        for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
-        for (const tile of added) tile.settleAnimals((owner, before) => guard(tile, owner, before));
-        if ([...added].some((tile) => tile.geo.commerce?.length)) {
+        for (const tile of added)
+          if (!this.preparedSettled.has(tile))
+            tile.settleGround((owner, before) => guard(tile, owner, before));
+        for (const tile of added)
+          if (!this.preparedSettled.has(tile))
+            tile.settleAnimals((owner, before) => guard(tile, owner, before));
+        if (
+          [...added].some((tile) => !this.preparedSettled.has(tile) && tile.geo.commerce?.length)
+        ) {
           const commerceGuard = this.groundGuard();
           for (const tile of added)
             tile.admitCommerce((owner, before) => commerceGuard(tile, owner, before));
@@ -3296,6 +3417,17 @@ export class LifeWorld {
               life.pending.push({ mover: m, at: life.elapsed });
               life.release(m);
             }
+          if (this.preparedSettled.has(life)) {
+            // Prepared ordinary travelers are checked on birth; local actors and bootstrap
+            // residents must fit the occupancy at this actual frame boundary.
+            for (let i = life.movers.length - 1; i >= 0; i--) {
+              const m = life.movers[i]!;
+              if ((m.kind === 'vehicle' || isWalker(m.kind)) && !guard(life, m))
+                life.movers.splice(i, 1);
+            }
+            for (let i = life.gatherers.length - 1; i >= 0; i--)
+              if (!guard(life, life.gatherers[i]!)) life.gatherers.splice(i, 1);
+          }
         }
       }
       if (changed) {
@@ -3376,12 +3508,16 @@ export class LifeWorld {
               transferred.has(m) ||
               m.kind !== kind ||
               !inTile(m) ||
-              masked(d.life.tile, m, d.masks) ||
-              !d.life.scenes.transferable(m)
+              masked(d.life.tile, m, d.masks)
             )
               return [];
             const x = f.x + m.x * f.scale,
               y = f.y + m.y * f.scale;
+            if (gained({ x, y }) && !d.life.scenes.transferable(m)) {
+              this.profiler?.countContinuity('attempts');
+              this.profiler?.countContinuity('localScene');
+              return [];
+            }
             return gained({ x, y })
               ? [{ ...d, m, index, x, y, distance: (x - center.x) ** 2 + (y - center.y) ** 2 }]
               : [];
@@ -3492,6 +3628,173 @@ export class LifeWorld {
   }
 
   /** One metric coordinate system for all tiles, so clearance also works across a seam. */
+  private *prepareGroundTerrain(
+    entries: readonly [string, TileLife][],
+    profile = false,
+  ): Generator<void, GroundTerrain, void> {
+    const lives = entries.map(([, life]) => life);
+    const ref = lives[0];
+    const terrain: GroundTerrain = {
+      key: entries.map(([key]) => key).join('|'),
+      ref,
+      blocked: new PolygonIndex(),
+      water: new PolygonIndex(),
+      trees: new PolygonIndex(),
+      roadAccess: new RoadAccess([], []),
+      origins: new Map(),
+    };
+    const origin = (life: TileLife) => {
+      const found = terrain.origins.get(life);
+      if (found) return found;
+      const scale = 2 ** (ref!.tile.z - life.tile.z);
+      const at = {
+        x: ((life.tile.x * scale - ref!.tile.x) * EXTENT) / ref!.perMeter,
+        y: ((life.tile.y * scale - ref!.tile.y) * EXTENT) / ref!.perMeter,
+        scale: (scale * life.perMeter) / ref!.perMeter,
+      };
+      terrain.origins.set(life, at);
+      return at;
+    };
+    const terrainStart = profile ? this.profiler?.time() : undefined;
+    const contributions = [];
+    for (const life of lives) {
+      const o = origin(life);
+      const key = `${o.x},${o.y},${o.scale}`;
+      let cached = this.metricTerrain.get(life);
+      if (!cached || cached.origin !== key) {
+        cached = { origin: key, blocked: [], water: [], trees: [] };
+        const metric = (polygon: Polygon) =>
+          polygon.map((ring) =>
+            ring.map((p) => ({
+              x: o.x + (p.x / life.perMeter) * o.scale,
+              y: o.y + (p.y / life.perMeter) * o.scale,
+            })),
+          );
+        for (const a of life.geo.areas ?? []) {
+          if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
+          if (a.kind === 'blocked') (a.water ? cached.water : cached.blocked).push(metric(a.rings));
+        }
+        this.metricTerrain.set(life, cached);
+      }
+      yield;
+      contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
+      for (const polygon of cached.trees) yield* terrain.trees.addSteps(polygon);
+    }
+    const roadsStart = profile ? this.profiler?.time() : undefined;
+    terrain.roadAccess = yield* this.roadCache.buildSteps(contributions);
+    if (roadsStart !== undefined)
+      this.profiler!.add('terrainRoads', this.profiler!.time() - roadsStart);
+    for (const life of lives) {
+      const cached = this.metricTerrain.get(life)!;
+      for (const polygon of cached.blocked) yield* terrain.blocked.addSteps(polygon);
+      for (const polygon of cached.water) yield* terrain.water.addSteps(polygon);
+    }
+    if (terrainStart !== undefined)
+      this.profiler!.add('terrainRebuild', this.profiler!.time() - terrainStart);
+    return terrain;
+  }
+
+  *prepareActivation(
+    entries: readonly LifeTile[],
+    ready: ReadonlyMap<string, TileLife>,
+  ): Generator<void, void, void> {
+    const keep = new Set(entries.map((entry) => entry.key));
+    const next = new Map([...this.tiles].filter(([key]) => keep.has(key)));
+    for (const entry of entries)
+      if (!next.has(entry.key)) {
+        const life = ready.get(entry.key) ?? this.resident(entry.key);
+        if (!life) return;
+        next.set(entry.key, life);
+      }
+    const terrain = yield* this.prepareGroundTerrain([...next]);
+    for (const life of ready.values()) this.preparedTerrain.set(life, terrain);
+    const fresh = new Set(
+      [...ready.values()].filter(
+        (life) => !this.history.has(life) && !this.preparedSettled.has(life),
+      ),
+    );
+    if (fresh.size) {
+      // The sandbox reads current neighbors, but only the private ready tile is modified.
+      // Its terrain and reservations are detached from the live world's frame.
+      const sandbox = new LifeWorld();
+      for (const [key, life] of next) sandbox.tiles.set(key, life);
+      sandbox.groundTerrain = terrain;
+      sandbox.lastLevels = this.lastLevels;
+      sandbox.mixedZoom = [...next.values()].some(
+        (life) => life.tile.z !== next.values().next().value!.tile.z,
+      );
+      for (const life of next.values()) {
+        const finer = [...next.values()].filter(
+          (other) => other.tile.z > life.tile.z && overlaps(life.tile, other.tile),
+        );
+        if (finer.length)
+          sandbox.covers.set(
+            life,
+            finer.map((other) => other.tile),
+          );
+      }
+      for (const life of fresh) life.setIdleGuard((owner) => sandbox.canIdle(life, owner));
+      const guard = sandbox.groundGuard(0, fresh);
+      for (const life of fresh)
+        yield* life.settleGroundSteps((owner, before) => guard(life, owner, before));
+      for (const life of fresh)
+        yield* life.settleAnimalsSteps((owner, before) => guard(life, owner, before));
+      const commerceGuard = sandbox.groundGuard();
+      for (const life of fresh)
+        yield* life.admitCommerceSteps((owner, before) => commerceGuard(life, owner, before));
+      for (const life of fresh) this.preparedSettled.add(life);
+    }
+    // Serialization buffers are prepared privately too; the worker transfers them once.
+    yield* terrain.roadAccess.roads.toFlatSteps();
+    yield* terrain.roadAccess.forbidden.toFlatSteps();
+    yield* terrain.trees.toFlatSteps();
+  }
+
+  private revalidateTerrain() {
+    const terrain = this.groundTerrain!;
+    const origin = (life: TileLife) => terrain.origins.get(life)!;
+    const toRef = (o: { x: number; y: number; scale: number }, b: Body): Body => {
+      b.x = o.x + b.x * o.scale;
+      b.y = o.y + b.y * o.scale;
+      b.length *= o.scale;
+      b.width *= o.scale;
+      return b;
+    };
+    for (const life of this.tiles.values()) life.setIdleGuard((owner) => this.canIdle(life, owner));
+    // A neighboring buffered crown can invalidate an already admitted parking placement.
+    const revalidateStart = this.profiler?.time();
+    for (const life of this.tiles.values()) {
+      const o = origin(life);
+      for (let i = life.gatherers.length - 1; i >= 0; i--)
+        if (life.gatherers[i]!.behavior === 'sit' && !life.canIdle(life.gatherers[i]!))
+          life.gatherers.splice(i, 1);
+      for (let i = life.parked.length - 1; i >= 0; i--) {
+        const p = life.parked[i]!,
+          spec = VEHICLES[p.vehicle];
+        const body = toRef(o, {
+          ...p,
+          x: p.x / life.perMeter,
+          y: p.y / life.perMeter,
+          length: spec.length,
+          width: spec.width,
+        });
+        if (this.groundTerrain!.trees.hits([body])) life.parked.splice(i, 1);
+      }
+      // Revalidate physical vendor footprints on terrain changes, independent of zoom.
+      for (let i = life.stalls.length - 1; i >= 0; i--) {
+        const stall = life.stalls[i]!;
+        const sample = life.groundBodies(stall, 0, this.groundSample);
+        for (const body of sample) toRef(o, body);
+        if (!this.groundTerrain!.roadAccess.allows(sample, false)) {
+          life.scenes.removeStall(stall);
+          life.stalls.splice(i, 1);
+        }
+      }
+    }
+    if (revalidateStart !== undefined)
+      this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
+  }
+
   private groundGuard(
     minimum = 0,
     fresh?: ReadonlySet<TileLife>,
@@ -3504,15 +3807,7 @@ export class LifeWorld {
     const reservations = new Map<GroundAgent, readonly Body[]>();
     const key = [...this.tiles.keys()].join('|');
     const rebuild = this.groundTerrain?.key !== key;
-    if (rebuild)
-      this.groundTerrain = {
-        key,
-        blocked: new PolygonIndex(),
-        water: new PolygonIndex(),
-        roadAccess: new RoadAccess([], []),
-        trees: new PolygonIndex(),
-        origins: new Map(),
-      };
+    if (rebuild) this.groundTerrain = complete(this.prepareGroundTerrain([...this.tiles], true));
     const { blocked, water } = this.groundTerrain!;
     const origin = (life: TileLife) => {
       const found = this.groundTerrain!.origins.get(life);
@@ -3544,78 +3839,7 @@ export class LifeWorld {
       for (const b of out) toRef(o, b);
       return out;
     };
-    if (rebuild) {
-      const terrainStart = this.profiler?.time();
-      const contributions = [];
-      for (const life of this.tiles.values()) {
-        const o = origin(life);
-        const key = `${o.x},${o.y},${o.scale}`;
-        let cached = this.metricTerrain.get(life);
-        if (!cached || cached.origin !== key) {
-          cached = { origin: key, blocked: [], water: [], trees: [] };
-          const metric = (polygon: Polygon) =>
-            polygon.map((ring) =>
-              ring.map((p) => ({
-                x: o.x + (p.x / life.perMeter) * o.scale,
-                y: o.y + (p.y / life.perMeter) * o.scale,
-              })),
-            );
-          for (const a of life.geo.areas ?? []) {
-            if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
-            if (a.kind === 'blocked')
-              (a.water ? cached.water : cached.blocked).push(metric(a.rings));
-          }
-          this.metricTerrain.set(life, cached);
-        }
-        contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
-        for (const polygon of cached.trees) this.groundTerrain!.trees.add(polygon);
-      }
-      const roadsStart = this.profiler?.time();
-      this.groundTerrain!.roadAccess = this.roadCache.build(contributions);
-      if (roadsStart !== undefined)
-        this.profiler!.add('terrainRoads', this.profiler!.time() - roadsStart);
-      for (const life of this.tiles.values())
-        life.setIdleGuard((owner) => this.canIdle(life, owner));
-      // A neighboring buffered crown can invalidate an already admitted parking placement.
-      const revalidateStart = this.profiler?.time();
-      for (const life of this.tiles.values()) {
-        const o = origin(life);
-        for (let i = life.gatherers.length - 1; i >= 0; i--)
-          if (life.gatherers[i]!.behavior === 'sit' && !life.canIdle(life.gatherers[i]!))
-            life.gatherers.splice(i, 1);
-        for (let i = life.parked.length - 1; i >= 0; i--) {
-          const p = life.parked[i]!,
-            spec = VEHICLES[p.vehicle];
-          const body = toRef(o, {
-            ...p,
-            x: p.x / life.perMeter,
-            y: p.y / life.perMeter,
-            length: spec.length,
-            width: spec.width,
-          });
-          if (this.groundTerrain!.trees.hits([body])) life.parked.splice(i, 1);
-        }
-        // Revalidate physical vendor footprints on terrain changes, independent of zoom.
-        for (let i = life.stalls.length - 1; i >= 0; i--) {
-          const stall = life.stalls[i]!;
-          const sample = life.groundBodies(stall, 0, this.groundSample);
-          for (const body of sample) toRef(o, body);
-          if (!this.groundTerrain!.roadAccess.allows(sample, false)) {
-            life.scenes.removeStall(stall);
-            life.stalls.splice(i, 1);
-          }
-        }
-      }
-      if (revalidateStart !== undefined)
-        this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
-      for (const life of this.tiles.values()) {
-        const cached = this.metricTerrain.get(life)!;
-        for (const polygon of cached.blocked) blocked.add(polygon);
-        for (const polygon of cached.water) water.add(polygon);
-      }
-      if (terrainStart !== undefined)
-        this.profiler!.add('terrainRebuild', this.profiler!.time() - terrainStart);
-    }
+    if (rebuild) this.revalidateTerrain();
     const roadAccess = this.groundTerrain!.roadAccess;
     for (const life of this.tiles.values()) {
       const o = origin(life);
@@ -3786,7 +4010,7 @@ export class LifeWorld {
    * the returned indexes.
    */
   cellTerrain() {
-    const ref = this.tiles.values().next().value;
+    const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
     return {
@@ -3800,7 +4024,7 @@ export class LifeWorld {
 
   /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
   groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
-    const ref = this.tiles.values().next().value;
+    const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
     return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell);
@@ -4069,7 +4293,10 @@ export class LifeWorld {
     this.birthCredit = Math.min(BIRTHS.worldRate, this.birthCredit + dt * BIRTHS.worldRate);
     for (const life of lives)
       life.birthCredit = Math.min(BIRTHS.tileRate, life.birthCredit + dt * BIRTHS.tileRate);
-    const guard = this.groundGuard(0, undefined, undefined, true);
+    let guard: ReturnType<LifeWorld['groundGuard']> | undefined;
+    const reject = this.profiler
+      ? (reason: ContinuityRejection) => this.profiler!.countContinuity(reason)
+      : undefined;
     const available = lives.reduce((sum, life) => sum + life.pending.length, 0);
     for (let attempt = 0; attempt < Math.min(BIRTHS.attempts, available); attempt++) {
       const life = lives[this.birthCursor++ % lives.length]!;
@@ -4138,7 +4365,12 @@ export class LifeWorld {
         !bodies.length ||
         !inTile(candidate) ||
         !this.owns(life, candidate) ||
-        !this.birthFits(life, candidate, guard)
+        !this.birthFits(
+          life,
+          candidate,
+          (guard ??= this.groundGuard(0, undefined, undefined, true)),
+          reject,
+        )
       ) {
         life.pending.push(seed);
         continue;
@@ -4153,8 +4385,16 @@ export class LifeWorld {
       this.profiler?.countContinuity('births');
     }
   }
-  private birthFits(life: TileLife, m: Mover, guard: ReturnType<LifeWorld['groundGuard']>) {
-    if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) return false;
+  private birthFits(
+    life: TileLife,
+    m: Mover,
+    guard: ReturnType<LifeWorld['groundGuard']>,
+    reject?: (reason: ContinuityRejection) => void,
+  ) {
+    if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) {
+      reject?.('geometry');
+      return false;
+    }
     if (
       m.kind === 'person' &&
       life
@@ -4166,9 +4406,15 @@ export class LifeWorld {
               { x: b.x * life.perMeter, y: b.y * life.perMeter },
             ),
         )
-    )
+    ) {
+      reject?.('terrain');
       return false;
-    if (m.kind === 'boat') return this.boatRoom(life, m, m, []);
+    }
+    if (m.kind === 'boat') {
+      const fits = this.boatRoom(life, m, m, []);
+      if (!fits) reject?.('occupancy');
+      return fits;
+    }
     if (m.train) {
       const bodies = life.birthBodies(m);
       if (
@@ -4200,7 +4446,7 @@ export class LifeWorld {
           if (bodies.some((a) => otherBodies.some((b) => bodiesOverlap(a, b)))) return false;
         }
     }
-    return guard(life, m, undefined, undefined, false, m);
+    return guard(life, m, undefined, undefined, false, m, reject);
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */

@@ -1,8 +1,9 @@
 /** Ground-agent clearance, in meters, shared across loaded tile boundaries. */
-import { flattenPolygons, type FlatPolygons } from './flat-polygons';
+import { flattenPolygonSteps, type FlatPolygons } from './flat-polygons';
 import type { PersonFigure } from './people';
 import { CAT_LENGTH_M } from './cats';
 import { DOG_LENGTH_M } from './dogs';
+import { complete } from './cooperate';
 
 const ADULT_BODY = { length: 0.9, width: 1 } as const;
 const CHILD_BODY = { length: 0.5, width: 0.5 } as const;
@@ -233,6 +234,7 @@ export class Occupancy {
 // Covers segmentCrossing's 1e-6 parametric tolerance on long edges, plus float rounding.
 const BOUNDS_PAD_M = 0.01;
 export class PolygonIndex {
+  private flat?: FlatPolygonIndex;
   readonly polygons: Polygon[] = [];
   private bounds = new Map<Polygon, [number, number, number, number]>();
   private bins = new Map<number, Set<Polygon>>();
@@ -260,31 +262,60 @@ export class PolygonIndex {
     };
   }
   add(polygon: Polygon) {
-    const points = polygon.flat();
+    complete(this.addSteps(polygon));
+  }
+  *addSteps(polygon: Polygon): Generator<void, void, void> {
+    this.flat = undefined;
+    const points: Point[] = [];
+    let count = 0;
+    for (const ring of polygon)
+      for (const p of ring) {
+        points.push(p);
+        if ((++count & 127) === 0) yield;
+      }
     this.polygons.push(polygon);
     this.bounds.set(polygon, boundsOf(points));
-    for (const key of binKeys(points)) put(this.bins, key, polygon);
+    const [x0, y0, x1, y1] = this.bounds.get(polygon)!;
+    for (let y = Math.floor(y0 / BIN_M); y <= Math.floor(y1 / BIN_M); y++)
+      for (let x = Math.floor(x0 / BIN_M); x <= Math.floor(x1 / BIN_M); x++) {
+        put(this.bins, (x + 32768) * 65536 + (y + 32768), polygon);
+        if ((++count & 127) === 0) yield;
+      }
+    yield;
   }
   toFlat(): FlatPolygonIndex {
-    const ids = new Map(this.polygons.map((polygon, id) => [polygon, id]));
+    return complete(this.toFlatSteps());
+  }
+  *toFlatSteps(): Generator<void, FlatPolygonIndex, void> {
+    if (this.flat?.polygons.polys.length === this.polygons.length + 1) return this.flat;
+    const ids = new Map<Polygon, number>();
+    for (let i = 0; i < this.polygons.length; i++) {
+      ids.set(this.polygons[i]!, i);
+      if ((i & 255) === 0) yield;
+    }
     const bounds = new Float64Array(this.polygons.length * 4);
-    for (const [id, polygon] of this.polygons.entries())
+    for (const [id, polygon] of this.polygons.entries()) {
       bounds.set(this.bounds.get(polygon)!, id * 4);
+      if ((id & 255) === 0) yield;
+    }
     const keys = new Float64Array([...this.bins.keys()].sort((a, b) => a - b));
     const starts = new Uint32Array(keys.length + 1);
     const items: number[] = [];
     for (const [i, key] of keys.entries()) {
       starts[i] = items.length;
-      for (const polygon of this.bins.get(key)!) items.push(ids.get(polygon)!);
+      for (const polygon of this.bins.get(key)!) {
+        items.push(ids.get(polygon)!);
+        if ((items.length & 255) === 0) yield;
+      }
     }
     starts[keys.length] = items.length;
-    return {
-      polygons: flattenPolygons(this.polygons),
+    return (this.flat = {
+      polygons: yield* flattenPolygonSteps(this.polygons),
       bounds,
       keys,
       starts,
       items: new Uint32Array(items),
-    };
+    });
   }
   near(x0: number, y0: number, x1: number, y1: number): boolean {
     for (const key of binKeys(
