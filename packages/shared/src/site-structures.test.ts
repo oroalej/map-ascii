@@ -25,6 +25,52 @@ const detail = {
 };
 
 describe('site structure content', () => {
+  it('accepts courts, holed tracks and explicit mapped roof wings without ambiguous roof fields', () => {
+    expect(SiteStructure.safeParse({ ...part, material: 'pitch', overhead: false }).success).toBe(
+      true,
+    );
+    expect(SiteStructure.safeParse({ ...part, material: 'pitch' }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'roof',
+        roof_shape: 'gabled',
+        roof_osm_id: 'osm:way/1',
+      }).success,
+    ).toBe(true);
+    for (const extra of [
+      { roof_shape: 'flat' },
+      { roof_osm_id: 'osm:way/1' },
+      { roof_shape: 'flat', roof_osm_id: 'osm:way/1' },
+    ])
+      expect(SiteStructure.safeParse({ ...part, ...extra }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        holes: [
+          [
+            [0.2, 0.2],
+            [0.4, 0.2],
+            [0.4, 0.4],
+            [0.2, 0.4],
+            [0.2, 0.2],
+          ],
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        holes: [
+          [
+            [0.2, 0.2],
+            [0.4, 0.2],
+            [0.4, 0.4],
+          ],
+        ],
+      }).success,
+    ).toBe(false);
+  });
   it('accepts walkable raised paving and rejects overhead paving', () => {
     expect(
       SiteStructure.safeParse({ ...part, material: 'paving', height_m: 0.15, overhead: false })

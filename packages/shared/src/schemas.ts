@@ -246,6 +246,14 @@ const treeShape = {
 /** One curated tree (`Landcover`). */
 export const CuratedTree = z.strictObject({ at: LngLat, ...treeShape });
 
+/** Refine a mapped tree's appearance while preserving its surveyed identity and position. */
+export const CuratedTreeOverride = z
+  .strictObject({ osm_id: OsmId, ...treeShape })
+  .refine(
+    (v) => v.crown_m !== undefined || v.height_m !== undefined || v.kind !== undefined,
+    'needs an appearance override',
+  );
+
 /** A curated line of trees, drawn a crown every crown's width (`Landcover`). */
 export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
 
@@ -339,20 +347,34 @@ export const SiteStructure = z
   .strictObject({
     id: DetailKey,
     ring: SimpleRing,
+    /** Open interiors, e.g. a running track surrounding a lawn. */
+    holes: z.array(SimpleRing).max(16).optional(),
     height_m: z.number().positive().max(255),
-    material: z.enum(['wood', 'stone', 'roof', 'paving']),
+    material: z.enum(['wood', 'stone', 'roof', 'paving', 'pitch']),
     overhead: z.boolean(),
+    /** Explicit roof wing on a standing mapped building; generic ridges follow this outline. */
+    roof_shape: z.enum(['flat', 'gabled', 'hipped', 'pyramidal']).optional(),
+    roof_osm_id: OsmId.optional(),
     /** Explicit paving replacing a coarse ground fill; omitted preserves legacy priority. */
     ground_override: z.boolean().optional(),
   })
-  .refine((part) => part.material !== 'paving' || !part.overhead, {
+  .refine((part) => !['paving', 'pitch'].includes(part.material) || !part.overhead, {
     path: ['overhead'],
-    message: 'walkable paving cannot be overhead',
+    message: 'walkable surfaces cannot be overhead',
   })
   .refine((part) => part.ground_override === undefined || part.material === 'paving', {
     path: ['ground_override'],
     message: 'only paving can override ground fill',
-  });
+  })
+  .refine(
+    (part) =>
+      (part.roof_shape === undefined && part.roof_osm_id === undefined) ||
+      (part.roof_shape !== undefined &&
+        part.roof_osm_id !== undefined &&
+        part.material === 'roof' &&
+        part.overhead),
+    'roof wings need a shape, mapped building and overhead roof material',
+  );
 export type SiteStructure = z.infer<typeof SiteStructure>;
 
 /** Canonical metadata for selection of linked detail surfaces. */
@@ -373,6 +395,15 @@ export const SiteDetail = z
     /** Curated landmark selected by this site, when different from its geometry anchor. */
     selection_osm_id: OsmId.optional(),
     structures: z.array(SiteStructure).default([]),
+    /** Replace an inaccurate generic roof inference, without changing the OSM footprint. */
+    roof_overrides: z
+      .array(
+        z.strictObject({
+          osm_id: OsmId,
+          shape: z.enum(['flat', 'gabled', 'hipped', 'pyramidal']),
+        }),
+      )
+      .default([]),
     /** Curated positions for existing mapped flagpoles, retaining their OSM identity. */
     flagpoles: z
       .array(z.strictObject({ osm_id: OsmId, at: LngLat, flag: z.literal('PH').optional() }))
@@ -458,6 +489,8 @@ export const SiteDetail = z
     sources: Sources,
   })
   .superRefine((v, ctx) => {
+    if (new Set(v.roof_overrides.map((roof) => roof.osm_id)).size !== v.roof_overrides.length)
+      ctx.addIssue({ code: 'custom', path: ['roof_overrides'], message: 'duplicate roof target' });
     if (new Set(v.flagpoles.map((pole) => pole.osm_id)).size !== v.flagpoles.length)
       ctx.addIssue({ code: 'custom', path: ['flagpoles'], message: 'duplicate flagpole target' });
     for (const key of ['walks', 'seating', 'lamps', 'structures'] as const) {
@@ -724,14 +757,15 @@ export function contentSchemas(languages?: readonly string[]) {
       id: z.string().regex(/^landcover\/[a-z0-9-]+$/, 'expected landcover/<slug>'),
       title: z.string().min(1),
       trees: z.array(CuratedTree).default([]),
+      tree_overrides: z.array(CuratedTreeOverride).default([]),
       rows: z.array(CuratedTreeRow).default([]),
       areas: z.array(CuratedArea).default([]),
       status: z.enum(['draft', 'verified']),
       credit: z.string().min(1),
       sources: Sources,
     })
-    .refine((v) => v.trees.length + v.rows.length + v.areas.length > 0, {
-      message: 'needs at least one tree, row, or area',
+    .refine((v) => v.trees.length + v.rows.length + v.areas.length + v.tree_overrides.length > 0, {
+      message: 'needs at least one tree, row, area, or mapped tree override',
       path: ['trees'],
     });
 

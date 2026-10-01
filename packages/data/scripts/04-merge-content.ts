@@ -8,7 +8,7 @@ import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
 import { enrichRoofs } from './lib/roofs';
-import { landcoverFeatures } from './lib/landcover';
+import { landcoverFeatures, applyLandcoverTreeOverrides } from './lib/landcover';
 import { mergeCemeteries } from './lib/cemeteries';
 import { mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
@@ -106,11 +106,14 @@ export const step: Step = {
       features.push(f as AtlasFeature);
     }
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
-    const merged = mergeTraffic(
-      mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
-      city.life?.signals,
-      city.streets,
-      (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
+    const merged = applyLandcoverTreeOverrides(
+      mergeTraffic(
+        mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+        city.life?.signals,
+        city.streets,
+        (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
+      ),
+      content.landcover,
     );
     const tourProblems = checkTours(merged, content.tours, regionBounds);
     if (tourProblems.length > 0) {

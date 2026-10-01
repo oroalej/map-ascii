@@ -48,19 +48,23 @@ const newDetails = details.filter(
 );
 
 describe('landmark detail tier coverage (fast)', () => {
-  it('covers three rendered tiers, including Place furniture, for every pack', () => {
-    expect(newDetails).toHaveLength(13);
+  it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
+    expect(newDetails).toHaveLength(14);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
       if (detail.surface === 'paving') add('paving');
       for (const part of detail.structures)
         add(
-          part.material === 'paving'
-            ? 'paving'
-            : part.material === 'wood'
-              ? 'building_woodwork'
-              : 'building_part',
+          part.roof_shape
+            ? 'building'
+            : part.material === 'pitch'
+              ? 'pitch'
+              : part.material === 'paving'
+                ? 'paving'
+                : part.material === 'wood'
+                  ? 'building_woodwork'
+                  : 'building_part',
         );
       if (detail.seating.length) add('seating');
       if (detail.lamps.length || detail.flagpoles.length) add('furniture');
@@ -146,7 +150,10 @@ describe('new landmark detail geometry (offline)', () => {
       for (const seat of detail.seating)
         check(seatingFootprint(seat.line, seat.width_m, seat.bench_spans), seat.id, true);
       for (const part of detail.structures.filter((part) => part.ground_override)) {
-        const shape: MultiPolygon = { type: 'MultiPolygon', coordinates: [[part.ring]] };
+        const shape: MultiPolygon = {
+          type: 'MultiPolygon',
+          coordinates: [[part.ring, ...(part.holes ?? [])]],
+        };
         // Benches can stand on paving; standing footprints and carriageways cannot be erased.
         for (const f of source) {
           if (!bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number])) continue;
@@ -166,12 +173,9 @@ describe('new landmark detail geometry (offline)', () => {
         }
       }
       const cover = covers.find((c) => c.id === `landcover/${detail.id.slice(7)}`);
-      // Existing Cathedral/USI landcover includes frontage beyond the OSM grounds. It is
-      // unchanged here; only new landcover must satisfy this stricter site containment check.
-      if (
-        cover &&
-        !['landcover/cathedral-grounds', 'landcover/universidad-de-santa-isabel'].includes(cover.id)
-      ) {
+      // Existing Cathedral landcover includes unchanged frontage beyond its OSM grounds.
+      // USI's new content must fit its explicit visual envelope; adjoining crowns are separate.
+      if (cover && cover.id !== 'landcover/cathedral-grounds') {
         for (const tree of cover.trees) expect(inside(tree.at, area), cover.id).toBe(true);
         for (const row of cover.rows)
           for (const p of row.line) expect(inside(p, area), cover.id).toBe(true);

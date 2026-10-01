@@ -265,6 +265,7 @@ Landcover {                      // cities/<slug>/landcover/*.json — trees and
   id: string;                    // "landcover/<slug>"
   title: string;
   trees?: { at: [lng, lat]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
+  tree_overrides?: { osm_id: string; kind?: TreeKind; crown_m?: number; height_m?: number }[]; // appearance only; mapped tree point required
   rows?: { line: [lng, lat][]; kind?: TreeKind; crown_m?: number; height_m?: number }[];
   areas?: { ring: [lng, lat][]; cover: 'grass' | 'parking' | 'woods' | 'shrubs' | 'planting'; kind?: TreeKind; raised?: boolean }[];  // closed ring; kind: woods only
   status: 'draft' | 'verified';  // draft until checked on the ground or against newer imagery
@@ -296,9 +297,13 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   selection_osm_id?: string;      // optional canonical curated landmark for these grounds
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
-    material: 'wood' | 'stone' | 'roof' | 'paving'; overhead: boolean;
+    holes?: [lng, lat][][];       // simple non-overlapping open interiors inside the outer ring
+    material: 'wood' | 'stone' | 'roof' | 'paving' | 'pitch'; overhead: boolean;
+    roof_shape?: 'flat' | 'gabled' | 'hipped' | 'pyramidal';
+    roof_osm_id?: string;         // both roof fields required for an explicit overhead roof wing
     ground_override?: boolean; // paving only; omitted/false retains ordinary terrace priority
   }[]; // default []; simple closed footprints wholly inside the parent area
+  roof_overrides?: { osm_id: string; shape: 'flat' | 'gabled' | 'hipped' | 'pyramidal' }[]; // standing mapped buildings inside the site
   flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
   seating: {
@@ -321,6 +326,27 @@ but they create no ground obstacles. Supports and platforms are blocked footprin
 routes and bench anchors must clear these ground parts; an overhead part may span a route.
 The merge rejects structures crossing the plaza edge, a concavity, or a hole, even if all
 their vertices lie inside. Existing detail records need no changes.
+
+Structures may have open interiors: the merge rejects holes outside the outer footprint,
+overlapping holes and empty surfaces. Tile triangulation retains the holes, so a running
+track leaves its lawn infield open without seams between radial pieces. `material: 'pitch'`
+emits a walkable sports pitch with canonical site selection and rejects overhead placement
+or intersections with standing buildings. Thin paving strips can represent painted court
+markings without introducing blocked stonework.
+
+An explicit roof wing requires `material: 'roof'`, `overhead: true`, `roof_shape` and
+`roof_osm_id`. Its entire shape must fit above the standing mapped building at a greater
+height; it uses ordinary building roof shading and the source site's canonical selection.
+Roof pieces create no additional school/market activity anchors.
+Optional `roof_overrides` replace a building's generic inferred shape, commonly flattening
+the base under separately traced roof wings, while preserving its footprint and height.
+Missing, non-building, exterior and duplicate targets fail. These visual estimates do not
+establish construction history or cadastral ownership.
+
+Landcover `tree_overrides` refine a mapped tree's crown, height or kind before curated-tree
+deduplication. They never move the trunk or create another feature. At least one attribute
+is required; missing, non-tree and duplicate targets fail. A crown can overhang a nearby
+road or roof; that does not relocate the mapped trunk or establish an exact species.
 
 `material: 'paving'` supplies a walkable raised surface or stair tread, requires
 `overhead: false`, and creates no ground obstacle. It emits the `paving` class with

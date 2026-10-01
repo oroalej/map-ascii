@@ -43,6 +43,7 @@ describe('detail layout fingerprints', () => {
     expect(detailLayoutKey(parsed)).toBe(detailLayoutKey(detail));
     expect(detailLayoutKey(reordered)).toBe(detailLayoutKey(detail));
     expect(detailLayoutKey(annotated)).toBe(detailLayoutKey(detail));
+    expect(detailLayoutKey({ ...detail, roof_overrides: [] })).toBe(detailLayoutKey(detail));
   });
 
   it('changes when surface priority, geometry or canonical selection changes', () => {
@@ -56,6 +57,7 @@ describe('detail layout fingerprints', () => {
       },
       { ...detail, structures: detail.structures.map((part) => ({ ...part, height_m: 0.3 })) },
       { ...detail, structures: [] },
+      { ...detail, roof_overrides: [{ osm_id: 'osm:way/2', shape: 'flat' }] },
     ])
       expect(detailLayoutKey(changed)).not.toBe(key);
   });

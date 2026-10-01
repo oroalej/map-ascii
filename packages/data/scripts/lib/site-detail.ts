@@ -5,6 +5,7 @@ import {
   type LngLat,
   type SiteDetail,
   type SubdivisionArea,
+  isRoofBuilding,
 } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
@@ -149,6 +150,7 @@ export function mergeSiteDetails(
   const warnings: string[] = [];
   const parents = new Set<string>();
   const relocated = new Set<string>();
+  const roofTargets = new Set<string>();
   // Validate every anchor before mutation; overlap decisions must not depend on pack order.
   const sites = packs.map((pack) => {
     const parent = features.find((f) => f.properties.id === pack.osm_id);
@@ -232,6 +234,23 @@ export function mergeSiteDetails(
       detail_parent: selectionId,
       ...(metadata && { detail_selection: metadata }),
     };
+    for (const roof of pack.roof_overrides) {
+      const target = features.find((f) => f.properties.id === roof.osm_id);
+      if (roofTargets.has(roof.osm_id))
+        throw new Error(`${pack.id}: duplicate roof override ${roof.osm_id}`);
+      if (
+        !target ||
+        !isRoofBuilding(target.properties.class) ||
+        !target.properties.height ||
+        !isArea(target.geometry) ||
+        !contained(target.geometry, area)
+      )
+        throw new Error(
+          `${pack.id}: roof override ${roof.osm_id} must be a standing building inside the site`,
+        );
+      roofTargets.add(roof.osm_id);
+      target.properties.variant = roof.shape;
+    }
     if (pack.surface === 'paving') {
       if (pack.grounds)
         features.push(feature(`${prefix}/grounds`, area, { class: 'paving', ...link }));
@@ -249,40 +268,68 @@ export function mergeSiteDetails(
       shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
     }));
     const structures = pack.structures.map((part) => {
-      const shape: Polygon = { type: 'Polygon', coordinates: [part.ring] };
+      const rings = [part.ring, ...(part.holes ?? [])];
+      const shape: Polygon = { type: 'Polygon', coordinates: rings };
+      for (const [i, hole] of (part.holes ?? []).entries()) {
+        if (
+          difference([hole], [part.ring]).length ||
+          (part.holes ?? []).slice(0, i).some((other) => intersection([hole], [other]).length) ||
+          difference([part.ring], [hole]).length === 0
+        )
+          throw new Error(`${pack.id} structure ${part.id}: invalid or overlapping interior`);
+      }
       requireInside(part.ring, `structure ${part.id}`);
       // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
-      if (difference([part.ring], parentClip).length > 0)
+      if (difference(rings, parentClip).length > 0)
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+      if (part.roof_osm_id) {
+        const roof = features.find((f) => f.properties.id === part.roof_osm_id);
+        if (
+          !roof ||
+          !isRoofBuilding(roof.properties.class) ||
+          !roof.properties.height ||
+          !isArea(roof.geometry) ||
+          !contained(shape, roof.geometry) ||
+          part.height_m <= roof.properties.height
+        )
+          throw new Error(
+            `${pack.id} structure ${part.id}: roof wing must fit above ${part.roof_osm_id}`,
+          );
+      }
       // Opt-in ground replacements must not paint a court through a standing footprint.
       // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
-      if (part.ground_override)
+      if (part.ground_override || part.material === 'pitch')
         for (const obstacle of blocked)
           if (
             bboxesOverlap(bbox(shape) as [number, number, number, number], obstacle.bounds) &&
-            intersection([part.ring], clip(obstacle.feature.geometry as Polygon | MultiPolygon))
-              .length
+            intersection(rings, clip(obstacle.feature.geometry as Polygon | MultiPolygon)).length
           )
             throw new Error(
               `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
             );
       return feature(`${prefix}/structure-${part.id}`, shape, {
-        class:
-          part.material === 'paving'
-            ? 'paving'
-            : part.material === 'wood'
-              ? 'building_woodwork'
-              : 'building_part',
+        class: part.roof_shape
+          ? // Roof surfaces have no independent school/market activity; selection uses link.
+            'building'
+          : part.material === 'pitch'
+            ? 'pitch'
+            : part.material === 'paving'
+              ? 'paving'
+              : part.material === 'wood'
+                ? 'building_woodwork'
+                : 'building_part',
         height: part.height_m,
         variant:
-          part.material === 'paving'
+          part.roof_shape ??
+          (part.material === 'paving'
             ? part.ground_override
               ? 'terrace_override'
               : 'terrace'
-            : 'flat',
+            : 'flat'),
         detail_overhead: part.overhead,
         ...((part.material === 'paving' || metadata) && link),
-        ...(!part.overhead && part.material !== 'paving' && { detail_blocked: true }),
+        ...(!part.overhead &&
+          !['paving', 'pitch'].includes(part.material) && { detail_blocked: true }),
       });
     });
     features.push(...structures);

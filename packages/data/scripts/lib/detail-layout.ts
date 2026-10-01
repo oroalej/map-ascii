@@ -14,6 +14,7 @@ export function detailLayoutKey(input: unknown): string {
       ...part,
       ground_override: part.ground_override ?? false,
     })),
+    ...(detail.roof_overrides.length && { roof_overrides: detail.roof_overrides }),
     flagpoles: detail.flagpoles,
     walks: detail.walks,
     seating: detail.seating,

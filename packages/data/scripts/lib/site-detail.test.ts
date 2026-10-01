@@ -2,6 +2,7 @@ import { SiteDetail } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
+import type { Polygon } from 'geojson';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 
 const m = 111_320;
@@ -41,6 +42,92 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('preserves a track infield and rejects exterior or intersecting holes', () => {
+    const ring = [p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)];
+    const hole = [p(20, 20), p(30, 20), p(30, 30), p(20, 30), p(20, 20)];
+    const pack = {
+      ...detail,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'track',
+          ring,
+          holes: [hole],
+          height_m: 0.15,
+          material: 'paving' as const,
+          overhead: false,
+          ground_override: true,
+        },
+      ],
+    };
+    const track = mergeSiteDetails([parent], [pack]).features.at(-1)!;
+    expect(track.geometry.type).toBe('Polygon');
+    expect(inside(p(25, 25), track.geometry as Polygon)).toBe(false);
+    expect(inside(p(15, 15), track.geometry as Polygon)).toBe(true);
+    for (const holes of [[hole, hole], [ring], [[p(0, 0), p(5, 0), p(5, 5), p(0, 5), p(0, 0)]]])
+      expect(() =>
+        mergeSiteDetails([parent], [{ ...pack, structures: [{ ...pack.structures[0]!, holes }] }]),
+      ).toThrow('interior');
+  });
+  it('renders mapped roof wings above an unchanged source footprint with canonical selection', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)]],
+      },
+      properties: { id: 'osm:way/2', class: 'building_market', height: 8 },
+    };
+    const wing = {
+      id: 'roof',
+      ring: [p(12, 12), p(38, 12), p(38, 20), p(12, 20), p(12, 12)],
+      height_m: 10,
+      material: 'roof' as const,
+      overhead: true,
+      roof_shape: 'gabled' as const,
+      roof_osm_id: 'osm:way/2',
+    };
+    const pack = {
+      ...detail,
+      surface: 'keep' as const,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [wing],
+      roof_overrides: [{ osm_id: 'osm:way/2', shape: 'flat' as const }],
+    };
+    const result = mergeSiteDetails([parent, building], [pack]).features;
+    expect(result.find((f) => f.properties.id === building.properties.id)).toEqual({
+      ...building,
+      properties: { ...building.properties, variant: 'flat' },
+    });
+    expect(building.properties.variant).toBeUndefined();
+    expect(
+      result.find((f) => f.properties.id === 'detail:test/structure-roof')!.properties,
+    ).toMatchObject({
+      class: 'building',
+      variant: 'gabled',
+      height: 10,
+      detail_overhead: true,
+      detail_parent: parent.properties.id,
+    });
+    for (const extra of [
+      { height_m: 8 },
+      { roof_osm_id: 'osm:way/3' },
+      { ring: [p(5, 5), p(15, 5), p(15, 15), p(5, 15), p(5, 5)] },
+    ])
+      expect(() =>
+        mergeSiteDetails([parent, building], [{ ...pack, structures: [{ ...wing, ...extra }] }]),
+      ).toThrow('roof wing');
+    expect(() =>
+      mergeSiteDetails(
+        [parent, building],
+        [{ ...pack, roof_overrides: [{ osm_id: parent.properties.id, shape: 'flat' }] }],
+      ),
+    ).toThrow('standing building');
+  });
   it('keeps ordinary terraces and emits opt-in overriding paving with canonical selection', () => {
     const pack = {
       ...detail,

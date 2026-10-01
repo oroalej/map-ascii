@@ -57,6 +57,7 @@ const content: ContentBundle = {
       id: 'landcover/fixture-grounds',
       title: 'Fixture grounds',
       trees: [{ at: [0.004, 0.004], crown_m: 10 }],
+      tree_overrides: [],
       rows: [],
       areas: [],
       status: 'draft',
