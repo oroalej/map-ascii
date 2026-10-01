@@ -84,6 +84,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
   const geometries = new Map<string, LifeGeometry>();
   return {
     init(options: LifeInit) {
+      preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
       world = new LifeWorld(options.traffic, profiler);
       preparation = new LifePreparation(world, profiler, preparationClock);
@@ -144,6 +145,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
         profiler.add('replyClone', profiler.time() - start);
       }
       preparation.slice();
+      if (!preparationClock) preparation.schedule();
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },

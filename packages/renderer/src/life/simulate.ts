@@ -3864,7 +3864,10 @@ export class LifeWorld {
       for (const p of life.parked) standing(p, p.vehicle);
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
       for (const s of life.stalls)
-        if (allBodies || (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))) {
+        if (
+          allBodies ||
+          (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))
+        ) {
           if (allBodies) {
             if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
           } else standing(s, 'cart');

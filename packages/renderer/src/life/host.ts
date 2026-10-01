@@ -69,6 +69,7 @@ export function createInlineHost(
           ),
       };
       preparation.slice();
+      if (!preparationClock) preparation.schedule();
       return true;
     },
     latest: () => {

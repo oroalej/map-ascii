@@ -23,6 +23,7 @@ export class LifePreparation {
   private view?: LifeViewContext;
   private epoch: number;
   private dirty = false;
+  private timer?: ReturnType<typeof setTimeout>;
   constructor(
     private readonly world: LifeWorld,
     private readonly profiler?: FrameProfiler,
@@ -32,6 +33,8 @@ export class LifePreparation {
   }
 
   clear() {
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer = undefined;
     this.wanted = [];
     this.queued = [];
     this.running = undefined;
@@ -188,6 +191,17 @@ export class LifePreparation {
     if (this.view && bounds) this.view = { bounds, spawnMarginM: Math.max(12, spawnMarginM) };
   }
 
+  /** Private work may use idle worker turns; activation still waits for the next frame. */
+  schedule() {
+    if (this.timer !== undefined || !this.view || this.activationEntries) return;
+    if (!this.running && !this.queued.length && !this.ready.size) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.slice();
+      this.schedule();
+    }, 0);
+  }
+
   /** Called after active simulation. Large loops cooperate through the same eager builder. */
   slice() {
     if (this.epoch !== this.world.preparationEpoch) {
@@ -202,7 +216,9 @@ export class LifePreparation {
         !this.running &&
         !this.activation &&
         this.ready.size &&
-        (this.ready.size >= PREPARATION.ready || !this.queued.length)
+        (this.ready.size >= PREPARATION.ready ||
+          !this.queued.length ||
+          !this.world.hasBootstrapped())
       ) {
         const entries = this.entries();
         this.activatingKeys = entries
@@ -229,7 +245,7 @@ export class LifePreparation {
         this.fill();
       }
     } while (this.now() - start < PREPARATION.sliceMs);
-    this.profiler?.add('prepareSlice', this.now() - start);
+    this.profiler?.preparationSlice(this.now() - start);
   }
 
   /** Bounded diagnostics for tests; never exposes private instances or iterators. */

@@ -34,6 +34,8 @@ export type ProfileSample = {
   checks: number;
   ms: Partial<Record<ProfileStage, number>>;
   continuity?: ContinuitySample;
+  /** Individual cooperative slices; ms keeps their complete CPU sum. */
+  preparationSlices?: number[];
 };
 export type AtlasProfile = {
   capacity: number;
@@ -120,6 +122,14 @@ export class FrameProfiler {
   add(stage: ProfileStage, elapsed: number) {
     if (this.current) this.current.ms[stage] = (this.current.ms[stage] ?? 0) + elapsed;
   }
+  preparationSlice(elapsed: number) {
+    const sample =
+      this.current ?? (this.pending ??= { at: 0, drawn: false, agents: 0, checks: 0, ms: {} });
+    sample.ms.prepareSlice = (sample.ms.prepareSlice ?? 0) + elapsed;
+    const slices = (sample.preparationSlices ??= []);
+    slices.push(elapsed);
+    if (slices.length > PROFILE_CAPACITY) slices.shift();
+  }
   /** Also retain measurements that finish between animation callbacks. */
   record(stage: ProfileStage, elapsed: number) {
     this.merge({ at: 0, drawn: false, agents: 0, checks: 0, ms: { [stage]: elapsed } });
@@ -153,6 +163,11 @@ export class FrameProfiler {
       if (sample.ms[stage] !== undefined)
         target.ms[stage] = (target.ms[stage] ?? 0) + sample.ms[stage];
     target.checks += sample.checks;
+    if (sample.preparationSlices) {
+      const slices = (target.preparationSlices ??= []);
+      slices.push(...sample.preparationSlices);
+      if (slices.length > PROFILE_CAPACITY) slices.splice(0, slices.length - PROFILE_CAPACITY);
+    }
     if (sample.continuity) {
       const data = (target.continuity ??= { counts: {}, trace: [] });
       for (const [event, count] of Object.entries(sample.continuity.counts)) {
@@ -203,7 +218,13 @@ export class FrameProfiler {
     const stages = Object.fromEntries(
       PROFILE_STAGES.map((stage) => {
         const values = samples
-          .flatMap((s) => (s.ms[stage] === undefined ? [] : [s.ms[stage]]))
+          .flatMap((s) =>
+            stage === 'prepareSlice' && s.preparationSlices
+              ? s.preparationSlices
+              : s.ms[stage] === undefined
+                ? []
+                : [s.ms[stage]],
+          )
           .sort((a, b) => a - b);
         const quantile = (q: number) =>
           values.length

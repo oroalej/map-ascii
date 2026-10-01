@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LifePreparation, PREPARATION } from './preparation';
 import { complete } from './cooperate';
 import { LifeWorld, TileLife, hashString } from './simulate';
@@ -96,7 +96,7 @@ describe('cooperative life preparation', () => {
     expect(jobs.stats().queued).toBe(0);
   });
 
-  it('prioritizes visible tiles and limits ready stock independently of the desired set', () => {
+  it('publishes the first visible tile promptly, then bounds ready batches independently of the desired set', () => {
     const world = new LifeWorld();
     const jobs = new LifePreparation(world, undefined, () => 0);
     const entries = [
@@ -106,11 +106,15 @@ describe('cooperative life preparation', () => {
     ];
     jobs.sync(entries, undefined, context());
     jobs.slice();
-    expect(jobs.stats().ready).toBe(PREPARATION.ready);
+    expect(jobs.stats().ready).toBe(1);
     expect(worldTiles(world).size).toBe(0);
     jobs.commit();
     expect([...worldTiles(world).keys()][0]).toBe(continuityTile(left).key);
-    expect(worldTiles(world).size).toBe(PREPARATION.ready);
+    expect(worldTiles(world).size).toBe(1);
+    jobs.slice();
+    expect(jobs.stats().ready).toBe(PREPARATION.ready);
+    jobs.commit();
+    expect(worldTiles(world).size).toBe(1 + PREPARATION.ready);
     finish(jobs);
     expect(worldTiles(world).size).toBe(entries.length);
     const resident = worldTiles(world).get(entries[0]!.key);
@@ -119,6 +123,31 @@ describe('cooperative life preparation', () => {
     expect(worldTiles(world).get(entries[0]!.key)).toBe(resident);
     jobs.clear();
     expect(jobs.stats()).toEqual({ queued: 0, running: false, ready: 0 });
+  });
+
+  it('finishes private preparation between slow display frames without activating or advancing Life', async () => {
+    vi.useFakeTimers();
+    const world = new LifeWorld();
+    const jobs = new LifePreparation(world, undefined, () => 0);
+    try {
+      jobs.sync([continuityTile(left)], undefined, context());
+      jobs.schedule();
+      await vi.runAllTimersAsync();
+      expect(worldTiles(world).size).toBe(0);
+      expect(world.signalClock).toBe(0);
+      expect(jobs.stats().ready).toBe(1);
+      jobs.commit();
+      expect(worldTiles(world).size).toBe(1);
+      jobs.sync([continuityTile(right)], undefined, context(right));
+      jobs.schedule();
+      jobs.clear();
+      await vi.runAllTimersAsync();
+      expect(worldTiles(world).size).toBe(1);
+      expect(jobs.stats()).toEqual({ queued: 0, ready: 0, running: false });
+    } finally {
+      jobs.clear();
+      vi.useRealTimers();
+    }
   });
 
   it('yields inside long geometry rather than only between tiles', () => {
