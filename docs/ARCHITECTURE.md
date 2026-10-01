@@ -261,7 +261,7 @@ Zod stays out of the browser bundle: the pipeline validates each generated file 
 
 ### Frame preparation and diagnostics
 
-The Life worker pipelines simulation one accepted frame ahead of drawing. Agents may appear one frame late at a fast pan's leading edge, but remain registered to the current camera. Worker stages (`step`, `visible`, `clearanceBuild`, `clearanceChecks`, `sync`, `terrainRebuild`) merge into the next main-thread sample; replies received between callbacks are retained. `sync` includes tile spawning/settlement and `terrainRebuild` isolates static terrain preparation and revalidation. Worker sync timing is retained until its next frame reply. These stage times are worker CPU measurements and are not included in main-thread `draw` or `callback` CPU time. With the inline fallback, step and visibility timings are nested inside the main-thread draw as before.
+The Life worker pipelines simulation one accepted frame ahead of drawing. Agents may appear one frame late at a fast pan's leading edge, but remain registered to the current camera. Worker stages (`step`, `visible`, `clearanceBuild`, `clearanceChecks`, `sync`, `spawn`, `settle`, `terrainRebuild`, `terrainRoads`, `terrainRevalidate`, `terrainEncode`, `replyClone`) merge into the next main-thread sample; replies received between callbacks are retained. `sync` includes tile spawning/settlement and `terrainRebuild` isolates static terrain preparation and revalidation. Worker sync timing is retained until its next frame reply. `spawn` and `settle` split tile admission; `terrainRoads` and `terrainRevalidate` are nested inside terrain preparation. On the main thread, `terrainSnapshot` measures accepting a terrain reply, `tileUpload` measures GPU submission for arriving tiles (including reload after context restoration), and `lifeLatency` measures posting a frame through receiving it. `FrameProfiler.record` retains these between callbacks. Latency includes queueing and messaging, rather than just CPU time. Only with profiling enabled, `replyClone` measures an extra worker-side structured clone of agents/procession, an upper-bound proxy for reply deserialization that also includes serialization; it is outside step/visible timing. These stage times are worker CPU measurements and are not included in main-thread `draw` or `callback` CPU time. With the inline fallback, step and visibility timings are nested inside the main-thread draw as before.
 
 Adaptive quality changes drawing only: Auto first thins drawn agents (1,200 → 700 → 500), then disables crown sway, ground wind, shadows, water detail, fish and beams, then caps DPR at 1.25. High pins the original drawing settings; Low pins the last tier. CSS-scheduled simulation clearance and gust coordinates remain independent of drawing DPR. Auto samples the next rAF callback after each draw, including callbacks that skip drawing; idle 30 fps pacing is not an overload signal. A bounded ten-second window requires 45 samples. Sustained p75 intervals above 25 ms for three seconds, or 40 ms for 1.5 seconds, lower quality after input has been quiet for one second. An eight-second cooldown and delayed, backed-off recovery trials prevent oscillation. Recovery requires healthy interval and CPU samples, changes no draw cadence, and does not require diagnostic profiling.
 
@@ -282,13 +282,13 @@ Adaptive quality changes drawing only: Auto first thins drawn agents (1,200 → 
 
 The matrix covers sparse traffic, crowded intersections, transit/vendor scenes, and alternating rain/shelter activity, with 1/4/16 loaded tiles and desktop/phone viewport bounds at z18. Transit and rain fixtures use a jeepney fleet so eligible stop service is exercised. Timed synthetic fixtures explicitly use a 0.9 m minimum ground footprint and 10×18 pixel packing cells; these are declared test inputs. The browser capture uses the real viewport, density and DPR. Full `LifeWorld.step`, visibility, packing, and combined CPU costs have individual-run and aggregate median/p95 results. Exact visible outputs are compared for 300 frames with 0/0.9/3 m footprint changes, with mover/scene state and packed texels compared every 30 frames. Actual populations, scene activity, source graph hashes, dependency hash, runtime, CPU, and heap deltas accompany the timings. Heap deltas are diagnostics; structural tests check retained ownership. Source changes during a run invalidate its comparison.
 
-`--overhead` adds five alternating pairs of plain and instrumented runs, including profiling setup/sample storage in instrumented combined CPU time. Instrumented reports also contain raw samples and clearance stage summaries. Normal timing runs disable the profiler. The gate requires at least 10% median step improvement in every dense target and at most 5% p95 regression in step or combined cost elsewhere; repeat any apparent regression before accepting or rejecting the change. Reports remain in ignored `test-results/`.
+`--overhead` adds five alternating pairs of plain and instrumented runs, including profiling setup/sample storage in instrumented combined CPU time. Instrumented reports also contain raw samples and clearance stage summaries. Normal timing runs disable the profiler. `--pan` runs the four dense kinds through a 4x4 window shifted one column right every 30 frames, eight times (270 frames total). The initial population is outside timing. It reports sync-plus-step (`syncFrame`) separately from other steps, still running visibility on every frame, and implies `--allow-diff` because eviction can change the metric reference between revisions. The gate requires at least 10% median step improvement in every dense target and at most 5% p95 regression in step or combined cost elsewhere; repeat any apparent regression before accepting or rejecting the change. Reports remain in ignored `test-results/`.
 
-`AtlasOptions.profiling` defaults to false. When enabled, `getProfile()` returns a detached snapshot of at most 4,096 callback samples, the retained window's `spanMs`, overwritten sample count `dropped`, available `gpuRenderer` (otherwise null), and stage median/p95 values; `resetProfile()` releases samples and clears the dropped count, and context loss also resets them. GPU identity is read from the renderer's own context at creation and after restoration, only with profiling enabled. The stage counters cover callback CPU time, drawing, simulation, clearance preparation/checks, visibility, packing and upload. Clearance is included in simulation or tile sync time. Packing/upload are included in drawing and callback time; simulation is included there only on the inline path. Missing stages have zero samples and null quantiles. GPU time retains its separate asynchronous counter. Quantiles are calculated on request, outside the frame path.
+`AtlasOptions.profiling` defaults to false. When enabled, `getProfile()` returns a detached snapshot of at most 4,096 callback samples, the retained window's `spanMs`, overwritten sample count `dropped`, available `gpuRenderer` (otherwise null), and stage median/p95 values; `resetProfile()` releases samples and clears the dropped count, and context loss also resets them. GPU identity is read from the renderer's own context at creation and after restoration, only with profiling enabled. The stage counters cover callback CPU time, drawing, simulation, clearance preparation/checks, visibility, packing, upload, tile spawning/settling, terrain preparation/road indexing/revalidation/encoding, main-thread terrain acceptance and tile uploads, worker frame round-trip latency, and a reply-clone proxy. Clearance is included in simulation or tile sync time. Packing/upload are included in drawing and callback time; simulation is included there only on the inline path. Missing stages have zero samples and null quantiles. GPU time retains its separate asynchronous counter. Quantiles are calculated on request, outside the frame path.
 
 The `?debug=1` panel enables profiling and offers Reset, Capture 30 seconds, and Download. Its UI is loaded only on request. Tests can shorten captures with the debug-only `captureMs` parameter, cached before URL mirroring removes it; share URLs omit it. Captures include raw bounded samples, settings and camera at both ends, viewport/DPR, browser and available GPU backend information. Backend classification distinguishes hardware-reported, software and unidentified renderers. If samples were overwritten, the panel reports the retained window and dropped count. Panel text lets map dragging pass through; its controls receive clicks.
 
-`pnpm perf:browser` prepares the current static export, serves it locally on port 3198 (`E2E_PORT` overrides it), and captures a visible desktop Chromium with calm and storm wind at noon. It warms up for five seconds after tiles finish loading, then alternates opposite arrow inputs every 250 ms for a 30-second active-camera capture. Reports are `test-results/browser-calm.json` and `browser-storm.json`; software backends establish functional behavior only. For a physical phone later, open the same static site with `?debug=1`, allow the initial tiles to load, and use the same capture/download controls. Phone viewport CPU fixtures and software browser timings do not establish physical-phone performance.
+`pnpm perf:browser` prepares the current static export, serves it locally on port 3198 (`E2E_PORT` overrides it), and captures a visible desktop Chromium with calm and storm wind at noon. It warms up for five seconds after tiles finish loading, then alternates opposite arrow inputs every 250 ms for a 30-second active-camera capture. `--pan` instead runs one calm pass with 30 arrows each right/down/left/up at 250 ms, saved as `test-results/browser-pan.json`. A browser PerformanceObserver records long tasks whose start falls inside the capture window, excluding warmup; reports contain their count, p95, maximum and raw start/duration samples. Reports without that flag are `test-results/browser-calm.json` and `browser-storm.json`; software backends establish functional behavior only. For a physical phone later, open the same static site with `?debug=1`, allow the initial tiles to load, and use the same capture/download controls. Phone viewport CPU fixtures and software browser timings do not establish physical-phone performance.
 
 Combined unit scenarios run 180 simulated seconds with one fixed seed using bounded test populations; benchmark fixtures retain full populations. Controlled scene fixtures retain two seeds and ensure purchasing, boarding, hidden passengers and returning complete through the world's collision guard. Lifecycle checks also retain two seeds and repeat 100 pan-away/return and tile eviction/reload cycles, verify seeded respawn and frozen out-of-view poses, and check unique ownership, queue capacities, seats, service limits, finite coordinates and bounded cooldown storage. Focused replays cover 30/60/120 Hz and oversized-step clamping. Collision scratch buffers are per index/world, clear owner references after queries, and stored bodies use per-owner double buffers so rejected trials cannot overwrite accepted reservations. Transform caches release evicted tiles immediately.
 
@@ -318,6 +318,107 @@ A paired production-export capture on October 1 used Chromium 153, the GTX 1650 
 Step, sync and terrain figures in the worker column measure worker CPU; callback figures do not include asynchronous main-thread snapshot reconstruction. Terrain rebuilds were infrequent (18 inline and 17 worker during the capture), so their p95 is sensitive to individual arrivals. The worker moves these costly sync operations off the animation callback but can delay fresh agent results. Raw captures are `test-results/life-inline-pan-profile.json` and `life-worker-pan-profile.json`. The emitted simulation chunk is 142,748 bytes (48,631 gzip); its complete worker dependency graph, including shared chunks and runtime, is 356,520 bytes (120,486 gzip). None of those worker chunks contains `twgl` or `getContext`. Production budgets pass: 165 KB initial JS, 58 KB renderer chunk, and 2.1 MB tiles.
 
 The WebGL canvas loads as a separate client chunk, and its download starts when the city module evaluates in the browser, overlapping hydration while the HUD and page content initialize. Initial gzipped JavaScript has a 250 KB budget; the renderer chunk has a separate 120 KB budget. The budget check requires one identifiable asynchronous renderer chunk and fails if it is missing or ambiguous.
+
+#### Terrain snapshots and tile-arrival measurements (October 1, 2026)
+
+Terrain replies contain prebuilt polygon indexes: flat Float64 coordinates/bounds/bin keys and Uint32 polygon/ring/bin offsets and polygon ids, transferring 21 buffers. The main thread accepts three read-only indexes in constant time. Queries binary-search the worker-built bins and lazily materialize only polygons needed for narrow-phase hits. Worker encoding now includes flattening/sorting the bins; that cost is reported separately.
+
+**Part C was tested and rejected by its acceptance gate; production retains the B terrain rebuild path.** The preserved candidate keeps the first loaded tile's metric anchor until an empty sync or traffic reset. It swap-removes evicted polygons, adds only new tile contributions to persistent ground indexes, and replaces changed road fragments by identity. CrossingIndex construction and crossing subtraction retain their original order. Removal-only updates skip idle/parking/stall revalidation because those checks use only roads and trees. A numeric version invalidates transferred snapshots. Evicted crossing tokens release owner references while retaining identity until surviving road dependencies update.
+
+These are one local desktop capture per revision, not a phone result or a general FPS guarantee: Ryzen 5 2600X, Windows 10, Chromium 153/ANGLE GTX 1650 SUPER, 1920x1080/DPR 1, z18/noon/calm, High quality, with 30 seconds of tile-crossing arrows. Profiling includes the extra reply clone. Terrain-arrival counts differ and rare-stage p95 values are sensitive to individual arrivals. `terrainSnapshot` excludes later lazy polygon queries, which are included in packing. Each table cell is **median / p95 ms (count)**.
+
+| Stage | A expanded baseline | B prebuilt indexes | C incremental candidate |
+| --- | ---: | ---: | ---: |
+| `callback` | 1.60 / 3.70 (1801) | 1.60 / 3.80 (1800) | 1.50 / 3.50 (1800) |
+| `terrainSnapshot` | 10.20 / 19.50 (18) | 0.00 / 0.10 (18) | 0.00 / 0.10 (16) |
+| `lifeLatency` | 7.50 / 14.40 (1667) | 8.20 / 19.60 (1605) | 7.60 / 13.60 (1697) |
+| `sync` | 0.00 / 65.30 (120) | 0.00 / 80.80 (118) | 0.00 / 41.80 (117) |
+| `spawn` | 9.60 / 49.00 (11) | 12.20 / 45.00 (11) | 11.60 / 24.70 (9) |
+| `settle` | 7.70 / 76.30 (11) | 17.20 / 82.20 (11) | 13.00 / 40.70 (9) |
+| `terrainRebuild` | 29.90 / 166.30 (18) | 29.50 / 140.20 (18) | 9.20 / 26.30 (16) |
+| `terrainRoads` | 15.10 / 94.60 (18) | 13.30 / 70.00 (18) | 7.60 / 16.30 (16) |
+| `terrainRevalidate` | 1.10 / 8.30 (18) | 1.20 / 13.10 (18) | 1.80 / 3.40 (9) |
+| `terrainEncode` | 0.80 / 8.60 (18) | 17.60 / 119.40 (18) | 17.20 / 33.80 (16) |
+| `tileUpload` | 0.20 / 0.40 (11) | 0.10 / 0.40 (11) | 0.20 / 0.60 (9) |
+| `replyClone` | 0.40 / 0.90 (1667) | 0.40 / 1.00 (1605) | 0.40 / 0.90 (1697) |
+| `clearanceBuild` | 1.10 / 1.90 (1667) | 1.10 / 2.00 (1605) | 1.10 / 1.90 (1697) |
+| `clearanceChecks` | 2.00 / 4.70 (1667) | 2.20 / 4.80 (1605) | 2.10 / 4.00 (1697) |
+| `step` | 5.70 / 9.90 (1667) | 6.20 / 11.30 (1605) | 5.80 / 9.20 (1697) |
+
+The A gates permit B and C: snapshot p95 is above 1 ms, rebuild p95 is above 16 ms, and spawning plus settling is 36.9% of the slowest 5% of sync samples (39.8% after B), below the 50% stop threshold. B achieves the <0.2 ms snapshot-acceptance target, while worker encoding increases from 0.8/8.6 to 17.6/119.4 ms median/p95. C browser latency p95 decreases from B's 19.6 to 13.6 ms; its synthetic pan gate is recorded below.
+
+A/B/C browser decode averages are 22.00 / 20.30 / 20.14 ms (the B value is supplied by its raw report). All three captures contain zero main-thread long tasks. Upload p95 stays below 2 ms and no recorded upload reaches 8 ms. Reply-clone p95 is 0.9 / 1.0 / 0.9 ms: B meets the >=1 ms item-4 follow-up threshold, with no unexplained long tasks. Clearance-build p95 is 1.9 / 2.0 / 1.9 ms and step p95 is 9.9 / 11.3 / 9.2 ms, so item 3b is not flagged. These are follow-up measurements only; no clearance-storage, agent-reply, tile-decode or upload optimization is included.
+
+`pnpm perf:tiles [--city=<slug>] [--rounds=<n>]` reads a local PMTiles archive through FileHandle ranges, scans all nonempty tiles at z15 through maxZoom, and reports per-tile medians over five rounds. Parse reads all properties/geometries; build repeats the tile worker's full geometry conversion with a fresh id registry. File IO and archive decompression are outside both timers. `--output=<path>` preserves separate runs. Source/lock/archive hashes and environment accompany the report. The CPU-profile pass uses `node --cpu-prof --cpu-prof-dir=test-results/tiles-cpuprof --import tsx packages/renderer/scripts/perf-tiles.ts --rounds=1 --output=test-results/tiles-decode-cpuprof.json`.
+
+| Zoom | Tiles | Build median / p95 / max, ms | Parse median / p95, ms | Tiles >16 ms |
+| --- | ---: | ---: | ---: | ---: |
+| 15 | 82 | 0.173 / 28.714 / 65.151 | 0.019 / 1.577 | 8 |
+| 16 | 216 | 0.124 / 12.273 / 36.823 | 0.015 / 0.889 | 8 |
+
+**Decode follow-up is flagged by the browser average >=16 ms.** The archive-wide median differs from browser decode by much more than 2x, so the harness cannot support conclusions about browser decode performance. Its corpus includes many sparse tiles, unlike the dense Centro view. Across that corpus only, summed parse medians are 6.7% of summed build medians; the rest of geometry building accounts for most of the measured time. 16/298 tiles (5.4%) exceed 16 ms, below the independent >10% flag.
+
+The ten slowest tiles **at each zoom** (build / parse ms; feature count):
+
+| Tile | Build, ms | Parse, ms | Features |
+| --- | ---: | ---: | ---: |
+| 15/27597/15131 | 65.151 | 4.652 | 2721 |
+| 15/27596/15132 | 63.515 | 3.669 | 3990 |
+| 15/27596/15131 | 63.244 | 3.880 | 2832 |
+| 15/27597/15132 | 40.708 | 1.997 | 1833 |
+| 15/27598/15132 | 28.714 | 1.569 | 1438 |
+| 15/27595/15132 | 24.729 | 1.577 | 1734 |
+| 15/27598/15131 | 21.110 | 1.005 | 1018 |
+| 15/27597/15130 | 17.204 | 0.965 | 853 |
+| 15/27595/15130 | 13.686 | 1.068 | 519 |
+| 15/27596/15130 | 13.494 | 0.766 | 620 |
+| 16/55193/30263 | 36.823 | 1.628 | 1117 |
+| 16/55193/30264 | 28.264 | 1.674 | 1529 |
+| 16/55193/30262 | 22.029 | 1.250 | 791 |
+| 16/55192/30265 | 19.967 | 1.789 | 1197 |
+| 16/55192/30264 | 18.861 | 0.998 | 1052 |
+| 16/55191/30264 | 17.116 | 0.889 | 959 |
+| 16/55192/30263 | 16.882 | 1.259 | 880 |
+| 16/55195/30263 | 16.241 | 0.842 | 740 |
+| 16/55194/30262 | 15.288 | 1.131 | 818 |
+| 16/55194/30263 | 12.422 | 0.906 | 851 |
+
+CPU profile, top 15 functions by self time across the whole one-round process, including startup, IO and GC. TypeScript locations from tsx are generated line 1; unambiguous original declaration lines are noted, not presented as sampled instruction locations.
+
+| Function | File:line | Self, ms |
+| --- | --- | ---: |
+| `buildTileGeometry` | `packages/renderer/src/raster/geometry.ts:1 (declaration 670)` | 210.175 |
+| `finish` | `packages/renderer/src/raster/geometry.ts:1 (declaration 316)` | 156.834 |
+| `spawnSync` | `node:internal/child_process:1105` | 120.690 |
+| `(idle)` | `(native):0` | 113.766 |
+| `(garbage collector)` | `(native):0` | 98.006 |
+| `(anonymous)` | `packages/renderer/scripts/perf-tiles.ts:1` | 89.632 |
+| `VectorTileFeature` | `node_modules/.pnpm/@mapbox+vector-tile@3.0.0/node_modules/@mapbox/vector-tile/index.js:15` | 63.183 |
+| `__name` | `packages/renderer/src/raster/geometry.ts:1` | 60.382 |
+| `set TextDecoder` | `(native):0` | 58.358 |
+| `(anonymous)` | `packages/renderer/src/raster/geometry.ts:1` | 51.078 |
+| `compileSourceTextModule` | `node:internal/modules/esm/utils:316` | 49.721 |
+| `principalAxis` | `packages/renderer/src/raster/geometry.ts:1 (declaration 485)` | 39.822 |
+| `(program)` | `(native):0` | 35.491 |
+| `lineLengths` | `node:internal/source_map/source_map_cache:257` | 31.650 |
+| `vertex` | `packages/renderer/src/raster/geometry.ts:1` | 28.932 |
+
+Both B and the C candidate pass production budgets: initial JS 165 KB / 250 KB, renderer 58 KB / 120 KB, tiles 2.1 MB / 40 MB. B's simulation chunk is 143,126 bytes / 48,706 gzip, with the full six-chunk worker graph 358,447 / 121,045 bytes. C's candidate is 143,964 / 48,897 for simulation and 360,406 / 121,563 for the graph. Neither graph contains `twgl` or `getContext`.
+
+**Part C stop gate fired.** The five-run pan comparison against `b827946` did not reach a 30% syncFrame p95 reduction in any dense kind, despite improved browser latency. No C production code is committed. The tested candidate, including its regression tests, is saved locally as `test-results/terrain-incremental-candidate.patch`; `git apply --check` succeeds against B. The accepted runtime contains A plus B. Candidate checks and captures above describe the rejected experiment.
+
+| Dense pan fixture | SyncFrame baseline to C median / p95, ms | SyncFrame p95 change | Step baseline to C median / p95, ms | Step p95 change |
+| --- | ---: | ---: | ---: | ---: |
+| junction/16/pan | 42.910 / 62.961 to 41.794 / 55.083 | -12.5% | 6.314 / 9.894 to 6.631 / 10.158 | +2.7% |
+| crossroads/16/pan | 40.533 / 55.378 to 43.564 / 49.234 | -11.1% | 6.630 / 9.403 to 6.641 / 9.781 | +4.0% |
+| transit/16/pan | 45.769 / 54.859 to 46.233 / 53.464 | -2.5% | 6.509 / 10.284 to 6.657 / 9.526 | -7.4% |
+| rain/16/pan | 44.351 / 53.208 to 46.227 / 55.802 | +4.9% | 6.410 / 9.508 to 6.511 / 9.595 | +0.9% |
+
+No pan step or syncFrame p95 regression exceeds 5%, so none requires a repeat. The C non-pan full timing/equality matrix was not run: the pan stop gate was evaluated first to avoid a lengthy benchmark for a candidate that cannot ship. C passes the existing worker/direct and cell-guard equality tests and new incremental/fresh terrain tests, but no claim of all-fixture C equality is made. A's noisy preliminary p95 regressions were not acceptance evidence or repeated; B's one-sample timing values likewise have no inferential use. This is an explicit verification-order deviation from C6, preserving its mandatory stop decision.
+
+Verification and deviations: A and B passed exact state/visible/packed comparisons in all 30 original fixtures. B's equality-only run uses `--runs=1 --samples=1`; its timing rows are not performance estimates. The initial A timing matrix overlapped the pan harness and has contention, so it is not used for acceptance. Changed tests, renderer typecheck, web typecheck and script typecheck pass. Early concurrent test runs had timeout-only failures; focused reruns passed, and C's 400 affected tests passed with `--maxWorkers=2`. `pnpm lint` reports only five pre-existing ignored `.plans` scratch-script parsing errors; lint excluding `.plans/**` passes. Full CI and desktop/mobile e2e are left to CI as directed. The updated A5-A7 work is a separate commit because A was already committed. Pan setup was corrected to exclude initial population and measure exactly eight window changes. The candidate road-cache identity tests retain polygon references before updates because the access object is now persistent; guard equality tests retain their assertions.
+
+Raw reports remain in ignored `test-results/`: `browser-pan-baseline.json`, `browser-pan-b.json`, `browser-pan-c.json`, `tiles-decode.json` (including hotspot summary), `tiles-decode-cpuprof.json`, `tiles-cpuprof/*.cpuprofile`, `world-terrain-profile.json`, `world-terrain-snapshot.json`, `world-pan.json`, and `bundle-terrain-{b,c}.json`.
 
 #### Earlier isolated prototypes
 
