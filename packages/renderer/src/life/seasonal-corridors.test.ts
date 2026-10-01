@@ -2,10 +2,11 @@ import { expect, it } from 'vitest';
 import type { SeasonConfig, SeasonalRecord } from '@atlas/shared';
 import { seasonalFixtures, createSeasonalFixtureCache } from './seasonal';
 import { LifeBuilder, LifeLine } from './geometry';
-import { tileToLngLat } from '../raster/geometry';
+import { lngLatToTile, tileToLngLat } from '../raster/geometry';
 import { FixturePart, packFixtures, type FixtureGrid } from './fixtures';
 import { mapGlyphs, themes } from '../theme';
 import { SEASONAL_GLYPHS } from './seasonal-glyphs';
+import { selectBuntingRows } from './bunting-junctions';
 const tile = { z: 16, x: 55192, y: 30266 };
 const point = (x: number, y: number) => tileToLngLat(tile, { x, y });
 const season: SeasonConfig = {
@@ -52,7 +53,7 @@ it('uses exact buffered corridor records once, independently of nearby worship s
   const a = make(false),
     b = { ...make(false), tile: { ...tile, x: tile.x + 1 } };
   const result = seasonalFixtures([a, b], season, 13.6);
-  expect(result).toEqual([
+  expect(result).toMatchObject([
     {
       kind: 'season-bunting',
       id: 'dense',
@@ -60,6 +61,7 @@ it('uses exact buffered corridor records once, independently of nearby worship s
       to: row.to,
       seed: 7,
       style: 'red-yellow-rectangles',
+      priority: { corridor: 0, road: 'osm:way/1' },
     },
   ]);
   expect(seasonalFixtures([b], season, 13.6)).toEqual(result);
@@ -90,6 +92,40 @@ it('invalidates when the decoded corridor payload changes and keeps old archives
       (f) => f.kind !== 'season-bunting' || !f.style,
     ),
   ).toBe(true);
+});
+it('keeps rejected dense segments covered and resolves buffered copies regardless of tile order', () => {
+  const group = make(),
+    cross: SeasonalRecord = {
+      ...row,
+      id: 'cross',
+      road: 'osm:way/2',
+      from: point(1800, 2000),
+      to: point(2200, 2000),
+      segment: [point(2000, 1000), point(2000, 3000)],
+    };
+  const neighbor = { ...make(), tile: { ...tile, x: tile.x + 1 }, seasonal: [cross, row] };
+  const config = structuredClone(season);
+  config.bunting!.corridors![0]!.ways.push('osm:way/2');
+  const a = seasonalFixtures([group, neighbor], config, 13.6);
+  expect(seasonalFixtures([neighbor, group], config, 13.6)).toEqual(a);
+  const grid: FixtureGrid = {
+    cols: 100,
+    rows: 100,
+    cellWidth: 5,
+    cellHeight: 9,
+    toCell: (lng, lat) => {
+      const p = lngLatToTile(tile, lng, lat);
+      return [p.x / 40, p.y / 40];
+    },
+  };
+  const accepted = [...selectBuntingRows(a, grid).keys()];
+  expect(accepted.some((f) => f.id === 'dense')).toBe(false);
+  expect(accepted.some((f) => f.id === 'cross')).toBe(true);
+  for (const f of a)
+    if (f.kind === 'season-bunting' && !f.style) {
+      const x = (f.from[0] + f.to[0]) / 2;
+      expect(x < row.segment[0][0] || x > row.segment[1][0]).toBe(true);
+    }
 });
 it('packs only rectangular red/yellow marks and keeps their phase stable when clipped by panning', () => {
   const glyphs = mapGlyphs(themes.dark),

@@ -50,6 +50,9 @@ export type LegacyStreetFixture = FixtureBody &
     | { kind: 'flagpole'; flag: 'PH' }
   );
 export type StreetFixture = UtilityFixture | LegacyStreetFixture | SeasonalFixture;
+// Fixture inputs are replaced when tiles/config change. Retain the seasonal slice so
+// whole-row priority sorting is cached across camera repacks as well.
+const seasonalInputs = new WeakMap<readonly StreetFixture[], readonly SeasonalFixture[]>();
 export type FixtureVisibility = {
   streetlights: boolean;
   trafficSignals: boolean;
@@ -615,9 +618,13 @@ export function packFixtures(
   // Animated cloth must retain the utility cells stamped after legacy hardware.
   for (const cell of packed.utilityCells) owners[cell] = -2;
   updateFixtureFlags(packed, motion);
-  const seasonal = fixtures.filter(
-    (f): f is SeasonalFixture => f.kind === 'season-lantern' || f.kind === 'season-bunting',
-  );
+  let seasonal = seasonalInputs.get(fixtures);
+  if (!seasonal) {
+    seasonal = fixtures.filter(
+      (f): f is SeasonalFixture => f.kind === 'season-lantern' || f.kind === 'season-bunting',
+    );
+    seasonalInputs.set(fixtures, seasonal);
+  }
   if (seasonal.length) {
     // Reserve every possible cloth position for decoration admission, while leaving
     // the real cloth owners free for subsequent animation frames.

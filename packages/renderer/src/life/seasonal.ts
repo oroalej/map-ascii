@@ -21,6 +21,7 @@ import type { FixtureGrid, LegacyStreetFixture } from './fixtures';
 import { lightByte, LampState, placeSeed } from './lights';
 import { clipUtilityLine } from './utilities';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
+import { buntingWidth, selectBuntingRows, type BuntingPriority } from './bunting-junctions';
 
 type Point = [number, number];
 import { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
@@ -34,6 +35,7 @@ export type SeasonalFixture =
       to: Point;
       seed: number;
       style?: 'red-yellow-rectangles';
+      priority?: BuntingPriority;
     };
 export type SeasonalVisibility = { lanterns: boolean; bunting: boolean };
 export type SeasonalTile = {
@@ -256,7 +258,21 @@ export function seasonalFixtures(
       to: r.to,
       seed: r.seed & 31,
       style: 'red-yellow-rectangles',
+      priority: {
+        width: buntingWidth(r.from, r.to),
+        corridor: season.bunting!.corridors!.findIndex((c) => c.id === r.corridor),
+        road: r.road,
+      },
     });
+  // Derive priority once with the cached fixture set. Coverage above deliberately includes
+  // every decoded dense segment, even when its row will be rejected at a junction.
+  if (corridors.size)
+    for (const fixture of bunting.values())
+      fixture.priority ??= {
+        width: buntingWidth(fixture.from, fixture.to),
+        corridor: Infinity,
+        road: fixture.id,
+      };
   result.push(...[...bunting.values()].sort((a, b) => a.id.localeCompare(b.id)));
   return result;
 }
@@ -305,6 +321,7 @@ export function packSeasonalFixtures(
   owners: Int32Array,
 ): SeasonalVisibility {
   const visibility = { lanterns: false, bunting: false };
+  const rows = bandVisibility({ min: 18 }, zoom) ? selectBuntingRows(fixtures, grid) : undefined;
   const write = (
     x: number,
     y: number,
@@ -362,29 +379,12 @@ export function packSeasonalFixtures(
         break;
       }
     } else {
-      // Pennants hang beside their carrier line. Stamping on the cable itself
-      // would lose every mark to utility ownership at detailed wire zoom.
-      const from = grid.toCell(...fixture.from),
-        to = grid.toCell(...fixture.to);
-      const dx = to[0] - from[0],
-        dy = to[1] - from[1],
-        length = Math.hypot(dx, dy) || 1;
-      const ox = (-dy / length) * 1.5,
-        oy = (dx / length) * 1.5;
-      const clipped = clipUtilityLine(
-        [from[0] + ox, from[1] + oy],
-        [to[0] + ox, to[1] + oy],
-        grid.cols,
-        grid.rows,
-      );
+      const row = rows?.get(fixture);
+      if (!row) continue;
+      const clipped = clipUtilityLine(row.from, row.to, grid.cols, grid.rows);
       if (!clipped) continue;
       const dense = fixture.style === 'red-yellow-rectangles';
-      const [a, b]: [Point, Point] = dense
-          ? [
-              [from[0] + ox, from[1] + oy],
-              [to[0] + ox, to[1] + oy],
-            ]
-          : clipped,
+      const [a, b]: [Point, Point] = dense ? [row.from, row.to] : clipped,
         spanX = b[0] - a[0],
         spanY = b[1] - a[1];
       const count = Math.max(1, Math.ceil(Math.max(Math.abs(spanX), Math.abs(spanY))));
