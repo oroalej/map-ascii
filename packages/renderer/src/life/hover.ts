@@ -12,6 +12,7 @@ export type LifeHover = { label: string; point: [number, number] } | { label: nu
 const permissions = cellBits();
 const trunk = classId('tree');
 const occluders = new Set([trunk, classId('tree_crown'), classId('trees')]);
+const HOVER_VALIDITY_MS = 250;
 
 /** Mirrors the glyph pass: birds fly above surfaces; other agents use the pointed subcell. */
 export function lifeVisibleOnSurface(
@@ -53,7 +54,7 @@ export class LifeHoverController {
   private output: LifeHover = { label: null, point: null };
   private serial = 0;
   private pending: { serial: number; key: string; at: number } | undefined;
-  private confirmed: { key: string; revision: number; visible: boolean } | undefined;
+  private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
 
   constructor(
     private readonly readback: Pick<Readback, 'size' | 'request'>,
@@ -102,7 +103,19 @@ export class LifeHoverController {
       SUB.rows - 1,
       Math.floor(((p[1] * f.dpr + f.grid.shiftY) / f.grid.cellHeight - row) * SUB.rows),
     );
-    return { col, row, sx, sy, label, key: `${f.geometry}/${col}/${row}/${sx}/${sy}/${label}` };
+    const offset = (row * f.targets.cols + col) * 4;
+    const lifeClass = f.life[offset + 1]! & 63;
+    const lifeFlags = f.life[offset + 2]! & LIFE_AGENT_MASK;
+    return {
+      col,
+      row,
+      sx,
+      sy,
+      label,
+      lifeClass,
+      lifeFlags,
+      key: `${f.geometry}/${col}/${row}/${sx}/${sy}/${label}/${lifeClass}/${lifeFlags}`,
+    };
   }
 
   update(frame: HoverFrame | null, now: number) {
@@ -112,9 +125,17 @@ export class LifeHoverController {
       this.clear();
       return;
     }
-    if (this.pending && now - this.pending.at >= 250) {
+    if (
+      this.pending &&
+      (this.pending.key !== c.key || now - this.pending.at >= HOVER_VALIDITY_MS)
+    ) {
       this.serial++;
       this.pending = undefined;
+    }
+    if (
+      this.confirmed &&
+      (this.confirmed.key !== c.key || now - this.confirmed.at >= HOVER_VALIDITY_MS)
+    ) {
       this.confirmed = undefined;
     }
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
@@ -124,9 +145,6 @@ export class LifeHoverController {
     if (this.readback.size > MAX_PENDING_READS - 3) return;
     const serial = ++this.serial;
     this.pending = { serial, key: c.key, at: now };
-    const offset = (c.row * frame.targets.cols + c.col) * 4;
-    const lifeClass = frame.life[offset + 1]! & 63;
-    const lifeFlags = frame.life[offset + 2]!;
     const bytes: (Uint8Array | undefined)[] = [];
     const at = (index: number) => (data: Uint8Array) => {
       if (this.pending?.serial !== serial) return;
@@ -135,13 +153,13 @@ export class LifeHoverController {
       this.pending = undefined;
       if (this.candidate()?.key !== c.key) return;
       const visible = lifeVisibleOnSurface(
-        lifeClass,
-        lifeFlags,
+        c.lifeClass,
+        c.lifeFlags,
         bytes[0][1]! & 63,
         bytes[1][0]!,
         bytes[2][0]!,
       );
-      this.confirmed = { key: c.key, revision: frame.revision, visible };
+      this.confirmed = { key: c.key, revision: frame.revision, visible, at: now };
       // Publish from update, once per animation frame, after all current geometry is known.
     };
     this.readback.request(

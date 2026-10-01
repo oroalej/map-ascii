@@ -127,3 +127,85 @@ it('rechecks moving owners without a pointer move and never reads empty, line or
   expect(requests).toHaveLength(0);
   expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
 });
+
+it('expires confirmed visibility at 250 ms even with an unchanged revision and a full queue', () => {
+  const { hover, frame, emit, reads, requests, finish } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  reads.size = 6;
+  hover.update(frame, 249);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+  hover.update(frame, 250);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(requests).toHaveLength(0);
+  reads.size = 5;
+  hover.update(frame, 251);
+  expect(requests).toHaveLength(3);
+  finish();
+  hover.update(frame, 252);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+});
+
+it('ages results from their request frame and refreshes cached rejection', () => {
+  const { hover, frame, emit, requests, finish } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 250);
+  expect(emit).not.toHaveBeenCalled();
+  expect(requests).toHaveLength(3);
+  finish('tree');
+  hover.update(frame, 251);
+  hover.update(frame, 499);
+  expect(requests).toHaveLength(0);
+  hover.update(frame, 500);
+  expect(requests).toHaveLength(3);
+  finish();
+  hover.update(frame, 501);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+});
+
+it('invalidates same-name candidates when packed class or permissions change, ignoring cosmetics', () => {
+  const { hover, frame, emit, requests, finish } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  frame.life[2] = CellBit.vehicle | 32 | 128;
+  hover.update(frame, 2);
+  expect(requests).toHaveLength(0);
+  frame.life[2] = CellBit.boat;
+  hover.update(frame, 3);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(requests).toHaveLength(3);
+  finish();
+  hover.update(frame, 4);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  frame.life[1] = classId('life_bird');
+  hover.update(frame, 5);
+  expect(requests).toHaveLength(3);
+});
+
+it('abandons changed candidates immediately and never revives expired batches', () => {
+  const { hover, frame, emit, requests, finish, reads } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  const stale = requests.splice(0);
+  frame.life[2] = CellBit.person;
+  hover.update(frame, 1);
+  expect(requests).toHaveLength(3);
+  stale.forEach(({ done }) => done(new Uint8Array([0, classId('road_mid'), 0, 0])));
+  finish();
+  hover.update(frame, 2);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+  hover.update({ ...frame, revision: 2 }, 3);
+  const expired = requests.splice(0);
+  reads.size = 6;
+  hover.update(frame, 253);
+  expired.forEach(({ done }) => done(new Uint8Array([0, classId('road_mid'), 0, 0])));
+  hover.update(frame, 254);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(requests).toHaveLength(0);
+});
