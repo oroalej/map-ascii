@@ -223,6 +223,8 @@ for (const city of cities) {
       }) => {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
+        // Exercise motion changes at High quality without filling CI's software GPU.
+        await page.setViewportSize({ width: 640, height: 480 });
         await page.emulateMedia({ reducedMotion: 'no-preference' });
         await page.addInitScript(() =>
           localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon' })),
