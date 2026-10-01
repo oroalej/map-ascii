@@ -1,3 +1,5 @@
+import { DEFAULT_CELLS } from '../density';
+import { MOMENTS } from './moments';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -2382,12 +2384,12 @@ export class TileLife {
     const momentView = pass?.momentView;
     this.momentHost.step(
       dt,
-      momentView?.zoom ?? (!shows || shows('person') ? 18 : 0),
+      momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
       env,
       near,
       guard,
       momentView?.cellWidth ?? 0,
-      momentView?.cellAspect ?? 1.8,
+      momentView?.cellAspect ?? DEFAULT_CELLS.aspect,
     );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) {
@@ -3333,7 +3335,7 @@ export class LifeWorld {
     wind?: LifeEnv['wind'],
     weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig },
     cellMeters = 0,
-    cellAspect = 1.8,
+    cellAspect = DEFAULT_CELLS.aspect,
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
@@ -3374,7 +3376,7 @@ export class LifeWorld {
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
         trains,
-        momentView: { zoom: zoom ?? 18, cellWidth: cellMeters, cellAspect },
+        momentView: { zoom: zoom ?? MOMENTS.zoom, cellWidth: cellMeters, cellAspect },
       });
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
@@ -3711,7 +3713,7 @@ export class LifeWorld {
           }
         }
       }
-      if (zoom >= 18)
+      if (zoom >= MOMENTS.zoom)
         for (const ball of life.momentHost.moments.balls()) {
           const [lng, lat] = tileToLngLat(tile, ball);
           balls.push({

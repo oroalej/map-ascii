@@ -1,11 +1,17 @@
 /** Tile-local social holds. Navigation and terrain admission stay with the simulation. */
-import { greetingPeriod, type DialogueChoice, type PlaceKind } from '@atlas/shared';
+import {
+  greetingPeriod,
+  SPEECH_ZOOM,
+  type DialogueChoice,
+  type GreetingPeriods,
+  type PlaceKind,
+} from '@atlas/shared';
 import type { PersonPose } from './people';
 import { between, random } from './random';
 
-export type MomentKind = 'greet' | 'talk' | 'ball' | 'look';
+export type MomentKind = DialogueChoice['kind'];
 export const MOMENTS = {
-  zoom: 18,
+  zoom: SPEECH_ZOOM,
   rain: 0.5,
   interval: 0.1,
   checks: 8,
@@ -13,13 +19,26 @@ export const MOMENTS = {
   capacity: 12,
   balls: 6,
   cooldown: 60,
-  greet: { chance: 0.3, duration: [1.5, 3] },
-  talk: { chance: 0.25, third: 0.35, duration: [10, 40], turn: [2, 5] },
-  ball: { chance: 0.35, duration: [30, 90], hold: [0.5, 2], flight: [0.6, 1.2] },
-  look: { chance: 0.15, duration: [4, 10] },
+  retry: 1,
+  clearanceExtra: 2,
+  gesture: 1,
+  greet: { chance: 0.3, duration: [1.5, 3], speechTurn: 2.5, reach: 3, rearm: 1, opposition: -0.5 },
+  talk: { chance: 0.25, third: 0.35, duration: [10, 40], turn: [2, 5], speechTurn: 3, reach: 8 },
+  ball: {
+    chance: 0.35,
+    duration: [30, 90],
+    hold: [0.5, 2],
+    flight: [0.6, 1.2],
+    speechTurn: 2.5,
+    speechCooldown: 10,
+    reach: 10,
+    minimum: 4,
+    gesture: 0.3,
+  },
+  look: { chance: 0.15, duration: [4, 10], speechTurn: 3, reach: 15, rearm: 20, point: 0.5 },
 } as const;
-export type MomentActor = {
-  owner: object;
+export type MomentActor<Owner extends object = object> = {
+  owner: Owner;
   type: 'walker' | 'gatherer';
   x: number;
   y: number;
@@ -32,31 +51,31 @@ export type MomentActor = {
   source?: number;
 };
 export type MomentAnchor = { x: number; y: number; source: number };
-export type MomentContext = {
+export type MomentContext<Owner extends object = object> = {
   zoom: number;
   rain: number;
   minutes?: number;
   perMeter: number;
   /** Refreshed only on the fixed scan cadence; order is stable. */
-  actors(): readonly MomentActor[];
+  actors(): readonly MomentActor<Owner>[];
   anchors: readonly MomentAnchor[];
-  eligible(actor: MomentActor): boolean;
+  eligible(actor: MomentActor<Owner>): boolean;
   /** View filtering must not rearm a still-near approach when the camera pans. */
-  alive?(actor: MomentActor): boolean;
+  alive?(actor: MomentActor<Owner>): boolean;
   /** Conservative radius of the actual cell/stamp footprint, in meters. */
-  clearance(actor: MomentActor): number;
+  clearance(actor: MomentActor<Owner>): number;
   /** Guarded heading admission. A failed call must restore its own state. */
-  face(actor: MomentActor, hx: number, hy: number): boolean;
-  release(actor: MomentActor): void;
+  face(actor: MomentActor<Owner>, hx: number, hy: number): boolean;
+  release(actor: MomentActor<Owner>): void;
 };
-type Moment = {
+type Moment<Owner extends object = object> = {
   id: number;
   dialogue?: DialogueChoice;
   speechStart?: number;
   speechHolder: number;
   lastSpeech: number;
   kind: MomentKind;
-  members: MomentActor[];
+  members: MomentActor<Owner>[];
   start: number;
   end: number;
   speaker: number;
@@ -68,10 +87,14 @@ type Moment = {
   phaseStart: number;
   phaseEnd: number;
 };
-type Approach = { a: MomentActor; b: MomentActor | MomentAnchor; radius: number };
-type Pending = {
+type Approach<Owner extends object = object> = {
+  a: MomentActor<Owner>;
+  b: MomentActor<Owner> | MomentAnchor;
+  radius: number;
+};
+type Pending<Owner extends object = object> = {
   kind: MomentKind;
-  members: MomentActor[];
+  members: MomentActor<Owner>[];
   anchor?: MomentAnchor;
   next: number;
 };
@@ -80,7 +103,7 @@ const social = new Set<PlaceKind>(['monument', 'fountain', 'worship', 'school'])
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
 
-export class Moments {
+export class Moments<Owner extends object = object> {
   private readonly rng: () => number;
   private readonly speechRng: () => number;
   private serial = 0;
@@ -93,10 +116,10 @@ export class Moments {
   private readonly ids = new Map<object, number>();
   private readonly cooldown = new Map<object, number>();
   private readonly episodes = new Map<object, { idle: boolean; talk: boolean; ball: boolean }>();
-  private readonly approaches = new Map<string, Approach>();
-  private readonly pending = new Map<string, Pending>();
-  private readonly membership = new Map<object, Moment>();
-  private readonly active: Moment[] = [];
+  private readonly approaches = new Map<string, Approach<Owner>>();
+  private readonly pending = new Map<string, Pending<Owner>>();
+  private readonly membership = new Map<object, Moment<Owner>>();
+  private readonly active: Moment<Owner>[] = [];
   readonly stats = {
     checks: 0,
     started: { greet: 0, talk: 0, ball: 0, look: 0 },
@@ -109,6 +132,7 @@ export class Moments {
     readonly enabled = true,
     rng?: () => number,
     private readonly dialogue: readonly DialogueChoice[] = [],
+    private readonly periods?: Readonly<GreetingPeriods>,
   ) {
     this.rng = rng ?? random(seed ^ 0x7f4a7c15);
     this.speechRng = random(seed ^ 0x592cf6a3);
@@ -123,7 +147,7 @@ export class Moments {
   speech(owner: object): SpeechCue | undefined {
     const m = this.membership.get(owner);
     if (!m?.dialogue || m.speechStart === undefined) return;
-    const seconds = m.kind === 'talk' || m.kind === 'look' ? 3 : 2.5;
+    const seconds = MOMENTS[m.kind].speechTurn;
     const line = Math.floor((this.time - m.speechStart) / seconds + 1e-9);
     if (
       line < 0 ||
@@ -136,12 +160,13 @@ export class Moments {
   private choose(kind: MomentKind, minutes: number): DialogueChoice | undefined {
     const choices = this.dialogue.filter(
       (entry) =>
-        entry.kind === kind && (kind !== 'greet' || entry.period === greetingPeriod(minutes)),
+        entry.kind === kind &&
+        (kind !== 'greet' || entry.period === greetingPeriod(minutes, this.periods)),
     );
     return choices.length ? choices[Math.floor(this.speechRng() * choices.length)] : undefined;
   }
   /** Explicit tile disposal releases even externally inspected test instances. */
-  clear(release: (actor: MomentActor) => void) {
+  clear(release: (actor: MomentActor<Owner>) => void) {
     for (const m of this.active) for (const actor of m.members) release(actor);
     this.active.length = 0;
     this.membership.clear();
@@ -159,13 +184,14 @@ export class Moments {
     const gesture =
       m.kind === 'greet'
         ? m.dialogue
-          ? index === Math.floor((this.time - m.start) / 2.5) && (this.time - m.start) % 2.5 < 1
-          : this.time - m.start < 1
+          ? index === Math.floor((this.time - m.start) / MOMENTS.greet.speechTurn) &&
+            (this.time - m.start) % MOMENTS.greet.speechTurn < MOMENTS.gesture
+          : this.time - m.start < MOMENTS.gesture
         : m.kind === 'look'
-          ? m.point && this.time - m.start < 1
+          ? m.point && this.time - m.start < MOMENTS.gesture
           : m.kind === 'talk'
-            ? index === m.speaker && this.time - m.turnStart < 1
-            : index === m.holder && m.flying && this.time - m.phaseStart < 0.3;
+            ? index === m.speaker && this.time - m.turnStart < MOMENTS.gesture
+            : index === m.holder && m.flying && this.time - m.phaseStart < MOMENTS.ball.gesture;
     return gesture ? 'gesture' : 'attentive';
   }
   balls() {
@@ -204,7 +230,7 @@ export class Moments {
       ]),
     };
   }
-  private finish(m: Moment, context: MomentContext, canceled: boolean) {
+  private finish(m: Moment<Owner>, context: MomentContext<Owner>, canceled: boolean) {
     for (let i = m.members.length - 1; i >= 0; i--) {
       const a = m.members[i]!;
       this.membership.delete(a.owner);
@@ -214,7 +240,7 @@ export class Moments {
     this.active.splice(this.active.indexOf(m), 1);
     this.stats[canceled ? 'canceled' : 'completed']++;
   }
-  step(dt: number, context: MomentContext) {
+  step(dt: number, context: MomentContext<Owner>) {
     if (!this.enabled) return;
     this.time += dt;
     const weather = context.zoom >= MOMENTS.zoom && context.rain < MOMENTS.rain;
@@ -243,14 +269,18 @@ export class Moments {
           m.speaker = (m.speaker + 1) % m.members.length;
           m.turnStart = m.turnEnd;
           const turn = between(this.rng, MOMENTS.talk.turn);
-          m.turnEnd += m.dialogue ? 3 : turn;
+          m.turnEnd += m.dialogue ? MOMENTS.talk.speechTurn : turn;
         }
       if (m.kind === 'ball')
         while (this.time + 1e-9 >= m.phaseEnd) {
           m.phaseStart = m.phaseEnd;
           if (m.flying) m.holder = 1 - m.holder;
           m.flying = !m.flying;
-          if (m.dialogue && m.flying && m.phaseStart - m.lastSpeech >= 10) {
+          if (
+            m.dialogue &&
+            m.flying &&
+            m.phaseStart - m.lastSpeech >= MOMENTS.ball.speechCooldown
+          ) {
             m.speechStart = m.phaseStart;
             m.speechHolder = m.holder;
             m.lastSpeech = m.phaseStart;
@@ -268,27 +298,35 @@ export class Moments {
       this.nextScan += MOMENTS.interval;
     }
   }
-  private available(a: MomentActor, c: MomentContext) {
+  private available(a: MomentActor<Owner>, c: MomentContext<Owner>) {
     return this.free(a) && c.eligible(a);
   }
-  private free(a: MomentActor) {
+  private free(a: MomentActor<Owner>) {
     return !this.busy(a.owner) && (this.cooldown.get(a.owner) ?? 0) <= this.time;
   }
-  private reach(a: MomentActor, b: MomentActor, base: number, c: MomentContext) {
-    return Math.max(base, c.clearance(a) + c.clearance(b) + 2);
+  private reach(
+    a: MomentActor<Owner>,
+    b: MomentActor<Owner>,
+    base: number,
+    c: MomentContext<Owner>,
+  ) {
+    return Math.max(base, c.clearance(a) + c.clearance(b) + MOMENTS.clearanceExtra);
   }
-  private attempt(key: string, p: Pending, c: MomentContext) {
+  private attempt(key: string, p: Pending<Owner>, c: MomentContext<Owner>) {
     if (this.start(p.kind, p.members, p.anchor, c)) this.pending.delete(key);
     else {
-      p.next = this.time + 1;
+      p.next = this.time + MOMENTS.retry;
       this.pending.set(key, p);
     }
   }
-  private retryable(p: Pending, c: MomentContext) {
+  private retryable(p: Pending<Owner>, c: MomentContext<Owner>) {
     if (p.members.some((a) => !this.available(a, c))) return false;
     const a = p.members[0]!;
-    if (p.kind === 'look') return distance(a, p.anchor!) / c.perMeter <= 15;
-    if (p.kind === 'greet' && a.hx * p.members[1]!.hx + a.hy * p.members[1]!.hy >= -0.5)
+    if (p.kind === 'look') return distance(a, p.anchor!) / c.perMeter <= MOMENTS.look.reach;
+    if (
+      p.kind === 'greet' &&
+      a.hx * p.members[1]!.hx + a.hy * p.members[1]!.hy >= MOMENTS.greet.opposition
+    )
       return false;
     if (
       p.kind !== 'greet' &&
@@ -300,16 +338,16 @@ export class Moments {
         const separation = distance(b, d) / c.perMeter;
         return (
           separation >= c.clearance(b) + c.clearance(d) &&
-          separation <= this.reach(b, d, p.kind === 'greet' ? 3 : p.kind === 'talk' ? 8 : 10, c) &&
-          (p.kind !== 'ball' || separation >= 4)
+          separation <= this.reach(b, d, MOMENTS[p.kind].reach, c) &&
+          (p.kind !== 'ball' || separation >= MOMENTS.ball.minimum)
         );
       }),
     );
   }
-  private scan(c: MomentContext) {
+  private scan(c: MomentContext<Owner>) {
     const actors = c.actors();
     const present = new Set(actors.map((a) => a.owner));
-    const alive = (a: MomentActor) => (c.alive ? c.alive(a) : present.has(a.owner));
+    const alive = (a: MomentActor<Owner>) => (c.alive ? c.alive(a) : present.has(a.owner));
     for (const a of actors) {
       if (!this.ids.has(a.owner)) this.ids.set(a.owner, this.ids.size);
       const episode = this.episodes.get(a.owner);
@@ -343,7 +381,7 @@ export class Moments {
       this.attempt(key, p, c);
     }
     const width = MOMENTS.binMeters * c.perMeter;
-    const bins = new Map<string, MomentActor[]>();
+    const bins = new Map<string, MomentActor<Owner>[]>();
     const key = (x: number, y: number) => `${x},${y}`;
     for (const a of actors) {
       const k = key(Math.floor(a.x / width), Math.floor(a.y / width));
@@ -360,10 +398,10 @@ export class Moments {
     const children = new Map<number, number>();
     for (const a of lists[2]!)
       if (a.figure === 'child') children.set(a.source!, (children.get(a.source!) ?? 0) + 1);
-    const neighbor = (a: MomentActor, k: number) => {
+    const neighbor = (a: MomentActor<Owner>, k: number) => {
       const bx = Math.floor(a.x / width),
         by = Math.floor(a.y / width);
-      const local: MomentActor[][] = [];
+      const local: MomentActor<Owner>[][] = [];
       let total = 0;
       for (let y = by - 1; y <= by + 1; y++)
         for (let x = bx - 1; x <= bx + 1; x++) {
@@ -399,10 +437,10 @@ export class Moments {
         if (!c.anchors.length) continue;
         const anchor = c.anchors[this.neighbors[k]!++ % c.anchors.length]!;
         const d = distance(a, anchor) / c.perMeter;
-        if (d <= 0 || d > 15 || !this.available(a, c)) continue;
+        if (d <= 0 || d > MOMENTS.look.reach || !this.available(a, c)) continue;
         const approach = `look:${this.ids.get(a.owner)}:${anchor.source}`;
         if (this.approaches.has(approach)) continue;
-        this.approaches.set(approach, { a, b: anchor, radius: 20 });
+        this.approaches.set(approach, { a, b: anchor, radius: MOMENTS.look.rearm });
         if (this.rng() < MOMENTS.look.chance)
           this.attempt(approach, { kind, members: [a], anchor, next: this.time }, c);
         continue;
@@ -412,13 +450,21 @@ export class Moments {
       const d = distance(a, b) / c.perMeter;
       if (d <= 0 || d < c.clearance(a) + c.clearance(b)) continue;
       if (kind === 'greet') {
-        if (b.type !== 'walker' || d > this.reach(a, b, 3, c) || a.hx * b.hx + a.hy * b.hy >= -0.5)
+        if (
+          b.type !== 'walker' ||
+          d > this.reach(a, b, MOMENTS.greet.reach, c) ||
+          a.hx * b.hx + a.hy * b.hy >= MOMENTS.greet.opposition
+        )
           continue;
         const ids = [this.ids.get(a.owner)!, this.ids.get(b.owner)!].sort((a, b) => a - b);
         const approach = `greet:${ids.join(':')}`;
         if (this.approaches.has(approach)) continue;
         if (!this.available(a, c) || !this.available(b, c)) continue;
-        this.approaches.set(approach, { a, b, radius: this.reach(a, b, 3, c) + 1 });
+        this.approaches.set(approach, {
+          a,
+          b,
+          radius: this.reach(a, b, MOMENTS.greet.reach, c) + MOMENTS.greet.rearm,
+        });
         if (this.rng() < MOMENTS.greet.chance)
           this.attempt(approach, { kind, members: [a, b], next: this.time }, c);
       } else {
@@ -433,7 +479,8 @@ export class Moments {
           continue;
         const episode = this.episodes.get(a.owner)!;
         if (kind === 'talk') {
-          if (!social.has(a.place!) || d > this.reach(a, b, 8, c) || episode.talk) continue;
+          if (!social.has(a.place!) || d > this.reach(a, b, MOMENTS.talk.reach, c) || episode.talk)
+            continue;
           if (!this.available(a, c) || !this.available(b, c)) continue;
           episode.talk = true;
           if (this.rng() >= MOMENTS.talk.chance) continue;
@@ -455,7 +502,7 @@ export class Moments {
                 members.every(
                   (p) =>
                     distance(p, third) / c.perMeter >= c.clearance(p) + c.clearance(third) &&
-                    distance(p, third) / c.perMeter <= this.reach(p, third, 8, c),
+                    distance(p, third) / c.perMeter <= this.reach(p, third, MOMENTS.talk.reach, c),
                 )
               )
                 members.push(third);
@@ -465,8 +512,8 @@ export class Moments {
         } else {
           const childOnly = a.place === 'school' || (children.get(a.source!) ?? 0) >= 2;
           if (
-            d < 4 ||
-            d > this.reach(a, b, 10, c) ||
+            d < MOMENTS.ball.minimum ||
+            d > this.reach(a, b, MOMENTS.ball.reach, c) ||
             episode.ball ||
             (childOnly && (a.figure !== 'child' || b.figure !== 'child')) ||
             this.active.filter((m) => m.kind === 'ball').length >= MOMENTS.balls
@@ -487,15 +534,15 @@ export class Moments {
   }
   private start(
     kind: MomentKind,
-    members: MomentActor[],
+    members: MomentActor<Owner>[],
     anchor: MomentAnchor | undefined,
-    c: MomentContext,
+    c: MomentContext<Owner>,
   ) {
     const center = anchor ?? {
       x: members.reduce((sum, a) => sum + a.x, 0) / members.length,
       y: members.reduce((sum, a) => sum + a.y, 0) / members.length,
     };
-    const admitted: MomentActor[] = [];
+    const admitted: MomentActor<Owner>[] = [];
     for (const a of members) {
       const d = distance(a, center);
       if (d <= 1e-9 || !c.face(a, (center.x - a.x) / d, (center.y - a.y) / d)) {
@@ -504,7 +551,7 @@ export class Moments {
       }
       admitted.push(a);
     }
-    const m: Moment = {
+    const m: Moment<Owner> = {
       id: ++this.serial,
       dialogue: this.choose(kind, c.minutes ?? 720),
       speechHolder: 0,
@@ -523,13 +570,14 @@ export class Moments {
       phaseEnd: this.time,
     };
     if (m.dialogue && kind !== 'ball') m.speechStart = m.start;
-    if (m.dialogue && kind === 'greet') m.end = m.start + 5;
+    if (m.dialogue && kind === 'greet')
+      m.end = m.start + MOMENTS.greet.speechTurn * m.dialogue.turns;
     if (kind === 'talk') {
       const turn = between(this.rng, MOMENTS.talk.turn);
-      m.turnEnd += m.dialogue ? 3 : turn;
+      m.turnEnd += m.dialogue ? MOMENTS.talk.speechTurn : turn;
     }
     if (kind === 'ball') m.phaseEnd += between(this.rng, MOMENTS.ball.hold);
-    if (kind === 'look') m.point = this.rng() < 0.5;
+    if (kind === 'look') m.point = this.rng() < MOMENTS.look.point;
     this.active.push(m);
     for (const a of members) this.membership.set(a.owner, m);
     this.stats.started[kind]++;

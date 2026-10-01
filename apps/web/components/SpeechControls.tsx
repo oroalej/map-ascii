@@ -1,6 +1,6 @@
 'use client';
 
-import type { DialogueCatalog } from '@atlas/shared';
+import { SPEECH_ZOOM, type DialogueCatalog } from '@atlas/shared';
 import { useSyncExternalStore } from 'react';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { useLifeStore } from '@/state/life';
@@ -18,8 +18,8 @@ export function SpeechControls({ catalog }: { catalog: DialogueCatalog }) {
     ? 'Speech pauses while reduced motion is on.'
     : !life
       ? 'Turn Life on to see speech.'
-      : zoom < 18
-        ? 'Zoom to z18 or closer to see speech.'
+      : zoom < SPEECH_ZOOM
+        ? `Zoom to z${SPEECH_ZOOM} or closer to see speech.`
         : null;
   return (
     <>
@@ -28,10 +28,10 @@ export function SpeechControls({ catalog }: { catalog: DialogueCatalog }) {
           type="button"
           className={`${styles.button} ${styles.toggle}`}
           aria-pressed={enabled}
-          title="Speech bubbles for simulated greetings and conversations at z18 and closer"
+          title={`Speech bubbles for simulated greetings and conversations at z${SPEECH_ZOOM} and closer`}
           onClick={() => useSpeechStore.setState({ enabled: !enabled })}
         >
-          Speech
+          Speech (simulated)
         </button>
         <select
           className={styles.button}

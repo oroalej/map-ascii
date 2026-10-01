@@ -1,3 +1,4 @@
+import { MOMENTS } from './life/moments';
 import {
   bandVisibility,
   CLASS_ZOOM,
@@ -714,7 +715,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
   const processions = options.processions ?? [];
-  const moments = { dialogue: options.dialogue && dialogueChoices(options.dialogue) };
+  const moments = {
+    dialogue: options.dialogue && dialogueChoices(options.dialogue),
+    periods: options.dialogue?.periods,
+  };
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
       ? createWorkerHost({ ...options, moments }, processions, profiler)
@@ -809,7 +813,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeAgents = agents;
       return;
     }
-    if (options.dialogue && speechEnabled && speechOwners.length !== targets.cols * targets.rows)
+    const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
+    if (trackSpeech && speechOwners.length !== targets.cols * targets.rows)
       speechOwners = new Uint32Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
       gl,
@@ -822,7 +827,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       knobs.shadows ? sun : null,
       profiler,
       host.latest()?.cellGuard(placement.toCell),
-      options.dialogue && speechEnabled ? speechOwners : undefined,
+      trackSpeech ? speechOwners : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -833,8 +838,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !options.dialogue ||
       !lifeActive() ||
       !watch.watched() ||
-      currentRain() >= 0.5 ||
-      camera.zoom < 18 ||
+      currentRain() >= MOMENTS.rain ||
+      camera.zoom < MOMENTS.zoom ||
       !targets ||
       !placement ||
       !lifeAgents.length ||
@@ -1213,7 +1218,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (destroyed || lost) return;
     profiler?.begin(now);
     raf = requestAnimationFrame(frame);
-    readback.poll();
     gpuTimer.poll();
     if (previousDraw && watch.watched()) {
       quality.sample({
@@ -1353,7 +1357,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       generation: targetsGeneration,
     });
     readClasses(now);
-    reportSpeech(now);
+    // Deliver reads after drawing and issuing prioritized picks/class queries so a slow
+    // frame cannot consume freshly confirmed speech before it is published.
+    readback.poll();
+    reportSpeech(performance.now());
     profiler?.end();
   };
   raf = requestAnimationFrame(frame);

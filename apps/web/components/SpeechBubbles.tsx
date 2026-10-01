@@ -26,7 +26,7 @@ export function SpeechBubbles({ catalog }: { catalog: DialogueCatalog }) {
       lastMeasure = -Infinity;
     const draw = () => {
       const { enabled, translation } = useSpeechStore.getState();
-      const selected = enabled ? cues.slice(0, window.innerWidth <= 640 ? 2 : 3) : [];
+      const selected = enabled ? cues : [];
       const keep = new Set(selected.map((cue) => cue.id));
       for (const [id, entry] of nodes)
         if (!keep.has(id)) {

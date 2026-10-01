@@ -42,6 +42,7 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
+import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
   utilityViewportVisibility,
@@ -736,7 +737,7 @@ export function glyphPass(
     u_crownSun:
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),
-    u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
+    u_vehicleOccluders: LIFE_OCCLUDERS,
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),

@@ -1,10 +1,13 @@
 import type { CellTargets } from '../gpu';
-import { SUB } from '../glyphs/select';
+import { SUB, unpackGlyph } from '../glyphs/select';
 import type { GridPlacement } from '../picking';
-import { MAX_PENDING_READS, type Readback } from '../readback';
+import type { Readback } from '../readback';
 import type { VisibleAgent } from './simulate';
 import type { SpeechCue } from './moments';
 import { lifeVisibleOnSurface } from './surface-visibility';
+
+const CONFIRMATION_MS = 1000;
+const RECHECK_MS = 120;
 
 export type SpeechInView = SpeechCue & { point: [number, number] };
 export type SpeechFrame = {
@@ -33,6 +36,7 @@ export class SpeechController {
   private frame: SpeechFrame | null = null;
   private serial = 0;
   private cursor = 0;
+  private spareCursor = 0;
   private pending: { serial: number; key: string; at: number } | undefined;
   private confirmed = new Map<string, { visible: boolean; at: number }>();
   private output = '';
@@ -102,7 +106,7 @@ export class SpeechController {
         cue: { ...agent.speech, point },
         col,
         row,
-        cls: frame.life[at + 1]! & 63,
+        cls: unpackGlyph(frame.life[at]!, frame.life[at + 1]!).cls,
         flags: frame.life[at + 2]!,
       });
     }
@@ -123,27 +127,34 @@ export class SpeechController {
     const candidates = this.candidates(frame),
       keys = new Set(candidates.map((entry) => entry.key));
     for (const key of this.confirmed.keys()) if (!keys.has(key)) this.confirmed.delete(key);
-    if (this.pending && (now - this.pending.at >= 1000 || !keys.has(this.pending.key))) {
+    if (this.pending && (now - this.pending.at >= CONFIRMATION_MS || !keys.has(this.pending.key))) {
       this.serial++;
       this.pending = undefined;
     }
-    this.publish(
-      candidates
-        .filter((entry) => {
-          const result = this.confirmed.get(entry.key);
-          return result?.visible && now - result.at < 250;
-        })
-        .slice(0, frame.size.width <= 640 ? 2 : 3)
-        .map((entry) => entry.cue),
-    );
-    if (this.pending || !candidates.length || this.readback.size > MAX_PENDING_READS - 3) return;
-    const due = candidates.filter(
-      (entry) => !this.confirmed.has(entry.key) || now - this.confirmed.get(entry.key)!.at >= 120,
-    );
-    if (!due.length) return;
-    const candidate = due[this.cursor++ % due.length]!;
+    const limit = frame.size.width <= 640 ? 2 : 3;
+    const displayed = candidates
+      .filter((entry) => {
+        const result = this.confirmed.get(entry.key);
+        return result?.visible && now - result.at < CONFIRMATION_MS;
+      })
+      .slice(0, limit);
+    this.publish(displayed.map((entry) => entry.cue));
+    // Leave headroom for picks arriving while this three-read batch is in flight.
+    if (this.pending || !candidates.length || this.readback.size > 1) return;
+    const due = (entry: Candidate) => {
+      const result = this.confirmed.get(entry.key);
+      return !result || now - result.at >= RECHECK_MS;
+    };
+    const spares = candidates.filter((entry) => !displayed.includes(entry) && due(entry));
+    const spare = spares.length ? spares[this.spareCursor % spares.length] : undefined;
+    const scheduled = [...displayed.filter(due), ...(spare ? [spare] : [])];
+    if (!scheduled.length) return;
+    const candidate = scheduled[this.cursor++ % scheduled.length]!;
+    if (candidate === spare) this.spareCursor++;
     const serial = ++this.serial;
-    this.pending = { serial, key: candidate.key, at: now };
+    // A slow frame can spend most of the watchdog interval drawing before this request.
+    // Start its timeout when the GPU batch is issued, rather than at the RAF timestamp.
+    this.pending = { serial, key: candidate.key, at: Math.max(now, this.clock()) };
     const bytes: (Uint8Array | undefined)[] = [];
     const done = (index: number) => (data: Uint8Array) => {
       if (this.pending?.serial !== serial) return;
@@ -157,7 +168,7 @@ export class SpeechController {
         visible: lifeVisibleOnSurface(
           candidate.cls,
           candidate.flags,
-          bytes[0][1]! & 63,
+          unpackGlyph(bytes[0][0]!, bytes[0][1]!).cls,
           bytes[1][0]!,
           bytes[2][0]!,
         ),

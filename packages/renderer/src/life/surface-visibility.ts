@@ -4,7 +4,8 @@ import { LIFE_AGENT_MASK } from './turn-signals';
 
 const permissions = cellBits();
 const trunk = classId('tree');
-const occluders = new Set([trunk, classId('tree_crown'), classId('trees')]);
+export const LIFE_OCCLUDERS = [trunk, classId('tree_crown'), classId('trees')] as const;
+const occluders = new Set<number>(LIFE_OCCLUDERS);
 
 /** Same surface/subcell predicate as glyph.ts and the completed Life-hover implementation. */
 export function lifeVisibleOnSurface(

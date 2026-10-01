@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type * as MomentsModule from './moments';
 import { LifeWorld } from './simulate';
 import { makeScenario } from './testing/scenarios';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
@@ -9,8 +10,21 @@ import { LifeBuilder } from './geometry';
 import { activityLevels } from './config';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
+vi.mock('./moments', async (load) => {
+  const actual = await load<typeof MomentsModule>();
+  return {
+    ...actual,
+    Moments: class extends actual.Moments {
+      constructor(...args: ConstructorParameters<typeof actual.Moments>) {
+        args[2] = () => 0;
+        super(...args);
+      }
+    },
+  };
+});
+
 describe('life worker protocol', () => {
-  it('transfers real speech cues with exact inline parity through eviction and reload', () => {
+  it('transfers speech, poses and balls with exact inline parity through weather, eviction and reload', () => {
     const tile = { z: 16, x: 55192, y: 30266 };
     const geometry = new LifeBuilder();
     geometry.place({ x: 2000, y: 2000 }, 'monument', 2 / metersPerUnit(tile));
@@ -29,13 +43,15 @@ describe('life worker protocol', () => {
     const api = createLifeWorkerApi();
     api.init({ processions: [], dialogue });
     api.sync(structuredClone(tiles));
-    let spoken = 0;
-    for (let frame = 0; frame < 600; frame++) {
-      if (frame === 120) {
+    let spoken = 0,
+      posed = false,
+      ball = false;
+    for (let frame = 0; frame < 120; frame++) {
+      if (frame === 80) {
         direct.sync([]);
         api.sync([]);
       }
-      if (frame === 121) {
+      if (frame === 81) {
         direct.sync(tiles);
         api.sync(structuredClone(tiles));
       }
@@ -52,7 +68,7 @@ describe('life worker protocol', () => {
           zoom: 21,
           bounds: undefined,
           wind: undefined,
-          weather: { rain: 0, minutes: 720 },
+          weather: { rain: frame >= 40 && frame < 50 ? 1 : 0, minutes: 720 },
           cellMeters: 0.2,
         },
         visible: [21, activityLevels(1), center],
@@ -61,9 +77,15 @@ describe('life worker protocol', () => {
         remote = api.frame(input);
       expect(remote.agents).toEqual(inline.agents);
       spoken += remote.agents.filter((agent) => agent.speech).length;
+      posed ||= remote.agents.some((agent) => agent.people?.some((person) => person.pose));
+      ball ||= remote.agents.some((agent) => agent.prop === 'ball');
+      if (frame === 40 || frame === 80)
+        expect(remote.agents.some((agent) => agent.speech || agent.prop)).toBe(false);
       expect(structuredClone(remote.agents)).toEqual(remote.agents);
     }
     expect(spoken).toBeGreaterThan(0);
+    expect(posed).toBe(true);
+    expect(ball).toBe(true);
   });
   it('matches a direct world over 120 frames, weather changes, eviction and reload', () => {
     const scenario = makeScenario('rain', 2, false);

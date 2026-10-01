@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { DialogueChoice } from '@atlas/shared';
+import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { Moments, MOMENTS, type MomentActor, type MomentContext, type MomentKind } from './moments';
 
 function fixture(
   kind: MomentKind,
   rng: () => number = () => 0,
   dialogue: readonly DialogueChoice[] = [],
+  periods?: GreetingPeriods,
 ) {
   const a: MomentActor = {
     owner: {},
@@ -40,7 +41,7 @@ function fixture(
       facing.delete(actor.owner);
     },
   };
-  return { a, b, actors, c, facing, releases, m: new Moments(42, true, rng, dialogue) };
+  return { a, b, actors, c, facing, releases, m: new Moments(42, true, rng, dialogue, periods) };
 }
 const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
   for (let i = 0; i < 20 && !f.m.stats.started[kind]; i++) f.m.step(0.1, f.c);
@@ -48,6 +49,20 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  it('selects speech using the catalog greeting schedule', () => {
+    const dialogue: DialogueChoice[] = [
+      { id: 'morning', kind: 'greet', period: 'morning', turns: 2 },
+      { id: 'afternoon', kind: 'greet', period: 'afternoon', turns: 2 },
+    ];
+    const f = fixture('greet', () => 0, dialogue, {
+      morningStart: 360,
+      afternoonStart: 780,
+      eveningStart: 1140,
+    });
+    f.c.minutes = 720;
+    start(f, 'greet');
+    expect(f.m.speech(f.a.owner)?.exchangeId).toBe('morning');
+  });
   it('accommodates pair and third-member clearance without relaxing minimum separation', () => {
     for (const kind of ['greet', 'talk', 'ball'] as const) {
       const f = fixture(kind);

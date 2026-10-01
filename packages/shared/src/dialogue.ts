@@ -3,6 +3,17 @@ import { LanguageCode, localizedText, Source } from './schemas';
 
 export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look']);
 export const GreetingPeriod = z.enum(['morning', 'afternoon', 'evening']);
+export const GreetingPeriods = z
+  .object({
+    morningStart: z.number().int().min(0).max(1439),
+    afternoonStart: z.number().int().min(0).max(1439),
+    eveningStart: z.number().int().min(0).max(1439),
+  })
+  .strict()
+  .refine((p) => p.morningStart < p.afternoonStart && p.afternoonStart < p.eveningStart, {
+    message: 'greeting period starts must be ordered',
+  });
+export type GreetingPeriods = z.infer<typeof GreetingPeriods>;
 const language = z.object({ code: LanguageCode, label: z.string().min(1).max(32) }).strict();
 
 /** Curated simulated speech. Missing catalogs are supported; incomplete translations are not. */
@@ -10,6 +21,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
   return z
     .object({
       native: language,
+      periods: GreetingPeriods.optional(),
       translations: z.array(language).max(6),
       exchanges: z
         .array(

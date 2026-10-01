@@ -65,6 +65,66 @@ function fixture() {
   return { frame, queue, events, readback, controller, finish, clock };
 }
 describe('speech visibility', () => {
+  it.each([
+    [800, 3, 50],
+    [500, 2, 100],
+    [800, 1, 800],
+  ])(
+    'keeps %s-wide confirmed speakers stable through %s-speaker GPU rechecks at %s ms',
+    (width, count, delay) => {
+      const f = fixture();
+      f.frame.size.width = width;
+      f.frame.owners.fill(0);
+      f.frame.agents = Array.from({ length: count === 1 ? 1 : count * 2 }, (_, i) => ({
+        kind: 'person',
+        lng: i + 1.5,
+        lat: 10.5,
+        flap: 0,
+        speech: { id: `speaker-${i}`, exchangeId: 'greet', line: 0 },
+      }));
+      f.frame.agents.forEach((_, i) => {
+        f.frame.owners[201 + i] = i + 1;
+        f.frame.life[(201 + i) * 4 + 1] = classId('life_person') | 192;
+        f.frame.life[(201 + i) * 4 + 2] = CellBit.person;
+      });
+      let sent = -1,
+        filled = false;
+      for (let now = 0; now <= 6000; now += 10) {
+        f.clock.now = now;
+        if (sent >= 0 && now - sent >= delay) {
+          f.finish();
+          sent = -1;
+        }
+        f.controller.update(f.frame, now);
+        if (f.queue.length && sent < 0) sent = now;
+        if (f.events.at(-1)?.length === count) filled = true;
+        if (filled) expect(f.events.at(-1)).toHaveLength(count);
+      }
+      expect(filled).toBe(true);
+    },
+  );
+  it('removes a confirmed speaker immediately after a negative recheck', () => {
+    const f = fixture();
+    f.controller.update(f.frame, 0);
+    f.finish();
+    f.controller.update(f.frame, 130);
+    expect(f.events.at(-1)).toHaveLength(1);
+    f.clock.now = 300;
+    f.finish('tree_crown');
+    f.controller.update(f.frame, 300);
+    expect(f.events.at(-1)).toEqual([]);
+  });
+  it('dates the pending watchdog from issuance after a slow drawing frame', () => {
+    const f = fixture();
+    f.clock.now = 900;
+    f.controller.update(f.frame, 0);
+    f.controller.update(f.frame, 1200);
+    expect(f.readback.request).toHaveBeenCalledTimes(3);
+    f.clock.now = 1300;
+    f.finish();
+    f.controller.update(f.frame, 1310);
+    expect(f.events.at(-1)).toHaveLength(1);
+  });
   it('uses completion freshness for slow GPU replies while retaining a bounded pending timeout', () => {
     const f = fixture();
     f.controller.update(f.frame, 0);
@@ -75,6 +135,8 @@ describe('speech visibility', () => {
     f.controller.update(f.frame, 510);
     expect(f.events.at(-1)).toHaveLength(1);
     f.controller.update(f.frame, 760);
+    expect(f.events.at(-1)).toHaveLength(1);
+    f.controller.update(f.frame, 1500);
     expect(f.events.at(-1)).toEqual([]);
     const late = f.queue.splice(0);
     f.controller.update(f.frame, 1761);
@@ -145,7 +207,7 @@ describe('speech visibility', () => {
       if (block === 'owner') f.frame.owners.fill(0);
       if (block === 'label') f.frame.labelsCover = () => true;
       if (block === 'edge') f.frame.size = { width: 50, height: 50 };
-      if (block === 'queue') f.readback.size = 6;
+      if (block === 'queue') f.readback.size = 2;
       f.controller.update(f.frame, 0);
       expect(f.readback.request).not.toHaveBeenCalled();
     }

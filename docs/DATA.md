@@ -360,6 +360,9 @@ Adding a city needs no renderer or web app changes. If it seems to, the engine h
 
 ### Optional ambient dialogue
 
+Catalogs may override greeting periods with `periods: { morningStart, afternoonStart, eveningStart }`, using city-local integer minutes from 0 through 1439 in strictly increasing order. Defaults are 300, 720 and 1080 (05:00, 12:00, 18:00). Each period starts inclusively; evening continues across midnight until morning. Omitted periods preserve the defaults.
+
+
 Add `packages/content/cities/<slug>/dialogue.json` to opt into human speech. `native` names the primary language (`code`, `label`); `translations` lists available secondary languages. `exchanges` contains unique IDs, a kind (`greet`, `talk`, `ball`, `look`), localized `lines`, and at least one `sources` record. Greetings require `period: morning | afternoon | evening`. Greetings and ball exchanges have two lines, conversations two or three, monument reactions one. Every line must contain the native language and every offered translation, use declared city languages (English is implicit), and stay within 96 characters without line breaks. All language labels and text belong to the pack.
 
 The content validator loads the optional catalog and fails on malformed or incomplete entries. Static page generation passes it directly to the app; dialogue changes need no tile regeneration or publishing. Cite linguistic references, and explain composed phrases in source notes. Ambient scripts describe illustrative encounters; they do not establish historical events or quote real residents.

@@ -3,25 +3,32 @@ import { inTile, PLACE_CODES, PLACE_STRIDE } from './geometry';
 import { Moments, type MomentActor, type MomentAnchor, type MomentContext } from './moments';
 import { FIGURE_SIZE_M, figureFit } from './people';
 import type { Gatherer, LifeEnv, Mover, TileLife } from './simulate';
-import type { DialogueChoice } from '@atlas/shared';
+import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 
-type Owner = (Mover | Gatherer) & { momentFacing?: { hx: number; hy: number } };
+type Owner = Mover | Gatherer;
 type Guard = (owner: Mover | Gatherer, before?: Mover | Gatherer) => boolean;
 export type MomentOptions = {
   enabled?: boolean;
   rng?: () => number;
   dialogue?: readonly DialogueChoice[];
+  periods?: Readonly<GreetingPeriods>;
 };
 export class MomentHost {
-  readonly moments: Moments;
-  private readonly actors = new Map<object, MomentActor>();
+  readonly moments: Moments<Owner>;
+  private readonly actors = new Map<Owner, MomentActor<Owner>>();
   private readonly anchors: MomentAnchor[] = [];
   constructor(
     private readonly tile: TileLife,
     seed: number,
     options: MomentOptions = {},
   ) {
-    this.moments = new Moments(seed, options.enabled ?? true, options.rng, options.dialogue);
+    this.moments = new Moments<Owner>(
+      seed,
+      options.enabled ?? true,
+      options.rng,
+      options.dialogue,
+      options.periods,
+    );
     const places = tile.geo.places;
     for (let i = 0; i < places.length; i += PLACE_STRIDE)
       if (
@@ -31,7 +38,7 @@ export class MomentHost {
         this.anchors.push({ x: places[i]!, y: places[i + 1]!, source: i / PLACE_STRIDE });
   }
   private refresh(near?: (x: number, y: number) => boolean) {
-    const out: MomentActor[] = [];
+    const out: MomentActor<Owner>[] = [];
     const update = (owner: Mover | Gatherer) => {
       if (near && !near(owner.x, owner.y)) return;
       const walker = 'kind' in owner ? owner.group?.[0] : owner.walker;
@@ -70,13 +77,13 @@ export class MomentHost {
     return out;
   }
   private source(owner: Gatherer): number | undefined {
-    return (owner as Gatherer & { source?: number }).source;
+    return owner.source;
   }
   clear() {
     this.moments.clear((actor) => {
-      delete (actor.owner as Owner).momentFacing;
+      delete actor.owner.momentFacing;
     });
-    for (const owner of this.actors.keys()) delete (owner as Owner).momentFacing;
+    for (const owner of this.actors.keys()) delete owner.momentFacing;
     this.actors.clear();
   }
   /** A pending release is retried by guarded movement, never an unguarded orientation snap. */
@@ -97,8 +104,8 @@ export class MomentHost {
     cellAspect: number,
   ) {
     const { tile } = this;
-    const eligible = (actor: MomentActor) => {
-      const owner = actor.owner as Owner;
+    const eligible = (actor: MomentActor<Owner>) => {
+      const owner = actor.owner;
       if (!inTile(owner) || (near && !near(owner.x, owner.y))) return false;
       if ('kind' in owner) {
         if (
@@ -115,17 +122,18 @@ export class MomentHost {
         return false;
       return tile.canIdle(owner);
     };
-    const c: MomentContext = {
+    let living: Set<Owner>;
+    const c: MomentContext<Owner> = {
       zoom,
       rain: env?.rain ?? 0,
       minutes: env?.minutes,
       perMeter: tile.perMeter,
       anchors: this.anchors,
-      actors: () => this.refresh(near),
-      alive: (actor) =>
-        'kind' in actor.owner
-          ? tile.movers.includes(actor.owner as Mover)
-          : tile.gatherers.includes(actor.owner as Gatherer),
+      actors: () => {
+        living = new Set<Owner>([...tile.movers, ...tile.gatherers]);
+        return this.refresh(near);
+      },
+      alive: (actor) => living.has(actor.owner),
       eligible,
       clearance: (actor) => {
         // Adults may have a canopy at any daylight setting: include it conservatively.
@@ -146,7 +154,7 @@ export class MomentHost {
         );
       },
       face: (actor, hx, hy) => {
-        const owner = actor.owner as Owner,
+        const owner = actor.owner,
           before = { ...owner };
         owner.momentFacing = { hx, hy };
         if (!tile.canIdle(owner) || (guard && !guard(owner, before))) {
@@ -156,7 +164,7 @@ export class MomentHost {
         }
         return true;
       },
-      release: (actor) => this.release(actor.owner as Owner, guard),
+      release: (actor) => this.release(actor.owner, guard),
     };
     this.moments.step(dt, c);
   }
@@ -171,7 +179,7 @@ export class MomentHost {
       return;
     const d = Math.hypot(owner.cx - owner.x, owner.cy - owner.y);
     if (d <= 1e-9) return;
-    const actor = owner as Owner,
+    const actor = owner,
       before = { ...actor };
     actor.momentFacing = { hx: (owner.cx - owner.x) / d, hy: (owner.cy - owner.y) / d };
     if (!this.tile.canIdle(actor) || (guard && !guard(actor, before))) {

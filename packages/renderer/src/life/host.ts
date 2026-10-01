@@ -101,6 +101,7 @@ export function createWorkerHost(
       processions,
       profiling: !!profiler,
       dialogue: options.moments?.dialogue,
+      periods: options.moments?.periods,
     })
     .then(() => {
       if (!disposed && !fallback) ready = true;

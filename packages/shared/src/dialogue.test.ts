@@ -23,6 +23,30 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
+  it('supports ordered city-local greeting boundaries and rejects malformed schedules', () => {
+    const periods = { morningStart: 360, afternoonStart: 780, eveningStart: 1140 };
+    expect(schema.parse({ ...catalog, periods }).periods).toEqual(periods);
+    for (const [minutes, expected] of [
+      [359, 'evening'],
+      [360, 'morning'],
+      [779, 'morning'],
+      [780, 'afternoon'],
+      [1139, 'afternoon'],
+      [1140, 'evening'],
+      [0, 'evening'],
+    ] as const)
+      expect(greetingPeriod(minutes, periods)).toBe(expected);
+    for (const changes of [
+      { morningStart: -1 },
+      { morningStart: 1.5 },
+      { afternoonStart: 360 },
+      { eveningStart: 1440 },
+      { extra: 1 },
+    ])
+      expect(schema.safeParse({ ...catalog, periods: { ...periods, ...changes } }).success).toBe(
+        false,
+      );
+  });
   it('validates complete translations and compiles only text-free worker choices', () => {
     const parsed = schema.parse(catalog);
     expect(dialogueChoices(parsed)).toEqual([

@@ -117,11 +117,12 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   act(() => listener!([]));
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(0);
 });
-it('bounds visible bubbles and removes old listeners/nodes when the renderer is replaced', () => {
+it('uses renderer-selected bubbles and removes old listeners/nodes when the renderer is replaced', () => {
   act(() =>
     listener!([1, 2, 3, 4].map((id) => ({ ...cue(), id: String(id), point: [id * 180, 300] }))),
   );
-  expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(3);
+  expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(4);
+  expect(container.textContent).toContain('Speech (simulated)');
   expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
   expect(container.querySelector('[aria-live]')).toBeNull();
   act(() => useAtlasInstance.setState({ atlas: null }));

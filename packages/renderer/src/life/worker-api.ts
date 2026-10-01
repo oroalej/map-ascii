@@ -1,6 +1,6 @@
 import * as Comlink from 'comlink';
 import type { CameraState, ProcessionRoute, TrafficMix } from '@atlas/shared';
-import type { DialogueChoice } from '@atlas/shared';
+import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
@@ -37,6 +37,7 @@ export type FrameResult = {
 };
 export type LifeInit = {
   dialogue?: readonly DialogueChoice[];
+  periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
   processions: readonly ProcessionRoute[];
   profiling?: boolean;
@@ -85,7 +86,10 @@ export function createLifeWorkerApi() {
   return {
     init(options: LifeInit) {
       profiler = options.profiling ? new FrameProfiler() : undefined;
-      world = new LifeWorld(options.traffic, profiler, { dialogue: options.dialogue });
+      world = new LifeWorld(options.traffic, profiler, {
+        dialogue: options.dialogue,
+        periods: options.periods,
+      });
       world.setProcessions(options.processions);
       geometries.clear();
       lastTerrain = undefined;
