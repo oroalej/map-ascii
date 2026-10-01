@@ -316,7 +316,7 @@ function makeTheme(background: number, c: Palette): Theme {
         color: c.trees,
         fill: background > 0x7fffff ? 0.86 : 0.72,
       },
-      // Mottled leaf clusters carry volume without sparse outline rings. Wind sways
+      // Overlapping raised leaf banks carry volume without sparse outline rings. Wind sways
       // the geometry and flutters the density by one step (glyphs/select.ts).
       tree_crown: {
         kind: 'foliage',

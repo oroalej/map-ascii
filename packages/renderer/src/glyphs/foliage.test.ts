@@ -25,7 +25,7 @@ const disc = Array.from(
   (_, i) => [(i % 41) / 20 - 1, Math.floor(i / 41) / 20 - 1] as const,
 ).filter(([x, y]) => x * x + y * y < 1);
 describe('leaf clumps', () => {
-  it('has deterministic multiscale relief with analytic normals and no quadrant bias', () => {
+  it('has deterministic raised leaf banks with analytic normals and no quadrant bias', () => {
     const means = [0, 0, 0, 0];
     const counts = [0, 0, 0, 0];
     for (let seed = 0; seed < 32; seed++) {
@@ -69,8 +69,13 @@ describe('leaf clumps', () => {
     const seams = noon
       .filter((_, i) => crownClumps(...disc[i]!, 42).crevice > 0.6)
       .map((c) => c.level);
-    expect(mean(tops) - mean(seams)).toBeGreaterThan(0.5);
-    expect(mean(seams)).toBeGreaterThan(1);
+    // Distinct upper banks and shaded joins must survive density selection, not flatten to mottling.
+    expect(mean(tops) - mean(seams)).toBeGreaterThan(2);
+    const topsLight = noon.filter((_, i) => crownClumps(...disc[i]!, 42).top > 0.8);
+    const seamsLight = noon.filter((_, i) => crownClumps(...disc[i]!, 42).crevice > 0.6);
+    expect(mean(topsLight.map((c) => c.light))).toBeGreaterThan(
+      mean(seamsLight.map((c) => c.light)) * 1.6,
+    );
     const range = (a: typeof noon) =>
       Math.max(...a.map((c) => c.light)) - Math.min(...a.map((c) => c.light));
     expect(range(night)).toBeLessThan(range(noon));
@@ -89,8 +94,10 @@ describe('leaf clumps', () => {
     expect(texture.filter((v, i) => v !== crownTexture(...disc[i]!, 73)).length).toBeGreaterThan(
       1000,
     );
-    expect(Math.min(...texture)).toBeLessThan(-0.12);
-    expect(Math.max(...texture)).toBeGreaterThan(0.12);
+    // Fine grain stays subordinate to the bank relief and its shadow joins.
+    expect(Math.min(...texture)).toBeLessThan(-0.04);
+    expect(Math.max(...texture)).toBeGreaterThan(0.04);
+    expect(Math.max(...texture) - Math.min(...texture)).toBeLessThan(0.15);
     const outer = disc.filter(([x, y]) => Math.hypot(x, y) > 0.75);
     const levels = outer.map(([x, y]) =>
       foliageVariant(0, 0, 0, 0, false, {
@@ -107,6 +114,20 @@ describe('leaf clumps', () => {
         foliageVariant(900, 800, 99, 0, false, ctx),
       );
     }
+  });
+  it('lights raised bank faces from the sun direction instead of outlining every layer equally', () => {
+    const faces = Array.from({ length: 8 }, (_, seed) =>
+      disc.map(([x, y]) => ({ x, y, c: crownClumps(x, y, seed) })),
+    )
+      .flat()
+      .filter(({ c }) => c.nx > 0.6 && c.top > 0.5 && c.crevice < 0.5);
+    expect(faces.length).toBeGreaterThan(40);
+    const differences = faces.map(({ x, y, c }) => {
+      const lit = crownShade(x, y, c, [Math.SQRT1_2, 0, Math.SQRT1_2]).light;
+      const away = crownShade(x, y, c, [-Math.SQRT1_2, 0, Math.SQRT1_2]).light;
+      return lit - away;
+    });
+    expect(differences.reduce((sum, v) => sum + v, 0) / differences.length).toBeGreaterThan(0.25);
   });
   it('uses unit sun vectors and a stable, relative tint per identity', () => {
     for (const altitude of [-10, 0, 1, 25, 60, 90])

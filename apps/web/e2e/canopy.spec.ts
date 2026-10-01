@@ -561,6 +561,44 @@ for (const theme of ['dark', 'light'] as const) {
           gl.bindTexture(gl.TEXTURE_2D, tex);
           gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
         };
+        // Edge light may come from the inward cell only when its identity matches the subsample.
+        const edgeWithoutCache = pixel(render(), cw + 4, 2 * ch + 4);
+        const edgeIds = read(live, 2),
+          alteredIds = edgeIds.slice();
+        const edgeBinding = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
+        // The sampled screen cell is (1,2). Quantized local (0,0) is positive, so inward is row 1.
+        const edgeNeighbor = (1 * cols + 1) * 4;
+        alteredIds.set([20, 0, 0, 0], edgeNeighbor);
+        upload(live.textures[2]!, cols, rows, alteredIds);
+        gl.bindTexture(gl.TEXTURE_2D, foliageLight);
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          1,
+          1,
+          1,
+          1,
+          gl.RED,
+          gl.UNSIGNED_BYTE,
+          new Uint8Array([255]),
+        );
+        const redrawEdge = () => {
+          gl.bindTexture(gl.TEXTURE_2D, edgeBinding);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.useProgram(glyph);
+          gl.bindVertexArray(emptyVao);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          const bytes = new Uint8Array(canvas.width * canvas.height * 4);
+          gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+          return pixel(bytes, cw + 4, 2 * ch + 4);
+        };
+        const matchingEdgeLight = redrawEdge();
+        alteredIds.set([21, 0, 0, 0], edgeNeighbor);
+        upload(live.textures[2]!, cols, rows, alteredIds);
+        const foreignEdgeLight = redrawEdge();
+        upload(live.textures[2]!, cols, rows, edgeIds);
+        render();
         const setAgent = (cls: number, bit: number, byte: number) => {
           life.fill(0);
           for (let x = 0; x < 6; x++)
@@ -808,6 +846,9 @@ void main() {
           orderIndependent,
           ...saved,
           leafColors,
+          edgeWithoutCache,
+          matchingEdgeLight,
+          foreignEdgeLight,
           falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
           lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
           roadJoinGlyph,
@@ -928,11 +969,13 @@ void main() {
       expect(p[1]).toBeLessThan(10);
     }
     for (const p of [result.edgeCovered, result.coveredCar]) {
-      // Relief/edge blending can dim the leaf; its synthetic green must still hide vehicle red.
-      expect(p[1]).toBeGreaterThan(80);
+      // Shaded banks and edge blending can dim leaves; green must still hide vehicle red.
+      expect(p[1]).toBeGreaterThan(20);
       expect(p[0]).toBeLessThan(10);
       expect(p[2]).toBeLessThan(10);
     }
+    expect(result.matchingEdgeLight[1]).toBeGreaterThan(result.foreignEdgeLight[1]! + 20);
+    expect(result.foreignEdgeLight).toEqual(result.edgeWithoutCache);
     const paint = themes[theme].styles.tree_crown!.color;
     const redOverGreen = ((paint >> 16) & 255) / ((paint >> 8) & 255);
     const blueOverGreen = (paint & 255) / ((paint >> 8) & 255);

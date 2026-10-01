@@ -41,7 +41,7 @@ import {
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
-import { foliageGlsl } from './foliage';
+import { foliageColorGlsl } from './foliage';
 import { foliageInkGlsl } from './foliage-ink';
 import { waterEffectGlsl } from '../life/water';
 
@@ -122,7 +122,7 @@ uniform float u_moon;
 out vec4 o_color;
 
 ${cellHashGlsl}
-${foliageGlsl}
+${foliageColorGlsl}
 ${foliageInkGlsl}
 ${waterEffectGlsl}
 
@@ -570,10 +570,20 @@ void main() {
     vec4 sampleId = edge ? texelFetch(u_subId, subAt, 0) : texelFetch(u_id, cell, 0);
     uvec4 bytes = uvec4(sampleId*255.0+0.5);
     uint seed = bytes.r | (bytes.g<<8u) | (bytes.b<<16u) | (bytes.a<<24u);
-    vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb*2.0-1.0;
-    // Covered edge subsamples retain their own identity/surface; interiors reuse cell lighting.
-    float leafLight = cachedLight > 0.0 ? filteredLight
-      : crownShade(local, crownClumps(local, seed)) + crownTexture(local, seed);
+    float leafLight = filteredLight;
+    if (cachedLight == 0.0) {
+      vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb*2.0-1.0;
+      leafLight = crownEdgeLight(local);
+      if (edge) {
+        // Continue the same bank to its covered edge, without evaluating all banks per pixel.
+        // An adjacent crown's cached light cannot substitute for this subsample's identity.
+        ivec2 inward = abs(local.x) > abs(local.y)
+          ? ivec2(int(sign(local.x)),0) : ivec2(0,int(sign(local.y)));
+        ivec2 neighbor = clamp(cell-inward,ivec2(0),textureSize(u_id,0)-1);
+        float nearby = texelFetch(u_foliageLight,neighbor,0).r;
+        if (nearby > 0.0 && texelFetch(u_id,neighbor,0) == sampleId) leafLight = nearby * 1.5;
+      }
+    }
     // Keep leaf variation in the theme palette; the grass's dry straw tint is too yellow here.
     vec3 pigment = crownTint(seed);
     if (tone == ${Tone.dry}) pigment *= vec3(1.06,1.02,0.94);

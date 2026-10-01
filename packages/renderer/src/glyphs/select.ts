@@ -868,20 +868,48 @@ function flutters(h: number, gust: number, time: number): boolean {
 /** Where the sun is when there is none (night): to the northwest, a unit vector (x east, y south). */
 export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 
-/** Shared crown-local clumps, used by individual crowns and the woods lattice. */
-export const CLUMPS = { coarse: 2.8, fine: 7.3, relief: 0.65 } as const;
+/** Overlapping branch banks: center and long axis before the identity-seeded rotation. */
+export const CROWN_BANKS = [
+  [-0.55, -0.3, 0.8, 0.6],
+  [-0.13, -0.58, 0.6, -0.8],
+  [0.45, -0.46, 0.8, 0.6],
+  [0.6, 0.07, 0.6, 0.8],
+  [0.25, 0.53, 0.8, -0.6],
+  [-0.29, 0.6, 0.6, 0.8],
+  [-0.6, 0.23, 0.8, -0.6],
+  [-0.1, 0.05, 0.8, 0.6],
+  [0.23, -0.05, 0.6, -0.8],
+] as const;
+/** Shared raised leaf surfaces, used by individual crowns and the woods lattice. */
+export const CLUMPS = {
+  coarse: 2.8,
+  relief: 0.65,
+  jitter: 0.12,
+  radius: 0.4,
+  radiusSpread: 0.18,
+  shoulder: 0.24,
+  cap: 0.4,
+  tier: 0.22,
+  tierSpread: 0.32,
+  innerLift: 0.05,
+  edgeScale: 6.5,
+  edgeWarp: 0.3,
+  crease: 0.09,
+  grain: 0.1,
+} as const;
 export const CROWN = { dryEvery: 12 } as const;
-export const CROWN_RAMP = [0.53, 0.65, 0.77, 0.94, 1.13] as const;
+export const CROWN_RAMP = [0.4, 0.56, 0.73, 0.95, 1.16] as const;
 export const CROWN_LIGHT = {
   tilt: 0.6,
   minZ: 0.08,
-  base: 0.66,
-  domeGain: 0.16,
-  clumpGain: 0.36,
-  creaseAO: 0.18,
-  rimAO: 0.12,
-  min: 0.52,
-  max: 1.25,
+  base: 0.58,
+  domeGain: 0.12,
+  clumpGain: 0.55,
+  heightGain: 0.8,
+  creaseAO: 0.5,
+  rimAO: 0.04,
+  min: 0.2,
+  max: 1.3,
   nightFlat: 0.35,
 } as const;
 export const CROWN_TINTS = [
@@ -929,22 +957,59 @@ function crownNoiseGradient(x: number, y: number, seed: number): readonly [numbe
   ];
 }
 
-/** Overlapping scales of leaf relief, with rotated fine branches to avoid square/ring patterns. */
+/** Raised elliptical leaf banks overlap lower foliage; their joins retain shaded depth. */
 export function crownClumps(x: number, y: number, seed: number): CrownClumps {
-  const a = crownNoiseGradient(x * CLUMPS.coarse, y * CLUMPS.coarse, seed);
-  const b = crownNoiseGradient(
-    (0.8 * x - 0.6 * y) * CLUMPS.fine + 17,
-    (0.6 * x + 0.8 * y) * CLUMPS.fine - 9,
-    seed,
-  );
-  const height = a[0] * 0.65 + b[0] * 0.35;
-  const dx = a[1] * CLUMPS.coarse * 0.65 + (0.8 * b[1] + 0.6 * b[2]) * CLUMPS.fine * 0.35;
-  const dy = a[2] * CLUMPS.coarse * 0.65 + (-0.6 * b[1] + 0.8 * b[2]) * CLUMPS.fine * 0.35;
+  const rotation = cellHash(seed, 37);
+  const rx = hashByte(rotation, 0) * 2 - 1,
+    ry = hashByte(rotation, 8) * 2 - 1,
+    norm = Math.hypot(rx, ry),
+    cs = rx / norm,
+    sn = ry / norm;
+  const px = cs * x + sn * y,
+    py = -sn * x + cs * y;
+  const ground = crownNoiseGradient(px * CLUMPS.coarse, py * CLUMPS.coarse, seed);
+  const edge = crownNoiseGradient(px * CLUMPS.edgeScale + 17, py * CLUMPS.edgeScale - 9, seed);
+  const shape = 1 - (edge[0] - 0.5) * CLUMPS.edgeWarp;
+  let height = 0.3 + ground[0] * 0.16,
+    second = height,
+    dx = ground[1] * CLUMPS.coarse * 0.16,
+    dy = ground[2] * CLUMPS.coarse * 0.16;
+  for (const [i, [cx, cy, ux, uy]] of CROWN_BANKS.entries()) {
+    const h = cellHash(seed, i + 71);
+    // Lower branch banks can be hidden by the crown's other branches; avoid a fixed rosette.
+    if (i < 7 && ((h >>> 24) & 7) === 0) continue;
+    const bx = px - cx - (hashByte(h, 0) * 2 - 1) * CLUMPS.jitter,
+      by = py - cy - (hashByte(h, 8) * 2 - 1) * CLUMPS.jitter;
+    const width = CLUMPS.radius + hashByte(h, 16) * CLUMPS.radiusSpread,
+      depth = width * (0.45 + hashByte(h, 24) * 0.8);
+    const qx = (bx * ux + by * uy) / width,
+      qy = (-bx * uy + by * ux) / depth,
+      radius2 = qx * qx + qy * qy,
+      v = 1 - radius2 * shape;
+    if (v <= 0) continue;
+    const tier =
+      CLUMPS.tier + hashByte(h, 24) * CLUMPS.tierSpread + (i >= 7 ? CLUMPS.innerLift : 0);
+    const bank = tier * smoothstep(0, CLUMPS.shoulder, v) + CLUMPS.cap * v;
+    if (bank > height) {
+      second = height;
+      height = bank;
+      const t = Math.min(1, v / CLUMPS.shoulder);
+      const slope = CLUMPS.cap + (tier * 6 * t * (1 - t)) / CLUMPS.shoulder;
+      dx =
+        slope *
+        (-2 * shape * ((qx * ux) / width - (qy * uy) / depth) +
+          radius2 * edge[1] * CLUMPS.edgeScale * CLUMPS.edgeWarp);
+      dy =
+        slope *
+        (-2 * shape * ((qx * uy) / width + (qy * ux) / depth) +
+          radius2 * edge[2] * CLUMPS.edgeScale * CLUMPS.edgeWarp);
+    } else second = Math.max(second, bank);
+  }
   return {
     top: height,
-    crevice: 1 - smoothstep(0.2, 0.65, height),
-    nx: -dx * CLUMPS.relief,
-    ny: -dy * CLUMPS.relief,
+    crevice: 1 - smoothstep(0.015, CLUMPS.crease, height - second),
+    nx: -(cs * dx - sn * dy) * CLUMPS.relief,
+    ny: -(sn * dx + cs * dy) * CLUMPS.relief,
   };
 }
 
@@ -956,7 +1021,7 @@ export function crownTexture(x: number, y: number, seed: number): number {
       8,
     ) -
       0.5) *
-    0.28
+    CLUMPS.grain
   );
 }
 
@@ -996,7 +1061,7 @@ export function crownShade(
       k.max,
       (k.base +
         (night ? k.nightFlat : 1) * (k.domeGain * dome + k.clumpGain * clump) +
-        (clumps.top - 0.5) * 0.7) *
+        (clumps.top - 0.5) * k.heightGain) *
         ao,
     ),
   );
