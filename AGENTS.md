@@ -75,6 +75,15 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`. If a file you must commit also holds another session's uncommitted edits, ask before committing it.
 - Commit messages are gitmoji + conventional commits, lowercase and imperative: `✨ feat(life): …`, `🐛 fix(renderer): …`, `⚡️ perf(web): …`, `📝 docs(roadmap): …`. Match `git log`.
 
+## Handoff plans
+
+Implementation plans live in the gitignored `.plans/` folder of the main checkout. `.plans/README.md` indexes them.
+
+- Each task has one folder, `.plans/<status>/<task>/`, where `<status>` is `todo`, `active`, `paused` or `done`. `handoff.md` is the plan.
+- Put every scratch file for the task in its folder: screenshots, capture scripts, logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
+- When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
+- Before ending the session, delete every file in the task folder except `handoff.md` and files the handoff marks **keep**. In your report, list what you deleted and what you kept.
+
 ## Don'ts
 
 - Don't use Google Maps / Street View imagery or tiles (terms forbid use on non-Google maps).
