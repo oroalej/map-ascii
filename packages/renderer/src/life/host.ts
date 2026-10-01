@@ -13,6 +13,8 @@ export type FrameView = {
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
+  /** Drop replies produced under a previous season without resetting the population. */
+  invalidateFrame(): void;
   sync(tiles: readonly LifeTile[]): void;
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
@@ -26,6 +28,9 @@ export interface LifeHost {
 export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): LifeHost {
   let agents: VisibleAgent[] = [];
   return {
+    invalidateFrame: () => {
+      agents = [];
+    },
     sync: (tiles) => {
       world.sync(tiles);
       if (!tiles.length) agents = [];
@@ -98,6 +103,11 @@ export function createWorkerHost(
     if (!disposed && !fallback) ready = true;
   }, fail);
   return {
+    invalidateFrame() {
+      generation++;
+      if (fallback) fallback.invalidateFrame();
+      if (view) view = { ...view, agents: [] };
+    },
     sync(next) {
       if (disposed) return;
       tiles = next;

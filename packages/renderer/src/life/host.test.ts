@@ -72,6 +72,30 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('discards in-flight replies after a season changes without clearing tile residency', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, [], undefined);
+    host.sync(s.tiles);
+    await flush();
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    expect(host.request(s.input)).toBe(true);
+    host.invalidateFrame();
+    resolve(result(1));
+    await flush();
+    expect(host.latest()).toBeUndefined();
+    mock.frame.mockResolvedValueOnce(result(2));
+    expect(host.request(s.input)).toBe(true);
+    await flush();
+    expect(host.latest()?.signalClock).toBe(2);
+    expect(mock.sync).toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     for (const method of [mock.init, mock.sync, mock.play, mock.stop, mock.setLive])

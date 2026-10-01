@@ -1,0 +1,172 @@
+import { describe, expect, it } from 'vitest';
+import type { CityLifeConfig, SeasonConfig } from '@atlas/shared';
+import { LifeBuilder, LifeLine } from './geometry';
+import { LifeWorld } from './simulate';
+import { MAX_TILE_AGENTS, activityLevels } from './config';
+import { worldTiles } from './testing/scenarios';
+import { stripRing } from './terrain';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
+import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
+
+const tile = { z: 16, x: 55192, y: 30266 };
+const season: SeasonConfig = {
+  id: 'feast',
+  title: { en: 'Feast' },
+  status: 'draft',
+  note: 'TODO(verify)',
+  sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
+  window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
+  stalls: { label: 'Food carts', near: ['worship'], radius_m: 300, per_tile: 12 },
+};
+const cityLife: CityLifeConfig = { source: 'Synthetic calendar', seasons: [season] };
+const select = (world: LifeWorld, id: string | null = 'feast') =>
+  world.step(0, undefined, undefined, undefined, undefined, { rain: 0, cityLife, season: id });
+function setup(road = false, places = true, blocked = false) {
+  const b = new LifeBuilder();
+  for (const y of [800, 1600, 2400, 3200])
+    b.line(
+      [
+        { x: 0, y },
+        { x: 4095, y },
+      ],
+      road ? LifeLine.roadMinor : LifeLine.path,
+      8,
+    );
+  if (places) b.place({ x: 2000, y: 2000 }, 'worship', 20);
+  if (blocked)
+    b.area('blocked', [
+      [
+        { x: 0, y: 0 },
+        { x: 4096, y: 0 },
+        { x: 4096, y: 4096 },
+        { x: 0, y: 4096 },
+        { x: 0, y: 0 },
+      ],
+    ]);
+  const tiles = [{ key: 'seasonal', tile, life: b.finish() }],
+    world = new LifeWorld();
+  world.sync(tiles);
+  return { tiles, world, life: worldTiles(world).values().next().value! };
+}
+describe('seasonal stall lifecycle', () => {
+  it('uses tile-owned neighboring markets even when selected worship places are absent', () => {
+    const { world, life, tiles } = setup(false, false),
+      neighbor = new LifeBuilder();
+    neighbor.market({ x: 10, y: 2000 });
+    world.sync([
+      ...tiles,
+      { key: 'market', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() },
+    ]);
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+  });
+  it('admits deterministic bounded carts after commerce without changing legacy populations', () => {
+    const a = setup(),
+      b = setup(),
+      movers = structuredClone(a.life.movers),
+      stalls = structuredClone(a.life.stalls),
+      gatherers = structuredClone(a.life.gatherers);
+    select(a.world);
+    select(b.world);
+    expect(a.life.seasonalStalls.length).toBeGreaterThan(0);
+    expect(a.life.seasonalStalls.length).toBeLessThanOrEqual(12);
+    expect(a.life.seasonalStalls).toEqual(b.life.seasonalStalls);
+    expect(a.life.movers).toEqual(movers);
+    expect(a.life.stalls).toEqual(stalls);
+    expect(a.life.gatherers).toEqual(gatherers);
+    const ref = a.life.seasonalStalls[0];
+    select(a.world);
+    expect(a.life.seasonalStalls[0]).toBe(ref);
+    select(a.world, null);
+    expect(a.life.seasonalStalls).toEqual([]);
+    select(a.world);
+    expect(a.life.seasonalStalls).toEqual(b.life.seasonalStalls);
+  });
+  it('requires paths/plazas and mapped proximity, rejecting blocked footprints', () => {
+    for (const scene of [setup(true), setup(false, false), setup(false, true, true)]) {
+      select(scene.world);
+      expect(scene.life.seasonalStalls).toEqual([]);
+    }
+  });
+  it('shares the mover quota and removes sites when reclaimed or deactivated at zero dt', () => {
+    const { world, life } = setup();
+    select(world);
+    const scenes = life.scenes as unknown as { sites: { stall?: unknown; queue: unknown[] }[] };
+    const seasonal = new Set(life.seasonalStalls);
+    expect(
+      scenes.sites.filter((s) => seasonal.has(s.stall as (typeof life.seasonalStalls)[number])),
+    ).toHaveLength(life.seasonalStalls.length * 2);
+    while (life.movers.length < MAX_TILE_AGENTS) life.movers.push({ ...life.movers[0]! });
+    select(world);
+    expect(life.seasonalStalls).toHaveLength(0);
+    expect(
+      scenes.sites.some((s) => seasonal.has(s.stall as (typeof life.seasonalStalls)[number])),
+    ).toBe(false);
+    select(world, null);
+    expect(life.stalls.length).toBeGreaterThan(0);
+  });
+  it('keeps both bodies off neighboring roads, including crossing regions, and releases evicted carts', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    const neighbor = new LifeBuilder(),
+      pm = 1 / metersPerUnit(tile);
+    neighbor.line(
+      [
+        { x: -4096, y: 800 },
+        { x: 0, y: 800 },
+      ],
+      LifeLine.roadMinor,
+      10,
+    );
+    neighbor.area('crossing', [stripRing({ x: -4096, y: 800 }, { x: 0, y: 800 }, 5 * pm)]);
+    const next = { key: 'neighbor', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() };
+    world.sync([...tiles, next]);
+    select(world);
+    for (const stall of life.seasonalStalls) expect(life.canIdle(stall)).toBe(true);
+    expect(life.seasonalStalls.every((s) => Math.abs(s.y - 800) > 5 * pm)).toBe(true);
+    world.sync([]);
+    select(world);
+    expect(worldTiles(world).size).toBe(0);
+  });
+  it('matches direct and worker frames through activation, deactivation and reload', () => {
+    const { tiles, world } = setup(),
+      api = createLifeWorkerApi();
+    api.init({ processions: [] });
+    api.sync(structuredClone(tiles));
+    const center = tileToLngLat(tile, { x: 2048, y: 2048 });
+    for (let frame = 0; frame < 12; frame++) {
+      if (frame === 8) {
+        world.sync([]);
+        api.sync([]);
+      }
+      if (frame === 9) {
+        world.sync(tiles);
+        api.sync(structuredClone(tiles));
+      }
+      const input: FrameInput = {
+        gust: {
+          camera: { lng: center[0], lat: center[1], zoom: 20 },
+          size: { width: 1920, height: 1080 },
+          cssCell: { w: 5, h: 9 },
+          time: frame / 30,
+          wind: { dir: [1, 0], strength: 0 },
+        },
+        step: {
+          dt: frame % 3 ? 1 / 30 : 0,
+          zoom: 20,
+          bounds: undefined,
+          wind: undefined,
+          weather: {
+            rain: 0,
+            minutes: 720,
+            cityLife,
+            season: frame < 4 || frame > 6 ? 'feast' : null,
+          },
+          cellMeters: 0,
+        },
+        visible: [20, activityLevels(720), center, { rain: 0, sunAltitude: 45 }],
+      };
+      expect(api.frame(input).agents).toEqual(runLifeFrame(world, input).agents);
+    }
+  });
+});
