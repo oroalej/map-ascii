@@ -43,7 +43,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
    - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, woods, shrub, or planting-bed areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`, `shrubs`, `planting`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
-   - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. `surface: "paving"` changes its ground class while retaining its id, labels, and landmark metadata. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side. Optional `bench_spans` select named sections by inclusive start/end vertex indices and widen them to the specified `width_m`. Spans must have unique ids, non-overlapping ranges within the line (shared endpoints are allowed), and widths at least the base rim width. Omission seats the entire line as before; `[]` creates a rim without pause anchors. Rim and bench sections are unioned in a common meter frame into one footprint, preserving the planted hole and avoiding internal seams; anchors use only the bench sections and their widths; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, buildings, out-of-bounds geometry, and routes across raised beds or monument parts; mapped benches and lamps within 3 m suppress curated duplicates. Optional `flagpoles` relocate existing OSM flagpole points by id, preserving their identity and refreshing label anchors and subdivision membership. Reject missing or non-flagpole targets, duplicate targets across detail packs, and positions outside the parent or inside raised obstacles. Omitted overrides default to an empty array. Optional `flag: "PH"` explicitly selects a Philippine flag marker at the mapped pole; omitted designs retain the generic pole glyph. The code is carried through tiles and worker fixture geometry, independent of Life. Credits join the generated meta attribution.
+   - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. Without curated grounds, `surface: "paving"` changes the area's ground class while retaining its id, labels, and landmark metadata. `surface: "keep"` retains its fill and tile range. A simple `grounds` ring must contain the complete standing building or point anchor and may not overlap another detail site; paving then adds separate unoutlined grounds without replacing the parent. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side. Optional `bench_spans` select named sections by inclusive start/end vertex indices and widen them to the specified `width_m`. Spans must have unique ids, non-overlapping ranges within the line (shared endpoints are allowed), and widths at least the base rim width. Omission seats the entire line as before; `[]` creates a rim without pause anchors. Rim and bench sections are unioned in a common meter frame into one footprint, preserving the planted hole and avoiding internal seams; anchors use only the bench sections and their widths; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, building parents without grounds, out-of-bounds geometry, and routes across raised beds, monument parts or standing buildings (overhead roofs remain walkable); mapped benches and lamps within 3 m suppress curated duplicates. Optional `flagpoles` relocate existing OSM flagpole points by id, preserving their identity and refreshing label anchors and subdivision membership. Reject missing or non-flagpole targets, duplicate targets across detail packs, and positions outside the parent or inside raised obstacles. Omitted overrides default to an empty array. Optional `flag: "PH"` explicitly selects a Philippine flag marker at the mapped pole; omitted designs retain the generic pole glyph. The code is carried through tiles and worker fixture geometry, independent of Life. Credits join the generated meta attribution.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
 5. **`05-tiles`**
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
@@ -78,12 +78,12 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
 | `building_station` | `building=train_station`, `railway=station|halt`, or `public_transport=station` with `train=yes` or a `railway` tag (area or point) |
 | `park` | `leisure=park|garden|playground`, `place=square` |
-| `paving` | a sourced `details/` ground-surface override on an existing OSM area |
+| `paving` | a sourced `details/` ground-surface override or curated grounds around an existing OSM anchor |
 | `seating` | sourced real-width stone seating and planter edges from `details/` |
 | `shrubs` | curated shrub polygons from `landcover/` |
 | `planting` | curated soil and sparse ground cover in planting beds; `raised` beds block ground agents |
 | `trees` | `natural=wood`, `landuse=forest|orchard` (kind in `variant`, including mapped palm orchards) |
-| `grass` | `landuse=grass|meadow|village_green|plant_nursery|cemetery`, `natural=grassland|scrub|heath`, `leisure=recreation_ground` (a park wins if both are tagged) |
+| `grass` | `landuse=grass|meadow|village_green|plant_nursery|cemetery`, `natural=grassland|scrub|heath`, `leisure=recreation_ground` or `landuse=recreation_ground` (a park wins if both are tagged) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
 | `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
@@ -274,7 +274,9 @@ TreeKind = 'broadleaved' | 'palm' | 'needleleaved';   // unset: the generic tree
 
 SiteDetail {                     // cities/<slug>/details/*.json — sourced outdoor detail
   id: string;                    // "detail/<slug>"
-  osm_id: string; title: string; surface: 'paving';
+  osm_id: string; title: string; surface: 'paving' | 'keep';
+  grounds?: [lng, lat][];         // simple closed ring containing the full area or point parent
+  selection_osm_id?: string;      // optional canonical curated landmark for these grounds
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
     material: 'wood' | 'stone' | 'roof' | 'paving'; overhead: boolean;
@@ -290,6 +292,8 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   status: 'draft' | 'verified'; credit: string; sources: Source[];
 }
 // CuratedArea also accepts raised?: boolean for planting beds ground agents cannot enter.
+
+`selection_osm_id` resolves kept grounds and paving terraces to an existing curated landmark. It must overlap the site or have a facade within 5 m of its boundary (OSM grounds can stop at an approximate building frontage); remote targets and alias chains are rejected. Structures on kept or explicitly outlined grounds also select that site's canonical landmark, including a canopy above an OSM lawn. A bounded `detail_selection` descriptor carries canonical id, class, name and landmark metadata through tiles, so selection works before the target's own tile loads. It creates no geometry or additional picking ink. Malformed or mismatched descriptors are ignored by the worker.
 
 Structure parts receive stable `detail:<slug>/structure-<id>` identities. Timber uses
 `building_woodwork` (from z18); stone and roof contours use `building_part`. Parts are flat
@@ -336,7 +340,7 @@ Validation rules:
 
 ## 6. Attribution (always visible in the UI)
 
-"© OpenStreetMap contributors" is always shown. The other credits are added only when their layer is active:
+"© OpenStreetMap contributors" is always shown outside the bounded, keyboard-accessible scrolling region for additional map credits. The other credits are added only when their layer is active:
 - DEM: "Copernicus DEM"
 - Satellite underlays: "Esri Wayback" or "Copernicus Sentinel-2"
 - Each photo and historic map: its own credit, in the info panel
@@ -373,6 +377,8 @@ Generated files are gitignored (never commit tiles), so builds get them from Git
 After direction overrides, `lib/signal-layout.ts` resolves each controller into validated `signal_layout` JSON metadata: member coordinates and exterior road arms with stable way IDs, travel direction, inbound/outbound eligibility, phase group, bearing, width, and optional stop position/width. Stop paint, signal fixtures, and vehicle gates consume this same layout. Curated `life.signals.add` entries may list `linked_junctions`; every member must be a shared road vertex, connected to the primary member without an intervening unlisted junction, and owned by only one controller. Duplicate, missing, disconnected, or multiply owned members fail the build. Internal connecting arms produce no signal heads, stops, or derived crossings. Archives lacking the optional metadata retain legacy behavior.
 
 ### Neighborhood enrichment
+
+The separate `detail-grounds.osm.json` query fetches `nwr["landuse"="recreation_ground"]` plus members in the city's detail bbox. Conversion merges it without changing the cached detail or neighborhood queries. These areas classify as grass unless a park tag takes precedence.
 
 The separate `detail-neighborhood.osm.json` query fetches shops, selected food/service amenities, craft, scrub/heath, orchards, plant nurseries and cemeteries. `03-normalize` runs `lib/frontage.ts` while raw tags and building polygons still exist: a bbox grid and polygon containment associate shop nodes with footprints, including holes. Food wins over service, retail and generic commercial tags. Assigned nodes are suppressed as standalone markers; embedded malls/supermarkets retain the market class and contribute their names to unnamed footprints. Other shop points use furniture variants `shop_food`, `shop_retail`, `shop_service`; building roof variants stay intact. Tiles carry `frontage` as a separate property. Point shops share a 5 m radius with the renderer through `SHOP_POINT_RADIUS_M`; changing it requires regenerating their derived anchors. The worker packs frontage/kind bits without adding classes, caps shop lights and buffered commerce centers at 150 per tile, and transfers commerce separately for deterministic additive spawning.
 

@@ -1,15 +1,18 @@
 import {
   featureZoomBand,
+  DetailSelectionSchema,
   tileZoomRange,
   type LngLat,
   type SiteDetail,
   type SubdivisionArea,
 } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
-import { difference, union } from 'polyclip-ts';
+import bbox from '@turf/bbox';
+import { difference, intersection, union } from 'polyclip-ts';
 import type { Polygon, MultiPolygon, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
+import { bboxesOverlap } from './geo';
 
 const METERS = 111_320;
 type MultiPoly = ReturnType<typeof union>;
@@ -100,7 +103,43 @@ function feature(
   };
 }
 
-/** Replace an area's ground material while retaining its OSM identity, labels and selection. */
+const isArea = (g: AtlasFeature['geometry']): g is Polygon | MultiPolygon =>
+  g.type === 'Polygon' || g.type === 'MultiPolygon';
+const clip = (g: Polygon | MultiPolygon) =>
+  (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((p) =>
+    p.map((r) => r.map(([lng, lat]): LngLat => [lng!, lat!])),
+  );
+const contained = (g: AtlasFeature['geometry'], area: Polygon | MultiPolygon) =>
+  g.type === 'Point'
+    ? inside(g.coordinates, area)
+    : isArea(g) && difference(clip(g), clip(area)).length === 0;
+
+/** OSM grounds can stop at a church's facade; allow a small boundary gap, not a remote alias. */
+function selectionNear(g: AtlasFeature['geometry'], area: Polygon | MultiPolygon): boolean {
+  if (contained(g, area)) return true;
+  if (!isArea(g)) return false;
+  if (intersection(clip(g), clip(area)).length) return true;
+  const rings = clip(area).flat();
+  return clip(g)
+    .flat()
+    .some((ring) =>
+      ring.some((point) => {
+        const f = frame(point);
+        return rings.some((boundary) =>
+          boundary.slice(1).some((b, i) => {
+            const [ax, ay] = f.local(boundary[i]!);
+            const [bx, by] = f.local(b);
+            const dx = bx - ax,
+              dy = by - ay;
+            const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy)));
+            return Math.hypot(ax + t * dx, ay + t * dy) <= 5;
+          }),
+        );
+      }),
+    );
+}
+
+/** Enrich a site's ground without replacing its buildings or canonical landmark identity. */
 export function mergeSiteDetails(
   input: AtlasFeature[],
   packs: readonly SiteDetail[],
@@ -110,29 +149,101 @@ export function mergeSiteDetails(
   const warnings: string[] = [];
   const parents = new Set<string>();
   const relocated = new Set<string>();
-  for (const pack of packs) {
+  // Validate every anchor before mutation; overlap decisions must not depend on pack order.
+  const sites = packs.map((pack) => {
     const parent = features.find((f) => f.properties.id === pack.osm_id);
-    if (!parent || (parent.geometry.type !== 'Polygon' && parent.geometry.type !== 'MultiPolygon'))
+    if (
+      !parent ||
+      (!isArea(parent.geometry) && !(pack.grounds && parent.geometry.type === 'Point'))
+    )
       throw new Error(`${pack.id}: parent ${pack.osm_id} must be an existing OSM area`);
     if (parents.has(pack.osm_id))
       throw new Error(`${pack.id}: duplicate detail parent ${pack.osm_id}`);
     parents.add(pack.osm_id);
-    if (parent.properties.height)
-      throw new Error(`${pack.id}: a building cannot be replaced by paving`);
-    const area = parent.geometry;
-    const parentClip = (area.type === 'Polygon' ? [area.coordinates] : area.coordinates).map(
-      (polygon) => polygon.map((ring) => ring.map(([lng, lat]): LngLat => [lng!, lat!])),
-    );
+    if (parent.properties.height && !pack.grounds)
+      throw new Error(`${pack.id}: a building parent needs curated grounds`);
+    const area = pack.grounds
+      ? { type: 'Polygon' as const, coordinates: [pack.grounds] }
+      : (parent.geometry as Polygon | MultiPolygon);
+    if (pack.grounds && !contained(parent.geometry, area))
+      throw new Error(`${pack.id}: grounds must contain parent ${pack.osm_id}`);
+    const selectionId = pack.selection_osm_id ?? pack.osm_id;
+    const target = features.find((f) => f.properties.id === selectionId);
+    if (
+      !target ||
+      (pack.selection_osm_id &&
+        (!target.properties.landmark_id || !selectionNear(target.geometry, area)))
+    )
+      throw new Error(
+        `${pack.id}: selection target must be an existing curated landmark inside or adjacent to the site`,
+      );
+    if (
+      target.properties.detail_parent ||
+      packs.some(
+        (p) => p.osm_id === selectionId && p.selection_osm_id && p.selection_osm_id !== selectionId,
+      )
+    )
+      throw new Error(`${pack.id}: selection targets cannot form alias chains`);
+    const p = target.properties;
+    const metadata =
+      pack.surface === 'keep' || pack.grounds || pack.selection_osm_id
+        ? JSON.stringify(
+            DetailSelectionSchema.parse({
+              id: selectionId,
+              class: p.class,
+              ...(p.name !== undefined && { name: p.name }),
+              ...(p.landmark_id !== undefined && { landmarkId: p.landmark_id }),
+              ...(p.subdivision !== undefined && { subdivision: p.subdivision }),
+              ...(p.subdivision_approx !== undefined && {
+                subdivisionApprox: p.subdivision_approx,
+              }),
+              ...(p.kind !== undefined && { kind: p.kind }),
+              ...(p.height && { height: p.height }),
+            }),
+          )
+        : undefined;
+    return { pack, parent, area, selectionId, metadata };
+  });
+  for (let i = 0; i < sites.length; i++) {
+    const a = sites[i]!;
+    for (const b of sites.slice(i + 1))
+      if ((a.pack.grounds || b.pack.grounds) && intersection(clip(a.area), clip(b.area)).length)
+        throw new Error(`${a.pack.id}: grounds overlap ${b.pack.id}`);
+  }
+  const blocked = input
+    .filter(
+      (f) =>
+        !f.properties.detail_overhead &&
+        isArea(f.geometry) &&
+        (f.properties.detail_blocked ||
+          f.properties.class === 'building_part' ||
+          (f.properties.class.startsWith('building') && (f.properties.height ?? 0) > 0)),
+    )
+    .map((f) => ({ feature: f, bounds: bbox(f) as [number, number, number, number] }));
+  for (const { pack, parent, area, selectionId, metadata } of sites) {
+    const parentClip = clip(area);
+    const siteBounds = bbox(area) as [number, number, number, number];
     const requireInside = (points: Position[], item: string) => {
       if (points.some((p) => !inside(p, area)))
         throw new Error(`${pack.id} ${item}: outside parent footprint`);
     };
-    parent.properties.class = 'paving';
-    parent.tippecanoe = {
-      layer: 'landuse',
-      ...tileZoomRange(featureZoomBand('paving'), TILE_ZOOMS),
-    };
     const prefix = `detail:${pack.id.slice(7)}`;
+    const link = {
+      detail_parent: selectionId,
+      ...(metadata && { detail_selection: metadata }),
+    };
+    if (pack.surface === 'paving') {
+      if (pack.grounds)
+        features.push(feature(`${prefix}/grounds`, area, { class: 'paving', ...link }));
+      else {
+        parent.properties.class = 'paving';
+        parent.tippecanoe = {
+          layer: 'landuse',
+          ...tileZoomRange(featureZoomBand('paving'), TILE_ZOOMS),
+        };
+      }
+    }
+    if (selectionId !== pack.osm_id) Object.assign(parent.properties, link);
     const seating = pack.seating.map((seat) => ({
       seat,
       shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
@@ -153,18 +264,13 @@ export function mergeSiteDetails(
         height: part.height_m,
         variant: part.material === 'paving' ? 'terrace' : 'flat',
         detail_overhead: part.overhead,
-        ...(part.material === 'paving' && { detail_parent: pack.osm_id }),
+        ...((part.material === 'paving' || metadata) && link),
         ...(!part.overhead && part.material !== 'paving' && { detail_blocked: true }),
       });
     });
     features.push(...structures);
     const obstacles = [
-      ...input.filter(
-        (f) =>
-          !f.properties.detail_overhead &&
-          (f.properties.detail_blocked || f.properties.class === 'building_part') &&
-          (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
-      ),
+      ...blocked.filter((f) => bboxesOverlap(f.bounds, siteBounds)).map((f) => f.feature),
       ...seating.map(({ seat, shape }) =>
         feature(`${prefix}/seating-${seat.id}`, shape, { detail_blocked: true }),
       ),

@@ -62,6 +62,8 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   detail_overhead?: boolean;
   /** Selection identity of a walkable surface authored inside an OSM area. */
   detail_parent?: string;
+  /** Bounded canonical selection metadata, available even before the target tile loads. */
+  detail_selection?: string;
   seat_bearing?: number;
   /** Country flag design explicitly supplied by a city detail pack. */
   flag?: 'PH';

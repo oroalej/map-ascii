@@ -1,5 +1,6 @@
 export * from './climate';
 export * from './constants';
+export * from './detail-selection';
 export * from './life-sites';
 export * from './rhythm';
 export * from './schemas';

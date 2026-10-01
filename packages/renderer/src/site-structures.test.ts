@@ -38,6 +38,63 @@ const rectangle = (
 });
 
 describe('outdoor structure rendering', () => {
+  it('registers a linked landmark from grounds on a cold load before its own tile arrives', () => {
+    const ground = rectangle('detail:church/grounds', 100, 100, 600, 600, false);
+    const target = {
+      id: 'osm:way/7',
+      class: 'building_religious',
+      landmarkId: 'landmark/church',
+      name: 'Church',
+      height: 15,
+    };
+    ground.properties = {
+      id: 'detail:church/grounds',
+      class: 'paving',
+      detail_parent: target.id,
+      detail_selection: JSON.stringify(target),
+    };
+    const registry = createIdRegistry();
+    const result = buildTileGeometry(
+      { landuse: { extent: EXTENT, length: 1, feature: () => ground } },
+      registry,
+      { z: 16, x: 55209, y: 30264 },
+    );
+    expect(registry.takeNew()).toEqual([
+      target,
+      { id: 'detail:church/grounds', class: 'paving', parentId: target.id },
+    ]);
+    expect(result.fills.ids).not.toContain(1); // The ground retains its own outline identity.
+    const church = rectangle(target.id, 200, 200, 100, 100, false);
+    church.properties = {
+      id: target.id,
+      class: target.class,
+      landmark_id: target.landmarkId,
+      name: target.name,
+      height: 15,
+    };
+    buildTileGeometry(
+      { buildings: { extent: EXTENT, length: 1, feature: () => church } },
+      registry,
+      { z: 16, x: 55209, y: 30264 },
+    );
+    expect(registry.takeNew()).toEqual([]);
+  });
+  it('does not register mismatched canonical selection metadata', () => {
+    const ground = rectangle('ground', 100, 100, 600, 600, false);
+    ground.properties = {
+      id: 'ground',
+      class: 'paving',
+      detail_parent: 'osm:way/7',
+      detail_selection: JSON.stringify({ id: 'osm:way/8', class: 'building' }),
+    };
+    const registry = createIdRegistry();
+    buildTileGeometry({ landuse: { extent: EXTENT, length: 1, feature: () => ground } }, registry, {
+      z: 16,
+      x: 55209,
+      y: 30264,
+    });
+    expect(registry.takeNew()).toHaveLength(1);
+  });
   it('keeps sub-meter terraces visible, outlined and walkable with parent selection metadata', () => {
     const terrace = rectangle('terrace', 100, 200, 500, 20, false);
     terrace.properties = {

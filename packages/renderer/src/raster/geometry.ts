@@ -7,6 +7,7 @@
  */
 import {
   parseUtilityRecord,
+  parseDetailSelection,
   isLitRoad,
   TILE_EXTENT as EXTENT,
   MERCATOR_METERS,
@@ -782,6 +783,11 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      // A site's building or monument may be in another tile on a cold direct-URL load.
+      // Register its real metadata without assigning its id to the surface's outline.
+      const selection = parseDetailSelection(feature.properties.detail_selection);
+      if (selection && selection.id === feature.properties.detail_parent)
+        registry.index(selection.id, () => selection);
       const id = registry.index(featureId, () =>
         featureInfo(featureId, className, feature.properties),
       );
