@@ -1,0 +1,32 @@
+{
+  "id": "landcover/plaza-de-nueva-caceres",
+  "title": "Plaza de Nueva Caceres grounds",
+  "trees": [],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.18413145, 13.62115585],
+        [123.18414976, 13.62115335],
+        [123.18415105, 13.62116224],
+        [123.18413274, 13.62116475],
+        [123.18413145, 13.62115585]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Plaza de Nueva Caceres — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/682340233",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/plaza-de-nueva-caceres/",
+      "note": "Official plaza description: 37.27 × 6.05 m is the plaza, not the statue base. Two sculptural groups and central flame represented by modest plan pedestals; individual figure counts are not duplicated as footprints. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

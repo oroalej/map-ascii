@@ -1,0 +1,41 @@
+{
+  "id": "plan/oragon-monument",
+  "osm_id": "osm:node/5067240326",
+  "title": "Oragon Monument",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "circle",
+      "size_m": 1.4,
+      "height_m": 3,
+      "offset_m": [0, 2]
+    },
+    {
+      "kind": "pedestal",
+      "shape": "circle",
+      "size_m": 1.4,
+      "height_m": 3,
+      "offset_m": [0, -2]
+    },
+    {
+      "kind": "tower",
+      "shape": "circle",
+      "size_m": 0.65,
+      "height_m": 4,
+      "offset_m": [0, 0]
+    }
+  ],
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/682340233",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/plaza-de-nueva-caceres/",
+      "note": "Official plaza description: 37.27 × 6.05 m is the plaza, not the statue base. Two sculptural groups and central flame represented by modest plan pedestals; individual figure counts are not duplicated as footprints. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}
