@@ -115,7 +115,10 @@ export class Moments<Owner extends object = object> {
   private readonly neighborCursor = new Map<object, number[]>();
   private readonly ids = new Map<object, number>();
   private readonly cooldown = new Map<object, number>();
-  private readonly episodes = new Map<object, { idle: boolean; talk: boolean; ball: boolean }>();
+  private readonly episodes = new Map<
+    object,
+    { idle: boolean; talk: boolean; ball: boolean; look: boolean }
+  >();
   private readonly approaches = new Map<string, Approach<Owner>>();
   private readonly pending = new Map<string, Pending<Owner>>();
   private readonly membership = new Map<object, Moment<Owner>>();
@@ -322,7 +325,12 @@ export class Moments<Owner extends object = object> {
   private retryable(p: Pending<Owner>, c: MomentContext<Owner>) {
     if (p.members.some((a) => !this.available(a, c))) return false;
     const a = p.members[0]!;
-    if (p.kind === 'look') return distance(a, p.anchor!) / c.perMeter <= MOMENTS.look.reach;
+    if (p.kind === 'look')
+      return (
+        (a.type === 'walker' ||
+          (a.idle && a.place === 'monument' && a.source === p.anchor!.source)) &&
+        distance(a, p.anchor!) / c.perMeter <= MOMENTS.look.reach
+      );
     if (
       p.kind === 'greet' &&
       a.hx * p.members[1]!.hx + a.hy * p.members[1]!.hy >= MOMENTS.greet.opposition
@@ -352,7 +360,7 @@ export class Moments<Owner extends object = object> {
       if (!this.ids.has(a.owner)) this.ids.set(a.owner, this.ids.size);
       const episode = this.episodes.get(a.owner);
       if (!episode || (!episode.idle && a.idle))
-        this.episodes.set(a.owner, { idle: a.idle, talk: false, ball: false });
+        this.episodes.set(a.owner, { idle: a.idle, talk: false, ball: false, look: false });
       else episode.idle = a.idle;
     }
     for (const [key, approach] of this.approaches)
@@ -389,11 +397,16 @@ export class Moments<Owner extends object = object> {
       if (list) list.push(a);
       else bins.set(k, [a]);
     }
+    const visitorReactions = this.dialogue.some((entry) => entry.kind === 'look');
     const lists = [
       actors.filter((a) => a.type === 'walker'),
       actors.filter((a) => a.type === 'gatherer' && social.has(a.place!)),
       actors.filter((a) => a.type === 'gatherer' && (a.place === 'school' || a.place === 'pitch')),
-      actors.filter((a) => a.type === 'walker'),
+      actors.filter(
+        (a) =>
+          a.type === 'walker' ||
+          (visitorReactions && a.type === 'gatherer' && a.place === 'monument' && a.idle),
+      ),
     ];
     const children = new Map<number, number>();
     for (const a of lists[2]!)
@@ -435,9 +448,26 @@ export class Moments<Owner extends object = object> {
       if (!this.free(a)) continue;
       if (kind === 'look') {
         if (!c.anchors.length) continue;
-        const anchor = c.anchors[this.neighbors[k]!++ % c.anchors.length]!;
+        const visitor = a.type === 'gatherer';
+        const anchor = visitor
+          ? c.anchors.find((entry) => entry.source === a.source)
+          : c.anchors[this.neighbors[k]!++ % c.anchors.length];
+        if (!anchor) continue;
         const d = distance(a, anchor) / c.perMeter;
         if (d <= 0 || d > MOMENTS.look.reach || !this.available(a, c)) continue;
+        if (visitor) {
+          // These visitors already attend their monument while paused. Give that action
+          // its reaction once, using the same guarded admission and cooldown as walkers.
+          const episode = this.episodes.get(a.owner)!;
+          if (episode.look) continue;
+          episode.look = true;
+          this.attempt(
+            `visit:${this.ids.get(a.owner)}`,
+            { kind, members: [a], anchor, next: this.time },
+            c,
+          );
+          continue;
+        }
         const approach = `look:${this.ids.get(a.owner)}:${anchor.source}`;
         if (this.approaches.has(approach)) continue;
         this.approaches.set(approach, { a, b: anchor, radius: MOMENTS.look.rearm });

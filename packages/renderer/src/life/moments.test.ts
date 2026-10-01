@@ -49,6 +49,94 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  const reaction = [{ id: 'monument-reaction', kind: 'look', turns: 1 }] as const;
+  const visitor = () => {
+    const f = fixture('look', () => 0.99, reaction);
+    f.a.type = 'gatherer';
+    return f;
+  };
+  it('lets separated monument visitors react to their own monument without a chance roll', () => {
+    const f = visitor();
+    f.b.type = 'gatherer';
+    f.b.x = 9.16;
+    f.actors.push(f.b);
+    f.c.anchors = [
+      { x: -1, y: 0, source: 99 },
+      { x: 4.58, y: 0, source: 0 },
+    ];
+    f.m.step(0.1, f.c);
+    expect(f.m.stats.started.look).toBe(2);
+    expect(f.m.stats.started.talk).toBe(0);
+    expect(f.facing.get(f.a.owner)).toEqual([1, 0]);
+    expect(f.facing.get(f.b.owner)).toEqual([-1, 0]);
+    for (const a of f.actors)
+      expect(f.m.speech(a.owner)).toMatchObject({ exchangeId: 'monument-reaction', line: 0 });
+    f.m.step(3, f.c);
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+  });
+  it('requires a new idle episode and the completed reaction cooldown before speaking again', () => {
+    const f = visitor();
+    start(f, 'look');
+    f.m.step(10, f.c);
+    f.m.step(61, f.c);
+    expect(f.m.stats.started.look).toBe(1);
+    f.a.idle = false;
+    f.m.step(0.1, f.c);
+    f.a.idle = true;
+    f.m.step(0.1, f.c);
+    expect(f.m.stats.started.look).toBe(2);
+    f.m.step(10, f.c);
+    f.a.idle = false;
+    f.m.step(0.1, f.c);
+    f.a.idle = true;
+    f.m.step(59, f.c);
+    expect(f.m.stats.started.look).toBe(2);
+    f.m.step(1, f.c);
+    expect(f.m.stats.started.look).toBe(3);
+  });
+  it('retries visitor facing within the shared budget and discards a moving visitor retry', () => {
+    for (const leaves of [false, true]) {
+      const f = visitor();
+      let attempts = 0;
+      f.c.face = () => ++attempts > 1;
+      f.m.step(0.1, f.c);
+      expect(f.m.speech(f.a.owner)).toBeUndefined();
+      expect(f.m.snapshot().pending).toHaveLength(1);
+      f.a.idle = !leaves;
+      for (let i = 0; i < 10; i++) {
+        const checks = f.m.stats.checks;
+        f.m.step(0.1, f.c);
+        expect(f.m.stats.checks - checks).toBeLessThanOrEqual(MOMENTS.checks);
+      }
+      expect(f.m.stats.started.look).toBe(leaves ? 0 : 1);
+      expect(f.m.snapshot().pending).toEqual([]);
+    }
+  });
+  it.each(['source', 'moving', 'catalog', 'eligibility'])(
+    'does not invent a visitor reaction with missing %s',
+    (reason) => {
+      const f = reason === 'catalog' ? fixture('look', () => 0.99) : visitor();
+      f.a.type = 'gatherer';
+      if (reason === 'source') f.a.source = undefined;
+      if (reason === 'moving') f.a.idle = false;
+      if (reason === 'eligibility') f.c.eligible = () => false;
+      f.m.step(1, f.c);
+      expect(f.m.stats.started.look).toBe(0);
+    },
+  );
+  it.each(['rain', 'zoom', 'eligibility'])(
+    'cancels visitor reactions when %s blocks the moment',
+    (reason) => {
+      const f = visitor();
+      start(f, 'look');
+      if (reason === 'rain') f.c.rain = 0.5;
+      if (reason === 'zoom') f.c.zoom = 17;
+      if (reason === 'eligibility') f.c.eligible = () => false;
+      f.m.step(0.1, f.c);
+      expect(f.m.speech(f.a.owner)).toBeUndefined();
+      expect(f.releases).toEqual([f.a.owner]);
+    },
+  );
   it('selects speech using the catalog greeting schedule', () => {
     const dialogue: DialogueChoice[] = [
       { id: 'morning', kind: 'greet', period: 'morning', turns: 2 },
