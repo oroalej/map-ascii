@@ -1,0 +1,102 @@
+{
+  "id": "detail/naga-city-peoples-mall",
+  "osm_id": "osm:way/23674855",
+  "title": "Naga City People's Mall",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "south-frontage-canopy",
+      "ring": [
+        [123.18341685, 13.62009199],
+        [123.18346752, 13.62011391],
+        [123.183463, 13.62012376],
+        [123.18341234, 13.62010184],
+        [123.18341685, 13.62009199]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "south-step",
+      "ring": [
+        [123.18342013, 13.62008868],
+        [123.18346235, 13.62010695],
+        [123.18345972, 13.62011269],
+        [123.1834175, 13.62009443],
+        [123.18342013, 13.62008868]
+      ],
+      "height_m": 0.3,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [],
+  "seating": [],
+  "lamps": [
+    {
+      "id": "south-access",
+      "at": [123.18346766, 13.62011686],
+      "bearing": 0,
+      "reach_m": 0.5,
+      "heads": 1,
+      "style": "streetlight"
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga City People's Mall — Reference: Ralff Nestor Nacor, May 2025, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23674855",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_City_People%27s_Mall,_May_2025.jpg",
+      "note": "Independent south riverfront photograph shows roofed frontage, broad access stairs and a lamp. The OSM market footprint spans Zamora Street; keep that existing road overlay. Do not claim a surveyed roof-deck parking layout. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ],
+  "grounds": [
+    [123.18324427, 13.62056855],
+    [123.18324598367165, 13.62056855],
+    [123.18327887, 13.620066605780346],
+    [123.18327887, 13.62004045],
+    [123.18333433, 13.62004045],
+    [123.18333433, 13.620049863637977],
+    [123.18387596443941, 13.62028305],
+    [123.18389783, 13.62028305],
+    [123.18389783, 13.62030765942363],
+    [123.18392804498424, 13.62047345],
+    [123.18393253, 13.62047345],
+    [123.18393253, 13.62052735],
+    [123.18393186359401, 13.62052735],
+    [123.18392953563257, 13.620620623654675],
+    [123.18393001810274, 13.620654342958131],
+    [123.18395467, 13.620652425244668],
+    [123.18395467, 13.62065035],
+    [123.18401013, 13.62065035],
+    [123.18401013, 13.620675009486654],
+    [123.18410321636135, 13.62120715],
+    [123.18410753, 13.62120715],
+    [123.18410753, 13.621231769884142],
+    [123.18424122185013, 13.62197845],
+    [123.18424563, 13.62197845],
+    [123.18424563, 13.62203235],
+    [123.18421992241296, 13.62203235],
+    [123.18367153, 13.62211191991465],
+    [123.18367153, 13.62211565],
+    [123.18361607, 13.62211565],
+    [123.18361607, 13.622092214569305],
+    [123.18339380110511, 13.62128225],
+    [123.18338737, 13.62128225],
+    [123.18338737, 13.621258700189474],
+    [123.18325106388704, 13.62074045],
+    [123.18324487, 13.62074045],
+    [123.18324487, 13.62071363],
+    [123.18324440637288, 13.62062245],
+    [123.18324427, 13.62062245],
+    [123.18324427, 13.62056855]
+  ]
+}
