@@ -96,12 +96,19 @@
     }
   ],
   "status": "draft",
-  "credit": "Trees and ground cover traced from Esri, Maxar, Earthstar Geographics",
+  "credit": "Trees and ground cover traced from Esri, Maxar, Earthstar Geographics; Universidad de Santa Isabel — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
   "sources": [
     {
       "title": "Esri World Imagery (Wayback release 2025-01-30)",
       "url": "https://livingatlas.arcgis.com/wayback/",
       "note": "Traced at z18 (~0.6 m/px) over the release 36557 tiles, 2026-09-29: tree crowns (sizes measured from the imagery; kinds are not identifiable at this resolution) and, at the Cathedral, the parking lot and plaza lawns."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.usi.edu.ph/_files/ugd/48eaaf_591c22c5c2e843efab8fe37e9d947a5a.pdf",
+      "note": "Official independent illustrated campus map identifies the chapel and courtyard facilities. Small paved chapel approach and seats are schematic; preserve existing landcover order. OSM boundary includes Naga Central School I: no detail is added to that northern section. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
     }
-  ]
+  ],
+  "rows": [],
+  "areas": []
 }

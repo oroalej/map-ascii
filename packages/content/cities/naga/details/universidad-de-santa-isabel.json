@@ -1,0 +1,59 @@
+{
+  "id": "detail/universidad-de-santa-isabel",
+  "osm_id": "osm:way/276457427",
+  "title": "Universidad de Santa Isabel",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "chapel-approach",
+      "ring": [
+        [123.18872168, 13.62915685],
+        [123.18879562, 13.62915685],
+        [123.18879562, 13.62922871],
+        [123.18872168, 13.62922871],
+        [123.18872168, 13.62915685]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "chapel-access",
+      "line": [
+        [123.18870319, 13.62921973],
+        [123.18870319, 13.62928261]
+      ],
+      "width_m": 1
+    }
+  ],
+  "seating": [
+    {
+      "id": "chapel-court",
+      "line": [
+        [123.1887263, 13.6291838],
+        [123.18875403, 13.6291838]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Universidad de Santa Isabel — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/276457427",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.usi.edu.ph/_files/ugd/48eaaf_591c22c5c2e843efab8fe37e9d947a5a.pdf",
+      "note": "Official independent illustrated campus map identifies the chapel and courtyard facilities. Small paved chapel approach and seats are schematic; preserve existing landcover order. OSM boundary includes Naga Central School I: no detail is added to that northern section. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}
