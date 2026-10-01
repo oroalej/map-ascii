@@ -16,7 +16,15 @@ import {
   type ClimateConfig,
   type SubdivisionArea,
 } from '@atlas/shared';
-import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
@@ -54,7 +62,7 @@ function QualityControl() {
   );
 }
 
-const WIDE = '(min-width: 640px)';
+const WIDE = '(min-width: 641px)';
 const isWide = () => window.matchMedia(WIDE).matches;
 const subscribeWide = (onChange: () => void) => {
   const query = window.matchMedia(WIDE);
@@ -124,7 +132,7 @@ const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
   );
 });
 
-function Legend({
+function LegendControls({
   subdivisionLabel,
   sidewalksDerived,
   hidden,
@@ -139,6 +147,8 @@ function Legend({
   const atlas = useAtlasInstance((s) => s.atlas);
   const life = useLifeShown();
   const focused = useUiStore((s) => s.legendFocus);
+  const summary = useRef<HTMLElement>(null);
+  const header = useRef<HTMLDivElement>(null);
   // The classes on screen, as the renderer last reported them (none reported yet: zoom only).
   const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
   useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
@@ -164,68 +174,110 @@ function Legend({
     useUiStore.setState({ legendFocus: null });
     return () => atlas?.setFocus(null);
   }, [atlas]);
+  const selected = entries.find((entry) => entry.id === focused && entry.focus);
   useEffect(() => {
-    const entry = entries.find((entry) => entry.label === focused && entry.focus);
-    atlas?.setFocus(entry?.focus ?? null);
-    if (focused && !entry) useUiStore.setState({ legendFocus: null });
-  }, [atlas, entries, focused]);
+    atlas?.setFocus(selected?.focus ?? null);
+    if (focused && !selected) useUiStore.setState({ legendFocus: null });
+  }, [atlas, selected, focused]);
+  const hasFocus = selected !== undefined;
+  useLayoutEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    const style = document.documentElement.style;
+    const publish = () => {
+      const bottom = `${element.getBoundingClientRect().bottom}px`;
+      style.setProperty('--hud-header-bottom', bottom);
+      if (hasFocus) style.setProperty('--focus-header-bottom', bottom);
+      else style.removeProperty('--focus-header-bottom');
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+    window.addEventListener('resize', publish);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', publish);
+      style.removeProperty('--hud-header-bottom');
+      style.removeProperty('--focus-header-bottom');
+    };
+  }, [hasFocus]);
+  const displayLabel = (entry: (typeof entries)[number]) =>
+    entry.id === 'class:admin_subdivision'
+      ? `${capitalize(subdivisionLabel)} boundary`
+      : entry.label;
+  const clearFocus = () => {
+    useUiStore.setState({ legendFocus: null });
+    const target = !hidden
+      ? summary.current
+      : document.querySelector<HTMLCanvasElement>('canvas[tabindex="0"]');
+    target?.focus({ preventScroll: true });
+  };
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? wide;
 
   return (
-    <details
-      className={styles.legend}
-      hidden={hidden}
-      open={open}
-      onToggle={(e) => {
-        const next = (e.target as HTMLDetailsElement).open;
-        if (next !== open) setToggled(next);
-      }}
-    >
-      <summary>Legend</summary>
-      <ul aria-label="What the glyphs on screen mean">
-        {entries.map((entry) => (
-          <li key={entry.label}>
-            {entry.focus ? (
-              <button
-                type="button"
-                className={styles.legendEntry}
-                aria-pressed={focused === entry.label}
-                onClick={() =>
-                  useUiStore.setState({ legendFocus: focused === entry.label ? null : entry.label })
-                }
-              >
-                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                  {entry.icons
-                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                    : entry.glyphs}
-                </span>
-                <span>
-                  {entry.label === 'Subdivision boundary'
-                    ? `${capitalize(subdivisionLabel)} boundary`
-                    : entry.label}
-                </span>
-              </button>
-            ) : (
-              <>
-                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                  {entry.icons
-                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                    : entry.glyphs}
-                </span>
-                <span>
-                  {entry.label === 'Subdivision boundary'
-                    ? `${capitalize(subdivisionLabel)} boundary`
-                    : entry.label}
-                </span>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-    </details>
+    <>
+      <div className={`${styles.row} ${styles.header}`} ref={header}>
+        <ZoomReadout />
+        {selected && (
+          <button
+            type="button"
+            className={`${styles.button} ${styles.focusClear}`}
+            aria-label={`Clear legend focus: ${displayLabel(selected)}`}
+            title={`Clear legend focus: ${displayLabel(selected)}`}
+            onClick={clearFocus}
+          >
+            <span className={styles.focusLabel}>Focus: {displayLabel(selected)}</span>
+            <span aria-hidden="true">×</span>
+          </button>
+        )}
+      </div>
+      <details
+        className={styles.legend}
+        hidden={hidden}
+        open={open}
+        onToggle={(e) => {
+          const next = (e.target as HTMLDetailsElement).open;
+          if (next !== open) setToggled(next);
+        }}
+      >
+        <summary ref={summary}>Legend</summary>
+        <ul aria-label="What the glyphs on screen mean">
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              {entry.focus ? (
+                <button
+                  type="button"
+                  className={styles.legendEntry}
+                  aria-pressed={focused === entry.id}
+                  onClick={() =>
+                    useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
+                  }
+                >
+                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                    {entry.icons
+                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                      : entry.glyphs}
+                  </span>
+                  <span>{displayLabel(entry)}</span>
+                </button>
+              ) : (
+                <>
+                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                    {entry.icons
+                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                      : entry.glyphs}
+                  </span>
+                  <span>{displayLabel(entry)}</span>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </>
   );
 }
 
@@ -482,10 +534,7 @@ export function Hud({
     <>
       <SubdivisionTracker city={city} />
       <div className={styles.topRight}>
-        <div className={styles.row}>
-          <ZoomReadout />
-        </div>
-        <Legend
+        <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
           hidden={panelOpen}

@@ -115,16 +115,40 @@ for (const city of cities) {
             .locator('details')
             .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
           await expect(legend).toBeVisible();
-          if (!hasTouch) {
-            const focus = legend.getByRole('button').first();
+          // Passive readouts must pass map input through, even when attribution pushes them up.
+          const scaleBox = (await page.getByLabel(/^Scale:/).boundingBox())!;
+          expect(
+            await canvas.evaluate(
+              (map, point) => document.elementFromPoint(point.x, point.y) === map,
+              { x: scaleBox.x + scaleBox.width / 2, y: scaleBox.y + scaleBox.height / 2 },
+            ),
+          ).toBe(true);
+          await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
+          await expect(coordsButton(page)).toBeVisible();
+          await coordsButton(page).click();
+          const summary = legend.locator('summary');
+          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
+            await summary.click();
+          const focus = legend.getByRole('button').first();
+          if (hasTouch) await focus.tap();
+          else {
             await focus.focus();
             await page.keyboard.press('Enter');
-            await expect(focus).toHaveAttribute('aria-pressed', 'true');
             await expect(focus).toHaveCSS('outline-style', 'solid');
-            await legend.locator('summary').click();
-            await legend.locator('summary').click();
-            await expect(focus).toHaveAttribute('aria-pressed', 'true');
           }
+          await expect(focus).toHaveAttribute('aria-pressed', 'true');
+          const clearFocus = page.getByRole('button', { name: /^Clear legend focus:/ });
+          await expect(clearFocus).toBeVisible();
+          if (hasTouch) {
+            expect((await focus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            expect((await clearFocus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            const toursBox = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
+            const zoomBox = (await page.getByLabel('Zoom').boundingBox())!;
+            expect(zoomBox.x).toBeGreaterThanOrEqual(toursBox.x + toursBox.width + 8);
+          }
+          await summary.click();
+          await expect(clearFocus).toBeVisible();
           // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
           // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {
@@ -142,10 +166,22 @@ for (const city of cities) {
           });
           await expect.poll(() => query(page).sel).toBe(place.id);
           await expect(legend).toBeHidden();
+          await expect(clearFocus).toBeVisible();
+          if (hasTouch) await clearFocus.tap();
+          else await clearFocus.click();
+          await expect(clearFocus).toHaveCount(0);
+          await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
+          expect(query(page).sel).toBe(place.id);
+          await expect(canvas).toBeFocused();
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
-          if (!hasTouch) await expect(legend.locator('button[aria-pressed="true"]')).toHaveCount(0);
+          await expect(legend.locator('button[aria-pressed="true"]')).toHaveCount(0);
+          await summary.click();
+          await focus.click();
+          await expect(clearFocus).toBeVisible();
+          await page.keyboard.press('Escape');
+          await expect(clearFocus).toHaveCount(0);
         },
       );
 

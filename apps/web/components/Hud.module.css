@@ -16,6 +16,29 @@
   gap: 8px;
 }
 
+.header {
+  max-width: 100%;
+}
+
+.header .zoom {
+  flex: none;
+  white-space: nowrap;
+}
+
+.focusClear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 32ch;
+}
+
+.focusLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .zoom {
   margin: 0;
   padding: 4px 8px;
@@ -26,7 +49,9 @@
 }
 
 .legend {
-  max-height: calc(100dvh - 120px);
+  max-height: calc(
+    100dvh - var(--hud-header-bottom, 44px) - var(--attribution-height, 16px) - 16px
+  );
   overflow-y: auto;
   padding: 6px 10px;
   background: rgb(4 5 10 / 88%);
@@ -40,6 +65,12 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
+}
+
+.legend summary:focus-visible,
+.focusClear:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
 }
 
 .legend ul {
@@ -104,6 +135,13 @@
   gap: 6px;
   z-index: 12;
   font-size: 12px;
+  /* Passive readouts and the gaps between controls must not swallow map gestures. */
+  pointer-events: none;
+}
+
+.bottomLeft .button,
+.bottomLeft .line [title] {
+  pointer-events: auto;
 }
 
 .scale {
@@ -170,6 +208,23 @@
 
   .zoom {
     font-size: 12px;
+  }
+
+  /* Tours occupies the left of this row; keep zoom and clear focus beside it. */
+  .header {
+    max-width: calc(100vw - 120px);
+  }
+
+  .legendEntry,
+  .legend summary,
+  .focusClear {
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .legend summary {
+    align-content: center;
   }
 
   /* Above the attribution, which wraps to a few lines on phones (Attribution.tsx publishes its height). */

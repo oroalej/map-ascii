@@ -127,7 +127,7 @@ import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
+export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { RenderClass } from './classes';
