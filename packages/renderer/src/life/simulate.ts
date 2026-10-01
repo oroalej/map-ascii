@@ -3054,7 +3054,8 @@ export class LifeWorld {
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
-    return !masked(life.tile, p, this.covers.get(life));
+    // Uniform-zoom steady state has no covered footprints.
+    return !this.mixedZoom || !masked(life.tile, p, this.covers.get(life));
   }
 
   /** Revive frozen tiles, then reconcile only regions whose zoom ownership changed. */
