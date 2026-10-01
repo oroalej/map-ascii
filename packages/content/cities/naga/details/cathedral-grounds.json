@@ -1,0 +1,125 @@
+{
+  "id": "detail/cathedral-grounds",
+  "osm_id": "osm:way/1203045057",
+  "title": "Naga Metropolitan Cathedral grounds",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "porta-pier-0",
+      "ring": [
+        [123.18669271, 13.62752386],
+        [123.18670392, 13.62751758],
+        [123.18672241, 13.6275487],
+        [123.1867112, 13.62755498],
+        [123.18669271, 13.62752386]
+      ],
+      "height_m": 10,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "porta-pier-1",
+      "ring": [
+        [123.18673698, 13.62749903],
+        [123.18674819, 13.62749274],
+        [123.18676667, 13.62752386],
+        [123.18675547, 13.62753014],
+        [123.18673698, 13.62749903]
+      ],
+      "height_m": 10,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "porta-pier-2",
+      "ring": [
+        [123.18678125, 13.62747419],
+        [123.18679245, 13.6274679],
+        [123.18681094, 13.62749902],
+        [123.18679973, 13.62750531],
+        [123.18678125, 13.62747419]
+      ],
+      "height_m": 10,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "porta-pier-3",
+      "ring": [
+        [123.18682551, 13.62744935],
+        [123.18683672, 13.62744306],
+        [123.18685521, 13.62747418],
+        [123.186844, 13.62748047],
+        [123.18682551, 13.62744935]
+      ],
+      "height_m": 10,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "porta-span",
+      "ring": [
+        [123.18669271, 13.62752386],
+        [123.1868368, 13.62744302],
+        [123.18685529, 13.62747414],
+        [123.1867112, 13.62755498],
+        [123.18669271, 13.62752386]
+      ],
+      "height_m": 11,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "processional-forecourt",
+      "ring": [
+        [123.18677759, 13.62779823],
+        [123.18692969, 13.62771289],
+        [123.18706834, 13.62794627],
+        [123.18691624, 13.62803161],
+        [123.18677759, 13.62779823]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "central-approach",
+      "line": [
+        [123.18691372, 13.6278453],
+        [123.18698767, 13.62797106]
+      ],
+      "width_m": 1.5
+    }
+  ],
+  "seating": [
+    {
+      "id": "west-court",
+      "line": [
+        [123.18680528, 13.62786327],
+        [123.1868373, 13.6278453]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Naga Metropolitan Cathedral grounds — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/1203045057",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/the-porta-mariae/",
+      "note": "Porta Mariae published dimensions: 18 m wide, 4 m deep, 11 m high. Four piers and overhead span show three walkable openings; exact pier thickness and orientation estimated around the OSM gate. Existing Cathedral roof plan and landcover order retained. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ],
+  "selection_osm_id": "osm:way/23666715"
+}

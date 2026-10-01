@@ -259,12 +259,18 @@
     }
   ],
   "status": "draft",
-  "credit": "Trees and ground cover traced from Esri, Maxar, Earthstar Geographics",
+  "credit": "Trees and ground cover traced from Esri, Maxar, Earthstar Geographics; Naga Metropolitan Cathedral grounds — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
   "sources": [
     {
       "title": "Esri World Imagery (Wayback release 2025-01-30)",
       "url": "https://livingatlas.arcgis.com/wayback/",
       "note": "Traced at z18 (~0.6 m/px) over the release 36557 tiles, 2026-09-29: tree crowns (sizes measured from the imagery; kinds are not identifiable at this resolution) and, at the Cathedral, the parking lot and plaza lawns."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/the-porta-mariae/",
+      "note": "Porta Mariae published dimensions: 18 m wide, 4 m deep, 11 m high. Four piers and overhead span show three walkable openings; exact pier thickness and orientation estimated around the OSM gate. Existing Cathedral roof plan and landcover order retained. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
     }
-  ]
+  ],
+  "rows": []
 }
