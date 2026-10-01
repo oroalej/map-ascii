@@ -1,4 +1,3 @@
-import { makeCellGuard } from './cell-guard';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -6,6 +5,7 @@ import { makeCellGuard } from './cell-guard';
  * key when it comes into view, so the same tile always starts with the same agents. Pure TS: the
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
+import { makeCellGuard } from './cell-guard';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -3234,7 +3234,10 @@ export class LifeWorld {
     };
   }
 
-  /** A versioned, immutable view of the terrain needed by the main-thread cell packer. */
+  /**
+   * The terrain the main-thread cell packer needs, versioned by identity. Callers must not mutate
+   * the returned indexes.
+   */
   cellTerrain() {
     const ref = this.tiles.values().next().value;
     const terrain = this.groundTerrain;

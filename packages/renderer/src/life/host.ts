@@ -67,7 +67,9 @@ export function createWorkerHost(
   let ready = false,
     inFlight = false,
     disposed = false,
-    generation = 0;
+    generation = 0,
+    frames = 0,
+    playedFrom = 0;
   let view: FrameView | undefined;
   let terrain: ReturnType<typeof cellTerrainFrom> | undefined;
   let fallback: LifeHost | undefined;
@@ -116,7 +118,9 @@ export function createWorkerHost(
       });
       for (const key of sent) if (!keep.has(key)) sent.delete(key);
       // Structured clone: lamps and fixtures still own these buffers on the main thread.
+      const postStart = profiler?.time();
       void remote.sync(payload).catch(fail);
+      if (postStart !== undefined) profiler!.record('syncPost', profiler!.time() - postStart);
     },
     request(input) {
       if (disposed) return false;
@@ -124,12 +128,17 @@ export function createWorkerHost(
       if (!ready || inFlight) return false;
       inFlight = true;
       const requestedGeneration = generation;
+      const frame = ++frames;
       const posted = profiler?.time();
       void remote
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
+          // Only frames posted after play() can show that its time-lapse has ended.
+          const run = result.procession;
+          if (played && frame > playedFrom && !(run && !run.live && run.id === played))
+            played = undefined;
           if (result.terrain !== undefined) {
             const start = profiler?.time();
             terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
@@ -162,6 +171,7 @@ export function createWorkerHost(
     play(id) {
       if (disposed || !processions.some((route) => route.id === id)) return false;
       played = id;
+      playedFrom = frames;
       if (fallback) return fallback.play(id);
       void remote.play(id).catch(fail);
       return true;

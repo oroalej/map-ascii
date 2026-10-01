@@ -50,6 +50,27 @@ const fixture = () => {
   return { ...s, input };
 };
 
+const route: ProcessionRoute = {
+  id: 'test',
+  title: { en: 'Test' },
+  status: 'draft',
+  kind: 'fluvial',
+  route: [
+    [0, 0],
+    [0.001, 0],
+  ],
+  length_m: 111,
+  schedule: {
+    month: 9,
+    weekday: 0,
+    nth: 3,
+    offset_days: 0,
+    start: '15:00',
+    duration_min: 60,
+    timezone: 'UTC',
+  },
+};
+
 describe('pipelined Life host', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -94,6 +115,7 @@ describe('pipelined Life host', () => {
     profiler.begin(1);
     profiler.end();
     expect(profiler.snapshot().samples[0]).toMatchObject({ checks: 2, ms: { step: 3 } });
+    expect(profiler.snapshot().stages.syncPost.count).toBe(1);
     host.sync([]);
     host.sync(s.tiles);
     expect(mock.sync.mock.calls.at(-1)![0][0]!.life).toBe(s.tiles[0]!.life);
@@ -128,26 +150,6 @@ describe('pipelined Life host', () => {
   });
 
   it('answers procession membership synchronously and recovers from startup failure', async () => {
-    const route: ProcessionRoute = {
-      id: 'test',
-      title: { en: 'Test' },
-      status: 'draft',
-      kind: 'fluvial',
-      route: [
-        [0, 0],
-        [0.001, 0],
-      ],
-      length_m: 111,
-      schedule: {
-        month: 9,
-        weekday: 0,
-        nth: 3,
-        offset_days: 0,
-        start: '15:00',
-        duration_min: 60,
-        timezone: 'UTC',
-      },
-    };
     const s = fixture();
     mock.init.mockRejectedValueOnce(new Error('worker startup failed'));
     const host = createWorkerHost({}, [route]);
@@ -163,5 +165,45 @@ describe('pipelined Life host', () => {
     expect(host.latest()?.procession).toBeUndefined();
     host.dispose();
     expect(mock.terminate).toHaveBeenCalledOnce();
+  });
+
+  it('replays a procession after worker failure only while it is still playing', async () => {
+    const s = fixture();
+    const replies: ((value: FrameResult) => void)[] = [];
+    mock.frame.mockImplementation(
+      () =>
+        new Promise<FrameResult>((r) => {
+          replies.push(r);
+        }),
+    );
+    const failOver = async (host: ReturnType<typeof createWorkerHost>) => {
+      mock.setLive.mockRejectedValueOnce(new Error('worker lost'));
+      host.setLive(undefined);
+      await flush();
+    };
+
+    // A reply to a frame posted before play() cannot show that the time-lapse ended.
+    const early = createWorkerHost({}, [route]);
+    early.sync(s.tiles);
+    await flush();
+    expect(early.request(s.input)).toBe(true);
+    expect(early.play('test')).toBe(true);
+    replies.shift()!(result(1));
+    await flush();
+    await failOver(early);
+    expect(early.latest()?.procession?.id).toBe('test');
+    early.dispose();
+
+    // A later reply without it means the time-lapse ended; the fallback must not restart it.
+    const ended = createWorkerHost({}, [route]);
+    ended.sync(s.tiles);
+    await flush();
+    expect(ended.play('test')).toBe(true);
+    expect(ended.request(s.input)).toBe(true);
+    replies.shift()!(result(1));
+    await flush();
+    await failOver(ended);
+    expect(ended.latest()?.procession).toBeUndefined();
+    ended.dispose();
   });
 });

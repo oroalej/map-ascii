@@ -1,5 +1,5 @@
-import { flattenPolygons, type FlatPolygons } from './flat-polygons';
 /** Ground-agent clearance, in meters, shared across loaded tile boundaries. */
+import { flattenPolygons, type FlatPolygons } from './flat-polygons';
 import type { PersonFigure } from './people';
 import { CAT_LENGTH_M } from './cats';
 import { DOG_LENGTH_M } from './dogs';

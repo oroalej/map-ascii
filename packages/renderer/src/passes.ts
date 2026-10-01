@@ -1,11 +1,11 @@
-import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
-export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
  * the glyph pass draws the glyphs at full resolution. The life pass puts the life layer's agents
  * on the grid every frame.
  */
+import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
 import {
   classDepths,
