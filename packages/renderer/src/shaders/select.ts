@@ -18,7 +18,6 @@ import {
   SHADOW_STATE,
   DEFAULT_SUN,
   GUST_STEPS,
-  Tone,
   TONE_SHIFT,
   WIND_SHIFT,
   FALLING,
@@ -40,7 +39,9 @@ import {
   WaterStroke,
 } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
-import { vegetationGlsl } from './vegetation';
+import { windVegetationGlsl } from './vegetation';
+import { foliageShadowGlsl } from './foliage';
+import { FOLIAGE_PENDING } from './foliage-select';
 import { partyWallsGlsl } from './party-walls';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -86,14 +87,16 @@ out vec4 o_glyph;
 // background, set in main before any emit.
 float g_state = 0.0;
 int g_bg = 0;
-// SHADOW_STATE if the cell is in a shadow (glyphs/select.ts inShadow), whatever it draws.
-float g_shadow = 0.0;
+// Resolve the receiver during selection, then trace exactly once after the winning cell.
+int g_shadowReceiver;
+vec4 g_shadowReceiverId;
+vec4 g_shadowReceiverAttr;
 // A vegetation cell's wind level (windLevel) and tone (Tone), which the glyph pass lights and tints.
 int g_wind = 0;
 int g_tone = 0;
 
 void emit(vec2 glyph, int cls) {
-  float state = g_state + g_shadow + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
+  float state = g_state + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
   o_glyph = vec4(glyph.x, float(cls + (int(glyph.y * 255.0 + 0.5) << 6)) / 255.0, state / 255.0, float(g_bg) / 255.0);
 }
 
@@ -103,7 +106,8 @@ int classAt(ivec2 p) {
 }
 
 ${cellHashGlsl}
-${vegetationGlsl}
+${windVegetationGlsl}
+${foliageShadowGlsl}
 
 vec4 idAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_id, 0) - 1);
@@ -196,8 +200,6 @@ int subClassAt(ivec2 q) {
   return int(texelFetch(u_subClass, q, 0).r * 255.0 + 0.5);
 }
 
-bool inShadow(ivec2 p, int receiver, vec4 receiverId, vec4 receiverAttr);
-
 // Sub-cell edge (glyphs/select.ts subcellEdge): emits the sextant and returns true, or returns
 // false if the cell keeps its glyph. cls is the cell's class (0 for none), id its feature.
 bool subcellEdge(ivec2 p, int cls, vec4 id) {
@@ -225,7 +227,11 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
     else if (bg == 0) bg = subClassAt(q);
   }
   if (mask == 0 || mask == 63) return false;
-  if (fg == ${classId('tree_crown')}) g_shadow = inShadow(p, fg, fgId, fgAttr) ? ${SHADOW_STATE}.0 : 0.0;
+  if (fg == ${classId('tree_crown')}) {
+    g_shadowReceiver = fg;
+    g_shadowReceiverId = fgId;
+    g_shadowReceiverAttr = fgAttr;
+  }
   g_state = stateOf(unpackId(fgId)) + ${EDGE_STATE}.0;
   g_bg = fillClass(bg);
   emit(texelFetch(u_table, ivec2(mask % 32, ${SEXTANT_ROW} + mask / 32), 0).rg, fg);
@@ -354,14 +360,13 @@ bool inShadow(ivec2 p, int receiver, vec4 receiverId, vec4 receiverAttr) {
   return false;
 }
 
-void main() {
+void selectCell() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int cls = classAt(p);
   int kind = u_kind[cls];
-  g_shadow = inShadow(p, cls, idAt(p), texelFetch(u_attr, p, 0)) ? ${SHADOW_STATE}.0 : 0.0;
   if (cls == 0 || kind == 0) {
     // An empty cell may still hold part of an area's edge, or a shadow on the ground.
-    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
+    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0);
     return;
   }
   vec4 id = idAt(p);
@@ -507,25 +512,22 @@ void main() {
     v = min(cropVariant(w, front.x), u_count[cls] - 1);
     g_tone = cropTone(w);
     g_wind = windLevel(front.x, front.y);
-  } else if (kind == ${kindCodes.canopy}) {
-    // Woods in the wind (glyphs/select.ts canopyCell): crowns creep downwind and flutter; their
-    // sunny side is lit and the far side shaded.
-    float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
-    int tone;
-    v = min(canopyVariant(p, w, variant, gust, u_time, tone), u_count[cls] - 1);
-    g_tone = tone;
-  } else if (kind == ${kindCodes.foliage}) {
-    // Crown lighting is applied across its rounded surface in the glyph pass.
-    float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
-    bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
-      || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
-    bool boundary = false;
-    const ivec2 sides[4] = ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
-    for (int i=0;i<4;i++) if (classAt(p+sides[i]) == cls && idAt(p+sides[i]) != id) boundary = true;
-    v = min(foliageVariant(w, attr.gb*2.0-1.0, unpackId(id), u_time, gust, rim, boundary), u_count[cls] - 1);
-    g_tone = crownIsDry(unpackId(id)) ? ${Tone.dry} : ${Tone.none};
   }
+  // Only interiors reaching this path need foliage selection: preserve early outline/sidewalk returns.
+  if (kind == ${kindCodes.canopy} || kind == ${kindCodes.foliage}) g_bg |= ${FOLIAGE_PENDING};
+
   vec2 glyph = texelFetch(u_table, ivec2(v, cls), 0).rg;
   emit(glyph, cls);
+}
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  g_shadowReceiver = classAt(p);
+  g_shadowReceiverId = idAt(p);
+  g_shadowReceiverAttr = texelFetch(u_attr, p, 0);
+  selectCell();
+  if (inShadow(p, g_shadowReceiver, g_shadowReceiverId, g_shadowReceiverAttr)) {
+    o_glyph.b += ${SHADOW_STATE}.0 / 255.0;
+  }
 }
 `;

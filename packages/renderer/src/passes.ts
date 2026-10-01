@@ -375,7 +375,7 @@ export function selectPass(
   awnings = true,
 ) {
   const { tables } = themeRes.map;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, targets.selectFbo);
   gl.viewport(0, 0, targets.cols, targets.rows);
   gl.useProgram(programs.select.program);
   twgl.setUniforms(programs.select, {
@@ -408,9 +408,26 @@ export function selectPass(
     u_subId: targets.sub.idTex,
     u_area: areas,
     ...sunUniforms(view, sun),
-    ...foliageUniforms(view, grid, sun),
   });
   gl.bindVertexArray(programs.emptyVao);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // A separate program keeps leaf-clump work out of the core shader's wall/shadow branches.
+  gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
+  gl.useProgram(programs.foliage.program);
+  twgl.setUniforms(programs.foliage, {
+    u_inputGlyphs: targets.selectTex,
+    u_class: targets.classTex,
+    u_attr: targets.attrTex,
+    u_id: targets.idTex,
+    u_table: themeRes.map.tableTex,
+    u_kind: tables.kinds,
+    u_count: tables.counts,
+    u_origin: [grid.originCol, grid.originRow],
+    u_time: time,
+    u_wind: wind.strength,
+    u_windDir: wind.dir,
+    ...foliageUniforms(view, grid, sun),
+  });
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 

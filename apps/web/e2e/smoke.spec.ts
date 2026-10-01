@@ -56,7 +56,7 @@ for (const city of cities) {
         expect(background).toBe('rgb(4, 5, 10)');
 
         await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
-        await expect(page.getByText(/needs WebGL2/)).toHaveCount(0);
+        await expect(page.getByText(/Map graphics could not start/)).toHaveCount(0);
         // Without generated tiles (e.g. in CI) the app explains how to build them instead of failing.
         await expect(page.getByText(/No map data for/)).toHaveCount(city.hasMeta ? 0 : 1);
         await expect(page.getByText(/map data .* is invalid/)).toHaveCount(0);

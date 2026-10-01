@@ -18,6 +18,7 @@ vi.mock('./gpu-context', () => ({
   deleteLabelGlyphs: vi.fn(),
 }));
 vi.mock('./gpu', () => ({
+  createContext: (canvas: HTMLCanvasElement) => canvas.getContext('webgl2'),
   createCellTargets: (
     _gl: unknown,
     cols: number,

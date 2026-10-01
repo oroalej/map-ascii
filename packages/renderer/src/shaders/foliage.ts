@@ -50,6 +50,10 @@ vec3 crownTint(uint seed) {
   const vec3 tints[3]=vec3[3](${CROWN_TINTS.map((t) => `vec3(${t.map(f).join(',')})`).join(',')});
   return tints[cellHash(ivec2(int(seed),9))%3u];
 }
+`;
+
+/** The shadow ray only needs the crown dome, not the leaf-clump lighting functions. */
+export const foliageShadowGlsl = /* glsl */ `
 float foliageShadowHeight(float h, vec2 local) {
   return h*(0.55+0.45*sqrt(max(0.0,1.0-dot(local,local))));
 }

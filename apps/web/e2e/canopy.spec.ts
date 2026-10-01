@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   classDepths,
   classId,
+  Flags,
   classVisibility,
   crownSurfaces,
   groundClasses,
@@ -12,6 +13,11 @@ import {
 import {
   buildGlyphTables,
   canopyCell,
+  crownIsDry,
+  treeGust,
+  Tone,
+  TONE_SHIFT,
+  EDGE_STATE,
   foliageVariant,
   MAX_VARIANTS,
   roadMask,
@@ -25,6 +31,10 @@ import { cellFragment, cellVertex } from '../../../packages/renderer/src/shaders
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
+import {
+  foliageSelectFragment,
+  FOLIAGE_PENDING,
+} from '../../../packages/renderer/src/shaders/foliage-select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
 for (const theme of ['dark', 'light'] as const) {
@@ -35,6 +45,52 @@ for (const theme of ['dark', 'light'] as const) {
     const glyphs = [' ', ...mapGlyphs(themes[theme]).filter((g) => g !== ' ')];
     const index = (g: string) => glyphs.indexOf(g);
     const tables = buildGlyphTables(themes[theme], index);
+    const leafCases = [];
+    for (const night of [false, true])
+      for (const wind of [0, 1]) {
+        for (const feature of ['crown42', 'crown73', 'boundary', 'woods0', 'woods1', 'woods2']) {
+          const crown = !feature.startsWith('woods');
+          const cls = classId(crown ? 'tree_crown' : 'trees');
+          const variant = crown ? 0 : Number(feature.at(-1));
+          const attrs: number[] = [],
+            ids: number[] = [],
+            selected: number[] = [],
+            expected: number[] = [];
+          for (let y = 0; y < 8; y++)
+            for (let x = 0; x < 12; x++) {
+              const seed = feature === 'crown73' || (feature === 'boundary' && x >= 6) ? 73 : 42;
+              const local = [Math.round((x / 11) * 255), Math.round((y / 7) * 255)] as const;
+              attrs.push(10, crown ? local[0] : 0, crown ? local[1] : variant, 0);
+              ids.push(seed, 0, 0, 0);
+              // Hover, shadow and wind are already packed by core selection; the foliage pass preserves them.
+              selected.push(0, cls, 41, 19 | FOLIAGE_PENDING);
+              const gust = treeGust(x, y, 3.5, [1, 0]) * wind;
+              const chosen = crown
+                ? {
+                    variant: foliageVariant(x, y, 3.5, gust, false, {
+                      id: seed,
+                      local: [(local[0] / 255) * 2 - 1, (local[1] / 255) * 2 - 1],
+                      sun: [0, 0, 1],
+                      night,
+                      boundary: feature === 'boundary' && (x === 5 || x === 6),
+                    }),
+                    tone: crownIsDry(seed) ? Tone.dry : Tone.none,
+                  }
+                : canopyCell(x, y, variant, gust, 3.5, [1, 0], undefined, {
+                    sun: [0, 0, 1],
+                    night,
+                  });
+              const at = (cls * MAX_VARIANTS + chosen.variant) * 2;
+              expected.push(
+                tables.table[at]!,
+                cls | (tables.table[at + 1]! << 6),
+                41 | (chosen.tone << TONE_SHIFT),
+                19,
+              );
+            }
+          leafCases.push({ night, wind, feature, cls, attrs, ids, selected, expected });
+        }
+      }
     const result = await page.evaluate(
       (input) => {
         const cols = 12,
@@ -88,6 +144,7 @@ for (const theme of ['dark', 'light'] as const) {
         };
         const cell = program(input.cellVertex, input.cellFragment);
         const select = program(input.fullscreenVertex, input.selectFragment);
+        const foliage = program(input.fullscreenVertex, input.foliageSelectFragment);
         const glyph = program(input.fullscreenVertex, input.glyphFragment);
         type UniformValue = number | number[] | WebGLTexture;
         const uniforms = (p: WebGLProgram, values: Record<string, UniformValue>) => {
@@ -140,6 +197,16 @@ for (const theme of ['dark', 'light'] as const) {
           subBase = raster(cols * 2, rows * 3);
         const live = raster(cols, rows),
           sub = raster(cols * 2, rows * 3);
+        const coreSelected = texture(cols, rows);
+        const coreFbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, coreFbo);
+        gl.framebufferTexture2D(
+          gl.FRAMEBUFFER,
+          gl.COLOR_ATTACHMENT0,
+          gl.TEXTURE_2D,
+          coreSelected,
+          0,
+        );
         const selected = texture(cols, rows);
         const selectFbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
@@ -311,8 +378,29 @@ for (const theme of ['dark', 'light'] as const) {
         colors[input.roof * 3 + 2] = 1;
         colors[input.person * 3] = 1;
         colors[input.bird * 3] = 1;
-        const render = (zoom = 20, shadows = 0) => {
+        const foliate = (night = 0, wind = 0, time = 0) => {
           gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
+          uniforms(foliage, {
+            u_inputGlyphs: coreSelected,
+            u_class: live.textures[0]!,
+            u_attr: live.textures[1]!,
+            u_id: live.textures[2]!,
+            u_table: tableTex,
+            u_kind: input.kinds,
+            u_count: input.counts,
+            u_crownSun: [0, 0, 1],
+            u_crownNight: night,
+            u_time: time,
+            u_wind: wind,
+            u_windDir: [1, 0],
+            u_canopyOrigin: [0, 0],
+            u_canopyPhase: [0, 0],
+            u_canopyStep: [0.25, 0.5],
+          });
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        };
+        const render = (zoom = 20, shadows = 0) => {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, coreFbo);
           gl.viewport(0, 0, cols, rows);
           uniforms(select, {
             u_class: live.textures[0]!,
@@ -344,6 +432,7 @@ for (const theme of ['dark', 'light'] as const) {
           });
           gl.bindVertexArray(emptyVao);
           gl.drawArrays(gl.TRIANGLES, 0, 3);
+          foliate();
           gl.bindFramebuffer(gl.FRAMEBUFFER, null);
           gl.viewport(0, 0, canvas.width, canvas.height);
           uniforms(glyph, {
@@ -535,6 +624,72 @@ for (const theme of ['dark', 'light'] as const) {
           { length: cols * rows },
           (_, i) => input.glyphs[woodsBytes[i * 4]! + ((woodsBytes[i * 4 + 1]! >> 6) << 8)],
         );
+        gl.bindVertexArray(emptyVao);
+        gl.viewport(0, 0, cols, rows);
+        let compared = 0;
+        for (const sample of input.leafCases) {
+          const classes = new Uint8Array(cols * rows * 4);
+          for (let i = 0; i < classes.length; i += 4) classes[i] = sample.cls;
+          upload(live.textures[0]!, cols, rows, classes);
+          upload(live.textures[1]!, cols, rows, new Uint8Array(sample.attrs));
+          upload(live.textures[2]!, cols, rows, new Uint8Array(sample.ids));
+          upload(coreSelected, cols, rows, new Uint8Array(sample.selected));
+          foliate(Number(sample.night), sample.wind, 3.5);
+          const bytes = new Uint8Array(cols * rows * 4);
+          gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+          for (let i = 0; i < bytes.length; i++) {
+            if (bytes[i] !== sample.expected[i])
+              throw new Error(
+                `${sample.feature} night=${sample.night} wind=${sample.wind} byte ${i}: ${bytes[i]} != ${sample.expected[i]}`,
+              );
+            compared++;
+          }
+        }
+        // A landmark woodland outline is resolved by core selection and must keep its wall glyph.
+        const outlinedClasses = new Uint8Array(cols * rows * 4);
+        const outlinedAttrs = new Uint8Array(outlinedClasses.length);
+        const outlinedIds = new Uint8Array(outlinedClasses.length);
+        for (let y = 2; y < 6; y++)
+          for (let x = 4; x < 8; x++) {
+            const at = (y * cols + x) * 4;
+            outlinedClasses[at] = input.woods;
+            outlinedAttrs[at + 1] = input.landmarkFlag;
+            outlinedIds[at] = 42;
+          }
+        upload(live.textures[0]!, cols, rows, outlinedClasses);
+        upload(live.textures[1]!, cols, rows, outlinedAttrs);
+        upload(live.textures[2]!, cols, rows, outlinedIds);
+        render();
+        const outline = new Uint8Array(4),
+          coreOutline = new Uint8Array(4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, coreFbo);
+        gl.readPixels(4, 3, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, coreOutline);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
+        gl.readPixels(4, 3, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, outline);
+        if (coreOutline[0] === 0 || outline.some((byte, i) => byte !== coreOutline[i])) {
+          throw new Error('Foliage pass replaced a woodland outline');
+        }
+        gl.viewport(0, 0, cols, rows);
+        // Every non-leaf cell and every leaf sextant must survive unchanged, even above glyph 255.
+        const preserved = new Uint8Array(cols * rows * 4);
+        for (let i = 0; i < cols * rows; i++) {
+          const cls = [input.roof, input.crown, input.woods][i % 3]!;
+          preserved.set(
+            [
+              (i * 7) & 255,
+              cls | ((i % 4) << 6),
+              ((i * 3) & 255) | (i % 2 ? input.edgeState : 0),
+              19,
+            ],
+            i * 4,
+          );
+        }
+        upload(coreSelected, cols, rows, preserved);
+        foliate(1, 1, 3.5);
+        const copied = new Uint8Array(preserved.length);
+        gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, copied);
+        if (copied.some((b, i) => b !== preserved[i]))
+          throw new Error('Foliage pass changed preserved cell metadata');
         if (gl.getError() !== gl.NO_ERROR) throw new Error('Foliage parity WebGL error');
         return {
           classes: [
@@ -554,6 +709,7 @@ for (const theme of ['dark', 'light'] as const) {
           revealedCar,
           revealedPerson,
           occlusion,
+          compared,
           crownGlyphs,
           woodsGlyphs,
           samplers,
@@ -561,10 +717,14 @@ for (const theme of ['dark', 'light'] as const) {
         };
       },
       {
+        landmarkFlag: Flags.landmark,
+        leafCases,
+        edgeState: EDGE_STATE,
         cellVertex,
         cellFragment,
         fullscreenVertex,
         selectFragment,
+        foliageSelectFragment,
         glyphFragment,
         glyphs,
         sextants: [...sextantGlyphs],
@@ -638,6 +798,7 @@ for (const theme of ['dark', 'light'] as const) {
         occluders: [classId('tree'), classId('tree_crown'), classId('trees')],
       },
     );
+    expect(result.compared).toBe(24 * 96 * 4);
     expect(result.classes).toEqual([
       classId('tree_crown'),
       classId('tree_crown'),

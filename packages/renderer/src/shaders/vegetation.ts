@@ -26,11 +26,7 @@ import { foliageGlsl } from './foliage';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
-export const vegetationGlsl = /* glsl */ `
-${foliageGlsl}
-uniform ivec2 u_canopyOrigin;
-uniform vec2 u_canopyPhase;
-uniform vec2 u_canopyStep;
+export const windVegetationGlsl = /* glsl */ `
 uniform vec2 u_windDir; // where the wind blows: a unit vector in cells (x east, y south)
 
 int vmod(int a, int n) {
@@ -143,6 +139,15 @@ vec2 swayOffset(float reach, float gust, float wake, float time, float phase) {
     * sin(time * ${float(SWAY.rate)} + phase);
   return dir * along + vec2(-dir.y, dir.x) * across;
 }
+
+`;
+
+/** Leaf selection is isolated from the core selection program to bound driver compilation. */
+export const vegetationGlsl = /* glsl */ `${windVegetationGlsl}
+${foliageGlsl}
+uniform ivec2 u_canopyOrigin;
+uniform vec2 u_canopyPhase;
+uniform vec2 u_canopyStep;
 
 bool flutters(uint h, float gust, float time) {
   float phase = float((h >> 8u) & 255u) / 256.0;

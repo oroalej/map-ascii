@@ -5,10 +5,45 @@ import type { GeometryArrays, GroundGeometry, TileGeometry } from './raster/geom
 
 export type GL = WebGL2RenderingContext;
 
-export function createProgram(gl: GL, vertex: string, fragment: string): twgl.ProgramInfo {
-  return twgl.createProgramInfo(gl, [vertex, fragment], (message: string) => {
-    throw new Error(`ASCII Atlas shader error: ${message}`);
+/** A failed context request can be transient; it does not establish browser API support. */
+export function createContext(canvas: HTMLCanvasElement): GL {
+  let detail = '';
+  const onError = (event: Event) => {
+    detail = (event as WebGLContextEvent).statusMessage;
+  };
+  canvas.addEventListener('webglcontextcreationerror', onError);
+  try {
+    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
+    if (!gl)
+      throw new Error(
+        `ASCII Atlas: WebGL2 context could not be initialized.${detail ? ` ${detail}` : ''}`,
+      );
+    return gl;
+  } finally {
+    canvas.removeEventListener('webglcontextcreationerror', onError);
+  }
+}
+
+export function createProgram(
+  gl: GL,
+  vertex: string,
+  fragment: string,
+  name = 'unnamed',
+): twgl.ProgramInfo {
+  const messages: string[] = [];
+  // TWGL reports link errors before shader logs and then releases failed resources. Throwing
+  // in its callback interrupts both diagnostics and cleanup.
+  const info = twgl.createProgramInfo(gl, [vertex, fragment], (message: string) => {
+    messages.push(message);
   });
+  if (!info || gl.isContextLost()) {
+    if (info) gl.deleteProgram(info.program);
+    const reason = gl.isContextLost()
+      ? 'Graphics context lost during initialization.'
+      : 'Program creation failed.';
+    throw new Error(`ASCII Atlas ${name} shader error: ${reason}\n${messages.join('\n')}`);
+  }
+  return info;
 }
 
 /** A nearest-filtered, edge-clamped 2D texture. */
@@ -21,6 +56,7 @@ export function createTexture(
   data: ArrayBufferView | null = null,
 ): WebGLTexture {
   const texture = gl.createTexture();
+  if (!texture) throw new Error('ASCII Atlas: graphics texture unavailable.');
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, gl.UNSIGNED_BYTE, data);
@@ -41,6 +77,9 @@ export type CellTargets = {
   classTex: WebGLTexture;
   attrTex: WebGLTexture;
   idTex: WebGLTexture;
+  /** Core selection before the foliage pass (never sampled while attached for drawing). */
+  selectTex: WebGLTexture;
+  selectFbo: WebGLFramebuffer;
   glyphTex: WebGLTexture;
   /** RGBA8 overlay on the label grid: 16-bit label glyph code, color index (labels.ts). */
   overlayTex: WebGLTexture;
@@ -86,25 +125,48 @@ function checkComplete(gl: GL, what: string) {
   }
 }
 
-function createRasterTargets(gl: GL, width: number, height: number, what: string): RasterTargets {
-  // RGBA8 rather than R8 (only red is used): the legend reads it back as RGBA, which then needs
-  // no format conversion.
-  const classTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
-  const attrTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
-  const idTex = createTexture(gl, gl.RGBA8, gl.RGBA, width, height);
-  const depth = gl.createRenderbuffer();
-  gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+/** Roll back only allocations made by this constructor if a later allocation fails. */
+function withRollback<T>(build: (own: <R>(value: R, dispose: (value: R) => void) => R) => T): T {
+  const release: (() => void)[] = [];
+  try {
+    return build((value, dispose) => {
+      if (value == null) throw new Error('ASCII Atlas: graphics resources unavailable.');
+      release.push(() => dispose(value));
+      return value;
+    });
+  } catch (error) {
+    for (const dispose of release.reverse()) dispose();
+    throw error;
+  }
+}
 
-  const fbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, classTex, 0);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, attrTex, 0);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, idTex, 0);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
-  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-  checkComplete(gl, what);
-  return { width, height, classTex, attrTex, idTex, depth, fbo };
+function createRasterTargets(gl: GL, width: number, height: number, what: string): RasterTargets {
+  return withRollback((own) => {
+    // RGBA8 rather than R8 (only red is used): the legend reads it back as RGBA, which then needs
+    // no format conversion.
+    const classTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, width, height), (value) =>
+      gl.deleteTexture(value),
+    );
+    const attrTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, width, height), (value) =>
+      gl.deleteTexture(value),
+    );
+    const idTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, width, height), (value) =>
+      gl.deleteTexture(value),
+    );
+    const depth = own(gl.createRenderbuffer(), (value) => gl.deleteRenderbuffer(value));
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+
+    const fbo = own(gl.createFramebuffer(), (value) => gl.deleteFramebuffer(value));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, classTex, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, attrTex, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, idTex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+    checkComplete(gl, what);
+    return { width, height, classTex, attrTex, idTex, depth, fbo };
+  });
 }
 
 /**
@@ -147,48 +209,81 @@ export function createCellTargets(
   labelCols: number,
   labelRows: number,
 ): CellTargets {
-  const cell = createRasterTargets(gl, cols, rows, 'cell');
-  const sub = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell');
-  const base = createRasterTargets(gl, cols, rows, 'cell base');
-  const subBase = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell base');
-  const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
-  const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const lightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  return withRollback((own) => {
+    const cell = own(createRasterTargets(gl, cols, rows, 'cell'), (value) =>
+      deleteRasterTargets(gl, value),
+    );
+    const sub = own(
+      createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell'),
+      (value) => deleteRasterTargets(gl, value),
+    );
+    const base = own(createRasterTargets(gl, cols, rows, 'cell base'), (value) =>
+      deleteRasterTargets(gl, value),
+    );
+    const subBase = own(
+      createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell base'),
+      (value) => deleteRasterTargets(gl, value),
+    );
+    const selectTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
+    const selectFbo = own(gl.createFramebuffer(), (value) => gl.deleteFramebuffer(value));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, selectTex, 0);
+    checkComplete(gl, 'selection');
+    const glyphTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
+    const overlayTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows), (value) =>
+      gl.deleteTexture(value),
+    );
+    const lifeTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
+    const lightTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
+    // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-  const fixtureTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const signalLightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+    const fixtureTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
+    const signalLightTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
 
-  const glyphFbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
-  checkComplete(gl, 'glyph');
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const glyphFbo = own(gl.createFramebuffer(), (value) => gl.deleteFramebuffer(value));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
+    checkComplete(gl, 'glyph');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  return {
-    cols,
-    rows,
-    labelCols,
-    labelRows,
-    classTex: cell.classTex,
-    attrTex: cell.attrTex,
-    idTex: cell.idTex,
-    glyphTex,
-    overlayTex,
-    lifeTex,
-    lightTex,
-    fixtureTex,
-    signalLightTex,
-    depth: cell.depth,
-    cellFbo: cell.fbo,
-    glyphFbo,
-    sub,
-    base,
-    subBase,
-  };
+    return {
+      cols,
+      rows,
+      labelCols,
+      labelRows,
+      classTex: cell.classTex,
+      attrTex: cell.attrTex,
+      idTex: cell.idTex,
+      selectTex,
+      selectFbo,
+      glyphTex,
+      overlayTex,
+      lifeTex,
+      lightTex,
+      fixtureTex,
+      signalLightTex,
+      depth: cell.depth,
+      cellFbo: cell.fbo,
+      glyphFbo,
+      sub,
+      base,
+      subBase,
+    };
+  });
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
@@ -196,6 +291,7 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
     t.classTex,
     t.attrTex,
     t.idTex,
+    t.selectTex,
     t.glyphTex,
     t.overlayTex,
     t.lifeTex,
@@ -207,6 +303,7 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
   }
   gl.deleteRenderbuffer(t.depth);
   gl.deleteFramebuffer(t.cellFbo);
+  gl.deleteFramebuffer(t.selectFbo);
   gl.deleteFramebuffer(t.glyphFbo);
   deleteRasterTargets(gl, t.sub);
   deleteRasterTargets(gl, t.base);

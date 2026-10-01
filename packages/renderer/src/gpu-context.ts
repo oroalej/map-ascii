@@ -1,5 +1,5 @@
 /**
- * The GPU resources the frame needs besides tile meshes: the three programs, the glyph atlases
+ * The GPU resources the frame needs besides tile meshes: the shader programs, the glyph atlases
  * and glyph table (theme resources, which depend on the device pixel ratio and, for the map's,
  * on the cell size, density.ts), and the cell-grid render targets. Each group is created and
  * deleted as a unit, so a lost WebGL context can be rebuilt from scratch (index.ts).
@@ -13,6 +13,7 @@ import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragment } from './shaders/glyph';
 import { selectFragment } from './shaders/select';
+import { foliageSelectFragment } from './shaders/foliage-select';
 import { labelVertex, labelFragment } from './shaders/labels';
 import { labelCharacters, mapGlyphs, type Theme } from './theme';
 import { buildLifeGlyphs, type LifeGlyphs } from './life/draw';
@@ -32,41 +33,61 @@ export type Programs = {
   streetText: StreetTextMesh;
   cell: twgl.ProgramInfo;
   select: twgl.ProgramInfo;
+  foliage: twgl.ProgramInfo;
   glyph: twgl.ProgramInfo;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
 };
 
 export function createPrograms(gl: GL): Programs {
+  const created: twgl.ProgramInfo[] = [];
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
-  gl.bindVertexArray(vao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  // Position, UV, glyph index (shaders/labels.ts), 5 floats a vertex.
-  for (const [slot, size, offset] of [
-    [0, 2, 0],
-    [1, 2, 8],
-    [2, 1, 16],
-  ]) {
-    gl.enableVertexAttribArray(slot!);
-    gl.vertexAttribPointer(slot!, size!, gl.FLOAT, false, 20, offset!);
-  }
-  gl.bindVertexArray(null);
-  return {
-    labels: createProgram(gl, labelVertex, labelFragment),
-    streetText: { vao, buffer, count: 0 },
-    cell: createProgram(gl, cellVertex, cellFragment),
-    select: createProgram(gl, fullscreenVertex, selectFragment),
-    glyph: createProgram(gl, fullscreenVertex, glyphFragment),
-    emptyVao: gl.createVertexArray(),
+  const emptyVao = gl.createVertexArray();
+  const program = (name: string, vertex: string, fragment: string) => {
+    const info = createProgram(gl, vertex, fragment, name);
+    created.push(info);
+    return info;
   };
+  try {
+    if (!vao || !buffer || !emptyVao)
+      throw new Error('ASCII Atlas: graphics resources unavailable.');
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    // Position, UV, glyph index (shaders/labels.ts), 5 floats a vertex.
+    for (const [slot, size, offset] of [
+      [0, 2, 0],
+      [1, 2, 8],
+      [2, 1, 16],
+    ]) {
+      gl.enableVertexAttribArray(slot!);
+      gl.vertexAttribPointer(slot!, size!, gl.FLOAT, false, 20, offset!);
+    }
+    gl.bindVertexArray(null);
+    return {
+      labels: program('labels', labelVertex, labelFragment),
+      streetText: { vao, buffer, count: 0 },
+      cell: program('cell', cellVertex, cellFragment),
+      select: program('selection', fullscreenVertex, selectFragment),
+      foliage: program('foliage', fullscreenVertex, foliageSelectFragment),
+      glyph: program('glyph', fullscreenVertex, glyphFragment),
+      emptyVao,
+    };
+  } catch (error) {
+    for (const info of created) gl.deleteProgram(info.program);
+    gl.bindVertexArray(null);
+    gl.deleteVertexArray(vao);
+    gl.deleteBuffer(buffer);
+    gl.deleteVertexArray(emptyVao);
+    throw error;
+  }
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);
-  for (const info of [p.cell, p.select, p.glyph]) gl.deleteProgram(info.program);
+  for (const info of [p.cell, p.select, p.foliage, p.glyph]) gl.deleteProgram(info.program);
   gl.deleteVertexArray(p.emptyVao);
 }
 

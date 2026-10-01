@@ -27,7 +27,7 @@ import {
 } from './camera';
 import { classesIn, type RenderClass } from './classes';
 import { DEFAULT_FONT } from './glyphs/atlas';
-import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
+import { createContext, createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
   cellStep,
   DEFAULT_CELLS,
@@ -363,10 +363,7 @@ const smooth = (average: number, sample: number) =>
  * Steps 1–3 run only when the camera or tiles change (passes.ts has the passes).
  */
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
-  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
-  if (!gl) {
-    throw new Error('ASCII Atlas requires WebGL2, which this browser does not support.');
-  }
+  const gl = createContext(canvas);
   const readGpuRenderer = (): string | null => {
     if (!options.profiling) return null;
     const ext = gl.getExtension('WEBGL_debug_renderer_info');

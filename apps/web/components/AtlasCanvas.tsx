@@ -9,7 +9,7 @@ import {
   type ProcessionRoute,
   type TrafficMix,
 } from '@atlas/shared';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
@@ -20,10 +20,6 @@ import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
 import styles from './AtlasCanvas.module.css';
 
-let webgl2Supported: boolean | undefined;
-const detectWebGL2 = () =>
-  (webgl2Supported ??= document.createElement('canvas').getContext('webgl2') !== null);
-const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
 const SMALL_SCREEN = '(max-width: 640px)';
 const SMALL_SCREEN_MIN_CELL = 6;
@@ -109,8 +105,8 @@ export function AtlasCanvas({
   cityLife?: CityLifeConfig | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Static export renders on the server, where we optimistically assume support.
-  const supported = useSyncExternalStore(subscribeNoop, detectWebGL2, () => true);
+  const [attempt, setAttempt] = useState(0);
+  const [startupFailed, setStartupFailed] = useState(false);
   const metaState = useCityMeta(slug);
   const meta = metaState.status === 'ready' ? metaState.meta : null;
   const processions = metaState.status === 'ready' ? metaState.processions : null;
@@ -124,7 +120,7 @@ export function AtlasCanvas({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !supported || !meta) return;
+    if (!canvas || !meta) return;
     const store = useAtlasStore.getState();
     // A camera already in the store (e.g. after a remount) wins; else the URL's, over the
     // city's default view. Only lat, lng, and zoom are taken from the meta: meta files built
@@ -142,26 +138,36 @@ export function AtlasCanvas({
     useLifeStore.setState(lifePrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
-    const atlas = createAtlas(canvas, {
-      quality,
-      utilities: { derive: utilitiesDerived },
-      tilesUrl: `/tiles/${slug}.pmtiles`,
-      theme: store.theme,
-      cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
-      bounds: meta.regionBounds,
-      initialCamera: camera,
-      year: store.year,
-      reducedMotion: prefersReducedMotion(),
-      gpuTiming: isDebugRequested(),
-      profiling: isDebugRequested(),
-      interactive: isPickable,
-      life: lifeSettings(lifePrefs),
-      traffic,
-      climate,
-      timezone,
-      cityLife,
-      processions: processions ?? [],
-    });
+    let atlas: ReturnType<typeof createAtlas>;
+    try {
+      atlas = createAtlas(canvas, {
+        quality,
+        utilities: { derive: utilitiesDerived },
+        tilesUrl: `/tiles/${slug}.pmtiles`,
+        theme: store.theme,
+        cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
+        bounds: meta.regionBounds,
+        initialCamera: camera,
+        year: store.year,
+        reducedMotion: prefersReducedMotion(),
+        gpuTiming: isDebugRequested(),
+        profiling: isDebugRequested(),
+        interactive: isPickable,
+        life: lifeSettings(lifePrefs),
+        traffic,
+        climate,
+        timezone,
+        cityLife,
+        processions: processions ?? [],
+      });
+    } catch (error) {
+      console.error('ASCII Atlas graphics initialization failed', error);
+      // Synchronous GPU initialization must report its outcome to the React overlay.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStartupFailed(true);
+      return;
+    }
+    setStartupFailed(false);
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas });
@@ -187,19 +193,12 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife, utilitiesDerived]);
-
-  if (!supported) {
-    return (
-      <p role="alert" className={styles.notice}>
-        ASCII Atlas needs WebGL2, which this browser does not support.
-      </p>
-    );
-  }
+  }, [attempt, meta, processions, slug, traffic, climate, timezone, cityLife, utilitiesDerived]);
 
   return (
     <>
       <canvas
+        key={attempt}
         ref={canvasRef}
         className={styles.canvas}
         aria-label={[
@@ -213,7 +212,22 @@ export function AtlasCanvas({
         // Focusable so the map's keyboard controls (+/-, arrow keys) work.
         tabIndex={0}
       />
-      {contextLost && (
+      {startupFailed && (
+        <div role="alert" className={styles.notice}>
+          <p>Map graphics could not start.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setStartupFailed(false);
+              setContextLost(false);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!startupFailed && contextLost && (
         <p role="status" className={styles.notice}>
           The graphics context was lost. Restoring the map…
         </p>
