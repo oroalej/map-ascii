@@ -729,7 +729,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const loaded = tileCache.get(tile);
       if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
     }
-    host.sync(lifeTiles, [camera.lng, camera.lat]);
+    const cell = stepCell(schedule, step ?? 0);
+    host.sync(lifeTiles, [camera.lng, camera.lat], {
+      bounds: viewBounds(),
+      spawnMarginM: Math.max(12, 2 * metersPerCssPx(camera) * Math.max(cell.width, cell.height)),
+    });
   };
 
   /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */

@@ -10,6 +10,13 @@ import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames'
 import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
 import type { ContinuityRejection } from './diagnostics';
 import { seamAhead } from './seams';
+import {
+  BIRTHS,
+  outsideView,
+  entryDistances,
+  type LifeViewContext,
+  type PendingSeed,
+} from './births';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -437,6 +444,9 @@ export class TileLife {
   readonly scenes: LocalScenes;
   private readonly catRng: () => number;
   readonly movers: Mover[] = [];
+  /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
+  readonly pending: PendingSeed[] = [];
+  birthCredit = 0;
   readonly flocks: Flock[] = [];
   readonly parked: Parked[] = [];
   /** Trains standing by on sidings: one entry per car (`spawnStandby`). */
@@ -835,6 +845,14 @@ export class TileLife {
       return out;
     }
     const mover = 'kind' in a;
+    if (mover && a.train) {
+      const train = this.birthBodies(a);
+      out.length = train.length;
+      train.forEach((b, i) => {
+        out[i] = { ...b, length: Math.max(b.length, minimum) };
+      });
+      return out;
+    }
     const lane = mover ? this.offsetOf(a) : 0;
     const x = a.x / this.perMeter - a.hy * lane;
     const y = a.y / this.perMeter + a.hx * lane;
@@ -1104,6 +1122,68 @@ export class TileLife {
     const hy = (coords[(v + 1) * 2 + 1]! - coords[v * 2 + 1]!) / length;
     const t = distance - this.along[v]!;
     return { x: coords[v * 2]! + hx * t, y: coords[v * 2 + 1]! + hy * t, hx, hy };
+  }
+  /** Pure candidate placement on the seed's original route; complete trains need a real trail. */
+  placeSeed(m: Mover, distance: number): Mover | undefined {
+    const line = m.line,
+      first = this.first(line),
+      last = this.last(line);
+    const d = Math.max(0, Math.min(this.lineLength(line), distance));
+    let v = first;
+    while (v < last - 1 && this.along[v + 1]! <= d) v++;
+    const length = this.segment(v, v + 1);
+    if (!length) return;
+    const point = this.pointAt(line, d);
+    const candidate: Mover = {
+      ...m,
+      ...point,
+      hx: point.hx * m.dir,
+      hy: point.hy * m.dir,
+      from: m.dir === 1 ? v : v + 1,
+      d: m.dir === 1 ? d - this.along[v]! : this.along[v + 1]! - d,
+      v: 0,
+      next: undefined,
+      came: undefined,
+      junctionRoute: undefined,
+    };
+    if (m.routing) candidate.routing = { seed: m.routing.seed, turns: m.routing.turns };
+    if (m.train) {
+      const length = trainLength(m.train.cars) * this.perMeter;
+      if (m.dir === 1 ? d < length : this.lineLength(line) - d < length) return;
+      const trail: number[] = [];
+      for (
+        let back = TRAIN.crumb * this.perMeter;
+        back < length + TRAIN.crumb * this.perMeter;
+        back += TRAIN.crumb * this.perMeter
+      ) {
+        const p = this.pointAt(line, d - m.dir * Math.min(length, back));
+        trail.push(p.x, p.y);
+      }
+      candidate.train = { ...m.train, trail, stopX: NaN, stopY: NaN, edge: false, reverse: false };
+    }
+    return candidate;
+  }
+
+  birthBodies(m: Mover): Body[] {
+    if (!m.train) return this.groundBodies(m);
+    const trail = [m.x, m.y, ...m.train.trail],
+      bodies: Body[] = [];
+    let back = 0;
+    for (const car of m.train.cars) {
+      const spec = VEHICLES[car],
+        at = alongTrail(trail, (back + spec.length / 2) * this.perMeter);
+      if (!at) return [];
+      bodies.push({
+        x: at.x / this.perMeter,
+        y: at.y / this.perMeter,
+        hx: at.hx,
+        hy: at.hy,
+        length: spec.length,
+        width: spec.width,
+      });
+      back += spec.length + TRAIN.coupling;
+    }
+    return bodies;
   }
 
   /** Who walks together (config.ts `PEOPLE`): one to four, led by an adult. */
@@ -2625,7 +2705,7 @@ export class TileLife {
         );
         if (this.caps[i]! + 1e-9 < next) this.motionStats.hardCaps++;
         speeds[i] = Math.min(next, this.caps[i]!);
-        if (seam) speeds[i] = Math.min(speeds[i]!, Math.max(0, seam.room) / dt);
+        if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
       const distance = speeds[i]! * dt;
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
@@ -3012,6 +3092,11 @@ export type LifeLineShape = {
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 export class LifeWorld {
+  private viewContext?: LifeViewContext;
+  private bootstrapped = false;
+  private previouslyVisible = new WeakSet<Mover>();
+  private birthCursor = 0;
+  private birthCredit = 0;
   private readonly junctions = new JunctionTable();
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
@@ -3099,6 +3184,10 @@ export class LifeWorld {
     this.groundBuffers = new WeakMap();
     this.roadCache = new WorldRoadCache();
     this.railTopology = undefined;
+    this.viewContext = undefined;
+    this.bootstrapped = false;
+    this.previouslyVisible = new WeakSet();
+    this.birthCursor = this.birthCredit = 0;
   }
 
   private pruneRetired(cap = true) {
@@ -3114,7 +3203,9 @@ export class LifeWorld {
   }
 
   /** Revive frozen tiles, then reconcile only regions whose zoom ownership changed. */
-  sync(tiles: readonly LifeTile[], focus?: readonly [number, number]) {
+  sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext) {
+    if (view) this.viewContext = view;
+    const gradual = !!this.viewContext && this.bootstrapped;
     const start = this.profiler?.time();
     try {
       this.pruneRetired(false);
@@ -3146,7 +3237,6 @@ export class LifeWorld {
           this.tiles.set(key, fresh);
           if (!saved) {
             this.profiler?.registerPopulation(key, fresh.movers);
-            this.profiler?.countContinuity('births', fresh.movers.length);
             added.add(fresh);
             this.history.set(fresh, { ceded: [], quotas: {} });
           } else this.profiler?.countContinuity('revivals', fresh.movers.length);
@@ -3195,6 +3285,17 @@ export class LifeWorld {
         for (const life of added) {
           const quotas = this.history.get(life)!.quotas;
           for (const m of life.movers) if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
+          if (!gradual) this.profiler?.countContinuity('births', life.movers.length);
+          if (gradual)
+            for (const m of [...life.movers]) {
+              if (
+                !['vehicle', 'boat', 'person', 'train'].includes(m.kind) ||
+                !life.scenes.transferable(m)
+              )
+                continue;
+              life.pending.push({ mover: m, at: life.elapsed });
+              life.release(m);
+            }
         }
       }
       if (changed) {
@@ -3244,6 +3345,7 @@ export class LifeWorld {
         for (const m of life.movers) if (!this.owns(life, m)) this.junctions.release(m);
       this.junctions.begin(new Set(this.tiles.values()));
       this.pruneRetired();
+      if (tiles.length) this.bootstrapped = true;
     } finally {
       if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
     }
@@ -3262,7 +3364,9 @@ export class LifeWorld {
       : { x: EXTENT / 2, y: EXTENT / 2 };
     for (const kind of ['vehicle', 'boat', 'train', 'person'] as const) {
       const quota = this.history.get(target)!.quotas[kind] ?? 0;
-      let count = target.movers.filter((m) => m.kind === kind && inTile(m)).length;
+      let count =
+        target.movers.filter((m) => m.kind === kind && inTile(m)).length +
+        target.pending.filter((p) => p.mover.kind === kind && inTile(p.mover)).length;
       const limit = Math.max(quota, count);
       const candidates = donors
         .flatMap((d) => {
@@ -3294,13 +3398,23 @@ export class LifeWorld {
         if (!c.life.movers.includes(c.m)) continue;
         this.profiler?.countContinuity('attempts');
         let replace: Mover | undefined;
-        if (count >= limit || kind === 'train') {
+        const pending = target.pending
+          .filter((p) => p.mover.kind === kind && gained(p.mover))
+          .sort(
+            (a, b) =>
+              (a.mover.x - c.x) ** 2 +
+              (a.mover.y - c.y) ** 2 -
+              (b.mover.x - c.x) ** 2 -
+              (b.mover.y - c.y) ** 2,
+          )[0];
+        if (!pending && (count >= limit || kind === 'train')) {
           let nearest = Infinity;
           for (const m of target.movers) {
             if (
               m.kind !== kind ||
               !gained(m) ||
               transferred.has(m) ||
+              (this.viewContext && this.previouslyVisible.has(m)) ||
               !target.scenes.transferable(m)
             )
               continue;
@@ -3338,6 +3452,7 @@ export class LifeWorld {
               )),
         );
         if (!accepted) continue;
+        if (pending) target.pending.splice(target.pending.indexOf(pending), 1);
         this.profiler?.countContinuity('transfers');
         this.junctions.rebind(
           c.m,
@@ -3351,7 +3466,7 @@ export class LifeWorld {
         }
         guard.remove(c.m);
         if (kind === 'vehicle' || kind === 'person') guard(target, c.m);
-        if (!replace) count++;
+        if (!replace && !pending) count++;
         transferred.add(c.m);
       }
     }
@@ -3377,7 +3492,12 @@ export class LifeWorld {
   }
 
   /** One metric coordinate system for all tiles, so clearance also works across a seam. */
-  private groundGuard(minimum = 0, fresh?: ReadonlySet<TileLife>, bounds?: LngLatBounds) {
+  private groundGuard(
+    minimum = 0,
+    fresh?: ReadonlySet<TileLife>,
+    bounds?: LngLatBounds,
+    allBodies = false,
+  ) {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
@@ -3520,8 +3640,11 @@ export class LifeWorld {
       for (const p of life.parked) standing(p, p.vehicle);
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
       for (const s of life.stalls)
-        if (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))
-          standing(s, 'cart');
+        if (allBodies || (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))) {
+          if (allBodies) {
+            if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
+          } else standing(s, 'cart');
+        }
       if (fresh?.has(life)) continue;
       for (const m of life.movers)
         if (
@@ -3529,14 +3652,14 @@ export class LifeWorld {
           this.owns(life, m) &&
           !life.scenes.hidden(m) &&
           (m.kind === 'vehicle' || isWalker(m.kind)) &&
-          (!this.lastLevels || m.rank < this.lastLevels[m.kind])
+          (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
           occupied.set(m, bodies(life, m, buffer(m).live));
       for (const g of life.gatherers)
         if (
           inView(g) &&
           this.owns(life, g) &&
-          (!this.lastLevels || g.rank < this.lastLevels.places[g.place])
+          (allBodies || !this.lastLevels || g.rank < this.lastLevels.places[g.place])
         )
           occupied.set(g, bodies(life, g, buffer(g).live));
     }
@@ -3703,6 +3826,7 @@ export class LifeWorld {
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
+    if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.pruneRetired();
     if (!this.tiles.size) {
@@ -3889,6 +4013,7 @@ export class LifeWorld {
       }
     }
     if (!shows || shows('train')) this.stepArrivals(clamped);
+    this.admitBirths(clamped);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -3931,6 +4056,151 @@ export class LifeWorld {
         return false;
     }
     return true;
+  }
+  private admitBirths(dt: number) {
+    const view = this.viewContext;
+    const lives = [...this.tiles.values()]
+      .filter((life) => life.pending.length)
+      .sort((a, b) => a.tile.z - b.tile.z || a.tile.x - b.tile.x || a.tile.y - b.tile.y);
+    if (!view || !lives.length) {
+      this.birthCredit = 0;
+      return;
+    }
+    this.birthCredit = Math.min(BIRTHS.worldRate, this.birthCredit + dt * BIRTHS.worldRate);
+    for (const life of lives)
+      life.birthCredit = Math.min(BIRTHS.tileRate, life.birthCredit + dt * BIRTHS.tileRate);
+    const guard = this.groundGuard(0, undefined, undefined, true);
+    const available = lives.reduce((sum, life) => sum + life.pending.length, 0);
+    for (let attempt = 0; attempt < Math.min(BIRTHS.attempts, available); attempt++) {
+      const life = lives[this.birthCursor++ % lives.length]!;
+      const seed = life.pending.shift();
+      if (!seed) continue;
+      this.profiler?.countContinuity('attempts');
+      const m = seed.mover,
+        kind = life.geo.kinds[m.line];
+      const invalid =
+        kind === undefined ||
+        !usableLines[m.kind].includes(kind as LifeLine) ||
+        (m.kind === 'vehicle' && life.geo.oneway?.[m.line] && life.geo.oneway[m.line] !== m.dir) ||
+        (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat');
+      if (invalid) {
+        this.profiler?.countContinuity('geometry');
+        continue;
+      }
+      if (life.movers.length >= MAX_TILE_AGENTS) {
+        this.profiler?.countContinuity('capQuota');
+        life.pending.push(seed);
+        continue;
+      }
+      let bodies = life.birthBodies(m),
+        candidate = m;
+      let ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
+      let entered = false;
+      const fallback =
+        life.elapsed - seed.at >= BIRTHS.grace &&
+        life.birthCredit >= 1 - 1e-9 &&
+        this.birthCredit >= 1 - 1e-9;
+      if (fallback && !ordinary) {
+        const radius = bodies.length
+          ? Math.max(
+              ...bodies.map(
+                (b) =>
+                  Math.hypot(b.x - m.x / life.perMeter, b.y - m.y / life.perMeter) +
+                  Math.hypot(b.length, b.width) / 2,
+              ),
+            )
+          : 2;
+        const distances = entryDistances(life, m, view, radius);
+        const index = (seed.entrance ?? 0) % distances.length;
+        seed.entrance = (seed.entrance ?? 0) + 1;
+        const distance = distances[index];
+        if (distance !== undefined) {
+          const placed = life.placeSeed(m, distance);
+          const full = placed ? life.birthBodies(placed) : [];
+          // Route endpoints are explicit entrances; viewport entries start fully offscreen.
+          const endpoint = index === distances.length - 1;
+          if (
+            placed &&
+            inTile(placed) &&
+            this.owns(life, placed) &&
+            full.length &&
+            (endpoint || outsideView(life, full, view, 0))
+          ) {
+            candidate = placed;
+            bodies = full;
+            entered = true;
+          }
+        }
+      }
+      ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
+      if (
+        (!ordinary && !entered) ||
+        !bodies.length ||
+        !inTile(candidate) ||
+        !this.owns(life, candidate) ||
+        !this.birthFits(life, candidate, guard)
+      ) {
+        life.pending.push(seed);
+        continue;
+      }
+      Object.assign(m, candidate);
+      life.movers.push(m);
+      if (m.kind !== 'boat') guard(life, m);
+      if (entered) {
+        life.birthCredit = Math.max(0, life.birthCredit - 1);
+        this.birthCredit = Math.max(0, this.birthCredit - 1);
+      }
+      this.profiler?.countContinuity('births');
+    }
+  }
+  private birthFits(life: TileLife, m: Mover, guard: ReturnType<LifeWorld['groundGuard']>) {
+    if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) return false;
+    if (
+      m.kind === 'person' &&
+      life
+        .birthBodies(m)
+        .some(
+          (b) =>
+            !life.scenes.walkable(
+              { x: b.x * life.perMeter, y: b.y * life.perMeter },
+              { x: b.x * life.perMeter, y: b.y * life.perMeter },
+            ),
+        )
+    )
+      return false;
+    if (m.kind === 'boat') return this.boatRoom(life, m, m, []);
+    if (m.train) {
+      const bodies = life.birthBodies(m);
+      if (
+        !bodies.length ||
+        bodies.some(
+          (b) =>
+            !life.projectRail({
+              ...m,
+              x: b.x * life.perMeter,
+              y: b.y * life.perMeter,
+              hx: b.hx,
+              hy: b.hy,
+            }),
+        )
+      )
+        return false;
+      for (const otherLife of this.tiles.values())
+        for (const other of otherLife.movers) {
+          if (!other.train || !this.owns(otherLife, other)) continue;
+          const f = frameBetween(otherLife.tile, life.tile),
+            scale = (f.scale * otherLife.perMeter) / life.perMeter;
+          const otherBodies = otherLife.birthBodies(other).map((b) => ({
+            ...b,
+            x: f.x / life.perMeter + b.x * scale,
+            y: f.y / life.perMeter + b.y * scale,
+            length: b.length * scale + 2 * FOLLOW.minGap,
+            width: b.width * scale,
+          }));
+          if (bodies.some((a) => otherBodies.some((b) => bodiesOverlap(a, b)))) return false;
+        }
+    }
+    return guard(life, m, undefined, undefined, false, m);
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */
@@ -4118,11 +4388,14 @@ export class LifeWorld {
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
+          if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
+            this.previouslyVisible.add(m);
           // A train is long, and there are few: all its cars, wherever its head is.
           for (const car of trainCars(life, m)) out.push({ ...car, consist: m.train });
           continue;
         }
         if (!inView(m.x, m.y)) continue;
+        if (this.viewContext) this.previouslyVisible.add(m);
         this.profiler?.observeVisible(m, m.kind === 'vehicle' || m.kind === 'boat');
         // Keep right, in a lane that fits the road: offset to the right of the heading (tile y
         // points down).

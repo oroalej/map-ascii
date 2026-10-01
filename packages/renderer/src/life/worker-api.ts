@@ -7,6 +7,7 @@ import { LifeWorld, type LifeTile, type VisibleAgent, type ProcessionRun } from 
 import type { LifeGeometry } from './geometry';
 import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
+import type { LifeViewContext } from './births';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -88,7 +89,7 @@ export function createLifeWorkerApi() {
       lastTerrain = undefined;
       terrainSent = false;
     },
-    sync(tiles: readonly SyncTile[], focus?: readonly [number, number]) {
+    sync(tiles: readonly SyncTile[], focus?: readonly [number, number], view?: LifeViewContext) {
       const keep = new Set(tiles.map((t) => t.key));
       const resolved = tiles.map(({ key, tile, life }) => {
         const geometry = life ?? geometries.get(key);
@@ -99,7 +100,7 @@ export function createLifeWorkerApi() {
       for (const key of geometries.keys()) if (!keep.has(key)) geometries.delete(key);
       // Sync happens between frame requests. Carry its timing into the next frame result.
       profiler?.begin(0);
-      world.sync(resolved, focus);
+      world.sync(resolved, focus, view);
       const sample = profiler?.drain();
       if (sample) profiler!.merge(sample);
       if (!tiles.length) terrainSent = false;

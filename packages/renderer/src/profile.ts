@@ -157,7 +157,7 @@ export class FrameProfiler {
       const data = (target.continuity ??= { counts: {}, trace: [] });
       for (const [event, count] of Object.entries(sample.continuity.counts)) {
         const key = event as ContinuityCounter;
-        data.counts[key] = (data.counts[key] ?? 0) + count!;
+        data.counts[key] = (data.counts[key] ?? 0) + count;
       }
       data.trace.push(...sample.continuity.trace);
       if (data.trace.length > PROFILE_CAPACITY)
@@ -218,7 +218,7 @@ export class FrameProfiler {
       if (sample.continuity) {
         for (const [event, count] of Object.entries(sample.continuity.counts)) {
           const key = event as ContinuityCounter;
-          continuity.counts[key] = (continuity.counts[key] ?? 0) + count!;
+          continuity.counts[key] = (continuity.counts[key] ?? 0) + count;
         }
         continuity.trace.push(...sample.continuity.trace);
       }

@@ -5,6 +5,7 @@ import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from 
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
+import type { LifeViewContext } from './births';
 
 export type FrameView = {
   agents: VisibleAgent[];
@@ -13,7 +14,7 @@ export type FrameView = {
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
-  sync(tiles: readonly LifeTile[], focus?: readonly [number, number]): void;
+  sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext): void;
   clearTiles(): void;
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
@@ -29,9 +30,9 @@ export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): Li
   let disposed = false;
   let acceptedPost: number | undefined;
   return {
-    sync: (tiles, focus) => {
+    sync: (tiles, focus, view) => {
       if (disposed) return;
-      world.sync(tiles, focus);
+      world.sync(tiles, focus, view);
       if (!tiles.length) agents = [];
     },
     clearTiles() {
@@ -95,6 +96,7 @@ export function createWorkerHost(
   let fallback: LifeHost | undefined;
   let tiles: readonly LifeTile[] = [];
   let focus: readonly [number, number] | undefined;
+  let viewContext: LifeViewContext | undefined;
   let live: { id: string | undefined; progress?: number } = { id: undefined };
   let played: string | undefined;
   const sent = new Set<string>();
@@ -108,7 +110,7 @@ export function createWorkerHost(
     ready = false;
     release();
     fallback = inline();
-    fallback.sync(tiles, focus);
+    fallback.sync(tiles, focus, viewContext);
     fallback.setLive(live.id, live.progress);
     if (played) fallback.play(played);
   };
@@ -119,12 +121,13 @@ export function createWorkerHost(
     if (!disposed && !fallback) ready = true;
   }, fail);
   return {
-    sync(next, nextFocus) {
+    sync(next, nextFocus, nextView) {
       if (disposed) return;
       tiles = next;
       focus = nextFocus;
+      viewContext = nextView;
       if (fallback) {
-        fallback.sync(next, nextFocus);
+        fallback.sync(next, nextFocus, nextView);
         return;
       }
       const keep = new Set(next.map((tile) => tile.key));
@@ -143,13 +146,14 @@ export function createWorkerHost(
       for (const key of sent) if (!keep.has(key)) sent.delete(key);
       // Structured clone: lamps and fixtures still own these buffers on the main thread.
       const postStart = profiler?.time();
-      void remote.sync(payload, nextFocus).catch(fail);
+      void remote.sync(payload, nextFocus, nextView).catch(fail);
       if (postStart !== undefined) profiler!.record('syncPost', profiler!.time() - postStart);
     },
     clearTiles() {
       if (disposed) return;
       tiles = [];
       focus = undefined;
+      viewContext = undefined;
       generation++;
       acceptedPost = undefined;
       profiler?.clearContinuity();

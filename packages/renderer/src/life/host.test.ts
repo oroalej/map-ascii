@@ -204,7 +204,7 @@ describe('pipelined Life host', () => {
     const host = createWorkerHost({}, []);
     const focus = [123, 13] as const;
     host.sync(s.tiles, focus);
-    expect(mock.sync).toHaveBeenLastCalledWith(expect.any(Array), focus);
+    expect(mock.sync).toHaveBeenLastCalledWith(expect.any(Array), focus, undefined);
     await flush();
     let resolve!: (value: FrameResult) => void;
     mock.frame.mockImplementation(
