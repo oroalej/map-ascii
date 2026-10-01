@@ -3,11 +3,13 @@ import { LifeLine, type LifeGeometry } from './geometry';
 import { frameBetween } from './frames';
 import { VEHICLES } from './vehicles';
 import type { Mover, TileLife } from './simulate';
+import type { ContinuityRejection } from './diagnostics';
 
 export type AdoptionOptions = {
   snapM?: number;
   bearingDeg?: number;
   replace?: Mover;
+  reject?: (reason: ContinuityRejection) => void;
 };
 type Segment = {
   line: number;
@@ -110,24 +112,39 @@ export function projectMover(
   const bearing = Math.cos(((options.bearingDeg ?? ADOPT.bearing) * Math.PI) / 180);
   const id = source.geo.lineIds?.[m.line];
   let best: { segment: Segment; t: number; dir: 1 | -1; distance: number } | undefined;
+  let rejection: ContinuityRejection = 'geometry';
   for (const segment of grid.near(x, y, reach)) {
     const { line, ax, ay, dx, dy, length } = segment;
     const kind = target.geo.kinds[line]! as LifeLine;
     if (!usableLines[m.kind].includes(kind)) continue;
     if (id && grid.identified && target.geo.lineIds?.[line] !== id) continue;
-    if (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat') continue;
+    if (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat') {
+      rejection = 'directionCraft';
+      continue;
+    }
     const width = target.geo.widths[line];
-    if (m.kind === 'vehicle' && m.vehicle && width && VEHICLES[m.vehicle].width > width) continue;
+    if (m.kind === 'vehicle' && m.vehicle && width && VEHICLES[m.vehicle].width > width) {
+      rejection = 'directionCraft';
+      continue;
+    }
     const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length ** 2));
     const distance = Math.hypot(ax + dx * t - x, ay + dy * t - y);
     if (distance > reach || (best && distance >= best.distance)) continue;
     const dir: 1 | -1 = m.hx * dx + m.hy * dy >= 0 ? 1 : -1;
-    if (m.kind === 'vehicle' && target.geo.oneway?.[line] && target.geo.oneway[line] !== dir)
+    if (m.kind === 'vehicle' && target.geo.oneway?.[line] && target.geo.oneway[line] !== dir) {
+      rejection = 'directionCraft';
       continue;
-    if (!m.train && ((oldPose.hx * dx + oldPose.hy * dy) * dir) / length < bearing) continue;
+    }
+    if (!m.train && ((oldPose.hx * dx + oldPose.hy * dy) * dir) / length < bearing) {
+      rejection = 'pose';
+      continue;
+    }
     best = { segment, t, dir, distance };
   }
-  if (!best) return;
+  if (!best) {
+    options.reject?.(rejection);
+    return;
+  }
   const { segment: s, t, dir } = best;
   const scale = target.perMeter / source.perMeter;
   // A stable preview shape avoids spread/override transitions for the 600-agent batch.
@@ -171,7 +188,9 @@ export function projectMover(
     !m.train &&
     (Math.hypot(pose.x - oldX, pose.y - oldY) > reach ||
       pose.hx * oldPose.hx + pose.hy * oldPose.hy < bearing)
-  )
+  ) {
+    options.reject?.('pose');
     return;
+  }
   return preview;
 }

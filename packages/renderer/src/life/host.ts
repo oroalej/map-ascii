@@ -27,6 +27,7 @@ export interface LifeHost {
 export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): LifeHost {
   let agents: VisibleAgent[] = [];
   let disposed = false;
+  let acceptedPost: number | undefined;
   return {
     sync: (tiles, focus) => {
       if (disposed) return;
@@ -36,18 +37,24 @@ export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): Li
     clearTiles() {
       world.clearTiles();
       agents = [];
+      acceptedPost = undefined;
     },
     request(input) {
       if (disposed) return false;
+      acceptedPost = profiler?.time();
       agents = runLifeFrame(world, input, profiler).agents;
       return true;
     },
-    latest: () => ({
-      agents,
-      procession: world.procession(),
-      signalClock: world.signalClock,
-      cellGuard: (toCell) => world.groundCellGuard(toCell),
-    }),
+    latest: () => {
+      if (acceptedPost !== undefined)
+        profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
+      return {
+        agents,
+        procession: world.procession(),
+        signalClock: world.signalClock,
+        cellGuard: (toCell) => world.groundCellGuard(toCell),
+      };
+    },
     setLive: (id, progress) => world.setLive(id, progress),
     play: (id) => world.play(id),
     stop: () => world.stop(),
@@ -83,6 +90,7 @@ export function createWorkerHost(
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
+  let acceptedPost: number | undefined;
   let terrain: ReturnType<typeof cellTerrainFrom> | undefined;
   let fallback: LifeHost | undefined;
   let tiles: readonly LifeTile[] = [];
@@ -143,6 +151,8 @@ export function createWorkerHost(
       tiles = [];
       focus = undefined;
       generation++;
+      acceptedPost = undefined;
+      profiler?.clearContinuity();
       terrain = undefined;
       sent.clear();
       if (view) view = { ...view, agents: [], cellGuard: () => undefined };
@@ -161,6 +171,7 @@ export function createWorkerHost(
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
+          acceptedPost = posted;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
           // Only frames posted after play() can show that its time-lapse has ended.
           const run = result.procession;
@@ -188,7 +199,12 @@ export function createWorkerHost(
         });
       return true;
     },
-    latest: () => (fallback ? fallback.latest() : view),
+    latest: () => {
+      if (fallback) return fallback.latest();
+      if (acceptedPost !== undefined)
+        profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
+      return view;
+    },
     setLive(id, progress) {
       if (disposed) return;
       live = { id, progress };

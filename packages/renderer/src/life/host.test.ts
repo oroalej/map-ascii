@@ -73,6 +73,47 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('measures accepted frame age on the posting clock and ignores stale diagnostics', async () => {
+    let now = 100;
+    const p = new FrameProfiler(() => now),
+      s = fixture(),
+      host = createWorkerHost({}, [], p);
+    host.sync(s.tiles);
+    await flush();
+    const reply = result(1);
+    reply.profile = {
+      at: 999999,
+      drawn: false,
+      agents: 0,
+      checks: 0,
+      ms: {},
+      continuity: { counts: { transfers: 2 }, trace: [] },
+    };
+    mock.frame.mockResolvedValueOnce(reply);
+    host.request(s.input);
+    await flush();
+    now = 150;
+    host.latest();
+    p.begin(1);
+    p.end();
+    expect(p.snapshot().stages.acceptedFrameAge.p95Ms).toBe(50);
+    expect(p.snapshot().continuity.counts.transfers).toBe(2);
+    let finish!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          finish = done;
+        }),
+    );
+    host.request(s.input);
+    host.clearTiles();
+    finish(reply);
+    await flush();
+    p.begin(2);
+    p.end();
+    expect(p.snapshot().continuity.counts.transfers).toBeUndefined();
+    host.dispose();
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     for (const method of [

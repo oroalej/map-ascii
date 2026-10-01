@@ -8,6 +8,7 @@
 import { makeCellGuard } from './cell-guard';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
 import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
+import type { ContinuityRejection } from './diagnostics';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -455,14 +456,21 @@ export class TileLife {
     admit?: (preview: Mover) => boolean,
   ): boolean {
     const replace = options.replace;
-    if (
-      source === this ||
-      !source.movers.includes(m) ||
-      !source.scenes.transferable(m) ||
-      (replace && (!this.movers.includes(replace) || !this.scenes.transferable(replace))) ||
-      this.movers.length - (replace ? 1 : 0) >= MAX_TILE_AGENTS
-    )
+    if (source === this || !source.movers.includes(m)) {
+      options.reject?.('ownership');
       return false;
+    }
+    if (
+      !source.scenes.transferable(m) ||
+      (replace && (!this.movers.includes(replace) || !this.scenes.transferable(replace)))
+    ) {
+      options.reject?.('localScene');
+      return false;
+    }
+    if (this.movers.length - (replace ? 1 : 0) >= MAX_TILE_AGENTS) {
+      options.reject?.('capQuota');
+      return false;
+    }
     const preview = this.projectFrom(m, source, options);
     if (!preview || (admit && !admit(preview))) return false;
     if (replace) this.release(replace);
@@ -3034,6 +3042,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.profiler?.clearContinuity();
     this.tiles.clear();
     this.retired.clear();
     this.covers.clear();
@@ -3090,9 +3099,11 @@ export class LifeWorld {
           this.retired.delete(key);
           this.tiles.set(key, fresh);
           if (!saved) {
+            this.profiler?.registerPopulation(key, fresh.movers);
+            this.profiler?.countContinuity('births', fresh.movers.length);
             added.add(fresh);
             this.history.set(fresh, { ceded: [], quotas: {} });
-          }
+          } else this.profiler?.countContinuity('revivals', fresh.movers.length);
           changed = true;
         }
       }
@@ -3234,6 +3245,7 @@ export class LifeWorld {
         );
       for (const c of candidates) {
         if (!c.life.movers.includes(c.m)) continue;
+        this.profiler?.countContinuity('attempts');
         let replace: Mover | undefined;
         if (count >= limit || kind === 'train') {
           let nearest = Infinity;
@@ -3251,7 +3263,10 @@ export class LifeWorld {
               replace = m;
             }
           }
-          if (!replace && kind !== 'train') continue;
+          if (!replace && kind !== 'train') {
+            this.profiler?.countContinuity('capQuota');
+            continue;
+          }
         }
         const accepted = target.adoptFrom(
           c.m,
@@ -3259,12 +3274,23 @@ export class LifeWorld {
           {
             replace,
             snapM: kind === 'train' ? TRAIN.handover : ADOPT.snap,
+            reject: this.profiler && ((reason) => this.profiler!.countContinuity(reason)),
           },
           (preview) =>
             gained(preview) &&
-            (kind !== 'vehicle' || guard(target, preview, undefined, replace, false, c.m)),
+            (kind !== 'vehicle' ||
+              guard(
+                target,
+                preview,
+                undefined,
+                replace,
+                false,
+                c.m,
+                this.profiler && ((reason) => this.profiler!.countContinuity(reason)),
+              )),
         );
         if (!accepted) continue;
+        this.profiler?.countContinuity('transfers');
         this.junctions.release(c.m);
         if (replace) {
           this.junctions.release(replace);
@@ -3450,6 +3476,7 @@ export class LifeWorld {
       ignore?: object,
       reserve = true,
       identity: GroundAgent = owner,
+      reject?: (reason: ContinuityRejection) => void,
     ) => {
       if (!this.owns(life, owner)) return true;
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
@@ -3459,7 +3486,10 @@ export class LifeWorld {
       const oldScore = before ? occupied.conflicts(identity, previous, ignore) : 0;
       const endScore = occupied.conflicts(identity, next, ignore);
       // Existing overlaps at a density change may escape, but never deepen or tunnel through.
-      if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) return false;
+      if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) {
+        reject?.('occupancy');
+        return false;
+      }
       let distance = 0,
         turns = 1;
       let x0 = Infinity,
@@ -3514,9 +3544,14 @@ export class LifeWorld {
           (blockedNear && blocked.hits(sample)) ||
           (waterNear && water.hits(sample)) ||
           (roadNear && !roadAccess.allows(sample, crossing))
-        )
+        ) {
+          reject?.('terrain');
           return false;
-        if (oldScore === 0 && occupied.conflicts(identity, sample, ignore) > 0) return false;
+        }
+        if (oldScore === 0 && occupied.conflicts(identity, sample, ignore) > 0) {
+          reject?.('occupancy');
+          return false;
+        }
       }
       if (reserve) {
         occupied.set(identity, next);
@@ -3672,6 +3707,13 @@ export class LifeWorld {
       }
     }
     if (!shows || shows('train')) this.stepArrivals(clamped);
+    if (this.profiler)
+      for (const [key, life] of this.tiles)
+        for (const m of life.movers) {
+          if (!this.profiler.tracing(m)) continue;
+          const [lng, lat] = tileToLngLat(life.tile, life.pose(m));
+          this.profiler.traceTraveler(m, { at: this.clock, tile: key, event: 'step', lng, lat });
+        }
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */
@@ -3864,6 +3906,7 @@ export class LifeWorld {
           continue;
         }
         if (!inView(m.x, m.y)) continue;
+        this.profiler?.observeVisible(m, m.kind === 'vehicle' || m.kind === 'boat');
         // Keep right, in a lane that fits the road: offset to the right of the heading (tile y
         // points down).
         const { x, y, hx, hy } = life.pose(m);
