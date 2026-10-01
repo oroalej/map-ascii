@@ -189,7 +189,8 @@ export function classify(
   // Church grounds (e.g. "Cathedral Grounds"); without building=* they get no height.
   if (tags.landuse === 'religious') return 'building_religious';
   if (isMonument(tags)) return 'monument';
-  if (tags.natural === 'water' || tags.water !== undefined) return 'water_area';
+  if (tags.natural === 'water' || tags.water !== undefined || tags.leisure === 'swimming_pool')
+    return 'water_area';
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
   if (tags.natural === 'wood' || oneOf(tags.landuse, 'forest', 'orchard')) return 'trees';

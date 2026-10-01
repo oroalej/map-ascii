@@ -389,6 +389,15 @@ After direction overrides, `lib/signal-layout.ts` resolves each controller into 
 
 The separate `detail-grounds.osm.json` query fetches `nwr["landuse"="recreation_ground"]` plus members in the city's detail bbox. Conversion merges it without changing the cached detail or neighborhood queries. These areas classify as grass unless a park tag takes precedence.
 
+The separate `detail-pools.osm.json` query fetches `nwr["leisure"="swimming_pool"]`
+and member geometry in the buffered detail bbox. Pools often lack `natural=water`, so
+the ordinary water query does not find them. Conversion accepts an absent pool cache
+for older cities; new fetches populate it. Pool areas use the existing `water_area`
+class, while a tagged standing building keeps its building class. Existing detail
+downloads remain reusable. A targeted primary OSM API download can seed an offline
+cache when Overpass is unavailable; record its actual bounded query and provenance,
+so it cannot masquerade as a complete citywide query on a later online fetch.
+
 The separate `detail-neighborhood.osm.json` query fetches shops, selected food/service amenities, craft, scrub/heath, orchards, plant nurseries and cemeteries. `03-normalize` runs `lib/frontage.ts` while raw tags and building polygons still exist: a bbox grid and polygon containment associate shop nodes with footprints, including holes. Food wins over service, retail and generic commercial tags. Assigned nodes are suppressed as standalone markers; embedded malls/supermarkets retain the market class and contribute their names to unnamed footprints. Other shop points use furniture variants `shop_food`, `shop_retail`, `shop_service`; building roof variants stay intact. Tiles carry `frontage` as a separate property. Point shops share a 5 m radius with the renderer through `SHOP_POINT_RADIUS_M`; changing it requires regenerating their derived anchors. The worker packs frontage/kind bits without adding classes, caps shop lights and buffered commerce centers at 150 per tile, and transfers commerce separately for deterministic additive spawning.
 
 Assignment chooses the smallest containing footprint, with stable OSM-id ties; outer boundaries are included and hole boundaries excluded. Commerce polygons otherwise lacking a render class become one interior point marker, retaining their OSM id and name. They annotate a building only if their whole area is contained in it. The shared `Frontage` schema validates the generated value; similarly named raw OSM annotations are ignored. `ShopAnchor` validates `shop_lng`, `shop_lat`, and `shop_radius_m` together. These are computed before clipping, from the largest polygon component's interior anchor (or a point's mapped position) and the full footprint's radius. Every tile copy uses that anchor, but only its containing tile owns the shop light. Commerce entries are deduplicated and capped by stable source id; older archives without anchors use the prior geometry fallback. Existing tile buffers bound the available proximity evidence; this does not promise complete shop coverage within 60 m beyond every tile edge.

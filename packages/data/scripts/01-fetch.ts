@@ -107,6 +107,11 @@ export const groundsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bb
 nwr["landuse"="recreation_ground"];
 out body; >; out skel qt;`;
 
+/** Pools are not necessarily tagged natural=water; keep the existing detail caches valid. */
+export const poolsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+nwr["leisure"="swimming_pool"];
+out body; >; out skel qt;`;
+
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
@@ -255,6 +260,13 @@ export const step: Step = {
       cache,
     );
     console.log(`  recreation grounds: ${grounds.elements.length} elements`);
+
+    const pools = await overpass(
+      poolsQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailPools),
+      cache,
+    );
+    console.log(`  swimming pools: ${pools.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

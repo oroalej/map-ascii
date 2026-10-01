@@ -47,6 +47,9 @@ describe('classify', () => {
     expect(line({ waterway: 'stream' })).toBe('water_stream');
     expect(line({ waterway: 'canal' })).toBe('water_stream');
     expect(area({ natural: 'water' })).toBe('water_area');
+    expect(area({ leisure: 'swimming_pool', sport: 'swimming' })).toBe('water_area');
+    expect(area({ leisure: 'swimming_pool', building: 'yes' })).toBe('building');
+    expect(classify({ leisure: 'swimming_pool' }, 'point', 10)).toBeNull();
     expect(area({ place: 'square' })).toBe('park');
     expect(area({ landuse: 'forest' })).toBe('trees');
     expect(area({ landuse: 'farmland', crop: 'rice' })).toBe('farmland');

@@ -166,6 +166,7 @@ export const step: Step = {
     );
     const detailRaw = await readJson<OverpassResponse>(join(rawDir, files.rawDetail));
     const grounds = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailGrounds));
+    const pools = await readOptional<OverpassResponse>(join(rawDir, files.rawDetailPools));
     const detail: FeatureCollection = osmtogeojson(
       mergeResponses([
         detailRaw,
@@ -174,6 +175,7 @@ export const step: Step = {
         ...(traffic ? [traffic] : []),
         ...(neighborhood ? [neighborhood] : []),
         ...(grounds ? [grounds] : []),
+        ...(pools ? [pools] : []),
       ]),
     );
     await writeJson(join(buildDir, files.osm), detail);
