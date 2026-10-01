@@ -258,7 +258,12 @@ export function uploadSignalLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
 }
 
-type Mesh = { vao: WebGLVertexArrayObject | null; buffers: WebGLBuffer[]; count: number };
+type Mesh = {
+  vao: WebGLVertexArrayObject | null;
+  buffers: WebGLBuffer[];
+  count: number;
+  surfaceScale?: number;
+};
 
 type GroundMesh = { fills: Mesh; lines: Mesh; points: Mesh };
 
@@ -268,11 +273,7 @@ export type TileMesh = GroundMesh & {
   region: GroundMesh;
 };
 
-function uploadMesh(
-  gl: GL,
-  arrays: GeometryArrays & { surface?: Float32Array },
-  indices?: Uint32Array,
-): Mesh {
+function uploadMesh(gl: GL, arrays: GeometryArrays, indices?: Uint32Array): Mesh {
   const count = indices ? indices.length : arrays.ids.length;
   if (count === 0) return { vao: null, buffers: [], count };
   const vao = gl.createVertexArray();
@@ -304,11 +305,23 @@ function uploadMesh(
   if (arrays.surface) {
     buffers.push(buffer(gl.ARRAY_BUFFER, arrays.surface));
     gl.enableVertexAttribArray(4);
-    gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+      4,
+      arrays.surfaceSize ?? 2,
+      arrays.surface instanceof Int16Array ? gl.SHORT : gl.FLOAT,
+      false,
+      0,
+      0,
+    );
   }
   if (indices) buffers.push(buffer(gl.ELEMENT_ARRAY_BUFFER, indices));
   gl.bindVertexArray(null);
-  return { vao, buffers, count };
+  return {
+    vao,
+    buffers,
+    count,
+    ...(arrays.surfaceScale !== undefined ? { surfaceScale: arrays.surfaceScale } : {}),
+  };
 }
 
 const uploadGround = (gl: GL, g: GroundGeometry): GroundMesh => ({

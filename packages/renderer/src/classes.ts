@@ -1,4 +1,11 @@
-import { ATLAS_CLASSES, bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
+import {
+  ATLAS_CLASSES,
+  bandVisibility,
+  CLASS_ZOOM,
+  isRoofBuilding,
+  RoofShape,
+  type AtlasClass,
+} from '@atlas/shared';
 
 /** Point markers the renderer adds on top of features (SPEC.md §4). */
 export const markerClasses = [
@@ -225,10 +232,18 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
 /**
  * The per-vertex variant byte from the pipeline's `variant` property: which furniture glyph to
  * draw, a tree's or wood's kind (`TREE_KINDS` + 1), a building's roof (1 = flat,
- * 2 = pitched), or a siding (1: a track's `siding`, `spur`, or `yard`). 0 is unknown.
+ * 2 = gabled, 3 = hipped, 4 = pyramidal), or a siding (1: a track's `siding`, `spur`, or `yard`). 0 is unknown.
  */
 export function variantCode(className: string, variant: unknown): number {
+  if (isRoofBuilding(className)) {
+    if (variant === undefined || variant === null || variant === '') return RoofShape.hipped;
+    if (variant === 'flat') return RoofShape.flat;
+    if (variant === 'hipped') return RoofShape.hipped;
+    if (variant === 'pyramidal') return RoofShape.pyramidal;
+    return RoofShape.gabled;
+  }
   if (typeof variant !== 'string') return 0;
+  if (className === 'paving') return variant === 'terrace' ? 1 : 0;
   if (className === 'furniture')
     return (
       [
@@ -251,7 +266,8 @@ export function variantCode(className: string, variant: unknown): number {
   if (className === 'tree' || className === 'trees') {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }
-  if (className.startsWith('building')) return variant === 'flat' ? 1 : 2;
+  if (className.startsWith('building'))
+    return variant === 'flat' ? RoofShape.flat : RoofShape.gabled;
   // A siding, spur, or yard track, where trains stand by.
   if (className === 'rail') return 1;
   return 0;

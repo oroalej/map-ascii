@@ -1,6 +1,36 @@
 import { expect, it } from 'vitest';
-import { awningSide, awningCode } from './select';
+import { awningSide, awningCode, packGlyph, unpackGlyph } from './select';
 import { mapGlyphs, themes } from '../theme';
+import { classId, renderClasses } from '../classes';
+import { CellBit, cellBits } from '../life/config';
+
+it('colors eligible classes above 31 without aliasing unrelated classes', () => {
+  const bits = cellBits();
+  expect(classId('building_station')).toBeGreaterThan(31);
+  for (const cls of renderClasses)
+    expect(Number((bits[classId(cls)]! & CellBit.frontage) !== 0)).toBe(
+      Number(cls.startsWith('building') || cls === 'furniture'),
+    );
+  const packed = packGlyph(290, classId('building_station'));
+  expect(unpackGlyph(...packed)).toEqual({ glyph: 290, cls: classId('building_station') });
+});
+it('uses each outward side only within the three-cell probe reach', () => {
+  for (let side = 0; side < 4; side++)
+    for (let distance = 1; distance <= 4; distance++) {
+      const outside = [0, 1, 2, 3].map((i) => i === side);
+      expect(awningSide(outside, (s, d) => s === side && d === distance)).toBe(
+        distance <= 3 ? side : -1,
+      );
+      if (distance > 1)
+        expect(
+          awningSide(
+            outside,
+            (s, d) => s === side && d === distance,
+            () => true,
+          ),
+        ).toBe(-1);
+    }
+});
 it('limits awnings to outside walls facing a street within three cells', () => {
   expect(
     awningSide([true, false, true, false], (side, distance) => side === 2 && distance === 3),

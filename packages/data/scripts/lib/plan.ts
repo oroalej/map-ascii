@@ -1,4 +1,10 @@
-import { CLASS_ZOOM, tileZoomRange, type LandmarkPlan, type PlanPart } from '@atlas/shared';
+import {
+  CLASS_ZOOM,
+  tileZoomRange,
+  isRoofBuilding,
+  type LandmarkPlan,
+  type PlanPart,
+} from '@atlas/shared';
 import type { Feature, Geometry, Polygon, Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { TILE_ZOOMS } from '../03-normalize';
@@ -100,7 +106,7 @@ export function partOutline(part: Pick<PlanPart, 'shape' | 'size_m'>, center: Ve
   return ring;
 }
 
-type Placed = Feature<Geometry, { id: string }>;
+type Placed = Feature<Geometry, { id: string; class?: string; height?: number }>;
 
 /**
  * Turn landmark plans into `building_part` features: each part a small footprint with its own
@@ -141,6 +147,10 @@ export function planParts(
           problems.push(`${plan.id} part ${i + 1}: \`at\` needs an area feature`);
           return;
         }
+        if (!isRoofBuilding(feature.properties.class ?? '') || !(feature.properties.height! > 0)) {
+          problems.push(`${plan.id} part ${i + 1}: \`at\` needs a standing building, not grounds`);
+          return;
+        }
         const a = part.at.along >= 0 ? part.at.along * axis.front : -part.at.along * axis.back;
         const section = axis.section(a);
         if (!section) {
@@ -177,4 +187,9 @@ export function planParts(
   }
   if (problems.length > 0) throw new Error(`Landmark plans:\n  ${problems.join('\n  ')}`);
   return { parts, warnings };
+}
+
+/** Preserve author/license attribution supplied by the city pack. */
+export function planCredits(plans: readonly LandmarkPlan[]): string[] {
+  return [...new Set(plans.map((p) => p.credit?.trim()).filter((s): s is string => !!s))];
 }

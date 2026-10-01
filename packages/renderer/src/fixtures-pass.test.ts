@@ -5,6 +5,62 @@ import type { ThemeResources } from './gpu-context';
 import type { StreetFixture } from './life/fixtures';
 import { signalState } from './life/signals';
 
+it('animates cached flag cloth independently of the signal clock and lighting lookup', () => {
+  const upload = vi.fn();
+  const gl = { bindTexture: vi.fn(), pixelStorei: vi.fn(), texSubImage2D: upload } as unknown as GL;
+  const targets = { cols: 100, rows: 100, fixtureTex: {}, signalLightTex: {} } as CellTargets;
+  const resources = { map: { atlas: { index: () => 300 } } } as unknown as ThemeResources;
+  const view: View = {
+    camera: { lng: 0, lat: 0, zoom: 20.5 },
+    dpr: 1,
+    width: 500,
+    height: 500,
+    cellDev: { w: 5, h: 9 },
+    labelDev: { w: 10, h: 18 },
+    detailZoom: 21,
+  };
+  const project = vi.fn((x: number, y: number): [number, number] => [x, y]);
+  const placement = { ...placeGrid(view, view.cellDev, 100, 100), toCell: project };
+  const fixtures: StreetFixture[] = [
+    {
+      kind: 'flagpole',
+      flag: 'PH',
+      seed: 7,
+      base: [40.5, 40.5],
+      tip: [40.5, 39.5],
+      forward: [40.5, 39.5],
+      right: [41.5, 40.5],
+    },
+  ];
+  fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 0,
+    strength: 0.7,
+  });
+  expect(upload).toHaveBeenCalledTimes(2);
+  project.mockClear();
+  fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 0.7,
+    strength: 0.7,
+  });
+  expect(project).not.toHaveBeenCalled();
+  expect(upload).toHaveBeenCalledTimes(3);
+  fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 0.7,
+    strength: 0.7,
+  });
+  expect(upload).toHaveBeenCalledTimes(3);
+  fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 1,
+    strength: 0,
+  });
+  expect(upload).toHaveBeenCalledTimes(4);
+  fixturePass(gl, targets, resources, view, placement, fixtures, 0, false, {
+    time: 10,
+    strength: 0,
+  });
+  expect(upload).toHaveBeenCalledTimes(4);
+});
+
 it('caches projection and rebuilds only for phase, geometry, grid, or atlas changes', () => {
   const upload = vi.fn();
   // Only the texture-upload surface is needed by this CPU pass test.

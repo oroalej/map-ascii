@@ -478,13 +478,13 @@ describe('Place-level ground detail', () => {
   it('marks the cell a ridge line crosses, else the lit or shaded slope', () => {
     expect(roofCode(0.4, 1)).toBe(RoofCode.ridge);
     expect(roofCode(-0.5, 1)).toBe(RoofCode.ridge);
-    expect(roofCode(0.6, 1)).toBe(RoofCode.lit);
-    expect(roofCode(-3, 1)).toBe(RoofCode.shaded);
+    expect(roofCode(0.6, 1)).toBe(RoofCode.sidePos);
+    expect(roofCode(-3, 1)).toBe(RoofCode.sideNeg);
   });
 
   it('draws slopes ▓ (lit) and ▒ (shaded)', () => {
-    expect(buildingRamp[roofVariant(RoofCode.lit, 0, 1.8)!]).toBe('▓');
-    expect(buildingRamp[roofVariant(RoofCode.shaded, 0, 1.8)!]).toBe('▒');
+    expect(buildingRamp[roofVariant(RoofCode.sidePos, 0, 1.8, [0, 1])!]).toBe('▓');
+    expect(buildingRamp[roofVariant(RoofCode.sideNeg, 0, 1.8, [0, 1])!]).toBe('▒');
     expect(roofVariant(RoofCode.none, 0, 1.8)).toBeNull(); // no ridge: the height ramp stays
   });
 

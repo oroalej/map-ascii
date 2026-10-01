@@ -10,6 +10,7 @@ function setup() {
     SHORT: 4,
     UNSIGNED_BYTE: 5,
     UNSIGNED_INT: 6,
+    FLOAT: 8,
     TRIANGLES: 7,
     createVertexArray: vi.fn(() => ({})),
     createBuffer: vi.fn(() => ({})),
@@ -60,3 +61,32 @@ it('uploads and releases only the nonempty submesh', () => {
   expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);
   expect(gl.deleteBuffer).toHaveBeenCalledTimes(4);
 });
+
+it.each([false, true])(
+  'binds roof surfaces with the correct numeric type (packed: %s) and releases their buffer',
+  (packed) => {
+    const { api, gl, geometry } = setup();
+    geometry.fills = {
+      positions: new Int16Array([0, 0, 1, 0, 0, 1]),
+      meta: new Uint8Array(12),
+      ids: new Uint32Array(3),
+      ridge: new Int16Array(3),
+      indices: new Uint32Array([0, 1, 2]),
+      surface: packed ? new Int16Array(12) : new Float32Array(12),
+      surfaceSize: 4,
+      ...(packed ? { surfaceScale: 1 / 64 } : {}),
+    };
+    const mesh = uploadTile(api, geometry);
+    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+      4,
+      4,
+      packed ? gl.SHORT : gl.FLOAT,
+      false,
+      0,
+      0,
+    );
+    expect(mesh.fills.surfaceScale).toBe(packed ? 1 / 64 : undefined);
+    deleteTile(api, mesh);
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(6);
+  },
+);

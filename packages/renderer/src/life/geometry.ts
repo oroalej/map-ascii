@@ -177,10 +177,26 @@ export const MAX_TILE_PERCHES = 24;
 export const MAX_TILE_PLACES = 40;
 export const MAX_TILE_SHOPS = 150;
 
+/** Keep the same bounded set regardless of vector-tile feature traversal order. */
+function shopEntry(entries: Map<string, number[]>, id: string, values: number[]) {
+  if (entries.has(id)) return;
+  if (entries.size >= MAX_TILE_SHOPS) {
+    let last = '';
+    for (const key of entries.keys()) if (key > last) last = key;
+    if (id >= last) return;
+    entries.delete(last);
+  }
+  entries.set(id, values);
+}
+const shopValues = (entries: Map<string, number[]>) =>
+  Float32Array.from(
+    [...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).flatMap(([, values]) => values),
+  );
+
 export class LifeBuilder {
-  private commerce: number[] = [];
-  commerceAt(p: TilePoint) {
-    if (this.commerce.length / 2 < MAX_TILE_SHOPS) this.commerce.push(p.x, p.y);
+  private commerce = new Map<string, number[]>();
+  commerceAt(p: TilePoint, id = `${p.x}/${p.y}`) {
+    shopEntry(this.commerce, id, [p.x, p.y]);
   }
   private signals: number[] = [];
   private signalLayouts: (SignalLayout | undefined)[] = [];
@@ -233,7 +249,7 @@ export class LifeBuilder {
   private lampSites: number[] = [];
   private lampStyles: number[] = [];
   private floods: number[] = [];
-  private shops: number[] = [];
+  private shops = new Map<string, number[]>();
   private places: number[] = [];
   private seatBearings: number[] = [];
 
@@ -381,9 +397,9 @@ export class LifeBuilder {
   }
 
   /** A shop or market centered at `p`, `radius` tile units across, lit while it is open. */
-  shop(p: TilePoint, radius: number) {
-    if (!inTile(p) || this.shops.length / 3 >= MAX_TILE_SHOPS) return;
-    this.shops.push(p.x, p.y, radius);
+  shop(p: TilePoint, radius: number, id = `${p.x}/${p.y}`) {
+    if (!inTile(p)) return;
+    shopEntry(this.shops, id, [p.x, p.y, radius]);
   }
 
   /**
@@ -400,7 +416,7 @@ export class LifeBuilder {
     return {
       signals: Float32Array.from(this.signals),
       signalLayouts: this.signalLayouts,
-      commerce: Float32Array.from(this.commerce),
+      commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
       areas: this.areas,
       sites: Float32Array.from(this.sites),
@@ -423,7 +439,7 @@ export class LifeBuilder {
       lampSites: Uint8Array.from(this.lampSites),
       lampStyles: Uint8Array.from(this.lampStyles),
       floods: Float32Array.from(this.floods),
-      shops: Float32Array.from(this.shops),
+      shops: shopValues(this.shops),
       places: Float32Array.from(this.places),
       seatBearings: Float32Array.from(this.seatBearings),
     };

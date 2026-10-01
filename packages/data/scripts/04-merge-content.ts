@@ -7,6 +7,7 @@ import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
+import { enrichRoofs } from './lib/roofs';
 import { landcoverFeatures } from './lib/landcover';
 import { mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
@@ -127,6 +128,8 @@ export const step: Step = {
     for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }
+    const roofs = enrichRoofs(detail.features);
+    console.log(`  roofs: ${JSON.stringify(roofs)}`);
     await writeFeatures(join(buildDir, files.merged), detail.features);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +

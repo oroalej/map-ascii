@@ -397,6 +397,47 @@ describe('classifyRings', () => {
     expect(Array.from(result.life.commerce!)).toContain(-10);
     expect(result.life.shops.length).toBe(6);
   });
+  it('keeps one owned shop light and the same commerce anchor across clipped tile copies', () => {
+    const left = { z: 16, x: 55192, y: 30266 },
+      right = { ...left, x: left.x + 1 };
+    const [shop_lng, shop_lat] = tileToLngLat(left, { x: 4050, y: 1100 });
+    const geometries = [left, right].map((tile, i) => {
+      const lo = i ? -80 : 3900,
+        hi = i ? 304 : 4176;
+      return buildTileGeometry(
+        {
+          buildings: layer([
+            feature(
+              3,
+              {
+                id: 'seam-shop',
+                class: 'building_station',
+                height: 6,
+                frontage: 'food',
+                shop_lng,
+                shop_lat,
+                shop_radius_m: 30,
+              },
+              [
+                [
+                  [lo, 1000],
+                  [hi, 1000],
+                  [hi, 1200],
+                  [lo, 1200],
+                  [lo, 1000],
+                ],
+              ],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+      );
+    });
+    expect(geometries.map((g) => g.life.shops.length)).toEqual([3, 0]);
+    expect(geometries[0]!.life.commerce![0]! - geometries[1]!.life.commerce![0]!).toBeCloseTo(4096);
+    expect(geometries[0]!.life.shops[2]! * metersPerUnit(left)).toBeCloseTo(30);
+  });
   it('rasterizes crossing anchors as road quads and transfers buffered signals without point glyphs', () => {
     const tile = { z: 16, x: 55192, y: 30266 };
     const result = buildTileGeometry(
@@ -1051,7 +1092,7 @@ describe('buildTileGeometry', () => {
     });
   });
 
-  it('puts a pitched roof ridge along the footprint long axis, lit side positive', () => {
+  it('centers a pitched roof frame on the long axis, with south-positive across distance', () => {
     const pts = (ring: [number, number][]) => ring.map(([x, y]) => ({ x, y }));
     // A 200 × 60 rectangle: the ridge runs east-west through y = 30.
     const wide = roofRidge(
@@ -1064,10 +1105,11 @@ describe('buildTileGeometry', () => {
       ]),
     );
     expect(wide.angle).toBe(0);
-    expect(wide.distance({ x: 100, y: 30 })).toBeCloseTo(0);
+    expect(wide.cx).toBeCloseTo(100);
+    expect(wide.cy).toBeCloseTo(30);
     // The light comes from the south (y grows southward), so the south slope is lit.
-    expect(wide.distance({ x: 100, y: 60 })).toBeGreaterThan(0);
-    expect(wide.distance({ x: 100, y: 0 })).toBeLessThan(0);
+    expect(wide.ux).toBeCloseTo(1);
+    expect(wide.uy).toBeCloseTo(0);
     // A tall rectangle: the ridge runs north-south (90°, byte ~128).
     const tall = roofRidge(
       pts([
@@ -1079,10 +1121,11 @@ describe('buildTileGeometry', () => {
       ]),
     );
     expect(tall.angle).toBe(128);
-    expect(tall.distance({ x: 30, y: 100 })).toBeCloseTo(0);
+    expect(tall.cx).toBeCloseTo(30);
+    expect(tall.cy).toBeCloseTo(100);
   });
 
-  it('gives buildings a ridge attribute and flag, but not flat roofs or grounds', () => {
+  it('gives pitched roofs a surface and flag while leaving the obsolete ridge distance zero', () => {
     const gabled = feature(3, { id: 'osm:way/40', class: 'building', height: 6 }, [
       square(0, 0, 100),
     ]);
@@ -1099,8 +1142,9 @@ describe('buildTileGeometry', () => {
     const v = vertices(fills);
     const ridged = (i: number) => (v[i]!.flags! & Flags.ridged) !== 0;
     expect([0, 5, 10].map(ridged)).toEqual([true, false, false]);
-    expect([...fills.ridge.slice(0, 5)].some((d) => d !== 0)).toBe(true);
-    expect([...fills.ridge.slice(5)].every((d) => d === 0)).toBe(true);
+    expect([...fills.ridge].every((d) => d === 0)).toBe(true);
+    expect([...fills.surface!.slice(0, 20)].some((d) => d !== 0)).toBe(true);
+    expect([...fills.surface!.slice(20)].every((d) => d === 0)).toBe(true);
   });
 });
 
