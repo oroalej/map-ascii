@@ -132,10 +132,12 @@ describe('classify: street-level detail', () => {
       { landuse: 'village_green' },
       { natural: 'grassland' },
       { leisure: 'recreation_ground' },
+      { landuse: 'recreation_ground' },
     ]) {
       expect(classify(tags, 'area', 10)).toBe('grass');
     }
     expect(classify({ leisure: 'park', landuse: 'grass' }, 'area', 10)).toBe('park');
+    expect(classify({ leisure: 'park', landuse: 'recreation_ground' }, 'area', 10)).toBe('park');
     expect(layerFor('grass', 'area')).toBe('landuse');
   });
 

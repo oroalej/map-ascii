@@ -196,7 +196,12 @@ export function classify(
   if (oneOf(tags.natural, 'scrub', 'heath') || oneOf(tags.landuse, 'plant_nursery', 'cemetery'))
     return 'grass';
   if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
-  if (tags.natural === 'grassland' || tags.leisure === 'recreation_ground') return 'grass';
+  if (
+    tags.natural === 'grassland' ||
+    tags.leisure === 'recreation_ground' ||
+    tags.landuse === 'recreation_ground'
+  )
+    return 'grass';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';
   if (tags.amenity === 'parking') return 'parking';
   if (tags.leisure === 'pitch') return 'pitch';

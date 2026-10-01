@@ -3,11 +3,20 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeResponses,
   neighborhoodQuery,
+  groundsQuery,
   railQuery,
   regionQueries,
   splitBbox,
   trafficQuery,
 } from './01-fetch';
+
+it('fetches recreation grounds and their member geometry in a separate bounded query', () => {
+  const query = groundsQuery('1,2,3,4');
+  expect(query).toContain('[bbox:1,2,3,4]');
+  expect(query).toContain('nwr["landuse"="recreation_ground"]');
+  expect(query).toContain('out body; >; out skel qt;');
+  expect(query).not.toContain('shop');
+});
 
 it('fetches commerce and neighborhood vegetation without commercial land-use zones', () => {
   const q = neighborhoodQuery('1,2,3,4');

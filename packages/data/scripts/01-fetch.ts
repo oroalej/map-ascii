@@ -102,6 +102,11 @@ export const neighborhoodQuery = (bbox: string) => `[out:json][timeout:120][bbox
 nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"];);
 out body; >; out skel qt;`;
 
+/** Outdoor recreation grounds, separately queried to retain all existing download caches. */
+export const groundsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+nwr["landuse"="recreation_ground"];
+out body; >; out skel qt;`;
+
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
@@ -243,6 +248,13 @@ export const step: Step = {
       cache,
     );
     console.log(`  neighborhood: ${neighborhood.elements.length} elements`);
+
+    const grounds = await overpass(
+      groundsQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailGrounds),
+      cache,
+    );
+    console.log(`  recreation grounds: ${grounds.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {
