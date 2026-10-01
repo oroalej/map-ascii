@@ -6,7 +6,7 @@ import { cities, mapReady } from './helpers';
 
 test('speech bubbles keep Bikol and switch English/Tagalog translations and conversation replies', async ({
   page,
-}) => {
+}, testInfo) => {
   const city = cities.find((entry) => entry.slug === 'naga' && entry.hasMeta)!;
   const catalog = JSON.parse(
     readFileSync(
@@ -31,9 +31,50 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
     const scope = window as unknown as {
       speechFixture: { exchangeId: string; line: number };
       holdSpeakers: boolean;
+      speechDiagnostics: {
+        frames: number;
+        eligible: number;
+        maxEligible: number;
+        fences: number;
+        completed: number;
+        maxLatency: number;
+      };
     };
     scope.speechFixture = { exchangeId: 'greet-afternoon', line: 0 };
     scope.holdSpeakers = false;
+    const diagnostics = (scope.speechDiagnostics = {
+      frames: 0,
+      eligible: 0,
+      maxEligible: 0,
+      fences: 0,
+      completed: 0,
+      maxLatency: 0,
+    });
+    // Test-only latency counters explain software-GPU failures without changing renderer APIs.
+    const starts = new WeakMap<WebGLSync, number>();
+    const glPrototype = WebGL2RenderingContext.prototype;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- invoke with the original GL receiver below
+    const fenceSync = glPrototype.fenceSync;
+    glPrototype.fenceSync = function (condition, flags) {
+      const sync = fenceSync.call(this, condition, flags);
+      if (sync) {
+        starts.set(sync, performance.now());
+        diagnostics.fences++;
+      }
+      return sync;
+    };
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- invoke with the original GL receiver below
+    const getSyncParameter = glPrototype.getSyncParameter;
+    glPrototype.getSyncParameter = function (sync, pname) {
+      const result: unknown = getSyncParameter.call(this, sync, pname);
+      const started = starts.get(sync);
+      if (pname === this.SYNC_STATUS && result === this.SIGNALED && started !== undefined) {
+        diagnostics.completed++;
+        diagnostics.maxLatency = Math.max(diagnostics.maxLatency, performance.now() - started);
+        starts.delete(sync);
+      }
+      return result;
+    };
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       private wrapped = new Map<EventListenerOrEventListenerObject, EventListener>();
@@ -61,6 +102,10 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
         if (type !== 'message') return super.addEventListener(type, listener, options);
         const wrapped: EventListener = (event) => {
           const data = (event as MessageEvent).data as { value?: { agents?: VisibleAgent[] } };
+          if (data.value?.agents) {
+            diagnostics.frames++;
+            diagnostics.eligible = 0;
+          }
           data.value?.agents?.forEach((agent, i) => {
             if (
               agent.kind === 'person' &&
@@ -68,9 +113,12 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
               !agent.aboard &&
               !agent.prop &&
               agent.people?.length === 1
-            )
+            ) {
               agent.speech = { id: `smoke-speaker-${i}`, ...scope.speechFixture };
+              diagnostics.eligible++;
+            }
           });
+          diagnostics.maxEligible = Math.max(diagnostics.maxEligible, diagnostics.eligible);
           if (typeof listener === 'function') listener.call(this, event);
           else listener.handleEvent(event);
         };
@@ -93,7 +141,19 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
   await page.locator('summary').filter({ hasText: 'Legend' }).click();
   const bubbles = page.locator('[data-speech-bubble]');
   const native = bubbles.locator(`[lang="${catalog.native.code}"]`).first();
-  await expect(native).toHaveText('Marhay na hapon!', { timeout: 30_000 });
+  try {
+    await expect(native).toHaveText('Marhay na hapon!', { timeout: 30_000 });
+  } catch (error) {
+    const diagnostics = await page.evaluate(
+      () => (window as unknown as { speechDiagnostics: object }).speechDiagnostics,
+    );
+    await testInfo.attach('speech-diagnostics', {
+      body: JSON.stringify(diagnostics),
+      contentType: 'application/json',
+    });
+    console.log('Speech admission diagnostics:', diagnostics);
+    throw error;
+  }
   await expect(bubbles.locator(`[lang="${catalog.native.code}"]:visible`).first()).toBeVisible();
   await page.evaluate(() => {
     (window as unknown as { holdSpeakers: boolean }).holdSpeakers = true;

@@ -40,6 +40,7 @@ export class SpeechController {
     private readonly readback: Pick<Readback, 'size' | 'request'>,
     private readonly attachment: number,
     private readonly emit: (cues: SpeechInView[]) => void,
+    private readonly clock: () => number = () => performance.now(),
   ) {}
 
   clear() {
@@ -122,7 +123,7 @@ export class SpeechController {
     const candidates = this.candidates(frame),
       keys = new Set(candidates.map((entry) => entry.key));
     for (const key of this.confirmed.keys()) if (!keys.has(key)) this.confirmed.delete(key);
-    if (this.pending && (now - this.pending.at >= 250 || !keys.has(this.pending.key))) {
+    if (this.pending && (now - this.pending.at >= 1000 || !keys.has(this.pending.key))) {
       this.serial++;
       this.pending = undefined;
     }
@@ -152,7 +153,7 @@ export class SpeechController {
       if (!this.frame || !this.candidates(this.frame).some((entry) => entry.key === candidate.key))
         return;
       this.confirmed.set(candidate.key, {
-        at: now,
+        at: this.clock(),
         visible: lifeVisibleOnSurface(
           candidate.cls,
           candidate.flags,

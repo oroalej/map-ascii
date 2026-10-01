@@ -49,16 +49,38 @@ function fixture() {
   frame.owners[210] = 1;
   frame.life[210 * 4 + 1] = classId('life_person');
   frame.life[210 * 4 + 2] = CellBit.person;
-  const controller = new SpeechController(readback, 10, (event) => events.push(event));
+  const clock = { now: 0 };
+  const controller = new SpeechController(
+    readback,
+    10,
+    (event) => events.push(event),
+    () => clock.now,
+  );
   const finish = (surface = 'paving', height = 0) => {
     const batch = queue.splice(0, 3);
     batch[0]?.(new Uint8Array([0, classId(surface), 0, 0]));
     batch[1]?.(new Uint8Array([classId(surface), 0, 0, 0]));
     batch[2]?.(new Uint8Array([height, 0, 0, 0]));
   };
-  return { frame, queue, events, readback, controller, finish };
+  return { frame, queue, events, readback, controller, finish, clock };
 }
 describe('speech visibility', () => {
+  it('uses completion freshness for slow GPU replies while retaining a bounded pending timeout', () => {
+    const f = fixture();
+    f.controller.update(f.frame, 0);
+    f.controller.update(f.frame, 400);
+    expect(f.readback.request).toHaveBeenCalledTimes(3);
+    f.clock.now = 500;
+    f.finish();
+    f.controller.update(f.frame, 510);
+    expect(f.events.at(-1)).toHaveLength(1);
+    f.controller.update(f.frame, 760);
+    expect(f.events.at(-1)).toEqual([]);
+    const late = f.queue.splice(0);
+    f.controller.update(f.frame, 1761);
+    for (const done of late) done(new Uint8Array([0, classId('paving'), 0, 0]));
+    expect(f.events.at(-1)).toEqual([]);
+  });
   it.each([
     [800, 3, 6],
     [500, 2, 4],
@@ -143,12 +165,12 @@ describe('speech visibility', () => {
     expect(f.events.at(-1)).toEqual([]);
     f.controller.update(f.frame, 50);
     const old = f.queue.splice(0);
-    f.controller.update(f.frame, 310);
+    f.controller.update(f.frame, 1051);
     for (const done of old) done(new Uint8Array([classId('paving'), classId('paving'), 0, 0]));
     expect(f.events.at(-1)).toEqual([]);
     f.frame.agents[0]!.speech = undefined;
     f.finish();
-    f.controller.update(f.frame, 320);
+    f.controller.update(f.frame, 1060);
     expect(f.events.at(-1)).toEqual([]);
   });
   it('keeps different maps independent', () => {
