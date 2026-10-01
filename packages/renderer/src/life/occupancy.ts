@@ -235,6 +235,26 @@ export class PolygonIndex {
   private readonly corners: Point[] = [];
   private readonly keys: number[] = [];
   private readonly tested = new Set<Polygon>();
+  /** Read-only diagnostics, kept off simulation and snapshot hot paths. */
+  stats() {
+    const counts = new Map<Polygon, number>();
+    let items = 0;
+    let maxBinsPerPolygon = 0;
+    for (const bin of this.bins.values())
+      for (const polygon of bin) {
+        const count = (counts.get(polygon) ?? 0) + 1;
+        counts.set(polygon, count);
+        maxBinsPerPolygon = Math.max(maxBinsPerPolygon, count);
+        items++;
+      }
+    return {
+      polygons: this.polygons.length,
+      bins: this.bins.size,
+      items,
+      maxBinsPerPolygon,
+      meanBinsPerPolygon: this.polygons.length ? items / this.polygons.length : 0,
+    };
+  }
   add(polygon: Polygon) {
     const points = polygon.flat();
     this.polygons.push(polygon);

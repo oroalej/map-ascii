@@ -1,6 +1,7 @@
 import { deepStrictEqual } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { cpus, platform, release } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,7 @@ import {
   scenarioState,
   scenarioTilesAt,
   worldTiles,
+  worldTerrainStats,
   SCENARIOS,
 } from '../src/life/testing/scenarios';
 import { LifeWorld } from '../src/life/simulate';
@@ -18,12 +20,18 @@ import { themes } from '../src/theme';
 import { FrameProfiler } from '../src/profile';
 import { tileToLngLat } from '../src/raster/geometry';
 import { viewportFor } from '../src/camera';
+import { City } from '@atlas/shared';
+import { activityLevels } from '../src/life/config';
+import { snapshotOf } from '../src/life/terrain-snapshot';
+import { openArchive, decodeLifeTiles, realPanStrip, archiveHash } from './archive';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback = '') =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
+const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
+if (real && !pan) throw new Error('--real requires --pan');
 const allowDiff = pan || process.argv.includes('--allow-diff');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
@@ -57,7 +65,234 @@ try {
   const frozen = await snapshotRevision(root, baseline, join(temporary, 'baseline'));
   const before = (await import(frozen.path('life/simulate.ts'))) as { LifeWorld: typeof LifeWorld };
   const oldDraw = (await import(frozen.path('life/draw.ts'))) as { packLife: typeof packLife };
-  if (pan) {
+  if (real) {
+    const oldSnapshot = (await import(frozen.path('life/terrain-snapshot.ts'))) as {
+      snapshotOf: typeof snapshotOf;
+    };
+    const city = arg('real', 'naga');
+    const ids = realPanStrip(city);
+    const configPath = join(root, 'packages/content/cities', city, 'city.json');
+    const configBytes = await readFile(configPath);
+    const config = City.parse(JSON.parse(configBytes.toString()) as unknown);
+    const configHash = createHash('sha256').update(configBytes).digest('hex');
+    const local = await openArchive(city);
+    try {
+      const decoded = await decodeLifeTiles(local.archive, ids);
+      const byKey = new Map(decoded.map((tile) => [tile.key, tile]));
+      const skipped = ids.map(({ z, x, y }) => `${z}/${x}/${y}`).filter((key) => !byKey.has(key));
+      console.log(
+        `Real strip: ${decoded.length}/40 tiles; skipped: ${skipped.join(', ') || 'none'}`,
+      );
+      if (decoded.length < 24) throw new Error('Fewer than 24 real-strip tiles exist');
+      const windows = Array.from({ length: 7 }, (_, shift) =>
+        decoded.filter(({ tile }) => tile.x >= 55189 + shift && tile.x < 55193 + shift),
+      );
+      const cameras = windows.map((_, shift) => {
+        const center = tileToLngLat({ z: 16, x: 55191 + shift, y: 30264 }, { x: 0, y: 0 });
+        const [[west, south], [east, north]] = viewportFor(
+          { lng: center[0], lat: center[1], zoom: 18 },
+          { width: 1920, height: 1080 },
+        ).getBounds() as [number[], number[]];
+        return {
+          center,
+          bounds: [west!, south!, east!, north!] as [number, number, number, number],
+        };
+      });
+      const realStages = [
+        'syncFrame',
+        'step',
+        'sync',
+        'spawn',
+        'settle',
+        'terrainRebuild',
+        'terrainRoads',
+        'terrainRevalidate',
+        'terrainEncode',
+      ] as const;
+      type RealStage = (typeof realStages)[number];
+      const summarize = (values: number[]) => ({
+        count: values.length,
+        median: values.length ? quantile(values, 0.5) : null,
+        p95: values.length ? quantile(values, 0.95) : null,
+      });
+      const measure = (Constructor: typeof LifeWorld, encode: typeof snapshotOf) => {
+        const profiler = new FrameProfiler();
+        const world = new Constructor(config.traffic, profiler);
+        const levels = activityLevels(1);
+        const timings = Object.fromEntries(
+          realStages.map((stage) => [stage, [] as number[]]),
+        ) as Record<RealStage, number[]>;
+        world.sync(windows[0]!);
+        const initial = world.cellTerrain();
+        if (!initial) throw new Error('Initial sync did not initialize terrain');
+        encode(initial);
+        let version = initial.version;
+        profiler.reset();
+        const samples = [];
+        for (let frame = 0; frame < 210; frame++) {
+          const shift = Math.floor(frame / 30);
+          const { center, bounds } = cameras[shift]!;
+          const changed = frame > 0 && frame % 30 === 0;
+          profiler.begin(frame / 30);
+          const start = performance.now();
+          if (changed) world.sync(windows[shift]!);
+          world.step(
+            1 / 30,
+            undefined,
+            18,
+            bounds,
+            undefined,
+            { rain: 0, minutes: 720, cityLife: config.life },
+            0.9,
+          );
+          timings[changed ? 'syncFrame' : 'step'].push(performance.now() - start);
+          world.visible(18, levels, center, { rain: 0, sunAltitude: 40 }, bounds);
+          const terrain = world.cellTerrain();
+          if (terrain && terrain.version !== version) {
+            const encodeStart = performance.now();
+            encode(terrain);
+            profiler.add('terrainEncode', performance.now() - encodeStart);
+            version = terrain.version;
+          }
+          const sample = profiler.drain()!;
+          samples.push(sample);
+          for (const stage of realStages) {
+            if (stage === 'step' || stage === 'syncFrame') continue;
+            const ms = sample.ms[stage];
+            if (ms !== undefined) timings[stage].push(ms);
+          }
+        }
+        return {
+          stages: Object.fromEntries(
+            realStages.map((stage) => [stage, summarize(timings[stage])]),
+          ) as Record<RealStage, ReturnType<typeof summarize>>,
+          stats: worldTerrainStats(world),
+          samples,
+        };
+      };
+      // Untimed paired warmup compiles both source graphs before collecting comparable runs.
+      measure(before.LifeWorld, oldSnapshot.snapshotOf);
+      measure(LifeWorld, snapshotOf);
+      const oldRuns: ReturnType<typeof measure>[] = [],
+        currentRuns: typeof oldRuns = [];
+      for (let run = 0; run < runs; run++) {
+        if (run % 2) {
+          currentRuns.push(measure(LifeWorld, snapshotOf));
+          oldRuns.push(measure(before.LifeWorld, oldSnapshot.snapshotOf));
+        } else {
+          oldRuns.push(measure(before.LifeWorld, oldSnapshot.snapshotOf));
+          currentRuns.push(measure(LifeWorld, snapshotOf));
+        }
+        console.log(`Real pan pair ${run + 1}/${runs}`);
+      }
+      const stages = Object.fromEntries(
+        realStages.map((stage) => {
+          const aggregate = (rs: typeof oldRuns) => {
+            const medians = rs.flatMap((r) =>
+              r.stages[stage].median === null ? [] : [r.stages[stage].median],
+            );
+            const p95s = rs.flatMap((r) =>
+              r.stages[stage].p95 === null ? [] : [r.stages[stage].p95],
+            );
+            return {
+              count: rs.reduce((n, r) => n + r.stages[stage].count, 0),
+              median: medians.length ? quantile(medians, 0.5) : null,
+              p95: p95s.length ? quantile(p95s, 0.5) : null,
+            };
+          };
+          const old = aggregate(oldRuns),
+            current = aggregate(currentRuns);
+          return [
+            stage,
+            {
+              baseline: old,
+              current,
+              p95Change: old.p95 && current.p95 !== null ? current.p95 / old.p95 - 1 : null,
+            },
+          ];
+        }),
+      );
+      if (
+        (await currentSourceHash(root)) !== currentHash ||
+        (await archiveHash(local.path)) !== local.hash ||
+        !(await readFile(configPath)).equals(configBytes)
+      )
+        throw new Error('Source, archive or city config changed during capture');
+      const output = resolve(root, arg('output', 'test-results/world-real-pan.json'));
+      await mkdir(dirname(output), { recursive: true });
+      await writeFile(
+        output,
+        JSON.stringify(
+          {
+            version: 1,
+            at: new Date().toISOString(),
+            baseline,
+            allowDiff,
+            baselineHash: frozen.hash,
+            currentHash,
+            archiveHash: local.hash,
+            configHash,
+            lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
+              cwd: root,
+              encoding: 'utf8',
+            }).trim(),
+            environment: {
+              node: process.version,
+              platform: platform(),
+              os: release(),
+              cpu: cpus()[0]?.model,
+            },
+            parameters: {
+              city,
+              runs,
+              frames: 210,
+              shifts: 6,
+              shiftEvery: 30,
+              window: [4, 4],
+              strip: ids,
+              found: decoded.map((tile) => tile.key),
+              skipped,
+              initialSyncTimed: false,
+              initialEncodeTimed: false,
+              warmupPairs: 1,
+              viewport: [1920, 1080],
+              camera: 'window centre',
+              zoom: 18,
+              dt: 1 / 30,
+              minutes: 720,
+              rain: 0,
+              activity: 1,
+              clearanceMinimumMeters: 0.9,
+              traffic: config.traffic,
+              cityLife: config.life,
+              aggregation: 'median of per-run medians and p95s; counts summed',
+            },
+            stages,
+            oldRuns,
+            currentRuns,
+          },
+          null,
+          2,
+        ),
+      );
+      console.table(
+        Object.entries(stages).map(([stage, row]) => ({
+          stage,
+          baselineMedian: row.baseline.median,
+          baselineP95: row.baseline.p95,
+          currentMedian: row.current.median,
+          currentP95: row.current.p95,
+          baselineCount: row.baseline.count,
+          currentCount: row.current.count,
+          p95Change: row.p95Change,
+        })),
+      );
+      console.table(currentRuns[0]!.stats);
+      console.log(`Report: ${output}`);
+    } finally {
+      await local.close();
+    }
+  } else if (pan) {
     const rows = [];
     for (const kind of SCENARIOS.filter((kind) => kind !== 'sparse')) {
       const name = `${kind}/16/pan`;

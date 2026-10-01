@@ -5,6 +5,7 @@ import { LifeBuilder, LifeLine } from '../geometry';
 import { activityLevels } from '../config';
 import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
+import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
 
 export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
@@ -131,6 +132,47 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
 export function worldTiles(world: LifeWorld): ReadonlyMap<string, TileLife> {
   // Test/benchmark inspection only; no production API or mutable global state.
   return (world as unknown as { tiles: Map<string, TileLife> }).tiles;
+}
+/** Baseline revisions can predate stats(); inspect their bins only in tests/benchmarks. */
+export function polygonStats(index: PolygonIndex): ReturnType<PolygonIndex['stats']> {
+  if (typeof index.stats === 'function') return index.stats();
+  const { bins } = index as unknown as { bins: Map<number, Set<Polygon>> };
+  const counts = new Map<Polygon, number>();
+  let items = 0;
+  let maxBinsPerPolygon = 0;
+  for (const bin of bins.values())
+    for (const polygon of bin) {
+      const count = (counts.get(polygon) ?? 0) + 1;
+      counts.set(polygon, count);
+      maxBinsPerPolygon = Math.max(maxBinsPerPolygon, count);
+      items++;
+    }
+  return {
+    polygons: index.polygons.length,
+    bins: bins.size,
+    items,
+    maxBinsPerPolygon,
+    meanBinsPerPolygon: index.polygons.length ? items / index.polygons.length : 0,
+  };
+}
+
+export function worldTerrainStats(world: LifeWorld) {
+  const terrain = world.cellTerrain();
+  const ground = (
+    world as unknown as {
+      groundTerrain?: { blocked: PolygonIndex; water: PolygonIndex };
+    }
+  ).groundTerrain;
+  if (!terrain || !ground) throw new Error('World terrain has not been initialized');
+  return Object.fromEntries(
+    Object.entries({
+      roads: terrain.roads,
+      forbidden: terrain.forbidden,
+      trees: terrain.trees,
+      blocked: ground.blocked,
+      water: ground.water,
+    }).map(([name, index]) => [name, polygonStats(index)]),
+  );
 }
 export function makeScenario(
   kind: Scenario,

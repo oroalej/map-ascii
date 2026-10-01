@@ -1,15 +1,14 @@
 /** Decode real archive tiles in Node; timings exclude file IO and PMTiles decompression. */
-import { open, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { cpus, platform, release } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PMTiles, type Source } from 'pmtiles';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { buildTileGeometry, createIdRegistry } from '../src/raster/geometry';
 import { currentSourceHash } from './snapshot';
+import { openArchive, archiveHash } from './archive';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback: string) =>
@@ -18,25 +17,8 @@ const city = arg('city', 'naga');
 if (!/^[a-z0-9-]+$/.test(city)) throw new Error('Invalid city slug');
 const rounds = Number(arg('rounds', '5'));
 if (!Number.isInteger(rounds) || rounds < 1) throw new Error('Invalid round count');
-const path = resolve(root, `apps/web/public/tiles/${city}.pmtiles`);
 const sourceHash = await currentSourceHash(root);
-const archiveHash = createHash('sha256')
-  .update(await readFile(path))
-  .digest('hex');
-const file = await open(path, 'r');
-const source: Source = {
-  getKey: () => path,
-  async getBytes(offset, length) {
-    const buffer = new Uint8Array(length);
-    let read = 0;
-    while (read < length) {
-      const { bytesRead } = await file.read(buffer, read, length - read, offset + read);
-      if (!bytesRead) break;
-      read += bytesRead;
-    }
-    return { data: buffer.slice(0, read).buffer };
-  },
-};
+const local = await openArchive(city);
 const quantile = (values: number[], q: number) => {
   const sorted = values.slice().sort((a, b) => a - b);
   return sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]! : null;
@@ -56,8 +38,7 @@ const tileY = (lat: number, n: number) => {
   );
 };
 try {
-  const archive = new PMTiles(source);
-  const header = await archive.getHeader();
+  const { archive, header } = local;
   const tiles: {
     key: string;
     z: number;
@@ -105,6 +86,8 @@ try {
   if (!tiles.length) throw new Error('No tiles at zoom 15 or higher');
   if ((await currentSourceHash(root)) !== sourceHash)
     throw new Error('Runtime source changed during capture');
+  if ((await archiveHash(local.path)) !== local.hash)
+    throw new Error('Archive changed during capture');
   const zooms = [...new Set(tiles.map((tile) => tile.z))].map((zoom) => {
     const rows = tiles.filter((tile) => tile.z === zoom);
     return {
@@ -124,7 +107,7 @@ try {
     at: new Date().toISOString(),
     city,
     sourceHash,
-    archiveHash,
+    archiveHash: local.hash,
     revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
       cwd: root,
@@ -157,5 +140,5 @@ try {
   );
   console.log(`Report: ${output}`);
 } finally {
-  await file.close();
+  await local.close();
 }
