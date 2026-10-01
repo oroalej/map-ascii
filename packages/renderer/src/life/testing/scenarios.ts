@@ -19,7 +19,7 @@ const ring = (x: number, y: number, w: number, h: number) => [
   { x, y: y + h },
   { x, y },
 ];
-export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile[] {
+export function scenarioLife(kind: Scenario) {
   const b = new LifeBuilder();
   if (kind === 'crossroads') {
     const center = { x: 2048, y: 2048 };
@@ -104,12 +104,29 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
       b.market({ x: 1300, y: 1800 });
     }
   }
-  const life = b.finish();
-  const side = Math.ceil(Math.sqrt(count));
-  return Array.from({ length: count }, (_, i) => {
-    const tile = { ...base, x: base.x + (i % side), y: base.y + Math.floor(i / side) };
+  return b.finish();
+}
+export function scenarioTilesAt(
+  kind: Scenario,
+  cells: readonly { dx: number; dy: number }[],
+  seed = 1,
+): LifeTile[] {
+  const life = scenarioLife(kind);
+  return cells.map(({ dx, dy }) => {
+    const tile = { ...base, x: base.x + dx, y: base.y + dy };
     return { key: `${tile.z}/${tile.x}/${tile.y}/seed${seed}`, tile, life };
   });
+}
+export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile[] {
+  const side = Math.ceil(Math.sqrt(count));
+  return scenarioTilesAt(
+    kind,
+    Array.from({ length: count }, (_, i) => ({
+      dx: i % side,
+      dy: Math.floor(i / side),
+    })),
+    seed,
+  );
 }
 export function worldTiles(world: LifeWorld): ReadonlyMap<string, TileLife> {
   // Test/benchmark inspection only; no production API or mutable global state.

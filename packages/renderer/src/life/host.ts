@@ -124,12 +124,17 @@ export function createWorkerHost(
       if (!ready || inFlight) return false;
       inFlight = true;
       const requestedGeneration = generation;
+      const posted = profiler?.time();
       void remote
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
-          if (result.terrain !== undefined)
+          if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
+          if (result.terrain !== undefined) {
+            const start = profiler?.time();
             terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
+            if (start !== undefined) profiler!.record('terrainSnapshot', profiler!.time() - start);
+          }
           const cellTerrain = terrain;
           view = {
             agents: result.agents,

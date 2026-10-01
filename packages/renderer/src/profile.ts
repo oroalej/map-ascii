@@ -10,6 +10,13 @@ export const PROFILE_STAGES = [
   'upload',
   'sync',
   'terrainRebuild',
+  'terrainSnapshot',
+  'terrainEncode',
+  'lifeLatency',
+  'spawn',
+  'settle',
+  'terrainRoads',
+  'terrainRevalidate',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {
@@ -51,6 +58,10 @@ export class FrameProfiler {
   }
   add(stage: ProfileStage, elapsed: number) {
     if (this.current) this.current.ms[stage] = (this.current.ms[stage] ?? 0) + elapsed;
+  }
+  /** Also retain measurements that finish between animation callbacks. */
+  record(stage: ProfileStage, elapsed: number) {
+    this.merge({ at: 0, drawn: false, agents: 0, checks: 0, ms: { [stage]: elapsed } });
   }
   check() {
     if (this.current) this.current.checks++;

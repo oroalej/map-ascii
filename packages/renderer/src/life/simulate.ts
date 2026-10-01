@@ -2953,6 +2953,7 @@ export class LifeWorld {
     try {
       const keep = new Set<string>();
       const added = new Set<TileLife>();
+      const spawnStart = this.profiler?.time();
       for (const { key, tile, life } of tiles) {
         keep.add(key);
         if (!this.tiles.has(key)) {
@@ -2961,6 +2962,8 @@ export class LifeWorld {
           added.add(fresh);
         }
       }
+      if (added.size && spawnStart !== undefined)
+        this.profiler!.add('spawn', this.profiler!.time() - spawnStart);
       for (const key of this.tiles.keys())
         if (!keep.has(key)) {
           this.tiles.delete(key);
@@ -2971,6 +2974,7 @@ export class LifeWorld {
       this.junctions.begin(new Set(this.tiles.values()));
       if (added.size) {
         const guard = this.groundGuard(0, added);
+        const settleStart = this.profiler?.time();
         for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
         for (const tile of added) tile.settleAnimals((owner, before) => guard(tile, owner, before));
         if ([...added].some((tile) => tile.geo.commerce?.length)) {
@@ -2978,6 +2982,8 @@ export class LifeWorld {
           for (const tile of added)
             tile.admitCommerce((owner, before) => commerceGuard(tile, owner, before));
         }
+        if (settleStart !== undefined)
+          this.profiler!.add('settle', this.profiler!.time() - settleStart);
       }
     } finally {
       if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
@@ -3057,10 +3063,14 @@ export class LifeWorld {
         contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
         for (const polygon of cached.trees) this.groundTerrain!.trees.add(polygon);
       }
+      const roadsStart = this.profiler?.time();
       this.groundTerrain!.roadAccess = this.roadCache.build(contributions);
+      if (roadsStart !== undefined)
+        this.profiler!.add('terrainRoads', this.profiler!.time() - roadsStart);
       for (const life of this.tiles.values())
         life.setIdleGuard((owner) => this.canIdle(life, owner));
       // A neighboring buffered crown can invalidate an already admitted parking placement.
+      const revalidateStart = this.profiler?.time();
       for (const life of this.tiles.values()) {
         const o = origin(life);
         for (let i = life.gatherers.length - 1; i >= 0; i--)
@@ -3089,6 +3099,8 @@ export class LifeWorld {
           }
         }
       }
+      if (revalidateStart !== undefined)
+        this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
       for (const life of this.tiles.values()) {
         const cached = this.metricTerrain.get(life)!;
         for (const polygon of cached.blocked) blocked.add(polygon);

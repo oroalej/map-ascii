@@ -12,6 +12,7 @@ import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const port = Number(process.env.E2E_PORT ?? 3198);
+const pan = process.argv.includes('--pan');
 const city = cities.find((c) => c.hasMeta);
 if (!city) throw new Error('Build city tiles before capturing a profile');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_PORT');
@@ -46,7 +47,7 @@ if (!ready) {
 let browser: Browser | undefined;
 try {
   browser = await chromium.launch({ headless: false });
-  for (const storm of [false, true]) {
+  for (const storm of pan ? [false] : [false, true]) {
     const page = await browser.newPage({
       viewport: { width: 1920, height: 1080 },
       reducedMotion: 'no-preference',
@@ -72,9 +73,15 @@ try {
     await page.getByRole('button', { name: 'Capture 30 seconds', exact: true }).click();
     const canvas = page.locator('canvas');
     await canvas.focus();
-    // Repeated input exercises the active draw rate; equal opposite inputs keep the view local.
+    // Pan crosses tile boundaries; the default alternating input keeps the view local.
     for (let i = 0; i < 120; i++) {
-      await canvas.press(i % 2 ? 'ArrowLeft' : 'ArrowRight');
+      await canvas.press(
+        pan
+          ? ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'][Math.floor(i / 30)]!
+          : i % 2
+            ? 'ArrowLeft'
+            : 'ArrowRight',
+      );
       await page.waitForTimeout(250);
     }
     await page.waitForFunction(
@@ -88,7 +95,10 @@ try {
     const downloading = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download profile', exact: true }).click();
     const download = await downloading;
-    const output = resolve(root, `test-results/browser-${storm ? 'storm' : 'calm'}.json`);
+    const output = resolve(
+      root,
+      `test-results/browser-${pan ? 'pan' : storm ? 'storm' : 'calm'}.json`,
+    );
     await mkdir(dirname(output), { recursive: true });
     await download.saveAs(output);
     const report = JSON.parse(await readFile(output, 'utf8')) as Record<string, unknown>;
@@ -100,7 +110,7 @@ try {
       cpu: cpus()[0]?.model,
       os: release(),
       browser: browser.version(),
-      input: 'alternating arrows every 250 ms',
+      input: pan ? 'pan 30x right/down/left/up every 250 ms' : 'alternating arrows every 250 ms',
       warmupSeconds: 5,
     };
     await writeFile(output, JSON.stringify(report, null, 2));

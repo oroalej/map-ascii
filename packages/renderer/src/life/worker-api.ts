@@ -114,7 +114,9 @@ export function createLifeWorkerApi() {
         terrainSent = true;
         lastTerrain = terrain?.version;
         if (terrain) {
+          const start = profiler?.time();
           const encoded = snapshotOf(terrain);
+          if (start !== undefined) profiler!.add('terrainEncode', profiler!.time() - start);
           result.terrain = encoded.snapshot;
           buffers = encoded.transferables;
         } else result.terrain = null;
