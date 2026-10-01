@@ -38,6 +38,10 @@ export const MAX_VISIBLE_AGENTS = 1200;
 export const MAX_TILE_AGENTS = 600;
 /** A longer frame (a background tab) is simulated as this long, so agents don't jump. */
 export const MAX_STEP_S = 0.1;
+/** Frozen out-of-view tiles, bounded by simulated time and count. */
+export const RETIRE = { seconds: 8, max: 24 } as const;
+/** Maximum rendered-pose discontinuity for a cross-zoom vehicle or boat. */
+export const ADOPT = { snap: 4, bearing: 35 } as const;
 /** A lane's width, m (the pipeline's, for roads tagged with lanes but no width). */
 export const LANE_WIDTH_M = 3.2;
 /** The width of a road line without one, m. */

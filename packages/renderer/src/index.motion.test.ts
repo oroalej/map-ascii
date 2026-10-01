@@ -278,6 +278,7 @@ describe('live motion preference', () => {
   });
 
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
@@ -285,6 +286,7 @@ describe('live motion preference', () => {
     draw(100);
     const saved = atlas.getLife();
     atlas.setReducedMotion(true);
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(atlas.getLife()).toEqual(saved);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![9]).toBe(true);
@@ -317,6 +319,7 @@ describe('live motion preference', () => {
   });
 
   it('disables animals and fish with Life while keeping the selected weather', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'cat', lng: 0, lat: 0, flap: 2 },
@@ -324,6 +327,7 @@ describe('live motion preference', () => {
     draw(100);
     const frames = step.mock.calls.length;
     atlas.setLife({ enabled: false });
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(step.mock.calls.length).toBe(frames);
     expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toEqual([]);
