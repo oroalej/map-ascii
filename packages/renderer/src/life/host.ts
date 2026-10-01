@@ -5,7 +5,7 @@ import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from 
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
-import type { LifeViewContext } from './births';
+import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 
 export type FrameView = {
@@ -52,7 +52,7 @@ export function createInlineHost(
       acceptedPost = profiler?.time();
       preparation.camera(
         input.step.bounds,
-        2 * (input.step.cellMeters ?? 0) * Math.max(1, input.gust.cssCell.h / input.gust.cssCell.w),
+        spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
       );
       preparation.commit();
       const result = runLifeFrame(world, input, profiler);
@@ -68,8 +68,7 @@ export function createInlineHost(
             toCell,
           ),
       };
-      preparation.slice();
-      if (!preparationClock) preparation.schedule();
+      preparation.schedule();
       return true;
     },
     latest: () => {

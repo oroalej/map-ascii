@@ -4,7 +4,7 @@ import { continuityTile, continuityMover, left, right, parent } from './testing/
 import { worldTiles } from './testing/scenarios';
 import { LifeBuilder, LifeLine } from './geometry';
 import { frameBetween } from './frames';
-import { seamAhead } from './seams';
+import { seamAhead, SEAMS } from './seams';
 import { activityLevels } from './config';
 
 function fixture(entries: LifeTile[]) {
@@ -30,7 +30,7 @@ describe('runtime geographic seam handover', () => {
     expect(lives[0]!.movers).toContain(m);
     const through = continuityMover(lives[0]!, 4095);
     lives[0]!.movers.push(through);
-    for (let frame = 0; frame < 1500; frame++) {
+    for (let frame = 0; frame < 1500 && !lives[2]!.movers.includes(through); frame++) {
       world.step(0.1);
       expect(lives.filter((life) => life.movers.includes(through))).toHaveLength(1);
     }
@@ -117,10 +117,10 @@ describe('runtime geographic seam handover', () => {
         blocker.v = 0;
         target!.movers.push(blocker);
       }
-      for (let i = 0; i < 60; i++) world.step(0.1);
+      for (let i = 0; i < (reason === 'missing' ? 20 : 60); i++) world.step(0.1);
       expect(source.movers).toContain(m);
       expect(m.x).toBeLessThan(4096);
-      expect(m.v).toBeLessThan(0.01);
+      expect(m.v).toBeLessThan(reason === 'missing' ? 3 * source.perMeter : 0.01);
       if (target) target.movers.splice(0);
       if (reason === 'missing') world.sync([a, b]);
       if (reason === 'oneway') target!.geo.oneway![0] = 0;
@@ -189,4 +189,29 @@ describe('runtime geographic seam handover', () => {
     expect(target.movers).toContain(m);
     expect(m.routing?.turns).toBe(7);
   });
+});
+
+it.each(['vehicle', 'boat'] as const)(
+  'lets a %s turn at a permanently missing outer neighbor',
+  (kind) => {
+    const { world, lives } = fixture([
+      continuityTile(left, kind === 'boat' ? LifeLine.river : LifeLine.roadMajor),
+    ]);
+    const source = lives[0]!,
+      mover = continuityMover(source, 4096 - 12 * source.perMeter, kind);
+    source.movers.push(mover);
+    for (let frame = 0; frame < 600 && mover.dir === 1; frame++) world.step(0.1);
+    expect(source.elapsed).toBeGreaterThanOrEqual(SEAMS.missingSeconds);
+    expect(mover.dir).toBe(-1);
+    expect(source.movers).toContain(mover);
+  },
+);
+it('keeps one-way endpoint restrictions after a missing-owner timeout', () => {
+  const { world, lives } = fixture([continuityTile(left, LifeLine.roadMajor, 77, 0, 1)]);
+  const source = lives[0]!,
+    mover = continuityMover(source, 4096 - 12 * source.perMeter);
+  source.movers.push(mover);
+  for (let frame = 0; frame < 600; frame++) world.step(0.1);
+  expect(mover.dir).toBe(1);
+  expect(mover.v).toBeLessThan(0.01);
 });

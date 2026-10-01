@@ -8,6 +8,7 @@ import { tileToLngLat } from '../raster/geometry';
 import type { LifeViewContext } from './births';
 import { activityLevels } from './config';
 import { FrameProfiler } from '../profile';
+import { LifeLine } from './geometry';
 
 const context = (tile = left): LifeViewContext => {
   const [west, north] = tileToLngLat(tile, { x: 0, y: 0 });
@@ -208,4 +209,79 @@ describe('cooperative life preparation', () => {
     world.step(0.1);
     expect(traveler.x).toBeGreaterThan(x);
   });
+});
+
+it('regenerates partially admitted commerce after the activation set changes', () => {
+  const entry = continuityTile(left, LifeLine.path);
+  entry.life.commerce = new Float32Array([500, 2000, 1500, 2000, 2500, 2000, 3500, 2000]);
+  const other = continuityTile({ ...left, x: left.x + 5 });
+  const world = new LifeWorld();
+  const bootstrap = continuityTile({ ...left, x: left.x + 10 });
+  world.sync([bootstrap], undefined, context());
+  let clock = 0,
+    interrupted: TileLife | undefined;
+  const jobs = new LifePreparation(world, undefined, () => clock++);
+  // The wrapper explicitly supplies the original method receiver below.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const original = TileLife.prototype.admitCommerceSteps;
+  const spy = vi.spyOn(TileLife.prototype, 'admitCommerceSteps').mockImplementation(function* (
+    this: TileLife,
+    guard,
+  ) {
+    const work = original.call(this, guard);
+    const first = work.next();
+    if (!first.done) {
+      // Keep the exact private instance to verify it is discarded on cancellation.
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      interrupted = this;
+      yield;
+    }
+    yield* work;
+  });
+  try {
+    jobs.sync([entry, other], undefined, context());
+    for (let i = 0; i < 10000 && !interrupted; i++) jobs.slice();
+    expect(interrupted).toBeDefined();
+    jobs.sync([entry], undefined, context());
+    spy.mockRestore();
+    finish(jobs);
+    const actual = worldTiles(world).get(entry.key)!;
+    expect(actual).not.toBe(interrupted);
+    const control = new LifeWorld();
+    control.sync([bootstrap], undefined, context());
+    control.sync([entry], undefined, context());
+    const expected = worldTiles(control).get(entry.key)!;
+    expect(actual.stalls).toEqual(expected.stalls);
+    expect(actual.movers).toEqual(expected.movers);
+    expect(actual.stalls.length).toBeGreaterThan(0);
+    const cache = (world as unknown as { preparedTerrain: WeakMap<TileLife, unknown> })
+      .preparedTerrain;
+    expect(cache.has(actual)).toBe(false);
+  } finally {
+    spy.mockRestore();
+    jobs.clear();
+  }
+});
+
+it('yields while building dense occupancy without publishing a partial guard', () => {
+  const world = new LifeWorld(),
+    entry = continuityTile(left);
+  world.sync([entry]);
+  const life = worldTiles(world).get(entry.key)!;
+  life.movers.splice(
+    0,
+    life.movers.length,
+    ...Array.from({ length: 600 }, (_, i) => continuityMover(life, 100 + i * 5)),
+  );
+  const internal = world as unknown as { groundGuardSteps(): Generator<void, unknown, void> };
+  const work = internal.groundGuardSteps();
+  let yields = 0,
+    result = work.next();
+  while (!result.done) {
+    expect(result.value).toBeUndefined();
+    yields++;
+    result = work.next();
+  }
+  expect(yields).toBeGreaterThanOrEqual(600 / 32 - 1);
+  expect(typeof result.value).toBe('function');
 });

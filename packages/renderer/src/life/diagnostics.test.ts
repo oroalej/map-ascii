@@ -56,3 +56,21 @@ it('profiling preserves complete simulation state and worker delta counts are me
   profiled.world.clearTiles();
   expect(p.snapshot().continuity).toEqual({ counts: {}, trace: [] });
 });
+
+it('honors explicit selection, restores automatic selection and clears it on reset', () => {
+  const profile = new FrameProfiler(() => 0),
+    a = {},
+    b = {};
+  profile.registerPopulation('tile', [a, b]);
+  profile.selectTraveler(profile.identity(b));
+  profile.observeVisible(a, true);
+  expect(profile.tracing(a)).toBe(false);
+  expect(profile.tracing(b)).toBe(true);
+  profile.selectTraveler();
+  profile.observeVisible(a, true);
+  expect(profile.tracing(a)).toBe(true);
+  profile.reset();
+  expect(profile.tracing(a)).toBe(false);
+  profile.observeVisible(b, true);
+  expect(profile.tracing(b)).toBe(true);
+});

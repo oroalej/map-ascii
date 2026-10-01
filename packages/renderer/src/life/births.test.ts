@@ -1,9 +1,9 @@
-import { expect, it } from 'vitest';
-import { LifeWorld } from './simulate';
+import { expect, it, vi } from 'vitest';
+import { LifeWorld, type WorldGroundGuard } from './simulate';
 import { continuityTile, continuityMover, left, parent } from './testing/continuity';
 import { completeScenarioState, worldTiles, retiredTiles } from './testing/scenarios';
 import { tileToLngLat } from '../raster/geometry';
-import { BIRTHS, outsideView, type LifeViewContext } from './births';
+import { BIRTHS, outsideView, spawnMargin, type LifeViewContext } from './births';
 import { LifeBuilder, LifeLine } from './geometry';
 import { FrameProfiler } from '../profile';
 import { activityLevels } from './config';
@@ -155,4 +155,75 @@ it('evaluates the full group and consist for offscreen admission', () => {
     train.y,
   ];
   expect(outsideView(life, life.birthBodies(train), view, 12)).toBe(false);
+});
+
+it('expires permanently blocked seeds without rebuilding the world guard every step', () => {
+  const builder = new LifeBuilder();
+  builder.line(
+    [
+      { x: -100, y: 2000 },
+      { x: 4196, y: 2000 },
+    ],
+    LifeLine.roadMajor,
+    6,
+    77,
+  );
+  builder.area('blocked', [
+    [
+      { x: 0, y: 0 },
+      { x: 4096, y: 0 },
+      { x: 4096, y: 4096 },
+      { x: 0, y: 4096 },
+      { x: 0, y: 0 },
+    ],
+  ]);
+  const world = new LifeWorld(),
+    view = context(),
+    entry = { key: 'blocked', tile: left, life: builder.finish() };
+  world.sync([entry], undefined, view);
+  const life = worldTiles(world).get(entry.key)!;
+  life.movers.splice(0);
+  life.pending.push({ mover: continuityMover(life, 500), at: life.elapsed });
+  const guard = vi.spyOn(
+    world as unknown as { groundGuard(...args: unknown[]): WorldGroundGuard },
+    'groundGuard',
+  );
+  for (let frame = 0; frame < 600; frame++) world.step(0.1, undefined, 18, view.bounds);
+  expect(life.pending).toHaveLength(0);
+  expect(life.movers).toHaveLength(0);
+  const birthBuilds = guard.mock.calls.filter((args) => args[3] === true);
+  expect(birthBuilds.length).toBeGreaterThan(0);
+  expect(birthBuilds.length).toBeLessThanOrEqual(BIRTHS.maxFailures);
+  expect(birthBuilds.every((args) => args[4] instanceof Set)).toBe(true);
+  guard.mockClear();
+  for (let frame = 0; frame < 20; frame++) world.step(0.1, undefined, 18, view.bounds);
+  expect(guard.mock.calls.some((args) => args[3] === true)).toBe(false);
+  guard.mockRestore();
+});
+
+it('derives the same CSS margin for tall and wide cells without imposing the minimum twice', () => {
+  expect(spawnMargin(5, 1.8)).toBe(18);
+  expect(spawnMargin(5, 0.5)).toBe(10);
+  expect(spawnMargin(1, 1.8)).toBe(3.6);
+});
+
+it('keeps near hidden residents in birth clearance while excluding distant tiles', () => {
+  const { world, life, view, boot, entry } = prepared();
+  const far = continuityTile({ ...left, x: left.x + 10 });
+  world.sync([boot, entry, far], undefined, view);
+  const distant = worldTiles(world).get(far.key)!;
+  distant.pending.splice(0);
+  const seed = continuityMover(life, 500),
+    blocker = { ...seed, rank: 1, speed: 0, v: 0 };
+  life.pending.splice(0, life.pending.length, { mover: seed, at: life.elapsed });
+  life.movers.splice(0, life.movers.length, blocker);
+  for (const tile of worldTiles(world).values()) if (tile !== life) tile.pending.splice(0);
+  world.visible(18, activityLevels(0), [123, 13]);
+  const calls = vi.spyOn(distant, 'groundBodies');
+  const internal = world as unknown as { admitBirths(dt: number): void };
+  internal.admitBirths(0.1);
+  expect(life.movers).not.toContain(seed);
+  expect(life.pending).toHaveLength(1);
+  expect(calls).not.toHaveBeenCalled();
+  calls.mockRestore();
 });

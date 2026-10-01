@@ -1,11 +1,37 @@
+import { FOLLOW, MAX_TILE_AGENTS, usableLines } from './config';
+import { LifeLine, inTile } from './geometry';
+import { frameBetween } from './frames';
+import { bodiesOverlap } from './occupancy';
+import type { ContinuityCounter, ContinuityRejection } from './diagnostics';
+import type { WorldGroundGuard } from './simulate';
 import { lngLatToTile } from '../raster/geometry';
 import { bodyCorners, type Body } from './occupancy';
 import type { LngLatBounds } from './procession';
 import type { Mover, TileLife } from './simulate';
 
 export type LifeViewContext = { bounds: LngLatBounds; spawnMarginM: number };
-export type PendingSeed = { mover: Mover; at: number; entrance?: number };
-export const BIRTHS = { attempts: 32, grace: 1, tileRate: 4, worldRate: 16, margin: 12 } as const;
+export type PendingSeed = {
+  mover: Mover;
+  at: number;
+  entrance?: number;
+  failures?: number;
+  retryAt?: number;
+};
+export const BIRTHS = {
+  attempts: 32,
+  grace: 1,
+  tileRate: 4,
+  worldRate: 16,
+  margin: 12,
+  maxFailures: 16,
+  lifetime: 8,
+  retrySeconds: 0.5,
+} as const;
+
+/** Two CSS cells in meters; admission alone applies the minimum protected margin. */
+export function spawnMargin(cellMeters: number, aspect: number) {
+  return 2 * cellMeters * Math.max(1, aspect);
+}
 
 export function viewRect(life: TileLife, view: LifeViewContext, margin: number) {
   const [w, s, e, n] = view.bounds;
@@ -83,4 +109,215 @@ export function entryDistances(
       : Math.max(along / 2, along - radius - 0.01) * pm,
   );
   return values;
+}
+
+function retainSeeds(life: TileLife, keep: (seed: PendingSeed) => boolean) {
+  let count = 0;
+  for (const seed of life.pending) if (keep(seed)) life.pending[count++] = seed;
+  life.pending.length = count;
+}
+
+export type BirthContext = {
+  view?: LifeViewContext;
+  lives: TileLife[];
+  credit: number;
+  cursor: number;
+  owns(life: TileLife, point: { x: number; y: number }): boolean;
+  guard(life: TileLife): WorldGroundGuard;
+  boatRoom(life: TileLife, mover: Mover): boolean;
+  count?: (event: ContinuityCounter) => void;
+};
+
+/** Replacement stock is inert until admitted; no background catch-up or population refill. */
+export function admitBirths(context: BirthContext, dt: number) {
+  const view = context.view;
+  const lives = context.lives
+    .filter((life) => life.pending.length)
+    .sort((a, b) => a.tile.z - b.tile.z || a.tile.x - b.tile.x || a.tile.y - b.tile.y);
+  if (!view || !lives.length) {
+    context.credit = 0;
+    return;
+  }
+  context.credit = Math.min(BIRTHS.worldRate, context.credit + dt * BIRTHS.worldRate);
+  for (const life of lives)
+    life.birthCredit = Math.min(BIRTHS.tileRate, life.birthCredit + dt * BIRTHS.tileRate);
+  let guard: WorldGroundGuard | undefined;
+  const reject = context.count;
+  // Expiry is active simulation time; retirement leaves life.elapsed frozen.
+  for (const life of lives) {
+    retainSeeds(life, (seed) => {
+      const expired =
+        life.elapsed - seed.at >= BIRTHS.lifetime || (seed.failures ?? 0) >= BIRTHS.maxFailures;
+      if (expired) context.count?.('expiredBirths');
+      return !expired;
+    });
+  }
+  // Only one neighborhood occupancy build per step, rotating fairly among due tiles.
+  let selected: TileLife | undefined;
+  for (let i = 0; i < lives.length; i++) {
+    const life = lives[context.cursor++ % lives.length]!;
+    if (life.pending.some((seed) => (seed.retryAt ?? 0) <= life.elapsed)) {
+      selected = life;
+      break;
+    }
+  }
+  if (!selected) return;
+  const life = selected;
+  const due: PendingSeed[] = [];
+  retainSeeds(life, (seed) => {
+    if (due.length < BIRTHS.attempts && (seed.retryAt ?? 0) <= life.elapsed) {
+      due.push(seed);
+      return false;
+    }
+    return true;
+  });
+  const retry = (seed: PendingSeed) => {
+    seed.failures = (seed.failures ?? 0) + 1;
+    seed.retryAt = life.elapsed + BIRTHS.retrySeconds;
+    if (seed.failures < BIRTHS.maxFailures) life.pending.push(seed);
+    else context.count?.('expiredBirths');
+  };
+  for (const seed of due) {
+    context.count?.('attempts');
+    const m = seed.mover,
+      kind = life.geo.kinds[m.line];
+    const invalid =
+      kind === undefined ||
+      !usableLines[m.kind].includes(kind as LifeLine) ||
+      (m.kind === 'vehicle' && life.geo.oneway?.[m.line] && life.geo.oneway[m.line] !== m.dir) ||
+      (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat');
+    if (invalid) {
+      context.count?.('geometry');
+      continue;
+    }
+    if (life.movers.length >= MAX_TILE_AGENTS) {
+      context.count?.('capQuota');
+      retry(seed);
+      continue;
+    }
+    let bodies = life.birthBodies(m),
+      candidate = m;
+    let ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
+    let entered = false;
+    const fallback =
+      life.elapsed - seed.at >= BIRTHS.grace &&
+      life.birthCredit >= 1 - 1e-9 &&
+      context.credit >= 1 - 1e-9;
+    if (fallback && !ordinary) {
+      const radius = bodies.length
+        ? Math.max(
+            ...bodies.map(
+              (b) =>
+                Math.hypot(b.x - m.x / life.perMeter, b.y - m.y / life.perMeter) +
+                Math.hypot(b.length, b.width) / 2,
+            ),
+          )
+        : 2;
+      const distances = entryDistances(life, m, view, radius);
+      const index = (seed.entrance ?? 0) % distances.length;
+      seed.entrance = (seed.entrance ?? 0) + 1;
+      const distance = distances[index];
+      if (distance !== undefined) {
+        const placed = life.placeSeed(m, distance);
+        const full = placed ? life.birthBodies(placed) : [];
+        // Route endpoints are explicit entrances; viewport entries start fully offscreen.
+        const endpoint = index === distances.length - 1;
+        if (
+          placed &&
+          inTile(placed) &&
+          context.owns(life, placed) &&
+          full.length &&
+          (endpoint || outsideView(life, full, view, 0))
+        ) {
+          candidate = placed;
+          bodies = full;
+          entered = true;
+        }
+      }
+    }
+    ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
+    if (
+      (!ordinary && !entered) ||
+      !bodies.length ||
+      !inTile(candidate) ||
+      !context.owns(life, candidate) ||
+      !birthFits(context, life, candidate, (guard ??= context.guard(life)), reject)
+    ) {
+      retry(seed);
+      continue;
+    }
+    Object.assign(m, candidate);
+    life.movers.push(m);
+    if (m.kind !== 'boat') guard(life, m);
+    if (entered) {
+      life.birthCredit = Math.max(0, life.birthCredit - 1);
+      context.credit = Math.max(0, context.credit - 1);
+    }
+    context.count?.('births');
+  }
+}
+
+function birthFits(
+  context: BirthContext,
+  life: TileLife,
+  m: Mover,
+  guard: WorldGroundGuard,
+  reject?: (reason: ContinuityRejection) => void,
+) {
+  if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) {
+    reject?.('geometry');
+    return false;
+  }
+  if (
+    m.kind === 'person' &&
+    life
+      .birthBodies(m)
+      .some(
+        (b) =>
+          !life.scenes.walkable(
+            { x: b.x * life.perMeter, y: b.y * life.perMeter },
+            { x: b.x * life.perMeter, y: b.y * life.perMeter },
+          ),
+      )
+  ) {
+    reject?.('terrain');
+    return false;
+  }
+  if (m.kind === 'boat') {
+    const fits = context.boatRoom(life, m);
+    if (!fits) reject?.('occupancy');
+    return fits;
+  }
+  if (m.train) {
+    const bodies = life.birthBodies(m);
+    if (
+      !bodies.length ||
+      bodies.some(
+        (b) =>
+          !life.projectRail({
+            ...m,
+            x: b.x * life.perMeter,
+            y: b.y * life.perMeter,
+            hx: b.hx,
+            hy: b.hy,
+          }),
+      )
+    )
+      return false;
+    for (const otherLife of context.lives)
+      for (const other of otherLife.movers) {
+        if (!other.train || !context.owns(otherLife, other)) continue;
+        const f = frameBetween(otherLife.tile, life.tile),
+          scale = (f.scale * otherLife.perMeter) / life.perMeter;
+        const otherBodies = otherLife.birthBodies(other).map((b) => ({
+          ...b,
+          x: f.x / life.perMeter + b.x * scale,
+          y: f.y / life.perMeter + b.y * scale,
+          length: b.length * scale + 2 * FOLLOW.minGap,
+          width: b.width * scale,
+        }));
+        if (bodies.some((a) => otherBodies.some((b) => bodiesOverlap(a, b)))) return false;
+      }
+  }
+  return guard(life, m, undefined, undefined, false, m, reject);
 }

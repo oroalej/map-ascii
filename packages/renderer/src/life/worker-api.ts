@@ -7,7 +7,7 @@ import { LifeWorld, type LifeTile, type VisibleAgent, type ProcessionRun } from 
 import type { LifeGeometry } from './geometry';
 import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
-import type { LifeViewContext } from './births';
+import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 
 type Step = Parameters<LifeWorld['step']>;
@@ -120,7 +120,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
       profiler?.begin(input.gust.time * 1000);
       preparation.camera(
         input.step.bounds,
-        2 * (input.step.cellMeters ?? 0) * Math.max(1, input.gust.cssCell.h / input.gust.cssCell.w),
+        spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
       );
       preparation.commit();
       const result: FrameResult = runLifeFrame(world, input, profiler);
@@ -144,8 +144,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
         structuredClone({ agents: result.agents, procession: result.procession });
         profiler.add('replyClone', profiler.time() - start);
       }
-      preparation.slice();
-      if (!preparationClock) preparation.schedule();
+      preparation.schedule();
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },

@@ -1,5 +1,11 @@
 /** Optional profiling data. Identities are weak and never participate in simulation decisions. */
-export const CONTINUITY_EVENTS = ['attempts', 'transfers', 'births', 'revivals'] as const;
+export const CONTINUITY_EVENTS = [
+  'attempts',
+  'transfers',
+  'births',
+  'revivals',
+  'expiredBirths',
+] as const;
 export const CONTINUITY_REJECTIONS = [
   'geometry',
   'directionCraft',

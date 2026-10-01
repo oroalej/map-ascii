@@ -222,3 +222,51 @@ export function projectMover(
   }
   return preview;
 }
+
+/** Stable nearest replacement: candidates are grouped once for a destination transaction. */
+export function nearestReplacement<T>(
+  candidates: ReadonlySet<T>,
+  point: { x: number; y: number },
+  position: (item: T) => { x: number; y: number },
+) {
+  let selected: T | undefined,
+    nearest = Infinity;
+  for (const item of candidates) {
+    const p = position(item);
+    const distance = (p.x - point.x) ** 2 + (p.y - point.y) ** 2;
+    if (distance < nearest) {
+      nearest = distance;
+      selected = item;
+    }
+  }
+  return selected;
+}
+
+export function walkingBefore(
+  target: TileLife,
+  source: TileLife,
+  mover: Mover,
+  preview: Mover,
+): Mover {
+  const f = frameBetween(source.tile, target.tile);
+  return {
+    ...preview,
+    x: f.x + mover.x * f.scale,
+    y: f.y + mover.y * f.scale,
+    hx: mover.hx,
+    hy: mover.hy,
+  };
+}
+export function walkingTransfer(target: TileLife, source: TileLife, mover: Mover, preview: Mover) {
+  const f = frameBetween(source.tile, target.tile),
+    ratio = (f.scale * source.perMeter) / target.perMeter;
+  const before = source.groundBodies(mover),
+    after = target.groundBodies(preview);
+  return after.every((b, i) => {
+    const a = before[i]!;
+    return target.scenes.walkable(
+      { x: f.x + a.x * ratio * target.perMeter, y: f.y + a.y * ratio * target.perMeter },
+      { x: b.x * target.perMeter, y: b.y * target.perMeter },
+    );
+  });
+}

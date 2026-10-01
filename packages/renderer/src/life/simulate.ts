@@ -7,17 +7,18 @@
  */
 import { makeCellGuard } from './cell-guard';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
-import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
-import type { ContinuityRejection } from './diagnostics';
-import { seamAhead } from './seams';
-import { complete } from './cooperate';
 import {
-  BIRTHS,
-  outsideView,
-  entryDistances,
-  type LifeViewContext,
-  type PendingSeed,
-} from './births';
+  projectMover,
+  SegmentGrid,
+  nearestReplacement,
+  walkingBefore,
+  walkingTransfer,
+  type AdoptionOptions,
+} from './continuity';
+import type { ContinuityCounter, ContinuityRejection } from './diagnostics';
+import { seamAhead, SEAMS } from './seams';
+import { complete } from './cooperate';
+import { admitBirths, outsideView, type LifeViewContext, type PendingSeed } from './births';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -136,6 +137,18 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
+export type WorldGroundGuard = ((
+  life: TileLife,
+  owner: GroundAgent,
+  before?: GroundAgent,
+  ignore?: object,
+  reserve?: boolean,
+  identity?: GroundAgent,
+  reject?: (reason: ContinuityRejection) => void,
+) => boolean) & {
+  remove(owner: object): void;
+  reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
+};
 export type StepPass = {
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
@@ -994,9 +1007,11 @@ export class TileLife {
   }
   *admitCommerceSteps(guard: GroundGuard): Generator<void, void, void> {
     if (this.commerceAdmitted) return;
-    this.commerceAdmitted = true;
     const commerce = this.geo.commerce ?? [];
-    if (!commerce.length) return;
+    if (!commerce.length) {
+      this.commerceAdmitted = true;
+      return;
+    }
     for (const shoppers of [false, true]) {
       const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
       for (let line = 0; line < this.geo.kinds.length; line++) {
@@ -1106,6 +1121,7 @@ export class TileLife {
         }
       }
     }
+    this.commerceAdmitted = true;
   }
 
   private *spawnCats(): Generator<void, void, void> {
@@ -3219,6 +3235,8 @@ export class LifeWorld {
   private groundTerrain?: GroundTerrain;
   private preparedTerrain = new WeakMap<TileLife, GroundTerrain>();
   private preparedSettled = new WeakSet<TileLife>();
+  private preparationTouched = new WeakSet<TileLife>();
+  private seamWait = new WeakMap<Mover, { key: string; at: number }>();
   private preparedRegistered?: WeakSet<TileLife>;
   private readonly idleSample: Body[] = [];
 
@@ -3272,6 +3290,8 @@ export class LifeWorld {
     this.preparationEpoch++;
     this.preparedTerrain = new WeakMap();
     this.preparedSettled = new WeakSet();
+    this.preparationTouched = new WeakSet();
+    this.seamWait = new WeakMap();
     this.preparedRegistered = undefined;
     this.profiler?.clearContinuity();
     this.tiles.clear();
@@ -3368,6 +3388,7 @@ export class LifeWorld {
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
           if (terrain?.key === [...this.tiles.keys()].join('|')) this.groundTerrain = terrain;
+          this.preparedTerrain.delete(life);
         }
         this.railTopology = undefined;
         this.covers = new Map();
@@ -3385,8 +3406,10 @@ export class LifeWorld {
         }
       }
       if (changed && this.groundTerrain) this.revalidateTerrain();
+      let activationGuard: WorldGroundGuard | undefined;
       if (added.size) {
         const guard = this.groundGuard(0, added);
+        if ([...added].every((life) => this.preparedSettled.has(life))) activationGuard = guard;
         const settleStart = this.profiler?.time();
         for (const tile of added)
           if (!this.preparedSettled.has(tile))
@@ -3439,7 +3462,7 @@ export class LifeWorld {
             ),
         );
         const transferred = new Set<Mover>();
-        let guard: ReturnType<LifeWorld['groundGuard']> | undefined;
+        let guard = activationGuard;
         for (const target of destinations) {
           const donors = before.filter(
             (d) => d.life.tile.z !== target.tile.z && overlaps(d.life.tile, target.tile),
@@ -3494,6 +3517,7 @@ export class LifeWorld {
     const center = focus
       ? lngLatToTile(target.tile, focus[0], focus[1])
       : { x: EXTENT / 2, y: EXTENT / 2 };
+    const membership = new Map(donors.map((donor) => [donor.life, new Set(donor.life.movers)]));
     for (const kind of ['vehicle', 'boat', 'train', 'person'] as const) {
       const quota = this.history.get(target)!.quotas[kind] ?? 0;
       let count =
@@ -3530,36 +3554,27 @@ export class LifeWorld {
             a.key.localeCompare(b.key) ||
             a.index - b.index,
         );
+      const consumed = new Set<PendingSeed>();
+      const pendingPool = new Set(
+        target.pending.filter((p) => p.mover.kind === kind && gained(p.mover)),
+      );
+      const replacements = new Set(
+        target.movers.filter(
+          (m) =>
+            m.kind === kind &&
+            gained(m) &&
+            !transferred.has(m) &&
+            !(this.viewContext && this.previouslyVisible.has(m)) &&
+            target.scenes.transferable(m),
+        ),
+      );
       for (const c of candidates) {
-        if (!c.life.movers.includes(c.m)) continue;
+        if (!membership.get(c.life)!.has(c.m)) continue;
         this.profiler?.countContinuity('attempts');
         let replace: Mover | undefined;
-        const pending = target.pending
-          .filter((p) => p.mover.kind === kind && gained(p.mover))
-          .sort(
-            (a, b) =>
-              (a.mover.x - c.x) ** 2 +
-              (a.mover.y - c.y) ** 2 -
-              (b.mover.x - c.x) ** 2 -
-              (b.mover.y - c.y) ** 2,
-          )[0];
+        const pending = nearestReplacement(pendingPool, c, (seed) => seed.mover);
         if (!pending && (count >= limit || kind === 'train')) {
-          let nearest = Infinity;
-          for (const m of target.movers) {
-            if (
-              m.kind !== kind ||
-              !gained(m) ||
-              transferred.has(m) ||
-              (this.viewContext && this.previouslyVisible.has(m)) ||
-              !target.scenes.transferable(m)
-            )
-              continue;
-            const distance = (m.x - c.x) ** 2 + (m.y - c.y) ** 2;
-            if (distance < nearest) {
-              nearest = distance;
-              replace = m;
-            }
-          }
+          replace = nearestReplacement(replacements, c, (m) => m);
           if (!replace && kind !== 'train') {
             this.profiler?.countContinuity('capQuota');
             continue;
@@ -3575,12 +3590,12 @@ export class LifeWorld {
           },
           (preview) =>
             gained(preview) &&
-            (kind !== 'person' || this.walkingTransfer(target, c.life, c.m, preview)) &&
+            (kind !== 'person' || walkingTransfer(target, c.life, c.m, preview)) &&
             ((kind !== 'vehicle' && kind !== 'person') ||
               guard(
                 target,
                 preview,
-                kind === 'person' ? this.walkingBefore(target, c.life, c.m, preview) : undefined,
+                kind === 'person' ? walkingBefore(target, c.life, c.m, preview) : undefined,
                 replace,
                 false,
                 c.m,
@@ -3588,7 +3603,12 @@ export class LifeWorld {
               )),
         );
         if (!accepted) continue;
-        if (pending) target.pending.splice(target.pending.indexOf(pending), 1);
+        membership.get(c.life)!.delete(c.m);
+        if (pending) {
+          pendingPool.delete(pending);
+          consumed.add(pending);
+        }
+        if (replace) replacements.delete(replace);
         this.profiler?.countContinuity('transfers');
         this.junctions.rebind(
           c.m,
@@ -3605,26 +3625,12 @@ export class LifeWorld {
         if (!replace && !pending) count++;
         transferred.add(c.m);
       }
+      if (consumed.size) {
+        let kept = 0;
+        for (const seed of target.pending) if (!consumed.has(seed)) target.pending[kept++] = seed;
+        target.pending.length = kept;
+      }
     }
-  }
-
-  /** One metric coordinate system for all tiles, so clearance also works across a seam. */
-  private walkingBefore(target: TileLife, source: TileLife, m: Mover, preview: Mover): Mover {
-    const f = frameBetween(source.tile, target.tile);
-    return { ...preview, x: f.x + m.x * f.scale, y: f.y + m.y * f.scale, hx: m.hx, hy: m.hy };
-  }
-  private walkingTransfer(target: TileLife, source: TileLife, m: Mover, preview: Mover): boolean {
-    const f = frameBetween(source.tile, target.tile),
-      ratio = (f.scale * source.perMeter) / target.perMeter;
-    const before = source.groundBodies(m),
-      after = target.groundBodies(preview);
-    return after.every((b, i) => {
-      const a = before[i]!;
-      return target.scenes.walkable(
-        { x: f.x + a.x * ratio * target.perMeter, y: f.y + a.y * ratio * target.perMeter },
-        { x: b.x * target.perMeter, y: b.y * target.perMeter },
-      );
-    });
   }
 
   /** One metric coordinate system for all tiles, so clearance also works across a seam. */
@@ -3694,6 +3700,14 @@ export class LifeWorld {
     return terrain;
   }
 
+  discardPreparation(life: TileLife) {
+    this.preparedTerrain.delete(life);
+    if (this.history.has(life) || !this.preparationTouched.has(life)) return false;
+    this.preparedSettled.delete(life);
+    this.preparationTouched.delete(life);
+    return true;
+  }
+
   *prepareActivation(
     entries: readonly LifeTile[],
     ready: ReadonlyMap<string, TileLife>,
@@ -3714,6 +3728,7 @@ export class LifeWorld {
       ),
     );
     if (fresh.size) {
+      for (const life of fresh) this.preparationTouched.add(life);
       // The sandbox reads current neighbors, but only the private ready tile is modified.
       // Its terrain and reservations are detached from the live world's frame.
       const sandbox = new LifeWorld();
@@ -3734,12 +3749,12 @@ export class LifeWorld {
           );
       }
       for (const life of fresh) life.setIdleGuard((owner) => sandbox.canIdle(life, owner));
-      const guard = sandbox.groundGuard(0, fresh);
+      const guard = yield* sandbox.groundGuardSteps(0, fresh);
       for (const life of fresh)
         yield* life.settleGroundSteps((owner, before) => guard(life, owner, before));
       for (const life of fresh)
         yield* life.settleAnimalsSteps((owner, before) => guard(life, owner, before));
-      const commerceGuard = sandbox.groundGuard();
+      const commerceGuard = yield* sandbox.groundGuardSteps();
       for (const life of fresh)
         yield* life.admitCommerceSteps((owner, before) => commerceGuard(life, owner, before));
       for (const life of fresh) this.preparedSettled.add(life);
@@ -3800,14 +3815,26 @@ export class LifeWorld {
     fresh?: ReadonlySet<TileLife>,
     bounds?: LngLatBounds,
     allBodies = false,
+    region?: ReadonlySet<TileLife>,
   ) {
+    return complete(this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false));
+  }
+
+  private *groundGuardSteps(
+    minimum = 0,
+    fresh?: ReadonlySet<TileLife>,
+    bounds?: LngLatBounds,
+    allBodies = false,
+    region?: ReadonlySet<TileLife>,
+    cooperative = true,
+  ): Generator<void, WorldGroundGuard, void> {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const reservations = new Map<GroundAgent, readonly Body[]>();
     const key = [...this.tiles.keys()].join('|');
     const rebuild = this.groundTerrain?.key !== key;
-    if (rebuild) this.groundTerrain = complete(this.prepareGroundTerrain([...this.tiles], true));
+    if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
     const { blocked, water } = this.groundTerrain!;
     const origin = (life: TileLife) => {
       const found = this.groundTerrain!.origins.get(life);
@@ -3841,7 +3868,9 @@ export class LifeWorld {
     };
     if (rebuild) this.revalidateTerrain();
     const roadAccess = this.groundTerrain!.roadAccess;
+    let visited = 0;
     for (const life of this.tiles.values()) {
+      if (region && !region.has(life)) continue;
       const o = origin(life);
       const near = bounds && viewIn(life.tile, bounds, 100 * life.perMeter);
       const inView = (p: { x: number; y: number }) => !near || near(p.x, p.y);
@@ -3861,9 +3890,13 @@ export class LifeWorld {
         toRef(o, b);
         occupied.set(p, out);
       };
-      for (const p of life.parked) standing(p, p.vehicle);
+      for (const p of life.parked) {
+        standing(p, p.vehicle);
+        if (cooperative && ++visited % 32 === 0) yield;
+      }
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
-      for (const s of life.stalls)
+      for (const s of life.stalls) {
+        if (cooperative && ++visited % 32 === 0) yield;
         if (
           allBodies ||
           (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))
@@ -3872,8 +3905,10 @@ export class LifeWorld {
             if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
           } else standing(s, 'cart');
         }
+      }
       if (fresh?.has(life)) continue;
-      for (const m of life.movers)
+      for (const m of life.movers) {
+        if (cooperative && ++visited % 32 === 0) yield;
         if (
           inView(m) &&
           this.owns(life, m) &&
@@ -3882,13 +3917,16 @@ export class LifeWorld {
           (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
           occupied.set(m, bodies(life, m, buffer(m).live));
-      for (const g of life.gatherers)
+      }
+      for (const g of life.gatherers) {
+        if (cooperative && ++visited % 32 === 0) yield;
         if (
           inView(g) &&
           this.owns(life, g) &&
           (allBodies || !this.lastLevels || g.rank < this.lastLevels.places[g.place])
         )
           occupied.set(g, bodies(life, g, buffer(g).live));
+      }
     }
     if (buildStart !== undefined)
       this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
@@ -4128,9 +4166,21 @@ export class LifeWorld {
         if (!this.covers.has(source) && Math.min(m.x, m.y, EXTENT - m.x, EXTENT - m.y) > reach)
           continue;
         const seam = seamAhead(source, m, this.covers.get(source) ?? [], reach);
-        if (!seam) continue;
+        if (!seam) {
+          this.seamWait.delete(m);
+          continue;
+        }
         this.profiler?.countContinuity('attempts');
         const target = ownerAt(source, seam.preview);
+        if (!target || target === source) {
+          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}`;
+          let wait = this.seamWait.get(m);
+          if (wait?.key !== key) {
+            wait = { key, at: source.elapsed };
+            this.seamWait.set(m, wait);
+          }
+          if (source.elapsed - wait.at >= SEAMS.missingSeconds) continue;
+        } else this.seamWait.delete(m);
         const reject =
           this.profiler &&
           ((reason: ContinuityRejection) => this.profiler!.countContinuity(reason));
@@ -4285,171 +4335,34 @@ export class LifeWorld {
     return true;
   }
   private admitBirths(dt: number) {
-    const view = this.viewContext;
-    const lives = [...this.tiles.values()]
-      .filter((life) => life.pending.length)
-      .sort((a, b) => a.tile.z - b.tile.z || a.tile.x - b.tile.x || a.tile.y - b.tile.y);
-    if (!view || !lives.length) {
-      this.birthCredit = 0;
-      return;
-    }
-    this.birthCredit = Math.min(BIRTHS.worldRate, this.birthCredit + dt * BIRTHS.worldRate);
-    for (const life of lives)
-      life.birthCredit = Math.min(BIRTHS.tileRate, life.birthCredit + dt * BIRTHS.tileRate);
-    let guard: ReturnType<LifeWorld['groundGuard']> | undefined;
-    const reject = this.profiler
-      ? (reason: ContinuityRejection) => this.profiler!.countContinuity(reason)
-      : undefined;
-    const available = lives.reduce((sum, life) => sum + life.pending.length, 0);
-    for (let attempt = 0; attempt < Math.min(BIRTHS.attempts, available); attempt++) {
-      const life = lives[this.birthCursor++ % lives.length]!;
-      const seed = life.pending.shift();
-      if (!seed) continue;
-      this.profiler?.countContinuity('attempts');
-      const m = seed.mover,
-        kind = life.geo.kinds[m.line];
-      const invalid =
-        kind === undefined ||
-        !usableLines[m.kind].includes(kind as LifeLine) ||
-        (m.kind === 'vehicle' && life.geo.oneway?.[m.line] && life.geo.oneway[m.line] !== m.dir) ||
-        (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat');
-      if (invalid) {
-        this.profiler?.countContinuity('geometry');
-        continue;
-      }
-      if (life.movers.length >= MAX_TILE_AGENTS) {
-        this.profiler?.countContinuity('capQuota');
-        life.pending.push(seed);
-        continue;
-      }
-      let bodies = life.birthBodies(m),
-        candidate = m;
-      let ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
-      let entered = false;
-      const fallback =
-        life.elapsed - seed.at >= BIRTHS.grace &&
-        life.birthCredit >= 1 - 1e-9 &&
-        this.birthCredit >= 1 - 1e-9;
-      if (fallback && !ordinary) {
-        const radius = bodies.length
-          ? Math.max(
-              ...bodies.map(
-                (b) =>
-                  Math.hypot(b.x - m.x / life.perMeter, b.y - m.y / life.perMeter) +
-                  Math.hypot(b.length, b.width) / 2,
-              ),
-            )
-          : 2;
-        const distances = entryDistances(life, m, view, radius);
-        const index = (seed.entrance ?? 0) % distances.length;
-        seed.entrance = (seed.entrance ?? 0) + 1;
-        const distance = distances[index];
-        if (distance !== undefined) {
-          const placed = life.placeSeed(m, distance);
-          const full = placed ? life.birthBodies(placed) : [];
-          // Route endpoints are explicit entrances; viewport entries start fully offscreen.
-          const endpoint = index === distances.length - 1;
-          if (
-            placed &&
-            inTile(placed) &&
-            this.owns(life, placed) &&
-            full.length &&
-            (endpoint || outsideView(life, full, view, 0))
-          ) {
-            candidate = placed;
-            bodies = full;
-            entered = true;
-          }
-        }
-      }
-      ordinary = outsideView(life, bodies, view, Math.max(BIRTHS.margin, view.spawnMarginM));
-      if (
-        (!ordinary && !entered) ||
-        !bodies.length ||
-        !inTile(candidate) ||
-        !this.owns(life, candidate) ||
-        !this.birthFits(
-          life,
-          candidate,
-          (guard ??= this.groundGuard(0, undefined, undefined, true)),
-          reject,
-        )
-      ) {
-        life.pending.push(seed);
-        continue;
-      }
-      Object.assign(m, candidate);
-      life.movers.push(m);
-      if (m.kind !== 'boat') guard(life, m);
-      if (entered) {
-        life.birthCredit = Math.max(0, life.birthCredit - 1);
-        this.birthCredit = Math.max(0, this.birthCredit - 1);
-      }
-      this.profiler?.countContinuity('births');
-    }
-  }
-  private birthFits(
-    life: TileLife,
-    m: Mover,
-    guard: ReturnType<LifeWorld['groundGuard']>,
-    reject?: (reason: ContinuityRejection) => void,
-  ) {
-    if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) {
-      reject?.('geometry');
-      return false;
-    }
-    if (
-      m.kind === 'person' &&
-      life
-        .birthBodies(m)
-        .some(
-          (b) =>
-            !life.scenes.walkable(
-              { x: b.x * life.perMeter, y: b.y * life.perMeter },
-              { x: b.x * life.perMeter, y: b.y * life.perMeter },
-            ),
-        )
-    ) {
-      reject?.('terrain');
-      return false;
-    }
-    if (m.kind === 'boat') {
-      const fits = this.boatRoom(life, m, m, []);
-      if (!fits) reject?.('occupancy');
-      return fits;
-    }
-    if (m.train) {
-      const bodies = life.birthBodies(m);
-      if (
-        !bodies.length ||
-        bodies.some(
-          (b) =>
-            !life.projectRail({
-              ...m,
-              x: b.x * life.perMeter,
-              y: b.y * life.perMeter,
-              hx: b.hx,
-              hy: b.hy,
-            }),
-        )
-      )
-        return false;
-      for (const otherLife of this.tiles.values())
-        for (const other of otherLife.movers) {
-          if (!other.train || !this.owns(otherLife, other)) continue;
-          const f = frameBetween(otherLife.tile, life.tile),
-            scale = (f.scale * otherLife.perMeter) / life.perMeter;
-          const otherBodies = otherLife.birthBodies(other).map((b) => ({
-            ...b,
-            x: f.x / life.perMeter + b.x * scale,
-            y: f.y / life.perMeter + b.y * scale,
-            length: b.length * scale + 2 * FOLLOW.minGap,
-            width: b.width * scale,
-          }));
-          if (bodies.some((a) => otherBodies.some((b) => bodiesOverlap(a, b)))) return false;
-        }
-    }
-    return guard(life, m, undefined, undefined, false, m, reject);
+    const context = {
+      view: this.viewContext,
+      lives: [...this.tiles.values()],
+      credit: this.birthCredit,
+      cursor: this.birthCursor,
+      owns: (life: TileLife, point: { x: number; y: number }) => this.owns(life, point),
+      guard: (life: TileLife) => {
+        // Ground actors stay within their buffered owner and adjacent tiles. Include every
+        // overlapping coarse/fine owner in a full one-tile halo; trains/boats check globally.
+        const region = new Set(
+          [...this.tiles.values()].filter((other) => {
+            const f = frameBetween(other.tile, life.tile);
+            return (
+              f.x < 2 * EXTENT &&
+              f.y < 2 * EXTENT &&
+              f.x + EXTENT * f.scale > -EXTENT &&
+              f.y + EXTENT * f.scale > -EXTENT
+            );
+          }),
+        );
+        return this.groundGuard(0, undefined, undefined, true, region);
+      },
+      boatRoom: (life: TileLife, mover: Mover) => this.boatRoom(life, mover, mover, []),
+      count: this.profiler && ((event: ContinuityCounter) => this.profiler!.countContinuity(event)),
+    };
+    admitBirths(context, dt);
+    this.birthCredit = context.credit;
+    this.birthCursor = context.cursor;
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */

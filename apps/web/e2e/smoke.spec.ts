@@ -218,7 +218,7 @@ for (const city of cities) {
         expect(errors).toEqual([]);
       });
 
-      test('follows a changed motion preference and shows GPU timing on request', async ({
+      test('follows the Life toggle and changed motion preference with GPU timing', async ({
         page,
       }) => {
         // Bound animated software-WebGL work while exercising startup and motion toggles.
@@ -233,7 +233,7 @@ for (const city of cities) {
         await expect(page.locator('pre')).toContainText(/gpu\s+(?:n\/a|\d+\.\d+) ms/);
         // Keyboard activation keeps this motion check independent of profile toolbar layout.
         const agents = async () =>
-          Number((await page.locator('pre').textContent())?.match(/agents\s+(\d+)/)?.[1] ?? 0);
+          Number((await page.locator('pre').textContent())?.match(/agents\s+(\d+)/)?.[1] ?? NaN);
         await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         await life.press('Enter');
         await expect.poll(agents).toBe(0);

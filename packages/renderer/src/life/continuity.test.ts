@@ -63,6 +63,14 @@ describe('tile retirement', () => {
     expect(retiredTiles(world).size).toBe(0);
   });
 
+  it('revives the original population immediately before retirement expiry', () => {
+    const { world, source, life } = fixture();
+    world.sync([]);
+    (world as unknown as { clock: number }).clock = RETIRE.seconds - 1e-6;
+    world.sync([source]);
+    expect(worldTiles(world).get(source.key)).toBe(life);
+  });
+
   it('expires at the boundary before revival and keeps only the newest 24 retirements', () => {
     const { world, source, life } = fixture();
     world.sync([]);

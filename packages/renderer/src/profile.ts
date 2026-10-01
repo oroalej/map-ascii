@@ -241,7 +241,6 @@ export class FrameProfiler {
           const key = event as ContinuityCounter;
           continuity.counts[key] = (continuity.counts[key] ?? 0) + count;
         }
-        continuity.trace.push(...sample.continuity.trace);
       }
     continuity.trace = structuredClone(this.trace);
     return {

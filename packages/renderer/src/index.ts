@@ -1,3 +1,4 @@
+import { spawnMargin } from './life/births';
 import {
   bandVisibility,
   CLASS_ZOOM,
@@ -732,7 +733,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const cell = stepCell(schedule, step ?? 0);
     host.sync(lifeTiles, [camera.lng, camera.lat], {
       bounds: viewBounds(),
-      spawnMarginM: Math.max(12, 2 * metersPerCssPx(camera) * Math.max(cell.width, cell.height)),
+      spawnMarginM: spawnMargin(metersPerCssPx(camera) * cell.width, cell.height / cell.width),
     });
   };
 

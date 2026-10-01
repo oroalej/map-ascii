@@ -32,7 +32,18 @@ export class LifePreparation {
     this.epoch = world.preparationEpoch;
   }
 
+  private cancelActivation() {
+    this.activation?.return();
+    for (const [key, life] of this.ready)
+      if (this.world.discardPreparation(life)) this.ready.delete(key);
+    this.activation = undefined;
+    this.activationEntries = undefined;
+    this.activatingKeys = undefined;
+    this.activationPlan = undefined;
+  }
+
   clear() {
+    this.cancelActivation();
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.timer = undefined;
     this.wanted = [];
@@ -67,7 +78,11 @@ export class LifePreparation {
     const keep = new Set(entries.map((entry) => entry.key));
     this.queued = this.queued.filter((job) => keep.has(job.entry.key));
     if (this.running && !keep.has(this.running.entry.key)) this.running = undefined;
-    for (const key of this.ready.keys()) if (!keep.has(key)) this.ready.delete(key);
+    for (const [key, life] of this.ready)
+      if (!keep.has(key)) {
+        this.world.discardPreparation(life);
+        this.ready.delete(key);
+      }
     if (
       this.activatingKeys !==
       this.entries()
@@ -75,10 +90,7 @@ export class LifePreparation {
         .sort()
         .join('|')
     ) {
-      this.activation = undefined;
-      this.activationEntries = undefined;
-      this.activatingKeys = undefined;
-      this.activationPlan = undefined;
+      this.cancelActivation();
     }
     this.fill();
   }
@@ -143,10 +155,7 @@ export class LifePreparation {
     for (const [key, life] of this.ready)
       if (this.world.preparedExpired(key, life)) {
         this.ready.delete(key);
-        this.activation = undefined;
-        this.activationEntries = undefined;
-        this.activationPlan = undefined;
-        this.activatingKeys = undefined;
+        this.cancelActivation();
         this.dirty = true;
         this.fill();
       }
@@ -188,7 +197,7 @@ export class LifePreparation {
 
   camera(bounds: LifeViewContext['bounds'] | undefined, spawnMarginM: number) {
     if (bounds && this.bootstrapBounds !== bounds.join(',')) this.bootstrap?.clear();
-    if (this.view && bounds) this.view = { bounds, spawnMarginM: Math.max(12, spawnMarginM) };
+    if (this.view && bounds) this.view = { bounds, spawnMarginM };
   }
 
   /** Private work may use idle worker turns; activation still waits for the next frame. */
