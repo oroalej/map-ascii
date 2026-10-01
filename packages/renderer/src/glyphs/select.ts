@@ -885,9 +885,9 @@ export const CROWN_LIGHT = {
   nightFlat: 0.35,
 } as const;
 export const CROWN_TINTS = [
-  [0.82, 0.92, 0.9],
+  [0.88, 0.96, 0.9],
   [1, 1, 1],
-  [1.12, 1.06, 0.78],
+  [1.03, 1.03, 0.96],
 ] as const;
 export const CROWN_SUN_MIN_ALT = 25;
 export type CrownSun = readonly [number, number, number];

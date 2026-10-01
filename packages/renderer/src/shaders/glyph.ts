@@ -558,16 +558,12 @@ void main() {
   float filteredLight = cachedLight > 0.0
     ? max(texture(u_foliageLight, grid / u_cell / vec2(textureSize(u_foliageLight, 0))).r, cachedLight * 0.8) * 1.5 : 0.0;
   vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
-  // Forest tips carry green/yellow pigment; the generic white tone makes foliage look dusty.
+  // Forest tips retain green pigment; the generic white tone makes foliage look dusty.
   if (cls == u_vehicleOccluders.z) {
-    vec3 pigment = tone == ${Tone.light} ? vec3(1.23,1.15,0.77)
-      : tone == ${Tone.shade} ? vec3(0.65,0.78,0.82)
-      : tone == ${Tone.dry} ? vec3(1.12,1.06,0.78) : vec3(1.0);
-    color = daylit(u_colors[cls]) * pigment;
-    if (cachedLight > 0.0) {
-      pigment = mix(vec3(0.60,0.80,0.64),vec3(1.28,1.20,0.76),smoothstep(0.62,1.2,filteredLight));
-      color = daylit(u_colors[cls]) * pigment * filteredLight;
-    }
+    // Relief changes brightness within the theme's green, without a yellow highlight tint.
+    float leafLight = cachedLight > 0.0 ? filteredLight
+      : tone == ${Tone.light} ? 1.1 : tone == ${Tone.shade} ? ${float(TONE.shade)} : 1.0;
+    color = daylit(u_colors[cls]) * leafLight;
   }
   if (cls == u_crownClass && (!edge || int(texelFetch(u_subClass, subAt, 0).r*255.0+0.5) == cls)) {
     // Identity and local surface come from the same sample. Exposed edge ground keeps its fill.
@@ -578,9 +574,10 @@ void main() {
     // Covered edge subsamples retain their own identity/surface; interiors reuse cell lighting.
     float leafLight = cachedLight > 0.0 ? filteredLight
       : crownShade(local, crownClumps(local, seed)) + crownTexture(local, seed);
-    // Warm leaf tips and cool green hollows; multiplicative pigment preserves class highlights.
-    vec3 pigment = mix(vec3(0.60,0.80,0.64),vec3(1.28,1.20,0.76),smoothstep(0.62,1.2,leafLight));
-    color = toned(daylit(u_colors[cls])*crownTint(seed)*pigment, tone, night) * leafLight;
+    // Keep leaf variation in the theme palette; the grass's dry straw tint is too yellow here.
+    vec3 pigment = crownTint(seed);
+    if (tone == ${Tone.dry}) pigment *= vec3(1.06,1.02,0.94);
+    color = toned(daylit(u_colors[cls])*pigment, tone == ${Tone.dry} ? ${Tone.none} : tone, night) * leafLight;
   }
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];

@@ -549,6 +549,14 @@ for (const theme of ['dark', 'light'] as const) {
           edgeCovered: pixel(still, cw + 4, 2 * ch + 4),
           coveredCar: pixel(still, 2 * cw + 2, 2 * ch + 4),
         };
+        // Check actual theme paint separately from the synthetic occlusion colors.
+        colors.splice(input.crown * 3, 3, ...input.crownColor);
+        const painted = render();
+        const leafColors = [
+          pixel(painted, cw + 4, 2 * ch + 4),
+          pixel(painted, 2 * cw + 2, 2 * ch + 4),
+        ];
+        colors.splice(input.crown * 3, 3, 0, 1, 0);
         const upload = (tex: WebGLTexture, width: number, height: number, bytes: Uint8Array) => {
           gl.bindTexture(gl.TEXTURE_2D, tex);
           gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
@@ -799,6 +807,7 @@ void main() {
           higherCrown: ids[(4 * cols + 4) * 4],
           orderIndependent,
           ...saved,
+          leafColors,
           falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
           lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
           roadJoinGlyph,
@@ -839,6 +848,9 @@ void main() {
         road: classId('road_mid'),
         roof: classId('building'),
         crown: classId('tree_crown'),
+        crownColor: [16, 8, 0].map(
+          (shift) => ((themes[theme].styles.tree_crown!.color >> shift) & 255) / 255,
+        ),
         woods: classId('trees'),
         marker: classId('marker_landmark'),
         roads: roadMask(),
@@ -916,8 +928,21 @@ void main() {
       expect(p[1]).toBeLessThan(10);
     }
     for (const p of [result.edgeCovered, result.coveredCar]) {
-      expect(p[1]).toBeGreaterThan(100);
+      // Relief/edge blending can dim the leaf; its synthetic green must still hide vehicle red.
+      expect(p[1]).toBeGreaterThan(80);
       expect(p[0]).toBeLessThan(10);
+      expect(p[2]).toBeLessThan(10);
+    }
+    const paint = themes[theme].styles.tree_crown!.color;
+    const redOverGreen = ((paint >> 16) & 255) / ((paint >> 8) & 255);
+    const blueOverGreen = (paint & 255) / ((paint >> 8) & 255);
+    for (const p of result.leafColors) {
+      // Scalar relief may change brightness, but leaf tints must stay close to the theme hue.
+      expect(p[1]).toBeGreaterThan(20);
+      expect(p[0]! / p[1]!).toBeGreaterThan(redOverGreen * 0.85);
+      expect(p[0]! / p[1]!).toBeLessThan(redOverGreen * 1.15);
+      expect(p[2]! / p[1]!).toBeGreaterThan(blueOverGreen * 0.8);
+      expect(p[2]! / p[1]!).toBeLessThan(blueOverGreen * 1.15);
     }
     expect(result.falseCurbGlyph).toBe(0);
     expect(result.lowerRoofEdgeClass).toBe(classId('tree_crown'));
