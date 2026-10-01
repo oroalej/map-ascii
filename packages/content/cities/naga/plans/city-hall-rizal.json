@@ -1,0 +1,27 @@
+{
+  "id": "plan/city-hall-rizal",
+  "osm_id": "osm:node/4581244589",
+  "title": "Dr. Jose Rizal Monument",
+  "parts": [
+    {
+      "kind": "pedestal",
+      "shape": "square",
+      "size_m": 2.4,
+      "height_m": 2,
+      "offset_m": [0, 0]
+    }
+  ],
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23669724",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_City_Hall,_Apr_2024.jpg",
+      "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

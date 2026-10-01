@@ -1,0 +1,109 @@
+{
+  "id": "detail/naga-city-hall",
+  "osm_id": "osm:way/23669724",
+  "title": "Naga City Hall",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "front-step",
+      "ring": [
+        [123.19885957, 13.62624724],
+        [123.19892142, 13.626314],
+        [123.1989118, 13.62632241],
+        [123.19884995, 13.62625566],
+        [123.19885957, 13.62624724]
+      ],
+      "height_m": 0.3,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [
+    {
+      "osm_id": "osm:node/13982296650",
+      "at": [123.198929, 13.6263339],
+      "flag": "PH"
+    }
+  ],
+  "walks": [],
+  "seating": [
+    {
+      "id": "front-bench",
+      "line": [
+        [123.19888256, 13.62630741],
+        [123.1989073, 13.62633411]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Naga City Hall — Reference: Ralff Nestor Nacor, April 2024, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23669724",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_City_Hall,_Apr_2024.jpg",
+      "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ],
+  "grounds": [
+    [123.19823291, 13.62625063],
+    [123.19824215205517, 13.62625063],
+    [123.19862371, 13.625755131901228],
+    [123.19862371, 13.62574313],
+    [123.19866069, 13.62574313],
+    [123.19866069, 13.625752668084326],
+    [123.19874977471218, 13.625824523764184],
+    [123.19877231, 13.625801360911392],
+    [123.19877231, 13.62579053],
+    [123.19878206288703, 13.62579053],
+    [123.19885311, 13.62570646930693],
+    [123.19885311, 13.62569493],
+    [123.19889009, 13.62569493],
+    [123.19889009, 13.62570441167601],
+    [123.19905661960702, 13.62583743],
+    [123.19906849, 13.62583743],
+    [123.19906849, 13.62587337],
+    [123.19905874093236, 13.62587337],
+    [123.1990298131115, 13.625907620038989],
+    [123.19906440563805, 13.62593523],
+    [123.19907629, 13.62593523],
+    [123.19907629, 13.62597117],
+    [123.19906653369263, 13.62597117],
+    [123.19887549, 13.62619713054283],
+    [123.19887549, 13.62620398],
+    [123.19892265, 13.62620398],
+    [123.19892265, 13.626257876437458],
+    [123.19914449, 13.62615008],
+    [123.19935709, 13.62636568],
+    [123.19895963, 13.62666212],
+    [123.19885286936103, 13.62636568],
+    [123.19875628, 13.62636568],
+    [123.19875628, 13.626326094447236],
+    [123.19863669, 13.626454999246231],
+    [123.19863669, 13.62646607],
+    [123.19859971, 13.62646607],
+    [123.19859971, 13.626456597694858],
+    [123.19855981725541, 13.62642477611916],
+    [123.19851939, 13.626468395],
+    [123.19851939, 13.62647947],
+    [123.19848241, 13.62647947],
+    [123.19848241, 13.62647045],
+    [123.19846471, 13.62645747],
+    [123.19845241, 13.62645747],
+    [123.19845241, 13.626448432591793],
+    [123.19832581682353, 13.62635547],
+    [123.19831351, 13.62635547],
+    [123.19831351, 13.626345621612904],
+    [123.19824443075471, 13.62628657],
+    [123.19823291, 13.62628657],
+    [123.19823291, 13.62625063]
+  ]
+}
