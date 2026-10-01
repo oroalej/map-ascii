@@ -36,7 +36,7 @@ const allowDiff = pan || process.argv.includes('--allow-diff');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
-const scratch = join(root, 'test-results');
+const scratch = resolve(root, arg('scratch', 'test-results'));
 const samples = Number(arg('samples', '160'));
 const runs = Number(arg('runs', '5'));
 if (![samples, runs].every((n) => Number.isInteger(n) && n > 0))
