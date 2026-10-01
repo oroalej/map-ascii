@@ -70,7 +70,7 @@ it('retains fixture entries and the collapsed preference after a panel closes wi
   const instance = renderer();
   await mount(instance);
   act(() => {
-    instance.emit('fixtureschange', { streetlights: true, trafficSignals: true });
+    instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: false });
     instance.emit('classeschange', ['road_mid']);
     instance.emit('lightschange', true);
   });
@@ -96,9 +96,21 @@ it('retains fixture entries and the collapsed preference after a panel closes wi
 it('receives fixture changes while hidden and forgets the old atlas when replaced', async () => {
   const previous = renderer();
   await mount(previous);
-  act(() => previous.emit('fixtureschange', { streetlights: true, trafficSignals: false }));
+  act(() =>
+    previous.emit('fixtureschange', {
+      streetlights: true,
+      trafficSignals: false,
+      utilities: false,
+    }),
+  );
   select('place');
-  act(() => previous.emit('fixtureschange', { streetlights: false, trafficSignals: true }));
+  act(() =>
+    previous.emit('fixtureschange', {
+      streetlights: false,
+      trafficSignals: true,
+      utilities: false,
+    }),
+  );
   select(null);
   expect(labels().join(' ')).not.toContain('Streetlights');
   expect(labels().join(' ')).toContain('Traffic signals');
@@ -109,7 +121,9 @@ it('receives fixture changes while hidden and forgets the old atlas when replace
   expect(previous.listeners.get('fixtureschange')?.size).toBe(0);
   select(null);
   expect(labels().join(' ')).not.toContain('Traffic signals');
-  act(() => next.emit('fixtureschange', { streetlights: true, trafficSignals: false }));
+  act(() =>
+    next.emit('fixtureschange', { streetlights: true, trafficSignals: false, utilities: false }),
+  );
   expect(labels().join(' ')).toContain('Streetlights');
   expect(labels().join(' ')).not.toContain('Traffic signals');
 });

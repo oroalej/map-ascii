@@ -9,6 +9,10 @@ export const ZOOM_FADE = 0.5;
  */
 export type ZoomBand = { min: number; max?: number };
 
+/** Static overhead hardware and seeded close-up ornament detail. */
+export const UTILITY_ZOOM: ZoomBand = { min: 18.5 };
+export const UTILITY_DETAIL_ZOOM: ZoomBand = { min: 19.5 };
+
 /**
  * The one table of when each class shows (SPEC.md §2 zoom levels). The pipeline derives each
  * feature's tile zoom range from it, and the renderer its crossfades.

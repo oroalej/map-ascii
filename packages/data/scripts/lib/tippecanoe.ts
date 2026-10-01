@@ -19,15 +19,21 @@ function run(command: string, args: string[]) {
  * files must be in the same directory. Uses a native tippecanoe when it is on PATH, and
  * otherwise the Docker image built from `packages/data/docker/`.
  */
-export function tippecanoe(input: string, output: string, args: string[]) {
+export function tippecanoe(input: string, output: string, args: string[], second?: string) {
+  const tool = second ? 'tile-join' : 'tippecanoe';
   const workDir = dirname(input);
-  if (dirname(output) !== workDir)
+  if (dirname(output) !== workDir || (second && dirname(second) !== workDir))
     throw new Error('tippecanoe input and output must share a folder');
 
-  if (available('tippecanoe', ['--version'])) {
+  if (available(tool, ['--version'])) {
     run(
-      'tippecanoe',
-      args.map((a) => a.replace('{in}', input).replace('{out}', output)),
+      tool,
+      args.map((a) =>
+        a
+          .replace('{in}', input)
+          .replace('{out}', output)
+          .replace('{second}', second ?? ''),
+      ),
     );
     return;
   }
@@ -58,7 +64,12 @@ export function tippecanoe(input: string, output: string, args: string[]) {
     '-v',
     `${workDir}:/data`,
     image,
-    'tippecanoe',
-    ...args.map((a) => a.replace('{in}', inContainer(input)).replace('{out}', inContainer(output))),
+    tool,
+    ...args.map((a) =>
+      a
+        .replace('{in}', inContainer(input))
+        .replace('{out}', inContainer(output))
+        .replace('{second}', second ? inContainer(second) : ''),
+    ),
   ]);
 }

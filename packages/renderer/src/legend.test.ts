@@ -5,6 +5,19 @@ import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
 
+it('describes utilities with Life off, only when reported, and switches glyphs at 19.5', () => {
+  const entry = (zoom: number, utilities?: boolean) =>
+    legendEntries('light', zoom, [], {
+      life: false,
+      lights: false,
+      fixtures: { streetlights: false, trafficSignals: false, utilities },
+    }).find((e) => e.label === 'Utility poles and wires (illustrative)');
+  expect(entry(18.5, true)?.glyphs).toBe('●─');
+  expect(entry(19.5, true)?.glyphs).toBe('●╳∞');
+  expect(entry(20, false)).toBeUndefined();
+  expect(entry(20)).toBeUndefined();
+});
+
 it("shows the map's own standing dog in the legend", () => {
   const dog = dogPixels({ frame: 0, heading: 0 }, 10);
   const drawn = Array.from({ length: 10 }, (_, y) =>

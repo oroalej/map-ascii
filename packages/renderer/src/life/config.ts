@@ -3,6 +3,7 @@
  * from which zoom. Everything is in real-world units, so motion reads the same at any zoom.
  */
 import {
+  LAMP_PLACEMENT,
   curveAt,
   SHOP_POINT_RADIUS_M,
   PLACE_KINDS,
@@ -40,7 +41,7 @@ export const MAX_STEP_S = 0.1;
 /** A lane's width, m (the pipeline's, for roads tagged with lanes but no width). */
 export const LANE_WIDTH_M = 3.2;
 /** The width of a road line without one, m. */
-export const DEFAULT_ROAD_WIDTH_M = 6;
+export { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
 /** Vehicles keep at least this far inside the road's edge, m. */
 export const ROAD_MARGIN_M = 0.2;
 
@@ -506,16 +507,10 @@ export const CellBit = {
  */
 export const STREETLIGHT = {
   zoom: { min: 15 } as ZoomBand,
-  spacing: 30,
-  setback: 0.5,
-  minSide: 0.7,
+  ...LAMP_PLACEMENT,
   radius: 12,
   /** How far in over the road a lamp's arm reaches, m: its pool is centered there. */
   reach: 3,
-  median: 25,
-  minMedian: 2,
-  /** No two lamps stand nearer than this, m (at junctions and where roads meet). */
-  minGap: 12,
   dead: 0.1,
   flicker: 0.1,
 } as const;

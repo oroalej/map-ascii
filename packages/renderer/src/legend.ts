@@ -219,7 +219,7 @@ export function legendEntries(
     life?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
-    fixtures?: { streetlights: boolean; trafficSignals: boolean };
+    fixtures?: { streetlights: boolean; trafficSignals: boolean; utilities?: boolean };
   } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
@@ -314,6 +314,13 @@ export function legendEntries(
       label: 'Traffic signals (simulated phases)',
       glyphs: zoom >= 18.5 ? '○○○' : '•',
       color: css(theme.fixturePaints[5]!),
+    });
+  if (fixtures?.utilities)
+    entries.push({
+      classes: [],
+      label: 'Utility poles and wires (illustrative)',
+      glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
+      color: css(theme.fixturePaints[7]!),
     });
   return entries;
 }

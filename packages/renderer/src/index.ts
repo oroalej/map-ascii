@@ -1,4 +1,12 @@
-import { bandVisibility, CLASS_ZOOM, shopHours, shopOpen, type ShopHours } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  UTILITY_ZOOM,
+  shopHours,
+  shopOpen,
+  type ShopHours,
+} from '@atlas/shared';
+import { sameReferenceMembers } from './cache-inputs';
 import type {
   BBox,
   CameraState,
@@ -81,6 +89,7 @@ import {
   type VisibleLamp,
 } from './life/lights';
 import { moonlight } from './life/moon';
+import { createUtilityFixtureCache } from './life/utilities';
 import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life/fixtures';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
@@ -144,6 +153,8 @@ export type LifeSettings = {
 };
 
 export type AtlasOptions = {
+  /** Static city-pack utility policy; omitted means disabled. */
+  utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
   tilesUrl: string;
@@ -914,9 +925,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let fixtures: StreetFixture[] = [];
   const fixtureTiles = new WeakMap<LoadedTile['life'], StreetFixture[]>();
   let fixturesKey = '';
+  const cachedUtilities = createUtilityFixtureCache();
+  let fixtureInputs: readonly LoadedTile[] = [];
+  let hadUtilities = false;
   const syncFixtures = (tiles: readonly TileId[]) => {
+    if (camera.zoom < 15) {
+      fixtures = [];
+      fixtureInputs = [];
+      hadUtilities = false;
+      return;
+    }
+    const inputs = tiles
+      .filter((tile) => tile.z >= LIFE_TILE_MIN_ZOOM)
+      .map((tile) => tileCache.get(tile))
+      .filter((t): t is LoadedTile => !!t);
+    const showUtilities =
+      options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
+    if (showUtilities === hadUtilities && sameReferenceMembers(inputs, fixtureInputs)) return;
+    fixtureInputs = inputs;
+    hadUtilities = showUtilities;
     fixtures = [];
-    if (camera.zoom < 15) return;
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
       const loaded = tileCache.get(tile);
@@ -928,6 +956,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
       fixtures.push(...found);
     }
+    const utilityGroups = showUtilities
+      ? inputs.flatMap((t) => (t.utilities ? [t.utilities] : []))
+      : [];
+    fixtures.push(...cachedUtilities(utilityGroups));
   };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
@@ -942,7 +974,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsDrawn,
       { time, strength: wind.strength },
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals}`;
+    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);
@@ -1282,6 +1314,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetQualitySamples();
     profiler?.reset();
     tileCache.suspend();
+    fixtures = [];
+    fixtureInputs = [];
+    cachedUtilities([]);
+    fixturesKey = '';
+    emit('fixtureschange', { streetlights: false, trafficSignals: false, utilities: false });
     emit('contextlost', undefined);
   };
   const onContextRestored = () => {

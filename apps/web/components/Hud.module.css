@@ -78,6 +78,13 @@
   gap: 6px;
   z-index: 12;
   font-size: 12px;
+  /* Passive readouts and the gaps between controls must not swallow map gestures. */
+  pointer-events: none;
+}
+
+.bottomLeft .button,
+.bottomLeft .line [title] {
+  pointer-events: auto;
 }
 
 .scale {

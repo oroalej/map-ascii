@@ -7,6 +7,7 @@ import { REGION_TILE_MAX_ZOOM, type CameraState } from '@atlas/shared';
 import type { Size } from './camera';
 import type { FrameProfiler } from './profile';
 import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
+import type { UtilityRecord } from '@atlas/shared';
 import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
 import {
@@ -26,7 +27,12 @@ export const RETRY_MS = 2000;
 export const RETRY_MAX_MS = 60_000;
 
 /** A loaded tile: its GPU mesh and label candidates. */
-export type LoadedTile = { mesh: TileMesh; labels: TileLabel[]; life: LifeGeometry };
+export type LoadedTile = {
+  mesh: TileMesh;
+  labels: TileLabel[];
+  life: LifeGeometry;
+  utilities?: readonly UtilityRecord[];
+};
 
 export class TileCache {
   readonly source: TileSource;
@@ -60,7 +66,12 @@ export class TileCache {
           const start = profiler?.time();
           const mesh = uploadTile(gl, geometry);
           if (start !== undefined) profiler!.record('tileUpload', profiler!.time() - start);
-          this.meshes.set(key, { mesh, labels: geometry.labels, life: geometry.life });
+          this.meshes.set(key, {
+            mesh,
+            labels: geometry.labels,
+            life: geometry.life,
+            ...(geometry.utilities ? { utilities: geometry.utilities } : {}),
+          });
         } else this.meshes.set(key, null);
         onChange();
       },

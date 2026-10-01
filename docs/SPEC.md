@@ -143,6 +143,8 @@ Mapped marked crossings and crossings derived at signalized junctions show trans
 
 ### Street hardware at close zoom
 
+Cities may enable illustrative overhead utilities along major and secondary roads. Concrete pole caps and simple wires fade in from z18 to z18.5; short single, double and bracket crossarms, insulators, occasional transformer tops, uneven cable bundles and small tangles appear from z19 to z19.5. Hardware variants are seeded per pole and stay fixed when revisiting a street. The view is strictly top-down. Supported corridors continue across OSM way boundaries and connect branches at source road junctions, with safe supplemental supports where placement allows; genuine barriers and disconnected roads can still interrupt the network. Some poles share retained streetlight bases; occasional diagonal spans cross the road to an opposite-side support. Lamp heads and signal lenses keep priority. Utilities remain visible with Life off and at night, disappear under roofs, water and canopy, and sit below labels. The legend lists **Utility poles and wires (illustrative)** when their packed marks intersect the viewport. These positions represent an illustrative network, not surveyed infrastructure or historical construction dates.
+
 Explicitly authored country flags appear as upright pole-and-flag map symbols from z18, retaining their geographic base in the top-down map. The Philippine design has a taller silver mast, a stepped stone base, and cloth that visibly ripples from its fixed hoist to the free edge, with shaded folds. At close zoom it shows blue over red, a white hoist triangle, a gold sun and three stars that move with the cloth. Wave amplitude and speed follow the existing wind strength; reduced motion freezes the cloth and folds. These symbolic markers animate with Life off and use the same roof/canopy masking as other fixtures.
 
 Raised paved forecourts remain walkable. Their terrace and stair treads use connected plan-view outlines from z18, with broad front steps and neutral paving beneath planted islands and furniture. Selection on the raised paving resolves to its parent plaza. Height and footprint estimates belong to the city pack.
@@ -186,6 +188,7 @@ Shop areas without a building or another rendered area class receive one interio
 
 **HUD**
 - Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs on screen and what they mean. The legend is built from the theme and lists only the classes the renderer reports in view, so it always matches the map. With the life layer on, "Street vendors" (a cart and the vendor) follows "People". It lists "Streetlights" while they are lit and the roads they line are in view.
+- Static hardware uses the renderer's viewport fixture report: streetlights, traffic signals, and "Utility poles and wires (illustrative)" describe packed marks independently of Life and illumination. The utility entry requires the city's opt-in and nontransparent utility marks inside the viewport.
 - Scale indicator (the "ruler").
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.

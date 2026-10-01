@@ -102,6 +102,9 @@ importers:
       '@atlas/shared':
         specifier: workspace:^
         version: link:../shared
+      '@mapbox/vector-tile':
+        specifier: 3.0.0
+        version: 3.0.0
       '@turf/bbox':
         specifier: ^7.4
         version: 7.4.0
@@ -132,6 +135,12 @@ importers:
       osmtogeojson:
         specifier: 3.0.0-beta.5
         version: 3.0.0-beta.5
+      pbf:
+        specifier: 5.1.0
+        version: 5.1.0
+      pmtiles:
+        specifier: 4.5.0
+        version: 4.5.0
       polyclip-ts:
         specifier: ^0.16.8
         version: 0.16.8
@@ -2442,6 +2451,10 @@ packages:
 
   pbf@3.3.0:
     resolution: {integrity: sha512-XDF38WCH3z5OV/OVa8GKUNtLAyneuzbCisx7QUCF8Q6Nutx0WnJrQe5O+kOtBlLfRNUws98Y58Lblp+NJG5T4Q==}
+    hasBin: true
+
+  pbf@5.1.0:
+    resolution: {integrity: sha512-Wv0yo0+uZepnoNEKsquhar1F18LogB8oeEikIhUXG16udbiXG7JecHGySwoo6kuMgjmbQYzdrTZlO+/K9t8eZg==}
     hasBin: true
 
   pbf@5.1.2:
@@ -5428,6 +5441,10 @@ snapshots:
   pbf@3.3.0:
     dependencies:
       ieee754: 1.2.1
+      resolve-protobuf-schema: 2.1.0
+
+  pbf@5.1.0:
+    dependencies:
       resolve-protobuf-schema: 2.1.0
 
   pbf@5.1.2:

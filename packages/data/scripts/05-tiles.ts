@@ -1,3 +1,5 @@
+import { buildUtilityTiles } from './lib/utility-tiles';
+import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
@@ -60,12 +62,15 @@ export const step: Step = {
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
+    const base = city.streets?.utilities?.derive
+      ? join(buildDir, `${city.slug}.base.pmtiles`)
+      : pmtiles;
     const tileInput = join(buildDir, 'tile-input.geojsonseq');
     const records: AtlasFeature[] = [];
     for await (const feature of readFeatures(merged))
       records.push(...roofTileRecords(feature as AtlasFeature));
     await writeFeatures(tileInput, records);
-    tippecanoe(tileInput, pmtiles, [
+    tippecanoe(tileInput, base, [
       '-o',
       '{out}',
       '--force',
@@ -73,10 +78,20 @@ export const step: Step = {
       `--minimum-zoom=${TILE_ZOOMS.min}`,
       `--maximum-zoom=${TILE_ZOOMS.max}`,
       '--drop-densest-as-needed',
+      '--exclude=highway',
       `--name=${city.name.en}`,
       '--attribution=© OpenStreetMap contributors',
       '{in}',
     ]);
+
+    if (city.streets?.utilities?.derive)
+      await buildUtilityTiles(
+        base,
+        pmtiles,
+        merged,
+        utilityCoverageBounds(geography.bounds, geography.regionBounds),
+        buildDir,
+      );
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));

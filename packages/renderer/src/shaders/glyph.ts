@@ -109,7 +109,7 @@ uniform int u_waterGlyphs[4];
 uniform sampler2D u_light;
 uniform float u_lampShow;
 uniform sampler2D u_fixtures;
-uniform vec3 u_fixturePaints[6];
+uniform vec3 u_fixturePaints[8];
 uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
@@ -394,6 +394,10 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
     under = mix(under, daylit(u_fixturePaints[1]), fixture.a * 0.85);
   }
   if (part == ${FixturePart.signal}) color = u_fixturePaints[3 + min(info, 2)];
+  if (part >= ${FixturePart.utilityCap} && part <= ${FixturePart.transformer})
+    color = lampLit(daylit(u_fixturePaints[6]), rainLight);
+  if (part == ${FixturePart.cable} || part == ${FixturePart.tangle})
+    color = max(daylit(u_fixturePaints[7]), u_fixturePaints[7] * 0.5);
   return mix(under, color, ink * fixture.a) + halo;
 }
 

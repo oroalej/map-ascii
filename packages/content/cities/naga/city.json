@@ -22,6 +22,10 @@
   "languages": ["fil", "bcl"],
   "timezone": "Asia/Manila",
   "streets": {
+    "utilities": {
+      "derive": true,
+      "source": "Project decision (2026-10-01): illustrative overhead utility poles and wires along major and secondary roads, requested by the project owner. Placement is derived from OSM roads; it is not a survey of utility infrastructure."
+    },
     "directions": [
       {
         "osm_id": "osm:way/23519261",

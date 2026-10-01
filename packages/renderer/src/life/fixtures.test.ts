@@ -135,7 +135,11 @@ describe('street fixtures', () => {
     expect(new Set(tops).size).toBeGreaterThan(1);
     expect(marks.filter((c) => c.glyph === glyph('\u2605'))).toHaveLength(3);
     expect(marks.filter((c) => c.glyph === glyph('\u263c'))).toHaveLength(1);
-    expect(result.visibility).toEqual({ streetlights: false, trafficSignals: false });
+    expect(result.visibility).toEqual({
+      streetlights: false,
+      trafficSignals: false,
+      utilities: false,
+    });
     expect(pack([pole], 20.5, grid, 500).texels).toEqual(result.texels);
     expect(updateFixtureSignals(result, 500)).toBe(false);
     expect(cells(pack([pole], 19).texels).length).toBeLessThan(marks.length);
@@ -301,8 +305,13 @@ describe('street fixtures', () => {
     expect(pack([lamp, signal], 19, { ...grid, visible: () => false }).visibility).toEqual({
       streetlights: false,
       trafficSignals: false,
+      utilities: false,
     });
-    expect(pack([lamp, signal]).visibility).toEqual({ streetlights: true, trafficSignals: true });
+    expect(pack([lamp, signal]).visibility).toEqual({
+      streetlights: true,
+      trafficSignals: true,
+      utilities: false,
+    });
     expect(cells(pack([signal], 19, { ...grid, cols: 2, rows: 2 }).texels)).toHaveLength(0);
     const clipped = {
       ...signal,
