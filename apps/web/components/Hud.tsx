@@ -414,6 +414,11 @@ function ShareButton() {
   );
 }
 
+function SubdivisionTracker({ city }: { city: string }) {
+  useSubdivisionTracking(city);
+  return null;
+}
+
 /**
  * The HUD (SPEC.md §5): the zoom and its level, and the legend top right; the
  * scale bar, the subdivision under the center, coordinates, and sharing bottom left.
@@ -432,15 +437,15 @@ export function Hud({
   timezone?: string | undefined;
   sidewalksDerived?: boolean;
 }) {
-  useSubdivisionTracking(city);
   const hasCamera = useAtlasStore((s) => s.camera !== null);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
   const touring = useAtlasStore((s) => s.tour !== null);
   const subdivision = useUiStore((s) => s.subdivision);
-  if (!hasCamera) return null;
+  if (!hasCamera) return <SubdivisionTracker city={city} />;
 
   return (
     <>
+      <SubdivisionTracker city={city} />
       <div className={styles.topRight}>
         <div className={styles.row}>
           <ZoomReadout />

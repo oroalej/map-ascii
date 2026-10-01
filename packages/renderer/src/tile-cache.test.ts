@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { GL } from './gpu';
+import { FrameProfiler } from './profile';
 import type * as tiles from './tiles';
 import { tileKey, type TileId, type TileSourceHandlers } from './tiles';
 
@@ -47,6 +48,26 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('retains upload timings between callbacks, including context restoration', () => {
+    let now = 0;
+    const profiler = new FrameProfiler(() => now++);
+    const cache = new TileCache({} as GL, 'https://example.test/x.pmtiles', () => {}, profiler);
+    const { handlers } = sources[0]!;
+    handlers.tile('16/1/1', geometry);
+    profiler.begin(1);
+    profiler.end();
+    expect(profiler.snapshot().stages.tileUpload).toMatchObject({ count: 1, medianMs: 1 });
+    profiler.reset();
+    cache.suspend();
+    handlers.tile('16/1/1', geometry);
+    cache.resume();
+    handlers.tile('16/1/1', geometry);
+    handlers.tile('16/1/2', null);
+    profiler.begin(2);
+    profiler.end();
+    expect(profiler.snapshot().stages.tileUpload).toMatchObject({ count: 1, medianMs: 1 });
+    cache.destroy();
+  });
   it('requests the view’s tiles and draws them once loaded', () => {
     const { cache, source } = setup();
     expect(cache.tilesToDraw(camera, size)).toEqual([]);

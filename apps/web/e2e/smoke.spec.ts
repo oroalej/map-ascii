@@ -106,9 +106,6 @@ for (const city of cities) {
           await page.goto(`/${city.slug}?${view}`);
           await mapReady(page);
           const canvas = page.getByLabel(`Map of ${city.name}`);
-          await expect
-            .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
-            .toBeGreaterThan(MIN_DRAWN);
           // Start without a selection: only the actual mouse click or touch tap opens the panel.
           const box = (await canvas.boundingBox())!;
           const position = { x: box.width / 2, y: box.height / 2 };
@@ -118,21 +115,21 @@ for (const city of cities) {
             .locator('details')
             .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
           await expect(legend).toBeVisible();
-          if (!hasTouch) {
-            await canvas.hover({ position });
-            await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 20_000 });
-            await page.mouse.move(-10, -10);
-            await expect(canvas).not.toHaveCSS('cursor', 'pointer');
-          }
-          // Drawing may begin before this landmark's tile arrives. Retry the same point, with
-          // enough time for asynchronous picking (and beyond the double-tap interval).
+          // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
+          // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {
-            if (hasTouch) await canvas.tap({ position });
-            else await canvas.click({ position });
-            await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark, {
-              timeout: 1_500,
-            });
+            await canvas.hover({ position });
+            await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 500 });
           }).toPass({ timeout: 20_000 });
+          await page.mouse.move(-10, -10);
+          await expect(canvas).not.toHaveCSS('cursor', 'pointer');
+          // Send one gesture and wait for its asynchronous GPU result. Retrying the gesture can
+          // leave a second pick in flight that reopens the panel after Escape.
+          if (hasTouch) await canvas.tap({ position });
+          else await canvas.click({ position });
+          await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark, {
+            timeout: 20_000,
+          });
           await expect.poll(() => query(page).sel).toBe(place.id);
           await expect(legend).toBeHidden();
           await page.keyboard.press('Escape');
@@ -261,25 +258,25 @@ for (const city of cities) {
       if (tour) {
         test(`tour "${tour.title.en}" plays end to end on its own`, async ({ page }) => {
           const count = tour.steps.length;
-          // Short flights, and a fake clock to skip through each step's dwell.
+          // Keep software WebGL work bounded while exercising every real camera flight.
+          await page.setViewportSize({ width: 600, height: 600 });
           await page.emulateMedia({ reducedMotion: 'reduce' });
-          await page.clock.install();
+          await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
           await page.goto(`/${city.slug}`);
           await mapReady(page);
+          // Installing a clock alone still lets wall time advance it. Pause before starting so
+          // slow rendering cannot move to the next step between the two assertions below.
+          await page.clock.pauseAt(new Date('2026-01-01T01:00:00Z'));
           const card = await startTour(page, tour);
           for (let step = 1; step <= count; step++) {
-            await expect(async () => {
-              await page.clock.fastForward(1000);
-              await expect(card.getByLabel(`Step ${step} of ${count}`)).toBeVisible({
-                timeout: 200,
-              });
-            }).toPass({ timeout: 30_000 });
+            await expect(card.getByLabel(`Step ${step} of ${count}`)).toBeVisible();
             await expect(card).toContainText(tour.steps[step - 1]!.narration.en);
-          }
-          await expect(async () => {
+            // One frame finishes the reduced-motion flight; the next jump completes its dwell.
+            // The player itself advances the step, without clicking Next or changing app state.
             await page.clock.fastForward(1000);
-            await expect(card).toContainText('End of the tour.', { timeout: 200 });
-          }).toPass({ timeout: 30_000 });
+            await page.clock.fastForward(tour.steps[step - 1]!.duration_ms);
+          }
+          await expect(card).toContainText('End of the tour.');
         });
       }
     });

@@ -5,6 +5,7 @@
  * key when it comes into view, so the same tile always starts with the same agents. Pure TS: the
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
+import { makeCellGuard } from './cell-guard';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -2873,6 +2874,15 @@ export type ProcessionRun = { id: string; progress: number; live: boolean };
 export class LifeWorld {
   private readonly junctions = new JunctionTable();
   private readonly roadCache = new WorldRoadCache();
+  private readonly metricTerrain = new WeakMap<
+    TileLife,
+    {
+      origin: string;
+      blocked: Polygon[];
+      water: Polygon[];
+      trees: Polygon[];
+    }
+  >();
   /** Weak ownership releases evicted agents. A stored body never aliases the next trial. */
   private groundBuffers = new WeakMap<object, { live: Body[]; trial: Body[] }>();
   private readonly groundPrevious: Body[] = [];
@@ -2939,33 +2949,44 @@ export class LifeWorld {
 
   /** Spawn agents for tiles that came into view and drop those of tiles that left it. */
   sync(tiles: readonly LifeTile[]) {
-    const keep = new Set<string>();
-    const added = new Set<TileLife>();
-    for (const { key, tile, life } of tiles) {
-      keep.add(key);
-      if (!this.tiles.has(key)) {
-        const fresh = new TileLife(tile, life, hashString(key), this.traffic);
-        this.tiles.set(key, fresh);
-        added.add(fresh);
+    const start = this.profiler?.time();
+    try {
+      const keep = new Set<string>();
+      const added = new Set<TileLife>();
+      const spawnStart = this.profiler?.time();
+      for (const { key, tile, life } of tiles) {
+        keep.add(key);
+        if (!this.tiles.has(key)) {
+          const fresh = new TileLife(tile, life, hashString(key), this.traffic);
+          this.tiles.set(key, fresh);
+          added.add(fresh);
+        }
       }
-    }
-    for (const key of this.tiles.keys())
-      if (!keep.has(key)) {
-        this.tiles.delete(key);
-        // Cached transforms own TileLife instances, so release them immediately on eviction.
-        this.groundTerrain = undefined;
-        this.railTopology = undefined;
+      if (added.size && spawnStart !== undefined)
+        this.profiler!.add('spawn', this.profiler!.time() - spawnStart);
+      for (const key of this.tiles.keys())
+        if (!keep.has(key)) {
+          this.tiles.delete(key);
+          // Cached transforms own TileLife instances, so release them immediately on eviction.
+          this.groundTerrain = undefined;
+          this.railTopology = undefined;
+        }
+      this.junctions.begin(new Set(this.tiles.values()));
+      if (added.size) {
+        const guard = this.groundGuard(0, added);
+        const settleStart = this.profiler?.time();
+        for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
+        for (const tile of added) tile.settleAnimals((owner, before) => guard(tile, owner, before));
+        if ([...added].some((tile) => tile.geo.commerce?.length)) {
+          const commerceGuard = this.groundGuard();
+          for (const tile of added)
+            tile.admitCommerce((owner, before) => commerceGuard(tile, owner, before));
+        }
+        if (settleStart !== undefined)
+          this.profiler!.add('settle', this.profiler!.time() - settleStart);
       }
-    this.junctions.begin(new Set(this.tiles.values()));
-    if (added.size) {
-      const guard = this.groundGuard(0, added);
-      for (const tile of added) tile.settleGround((owner, before) => guard(tile, owner, before));
-      for (const tile of added) tile.settleAnimals((owner, before) => guard(tile, owner, before));
-      if ([...added].some((tile) => tile.geo.commerce?.length)) {
-        const commerceGuard = this.groundGuard();
-        for (const tile of added)
-          tile.admitCommerce((owner, before) => commerceGuard(tile, owner, before));
-      }
+    } finally {
+      if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
     }
   }
 
@@ -3017,25 +3038,39 @@ export class LifeWorld {
       return out;
     };
     if (rebuild) {
+      const terrainStart = this.profiler?.time();
       const contributions = [];
       for (const life of this.tiles.values()) {
         const o = origin(life);
-        const metric = (polygon: Polygon) =>
-          polygon.map((ring) =>
-            ring.map((p) => ({
-              x: o.x + (p.x / life.perMeter) * o.scale,
-              y: o.y + (p.y / life.perMeter) * o.scale,
-            })),
-          );
-        contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
-        for (const a of life.geo.areas ?? []) {
-          if (a.kind === 'parking-exclusion') this.groundTerrain!.trees.add(metric(a.rings));
+        const key = `${o.x},${o.y},${o.scale}`;
+        let cached = this.metricTerrain.get(life);
+        if (!cached || cached.origin !== key) {
+          cached = { origin: key, blocked: [], water: [], trees: [] };
+          const metric = (polygon: Polygon) =>
+            polygon.map((ring) =>
+              ring.map((p) => ({
+                x: o.x + (p.x / life.perMeter) * o.scale,
+                y: o.y + (p.y / life.perMeter) * o.scale,
+              })),
+            );
+          for (const a of life.geo.areas ?? []) {
+            if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
+            if (a.kind === 'blocked')
+              (a.water ? cached.water : cached.blocked).push(metric(a.rings));
+          }
+          this.metricTerrain.set(life, cached);
         }
+        contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
+        for (const polygon of cached.trees) this.groundTerrain!.trees.add(polygon);
       }
+      const roadsStart = this.profiler?.time();
       this.groundTerrain!.roadAccess = this.roadCache.build(contributions);
+      if (roadsStart !== undefined)
+        this.profiler!.add('terrainRoads', this.profiler!.time() - roadsStart);
       for (const life of this.tiles.values())
         life.setIdleGuard((owner) => this.canIdle(life, owner));
       // A neighboring buffered crown can invalidate an already admitted parking placement.
+      const revalidateStart = this.profiler?.time();
       for (const life of this.tiles.values()) {
         const o = origin(life);
         for (let i = life.gatherers.length - 1; i >= 0; i--)
@@ -3064,21 +3099,19 @@ export class LifeWorld {
           }
         }
       }
+      if (revalidateStart !== undefined)
+        this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
+      for (const life of this.tiles.values()) {
+        const cached = this.metricTerrain.get(life)!;
+        for (const polygon of cached.blocked) blocked.add(polygon);
+        for (const polygon of cached.water) water.add(polygon);
+      }
+      if (terrainStart !== undefined)
+        this.profiler!.add('terrainRebuild', this.profiler!.time() - terrainStart);
     }
     const roadAccess = this.groundTerrain!.roadAccess;
     for (const life of this.tiles.values()) {
       const o = origin(life);
-      for (const a of rebuild ? (life.geo.areas ?? []) : [])
-        if (a.kind === 'blocked') {
-          (a.water ? water : blocked).add(
-            a.rings.map((r) =>
-              r.map((p) => ({
-                x: o.x + (p.x / life.perMeter) * o.scale,
-                y: o.y + (p.y / life.perMeter) * o.scale,
-              })),
-            ),
-          );
-        }
       const near = bounds && viewIn(life.tile, bounds, 100 * life.perMeter);
       const inView = (p: { x: number; y: number }) => !near || near(p.x, p.y);
       const standing = (p: Parked | Stall, vehicle: CraftType) => {
@@ -3128,12 +3161,35 @@ export class LifeWorld {
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) return false;
       let distance = 0,
         turns = 1;
+      let x0 = Infinity,
+        y0 = Infinity,
+        x1 = -Infinity,
+        y1 = -Infinity,
+        radius = 0;
       for (let i = 0; i < next.length; i++) {
         const b = next[i]!,
           a = previous[i]!;
         distance = Math.max(distance, Math.hypot(b.x - a.x, b.y - a.y));
         turns = Math.max(turns, Math.ceil(Math.hypot(b.hx - a.hx, b.hy - a.hy) * 8));
+        x0 = Math.min(x0, a.x, b.x);
+        y0 = Math.min(y0, a.y, b.y);
+        x1 = Math.max(x1, a.x, b.x);
+        y1 = Math.max(y1, a.y, b.y);
+        radius = Math.max(
+          radius,
+          Math.hypot(a.length, a.width) / 2,
+          Math.hypot(b.length, b.width) / 2,
+        );
       }
+      // The half-diagonal encloses every intermediate heading along the whole move.
+      x0 -= radius;
+      y0 -= radius;
+      x1 += radius;
+      y1 += radius;
+      const crossing = 'kind' in owner || 'walker' in owner;
+      const blockedNear = blocked.near(x0, y0, x1, y1);
+      const waterNear = onFoot && water.near(x0, y0, x1, y1);
+      const roadNear = onFoot && roadAccess.near(x0, y0, x1, y1, crossing);
       const steps = Math.max(1, Math.ceil(distance / 0.3), turns);
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
@@ -3154,9 +3210,9 @@ export class LifeWorld {
           s.width = b.width;
         }
         if (
-          blocked.hits(sample) ||
-          (onFoot && water.hits(sample)) ||
-          (onFoot && !roadAccess.allows(sample, 'kind' in owner || 'walker' in owner))
+          (blockedNear && blocked.hits(sample)) ||
+          (waterNear && water.hits(sample)) ||
+          (roadNear && !roadAccess.allows(sample, crossing))
         )
           return false;
         if (oldScore === 0 && occupied.conflicts(owner, sample) > 0) return false;
@@ -3178,26 +3234,29 @@ export class LifeWorld {
     };
   }
 
+  /**
+   * The terrain the main-thread cell packer needs, versioned by identity. Callers must not mutate
+   * the returned indexes.
+   */
+  cellTerrain() {
+    const ref = this.tiles.values().next().value;
+    const terrain = this.groundTerrain;
+    if (!ref || !terrain) return undefined;
+    return {
+      version: terrain,
+      ref: { tile: ref.tile, perMeter: ref.perMeter },
+      forbidden: terrain.roadAccess.forbidden,
+      roads: terrain.roadAccess.roads,
+      trees: terrain.trees,
+    };
+  }
+
   /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
   groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
     const ref = this.tiles.values().next().value;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
-    const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
-    const [c1, r1] = toCell(...tileToLngLat(ref.tile, { x: ref.perMeter, y: ref.perMeter }));
-    const width = 1 / (c1 - c0),
-      height = 1 / (r1 - r0);
-    const body: Body = { x: 0, y: 0, hx: 1, hy: 0, length: width, width: height };
-    const sample = [body];
-    return (agent: VisibleAgent, col: number, row: number) => {
-      if (agent.aboard) return true;
-      body.x = (col + 0.5 - c0) * width;
-      body.y = (row + 0.5 - r0) * height;
-      if (isWalker(agent.kind)) return terrain.roadAccess.allows(sample, agent.vehicle !== 'cart');
-      return (
-        agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !terrain.trees.hits(sample)
-      );
-    };
+    return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell);
   }
 
   /**

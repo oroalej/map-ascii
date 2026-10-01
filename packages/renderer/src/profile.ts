@@ -8,6 +8,18 @@ export const PROFILE_STAGES = [
   'visible',
   'pack',
   'upload',
+  'sync',
+  'terrainRebuild',
+  'terrainSnapshot',
+  'terrainEncode',
+  'lifeLatency',
+  'spawn',
+  'settle',
+  'terrainRoads',
+  'terrainRevalidate',
+  'tileUpload',
+  'replyClone',
+  'syncPost',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {
@@ -33,11 +45,16 @@ export class FrameProfiler {
   private count = 0;
   private dropped = 0;
   private current: ProfileSample | undefined;
+  private pending: ProfileSample | undefined;
   private started = 0;
   constructor(private readonly now: () => number = () => performance.now()) {}
   begin(at: number) {
     this.started = this.now();
     this.current = { at, drawn: false, agents: 0, checks: 0, ms: {} };
+    if (this.pending) {
+      this.merge(this.pending);
+      this.pending = undefined;
+    }
   }
   time() {
     return this.now();
@@ -45,8 +62,34 @@ export class FrameProfiler {
   add(stage: ProfileStage, elapsed: number) {
     if (this.current) this.current.ms[stage] = (this.current.ms[stage] ?? 0) + elapsed;
   }
+  /** Also retain measurements that finish between animation callbacks. */
+  record(stage: ProfileStage, elapsed: number) {
+    this.merge({ at: 0, drawn: false, agents: 0, checks: 0, ms: { [stage]: elapsed } });
+  }
   check() {
     if (this.current) this.current.checks++;
+  }
+  /** Take a worker sample without adding callback timing or retaining it in the ring. */
+  drain(): ProfileSample | undefined {
+    const sample = this.current;
+    this.current = undefined;
+    return sample;
+  }
+  /** Worker replies arrive between callbacks; carry their stages into the next sample. */
+  merge(sample: ProfileSample) {
+    const target =
+      this.current ??
+      (this.pending ??= {
+        at: sample.at,
+        drawn: false,
+        agents: 0,
+        checks: 0,
+        ms: {},
+      });
+    for (const stage of PROFILE_STAGES)
+      if (sample.ms[stage] !== undefined)
+        target.ms[stage] = (target.ms[stage] ?? 0) + sample.ms[stage];
+    target.checks += sample.checks;
   }
   draw(elapsed: number, agents: number) {
     if (!this.current) return;
@@ -68,6 +111,7 @@ export class FrameProfiler {
     this.cursor = this.count = 0;
     this.dropped = 0;
     this.current = undefined;
+    this.pending = undefined;
   }
   snapshot(gpuRenderer: string | null = null): AtlasProfile {
     const samples: ProfileSample[] = [];

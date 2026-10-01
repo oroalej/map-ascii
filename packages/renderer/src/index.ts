@@ -84,7 +84,7 @@ import { moonlight } from './life/moon';
 import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life/fixtures';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
-import { treeGust } from './glyphs/select';
+import { createInlineHost, createWorkerHost } from './life/host';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
   prevailingWind,
@@ -174,6 +174,8 @@ export type AtlasOptions = {
   gpuTiming?: boolean;
   /** Collect bounded CPU stage samples for local diagnostics. Disabled by default. */
   profiling?: boolean;
+  /** Run Life in a worker when available; false selects the synchronous in-process path. */
+  lifeWorker?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -540,6 +542,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // Tiles
+  const profiler = options.profiling ? new FrameProfiler() : undefined;
   const tileCache = new TileCache(
     gl,
     new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
@@ -548,6 +551,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellDirty = true;
       cellsFor = null;
     },
+    profiler,
   );
   const { source } = tileCache;
 
@@ -679,14 +683,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
-  const profiler = options.profiling ? new FrameProfiler() : undefined;
-  const world = new LifeWorld(options.traffic, profiler);
   const processions = options.processions ?? [];
-  world.setProcessions(processions);
+  const host =
+    options.lifeWorker !== false && typeof Worker !== 'undefined'
+      ? createWorkerHost(options, processions, profiler)
+      : (() => {
+          const world = new LifeWorld(options.traffic, profiler);
+          world.setProcessions(processions);
+          return createInlineHost(world, profiler);
+        })();
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
   const reportProcession = () => {
-    const run = world.procession();
+    const run = host.latest()?.procession;
     const key = run ? `${run.id} ${run.live}` : '';
     if (key === processionKey) return;
     processionKey = key;
@@ -707,7 +716,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
       }
     }
-    world.sync(lifeTiles);
+    host.sync(lifeTiles);
   };
 
   /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */
@@ -737,43 +746,28 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
-      const canonical = placeGrid(
-        { ...view(), dpr: 1, width: size.width, height: size.height },
-        { w: cssCell.width, h: cssCell.height },
-        1,
-        1,
-      );
-      const { grid, toCell } = canonical;
-      const stepStart = profiler?.time();
-      world.step(
-        (at - lastLifeStep) / 1000,
-        (lng, lat) => {
-          const [col, row] = toCell(lng, lat);
-          const x = grid.originCol + Math.floor(col);
-          const y = grid.originRow + Math.floor(row);
-          return wind.strength * treeGust(x, y, time, wind.dir);
+      const accepted = host.request({
+        gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
+        step: {
+          dt: (at - lastLifeStep) / 1000,
+          zoom: camera.zoom,
+          bounds: viewBounds(),
+          wind: worldWind(time),
+          weather: { rain: currentRain(), minutes: cityMinutes, cityLife: options.cityLife },
+          cellMeters: metersPerCssPx(camera) * cssCell.width,
         },
-        camera.zoom,
-        viewBounds(),
-        // Circling flocks drift with it (in world axes, like the tiles).
-        worldWind(time),
-        { rain: currentRain(), minutes: cityMinutes, cityLife: options.cityLife },
-        // A cell's width in meters, for walkers' clearance.
-        metersPerCssPx(camera) * cssCell.width,
-      );
-      if (stepStart !== undefined) profiler!.add('step', profiler!.time() - stepStart);
-      lastLifeStep = at;
-      const visibleStart = profiler?.time();
-      agents = world.visible(
-        camera.zoom,
-        activity,
-        [camera.lng, camera.lat],
-        { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
-        viewBounds(),
-        knobs.crowd,
-        knobs.maxAgents,
-      );
-      if (visibleStart !== undefined) profiler!.add('visible', profiler!.time() - visibleStart);
+        visible: [
+          camera.zoom,
+          activity,
+          [camera.lng, camera.lat],
+          { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+          viewBounds(),
+          knobs.crowd,
+          knobs.maxAgents,
+        ],
+      });
+      if (accepted) lastLifeStep = at;
+      agents = host.latest()?.agents ?? [];
       reportProcession();
     } else if (!lifeShown) {
       return;
@@ -794,7 +788,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       agents,
       knobs.shadows ? sun : null,
       profiler,
-      world.groundCellGuard(placement.toCell),
+      host.latest()?.cellGuard(placement.toCell),
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -944,7 +938,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       view(),
       placement,
       fixtures,
-      world.signalClock,
+      host.latest()?.signalClock ?? 0,
       cellsDrawn,
     );
     const key = `${visible.streetlights} ${visible.trafficSignals}`;
@@ -1008,7 +1002,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
     }
-    world.setLive(live?.id, live?.progress);
+    host.setLive(live?.id, live?.progress);
     // The moment the map shows: now, or today at the fixed time in the city.
     const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
@@ -1419,12 +1413,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getLife: () => ({ ...life }),
     playProcession(id) {
-      if (!lifeActive() || !world.play(id)) return false;
+      if (!lifeActive() || !host.play(id)) return false;
       drawDirty = true;
       return true;
     },
     stopProcession() {
-      world.stop();
+      host.stop();
       drawDirty = true;
     },
     setYear() {
@@ -1447,6 +1441,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      host.dispose();
       destroyed = true;
       canvas.style.cursor = '';
       cancelAnimationFrame(raf);

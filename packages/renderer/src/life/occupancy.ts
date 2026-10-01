@@ -1,4 +1,5 @@
 /** Ground-agent clearance, in meters, shared across loaded tile boundaries. */
+import { flattenPolygons, type FlatPolygons } from './flat-polygons';
 import type { PersonFigure } from './people';
 import { CAT_LENGTH_M } from './cats';
 import { DOG_LENGTH_M } from './dogs';
@@ -225,13 +226,82 @@ export class Occupancy {
 }
 
 /** Polygon holes remain usable; index only the bounds and check the actual shape on query. */
+// Covers segmentCrossing's 1e-6 parametric tolerance on long edges, plus float rounding.
+const BOUNDS_PAD_M = 0.01;
 export class PolygonIndex {
+  readonly polygons: Polygon[] = [];
+  private bounds = new Map<Polygon, [number, number, number, number]>();
   private bins = new Map<number, Set<Polygon>>();
   private readonly corners: Point[] = [];
   private readonly keys: number[] = [];
   private readonly tested = new Set<Polygon>();
+  /** Read-only diagnostics, kept off simulation and snapshot hot paths. */
+  stats() {
+    const counts = new Map<Polygon, number>();
+    let items = 0;
+    let maxBinsPerPolygon = 0;
+    for (const bin of this.bins.values())
+      for (const polygon of bin) {
+        const count = (counts.get(polygon) ?? 0) + 1;
+        counts.set(polygon, count);
+        maxBinsPerPolygon = Math.max(maxBinsPerPolygon, count);
+        items++;
+      }
+    return {
+      polygons: this.polygons.length,
+      bins: this.bins.size,
+      items,
+      maxBinsPerPolygon,
+      meanBinsPerPolygon: this.polygons.length ? items / this.polygons.length : 0,
+    };
+  }
   add(polygon: Polygon) {
-    for (const key of binKeys(polygon.flat())) put(this.bins, key, polygon);
+    const points = polygon.flat();
+    this.polygons.push(polygon);
+    this.bounds.set(polygon, boundsOf(points));
+    for (const key of binKeys(points)) put(this.bins, key, polygon);
+  }
+  toFlat(): FlatPolygonIndex {
+    const ids = new Map(this.polygons.map((polygon, id) => [polygon, id]));
+    const bounds = new Float64Array(this.polygons.length * 4);
+    for (const [id, polygon] of this.polygons.entries())
+      bounds.set(this.bounds.get(polygon)!, id * 4);
+    const keys = new Float64Array([...this.bins.keys()].sort((a, b) => a - b));
+    const starts = new Uint32Array(keys.length + 1);
+    const items: number[] = [];
+    for (const [i, key] of keys.entries()) {
+      starts[i] = items.length;
+      for (const polygon of this.bins.get(key)!) items.push(ids.get(polygon)!);
+    }
+    starts[keys.length] = items.length;
+    return {
+      polygons: flattenPolygons(this.polygons),
+      bounds,
+      keys,
+      starts,
+      items: new Uint32Array(items),
+    };
+  }
+  near(x0: number, y0: number, x1: number, y1: number): boolean {
+    for (const key of binKeys(
+      [
+        { x: x0, y: y0 },
+        { x: x1, y: y1 },
+      ],
+      BOUNDS_PAD_M,
+      this.keys,
+    ))
+      for (const polygon of this.bins.get(key) ?? []) {
+        const [a0, b0, a1, b1] = this.bounds.get(polygon)!;
+        if (
+          a0 <= x1 + BOUNDS_PAD_M &&
+          a1 >= x0 - BOUNDS_PAD_M &&
+          b0 <= y1 + BOUNDS_PAD_M &&
+          b1 >= y0 - BOUNDS_PAD_M
+        )
+          return true;
+      }
+    return false;
   }
   hits(bodies: readonly Body[]): boolean {
     const tested = this.tested;
@@ -239,12 +309,92 @@ export class PolygonIndex {
       for (const b of bodies) {
         tested.clear();
         const corners = bodyCorners(b, this.corners);
+        const [x0, y0, x1, y1] = boundsOf(corners);
         for (const key of binKeys(corners, 0, this.keys))
           for (const polygon of this.bins.get(key) ?? []) {
             if (tested.has(polygon)) continue;
             tested.add(polygon);
+            const [a0, b0, a1, b1] = this.bounds.get(polygon)!;
+            if (
+              a0 > x1 + BOUNDS_PAD_M ||
+              a1 < x0 - BOUNDS_PAD_M ||
+              b0 > y1 + BOUNDS_PAD_M ||
+              b1 < y0 - BOUNDS_PAD_M
+            )
+              continue;
             if (bodyHitsPolygon(b, polygon, corners)) return true;
           }
+      }
+      return false;
+    } finally {
+      tested.clear();
+    }
+  }
+}
+
+export type FlatPolygonIndex = {
+  polygons: FlatPolygons;
+  bounds: Float64Array;
+  keys: Float64Array;
+  starts: Uint32Array;
+  items: Uint32Array;
+};
+
+/** Read-only transferred bins. Accepting a snapshot does no per-polygon work. */
+export class FrozenPolygonIndex {
+  private readonly polygons: (Polygon | undefined)[] = [];
+  private readonly corners: Point[] = [];
+  private readonly keys: number[] = [];
+  private readonly tested = new Set<number>();
+  constructor(private readonly flat: FlatPolygonIndex) {}
+
+  private polygon(id: number): Polygon {
+    const cached = this.polygons[id];
+    if (cached) return cached;
+    const { coords, rings, polys } = this.flat.polygons;
+    const polygon: Point[][] = [];
+    for (let r = polys[id]!; r < polys[id + 1]!; r++) {
+      const ring: Point[] = [];
+      for (let i = rings[r]!; i < rings[r + 1]!; i++)
+        ring.push({ x: coords[2 * i]!, y: coords[2 * i + 1]! });
+      polygon.push(ring);
+    }
+    this.polygons[id] = polygon;
+    return polygon;
+  }
+
+  hits(bodies: readonly Body[]): boolean {
+    const tested = this.tested;
+    const { keys, starts, items, bounds } = this.flat;
+    try {
+      for (const b of bodies) {
+        tested.clear();
+        const corners = bodyCorners(b, this.corners);
+        const [x0, y0, x1, y1] = boundsOf(corners);
+        for (const key of binKeys(corners, 0, this.keys)) {
+          let lo = 0,
+            hi = keys.length;
+          while (lo < hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (keys[mid]! < key) lo = mid + 1;
+            else hi = mid;
+          }
+          if (keys[lo] !== key) continue;
+          for (let i = starts[lo]!; i < starts[lo + 1]!; i++) {
+            const id = items[i]!;
+            if (tested.has(id)) continue;
+            tested.add(id);
+            const offset = id * 4;
+            if (
+              bounds[offset]! > x1 + BOUNDS_PAD_M ||
+              bounds[offset + 2]! < x0 - BOUNDS_PAD_M ||
+              bounds[offset + 1]! > y1 + BOUNDS_PAD_M ||
+              bounds[offset + 3]! < y0 - BOUNDS_PAD_M
+            )
+              continue;
+            if (bodyHitsPolygon(b, this.polygon(id), corners)) return true;
+          }
+        }
       }
       return false;
     } finally {

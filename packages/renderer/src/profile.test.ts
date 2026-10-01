@@ -2,6 +2,55 @@ import { describe, expect, it } from 'vitest';
 import { FrameProfiler, PROFILE_CAPACITY } from './profile';
 
 describe('bounded frame profiles', () => {
+  it('records stages during and between callbacks, and clears pending stages on reset', () => {
+    const p = new FrameProfiler(() => 0);
+    p.record('terrainSnapshot', 2);
+    p.record('terrainSnapshot', 3);
+    p.record('lifeLatency', 12);
+    expect(p.snapshot().samples).toEqual([]);
+    p.begin(1);
+    p.record('terrainSnapshot', 1);
+    p.end();
+    expect(p.snapshot().samples[0]!.ms).toEqual({
+      terrainSnapshot: 6,
+      lifeLatency: 12,
+      callback: 0,
+    });
+    p.begin(2);
+    p.end();
+    expect(p.snapshot().stages.terrainSnapshot.count).toBe(1);
+    p.record('lifeLatency', 10);
+    p.reset();
+    p.begin(3);
+    p.end();
+    expect(p.snapshot().stages.lifeLatency.count).toBe(0);
+  });
+  it('drains worker stages and merges replies during and between callbacks', () => {
+    const worker = new FrameProfiler(() => 0);
+    const main = new FrameProfiler(() => 0);
+    worker.begin(1);
+    worker.add('sync', 4);
+    worker.add('terrainRebuild', 2);
+    worker.check();
+    const sample = worker.drain()!;
+    expect(worker.drain()).toBeUndefined();
+    expect(worker.snapshot().samples).toEqual([]);
+    main.merge(sample);
+    main.begin(2);
+    main.merge(sample);
+    main.end();
+    expect(main.snapshot().samples[0]).toMatchObject({
+      at: 2,
+      checks: 2,
+      ms: { sync: 8, terrainRebuild: 4, callback: 0 },
+    });
+    expect(sample.ms.sync).toBe(4);
+    main.merge(sample);
+    main.reset();
+    main.begin(3);
+    main.end();
+    expect(main.snapshot().stages.sync.count).toBe(0);
+  });
   it('accumulates nested stages and separates missing stages from zero measurements', () => {
     let now = 10;
     const p = new FrameProfiler(() => now);
