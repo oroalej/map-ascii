@@ -164,6 +164,18 @@ function drawAgent(
   const { cols, rows, toCell } = grid;
   if (agent.line) return drawLine(out, grid, agent.line, glyphIndex) ? 1 : 0;
   const [col, row] = toCell(agent.lng, agent.lat);
+  if (agent.prop === 'ball') {
+    const c = Math.floor(col),
+      r = Math.floor(row),
+      index = glyphIndex('•');
+    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
+    const at = (r * cols + c) * 4;
+    rememberGroundCell(out, at);
+    [out[at], out[at + 1]] = packGlyph(index, classId(lifeClassFor.person));
+    out[at + 2] = CellBit.person;
+    out[at + 3] = personByte(PAINT_NONE, PersonPart.figure);
+    return 1;
+  }
   const baseSpec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
   const spec = agent.covered && agent.vehicle === 'cart' && baseSpec ? COVERED_CART : baseSpec;
   if (agent.kind === 'person' && !spec) return drawPeople(out, grid, agent, [col, row], glyphIndex);
@@ -319,7 +331,15 @@ function drawPeople(
     const pull = (stroke ^ swap) as 0 | 1;
     let any = false;
     for (const slice of [0, 1, 2, 3] as const) {
-      const glyph = figureGlyph(look.figure, across, frame, { slice }, pull, headingOf(fx, fy));
+      const glyph = figureGlyph(
+        look.figure,
+        across,
+        frame,
+        { slice },
+        pull,
+        headingOf(fx, fy),
+        look.pose,
+      );
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
@@ -349,7 +369,15 @@ function drawPeople(
       } else if (fit === 'big') {
         any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
       } else {
-        const glyph = figureGlyph(look.figure, across, frame, { scale: fit }, 0, headingOf(fx, fy));
+        const glyph = figureGlyph(
+          look.figure,
+          across,
+          frame,
+          { scale: fit },
+          0,
+          headingOf(fx, fy),
+          look.pose,
+        );
         any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
       }
       if (any) drawn++;
@@ -384,6 +412,7 @@ function drawPeople(
         { scale: fit === 'stamp' ? 2 : fit },
         0,
         headingOf(fx, fy),
+        look.pose,
       );
       // In a 2×2 slot: its cell nearest the first of the group.
       const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
@@ -422,7 +451,7 @@ function stampFigure(
     along,
     right,
     FIGURE_SIZE_M[look.figure],
-    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke),
+    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
     toneShare,
     glyphIndex,
     texel,

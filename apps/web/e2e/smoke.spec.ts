@@ -210,16 +210,28 @@ for (const city of cities) {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.addInitScript(() =>
+          localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon' })),
+        );
         await page.goto(`/${city.slug}?debug=1&z=18`);
         await mapReady(page);
         const life = page.getByRole('button', { name: 'Life', exact: true });
         await expect(life).toHaveAttribute('aria-pressed', 'true');
         await expect(page.locator('pre')).toContainText(/gpu\s+(?:n\/a|\d+\.\d+) ms/);
+        const agents = async () =>
+          Number((await page.locator('pre').textContent())?.match(/agents\s+(\d+)/)?.[1] ?? 0);
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
+        await life.click();
+        await expect.poll(agents).toBe(0);
+        await life.click();
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await expect(life).toBeDisabled();
+        await expect.poll(agents).toBe(0);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
         await expect(life).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         expect(errors).toEqual([]);

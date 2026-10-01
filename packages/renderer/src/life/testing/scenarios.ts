@@ -8,7 +8,14 @@ import type { FrameProfiler } from '../../profile';
 import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
 
-export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
+export const SCENARIOS = [
+  'sparse',
+  'junction',
+  'crossroads',
+  'transit',
+  'rain',
+  'moments',
+] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 const base = { z: 16, x: 55192, y: 30266 };
 // Explicit mapped sidewalk outside the 14 m carriageway, wide enough for waiting groups.
@@ -104,6 +111,15 @@ export function scenarioLife(kind: Scenario) {
       b.site({ x: 1800, y: 800 }, 2, 0, true);
       b.market({ x: 1300, y: 1800 });
     }
+  }
+  if (kind === 'moments') {
+    // Bounded legal gathering rings, away from roads and buildings. Benchmark real holds,
+    // not an empty controller running over a geography with no places.
+    const pm = 1 / metersPerUnit(base);
+    b.place({ x: 1500, y: 1500 }, 'monument', 2 * pm);
+    b.place({ x: 2500, y: 1500 }, 'school', 8 * pm);
+    b.place({ x: 1500, y: 2600 }, 'pitch', 14 * pm);
+    b.place({ x: 3000, y: 2700 }, 'worship', 6 * pm);
   }
   return b.finish();
 }
@@ -255,5 +271,9 @@ export function completeScenarioState(world: LifeWorld) {
     junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
     tiles: scenarioState(world),
+    moments: [...worldTiles(world)].map(([key, tile]) => ({
+      key,
+      state: tile.momentHost.moments.snapshot(),
+    })),
   };
 }

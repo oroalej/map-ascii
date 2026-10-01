@@ -7,6 +7,7 @@ import {
   figureGlyph,
   figureOf,
   figurePixels,
+  figureInk,
   PAINT_NONE,
   PersonPart,
   personByte,
@@ -32,7 +33,9 @@ describe('people', () => {
       expect(g.charCodeAt(0)).toBeLessThan(0xf900);
       const f = figureOf(g)!;
       const at = f.slice === undefined ? { scale: f.scale! } : { slice: f.slice };
-      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0, f.heading)).toBe(g);
+      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0, f.heading, f.pose)).toBe(
+        g,
+      );
     }
     expect(figureOf('☺')).toBeUndefined();
   });
@@ -99,5 +102,32 @@ describe('people', () => {
       expect(new Set([0, 1, 2, 3].map((h) => rows(h as Heading).join(''))).size).toBe(4);
       expect(up).not.toEqual(FIGURE_MASTERS.adult[box]);
     }
+  });
+
+  it('appends age-preserving stationary poses with distinct cardinal directions and stamp ink', () => {
+    expect(personGlyphs()).toHaveLength(187);
+    for (const figure of ['adult', 'child'] as const)
+      for (const pose of ['attentive', 'gesture'] as const)
+        for (const box of [5, 10, 20]) {
+          const rows = (heading: Heading) => {
+            const pixels = figurePixels({ figure, pose, heading, across: false, frame: 0 }, box);
+            return Array.from({ length: box }, (_, y) =>
+              Array.from({ length: box }, (_, x) => pixels(x, y)).join(''),
+            );
+          };
+          const up = rows(Heading.up);
+          expect(new Set([0, 1, 2, 3].map((h) => rows(h as Heading).join(''))).size).toBe(4);
+          expect(rows(Heading.down)).toEqual(
+            [...up].reverse().map((r) => [...r].reverse().join('')),
+          );
+          for (let y = 0; y < box; y++)
+            for (let x = 0; x < box; x++)
+              expect(figureInk(figure, 1, 1 - (y + 0.5) / box, (x + 0.5) / box, box, 1, pose)).toBe(
+                up[y]![x],
+              );
+          expect(
+            figureOf(figureGlyph(figure, true, 1, { scale: 2 }, 0, Heading.left, pose)),
+          ).toMatchObject({ figure, pose, heading: Heading.left });
+        }
   });
 });

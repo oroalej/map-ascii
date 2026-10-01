@@ -70,6 +70,7 @@ import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from '
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { MomentHost, type MomentOptions } from './moments-host';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
@@ -122,7 +123,11 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
-export type StepPass = { junctions: JunctionTable; trains?: ReadonlyMap<Mover, TrainLimit> };
+export type StepPass = {
+  junctions: JunctionTable;
+  trains?: ReadonlyMap<Mover, TrainLimit>;
+  momentView?: { zoom: number; cellWidth: number; cellAspect: number };
+};
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -151,6 +156,8 @@ const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo +
 
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
+  /** Displayed social heading, separate from the navigation cursor and detour. */
+  momentFacing?: { hx: number; hy: number };
   /** Cats' resting or grooming pose. */
   grooming?: boolean;
   kind: Exclude<AgentKind, 'bird'>;
@@ -264,6 +271,9 @@ export type Stall = {
  * end: `sign`), leading a carabao in `carabao`'s paint.
  */
 export type Gatherer = {
+  /** Original place ordinal; adjacent or coincident records retain separate ownership. */
+  source?: number;
+  momentFacing?: { hx: number; hy: number };
   place: PlaceKind;
   behavior: PlaceBehavior;
   cx: number;
@@ -411,6 +421,8 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  readonly momentHost: MomentHost;
+  private readonly walkerRng: () => number;
   private readonly commerceStallsRng: () => number;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
@@ -467,10 +479,12 @@ export class TileLife {
     readonly geo: LifeGeometry,
     seed: number,
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
+    momentOptions?: MomentOptions,
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.roadTerrain = prepareRoadTerrain(geo, this.perMeter);
     this.rng = random(seed);
+    this.walkerRng = random(seed ^ 0x3c6ef372);
     this.routingSeed = seed;
     this.routeRng = random(seed ^ 0x2545f491);
     this.looks = random(seed ^ 0xc2b2ae35);
@@ -509,8 +523,16 @@ export class TileLife {
     this.spawnStalls();
     this.spawnGatherers();
     this.spawnFlocks();
-    this.scenes = new LocalScenes(geo, this.perMeter, seed, this.stalls, (m) => this.canIdle(m));
+    this.scenes = new LocalScenes(
+      geo,
+      this.perMeter,
+      seed,
+      this.stalls,
+      (m) => this.canIdle(m),
+      (m) => this.momentHost?.moments.busy(m) ?? false,
+    );
     this.spawnCats();
+    this.momentHost = new MomentHost(this, seed, momentOptions);
   }
 
   private first(line: number) {
@@ -693,6 +715,7 @@ export class TileLife {
   pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }): Pose {
     const offset = this.offsetOf(m) * this.perMeter;
     Object.assign(out, { x: m.x - m.hy * offset, y: m.y + m.hx * offset, hx: m.hx, hy: m.hy });
+    if (m.momentFacing) Object.assign(out, m.momentFacing);
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
     const reach = FILLET.maxM * this.perMeter;
     const behind = m.d <= reach ? this.corner(m, m.from) : undefined;
@@ -791,14 +814,15 @@ export class TileLife {
       return out;
     }
     const walkers = mover ? (a.group ?? []) : [a.walker];
+    const { hx, hy } = a.momentFacing ?? a;
     const spacing = Math.max(1, minimum);
     for (let i = 0; i < walkers.length; i++) {
       const w = walkers[i]!;
       const b = out[i] ?? (out[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
-      b.x = x - a.hy * w.lateral * spacing - a.hx * w.back * spacing;
-      b.y = y + a.hx * w.lateral * spacing - a.hy * w.back * spacing;
-      b.hx = a.hx;
-      b.hy = a.hy;
+      b.x = x - hy * w.lateral * spacing - hx * w.back * spacing;
+      b.y = y + hx * w.lateral * spacing - hy * w.back * spacing;
+      b.hx = hx;
+      b.hy = hy;
       b.length = Math.max(memberSize(w.figure).length, minimum);
       b.width = Math.max(memberSize(w.figure).width, minimum);
     }
@@ -1123,6 +1147,7 @@ export class TileLife {
       for (let n = 0; n < count && this.gatherers.length < MAX_TILE_GATHERERS; n++) {
         const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
         const g: Gatherer = {
+          source: i / PLACE_STRIDE,
           place,
           behavior: rule.behavior,
           cx,
@@ -1277,8 +1302,13 @@ export class TileLife {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
+      if (this.momentHost.moments.busy(g)) {
+        g.pause = Math.max(0, g.pause - dt);
+        continue;
+      }
       if (!this.canIdle(g)) g.pause = 0;
       if (g.pause > 0) {
+        this.momentHost.attend(g, guard);
         g.pause -= dt;
         continue;
       }
@@ -1287,6 +1317,7 @@ export class TileLife {
       const dist = Math.hypot(dx, dy);
       const move = g.speed * dt;
       const before = guard && { ...g };
+      delete g.momentFacing;
       if (dist <= move) {
         g.x = g.tx;
         g.y = g.ty;
@@ -1883,7 +1914,9 @@ export class TileLife {
                         ? this.catRng()
                         : m.kind === 'dog'
                           ? this.dogRng()
-                          : this.rng()) * options.length,
+                          : m.kind === 'person'
+                            ? this.walkerRng()
+                            : this.rng()) * options.length,
                   )
                 ]!;
     m.next = undefined;
@@ -2345,6 +2378,16 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
     );
+    const momentView = pass?.momentView;
+    this.momentHost.step(
+      dt,
+      momentView?.zoom ?? (!shows || shows('person') ? 18 : 0),
+      env,
+      near,
+      guard,
+      momentView?.cellWidth ?? 0,
+      momentView?.cellAspect ?? 1.8,
+    );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) {
       const active = (m: Mover) =>
@@ -2455,17 +2498,21 @@ export class TileLife {
         }
       }
       if (m.kind === 'person') {
+        if (this.momentHost.moments.busy(m)) {
+          m.pause = Math.max(0, m.pause - dt);
+          continue;
+        }
         const idle = this.canIdle(m);
         if (!idle) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
-        if (idle && rng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(rng, PERSON_PAUSE.seconds);
+        if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
+          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
           continue;
         }
-        if (idle && rng() < PERSON_TURN_CHANCE * dt) {
+        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -2506,6 +2553,7 @@ export class TileLife {
       }
       const before = { ...m };
       if (walking) {
+        delete m.momentFacing;
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
@@ -2639,10 +2687,12 @@ export class TileLife {
       (x - flock.x) ** 2 + (y - flock.y) ** 2 < r * r;
     for (const m of this.movers) {
       if (levels && m.rank >= levels[m.kind]) continue;
+      if (this.momentHost.moments.busy(m)) continue;
       if (m.pause > 0 && m.kind !== 'train') continue;
       if (within(m.x, m.y, m.kind === 'dog' ? 2 * reach : reach)) return true;
     }
     for (const g of this.gatherers) {
+      if (this.momentHost.moments.busy(g)) continue;
       if (g.behavior === 'sit' || g.pause > 0) continue;
       if (levels && g.rank >= levels.places[g.place]) continue;
       if (within(g.x, g.y, reach)) return true;
@@ -2814,6 +2864,8 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  /** A transient airborne ball, packed before the ordinary person figure dispatch. */
+  prop?: 'ball';
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -2932,6 +2984,7 @@ export class LifeWorld {
   constructor(
     traffic?: TrafficMix,
     private readonly profiler?: FrameProfiler,
+    private readonly momentOptions?: MomentOptions,
   ) {
     this.traffic = resolveTraffic(traffic);
   }
@@ -2939,6 +2992,7 @@ export class LifeWorld {
   /** Change the vehicle mix: every tile's agents spawn again with it. */
   setTraffic(traffic?: TrafficMix) {
     this.traffic = resolveTraffic(traffic);
+    for (const tile of this.tiles.values()) tile.momentHost.clear();
     this.tiles.clear();
     this.junctions.clear();
     this.arrivals.clear();
@@ -2957,7 +3011,7 @@ export class LifeWorld {
       for (const { key, tile, life } of tiles) {
         keep.add(key);
         if (!this.tiles.has(key)) {
-          const fresh = new TileLife(tile, life, hashString(key), this.traffic);
+          const fresh = new TileLife(tile, life, hashString(key), this.traffic, this.momentOptions);
           this.tiles.set(key, fresh);
           added.add(fresh);
         }
@@ -2966,6 +3020,7 @@ export class LifeWorld {
         this.profiler!.add('spawn', this.profiler!.time() - spawnStart);
       for (const key of this.tiles.keys())
         if (!keep.has(key)) {
+          this.tiles.get(key)!.momentHost.clear();
           this.tiles.delete(key);
           // Cached transforms own TileLife instances, so release them immediately on eviction.
           this.groundTerrain = undefined;
@@ -3276,6 +3331,7 @@ export class LifeWorld {
     wind?: LifeEnv['wind'],
     weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig },
     cellMeters = 0,
+    cellAspect = 1.8,
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
@@ -3316,6 +3372,7 @@ export class LifeWorld {
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
         trains,
+        momentView: { zoom: zoom ?? 18, cellWidth: cellMeters, cellAspect },
       });
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
@@ -3492,6 +3549,8 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const owners = new Map<object, VisibleAgent>();
+    const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
@@ -3545,8 +3604,11 @@ export class LifeWorld {
             back: w.back,
             // Standing still, feet together.
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+            pose: life.momentHost.moments.pose(m),
           }));
-          out.push({ kind: m.kind, lng, lat, ahead, flap: 0, people });
+          const agent: VisibleAgent = { kind: m.kind, lng, lat, ahead, flap: 0, people };
+          out.push(agent);
+          owners.set(m, agent);
         } else if (m.kind === 'dog' || m.kind === 'cat') {
           // Standing, sniffing, or lying down, it keeps still.
           const still = m.pause > 0 || life.scenes.still(m);
@@ -3595,6 +3657,9 @@ export class LifeWorld {
             back: 0,
             // Standing still (or sitting), feet together.
             flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+            pose:
+              life.momentHost.moments.pose(g) ??
+              (still && g.momentFacing ? 'attentive' : undefined),
           };
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
@@ -3615,11 +3680,30 @@ export class LifeWorld {
             });
           } else {
             const [lng, lat] = at(g.x, g.y);
-            const ahead = at(g.x + g.hx * perMeter, g.y + g.hy * perMeter);
-            out.push({ kind: 'person', lng, lat, ahead, flap: 0, people: [look] });
+            const { hx, hy } = g.momentFacing ?? g;
+            const ahead = at(g.x + hx * perMeter, g.y + hy * perMeter);
+            const agent: VisibleAgent = {
+              kind: 'person',
+              lng,
+              lat,
+              ahead,
+              flap: 0,
+              people: [look],
+            };
+            out.push(agent);
+            owners.set(g, agent);
           }
         }
       }
+      if (zoom >= 18)
+        for (const ball of life.momentHost.moments.balls()) {
+          const [lng, lat] = tileToLngLat(tile, ball);
+          balls.push({
+            a: ball.a,
+            b: ball.b,
+            agent: { kind: 'person', prop: 'ball', glyph: '•', lng, lat, flap: 0 },
+          });
+        }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
@@ -3689,7 +3773,23 @@ export class LifeWorld {
         }
       }
     }
-    if (out.length <= maxAgents) return [...staged, ...out];
+    const withBalls = (admitted: VisibleAgent[]) => {
+      const kept = new Set(admitted);
+      const weight = (a: VisibleAgent) =>
+        a.vehicle ? 1 + (a.people?.length ?? 0) : Math.max(1, a.people?.length ?? 0);
+      let spare = Math.max(0, maxAgents - admitted.reduce((n, a) => n + weight(a), 0));
+      for (const ball of balls) {
+        if (spare <= 0) break;
+        const a = owners.get(ball.a),
+          b = owners.get(ball.b);
+        if (a && b && kept.has(a) && kept.has(b)) {
+          admitted.push(ball.agent);
+          spare--;
+        }
+      }
+      return admitted;
+    };
+    if (out.length <= maxAgents) return withBalls([...staged, ...out]);
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
     const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
@@ -3714,6 +3814,6 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    return kept;
+    return withBalls(kept);
   }
 }

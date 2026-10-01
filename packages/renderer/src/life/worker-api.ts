@@ -64,6 +64,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.wind,
     step.weather,
     step.cellMeters,
+    gust.cssCell.h / gust.cssCell.w,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();

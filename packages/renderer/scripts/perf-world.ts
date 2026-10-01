@@ -28,6 +28,10 @@ import { openArchive, decodeLifeTiles, realPanStrip, archiveHash } from './archi
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback = '') =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const matchesCase = (name: string) =>
+  arg('case')
+    .split(',')
+    .some((prefix) => name.startsWith(prefix));
 const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
@@ -36,7 +40,7 @@ const allowDiff = pan || process.argv.includes('--allow-diff');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
-const scratch = join(root, 'test-results');
+const scratch = resolve(root, arg('scratch-dir', 'test-results'));
 const samples = Number(arg('samples', '160'));
 const runs = Number(arg('runs', '5'));
 if (![samples, runs].every((n) => Number.isInteger(n) && n > 0))
@@ -296,7 +300,7 @@ try {
     const rows = [];
     for (const kind of SCENARIOS.filter((kind) => kind !== 'sparse')) {
       const name = `${kind}/16/pan`;
-      if (!name.startsWith(arg('case'))) continue;
+      if (!matchesCase(name)) continue;
       const windows = Array.from({ length: 9 }, (_, shift) =>
         scenarioTilesAt(
           kind,
@@ -416,7 +420,7 @@ try {
       for (const count of [1, 4, 16])
         for (const mobile of [false, true]) {
           const name = `${kind}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
-          if (!name.startsWith(arg('case'))) continue;
+          if (!matchesCase(name)) continue;
           const a = makeScenario(kind, count, mobile, 1, before.LifeWorld);
           const b = makeScenario(kind, count, mobile);
           const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
@@ -455,6 +459,8 @@ try {
             let agents = 0,
               maxVisits = 0,
               maxServices = 0;
+            let maxMoments = 0,
+              maxBalls = 0;
             const visitStates = new Set<string>();
             const heapBefore = process.memoryUsage().heapUsed;
             for (let frame = 0; frame < warmup + samples; frame++) {
@@ -483,6 +489,11 @@ try {
               }
               const completed = profiler?.time();
               for (const tile of worldTiles(s.world).values()) {
+                const moments = tile.momentHost?.moments;
+                if (moments) {
+                  maxMoments = Math.max(maxMoments, moments.size);
+                  maxBalls = Math.max(maxBalls, moments.balls().length);
+                }
                 maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
                 maxServices = Math.max(maxServices, tile.scenes.services.size);
                 for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
@@ -506,6 +517,11 @@ try {
               agents,
               maxVisits,
               maxServices,
+              maxMoments,
+              maxBalls,
+              momentStarts: [...worldTiles(s.world).values()].map(
+                (t) => t.momentHost?.moments.stats.started,
+              ),
               visitStates: [...visitStates],
               simulated: [...worldTiles(s.world).values()].reduce(
                 (n, t) => n + t.movers.length + t.gatherers.length,

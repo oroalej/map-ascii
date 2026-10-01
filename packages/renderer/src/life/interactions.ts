@@ -84,6 +84,7 @@ export class LocalScenes {
     seed: number,
     stalls: readonly Stall[],
     private readonly idleGuard?: (mover: Mover) => boolean,
+    private readonly busy?: (mover: Mover) => boolean,
   ) {
     this.graph = new WalkingGraph(geo, perMeter);
     this.rng = random(seed ^ 0xb5297a4d);
@@ -191,7 +192,8 @@ export class LocalScenes {
   /** Explicit entry point also used by deterministic scene tests. */
   reserve(m: Mover, index: number): boolean {
     const site = this.sites[index];
-    if (!site || this.visits.has(m) || (isWalker(m.kind) && !this.canIdle(m))) return false;
+    if (!site || this.visits.has(m) || this.busy?.(m) || (isWalker(m.kind) && !this.canIdle(m)))
+      return false;
     const size = m.group?.length ?? 1;
     const occupied = new Set(
       site.queue.flatMap((p) => {
