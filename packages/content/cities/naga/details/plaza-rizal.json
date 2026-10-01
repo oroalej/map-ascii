@@ -4010,6 +4010,58 @@
       "height_m": 0.15,
       "material": "paving",
       "overhead": false
+    },
+    {
+      "id": "rizal-back-step-1",
+      "ring": [
+        [123.18475691, 13.62328813],
+        [123.18476308, 13.62328624],
+        [123.18481867, 13.62345758],
+        [123.1848125, 13.62345947],
+        [123.18475691, 13.62328813]
+      ],
+      "height_m": 0.6,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-back-step-2",
+      "ring": [
+        [123.18475074, 13.62329002],
+        [123.18475691, 13.62328813],
+        [123.1848125, 13.62345947],
+        [123.18480633, 13.62346136],
+        [123.18475074, 13.62329002]
+      ],
+      "height_m": 0.45,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-back-step-3",
+      "ring": [
+        [123.18474457, 13.62329191],
+        [123.18475074, 13.62329002],
+        [123.18480633, 13.62346136],
+        [123.18480016, 13.62346325],
+        [123.18474457, 13.62329191]
+      ],
+      "height_m": 0.3,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-back-step-4",
+      "ring": [
+        [123.1847384, 13.6232938],
+        [123.18474457, 13.62329191],
+        [123.18480016, 13.62346325],
+        [123.18479399, 13.62346514],
+        [123.1847384, 13.6232938]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
     }
   ],
   "status": "draft",
@@ -4036,7 +4088,7 @@
     },
     {
       "title": "Project owner: raised forecourt, 1 October 2026",
-      "note": "Owner-requested raised monument/flagpole forecourt with four broad front steps. Heights (0.6 m terrace, 0.15 m rises), tread widths and footprints are illustrative estimates fitted to OSM and corroborated by the credited independent photographs; no construction date is inferred."
+      "note": "Owner-requested raised monument/flagpole forecourt with four broad front steps and matching back steps. Heights (0.6 m terrace, 0.15 m rises), tread widths and footprints are illustrative estimates fitted to OSM; the back steps follow the owner's requested layout and match the front stair profile. No construction date is inferred."
     }
   ]
 }
