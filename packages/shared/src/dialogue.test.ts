@@ -23,6 +23,22 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
+  it('keeps role and scene metadata in text-free choices and rejects mismatched contracts', () => {
+    const entry = { ...catalog.exchanges[0], profile: 'greeting', speakers: [0, 1] };
+    const valid = schema.parse({ ...catalog, exchanges: [entry] });
+    expect(dialogueChoices(valid)[0]).toMatchObject({ profile: 'greeting', speakers: [0, 1] });
+    for (const change of [
+      { speakers: [0, 0] },
+      { speakers: [0, 2] },
+      { speakers: undefined },
+      { profile: 'vendor-order' },
+      { conditions: { event: 'catch' } },
+      { conditions: { audience: 'adult-child' } },
+    ])
+      expect(schema.safeParse({ ...catalog, exchanges: [{ ...entry, ...change }] }).success).toBe(
+        false,
+      );
+  });
   it('supports ordered city-local greeting boundaries and rejects malformed schedules', () => {
     const periods = { morningStart: 360, afternoonStart: 780, eveningStart: 1140 };
     expect(schema.parse({ ...catalog, periods }).periods).toEqual(periods);

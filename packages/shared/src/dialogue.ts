@@ -2,6 +2,43 @@ import { z } from 'zod';
 import { LanguageCode, localizedText, Source } from './schemas';
 
 export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look']);
+export const DialogueProfile = z.enum([
+  'greeting',
+  'reunion',
+  'farewell',
+  'directions',
+  'courtesy',
+  'weather',
+  'food',
+  'school',
+  'daily-plans',
+  'vendor-order',
+  'vendor-thanks',
+  'transit',
+  'companion',
+  'play',
+  'place-reaction',
+]);
+export type DialogueProfile = z.infer<typeof DialogueProfile>;
+export const DialogueAnchor = z.enum(['monument', 'fountain', 'plaza', 'stall', 'stop', 'seat']);
+export type DialogueAnchor = z.infer<typeof DialogueAnchor>;
+export const DialogueConditions = z
+  .object({
+    anchor: DialogueAnchor.optional(),
+    weather: z
+      .enum(['daylight', 'calm', 'breeze', 'gust', 'rain', 'heavy-rain', 'easing', 'evening-calm'])
+      .optional(),
+    audience: z.enum(['adults', 'adult-child']).optional(),
+    event: z.enum(['arrival', 'catch', 'pass']).optional(),
+  })
+  .strict();
+export type DialogueConditions = z.infer<typeof DialogueConditions>;
+const metadata = {
+  profile: DialogueProfile.optional(),
+  conditions: DialogueConditions.optional(),
+  /** Ordered participant slots: caller/customer is 0; respondent/vendor is 1. */
+  speakers: z.array(z.number().int().min(0).max(2)).min(1).max(3).optional(),
+};
 export const GreetingPeriod = z.enum(['morning', 'afternoon', 'evening']);
 export const GreetingPeriods = z
   .object({
@@ -29,6 +66,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
             .object({
               id: z.string().regex(/^[a-z0-9-]+$/),
               kind: DialogueKind,
+              ...metadata,
               period: GreetingPeriod.optional(),
               lines: z
                 .array(
@@ -71,6 +109,52 @@ export function dialogueCatalog(languages?: readonly string[]) {
           });
         ids.add(exchange.id);
         const count = exchange.lines.length;
+        if (exchange.profile && (!exchange.speakers || exchange.speakers.length !== count))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i, 'speakers'],
+            message: 'profiled exchanges require one speaker per turn',
+          });
+        if (
+          exchange.speakers &&
+          (exchange.speakers.length !== count ||
+            exchange.speakers.some(
+              (speaker) => speaker >= Math.min(count, exchange.kind === 'look' ? 1 : 3),
+            ) ||
+            (count > 1 && new Set(exchange.speakers).size < 2))
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i, 'speakers'],
+            message: 'invalid participant roles',
+          });
+        const profile = exchange.profile;
+        if (
+          profile &&
+          ((profile === 'greeting' && exchange.kind !== 'greet') ||
+            (profile === 'play' && exchange.kind !== 'ball') ||
+            (profile === 'place-reaction' && !['look', 'talk'].includes(exchange.kind)) ||
+            (!['greeting', 'play', 'place-reaction'].includes(profile) && exchange.kind !== 'talk'))
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i, 'kind'],
+            message: 'profile and mechanism disagree',
+          });
+        if (
+          (profile === 'directions' && !exchange.conditions?.anchor) ||
+          (profile === 'weather' && !exchange.conditions?.weather) ||
+          (exchange.conditions?.event === 'arrival' && profile !== 'transit') ||
+          ((exchange.conditions?.event === 'catch' || exchange.conditions?.event === 'pass') &&
+            profile !== 'play') ||
+          (exchange.conditions?.audience === 'adult-child' && profile !== 'companion') ||
+          (profile?.startsWith('vendor-') && count !== 2)
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i, 'conditions'],
+            message: 'unsupported scene conditions',
+          });
         if (
           ((exchange.kind === 'greet' || exchange.kind === 'ball') && count !== 2) ||
           (exchange.kind === 'talk' && count < 2) ||
@@ -106,6 +190,7 @@ export type DialogueCatalog = z.infer<typeof DialogueCatalog>;
 export const DialogueChoice = z.object({
   id: z.string(),
   kind: DialogueKind,
+  ...metadata,
   period: GreetingPeriod.optional(),
   turns: z.number().int().min(1).max(3),
 });

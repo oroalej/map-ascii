@@ -36,7 +36,87 @@
           "url": "https://www.omniglot.com/language/phrases/bikol.htm",
           "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
         }
-      ]
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "greet-morning-well",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Marhay na aga! Kumusta ka?",
+          "en": "Good morning! How are you?",
+          "fil": "Magandang umaga! Kumusta ka?"
+        },
+        {
+          "bcl": "Marhay man, salamat.",
+          "en": "I'm fine, thank you.",
+          "fil": "Mabuti naman, salamat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "morning"
+    },
+    {
+      "id": "greet-morning-early",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Aga mo ngunyan!",
+          "en": "You're early today!",
+          "fil": "Maaga ka ngayon!"
+        },
+        {
+          "bcl": "Naglalakaw sana ako.",
+          "en": "I'm just taking a walk.",
+          "fil": "Naglalakad lang ako."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "morning"
+    },
+    {
+      "id": "greet-morning-day",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Marhay na aldaw saimo!",
+          "en": "Have a good day!",
+          "fil": "Magandang araw sa iyo!"
+        },
+        {
+          "bcl": "Sa imo man!",
+          "en": "You too!",
+          "fil": "Sa iyo rin!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "morning"
     },
     {
       "id": "greet-afternoon",
@@ -60,7 +140,87 @@
           "url": "https://www.omniglot.com/language/phrases/bikol.htm",
           "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
         }
-      ]
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "greet-afternoon-well",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Marhay na hapon! Kumusta?",
+          "en": "Good afternoon! How are things?",
+          "fil": "Magandang hapon! Kumusta?"
+        },
+        {
+          "bcl": "Marhay man an gabos.",
+          "en": "Everything is fine.",
+          "fil": "Mabuti naman ang lahat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "afternoon"
+    },
+    {
+      "id": "greet-afternoon-walk",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Naglalakaw ka?",
+          "en": "Out for a walk?",
+          "fil": "Namamasyal ka ba?"
+        },
+        {
+          "bcl": "Iyo, kadikit sana.",
+          "en": "Yes, just a little.",
+          "fil": "Oo, sandali lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "afternoon"
+    },
+    {
+      "id": "greet-afternoon-see",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Marhay na nahiling taka ngunyan.",
+          "en": "It's nice seeing you today.",
+          "fil": "Mabuting nakita kita ngayon."
+        },
+        {
+          "bcl": "Iyo, marhay man.",
+          "en": "Yes, it's nice.",
+          "fil": "Oo, mabuti nga."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "afternoon"
     },
     {
       "id": "greet-evening",
@@ -84,30 +244,87 @@
           "url": "https://www.omniglot.com/language/phrases/bikol.htm",
           "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
         }
-      ]
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1]
     },
     {
-      "id": "talk-how-are-you",
-      "kind": "talk",
+      "id": "greet-evening-well",
+      "kind": "greet",
       "lines": [
         {
-          "bcl": "Kumusta ka?",
-          "en": "How are you?",
-          "fil": "Kumusta ka?"
+          "bcl": "Marhay na banggi! Kumusta an aldaw mo?",
+          "en": "Good evening! How was your day?",
+          "fil": "Magandang gabi! Kumusta ang araw mo?"
         },
         {
-          "bcl": "Marhay man, salamat.",
-          "en": "I'm fine, thank you.",
-          "fil": "Mabuti naman, salamat."
+          "bcl": "Marhay man.",
+          "en": "It went well.",
+          "fil": "Mabuti naman."
         }
       ],
       "sources": [
         {
-          "title": "Bikol phrasebook — Naga/Legazpi variety",
-          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
-          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
         }
-      ]
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "evening"
+    },
+    {
+      "id": "greet-evening-walk",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Naglalakaw ka ngunyang banggi?",
+          "en": "Taking an evening walk?",
+          "fil": "Namamasyal ka ngayong gabi?"
+        },
+        {
+          "bcl": "Iyo, bago magpuli.",
+          "en": "Yes, before going home.",
+          "fil": "Oo, bago umuwi."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "evening"
+    },
+    {
+      "id": "greet-evening-rest",
+      "kind": "greet",
+      "lines": [
+        {
+          "bcl": "Magpahingalo ka na.",
+          "en": "Get some rest now.",
+          "fil": "Magpahinga ka na."
+        },
+        {
+          "bcl": "Iyo, ika man.",
+          "en": "Yes, you too.",
+          "fil": "Oo, ikaw rin."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "greeting",
+      "speakers": [0, 1],
+      "period": "evening"
     },
     {
       "id": "talk-meet-again",
@@ -140,30 +357,557 @@
           "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
           "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
         }
-      ]
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1, 0]
     },
     {
-      "id": "talk-visit",
+      "id": "talk-how-are-you",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Pirmi kang yaon digdi?",
-          "en": "Do you come here often?",
-          "fil": "Madalas ka bang pumunta rito?"
+          "bcl": "Kumusta ka?",
+          "en": "How are you?",
+          "fil": "Kumusta ka?"
         },
         {
-          "bcl": "Iyo.",
-          "en": "Yes.",
-          "fil": "Oo."
+          "bcl": "Marhay man, salamat.",
+          "en": "I'm fine, thank you.",
+          "fil": "Mabuti naman, salamat."
         }
       ],
       "sources": [
         {
-          "title": "Bikol everyday phrases — Omniglot",
-          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
-          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+          "title": "Bikol phrasebook — Naga/Legazpi variety",
+          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
+          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
         }
-      ]
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "reunion-surprise",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ay, yaon ka palan digdi!",
+          "en": "Oh, you're here!",
+          "fil": "Ay, nandito ka pala!"
+        },
+        {
+          "bcl": "Iyo! Kumusta ka?",
+          "en": "Yes! How are you?",
+          "fil": "Oo! Kumusta ka?"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "reunion-wave",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hoy, kumusta ka duman?",
+          "en": "Hello over there! How are you?",
+          "fil": "Kumusta ka diyan?"
+        },
+        {
+          "bcl": "Marhay man! Madya digdi.",
+          "en": "I'm fine! Come over here.",
+          "fil": "Mabuti naman! Halika rito."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "reunion-walk",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mag-ulay kita nin kadikit?",
+          "en": "Shall we talk for a bit?",
+          "fil": "Mag-usap tayo sandali?"
+        },
+        {
+          "bcl": "Iyo, sige.",
+          "en": "Yes, sure.",
+          "fil": "Oo, sige."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "reunion-glad",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Maugma akong nahiling taka.",
+          "en": "I'm glad I saw you.",
+          "fil": "Masaya akong nakita kita."
+        },
+        {
+          "bcl": "Ako man, maugma.",
+          "en": "I'm glad too.",
+          "fil": "Ako rin, masaya."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "reunion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-going",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mauna na ako.",
+          "en": "I'll get going.",
+          "fil": "Mauuna na ako."
+        },
+        {
+          "bcl": "Mag-ingat ka.",
+          "en": "Take care.",
+          "fil": "Mag-ingat ka."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-again",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mahiling kita giraray.",
+          "en": "See you again.",
+          "fil": "Magkikita tayo ulit."
+        },
+        {
+          "bcl": "Hasta sa sunod!",
+          "en": "Until next time!",
+          "fil": "Hanggang sa susunod!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-home",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mapuli na ako.",
+          "en": "I'm going home.",
+          "fil": "Uuwi na ako."
+        },
+        {
+          "bcl": "Mag-ingat sa pagpuli.",
+          "en": "Get home safely.",
+          "fil": "Mag-ingat sa pag-uwi."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-later",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mag-ulay kita giraray sa sunod.",
+          "en": "Let's talk again next time.",
+          "fil": "Mag-usap tayo ulit sa susunod."
+        },
+        {
+          "bcl": "Iyo, hasta sa sunod.",
+          "en": "Yes, until next time.",
+          "fil": "Oo, hanggang sa susunod."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-thanks",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Salamat sa pag-ulay.",
+          "en": "Thanks for the chat.",
+          "fil": "Salamat sa pag-uusap."
+        },
+        {
+          "bcl": "Maugma akong nahiling taka.",
+          "en": "I'm glad I saw you.",
+          "fil": "Masaya akong nakita kita."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "farewell-wave",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Paaram muna!",
+          "en": "Goodbye for now!",
+          "fil": "Paalam muna!"
+        },
+        {
+          "bcl": "Sige, mag-ingat!",
+          "en": "All right, take care!",
+          "fil": "Sige, mag-ingat!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "farewell",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "directions-monument",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Iyan an monumento?",
+          "en": "Is that the monument?",
+          "fil": "Iyan ba ang monumento?"
+        },
+        {
+          "bcl": "Iyo, iyan mismo.",
+          "en": "Yes, that one.",
+          "fil": "Oo, iyan mismo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "monument"
+      }
+    },
+    {
+      "id": "directions-fountain",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hain an fountain?",
+          "en": "Where is the fountain?",
+          "fil": "Nasaan ang fountain?"
+        },
+        {
+          "bcl": "Yaon duman.",
+          "en": "It's over there.",
+          "fil": "Nandoon."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "fountain"
+      }
+    },
+    {
+      "id": "directions-stall",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Iyan an tindahan nin kakanon?",
+          "en": "Is that the food stall?",
+          "fil": "Iyan ba ang puwesto ng pagkain?"
+        },
+        {
+          "bcl": "Iyo, iyan an tindahan.",
+          "en": "Yes, that's the stall.",
+          "fil": "Oo, iyan ang puwesto."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "stall"
+      }
+    },
+    {
+      "id": "directions-stop",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hain mahulat nin sasakyan?",
+          "en": "Where can we wait for a ride?",
+          "fil": "Saan maghihintay ng masasakyan?"
+        },
+        {
+          "bcl": "Duman sa hulatan.",
+          "en": "Over there at the stop.",
+          "fil": "Doon sa hintayan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "stop"
+      }
+    },
+    {
+      "id": "directions-seat",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Igwa nin matutukawan digdi?",
+          "en": "Is there somewhere to sit here?",
+          "fil": "May mauupuan ba rito?"
+        },
+        {
+          "bcl": "Igwa, duman.",
+          "en": "Yes, over there.",
+          "fil": "Mayroon, doon."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "seat"
+      }
+    },
+    {
+      "id": "directions-plaza",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ini an plaza?",
+          "en": "Is this the plaza?",
+          "fil": "Ito ba ang plaza?"
+        },
+        {
+          "bcl": "Iyo, ini an plaza.",
+          "en": "Yes, this is the plaza.",
+          "fil": "Oo, ito ang plaza."
+        },
+        {
+          "bcl": "Salamat saimo.",
+          "en": "Thank you.",
+          "fil": "Salamat sa iyo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "directions",
+      "speakers": [0, 1, 0],
+      "conditions": {
+        "anchor": "plaza"
+      }
+    },
+    {
+      "id": "courtesy-after-you",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ika na muna.",
+          "en": "You first.",
+          "fil": "Ikaw muna."
+        },
+        {
+          "bcl": "Salamat!",
+          "en": "Thank you!",
+          "fil": "Salamat!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "courtesy-excuse",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Tabi po.",
+          "en": "Excuse me.",
+          "fil": "Makikiraan po."
+        },
+        {
+          "bcl": "Sige po.",
+          "en": "Of course.",
+          "fil": "Sige po."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "courtesy-pass",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Puwede akong mag-agi?",
+          "en": "May I pass?",
+          "fil": "Maaari ba akong dumaan?"
+        },
+        {
+          "bcl": "Iyo, dagos sana.",
+          "en": "Yes, go ahead.",
+          "fil": "Oo, tuloy lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "courtesy-wait",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mahulat ako digdi.",
+          "en": "I'll wait here.",
+          "fil": "Maghihintay ako rito."
+        },
+        {
+          "bcl": "Salamat sa paghulat.",
+          "en": "Thanks for waiting.",
+          "fil": "Salamat sa paghihintay."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
     },
     {
       "id": "talk-thanks",
@@ -186,7 +930,1444 @@
           "url": "https://www.omniglot.com/language/phrases/bikol.htm",
           "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
         }
-      ]
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "courtesy-sorry",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Pasensya na.",
+          "en": "I'm sorry.",
+          "fil": "Pasensya na."
+        },
+        {
+          "bcl": "Daing kaso.",
+          "en": "It's all right.",
+          "fil": "Walang problema."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "courtesy",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "weather-warm",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Maliwanag digdi.",
+          "en": "It's bright here.",
+          "fil": "Maliwanag dito."
+        },
+        {
+          "bcl": "Iyo, maliwanag an aldaw.",
+          "en": "Yes, the day is bright.",
+          "fil": "Oo, maliwanag ang araw."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "daylight"
+      }
+    },
+    {
+      "id": "weather-breeze",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Marhay an duros ngunyan.",
+          "en": "The breeze feels nice.",
+          "fil": "Masarap ang simoy ngayon."
+        },
+        {
+          "bcl": "Iyo, presko.",
+          "en": "Yes, it's refreshing.",
+          "fil": "Oo, presko."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "breeze"
+      }
+    },
+    {
+      "id": "weather-windy",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Makusog an duros!",
+          "en": "The wind is strong!",
+          "fil": "Malakas ang hangin!"
+        },
+        {
+          "bcl": "Kaputan an mga dara mo.",
+          "en": "Hold on to your things.",
+          "fil": "Hawakan ang mga dala mo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "gust"
+      }
+    },
+    {
+      "id": "weather-calm",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Kalmado digdi.",
+          "en": "It's calm here.",
+          "fil": "Kalmado rito."
+        },
+        {
+          "bcl": "Marhay magpahingalo.",
+          "en": "It's nice to rest.",
+          "fil": "Masarap magpahinga."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "calm"
+      }
+    },
+    {
+      "id": "weather-rain-wait",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hulaton ta muna an uran.",
+          "en": "Let's wait out the rain.",
+          "fil": "Hintayin muna natin ang ulan."
+        },
+        {
+          "bcl": "Iyo, digdi muna kita.",
+          "en": "Yes, let's stay here.",
+          "fil": "Oo, dito muna tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "rain"
+      }
+    },
+    {
+      "id": "weather-rain-listen",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Dangoga an uran.",
+          "en": "Listen to the rain.",
+          "fil": "Pakinggan ang ulan."
+        },
+        {
+          "bcl": "Makusog an uran!",
+          "en": "It's raining hard!",
+          "fil": "Malakas ang ulan!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "heavy-rain"
+      }
+    },
+    {
+      "id": "weather-rain-easing",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Naghihina na an uran.",
+          "en": "The rain is easing.",
+          "fil": "Humihina na ang ulan."
+        },
+        {
+          "bcl": "Hulat kita nin kadikit pa.",
+          "en": "Let's wait a little longer.",
+          "fil": "Maghintay pa tayo sandali."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "easing"
+      }
+    },
+    {
+      "id": "weather-evening",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Matuninong an banggi.",
+          "en": "The evening is quiet.",
+          "fil": "Tahimik ang gabi."
+        },
+        {
+          "bcl": "Magpahingalo kita nin kadikit.",
+          "en": "Let's rest for a bit.",
+          "fil": "Magpahinga tayo sandali."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "evening-calm"
+      }
+    },
+    {
+      "id": "food-hungry",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Nagugutom ka na?",
+          "en": "Are you hungry already?",
+          "fil": "Gutom ka na ba?"
+        },
+        {
+          "bcl": "Kadikit pa sana.",
+          "en": "Just a little.",
+          "fil": "Kaunti pa lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "food-snack",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magmerienda kita?",
+          "en": "Shall we have a snack?",
+          "fil": "Magmeryenda tayo?"
+        },
+        {
+          "bcl": "Iyo, marhay iyan.",
+          "en": "Yes, that's a good idea.",
+          "fil": "Oo, magandang ideya iyan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "food-ate",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Nagkakan ka na?",
+          "en": "Have you eaten?",
+          "fil": "Kumain ka na ba?"
+        },
+        {
+          "bcl": "Iyo, salamat.",
+          "en": "Yes, thank you.",
+          "fil": "Oo, salamat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "food-later",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Makakan kita sa urhi?",
+          "en": "Shall we eat later?",
+          "fil": "Kakain tayo mamaya?"
+        },
+        {
+          "bcl": "Tapuson ta muna an paglakaw.",
+          "en": "Let's finish our walk first.",
+          "fil": "Tapusin muna natin ang paglalakad."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "food-smell",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mahamot an kakanon!",
+          "en": "The food smells good!",
+          "fil": "Mabango ang pagkain!"
+        },
+        {
+          "bcl": "Gikan duman sa tindahan.",
+          "en": "It's from that stall.",
+          "fil": "Galing doon sa puwesto."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "stall"
+      }
+    },
+    {
+      "id": "food-choose",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ano an gusto mo?",
+          "en": "What would you like?",
+          "fil": "Ano ang gusto mo?"
+        },
+        {
+          "bcl": "Mahiling muna kita.",
+          "en": "Let's look first.",
+          "fil": "Tumingin muna tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "stall"
+      }
+    },
+    {
+      "id": "food-drink",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Gusto mong mag-inom?",
+          "en": "Would you like a drink?",
+          "fil": "Gusto mong uminom?"
+        },
+        {
+          "bcl": "Iyo, tubig sana.",
+          "en": "Yes, just water.",
+          "fil": "Oo, tubig lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "food-meet",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magmerienda kita digdi sa sunod?",
+          "en": "Shall we have a snack here next time?",
+          "fil": "Magmeryenda tayo rito sa susunod?"
+        },
+        {
+          "bcl": "Sige, digdi kita.",
+          "en": "All right, let us meet here.",
+          "fil": "Sige, dito tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "food",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "stall"
+      }
+    },
+    {
+      "id": "school-study",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mag-adal kita nin magkaiba?",
+          "en": "Shall we study together?",
+          "fil": "Mag-aral tayo nang magkasama?"
+        },
+        {
+          "bcl": "Iyo, mag-adal kita.",
+          "en": "Yes, let's study.",
+          "fil": "Oo, mag-aral tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "school-understand",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Nasabutan mo?",
+          "en": "Did you understand?",
+          "fil": "Naunawaan mo ba?"
+        },
+        {
+          "bcl": "Pakiulit daw.",
+          "en": "Please say it again.",
+          "fil": "Pakiulit nga."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "school-help",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Kaipuhan mo nin tabang?",
+          "en": "Do you need help?",
+          "fil": "Kailangan mo ba ng tulong?"
+        },
+        {
+          "bcl": "Iyo, salamat na marhay.",
+          "en": "Yes, thank you very much.",
+          "fil": "Oo, maraming salamat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "school-book",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ano an binabasa mo?",
+          "en": "What are you reading?",
+          "fil": "Ano ang binabasa mo?"
+        },
+        {
+          "bcl": "Sarong istorya.",
+          "en": "A story.",
+          "fil": "Isang kuwento."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "school-practice",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magpraktis kita giraray.",
+          "en": "Let's practice again.",
+          "fil": "Magpraktis tayo ulit."
+        },
+        {
+          "bcl": "Andam na ako.",
+          "en": "I'm ready.",
+          "fil": "Handa na ako."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "school-break",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magpahingalo kita muna?",
+          "en": "Shall we take a break?",
+          "fil": "Magpahinga muna tayo?"
+        },
+        {
+          "bcl": "Kadikit na sana.",
+          "en": "Just a little longer.",
+          "fil": "Sandali na lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "school",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "plans-busy",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Sibot-sibot ka ngunyan?",
+          "en": "Are you busy today?",
+          "fil": "Abala ka ngayon?"
+        },
+        {
+          "bcl": "Iyo, kadikit.",
+          "en": "Yes, a little.",
+          "fil": "Oo, kaunti."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "plans-rest",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Nagpapahingalo ka?",
+          "en": "Taking a break?",
+          "fil": "Nagpapahinga ka ba?"
+        },
+        {
+          "bcl": "Iyo, kadikit sana na oras.",
+          "en": "Yes, just for a little while.",
+          "fil": "Oo, sandali lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "plans-errand",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Igwa ka pang gigibohon?",
+          "en": "Do you still have things to do?",
+          "fil": "May gagawin ka pa ba?"
+        },
+        {
+          "bcl": "Saro pa.",
+          "en": "One more.",
+          "fil": "Isa pa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "plans-weekend",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ano an gigibohon ta sa Sabado?",
+          "en": "What shall we do on Saturday?",
+          "fil": "Ano ang gagawin natin sa Sabado?"
+        },
+        {
+          "bcl": "Maglakaw-lakaw kita.",
+          "en": "Let's go for a walk.",
+          "fil": "Mamasyal tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "plans-done",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Tapos ka na ngunyan?",
+          "en": "Are you finished for today?",
+          "fil": "Tapos ka na ngayon?"
+        },
+        {
+          "bcl": "Harani na.",
+          "en": "Almost.",
+          "fil": "Malapit na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "plans-tomorrow",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mahiling kita sa aga?",
+          "en": "Shall we meet tomorrow?",
+          "fil": "Magkita tayo bukas?"
+        },
+        {
+          "bcl": "Mag-ulay kita sa urhi.",
+          "en": "Let's talk about it later.",
+          "fil": "Pag-usapan natin mamaya."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "daily-plans",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adults"
+      }
+    },
+    {
+      "id": "vendor-ask-price",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Gurano ini?",
+          "en": "How much is this?",
+          "fil": "Magkano ito?"
+        },
+        {
+          "bcl": "Hihilingon ko muna.",
+          "en": "I'll check first.",
+          "fil": "Titingnan ko muna."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-order-one",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Saro tabi.",
+          "en": "One, please.",
+          "fil": "Isa po."
+        },
+        {
+          "bcl": "Sige, saro.",
+          "en": "All right, one.",
+          "fil": "Sige, isa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-order-two",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Duwa tabi.",
+          "en": "Two, please.",
+          "fil": "Dalawa po."
+        },
+        {
+          "bcl": "Sige, duwa.",
+          "en": "All right, two.",
+          "fil": "Sige, dalawa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-available",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Igwa pa kaini?",
+          "en": "Is this still available?",
+          "fil": "Mayroon pa ba nito?"
+        },
+        {
+          "bcl": "Iyo, igwa pa.",
+          "en": "Yes, there is.",
+          "fil": "Oo, mayroon pa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-look",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Puwedeng maghiling?",
+          "en": "May I have a look?",
+          "fil": "Puwedeng tumingin?"
+        },
+        {
+          "bcl": "Iyo, hiling sana.",
+          "en": "Yes, go ahead and look.",
+          "fil": "Oo, tingin lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-choose",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Ini tabi.",
+          "en": "This one, please.",
+          "fil": "Ito po."
+        },
+        {
+          "bcl": "O, ini na.",
+          "en": "Here it is.",
+          "fil": "O, heto na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-ready",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Andam na?",
+          "en": "Is it ready?",
+          "fil": "Handa na ba?"
+        },
+        {
+          "bcl": "Iyo, ini na.",
+          "en": "Yes, here it is.",
+          "fil": "Oo, heto na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-wait",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hulat tabi.",
+          "en": "One moment, please.",
+          "fil": "Sandali po."
+        },
+        {
+          "bcl": "Sige, daing kaso.",
+          "en": "Sure, no problem.",
+          "fil": "Sige, walang problema."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-order",
+      "speakers": [1, 0]
+    },
+    {
+      "id": "vendor-thank-you",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Salamat po.",
+          "en": "Thank you.",
+          "fil": "Salamat po."
+        },
+        {
+          "bcl": "Daing ano man po.",
+          "en": "You're welcome.",
+          "fil": "Walang anuman po."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-thanks",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-come-again",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magbalik ka giraray.",
+          "en": "Come back again.",
+          "fil": "Bumalik ka ulit."
+        },
+        {
+          "bcl": "Iyo, salamat po.",
+          "en": "Yes, thank you.",
+          "fil": "Oo, salamat po."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-thanks",
+      "speakers": [1, 0]
+    },
+    {
+      "id": "vendor-all",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Iyan na sana, salamat.",
+          "en": "That's all, thank you.",
+          "fil": "Iyan na lang, salamat."
+        },
+        {
+          "bcl": "Sige po, salamat man.",
+          "en": "All right, thank you too.",
+          "fil": "Sige po, salamat din."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-thanks",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "vendor-goodbye",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mauna na po ako.",
+          "en": "I'll be going now.",
+          "fil": "Mauuna na po ako."
+        },
+        {
+          "bcl": "Sige po, mag-ingat.",
+          "en": "All right, take care.",
+          "fil": "Sige po, mag-ingat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "vendor-thanks",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-waiting",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Naghuhulat ka nin sasakyan?",
+          "en": "Waiting for a ride?",
+          "fil": "Naghihintay ka ng masasakyan?"
+        },
+        {
+          "bcl": "Iyo, naghuhulat pa.",
+          "en": "Yes, still waiting.",
+          "fil": "Oo, naghihintay pa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-wait-here",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Digdi kita mahulat?",
+          "en": "Shall we wait here?",
+          "fil": "Dito tayo maghihintay?"
+        },
+        {
+          "bcl": "Iyo, digdi sa hulatan.",
+          "en": "Yes, here at the stop.",
+          "fil": "Oo, dito sa hintayan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-company",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Puwede akong mahulat digdi?",
+          "en": "May I wait here?",
+          "fil": "Puwede akong maghintay rito?"
+        },
+        {
+          "bcl": "Iyo, puwede.",
+          "en": "Yes, of course.",
+          "fil": "Oo, puwede."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-arriving",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Yaon na an sasakyan!",
+          "en": "Here comes a ride!",
+          "fil": "Nariyan na ang sasakyan!"
+        },
+        {
+          "bcl": "Mag-andam na kita.",
+          "en": "Let's get ready.",
+          "fil": "Maghanda na tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1],
+      "conditions": {
+        "event": "arrival"
+      }
+    },
+    {
+      "id": "transit-our-turn",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Kita na?",
+          "en": "Is it our turn?",
+          "fil": "Tayo na ba?"
+        },
+        {
+          "bcl": "Hulat muna kita.",
+          "en": "Let's wait a moment.",
+          "fil": "Maghintay muna tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-watch",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Sabihon mo pag-abot.",
+          "en": "Tell me when it arrives.",
+          "fil": "Sabihin mo pagdating."
+        },
+        {
+          "bcl": "Iyo, sasabihon ko.",
+          "en": "Yes, I'll tell you.",
+          "fil": "Oo, sasabihin ko."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-destination",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mapuli ka na?",
+          "en": "Are you heading home?",
+          "fil": "Pauwi ka na ba?"
+        },
+        {
+          "bcl": "Iyo, mapuli na.",
+          "en": "Yes, I'm heading home.",
+          "fil": "Oo, pauwi na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "transit-together",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Magkaiba kitang mahulat?",
+          "en": "Shall we wait together?",
+          "fil": "Sabay tayong maghintay?"
+        },
+        {
+          "bcl": "Iyo, magkaiba kita.",
+          "en": "Yes, together.",
+          "fil": "Oo, magkasama tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "transit",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "companion-here",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Yaon ako digdi!",
+          "en": "I'm over here!",
+          "fil": "Nandito ako!"
+        },
+        {
+          "bcl": "Nahihiling taka.",
+          "en": "I can see you.",
+          "fil": "Nakikita kita."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "companion-ready",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Andam ka na?",
+          "en": "Are you ready?",
+          "fil": "Handa ka na ba?"
+        },
+        {
+          "bcl": "Andam na!",
+          "en": "Ready!",
+          "fil": "Handa na!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "companion-look",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Hilinga duman!",
+          "en": "Look over there!",
+          "fil": "Tingnan mo roon!"
+        },
+        {
+          "bcl": "Nahihiling ko na.",
+          "en": "I see it now.",
+          "fil": "Nakikita ko na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1],
+      "conditions": {
+        "anchor": "monument"
+      }
+    },
+    {
+      "id": "companion-rest",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Gusto mong magpahingalo?",
+          "en": "Would you like to rest?",
+          "fil": "Gusto mong magpahinga?"
+        },
+        {
+          "bcl": "Kadikit sana.",
+          "en": "Just for a bit.",
+          "fil": "Sandali lang."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "companion-near",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Digdi ka sana sa harani.",
+          "en": "Stay close by.",
+          "fil": "Dito ka lang sa malapit."
+        },
+        {
+          "bcl": "Iyo, digdi sana ako.",
+          "en": "Yes, I'll stay here.",
+          "fil": "Oo, dito lang ako."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1],
+      "conditions": {
+        "audience": "adult-child"
+      }
+    },
+    {
+      "id": "companion-next",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Madagos na kita?",
+          "en": "Shall we keep going?",
+          "fil": "Tuloy na tayo?"
+        },
+        {
+          "bcl": "Iyo, madya na.",
+          "en": "Yes, let's go.",
+          "fil": "Oo, tara na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "companion",
+      "speakers": [0, 1]
     },
     {
       "id": "ball-here",
@@ -214,7 +2395,9 @@
           "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
           "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
         }
-      ]
+      ],
+      "profile": "play",
+      "speakers": [0, 1]
     },
     {
       "id": "ball-play",
@@ -247,7 +2430,115 @@
           "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
           "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
         }
-      ]
+      ],
+      "profile": "play",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "ball-ready",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Andam na kamo?",
+          "en": "Are you ready?",
+          "fil": "Handa na ba kayo?"
+        },
+        {
+          "bcl": "Digdi mo ipasa!",
+          "en": "Pass it here!",
+          "fil": "Ipasa mo rito!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "play",
+      "speakers": [0, 1]
+    },
+    {
+      "id": "ball-catch",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Salua!",
+          "en": "Catch!",
+          "fil": "Saluhin mo!"
+        },
+        {
+          "bcl": "Nasalo ko!",
+          "en": "Got it!",
+          "fil": "Nasalo ko!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "play",
+      "speakers": [0, 1],
+      "conditions": {
+        "event": "catch"
+      }
+    },
+    {
+      "id": "ball-good",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Marhay na pasa!",
+          "en": "Nice pass!",
+          "fil": "Magandang pasa!"
+        },
+        {
+          "bcl": "Salamat saimo!",
+          "en": "Thank you!",
+          "fil": "Salamat sa iyo!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "play",
+      "speakers": [0, 1],
+      "conditions": {
+        "event": "pass"
+      }
+    },
+    {
+      "id": "ball-again",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Saro pang pasa?",
+          "en": "One more pass?",
+          "fil": "Isa pang pasa?"
+        },
+        {
+          "bcl": "Iyo, saro pa!",
+          "en": "Yes, one more!",
+          "fil": "Oo, isa pa!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "play",
+      "speakers": [0, 1]
     },
     {
       "id": "look-beautiful",
@@ -265,7 +2556,80 @@
           "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
           "note": "Naga/Legazpi grammar, deictics (digdi: here), magayon: beautiful. Play calls are original fictional exchanges using this vocabulary and the mag- actor-focus imperative."
         }
-      ]
+      ],
+      "profile": "place-reaction",
+      "speakers": [0]
+    },
+    {
+      "id": "look-monument",
+      "kind": "look",
+      "lines": [
+        {
+          "bcl": "Hilinga an monumento.",
+          "en": "Look at the monument.",
+          "fil": "Tingnan ang monumento."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "place-reaction",
+      "speakers": [0],
+      "conditions": {
+        "anchor": "monument"
+      }
+    },
+    {
+      "id": "look-fountain",
+      "kind": "look",
+      "lines": [
+        {
+          "bcl": "Magayon an fountain!",
+          "en": "What a lovely fountain!",
+          "fil": "Ang ganda ng fountain!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        }
+      ],
+      "profile": "place-reaction",
+      "speakers": [0],
+      "conditions": {
+        "anchor": "fountain"
+      }
+    },
+    {
+      "id": "talk-visit",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Pirmi kang yaon digdi?",
+          "en": "Do you come here often?",
+          "fil": "Madalas ka bang pumunta rito?"
+        },
+        {
+          "bcl": "Iyo.",
+          "en": "Yes.",
+          "fil": "Oo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ],
+      "profile": "place-reaction",
+      "speakers": [0, 1]
     }
   ]
 }

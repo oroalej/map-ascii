@@ -8,11 +8,14 @@ export const DEFAULT_GREETING_PERIODS: Readonly<GreetingPeriods> = {
 };
 
 export const dialogueChoices = (catalog: DialogueCatalog): DialogueChoice[] =>
-  catalog.exchanges.map(({ id, kind, period, lines }) => ({
+  catalog.exchanges.map(({ id, kind, period, lines, profile, conditions, speakers }) => ({
     id,
     kind,
     period,
     turns: lines.length,
+    ...(profile && { profile }),
+    ...(conditions && { conditions }),
+    ...(speakers && { speakers }),
   }));
 
 export function greetingPeriod(
