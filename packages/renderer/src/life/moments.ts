@@ -398,15 +398,17 @@ export class Moments<Owner extends object = object> {
       else bins.set(k, [a]);
     }
     const visitorReactions = this.dialogue.some((entry) => entry.kind === 'look');
+    const walkers = actors.filter((a) => a.type === 'walker');
+    // Visitors already looking at their monument should not wait behind a tile's walkers
+    // for their first reaction. The shared cursor still visits every candidate afterward.
+    const visitors = visitorReactions
+      ? actors.filter((a) => a.type === 'gatherer' && a.place === 'monument' && a.idle)
+      : [];
     const lists = [
-      actors.filter((a) => a.type === 'walker'),
+      walkers,
       actors.filter((a) => a.type === 'gatherer' && social.has(a.place!)),
       actors.filter((a) => a.type === 'gatherer' && (a.place === 'school' || a.place === 'pitch')),
-      actors.filter(
-        (a) =>
-          a.type === 'walker' ||
-          (visitorReactions && a.type === 'gatherer' && a.place === 'monument' && a.idle),
-      ),
+      [...visitors, ...walkers],
     ];
     const children = new Map<number, number>();
     for (const a of lists[2]!)

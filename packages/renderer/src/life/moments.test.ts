@@ -55,6 +55,20 @@ describe('small human moments', () => {
     f.a.type = 'gatherer';
     return f;
   };
+  it('admits an existing monument visit promptly despite unrelated walkers in the tile', () => {
+    const f = visitor();
+    f.actors.unshift(
+      ...Array.from({ length: 50 }, (_, i): MomentActor => ({
+        ...f.a,
+        owner: {},
+        type: 'walker',
+        x: 100 + i * 20,
+      })),
+    );
+    f.m.step(0.1, f.c);
+    expect(f.m.speech(f.a.owner)?.exchangeId).toBe('monument-reaction');
+    expect(f.m.stats.checks).toBeLessThanOrEqual(MOMENTS.checks);
+  });
   it('lets separated monument visitors react to their own monument without a chance roll', () => {
     const f = visitor();
     f.b.type = 'gatherer';
