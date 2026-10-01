@@ -77,6 +77,7 @@ export const step: Step = {
       `--minimum-zoom=${TILE_ZOOMS.min}`,
       `--maximum-zoom=${TILE_ZOOMS.max}`,
       '--drop-densest-as-needed',
+      '--exclude=highway',
       `--name=${city.name.en}`,
       '--attribution=© OpenStreetMap contributors',
       '{in}',

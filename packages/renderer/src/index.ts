@@ -1,4 +1,12 @@
-import { bandVisibility, CLASS_ZOOM, shopHours, shopOpen, type ShopHours } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  UTILITY_ZOOM,
+  shopHours,
+  shopOpen,
+  type ShopHours,
+} from '@atlas/shared';
+import { sameReferenceMembers } from './cache-inputs';
 import type {
   BBox,
   CameraState,
@@ -931,13 +939,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       .filter((tile) => tile.z >= LIFE_TILE_MIN_ZOOM)
       .map((tile) => tileCache.get(tile))
       .filter((t): t is LoadedTile => !!t);
-    const showUtilities = options.utilities?.derive === true && camera.zoom > 18;
-    if (
-      showUtilities === hadUtilities &&
-      inputs.length === fixtureInputs.length &&
-      inputs.every((t, i) => t === fixtureInputs[i])
-    )
-      return;
+    const showUtilities =
+      options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
+    if (showUtilities === hadUtilities && sameReferenceMembers(inputs, fixtureInputs)) return;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
     fixtures = [];

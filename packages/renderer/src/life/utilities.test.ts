@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { offsetUtility, utilitySpanId, type UtilityPole, type UtilityRecord } from '@atlas/shared';
 import {
   packFixtures,
@@ -12,6 +12,8 @@ import {
   createUtilityFixtureCache,
   utilityFixtures,
   utilityViewportVisibility,
+  createUtilityPackingScratch,
+  packUtilityFixtures,
 } from './utilities';
 import { LampState } from './lights';
 
@@ -99,6 +101,67 @@ describe('utility fixture composition', () => {
     const p = pack(utilityFixtures([span]), 20, { ...grid, visible: () => false });
     expect(p.visibility.utilities).toBe(false);
     expect(utilityViewportVisibility(p.utilityCells, grid.cols, () => true)).toBe(true);
+  });
+  it('reuses merged fixtures across reordering but detects reference replacement and duplicate counts', () => {
+    const cache = createUtilityFixtureCache();
+    const one = [span],
+      two = [{ version: 1, kind: 'pole', pole: a } satisfies UtilityRecord];
+    const first = cache([one, two, one]);
+    expect(cache([one, one, two])).toBe(first);
+    const differentCounts = cache([one, two, two]);
+    expect(differentCounts).not.toBe(first);
+    expect(cache([structuredClone(one), two, two])).not.toBe(differentCounts);
+  });
+  it('reuses and clears utility scratch arrays, including resizing and inactive calls', () => {
+    const scratch = createUtilityPackingScratch();
+    const fixtures = utilityFixtures([span]);
+    const run = (fixtures: ReturnType<typeof utilityFixtures>, g = grid, zoom = 19.5) => {
+      const out = new Uint8Array(g.cols * g.rows * 4);
+      packUtilityFixtures(out, g, fixtures, zoom, glyph, new Map(), scratch);
+      return out;
+    };
+    run(fixtures);
+    const { owners, cables } = scratch;
+    const onlyPole = utilityFixtures([{ version: 1, kind: 'pole', pole: a }]);
+    expect(run(onlyPole)).toEqual(pack(onlyPole, 19.5).texels);
+    expect(scratch.owners).toBe(owners);
+    expect(scratch.cables).toBe(cables);
+    run(fixtures, { ...grid, cols: 120 });
+    expect(scratch.owners).not.toBe(owners);
+    expect(scratch.owners).toHaveLength(120 * grid.rows);
+    const inactive = createUtilityPackingScratch();
+    packUtilityFixtures(
+      new Uint8Array(grid.cols * grid.rows * 4),
+      grid,
+      fixtures,
+      18,
+      glyph,
+      new Map(),
+      inactive,
+    );
+    expect(inactive.owners).toHaveLength(0);
+    expect(inactive.cables).toHaveLength(0);
+  });
+  it('skips shared-base lookup when no utilities are drawable', () => {
+    const support = vi.fn(() => 'matching');
+    const lamp: StreetFixture = {
+      kind: 'streetlight',
+      base: a.at,
+      tip: offsetUtility(a.at, 2, 0),
+      forward: offsetUtility(a.at, 1, 0),
+      right: offsetUtility(a.at, 0, 1),
+      roadCenter: offsetUtility(a.at, 4, 0),
+      state: LampState.working,
+      seed: 1,
+      get supportKey() {
+        return support();
+      },
+    };
+    pack([lamp]);
+    pack([lamp, ...utilityFixtures([span])], 18);
+    expect(support).not.toHaveBeenCalled();
+    pack([lamp, ...utilityFixtures([span])], 18.5);
+    expect(support).toHaveBeenCalled();
   });
   it('is commutative for crossings and cannot overwrite another hardware owner', () => {
     const c = pole('c', 0, -20),

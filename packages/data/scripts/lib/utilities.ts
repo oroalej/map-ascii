@@ -1,6 +1,7 @@
 /** Illustrative utility geometry, finalized before tiling. No runtime topology discovery. */
 import {
   UTILITY,
+  DEFAULT_ROAD_WIDTH_M,
   UtilityRecordSchema,
   utilityRandom,
   utilitySeed,
@@ -175,7 +176,7 @@ export function generateUtilities(
       components.push({
         id: `${f.properties.id}/${index}`,
         road: f.properties.id,
-        width: f.properties.width ?? 6,
+        width: f.properties.width ?? DEFAULT_ROAD_WIDTH_M,
         closed: same(geographic[0]!, geographic.at(-1)!),
         points,
         geographic,

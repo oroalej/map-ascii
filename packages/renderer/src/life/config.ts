@@ -41,7 +41,7 @@ export const MAX_STEP_S = 0.1;
 /** A lane's width, m (the pipeline's, for roads tagged with lanes but no width). */
 export const LANE_WIDTH_M = 3.2;
 /** The width of a road line without one, m. */
-export const DEFAULT_ROAD_WIDTH_M = 6;
+export { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
 /** Vehicles keep at least this far inside the road's edge, m. */
 export const ROAD_MARGIN_M = 0.2;
 

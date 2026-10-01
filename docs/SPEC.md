@@ -188,6 +188,7 @@ Shop areas without a building or another rendered area class receive one interio
 
 **HUD**
 - Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs on screen and what they mean. The legend is built from the theme and lists only the classes the renderer reports in view, so it always matches the map. With the life layer on, "Street vendors" (a cart and the vendor) follows "People". It lists "Streetlights" while they are lit and the roads they line are in view.
+- Static hardware uses the renderer's viewport fixture report: streetlights, traffic signals, and "Utility poles and wires (illustrative)" describe packed marks independently of Life and illumination. The utility entry requires the city's opt-in and nontransparent utility marks inside the viewport.
 - Scale indicator (the "ruler").
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.

@@ -7,6 +7,8 @@ import { PMTiles, type Source } from 'pmtiles';
 import {
   UTILITY,
   UTILITY_EXTENT,
+  UTILITY_MERCATOR_METERS,
+  isLitRoad,
   placeLampSupports,
   lampSupportKey,
   utilityTileMeters,
@@ -74,12 +76,7 @@ export async function utilityLampCatalog(archive: PMTiles): Promise<UtilityLamp[
       for (let i = 0; i < layer.length; i++) {
         const feature = layer.feature(i),
           p = feature.properties;
-        if (
-          p.region === true ||
-          feature.type !== 2 ||
-          !['road_major', 'road_mid'].includes(String(p.class))
-        )
-          continue;
+        if (feature.type !== 2 || !isLitRoad(p.class, p.region)) continue;
         for (const line of feature.loadGeometry())
           lines.push({
             road: String(p.id),
@@ -136,7 +133,17 @@ export async function auditUtilityArchive(
   let tiles = 0;
   const baseHeader = await base.getHeader(),
     header = await output.getHeader();
-  for (const key of ['minZoom', 'maxZoom', 'minLon', 'minLat', 'maxLon', 'maxLat'] as const)
+  for (const key of [
+    'minZoom',
+    'maxZoom',
+    'minLon',
+    'minLat',
+    'maxLon',
+    'maxLat',
+    'centerZoom',
+    'centerLon',
+    'centerLat',
+  ] as const)
     if (header[key] !== baseHeader[key]) throw new Error(`Utility merge changed archive ${key}`);
   for await (const { tile, parsed } of utilityArchiveTiles(base, true)) {
     const data = await output.getZxy(tile.z, tile.x, tile.y);
@@ -199,7 +206,7 @@ export async function buildUtilityTiles(
     const utilityPath = join(buildDir, 'utilities.pmtiles');
     const worstLatitude = Math.max(Math.abs(bounds[1]), Math.abs(bounds[3]));
     const tileMeters =
-      (40_075_016.686 * Math.cos((worstLatitude * Math.PI) / 180)) / 2 ** header.maxZoom;
+      (UTILITY_MERCATOR_METERS * Math.cos((worstLatitude * Math.PI) / 180)) / 2 ** header.maxZoom;
     const buffer = Math.max(5, Math.ceil((UTILITY.buffer / tileMeters) * 256));
     if (records.length) {
       tippecanoe(geojson, utilityPath, [

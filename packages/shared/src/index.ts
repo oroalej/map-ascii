@@ -9,5 +9,12 @@ export * from './roof-plan-schema';
 export * from './search';
 export * from './search-options';
 export * from './zoom';
-export { LAMP_PLACEMENT, placeLampSupports, inLampMedian, type LitLine } from './lamp-placement';
+export {
+  LAMP_PLACEMENT,
+  isLitRoad,
+  placeLampSupports,
+  inLampMedian,
+  type LitLine,
+} from './lamp-placement';
+export * from './tile-space';
 export * from './utilities';

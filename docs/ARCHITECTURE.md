@@ -64,6 +64,7 @@ const atlas = createAtlas(canvas, {
   bounds: meta.regionBounds,
   initialCamera: urlCamera ?? meta.defaultCamera,
   year: 2026,
+  utilities: { derive: cityConfig.streets?.utilities?.derive === true }, // optional; omitted disables
 });
 
 atlas.setCamera(partial, { animate?: boolean, duration?: number });
@@ -77,13 +78,15 @@ atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has
 atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
 atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input'
-  | 'classeschange' | 'labelschange' | 'contextlost' | 'contextrestored', handler);
+  | 'classeschange' | 'labelschange' | 'fixtureschange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 
 `classeschange` sends the classes drawn in at least one on-screen cell (for the legend), and `labelschange` the places, landmarks, and monuments whose names are on screen (`{ featureId, name, kind, lngLat }`, for the "Places in view" list); both fire only on change. `contextlost` and `contextrestored` bracket a lost WebGL context (see §3). `input` fires when the visitor moves the camera (drag, wheel, pinch, or keys; not clicks or hover), which also ends any flight; a tour pauses on it. `hover` and `click` carry `{ featureId, feature, point }` (`click` also `lngLat`), where `feature` is the slim `FeatureInfo` the tile worker recorded: class, name, subdivision (and whether it is approximate), landmark id, kind, and height. The package also exports `legendEntries(theme, zoom, present?)` and `CLASS_LABELS` for the legend.
 
 The web app owns app state (Zustand) and pushes it into the renderer. The renderer emits events back. The renderer never reads the URL or the DOM outside its canvas, and it knows nothing about specific cities. Switching cities destroys the atlas and creates a new one with the other city's tiles and meta.
+
+`AtlasOptions.utilities?: { derive: boolean }` controls static overhead hardware independently of Life. `fixtureschange` reports `{ streetlights: boolean, trafficSignals: boolean, utilities: boolean }` when viewport-packed hardware changes; `utilities` indicates nontransparent packed marks, before the shader's surface mask. `legendEntries` accepts that fixture report, including an omitted `utilities` field for older callers. Utility record version 1 is unchanged: pipeline validation remains strict, while the worker skips malformed or unsupported individual records using a Zod-free shape validator, retaining ordinary tile geometry.
 
 **City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), and `attribution` (extra credits the city's layers need).
 
@@ -182,7 +185,7 @@ Rasterization runs only when the camera, year, or tiles change. While watched, a
 
 **Utility fixtures.** For a city with `streets.utilities.derive`, the data pipeline bakes a complete network before tiling. It preserves the ordinary archive, reads its retained lamp supports using the same pure `shared/lamp-placement.ts` helper as the renderer, and merges a separate max-zoom `utilities` layer. Each versioned JSON record retains string identities and precise geographic endpoints even when its indexing geometry is clipped. The merge audit compares ordinary decoded geometry and feature order, verifies every record survives, and rejects dangling endpoints. The worker validates this layer only at archive max zoom and stores it beside `LifeGeometry`, so utility records never enter simulation snapshots or actor seeds.
 
-The renderer deduplicates buffered copies and builds static fixtures from those explicit endpoints. It memoizes by contributing payload references; no neighboring-tile search or runtime topology reconstruction is needed. Signals, lamps and flags retain priority, then utility poles claim free cells; a shared cap may replace only its exact lamp owner's base. Cables combine directional masks commutatively and clip to the cell grid before rasterization. Fixture paints append concrete and cable to the existing six colors. Cable ink leaves the background and traffic visible around its strokes. `fixtureschange.utilities` describes viewport-packed marks, independently of Life and illumination; the existing shader surface mask can hide those marks under cover.
+The renderer deduplicates buffered copies and builds static fixtures from those explicit endpoints. It memoizes by unordered contributing payload references; no neighboring-tile search or runtime topology reconstruction is needed. Signals, lamps and flags retain priority, then utility poles claim free cells; a shared cap may replace only its exact lamp owner's base. Shared-base lookup runs only for drawable utility fixtures. Cables combine directional masks commutatively and clip to the cell grid before rasterization, reusing per-target owner/cable scratch arrays. Shared zoom bands govern hardware opacity and seeded detail. Fixture paints append concrete and cable to the existing six colors. Cable ink leaves the background and traffic visible around its strokes. `fixtureschange.utilities` describes viewport-packed marks, independently of Life and illumination; viewport visibility is cached until placement or viewport cell bounds change, and the existing shader surface mask can hide those marks under cover.
 
 ## 4. Glyph selection rules
 

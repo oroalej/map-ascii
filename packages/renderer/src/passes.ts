@@ -42,7 +42,11 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
-import { utilityViewportVisibility } from './life/utilities';
+import {
+  createUtilityPackingScratch,
+  utilityViewportVisibility,
+  type UtilityPackingScratch,
+} from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
@@ -533,6 +537,8 @@ const fixturesOf = new WeakMap<
     cellHeight: number;
     lightTexels: Uint8Array;
     lightScores: Float32Array;
+    utilityScratch: UtilityPackingScratch;
+    viewport: ReturnType<typeof screenArea>;
   }
 >();
 
@@ -550,9 +556,12 @@ export function fixturePass(
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
+  const viewport = screenArea(view, placement.grid, view.cellDev);
   if (
     repack ||
     !cache ||
+    cache.packed.cloth.cols !== targets.cols ||
+    cache.packed.cloth.rows !== targets.rows ||
     cache.fixtures !== fixtures ||
     cache.atlas !== resources.map.atlas ||
     cache.zoom !== view.camera.zoom ||
@@ -560,9 +569,12 @@ export function fixturePass(
     cache.cellWidth !== view.cellDev.w ||
     cache.cellHeight !== view.cellDev.h
   ) {
-    const area = screenArea(view, placement.grid, view.cellDev);
+    const area = viewport;
+    const utilityScratch = cache?.utilityScratch ?? createUtilityPackingScratch();
     const packed = packFixtures(
-      cache?.packed.texels ?? new Uint8Array(targets.cols * targets.rows * 4),
+      cache?.packed.texels.length === targets.cols * targets.rows * 4
+        ? cache.packed.texels
+        : new Uint8Array(targets.cols * targets.rows * 4),
       {
         cols: targets.cols,
         rows: targets.rows,
@@ -576,6 +588,7 @@ export function fixturePass(
       (glyph) => resources.map.atlas.index(glyph),
       clock,
       motion,
+      utilityScratch,
     );
     cache = {
       packed,
@@ -585,8 +598,16 @@ export function fixturePass(
       dpr: view.dpr,
       cellWidth: view.cellDev.w,
       cellHeight: view.cellDev.h,
-      lightTexels: cache?.lightTexels ?? new Uint8Array(targets.cols * targets.rows * 4),
-      lightScores: cache?.lightScores ?? new Float32Array(targets.cols * targets.rows),
+      lightTexels:
+        cache?.lightTexels.length === targets.cols * targets.rows * 4
+          ? cache.lightTexels
+          : new Uint8Array(targets.cols * targets.rows * 4),
+      lightScores:
+        cache?.lightScores.length === targets.cols * targets.rows
+          ? cache.lightScores
+          : new Float32Array(targets.cols * targets.rows),
+      utilityScratch,
+      viewport,
     };
     fixturesOf.set(targets, cache);
     changed = true;
@@ -612,13 +633,20 @@ export function fixturePass(
     );
     uploadSignalLights(gl, targets, cache.lightTexels);
   }
-  const viewport = screenArea(view, placement.grid, view.cellDev);
-  cache.packed.visibility.utilities = utilityViewportVisibility(
-    cache.packed.utilityCells,
-    targets.cols,
-    (c, r) =>
-      c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
-  );
+  if (
+    viewport.left !== cache.viewport.left ||
+    viewport.right !== cache.viewport.right ||
+    viewport.top !== cache.viewport.top ||
+    viewport.bottom !== cache.viewport.bottom
+  ) {
+    cache.packed.visibility.utilities = utilityViewportVisibility(
+      cache.packed.utilityCells,
+      targets.cols,
+      (c, r) =>
+        c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
+    );
+    cache.viewport = viewport;
+  }
   return cache.packed.visibility;
 }
 

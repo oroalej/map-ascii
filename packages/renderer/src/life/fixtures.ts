@@ -3,7 +3,9 @@ import {
   packUtilityFixtures,
   utilityViewportVisibility,
   UtilityPart,
+  utilityOpacity,
   type UtilityFixture,
+  type UtilityPackingScratch,
 } from './utilities';
 import { lampSupportKey, bandVisibility } from '@atlas/shared';
 import { MAX_GLYPHS, packGlyph, wallGlyph } from '../glyphs/select';
@@ -313,6 +315,7 @@ export function packFixtures(
   glyphIndex: (glyph: string) => number,
   clock: number,
   motion: FixtureMotion = { time: 0, strength: 0 },
+  utilityScratch?: UtilityPackingScratch,
 ): PackedFixtures {
   out.fill(0);
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
@@ -565,33 +568,37 @@ export function packFixtures(
       packed.signals.push(signal);
     }
   }
-  const sharedBases = new Map<string, number>();
-  for (const [owner, fixture] of ordered.entries()) {
-    if (fixture.kind !== 'streetlight' || !fixture.supportKey) continue;
-    const [x, y] = grid.toCell(...fixture.base);
-    const c = Math.floor(x),
-      r = Math.floor(y),
-      cell = r * grid.cols + c;
-    if (
-      c >= 0 &&
-      c < grid.cols &&
-      r >= 0 &&
-      r < grid.rows &&
-      owners[cell] === owner &&
-      (out[cell * 4 + 1]! & 63) === FixturePart.base
-    )
-      sharedBases.set(fixture.supportKey, cell);
-  }
-  packed.utilityCells = packUtilityFixtures(
-    out,
-    grid,
-    fixtures.filter(
-      (f): f is UtilityFixture => f.kind === 'utility-pole' || f.kind === 'utility-span',
-    ),
-    zoom,
-    glyphIndex,
-    sharedBases,
+  const utilities = fixtures.filter(
+    (f): f is UtilityFixture => f.kind === 'utility-pole' || f.kind === 'utility-span',
   );
+  if (utilities.length && utilityOpacity(zoom) > 0) {
+    const sharedBases = new Map<string, number>();
+    for (const [owner, fixture] of ordered.entries()) {
+      if (fixture.kind !== 'streetlight' || !fixture.supportKey) continue;
+      const [x, y] = grid.toCell(...fixture.base);
+      const c = Math.floor(x),
+        r = Math.floor(y),
+        cell = r * grid.cols + c;
+      if (
+        c >= 0 &&
+        c < grid.cols &&
+        r >= 0 &&
+        r < grid.rows &&
+        owners[cell] === owner &&
+        (out[cell * 4 + 1]! & 63) === FixturePart.base
+      )
+        sharedBases.set(fixture.supportKey, cell);
+    }
+    packed.utilityCells = packUtilityFixtures(
+      out,
+      grid,
+      utilities,
+      zoom,
+      glyphIndex,
+      sharedBases,
+      utilityScratch,
+    );
+  }
   packed.visibility.utilities = utilityViewportVisibility(
     packed.utilityCells,
     grid.cols,

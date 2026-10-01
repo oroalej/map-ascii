@@ -5,6 +5,9 @@ import { LifeWorld } from './life/simulate';
 import { cellPass, fixturePass, glyphPass, lifePass, lightPass, selectPass } from './passes';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
+import { TileCache, type LoadedTile } from './tile-cache';
+import { LifeBuilder } from './life/geometry';
+import type { TileMesh } from './gpu';
 
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
@@ -116,6 +119,64 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', () => {
+    atlas.destroy();
+    const a = { z: 16, x: 32768, y: 32768 },
+      b = { ...a, x: a.x + 1 };
+    const loaded = (id: string): LoadedTile => ({
+      // The mocked cell pass does not inspect mesh buffers.
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: new LifeBuilder().finish(),
+      utilities: [
+        {
+          version: 1,
+          kind: 'pole',
+          pole: {
+            id,
+            road: 'r',
+            component: 'r/0',
+            at: [0.001, -0.001],
+            heading: [1, 0],
+            normal: [0, 1],
+            transformer: false,
+          },
+        },
+      ],
+    });
+    const one = loaded('one');
+    let two = loaded('two');
+    const order = vi.spyOn(TileCache.prototype, 'tilesToDraw').mockReturnValue([a, b]);
+    vi.spyOn(TileCache.prototype, 'get').mockImplementation((tile) => (tile.x === a.x ? one : two));
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 19.5 },
+      year: 2026,
+      utilities: { derive: true },
+      life: { enabled: false, time: 720 },
+    });
+    draw(10);
+    const fixtures = vi.mocked(fixturePass).mock.calls.at(-1)![5];
+    expect(fixtures).toHaveLength(2);
+    order.mockReturnValue([b, a]);
+    atlas.setCamera({ lng: 0.01 });
+    draw(50);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toBe(fixtures);
+    two = loaded('two');
+    atlas.setCamera({ lng: 0.02 });
+    draw(100);
+    const replaced = vi.mocked(fixturePass).mock.calls.at(-1)![5];
+    expect(replaced).not.toBe(fixtures);
+    order.mockReturnValue([a]);
+    atlas.setCamera({ lng: 0.03 });
+    draw(150);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toHaveLength(1);
+    atlas.setCamera({ zoom: 18 });
+    draw(200);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
   });
 
   it('leaves profiling disabled by default and resets enabled profiles on context loss', () => {

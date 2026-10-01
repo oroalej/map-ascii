@@ -6,7 +6,13 @@
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
 import {
-  UtilityRecordSchema,
+  parseUtilityRecord,
+  isLitRoad,
+  TILE_EXTENT as EXTENT,
+  MERCATOR_METERS,
+  metersPerUnit,
+  tileToLngLat,
+  lngLatToTile,
   type UtilityRecord,
   featureZoomBand,
   LIFE_SITE_KINDS,
@@ -62,9 +68,13 @@ const CROWN_SWEEP_FACTOR =
     (1 + WIND_VARIATION.breathe) *
     Math.hypot(SWAY.bend, SWAY.flutter * 0.8);
 
-export const EXTENT = 4096;
-/** The world's width in mercator meters. */
-export const MERCATOR_METERS = 40_075_016.686;
+export {
+  TILE_EXTENT as EXTENT,
+  MERCATOR_METERS,
+  metersPerUnit,
+  tileToLngLat,
+  lngLatToTile,
+} from '@atlas/shared';
 
 /** Layers the renderer doesn't draw yet: event pins arrive with the timeline (Phase 4). */
 export const skippedLayers: ReadonlySet<string> = new Set(['events']);
@@ -643,30 +653,6 @@ export function parkingStalls(
 /** Which tile is being built; the worker passes it for real-world sizes and positions. */
 export type TileAddress = { z: number; x: number; y: number };
 
-/** [lng, lat] of a tile-local point (tile units, 0–EXTENT, y down). */
-export function tileToLngLat({ z, x, y }: TileAddress, p: TilePoint): [number, number] {
-  const n = 2 ** z;
-  const wx = (x + p.x / EXTENT) / n;
-  const wy = (y + p.y / EXTENT) / n;
-  const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * wy))) * 180) / Math.PI;
-  return [wx * 360 - 180, lat];
-}
-
-/** A place's position in a tile's units (the inverse of `tileToLngLat`). */
-export function lngLatToTile({ z, x, y }: TileAddress, lng: number, lat: number): TilePoint {
-  const n = 2 ** z;
-  const phi = (lat * Math.PI) / 180;
-  const wy = (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2;
-  return { x: (((lng + 180) / 360) * n - x) * EXTENT, y: (wy * n - y) * EXTENT };
-}
-
-/** Meters per tile unit (EXTENT per tile) at the tile's center latitude. */
-export function metersPerUnit({ z, y }: TileAddress): number {
-  const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
-  const lat = Math.atan(Math.sinh(n));
-  return (MERCATOR_METERS * Math.cos(lat)) / 2 ** z / EXTENT;
-}
-
 /**
  * Add a road segment as a strip `2 × half` units wide, extended by `half` past each end so
  * consecutive segments overlap into square joins.
@@ -781,8 +767,8 @@ export function buildTileGeometry(
     if (name === 'utilities') {
       if (tile && tile.z === maxZoom)
         for (let i = 0; i < layer.length; i++) {
-          const value = layer.feature(i).properties.utility;
-          utilities.push(UtilityRecordSchema.parse(JSON.parse(String(value))));
+          const record = parseUtilityRecord(layer.feature(i).properties.utility);
+          if (record) utilities.push(record);
         }
       continue;
     }
@@ -1225,7 +1211,7 @@ export function buildTileGeometry(
           for (const line of rings) life.obstacle(line, false);
         }
         // Streetlights line major and secondary roads (life/lights.ts), placed once all are in.
-        if (lifeLine === LifeLine.roadMajor || lifeLine === LifeLine.roadMid) {
+        if (isLitRoad(className, isRegion)) {
           for (const line of rings) litLines.push({ points: line, width });
         }
         const first = rings[0];

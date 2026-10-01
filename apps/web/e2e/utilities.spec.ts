@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits } from '../../../packages/renderer/src/life/config';
+import { UtilityPart } from '../../../packages/renderer/src/life/utilities';
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { themes } from '../../../packages/renderer/src/theme';
@@ -10,7 +11,7 @@ test('utility poles and overhead wires', async ({ page }) => {
   // The actual fragment shader proves ink-only composition and the surface/label masks.
   // The real city below proves config -> tile worker -> fixture texture -> HUD integration.
   const checked = await page.evaluate(
-    ({ vertex, fragment, classes, bits, colors, max }) => {
+    ({ vertex, fragment, classes, bits, colors, max, cable }) => {
       const canvas = document.createElement('canvas');
       canvas.width = 40;
       canvas.height = 8;
@@ -53,7 +54,7 @@ test('utility poles and overhead wires', async ({ page }) => {
         attr = new Uint8Array(20);
       classes.forEach((cls, i) => {
         glyphs.set([0, cls, 0, 0], i * 4);
-        fixtures.set([1, 21, 0, 255], i * 4);
+        fixtures.set([1, cable, 0, 255], i * 4);
       });
       attr[4] = 10;
       labels[16] = 1;
@@ -81,8 +82,8 @@ test('utility poles and overhead wires', async ({ page }) => {
         gl.readPixels(0, 0, 40, 8, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
         return bytes;
       };
-      const result: boolean[] = [];
-      for (const paints of colors)
+      const result: { theme: string; daylight: number; checks: Record<string, boolean> }[] = [];
+      for (const { theme, paints } of colors)
         for (const daylight of [1, 0]) {
           gl.uniform1f(gl.getUniformLocation(program, 'u_daylight'), daylight);
           gl.uniform3fv(gl.getUniformLocation(program, 'u_fixturePaints'), paints);
@@ -90,14 +91,18 @@ test('utility poles and overhead wires', async ({ page }) => {
             on = read(true);
           const changed = (x: number) =>
             [0, 1, 2].some((c) => off[(4 * 40 + x) * 4 + c] !== on[(4 * 40 + x) * 4 + c]);
-          result.push(
-            changed(1),
-            !changed(6),
-            !changed(9),
-            !changed(17),
-            !changed(25),
-            !changed(33),
-          );
+          result.push({
+            theme,
+            daylight,
+            checks: {
+              'cable ink on road': changed(1),
+              'transparent cable background': !changed(6),
+              'roof mask': !changed(9),
+              'canopy mask': !changed(17),
+              'water mask': !changed(25),
+              'label mask': !changed(33),
+            },
+          });
         }
       if (gl.getError() !== gl.NO_ERROR) throw new Error('Utility shader WebGL error');
       return result;
@@ -106,22 +111,26 @@ test('utility poles and overhead wires', async ({ page }) => {
       vertex: fullscreenVertex,
       fragment: glyphFragment,
       max: MAX_CLASSES,
+      cable: UtilityPart.cable,
       classes: ['road_major', 'building', 'tree_crown', 'water_area', 'road_major'].map(classId),
       bits: Array.from(cellBits()),
-      colors: [themes.light, themes.dark].map((t) =>
-        t.fixturePaints.flatMap((c) => [
+      colors: (['light', 'dark'] as const).map((theme) => ({
+        theme,
+        paints: themes[theme].fixturePaints.flatMap((c) => [
           ((c >> 16) & 255) / 255,
           ((c >> 8) & 255) / 255,
           (c & 255) / 255,
         ]),
-      ),
+      })),
     },
   );
-  expect(checked.every(Boolean)).toBe(true);
+  for (const { theme, daylight, checks } of checked)
+    for (const [name, passed] of Object.entries(checks))
+      expect(passed, `${theme}, ${daylight ? 'day' : 'night'}: ${name}`).toBe(true);
 
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() =>
-    localStorage.setItem('atlas.life', JSON.stringify({ enabled: true, time: 'noon' })),
+    localStorage.setItem('atlas.life', JSON.stringify({ enabled: false, time: 'noon' })),
   );
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -134,7 +143,6 @@ test('utility poles and overhead wires', async ({ page }) => {
   await expect(legend.getByText('Utility poles and wires (illustrative)')).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByRole('button', { name: 'Life', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Life', exact: true })).toHaveAttribute(
     'aria-pressed',
     'false',

@@ -2,6 +2,9 @@
 import {
   offsetUtility,
   UTILITY,
+  bandVisibility,
+  UTILITY_ZOOM,
+  UTILITY_DETAIL_ZOOM,
   utilityRandom,
   utilityRecordId,
   utilitySeed,
@@ -12,6 +15,7 @@ import {
 } from '@atlas/shared';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import type { FixtureGrid } from './fixtures';
+import { sameReferenceMembers } from '../cache-inputs';
 
 export const UtilityPart = {
   utilityCap: 17,
@@ -51,8 +55,7 @@ export function createUtilityFixtureCache() {
   let previous: readonly (readonly UtilityRecord[])[] = [],
     result: UtilityFixture[] = [];
   return (groups: readonly (readonly UtilityRecord[])[]) => {
-    if (groups.length === previous.length && groups.every((g, i) => g === previous[i]))
-      return result;
+    if (sameReferenceMembers(groups, previous)) return result;
     previous = groups.slice();
     const records = new Map<string, UtilityRecord>();
     for (const group of groups)
@@ -93,7 +96,15 @@ export function clipUtilityLine(
       ];
 }
 const detailed = (id: string, zoom: number) =>
-  zoom >= 19.5 || (zoom > 19 && utilityRandom(id, 'detail') < (zoom - 19) / 0.5);
+  utilityRandom(id, 'detail') < bandVisibility(UTILITY_DETAIL_ZOOM, zoom);
+
+export const utilityOpacity = (zoom: number) =>
+  Math.round(bandVisibility(UTILITY_ZOOM, zoom) * 255);
+export type UtilityPackingScratch = { owners: Int32Array; cables: Uint8Array };
+export const createUtilityPackingScratch = (): UtilityPackingScratch => ({
+  owners: new Int32Array(0),
+  cables: new Uint8Array(0),
+});
 const direction = (a: UtilityPoint, b: UtilityPoint, grid: FixtureGrid) => {
   const dx = (b[0] - a[0]) * grid.cellWidth,
     dy = (b[1] - a[1]) * grid.cellHeight;
@@ -130,11 +141,18 @@ export function packUtilityFixtures(
   zoom: number,
   glyphIndex: (glyph: string) => number,
   sharedBases: ReadonlyMap<string, number>,
+  scratch: UtilityPackingScratch = createUtilityPackingScratch(),
 ): number[] {
-  const alpha = Math.round(Math.max(0, Math.min(1, (zoom - 18) / 0.5)) * 255);
+  const alpha = utilityOpacity(zoom);
   if (!alpha || !fixtures.length) return [];
-  const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
-  const cables = new Uint8Array(owners.length);
+  const size = grid.cols * grid.rows;
+  if (scratch.owners.length !== size) {
+    scratch.owners = new Int32Array(size);
+    scratch.cables = new Uint8Array(size);
+  }
+  const { owners, cables } = scratch;
+  owners.fill(-1);
+  cables.fill(0);
   const active = new Set<number>();
   // The camera has no rotation. Expand the geographic indexing segment by the maximum
   // ornament reach, then skip offscreen hardware before projecting individual strokes.

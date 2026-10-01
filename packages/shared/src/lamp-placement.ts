@@ -1,4 +1,5 @@
 /** Pure legacy lamp placement shared by the tile worker and utility pipeline. */
+import { DEFAULT_ROAD_WIDTH_M } from './constants';
 export type TilePoint = { x: number; y: number };
 export const LAMP_PLACEMENT = {
   spacing: 30,
@@ -9,7 +10,9 @@ export const LAMP_PLACEMENT = {
   minGap: 12,
 } as const;
 const STREETLIGHT = LAMP_PLACEMENT;
-const DEFAULT_ROAD_WIDTH_M = 6;
+/** Lamp eligibility follows display road class, including tertiary roads in road_mid. */
+export const isLitRoad = (className: unknown, region: unknown): boolean =>
+  region !== true && (className === 'road_major' || className === 'road_mid');
 /** A lit road line: its points (tile units) and carriageway width, m (0: unknown). */
 export type LitLine = { points: readonly TilePoint[]; width: number };
 

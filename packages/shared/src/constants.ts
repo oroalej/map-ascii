@@ -11,6 +11,9 @@ export type FrontageKind = (typeof FRONTAGE_KINDS)[number];
 /** Point-shop footprint radius in meters; pipeline anchors and renderer fallback agree. */
 export const SHOP_POINT_RADIUS_M = 5;
 
+/** Carriageway width in meters when a road has no width metadata. */
+export const DEFAULT_ROAD_WIDTH_M = 6;
+
 /** Stable building variant bytes, shared by the pipeline and renderer. */
 export const RoofShape = { flat: 1, gabled: 2, hipped: 3, pyramidal: 4 } as const;
 export const foldRoofAngle = (angle: number) => ((angle % Math.PI) + Math.PI) % Math.PI;

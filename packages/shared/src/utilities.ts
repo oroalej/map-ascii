@@ -1,4 +1,11 @@
 /** Versioned illustrative utility data. Runtime helpers deliberately have no Zod dependency. */
+import { MERCATOR_METERS, type TileAddress } from './tile-space';
+export {
+  TILE_EXTENT as UTILITY_EXTENT,
+  MERCATOR_METERS as UTILITY_MERCATOR_METERS,
+  metersPerUnit as utilityTileMeters,
+  tileToLngLat as utilityTilePoint,
+} from './tile-space';
 export type UtilityPoint = [number, number];
 export type UtilityPole = {
   id: string;
@@ -22,6 +29,73 @@ export type UtilitySpan = {
 };
 export type UtilityRecord =
   { version: 1; kind: 'pole'; pole: UtilityPole } | { version: 1; kind: 'span'; span: UtilitySpan };
+
+const object = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+const finite = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+const point = (value: unknown): value is UtilityPoint =>
+  Array.isArray(value) && value.length === 2 && value.every(finite);
+const keys = (value: Record<string, unknown>, required: string[], optional: string[] = []) =>
+  required.every((key) => Object.hasOwn(value, key)) &&
+  Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
+const direction = (value: unknown): value is UtilityPoint =>
+  point(value) && Math.abs(Math.hypot(...value) - 1) < 0.001;
+function isUtilityPole(value: unknown): value is UtilityPole {
+  return (
+    object(value) &&
+    keys(
+      value,
+      ['id', 'road', 'component', 'at', 'heading', 'normal', 'transformer'],
+      ['sharedLamp', 'partner'],
+    ) &&
+    text(value.id) &&
+    text(value.road) &&
+    text(value.component) &&
+    point(value.at) &&
+    Math.abs(value.at[0]) <= 180 &&
+    Math.abs(value.at[1]) <= 85.051129 &&
+    direction(value.heading) &&
+    direction(value.normal) &&
+    typeof value.transformer === 'boolean' &&
+    (value.sharedLamp === undefined || text(value.sharedLamp)) &&
+    (value.partner === undefined || text(value.partner))
+  );
+}
+
+/** Runtime counterpart of UtilityRecordSchema; no schema evaluation in the tile worker. */
+export function isUtilityRecord(value: unknown): value is UtilityRecord {
+  if (!object(value) || value.version !== 1) return false;
+  if (value.kind === 'pole')
+    return keys(value, ['version', 'kind', 'pole']) && isUtilityPole(value.pole);
+  if (value.kind !== 'span' || !keys(value, ['version', 'kind', 'span'])) return false;
+  const span = value.span;
+  return (
+    object(span) &&
+    keys(span, ['id', 'kind', 'from', 'to', 'seed']) &&
+    text(span.id) &&
+    (span.kind === 'corridor' || span.kind === 'crossing' || span.kind === 'junction') &&
+    isUtilityPole(span.from) &&
+    isUtilityPole(span.to) &&
+    span.from.id !== span.to.id &&
+    finite(span.seed) &&
+    Number.isInteger(span.seed) &&
+    span.seed >= 0 &&
+    span.seed <= 0xffffffff
+  );
+}
+
+/** Bad or newer optional records must not prevent the ordinary tile from drawing. */
+export function parseUtilityRecord(value: unknown): UtilityRecord | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    const record: unknown = JSON.parse(value);
+    return isUtilityRecord(record) ? record : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const UTILITY = {
   spacing: 30,
@@ -51,26 +125,10 @@ export function utilitySeed(id: string): number {
 export const utilityRandom = (id: string, purpose: string): number =>
   utilitySeed(`${id}:${purpose}`) / 0x100000000;
 
-export const UTILITY_EXTENT = 4096;
-export const UTILITY_MERCATOR_METERS = 40_075_016.686;
-export type UtilityTile = { z: number; x: number; y: number };
-/** These operations match the renderer's legacy lamp projection exactly. */
-export function utilityTileMeters({ z, y }: UtilityTile): number {
-  const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
-  return (UTILITY_MERCATOR_METERS * Math.cos(Math.atan(Math.sinh(n)))) / 2 ** z / UTILITY_EXTENT;
-}
-export function utilityTilePoint(
-  { z, x, y }: UtilityTile,
-  p: { x: number; y: number },
-): UtilityPoint {
-  const n = 2 ** z;
-  const wx = (x + p.x / UTILITY_EXTENT) / n;
-  const wy = (y + p.y / UTILITY_EXTENT) / n;
-  return [wx * 360 - 180, (Math.atan(Math.sinh(Math.PI * (1 - 2 * wy))) * 180) / Math.PI];
-}
+export type UtilityTile = TileAddress;
 export const lampSupportKey = (t: UtilityTile, x: number, y: number): string =>
   `${t.z}/${t.x}/${t.y}:${Math.fround(x)},${Math.fround(y)}`;
 export function offsetUtility(at: UtilityPoint, east: number, north: number): UtilityPoint {
-  const unit = UTILITY_MERCATOR_METERS / 360;
+  const unit = MERCATOR_METERS / 360;
   return [at[0] + east / (unit * Math.cos((at[1] * Math.PI) / 180)), at[1] + north / unit];
 }
