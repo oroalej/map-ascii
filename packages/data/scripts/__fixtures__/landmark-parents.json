@@ -31815,5 +31815,971 @@
       "minzoom": 6,
       "maxzoom": 16
     }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.186169,
+            13.631556
+          ],
+          [
+            123.186211,
+            13.631641
+          ],
+          [
+            123.186081,
+            13.631701
+          ],
+          [
+            123.186041,
+            13.631615
+          ],
+          [
+            123.186169,
+            13.631556
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23617033",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.184528,
+            13.629
+          ],
+          [
+            123.184556,
+            13.629065
+          ],
+          [
+            123.184496,
+            13.629091
+          ],
+          [
+            123.184467,
+            13.629024
+          ],
+          [
+            123.184528,
+            13.629
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662063",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.183038,
+            13.629113
+          ],
+          [
+            123.183052,
+            13.629151
+          ],
+          [
+            123.183004,
+            13.629167
+          ],
+          [
+            123.182991,
+            13.629128
+          ],
+          [
+            123.183038,
+            13.629113
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663375",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1861356,
+            13.6294876
+          ],
+          [
+            123.1861856,
+            13.6296066
+          ],
+          [
+            123.1860906,
+            13.6296446
+          ],
+          [
+            123.1860406,
+            13.6295266
+          ],
+          [
+            123.1861356,
+            13.6294876
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664094",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.18296,
+            13.631979
+          ],
+          [
+            123.183022,
+            13.631987
+          ],
+          [
+            123.183017,
+            13.632027
+          ],
+          [
+            123.182955,
+            13.632019
+          ],
+          [
+            123.18296,
+            13.631979
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23667131",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.183094,
+            13.628989
+          ],
+          [
+            123.183127,
+            13.629099
+          ],
+          [
+            123.183074,
+            13.629115
+          ],
+          [
+            123.183041,
+            13.629005
+          ],
+          [
+            123.183094,
+            13.628989
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668204",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.186203,
+            13.629134
+          ],
+          [
+            123.186235,
+            13.629215
+          ],
+          [
+            123.186121,
+            13.629258
+          ],
+          [
+            123.18609,
+            13.629177
+          ],
+          [
+            123.186203,
+            13.629134
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669389",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.183027,
+            13.629516
+          ],
+          [
+            123.183042,
+            13.629607
+          ],
+          [
+            123.182893,
+            13.62963
+          ],
+          [
+            123.182878,
+            13.62954
+          ],
+          [
+            123.183027,
+            13.629516
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669392",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.184314,
+            13.629063
+          ],
+          [
+            123.184324,
+            13.629115
+          ],
+          [
+            123.184223,
+            13.629132
+          ],
+          [
+            123.184214,
+            13.629079
+          ],
+          [
+            123.184314,
+            13.629063
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669642",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1835272,
+            13.6289805
+          ],
+          [
+            123.1835662,
+            13.6290705
+          ],
+          [
+            123.1835652,
+            13.6290765
+          ],
+          [
+            123.1835072,
+            13.6291015
+          ],
+          [
+            123.1834662,
+            13.6290055
+          ],
+          [
+            123.1835272,
+            13.6289805
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671116",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1862365,
+            13.6296461
+          ],
+          [
+            123.1862845,
+            13.6297431
+          ],
+          [
+            123.1861415,
+            13.6298111
+          ],
+          [
+            123.1860935,
+            13.6297131
+          ],
+          [
+            123.1862365,
+            13.6296461
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672272",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.186176,
+            13.629014
+          ],
+          [
+            123.186207,
+            13.629083
+          ],
+          [
+            123.186112,
+            13.629123
+          ],
+          [
+            123.186082,
+            13.629054
+          ],
+          [
+            123.186176,
+            13.629014
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672663",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1829957,
+            13.6299931
+          ],
+          [
+            123.1830137,
+            13.6300411
+          ],
+          [
+            123.1829377,
+            13.6300701
+          ],
+          [
+            123.1829187,
+            13.6300221
+          ],
+          [
+            123.1829957,
+            13.6299931
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674080",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.18473,
+            13.632791
+          ],
+          [
+            123.184749,
+            13.632873
+          ],
+          [
+            123.184639,
+            13.632896
+          ],
+          [
+            123.184621,
+            13.632815
+          ],
+          [
+            123.18473,
+            13.632791
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23676375",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.184156,
+            13.62895
+          ],
+          [
+            123.184195,
+            13.629053
+          ],
+          [
+            123.184134,
+            13.629076
+          ],
+          [
+            123.184095,
+            13.628973
+          ],
+          [
+            123.184156,
+            13.62895
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23676632",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1837424,
+            13.6289161
+          ],
+          [
+            123.1837594,
+            13.6289781
+          ],
+          [
+            123.1836664,
+            13.6290031
+          ],
+          [
+            123.1836494,
+            13.6289411
+          ],
+          [
+            123.1837424,
+            13.6289161
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23676916",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.183908,
+            13.628935
+          ],
+          [
+            123.183938,
+            13.629007
+          ],
+          [
+            123.183815,
+            13.629054
+          ],
+          [
+            123.183785,
+            13.628982
+          ],
+          [
+            123.183908,
+            13.628935
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677155",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1852555,
+            13.6334375
+          ],
+          [
+            123.185163,
+            13.6330426
+          ],
+          [
+            123.1851255,
+            13.6328836
+          ],
+          [
+            123.1852153,
+            13.6327832
+          ],
+          [
+            123.1855157,
+            13.6327076
+          ],
+          [
+            123.1858202,
+            13.6326972
+          ],
+          [
+            123.1861219,
+            13.6326855
+          ],
+          [
+            123.1862332,
+            13.6332146
+          ],
+          [
+            123.1856726,
+            13.6333436
+          ],
+          [
+            123.1852555,
+            13.6334375
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881063054",
+      "class": "building_school",
+      "name": "Doctor D. Abcede Elementary School",
+      "kind": "amenity=school",
+      "addr:street": "Queborac Street",
+      "operator": "Naga North District Naga City Schools Division, DepEd",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true,
+      "start_year": 1972,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1851307,
+            13.6289838
+          ],
+          [
+            123.1853982,
+            13.6288625
+          ],
+          [
+            123.1854566,
+            13.6289843
+          ],
+          [
+            123.1851892,
+            13.6291055
+          ],
+          [
+            123.1851307,
+            13.6289838
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203045050",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1855311,
+            13.6292251
+          ],
+          [
+            123.1854799,
+            13.6290199
+          ],
+          [
+            123.1853176,
+            13.628588
+          ],
+          [
+            123.1851888,
+            13.6282653
+          ],
+          [
+            123.1850056,
+            13.6278519
+          ],
+          [
+            123.1860709,
+            13.6272371
+          ],
+          [
+            123.1862885,
+            13.6275946
+          ],
+          [
+            123.1863321,
+            13.627567
+          ],
+          [
+            123.1868976,
+            13.6285073
+          ],
+          [
+            123.186464,
+            13.6287484
+          ],
+          [
+            123.1860216,
+            13.6289775
+          ],
+          [
+            123.1855311,
+            13.6292251
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1205481634",
+      "class": "building_school",
+      "name": "Holy Rosary Minor Seminary",
+      "kind": "amenity=school",
+      "wikidata": "Q18349863",
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1830546,
+          13.6299422
+        ],
+        [
+          123.1824473,
+          13.6301427
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600609951",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1830535,
+          13.6304698
+        ],
+        [
+          123.1827946,
+          13.6305272
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600609957",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
   }
 ]
