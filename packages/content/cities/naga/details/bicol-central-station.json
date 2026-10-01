@@ -1,0 +1,83 @@
+{
+  "id": "detail/bicol-central-station",
+  "osm_id": "osm:way/293702439",
+  "title": "Bicol Central Station",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "bay-canopy-west",
+      "ring": [
+        [123.18971432, 13.61893809],
+        [123.18974967, 13.61892758],
+        [123.18984155, 13.61921966],
+        [123.1898062, 13.61923017],
+        [123.18971432, 13.61893809]
+      ],
+      "height_m": 3.8,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "bay-canopy-east",
+      "ring": [
+        [123.19006598, 13.61890839],
+        [123.19010134, 13.61889788],
+        [123.19015539, 13.6190697],
+        [123.19012003, 13.6190802],
+        [123.19006598, 13.61890839]
+      ],
+      "height_m": 3.8,
+      "material": "roof",
+      "overhead": true
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "waiting-approach",
+      "line": [
+        [123.18981491, 13.61893514],
+        [123.18989809, 13.61920464]
+      ],
+      "width_m": 1.5
+    }
+  ],
+  "seating": [
+    {
+      "id": "waiting-west",
+      "line": [
+        [123.18976329, 13.61914254],
+        [123.1897741, 13.6191769]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Bicol Central Station — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/293702439",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord2016-019.pdf",
+      "note": "Official complex description confirms bus parking, loading/unloading bays, passenger lounges and commercial space. Illustrative overhead bay strips and waiting seats do not assert current bay count. Grounds copied exactly from converted OSM way geometry; terminal point identity retained. Distinct from the PNR railway station. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ],
+  "grounds": [
+    [123.1898801, 13.618669],
+    [123.1904372, 13.618497],
+    [123.190546, 13.6191953],
+    [123.1902645, 13.6192754],
+    [123.1903329, 13.6194681],
+    [123.1903903, 13.6196299],
+    [123.1891341, 13.6199747],
+    [123.1889391, 13.6189277],
+    [123.1898801, 13.618669]
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "landcover/bicol-central-station",
+  "title": "Bicol Central Station grounds",
+  "trees": [],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "parking",
+      "ring": [
+        [123.18969667, 13.61892388],
+        [123.19001488, 13.61882933],
+        [123.19013649, 13.6192159],
+        [123.18981828, 13.61931045],
+        [123.18969667, 13.61892388]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Bicol Central Station — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/293702439",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord2016-019.pdf",
+      "note": "Official complex description confirms bus parking, loading/unloading bays, passenger lounges and commercial space. Illustrative overhead bay strips and waiting seats do not assert current bay count. Grounds copied exactly from converted OSM way geometry; terminal point identity retained. Distinct from the PNR railway station. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}
