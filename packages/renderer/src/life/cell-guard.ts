@@ -1,15 +1,16 @@
 import type { TileId } from '../tiles';
 import { tileToLngLat } from '../raster/geometry';
-import type { RoadAccess } from './terrain';
-import type { Body, PolygonIndex } from './occupancy';
+import type { Body } from './occupancy';
 import { isWalker } from './config';
 import type { VisibleAgent } from './simulate';
+
+type Hits = { hits(bodies: readonly Body[]): boolean };
 
 /** Whole-cell clearance shared by the inline world and received terrain snapshots. */
 export function makeCellGuard(
   ref: { tile: TileId; perMeter: number },
-  access: RoadAccess,
-  trees: PolygonIndex,
+  access: { roads: Hits; forbidden: Hits },
+  trees: Hits,
   toCell: (lng: number, lat: number) => [number, number],
 ) {
   const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
@@ -22,7 +23,8 @@ export function makeCellGuard(
     if (agent.aboard) return true;
     body.x = (col + 0.5 - c0) * width;
     body.y = (row + 0.5 - r0) * height;
-    if (isWalker(agent.kind)) return access.allows(sample, agent.vehicle !== 'cart');
+    if (isWalker(agent.kind))
+      return !(agent.vehicle !== 'cart' ? access.forbidden : access.roads).hits(sample);
     return agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !trees.hits(sample);
   };
 }

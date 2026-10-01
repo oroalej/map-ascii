@@ -74,6 +74,8 @@ try {
         );
         const levels = makeScenario(kind, 1).levels;
         const timings = { syncFrame: [] as number[], step: [] as number[] };
+        // Populate before measuring: the eight pan shifts, not initial spawning, are the target.
+        world.sync(windows[0]!);
         for (let frame = 0; frame < 270; frame++) {
           const shift = Math.floor(frame / 30);
           const tiles = windows[shift]!;
@@ -84,7 +86,7 @@ try {
           ).getBounds() as [number[], number[]];
           const bounds: [number, number, number, number] = [west!, south!, east!, north!];
           const rain = kind === 'rain' && Math.floor(frame / 90) % 2 === 0 ? 1 : 0;
-          const changed = frame % 30 === 0;
+          const changed = frame > 0 && frame % 30 === 0;
           const start = performance.now();
           if (changed) world.sync(tiles);
           world.step(1 / 30, undefined, 18, bounds, undefined, { rain, minutes: 720 }, 0.9);
@@ -160,6 +162,7 @@ try {
             frames: 270,
             shiftEvery: 30,
             shifts: 8,
+            initialSyncTimed: false,
             window: [4, 4],
             seed: 1,
             dt: 1 / 30,

@@ -57,7 +57,7 @@ describe('cell terrain snapshots', () => {
     scenario.world.sync(tiles);
     const { snapshot, transferables } = snapshotOf(scenario.world.cellTerrain()!);
     const received = structuredClone(snapshot, { transfer: transferables });
-    expect(snapshot.roads.coords.byteLength).toBe(0);
+    expect(snapshot.roads.polygons.coords.byteLength).toBe(0);
     const { ref, access, trees } = cellTerrainFrom(received);
     const guard = makeCellGuard(ref, access, trees, scenario.grid.toCell);
     const direct = scenario.world.groundCellGuard(scenario.grid.toCell)!;

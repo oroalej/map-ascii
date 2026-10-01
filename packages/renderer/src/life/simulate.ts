@@ -3242,9 +3242,9 @@ export class LifeWorld {
     return {
       version: terrain,
       ref: { tile: ref.tile, perMeter: ref.perMeter },
-      forbidden: terrain.roadAccess.forbidden.polygons,
-      roads: terrain.roadAccess.roads.polygons,
-      trees: terrain.trees.polygons,
+      forbidden: terrain.roadAccess.forbidden,
+      roads: terrain.roadAccess.roads,
+      trees: terrain.trees,
     };
   }
 
