@@ -69,11 +69,11 @@ function sample(style: ClassStyle): string {
     case 'grass':
       return style.glyphs.slice(0, 3).join(''); // at rest
     case 'canopy':
-      return [...new Set(style.glyphs.slice(0, 4))].join(''); // crowns and foliage
+      return style.glyphs.slice(2).join(''); // clump tops and palm/conifer centers
     case 'crop':
       return style.glyphs.slice(0, 2).join(''); // at rest
     case 'foliage':
-      return style.glyphs.slice(0, 2).join(''); // at rest
+      return style.glyphs.slice(2, 6).join(''); // clump density ramp
     case 'single':
     case 'variant':
       return style.glyphs

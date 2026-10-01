@@ -196,6 +196,8 @@ int subClassAt(ivec2 q) {
   return int(texelFetch(u_subClass, q, 0).r * 255.0 + 0.5);
 }
 
+bool inShadow(ivec2 p, int receiver, vec4 receiverId, vec4 receiverAttr);
+
 // Sub-cell edge (glyphs/select.ts subcellEdge): emits the sextant and returns true, or returns
 // false if the cell keeps its glyph. cls is the cell's class (0 for none), id its feature.
 bool subcellEdge(ivec2 p, int cls, vec4 id) {
@@ -223,6 +225,7 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
     else if (bg == 0) bg = subClassAt(q);
   }
   if (mask == 0 || mask == 63) return false;
+  if (fg == ${classId('tree_crown')}) g_shadow = inShadow(p, fg, fgId, fgAttr) ? ${SHADOW_STATE}.0 : 0.0;
   g_state = stateOf(unpackId(fgId)) + ${EDGE_STATE}.0;
   g_bg = fillClass(bg);
   emit(texelFetch(u_table, ivec2(mask % 32, ${SEXTANT_ROW} + mask / 32), 0).rg, fg);
@@ -321,21 +324,30 @@ int waterStroke(ivec2 p, ivec2 w) {
 
 // The height standing in a cell that casts a shadow: buildings, trees and their crowns (not
 // terrain, whose height byte is its band).
+float standingHeight(int cls, vec4 attr) {
+  int k = u_kind[cls];
+  float h = attr.r * 255.0;
+  if (k == ${kindCodes.foliage}) return foliageShadowHeight(h, attr.gb * 2.0 - 1.0);
+  return k == ${kindCodes.building} || k == ${kindCodes.variant} ? h : 0.0;
+}
+
 float castsAt(ivec2 q) {
   q = clamp(q, ivec2(0), textureSize(u_class, 0) - 1);
-  int k = u_kind[classAt(q)];
-  bool standing = k == ${kindCodes.building} || k == ${kindCodes.foliage} || k == ${kindCodes.variant};
-  return standing ? texelFetch(u_attr, q, 0).r * 255.0 : 0.0;
+  return standingHeight(classAt(q), texelFetch(u_attr, q, 0));
 }
 
 // Whether the cell is in shadow (glyphs/select.ts inShadow): looking toward the sun a cell
 // width at a time, something stands taller than the sun rises over that distance.
-bool inShadow(ivec2 p) {
+bool inShadow(ivec2 p, int receiver, vec4 receiverId, vec4 receiverAttr) {
   if (!u_shadows || u_sun.z <= 0.0) return false;
-  float self = castsAt(p);
+  float self = standingHeight(receiver, receiverAttr);
   vec2 perStep = u_sun.xy * u_cellMeters.x / u_cellMeters;
   for (int k = 1; k <= ${SHADOW.steps}; k++) {
     ivec2 q = p + ivec2(floor(perStep * float(k) + 0.5));
+    if (u_kind[classAt(q)] == ${kindCodes.foliage}) {
+      if (u_kind[receiver] == ${kindCodes.foliage} && unpackId(receiverId) != 0u && idAt(q) == receiverId) continue;
+      if ((cellHash(u_origin + p) & 255u) >= ${Math.round(SHADOW.dapple * 256)}u) continue;
+    }
     float h = castsAt(q);
     if (h > 0.0 && h - self >= float(k) * u_cellMeters.x * u_sun.z) return true;
   }
@@ -346,7 +358,7 @@ void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int cls = classAt(p);
   int kind = u_kind[cls];
-  g_shadow = inShadow(p) ? ${SHADOW_STATE}.0 : 0.0;
+  g_shadow = inShadow(p, cls, idAt(p), texelFetch(u_attr, p, 0)) ? ${SHADOW_STATE}.0 : 0.0;
   if (cls == 0 || kind == 0) {
     // An empty cell may still hold part of an area's edge, or a shadow on the ground.
     if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
@@ -416,7 +428,7 @@ void main() {
   if (isArea(cls) && subcellEdge(p, cls, id)) return;
 
   int v = 0;
-  if ((int(attr.g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
+  if (kind != ${kindCodes.foliage} && (int(attr.g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     emit(texelFetch(u_table, ivec2(0, ${classId('path')}), 0).rg, cls);
     return;
   }
@@ -500,14 +512,17 @@ void main() {
     // sunny side is lit and the far side shaded.
     float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
     int tone;
-    v = min(canopyVariant(w, variant, gust, u_time, sunDir(), tone), u_count[cls] - 1);
+    v = min(canopyVariant(p, w, variant, gust, u_time, tone), u_count[cls] - 1);
     g_tone = tone;
   } else if (kind == ${kindCodes.foliage}) {
     // Crown lighting is applied across its rounded surface in the glyph pass.
     float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
     bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
       || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
-    v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);
+    bool boundary = false;
+    const ivec2 sides[4] = ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
+    for (int i=0;i<4;i++) if (classAt(p+sides[i]) == cls && idAt(p+sides[i]) != id) boundary = true;
+    v = min(foliageVariant(w, attr.gb*2.0-1.0, unpackId(id), u_time, gust, rim, boundary), u_count[cls] - 1);
     g_tone = crownIsDry(unpackId(id)) ? ${Tone.dry} : ${Tone.none};
   }
   vec2 glyph = texelFetch(u_table, ivec2(v, cls), 0).rg;

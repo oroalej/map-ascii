@@ -5,6 +5,14 @@ import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
 
+it('shows the clump density ramp and woods kind centers in both themes', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    const entries = legendEntries(theme, 20);
+    expect(entries.find((e) => e.classes.includes('tree_crown'))!.glyphs).toBe(':%&@ Ψ ↑ ♣');
+    expect(entries.find((e) => e.classes.includes('trees'))!.glyphs).toBe(':%&@Ψ↑♠');
+  }
+});
+
 it('describes utilities with Life off, only when reported, and switches glyphs at 19.5', () => {
   const entry = (zoom: number, utilities?: boolean) =>
     legendEntries('light', zoom, [], {

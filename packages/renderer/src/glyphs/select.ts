@@ -207,7 +207,7 @@ export const EDGE_STATE = 4;
  * shadow if something there stands taller than it by more than the sun rises over that
  * distance. Shaded cells (`SHADOW_STATE` in the select pass's state byte) draw `dark` darker.
  */
-export const SHADOW = { steps: 6, dark: 0.5 } as const;
+export const SHADOW = { steps: 6, dark: 0.5, dapple: 0.75 } as const;
 export const SHADOW_STATE = 8;
 
 /** Where the wind level (0–3) and the tone (`Tone`) sit in the state byte. */
@@ -246,11 +246,25 @@ export function inShadow(
   heightAt: (k: number) => number,
   sunTan: number,
   stepMeters: number,
+  foliage?: {
+    id: number;
+    world: readonly [number, number];
+    local?: readonly [number, number];
+    at: (k: number) => { id: number; local: readonly [number, number] } | null;
+  },
 ): boolean {
   if (sunTan <= 0) return false;
+  const self = foliage?.local ? foliageShadowHeight(selfHeight, foliage.local) : selfHeight;
   for (let k = 1; k <= SHADOW.steps; k++) {
-    const h = heightAt(k);
-    if (h > 0 && h - selfHeight >= k * stepMeters * sunTan) return true;
+    const crown = foliage?.at(k);
+    if (
+      crown &&
+      ((foliage!.local && foliage!.id !== 0 && crown.id === foliage!.id) ||
+        (cellHash(...foliage!.world) & 255) >= SHADOW.dapple * 256)
+    )
+      continue;
+    const h = crown ? foliageShadowHeight(heightAt(k), crown.local) : heightAt(k);
+    if (h > 0 && h - self >= k * stepMeters * sunTan) return true;
   }
   return false;
 }
@@ -854,129 +868,240 @@ function flutters(h: number, gust: number, time: number): boolean {
 /** Where the sun is when there is none (night): to the northwest, a unit vector (x east, y south). */
 export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 
-/** Crown glyphs by role (theme.ts `tree_crown`): the rim's leaf, a thick interior, a dense core. */
-export const CrownGlyph = { rim: 0, interior: 1, core: 4 } as const;
-/**
- * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, a
- * dense `@` where value noise (`scale`, `seed`) is over `above`, except one cell in `skip`, and
- * `&` elsewhere. One crown in `dryEvery` is yellowing (`Tone.dry`).
- */
-export const CROWN = {
-  core: { scale: 3, seed: 17, above: 0.62, skip: 3 },
-  dryEvery: 12,
+/** Shared crown-local clumps, used by individual crowns and the woods lattice. */
+export const CLUMPS = {
+  count: 7,
+  ring: 0.55,
+  jitter: 0.1,
+  radius: 0.46,
+  radiusJitter: 0.06,
+  crease: 0.14,
 } as const;
+export const CROWN = { dryEvery: 12 } as const;
+export const CROWN_RAMP = [0.6, 0.72, 0.84, 0.97, 1.1] as const;
+export const CROWN_LIGHT = {
+  tilt: 0.6,
+  minZ: 0.08,
+  base: 0.78,
+  domeGain: 0.28,
+  clumpGain: 0.35,
+  creaseAO: 0.48,
+  rimAO: 0.18,
+  min: 0.5,
+  max: 1.3,
+  nightFlat: 0.35,
+} as const;
+export const CROWN_TINTS = [
+  [0.8, 0.9, 0.82],
+  [1, 1, 1],
+  [1.12, 1.1, 0.75],
+] as const;
+export const CROWN_SUN_MIN_ALT = 25;
+export type CrownSun = readonly [number, number, number];
+export const MOON_SUN: CrownSun = [
+  -Math.SQRT1_2 / Math.sqrt(1.49),
+  -Math.SQRT1_2 / Math.sqrt(1.49),
+  0.7 / Math.sqrt(1.49),
+];
 
-/**
- * A crown lit as a rounded canopy (shaders/glyph.ts): its surface normal leans outward by `tilt`
- * with at least `minZ` up, and the light is `base + gain · (normal · sun)`, within [min, max].
- */
-export const CROWN_LIGHT = { tilt: 1.2, minZ: 0.08, base: 0.55, gain: 0.7, min: 0.38, max: 1.25 };
-
-/** `CROWN_LIGHT` at crown-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
-export function crownLight(x: number, y: number, [sx, sy, sz]: readonly number[]): number {
-  const { tilt, minZ, base, gain, min, max } = CROWN_LIGHT;
-  const z = Math.sqrt(Math.max(minZ, 1 - x * x - y * y));
-  const norm = Math.hypot(x * tilt, y * tilt, z);
-  const light = Math.hypot(sx!, sy!, sz!) || 1;
-  const dot = (x * tilt * sx! + y * tilt * sy! + z * sz!) / norm / light;
-  return Math.max(min, Math.min(max, base + gain * dot));
+/** Unit surface-light vector; the shadow pass deliberately retains its tangent vector. */
+export function crownSun(sun: { altitude: number; azimuth: number } | null): CrownSun {
+  if (!sun || sun.altitude <= 0) return MOON_SUN;
+  const alt = (Math.max(CROWN_SUN_MIN_ALT, sun.altitude) * Math.PI) / 180;
+  const az = (sun.azimuth * Math.PI) / 180;
+  return [Math.cos(alt) * Math.sin(az), -Math.cos(alt) * Math.cos(az), Math.sin(alt)];
 }
 
-/**
- * A crown cell's glyph (theme.ts `tree_crown`): at rest the rim (`rim`: some neighbor isn't
- * crown) is `%` and the inside `&` or a dense `@` by hash; in a gust (`gust`, already scaled by
- * the wind), the leaves flutter, flipping between `%` and `&`.
- */
-export function foliageVariant(x: number, y: number, time = 0, gust = 0, rim = true): number {
-  const h = cellHash(x, y);
-  if (gust >= TREE_WIND.step) return flutters(h, gust, time) ? 0 : 1;
-  if (rim) return CrownGlyph.rim;
-  const { scale, seed, above, skip } = CROWN.core;
-  return valueNoise(x, y, scale, seed) > above && h % skip !== 0
-    ? CrownGlyph.core
-    : CrownGlyph.interior;
+export type CrownClumps = { top: number; crevice: number; nx: number; ny: number };
+const CLUMP_RING = [
+  [1, 0],
+  [0.5, Math.sqrt(3) / 2],
+  [-0.5, Math.sqrt(3) / 2],
+  [-1, 0],
+  [-0.5, -Math.sqrt(3) / 2],
+  [0.5, -Math.sqrt(3) / 2],
+] as const;
+const hashByte = (h: number, shift: number) => ((h >>> shift) & 255) / 255;
+
+export function crownClumps(x: number, y: number, seed: number): CrownClumps {
+  const rh = cellHash(seed, 37);
+  const rx = hashByte(rh, 0) * 2 - 1;
+  const ry = hashByte(rh, 8) * 2 - 1;
+  const norm = Math.hypot(rx, ry) || 1;
+  let f1 = Infinity,
+    f2 = Infinity,
+    nx = 0,
+    ny = 0;
+  for (let i = 0; i < CLUMPS.count; i++) {
+    const h = cellHash(seed, i);
+    const [ax, ay] = i === 0 ? [0, 0] : CLUMP_RING[i - 1]!;
+    const cx =
+      (CLUMPS.ring * (ax * rx - ay * ry)) / norm + (hashByte(h, 0) * 2 - 1) * CLUMPS.jitter;
+    const cy =
+      (CLUMPS.ring * (ax * ry + ay * rx)) / norm + (hashByte(h, 8) * 2 - 1) * CLUMPS.jitter;
+    const radius = CLUMPS.radius + (hashByte(h, 16) * 2 - 1) * CLUMPS.radiusJitter;
+    const dx = (x - cx) / radius,
+      dy = (y - cy) / radius;
+    const d = dx * dx + dy * dy;
+    if (d < f1) {
+      f2 = f1;
+      f1 = d;
+      nx = dx;
+      ny = dy;
+    } else if (d < f2) f2 = d;
+  }
+  return {
+    top: Math.sqrt(Math.max(0, 1 - f1)),
+    crevice: 1 - smoothstep(0, CLUMPS.crease, Math.sqrt(f2) - Math.sqrt(f1)),
+    nx,
+    ny,
+  };
 }
 
-/** Whether the crown of feature `id` is yellowing: one in `CROWN.dryEvery`. */
+/** Sparse creases and rims remain sparse even while leaves flutter. */
+export function crownLevel(
+  light: number,
+  crevice: number,
+  radius: number,
+  rim = false,
+  boundary = false,
+): number {
+  let level = CROWN_RAMP.filter((t) => light >= t).length;
+  if (crevice > 0.6 || boundary) level = Math.min(level, 1);
+  if (rim || radius > 0.75) level = Math.min(level, 2);
+  return level;
+}
+
+export function crownShade(
+  x: number,
+  y: number,
+  clumps: CrownClumps,
+  sun: CrownSun = MOON_SUN,
+  night = false,
+): { light: number; level: number } {
+  const k = CROWN_LIGHT;
+  const dz = Math.sqrt(Math.max(k.minZ, 1 - x * x - y * y));
+  const dn = Math.hypot(x * k.tilt, y * k.tilt, dz);
+  const cn = Math.hypot(clumps.nx, clumps.ny, Math.max(k.minZ, clumps.top));
+  const dome = (x * k.tilt * sun[0] + y * k.tilt * sun[1] + dz * sun[2]) / dn;
+  const clump =
+    (clumps.nx * sun[0] + clumps.ny * sun[1] + Math.max(k.minZ, clumps.top) * sun[2]) / cn;
+  const r = Math.hypot(x, y);
+  const ao = (1 - k.creaseAO * clumps.crevice) * (1 - k.rimAO * smoothstep(0.75, 1, r));
+  const light = Math.max(
+    k.min,
+    Math.min(
+      k.max,
+      (k.base + (night ? k.nightFlat : 1) * (k.domeGain * dome + k.clumpGain * clump)) * ao,
+    ),
+  );
+  return { light, level: crownLevel(light, clumps.crevice, r) };
+}
+
+export const crownTint = (id: number): readonly [number, number, number] =>
+  CROWN_TINTS[cellHash(id, 9) % CROWN_TINTS.length]!;
 export const crownIsDry = (id: number): boolean => cellHash(id, 5) % CROWN.dryEvery === 0;
+export const foliageShadowHeight = (height: number, local: readonly [number, number]): number =>
+  height * (0.55 + 0.45 * Math.sqrt(Math.max(0, 1 - local[0] ** 2 - local[1] ** 2)));
 
-/**
- * Woods as clumped crowns (SPEC.md §4): a crown per `cols × rows` block of cells, centered on a
- * hashed cell of the block. A cell farther than `clearing` (in blocks) from every center is a
- * clearing with chance `gaps`. In a gust the whole pattern leans downwind by `sway` cells at a
- * gust's crest, continuously, so crowns creep across cells. Foliage more than `lit` cells from
- * its crown's center toward the sun is lit, and away from it shaded.
- */
+export type FoliageContext = {
+  local?: readonly [number, number];
+  id?: number;
+  sun?: CrownSun;
+  night?: boolean;
+  boundary?: boolean;
+};
+export function foliageVariant(
+  x: number,
+  y: number,
+  time = 0,
+  gust = 0,
+  rim = true,
+  ctx: FoliageContext = {},
+): number {
+  const [lx, ly] = ctx.local ?? [0, 0];
+  const clumps = crownClumps(lx, ly, ctx.id ?? 0);
+  let level = crownShade(lx, ly, clumps, ctx.sun, ctx.night).level;
+  if (gust >= TREE_WIND.step)
+    level = Math.max(0, Math.min(5, level + (flutters(cellHash(x, y), gust, time) ? 1 : -1)));
+  if (clumps.crevice > 0.6 || ctx.boundary) level = Math.min(level, 1);
+  if (rim || Math.hypot(lx, ly) > 0.75) level = Math.min(level, 2);
+  return level;
+}
+
+/** Woods use a fixed projected-metre lattice, split to retain precision at large world coordinates. */
 export const CANOPY = {
   cols: 4,
   rows: 2,
+  meters: 9,
+  radius: 0.7,
+  crease: 0.12,
   clearing: 0.65,
   gaps: 0.5,
   sway: 1.5,
-  lit: 0.75,
+  freshEvery: 5,
 } as const;
-/** Canopy glyphs by role (theme.ts `trees`); `rustle` is the foliage's other glyph in a gust. */
-export const CanopyGlyph = { foliage: 3, gap: 4, palm: 5, needle: 6, rustle: 8 } as const;
-
-/** How many cells the woods' pattern leans downwind in a gust (already scaled by the wind). */
+export const CanopyGlyph = { palm: 6, needle: 7 } as const;
+export type CanopyGrid = {
+  cellOrigin: readonly [number, number];
+  origin: readonly [number, number];
+  phase: readonly [number, number];
+  step: readonly [number, number];
+};
+export function canopyGrid(
+  cellOrigin: readonly [number, number],
+  cellMeters: readonly [number, number],
+): CanopyGrid {
+  const step = [cellMeters[0] / CANOPY.meters, cellMeters[1] / CANOPY.meters] as const;
+  const x = cellOrigin[0] * step[0],
+    y = cellOrigin[1] * step[1];
+  const origin = [Math.floor(x), Math.floor(y)] as const;
+  return { cellOrigin, origin, phase: [x - origin[0], y - origin[1]], step };
+}
+const DEFAULT_CANOPY_GRID = canopyGrid(
+  [0, 0],
+  [CANOPY.meters / CANOPY.cols, CANOPY.meters / CANOPY.rows],
+);
 export const canopyLean = (gust: number): number => CANOPY.sway * gust;
 
-/** The woods' pattern at a world cell: a crown's center, foliage, or a clearing, and its tone. */
-function canopyShape(
+export function canopyShape(
   x: number,
   y: number,
-  variant: number,
-  lean: WindDir,
-  sun: WindDir,
-): { variant: number; tone: number } {
-  const { cols, rows } = CANOPY;
-  // The pattern, read from upwind: fractional, so its edges creep a cell at a time.
-  const px = x - lean[0];
-  const py = y - lean[1];
-  const gx = Math.floor(px / cols);
-  const gy = Math.floor(py / rows);
-  let best = Infinity;
-  let bestHash = 0;
-  let bx = 0;
-  let by = 0;
-  for (let oy = -1; oy <= 1; oy++) {
+  lean: WindDir = [0, 0],
+  grid: CanopyGrid = DEFAULT_CANOPY_GRID,
+) {
+  const px = grid.phase[0] + (x - grid.cellOrigin[0] - lean[0]) * grid.step[0];
+  const py = grid.phase[1] + (y - grid.cellOrigin[1] - lean[1]) * grid.step[1];
+  const gx = Math.floor(px),
+    gy = Math.floor(py);
+  let f1 = Infinity,
+    f2 = Infinity,
+    seed = 0,
+    bx = 0,
+    by = 0;
+  for (let oy = -1; oy <= 1; oy++)
     for (let ox = -1; ox <= 1; ox++) {
-      const h = cellHash(gx + ox, gy + oy);
-      const dx = px - ((gx + ox) * cols + (h % cols));
-      const dy = py - ((gy + oy) * rows + ((h >>> 8) % rows));
-      const d = (dx / cols) * (dx / cols) + (dy / rows) * (dy / rows);
-      if (d < best) {
-        best = d;
-        bestHash = h;
+      const h = cellHash(grid.origin[0] + gx + ox, grid.origin[1] + gy + oy);
+      const dx = px - (gx + ox + 0.15 + hashByte(h, 0) * 0.7);
+      const dy = py - (gy + oy + 0.15 + hashByte(h, 8) * 0.7);
+      const d = dx * dx + dy * dy;
+      if (d < f1) {
+        f2 = f1;
+        f1 = d;
+        seed = h;
         bx = dx;
         by = dy;
-      }
+      } else if (d < f2) f2 = d;
     }
-  }
-  if (Math.abs(bx) < 0.5 && Math.abs(by) < 0.5) {
-    if (variant === 1) return { variant: CanopyGlyph.palm, tone: Tone.none };
-    if (variant === 2) {
-      return { variant: CanopyGlyph.needle + ((bestHash >>> 16) & 1), tone: Tone.none };
-    }
-    return { variant: (bestHash >>> 16) % 3, tone: Tone.none };
-  }
-  const clearing = best > CANOPY.clearing * CANOPY.clearing;
-  // Gaps are picked by the fixed world cell, so a clearing moving over the wood reveals or hides
-  // them one by one instead of re-rolling them.
-  if (clearing && ((cellHash(x, y) >>> 8) & 255) < CANOPY.gaps * 256) {
-    return { variant: CanopyGlyph.gap, tone: Tone.none };
-  }
-  const toSun = bx * sun[0] + by * sun[1];
-  const tone = toSun > CANOPY.lit ? Tone.light : toSun < -CANOPY.lit ? Tone.shade : Tone.none;
-  return { variant: CanopyGlyph.foliage, tone };
+  return {
+    seed,
+    local: [bx / CANOPY.radius, by / CANOPY.radius] as const,
+    crevice: 1 - smoothstep(0, CANOPY.crease, Math.sqrt(f2) - Math.sqrt(f1)),
+    center: Math.abs(bx) < grid.step[0] / 2 && Math.abs(by) < grid.step[1] / 2,
+    clearing: f1 > CANOPY.clearing ** 2 && ((cellHash(x, y) >>> 8) & 255) < CANOPY.gaps * 256,
+  };
 }
 
-/**
- * A canopy cell's glyph and tone: at a crown's center, by the wood's kind (`variant`, classes.ts
- * `TREE_KINDS` + 1), else one of three by the crown's hash; around it, foliage or a clearing.
- * In a gust (`gust`, already scaled by the wind) the crowns lean downwind with it (the pattern
- * is read from upwind) and their foliage flutters.
- */
 export function canopyCell(
   x: number,
   y: number,
@@ -985,17 +1110,37 @@ export function canopyCell(
   time = 0,
   dir: WindDir = DEFAULT_WIND_DIR,
   sun: WindDir = DEFAULT_SUN,
+  options: { grid?: CanopyGrid; sun?: CrownSun; night?: boolean } = {},
 ): { variant: number; tone: number } {
-  const lean = canopyLean(gust);
-  const cell = canopyShape(x, y, variant, [dir[0] * lean, dir[1] * lean], sun);
-  if (
-    cell.variant === CanopyGlyph.foliage &&
-    gust >= TREE_WIND.step &&
-    flutters(cellHash(x, y), gust, time)
-  ) {
-    return { variant: CanopyGlyph.rustle, tone: cell.tone };
-  }
-  return cell;
+  const shape = canopyShape(
+    x,
+    y,
+    [dir[0] * canopyLean(gust), dir[1] * canopyLean(gust)],
+    options.grid,
+  );
+  if (shape.center && variant === 1) return { variant: CanopyGlyph.palm, tone: Tone.none };
+  if (shape.center && variant === 2)
+    return { variant: CanopyGlyph.needle + ((shape.seed >>> 16) & 1), tone: Tone.none };
+  if (shape.clearing) return { variant: 0, tone: Tone.shade };
+  const [lx, ly] = shape.local;
+  const clumps = crownClumps(lx, ly, shape.seed);
+  clumps.crevice = Math.max(clumps.crevice, shape.crevice);
+  const sn = Math.sqrt(1.49);
+  const light = options.sun ?? [sun[0] / sn, sun[1] / sn, 0.7 / sn];
+  let level = crownShade(lx, ly, clumps, light, options.night).level;
+  if (gust >= TREE_WIND.step)
+    level = Math.max(0, Math.min(5, level + (flutters(cellHash(x, y), gust, time) ? 1 : -1)));
+  if (clumps.crevice > 0.6) level = Math.min(level, 1);
+  if (Math.hypot(lx, ly) > 0.75) level = Math.min(level, 2);
+  const tone =
+    level <= 1
+      ? Tone.shade
+      : level >= 4
+        ? Tone.light
+        : shape.seed % CANOPY.freshEvery === 0
+          ? Tone.dry
+          : Tone.none;
+  return { variant: level, tone };
 }
 
 export const canopyVariant = (
@@ -1035,6 +1180,12 @@ export type CellContext = {
   windDir?: WindDir;
   /** The feature's variant byte (classes.ts `variantCode`). */
   variant?: number;
+  local?: readonly [number, number];
+  id?: number;
+  neighborId?: (dx: number, dy: number) => number;
+  sun?: CrownSun;
+  night?: boolean;
+  canopyGrid?: CanopyGrid;
 };
 
 /** The variant a class with `count` glyphs shows in a cell: the CPU twin of the select shader. */
@@ -1085,7 +1236,11 @@ export function variantFor(
       return Math.min(grassVariant(ctx.x, ctx.y, ctx.time, ctx.wind, ctx.windDir), count - 1);
     case 'canopy': {
       const gust = (ctx.wind ?? 1) * treeGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
-      const v = canopyVariant(ctx.x, ctx.y, ctx.variant, gust, ctx.time, ctx.windDir);
+      const v = canopyCell(ctx.x, ctx.y, ctx.variant, gust, ctx.time, ctx.windDir, DEFAULT_SUN, {
+        grid: ctx.canopyGrid,
+        sun: ctx.sun,
+        night: ctx.night,
+      }).variant;
       return Math.min(v, count - 1);
     }
     case 'crop': {
@@ -1103,7 +1258,21 @@ export function variantFor(
           [0, -1],
         ] as const
       ).some(([dx, dy]) => ctx.neighbor(dx, dy) !== cls);
-      return Math.min(foliageVariant(ctx.x, ctx.y, ctx.time, gust, rim), count - 1);
+      const boundary =
+        ctx.id !== undefined &&
+        ctx.neighborId !== undefined &&
+        (
+          [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ] as const
+        ).some(([dx, dy]) => ctx.neighbor(dx, dy) === cls && ctx.neighborId!(dx, dy) !== ctx.id);
+      return Math.min(
+        foliageVariant(ctx.x, ctx.y, ctx.time, gust, rim, { ...ctx, boundary }),
+        count - 1,
+      );
     }
   }
 }

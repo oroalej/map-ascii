@@ -16,7 +16,7 @@ import {
   groundDepth,
   TIER_STEP,
 } from './classes';
-import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
+import { canopyGrid, crownSun, roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
 import {
   copyRaster,
@@ -408,6 +408,7 @@ export function selectPass(
     u_subId: targets.sub.idTex,
     u_area: areas,
     ...sunUniforms(view, sun),
+    ...foliageUniforms(view, grid, sun),
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -426,6 +427,23 @@ function sunUniforms(view: View, sun: Sun | null) {
   return {
     u_sun: [Math.sin(az), -Math.cos(az), tan],
     u_cellMeters: [(cellDev.w / dpr) * metersPerPx, (cellDev.h / dpr) * metersPerPx],
+  };
+}
+
+/** Keep the woods lattice in projected metres and split its origin before uploading. */
+export function foliageUniforms(view: View, grid: Grid, sun: Sun | null) {
+  const ground = sunUniforms(view, sun).u_cellMeters;
+  const latitudeScale = Math.cos((view.camera.lat * Math.PI) / 180);
+  const lattice = canopyGrid(
+    [grid.originCol, grid.originRow],
+    [ground[0]! / latitudeScale, ground[1]! / latitudeScale],
+  );
+  return {
+    u_crownSun: crownSun(sun),
+    u_crownNight: !sun || sun.altitude <= 0,
+    u_canopyOrigin: lattice.origin,
+    u_canopyPhase: lattice.phase,
+    u_canopyStep: lattice.step,
   };
 }
 
@@ -707,6 +725,8 @@ export function glyphPass(
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
+    u_id: targets.idTex,
+    u_subId: targets.sub.idTex,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_daylight: daylight,
@@ -719,8 +739,7 @@ export function glyphPass(
     u_lampShow: lampShow,
     u_moon: moon,
     u_crownClass: classId('tree_crown'),
-    u_crownSun:
-      sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
+    ...foliageUniforms(view, grid, sun),
     u_vehicle: classId('life_vehicle'),
     u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
     u_boat: classId('life_boat'),

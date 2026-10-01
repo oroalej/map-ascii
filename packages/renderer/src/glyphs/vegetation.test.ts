@@ -3,20 +3,12 @@ import { classId, MAX_CLASSES } from '../classes';
 import { grassGlyphs, themes } from '../theme';
 import {
   buildGlyphTables,
-  CANOPY,
-  CanopyGlyph,
-  canopyCell,
-  canopyLean,
-  canopyVariant,
   CROP,
   CropGlyph,
   cropTone,
   cropVariant,
   CROWN,
-  CrownGlyph,
   crownIsDry,
-  DEFAULT_SUN,
-  foliageVariant,
   GRASS,
   GUST_STEPS,
   GrassGlyph,
@@ -220,38 +212,6 @@ describe('the wind front and its wake', () => {
   });
 });
 
-describe('clumped canopy', () => {
-  const field = cells(500_000, 800_000, 64);
-
-  it('has one crown center per block, and foliage around it', () => {
-    const variants = field.map(([x, y]) => canopyVariant(x, y));
-    const centers = variants.filter((v) => v < 3).length;
-    expect(centers).toBeGreaterThan((field.length / (CANOPY.cols * CANOPY.rows)) * 0.8);
-    expect(centers).toBeLessThan((field.length / (CANOPY.cols * CANOPY.rows)) * 1.2);
-    const foliage = variants.filter((v) => v === CanopyGlyph.foliage).length;
-    expect(foliage).toBeGreaterThan(field.length / 2);
-  });
-
-  it('leaves a few clearings, but keeps the canopy mostly closed', () => {
-    const gaps = field.filter(([x, y]) => canopyVariant(x, y) === CanopyGlyph.gap).length;
-    expect(gaps).toBeGreaterThan(0);
-    expect(gaps).toBeLessThan(field.length * 0.2);
-  });
-
-  it('draws palms and conifers at the centers of their woods', () => {
-    const centers = field.filter(([x, y]) => canopyVariant(x, y) < 3);
-    for (const [x, y] of centers) {
-      expect(canopyVariant(x, y, 1)).toBe(CanopyGlyph.palm);
-      expect([CanopyGlyph.needle, CanopyGlyph.needle + 1]).toContain(canopyVariant(x, y, 2));
-      expect(canopyVariant(x, y, 3)).toBe(canopyVariant(x, y));
-    }
-  });
-
-  it('stays put: the same cell always gets the same glyph', () => {
-    for (const [x, y] of field.slice(0, 50)) expect(canopyVariant(x, y)).toBe(canopyVariant(x, y));
-  });
-});
-
 describe('trees in the wind', () => {
   const field = cells(700_000, 900_000, 64);
 
@@ -298,109 +258,10 @@ describe('trees in the wind', () => {
     expect(SWAY.recoil).toBeLessThan(1);
   });
 
-  it('flutter their leaves between % and & in a gust, and hold still without wind', () => {
-    for (const [x, y] of field) {
-      expect(foliageVariant(x, y, 20, 0)).toBe(foliageVariant(x, y, 21, 0));
-      expect([0, 1]).toContain(foliageVariant(x, y, 20, 1));
-    }
-    const flips = field.filter(
-      ([x, y]) => foliageVariant(x, y, 20, 1) !== foliageVariant(x, y, 20.4, 1),
-    );
-    expect(flips.length).toBeGreaterThan(field.length / 8);
-    const crown = (time: number, wind: number) =>
-      field.map(([x, y]) =>
-        selectGlyph(themes.dark, 'tree_crown', {
-          x,
-          y,
-          height: 0,
-          neighbor: () => null,
-          time,
-          wind,
-        }),
-      );
-    for (const glyph of crown(20, 1)) expect(['%', '&']).toContain(glyph);
-    expect(crown(20, 0)).toEqual(crown(25, 0));
-  });
-
-  it('draw a crown as a rim of leaves around an inside, with a dense core here and there', () => {
-    const rim = field.map(([x, y]) => foliageVariant(x, y, 0, 0, true));
-    expect(new Set(rim)).toEqual(new Set([CrownGlyph.rim]));
-    const inside = field.map(([x, y]) => foliageVariant(x, y, 0, 0, false));
-    expect(new Set(inside)).toEqual(new Set([CrownGlyph.interior, CrownGlyph.core]));
-    const cores = inside.filter((v) => v === CrownGlyph.core).length / field.length;
-    // About a quarter of the inside.
-    expect(cores).toBeGreaterThan(0.15);
-    expect(cores).toBeLessThan(0.35);
-    // In a gust the leaves flutter whatever their place in the crown.
-    for (const [x, y] of field.slice(0, 200)) {
-      expect([0, 1]).toContain(foliageVariant(x, y, 20, 1, false));
-    }
-  });
-
-  it('draw a crown from the rim of its neighbors', () => {
-    const glyph = (neighbor: () => 'tree_crown' | 'grass' | null, x: number, y: number) =>
-      selectGlyph(themes.dark, 'tree_crown', { x, y, height: 0, neighbor, time: 0, wind: 0 });
-    for (const [x, y] of field.slice(0, 100)) {
-      expect(glyph(() => 'grass', x, y)).toBe('%'); // rim: something else all around
-      expect(['&', '@']).toContain(glyph(() => 'tree_crown', x, y)); // inside
-    }
-  });
-
   it('yellow one crown in a few', () => {
     const dry = Array.from({ length: 2000 }, (_, id) => id).filter(crownIsDry).length / 2000;
     expect(dry).toBeGreaterThan(0.5 / CROWN.dryEvery);
     expect(dry).toBeLessThan(1.6 / CROWN.dryEvery);
-  });
-
-  it('lean the woods downwind in a gust, and flutter their foliage', () => {
-    expect(canopyLean(0)).toBe(0);
-    expect(canopyLean(1)).toBeCloseTo(CANOPY.sway);
-    const east = windFrom(270);
-    // A lean of a whole number of cells moves the crowns exactly that far. (Rustling leaves and
-    // the clearing's gap dots, which stay on their cells, are foliage here.)
-    const shape = (v: number) =>
-      v === CanopyGlyph.rustle || v === CanopyGlyph.gap ? CanopyGlyph.foliage : v;
-    const gust = 3 / CANOPY.sway;
-    for (const [x, y] of field) {
-      expect(canopyVariant(x, y, 0, 0, 5)).toBe(canopyVariant(x, y, 0, 0, 9));
-      expect(shape(canopyVariant(x + 3, y, 0, gust, 5, east))).toBe(shape(canopyVariant(x, y)));
-      expect([CanopyGlyph.foliage, CanopyGlyph.rustle, CanopyGlyph.gap, 0, 1, 2]).toContain(
-        canopyVariant(x, y, 0, 1, 5),
-      );
-    }
-  });
-
-  it('let the woods creep, not jump: a slightly stronger gust changes few cells', () => {
-    const still = (v: number) => (v === CanopyGlyph.rustle ? CanopyGlyph.foliage : v);
-    const changed = field.filter(
-      ([x, y]) => still(canopyVariant(x, y, 0, 1.0, 5)) !== still(canopyVariant(x, y, 0, 1.1, 5)),
-    );
-    expect(changed.length).toBeLessThan(field.length * 0.25);
-  });
-
-  it('light the sunny side of a wood and shade the far side, and swap them with the sun', () => {
-    const sun = DEFAULT_SUN;
-    const away: readonly [number, number] = [-sun[0], -sun[1]];
-    let lit = 0;
-    let shaded = 0;
-    for (const [x, y] of field) {
-      const a = canopyCell(x, y, 0, 0, 0, DEFAULT_WIND_DIR, sun);
-      const b = canopyCell(x, y, 0, 0, 0, DEFAULT_WIND_DIR, away);
-      expect(b.variant).toBe(a.variant);
-      if (a.variant !== CanopyGlyph.foliage) {
-        expect(a.tone).toBe(Tone.none); // centers and clearings keep their own color
-        continue;
-      }
-      if (a.tone === Tone.light) {
-        lit++;
-        expect(b.tone).toBe(Tone.shade);
-      } else if (a.tone === Tone.shade) {
-        shaded++;
-        expect(b.tone).toBe(Tone.light);
-      }
-    }
-    expect(lit).toBeGreaterThan(field.length / 20);
-    expect(shaded).toBeGreaterThan(field.length / 20);
   });
 });
 

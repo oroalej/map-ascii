@@ -10,7 +10,6 @@ import {
   CROP,
   CropGlyph,
   CROWN,
-  CrownGlyph,
   FLUTTER,
   GrassGlyph,
   GRASS,
@@ -23,9 +22,15 @@ import {
   WIND,
 } from '../glyphs/select';
 
+import { foliageGlsl } from './foliage';
+
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 export const vegetationGlsl = /* glsl */ `
+${foliageGlsl}
+uniform ivec2 u_canopyOrigin;
+uniform vec2 u_canopyPhase;
+uniform vec2 u_canopyStep;
 uniform vec2 u_windDir; // where the wind blows: a unit vector in cells (x east, y south)
 
 int vmod(int a, int n) {
@@ -145,13 +150,13 @@ bool flutters(uint h, float gust, float time) {
   return ((int(h >> 2u) + flips) & 1) == 1;
 }
 
-// A crown's glyph: the rim, an interior, or a dense core; fluttering in a gust (glyphs/select.ts).
-int foliageVariant(ivec2 c, float time, float gust, bool rim) {
-  uint h = cellHash(c);
-  if (gust >= ${float(TREE_WIND.step)}) return flutters(h, gust, time) ? 0 : 1;
-  if (rim) return ${CrownGlyph.rim};
-  return valueNoise(c, ${CROWN.core.scale}, ${CROWN.core.seed}) > ${float(CROWN.core.above)}
-    && h % ${CROWN.core.skip}u != 0u ? ${CrownGlyph.core} : ${CrownGlyph.interior};
+int foliageVariant(ivec2 c, vec2 local, uint seed, float time, float gust, bool rim, bool boundary) {
+  vec4 clumps=crownClumps(local,seed);
+  int level=crownLevel(crownShade(local,clumps),clumps.y,length(local));
+  if(gust>=${float(TREE_WIND.step)}) level=clamp(level+(flutters(cellHash(c),gust,time)?1:-1),0,5);
+  if(clumps.y>0.6 || boundary) level=min(level,1);
+  if(rim || length(local)>0.75) level=min(level,2);
+  return level;
 }
 
 // Whether the crown of feature id is yellowing.
@@ -159,50 +164,34 @@ bool crownIsDry(uint id) {
   return cellHash(ivec2(int(id), 5)) % ${CROWN.dryEvery}u == 0u;
 }
 
-// The woods' pattern read from upwind by lean cells (fractional, so its edges creep): split into a
-// whole shift and a fraction to stay exact at large world coordinates (glyphs/select.ts).
-int canopyShape(ivec2 c, int variant, vec2 lean, vec2 sun, out int tone) {
-  tone = ${Tone.none};
-  vec2 shift = floor(lean);
-  ivec2 ci = c - ivec2(shift);
-  vec2 f = lean - shift;
-  int gx = floorDiv(ci.x - (f.x > 0.0 ? 1 : 0), ${CANOPY.cols});
-  int gy = floorDiv(ci.y - (f.y > 0.0 ? 1 : 0), ${CANOPY.rows});
-  float bestD = 1e9;
-  uint bestHash = 0u;
-  vec2 best = vec2(0.0);
-  for (int oy = -1; oy <= 1; oy++) {
-    for (int ox = -1; ox <= 1; ox++) {
-      uint h = cellHash(ivec2(gx + ox, gy + oy));
-      int cx = (gx + ox) * ${CANOPY.cols} + int(h % ${CANOPY.cols}u);
-      int cy = (gy + oy) * ${CANOPY.rows} + int((h >> 8u) % ${CANOPY.rows}u);
-      vec2 d = vec2(float(ci.x - cx), float(ci.y - cy)) - f;
-      vec2 n = d / vec2(${float(CANOPY.cols)}, ${float(CANOPY.rows)});
-      float dd = dot(n, n);
-      if (dd < bestD) {
-        bestD = dd;
-        bestHash = h;
-        best = d;
-      }
-    }
+// Fixed projected lattice. The integer block origin is never converted to a large float.
+int canopyVariant(ivec2 p, ivec2 w, int variant, float gust, float time, out int tone) {
+  vec2 pos=u_canopyPhase+(vec2(p)-u_windDir*(gust*${float(CANOPY.sway)}))*u_canopyStep;
+  ivec2 g=ivec2(floor(pos));
+  vec2 frac=fract(pos);
+  float f1=1e9,f2=1e9;
+  uint seed=0u;
+  vec2 best=vec2(0);
+  for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++) {
+    uint h=cellHash(u_canopyOrigin+g+ivec2(ox,oy));
+    vec2 d=frac-vec2(ox,oy)-vec2(0.15)-vec2(hashByte(h,0u),hashByte(h,8u))*0.7;
+    float dd=dot(d,d);
+    if(dd<f1) { f2=f1; f1=dd; seed=h; best=d; } else if(dd<f2) f2=dd;
   }
-  if (abs(best.x) < 0.5 && abs(best.y) < 0.5) {
-    if (variant == 1) return ${CanopyGlyph.palm};
-    if (variant == 2) return ${CanopyGlyph.needle} + int((bestHash >> 16u) & 1u);
-    return int((bestHash >> 16u) % 3u);
+  tone=${Tone.none};
+  if(all(lessThan(abs(best),u_canopyStep*0.5))) {
+    if(variant==1) return ${CanopyGlyph.palm};
+    if(variant==2) return ${CanopyGlyph.needle}+int((seed>>16u)&1u);
   }
-  bool clearing = bestD > ${float(CANOPY.clearing * CANOPY.clearing)};
-  if (clearing && ((cellHash(c) >> 8u) & 255u) < ${Math.round(CANOPY.gaps * 256)}u) return ${CanopyGlyph.gap};
-  float toSun = dot(best, sun);
-  tone = toSun > ${float(CANOPY.lit)} ? ${Tone.light} : toSun < ${float(-CANOPY.lit)} ? ${Tone.shade} : ${Tone.none};
-  return ${CanopyGlyph.foliage};
-}
-
-int canopyVariant(ivec2 c, int variant, float gust, float time, vec2 sun, out int tone) {
-  int v = canopyShape(c, variant, u_windDir * (gust * ${float(CANOPY.sway)}), sun, tone);
-  if (v == ${CanopyGlyph.foliage} && gust >= ${float(TREE_WIND.step)} && flutters(cellHash(c), gust, time)) {
-    return ${CanopyGlyph.rustle};
-  }
-  return v;
+  if(f1>${float(CANOPY.clearing * CANOPY.clearing)} && ((cellHash(w)>>8u)&255u)<${Math.round(CANOPY.gaps * 256)}u) { tone=${Tone.shade}; return 0; }
+  vec2 local=best/${float(CANOPY.radius)};
+  vec4 clumps=crownClumps(local,seed);
+  clumps.y=max(clumps.y,1.0-smoothstep(0.0,${float(CANOPY.crease)},sqrt(f2)-sqrt(f1)));
+  int level=crownLevel(crownShade(local,clumps),clumps.y,length(local));
+  if(gust>=${float(TREE_WIND.step)}) level=clamp(level+(flutters(cellHash(w),gust,time)?1:-1),0,5);
+  if(clumps.y>0.6) level=min(level,1);
+  if(length(local)>0.75) level=min(level,2);
+  tone=level<=1 ? ${Tone.shade} : level>=4 ? ${Tone.light} : seed%${CANOPY.freshEvery}u==0u ? ${Tone.dry} : ${Tone.none};
+  return level;
 }
 `;

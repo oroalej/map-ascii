@@ -27,7 +27,6 @@ import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import {
-  CROWN_LIGHT,
   EDGE_INK,
   EDGE_STATE,
   SHADOW,
@@ -42,6 +41,7 @@ import {
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
+import { foliageGlsl } from './foliage';
 import { waterEffectGlsl } from '../life/water';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -83,11 +83,12 @@ uniform bool u_shimmer;
 uniform sampler2D u_life;
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
+uniform sampler2D u_subId;
+uniform sampler2D u_id;
 uniform int u_cellBits[${MAX_CLASSES}];
 uniform ivec2 u_origin;
 uniform sampler2D u_attr;
 uniform int u_crownClass;
-uniform vec3 u_crownSun;
 uniform float u_daylight;
 uniform int u_vehicle;
 uniform ivec3 u_vehicleOccluders; // trunks, crowns, and woods cover all non-bird Life
@@ -118,6 +119,7 @@ uniform float u_moon;
 out vec4 o_color;
 
 ${cellHashGlsl}
+${foliageGlsl}
 ${waterEffectGlsl}
 
 float darkness() {
@@ -545,16 +547,13 @@ void main() {
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
-  if (cls == u_crownClass) {
-    vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb * 2.0 - 1.0;
-    vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
-      sqrt(max(${float(CROWN_LIGHT.minZ)}, 1.0 - dot(local, local)))));
-    float light = clamp(
-      ${float(CROWN_LIGHT.base)} + ${float(CROWN_LIGHT.gain)} * dot(normal, normalize(u_crownSun)),
-      ${float(CROWN_LIGHT.min)}, ${float(CROWN_LIGHT.max)});
-    float variation = 0.94 + 0.12 * float(cellHash((u_origin + cell) / 3) >> 8u) / 16777216.0;
-    color *= light * variation;
-    back *= light;
+  if (cls == u_crownClass && (!edge || int(texelFetch(u_subClass, subAt, 0).r*255.0+0.5) == cls)) {
+    // Identity and local surface come from the same sample. Exposed edge ground keeps its fill.
+    vec4 sampleId = edge ? texelFetch(u_subId, subAt, 0) : texelFetch(u_id, cell, 0);
+    uvec4 bytes = uvec4(sampleId*255.0+0.5);
+    uint seed = bytes.r | (bytes.g<<8u) | (bytes.b<<16u) | (bytes.a<<24u);
+    vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb*2.0-1.0;
+    color = toned(daylit(u_colors[cls])*crownTint(seed), tone, night) * crownShade(local, crownClumps(local, seed));
   }
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];

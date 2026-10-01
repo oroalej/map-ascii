@@ -1,5 +1,12 @@
 import { expect, it, vi } from 'vitest';
-import { overlayPass, placeGrid, prepareCrowns, type TileDraw, type View } from './passes';
+import {
+  foliageUniforms,
+  overlayPass,
+  placeGrid,
+  prepareCrowns,
+  type TileDraw,
+  type View,
+} from './passes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import type { TileLabel } from './raster/geometry';
@@ -16,6 +23,21 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('shares unit crown lighting and a latitude-independent projected woods lattice', () => {
+  const grid = placeGrid(view, view.cellDev, 83, 37).grid;
+  const day = foliageUniforms(view, grid, { altitude: 8, azimuth: 250 });
+  const night = foliageUniforms(view, grid, null);
+  expect(Math.hypot(...day.u_crownSun)).toBeCloseTo(1);
+  expect(day.u_crownNight).toBe(false);
+  expect(night.u_crownNight).toBe(true);
+  expect(Math.hypot(...night.u_crownSun)).toBeCloseTo(1);
+  foliageUniforms(
+    { ...view, camera: { ...view.camera, lat: 60 } },
+    grid,
+    null,
+  ).u_canopyStep.forEach((step, i) => expect(step).toBeCloseTo(night.u_canopyStep[i]!, 12));
+});
 
 it('reuses crown matrices through sub-cell shifts and invalidates every matrix input', () => {
   const tiles = [

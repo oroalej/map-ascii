@@ -1020,6 +1020,12 @@ describe('buildTileGeometry', () => {
       );
       // At 0, 8, 16, 24, 32, and 40 m.
       expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
+      // A row remains one picking identity; local crown surfaces repeat at each trunk.
+      expect(new Set(crowns.ids).size).toBe(1);
+      for (let i = 0; i < 6; i++) {
+        const trunk = i * (CROWN_SIDES + 1) * 2;
+        expect(Array.from(crowns.surface.slice(trunk, trunk + 2))).toEqual([0, 0]);
+      }
       expect(life.areas!.filter((a) => a.kind === 'parking-exclusion')).toHaveLength(6);
     });
 

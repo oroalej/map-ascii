@@ -313,18 +313,17 @@ function makeTheme(background: number, c: Palette): Theme {
       grass: { kind: 'grass', glyphs: grassGlyphs, color: c.grass, fill: 0.08 },
       trees: {
         kind: 'canopy',
-        glyphs: ['♣', '♠', '♣', '&', ',', 'Ψ', '↑', '♠', '%'],
+        glyphs: ['.', ',', ':', '%', '&', '@', 'Ψ', '↑', '♠'],
         color: c.trees,
-        fill: 0.1,
+        fill: background > 0x7fffff ? 0.35 : 0.16,
       },
-      // A tree's crown around its trunk: its rim is `%` and its inside `&`, with a dense `@` here
-      // and there (glyphs/select.ts `CrownGlyph`). In the wind it sways (the
-      // cell shader) and its leaves flutter between `%` and `&`.
+      // Clump tops carry dense ink in both themes; crevices and rims stay sparse. Wind sways
+      // the geometry and flutters the density by one step (glyphs/select.ts).
       tree_crown: {
         kind: 'foliage',
-        glyphs: ['%', '&', '&', '&', '@'],
+        glyphs: ['.', ',', ':', '%', '&', '@'],
         color: c.crown,
-        fill: 0.14,
+        fill: background > 0x7fffff ? 0.4 : 0.2,
       },
       farmland: { kind: 'crop', glyphs: ['≡', "'", '/', '\\', '~'], color: c.farmland, fill: 0.08 },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },

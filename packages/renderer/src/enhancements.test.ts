@@ -6,7 +6,7 @@ import {
   uprightStreetAngle,
   resetOverlay,
 } from './labels';
-import { crownLight } from './glyphs/select';
+import { crownShade, crownClumps } from './glyphs/select';
 import { legendEntries } from './legend';
 
 describe('rotated street names', () => {
@@ -67,11 +67,9 @@ describe('rotated street names', () => {
   });
 });
 
-it('lights a rounded tree crown through its interior, with a shaded far side', () => {
-  const sun: [number, number, number] = [-1, 0, 1];
-  expect(crownLight(-0.5, 0, sun)).toBeGreaterThan(crownLight(0.5, 0, sun));
-  expect(crownLight(0, 0, sun)).toBeGreaterThan(crownLight(0.95, 0, sun));
-  expect(crownLight(0.5, 0, [1, 0, 1])).toBeCloseTo(crownLight(-0.5, 0, sun));
+it('keeps crown illumination smooth within each seeded clump', () => {
+  const shade = (x: number) => crownShade(x, 0, crownClumps(x, 0, 42), [0, 0, 1]).light;
+  expect(Math.abs(shade(0.001) - shade(0))).toBeLessThan(0.01);
 });
 
 it('shows solid boat hulls and outriggers in the legend in both themes', () => {
