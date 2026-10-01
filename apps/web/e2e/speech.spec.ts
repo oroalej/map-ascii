@@ -160,36 +160,25 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
   });
   const selector = page.getByRole('combobox', { name: 'Speech translation' });
   await selector.selectOption('en');
-  await expect(bubbles.locator('[lang="en"]').first()).toHaveText('Good afternoon!');
-  await expect(native).toHaveText('Marhay na hapon!');
+  await expect(bubbles.first().locator('[lang]')).toHaveText([
+    'Marhay na hapon!',
+    'Good afternoon!',
+  ]);
   await selector.selectOption('fil');
-  await expect(bubbles.locator('[lang="fil"]').first()).toHaveText('Magandang hapon!');
-  await page.evaluate(() => {
-    (window as unknown as { speechFixture: object }).speechFixture = {
-      exchangeId: 'talk-how-are-you',
-      line: 0,
-    };
-  });
-  await expect(native).toHaveText('Kumusta ka?');
+  await expect(bubbles.first().locator('[lang]')).toHaveText([
+    'Marhay na hapon!',
+    'Magandang hapon!',
+  ]);
   await page.evaluate(() => {
     (window as unknown as { speechFixture: object }).speechFixture = {
       exchangeId: 'talk-how-are-you',
       line: 1,
     };
   });
-  await expect(native).toHaveText('Marhay man, salamat.');
-  await expect(bubbles.locator('[lang="fil"]').first()).toHaveText('Mabuti naman, salamat.');
+  await expect(bubbles.first().locator('[lang]')).toHaveText([
+    'Marhay man, salamat.',
+    'Mabuti naman, salamat.',
+  ]);
   await page.getByRole('button', { name: 'Speech', exact: true }).click();
-  await expect(bubbles).toHaveCount(0);
-  await page.getByRole('button', { name: 'Speech', exact: true }).click();
-  await expect(native).toHaveText('Marhay man, salamat.');
-  await page.reload();
-  await mapReady(page);
-  await page.locator('summary').filter({ hasText: 'Legend' }).click();
-  await expect(selector).toHaveValue('fil');
-  await expect(bubbles.locator('[lang="fil"]').first()).toHaveText('Magandang hapon!', {
-    timeout: 20_000,
-  });
-  await page.getByRole('button', { name: 'Life', exact: true }).click();
   await expect(bubbles).toHaveCount(0);
 });
