@@ -5,8 +5,6 @@ import {
   bandVisibility,
   UTILITY_ZOOM,
   UTILITY_DETAIL_ZOOM,
-  utilityRandom,
-  utilityRecordId,
   utilitySeed,
   type UtilityRecord,
   type UtilityPole,
@@ -57,10 +55,8 @@ export function createUtilityFixtureCache() {
   return (groups: readonly (readonly UtilityRecord[])[]) => {
     if (sameReferenceMembers(groups, previous)) return result;
     previous = groups.slice();
-    const records = new Map<string, UtilityRecord>();
-    for (const group of groups)
-      for (const record of group) records.set(utilityRecordId(record), record);
-    result = utilityFixtures([...records.values()]);
+    // Conversion already deduplicates poles and spans, including buffered tile copies.
+    result = utilityFixtures(groups.flat());
     return result;
   };
 }
@@ -95,11 +91,14 @@ export function clipUtilityLine(
         [a[0] + dx * hi, a[1] + dy * hi],
       ];
 }
-const detailed = (id: string, zoom: number) =>
-  utilityRandom(id, 'detail') < bandVisibility(UTILITY_DETAIL_ZOOM, zoom);
+const draw = (seed: number, purpose: string) => utilitySeed(`:${purpose}`, seed) / 0x100000000;
 
 export const utilityOpacity = (zoom: number) =>
   Math.round(bandVisibility(UTILITY_ZOOM, zoom) * 255);
+
+/** Small, stable hardware variations; topology and the concrete-cap visual stay unchanged. */
+export const utilityPoleVariant = (id: string): 'single' | 'double' | 'bracket' =>
+  (['single', 'double', 'bracket'] as const)[utilitySeed(`${id}:hardware`) % 3]!;
 export type UtilityPackingScratch = { owners: Int32Array; cables: Uint8Array };
 export const createUtilityPackingScratch = (): UtilityPackingScratch => ({
   owners: new Int32Array(0),
@@ -144,6 +143,7 @@ export function packUtilityFixtures(
   scratch: UtilityPackingScratch = createUtilityPackingScratch(),
 ): number[] {
   const alpha = utilityOpacity(zoom);
+  const detailVisibility = bandVisibility(UTILITY_DETAIL_ZOOM, zoom);
   if (!alpha || !fixtures.length) return [];
   const size = grid.cols * grid.rows;
   if (scratch.owners.length !== size) {
@@ -154,12 +154,57 @@ export function packUtilityFixtures(
   owners.fill(-1);
   cables.fill(0);
   const active = new Set<number>();
-  // The camera has no rotation. Expand the geographic indexing segment by the maximum
-  // ornament reach, then skip offscreen hardware before projecting individual strokes.
-  const outside = (at: UtilityPoint, a: UtilityPoint, b = a) => {
-    const expanded = grid.toCell(...offsetUtility(at, UTILITY.buffer, UTILITY.buffer));
-    const mx = Math.abs(expanded[0] - a[0]) + 1,
-      my = Math.abs(expanded[1] - a[1]) + 1;
+  const projected = new Map<
+    string,
+    { center: UtilityPoint; along?: UtilityPoint; across?: UtilityPoint }
+  >();
+  const project = (pole: UtilityPole) => {
+    let pose = projected.get(pole.id);
+    if (!pose) {
+      const center = grid.toCell(...pole.at);
+      pose = { center };
+      projected.set(pole.id, pose);
+    }
+    return pose;
+  };
+  const localPoint = (pole: UtilityPole, along: number, across: number): UtilityPoint => {
+    const pose = project(pole);
+    if (!along && !across) return pose.center;
+    if (!pose.along) {
+      const a = grid.toCell(...offsetUtility(pole.at, ...pole.heading));
+      const n = grid.toCell(...offsetUtility(pole.at, ...pole.normal));
+      pose.along = [a[0] - pose.center[0], a[1] - pose.center[1]];
+      pose.across = [n[0] - pose.center[0], n[1] - pose.center[1]];
+    }
+    // Bounded metre-scale ornaments use local cell directions; support centers remain exact.
+    return [
+      pose.center[0] + pose.along[0] * along + pose.across![0] * across,
+      pose.center[1] + pose.along[1] * along + pose.across![1] * across,
+    ];
+  };
+  // Mercator scale is bounded by the latitude extrema. Compute conservative ornament
+  // padding twice for the network, not once for every offscreen support and span.
+  let south: UtilityPole | undefined, north: UtilityPole | undefined;
+  const extent = (pole: UtilityPole) => {
+    if (!south || pole.at[1] < south.at[1]) south = pole;
+    if (!north || pole.at[1] > north.at[1]) north = pole;
+  };
+  for (const fixture of fixtures) {
+    if (fixture.kind === 'utility-pole') extent(fixture.pole);
+    else {
+      extent(fixture.span.from);
+      extent(fixture.span.to);
+    }
+  }
+  let mx = 1,
+    my = 1;
+  for (const pole of [south!, north!]) {
+    const center = project(pole).center;
+    const expanded = grid.toCell(...offsetUtility(pole.at, UTILITY.buffer, UTILITY.buffer));
+    mx = Math.max(mx, Math.abs(expanded[0] - center[0]) + 1);
+    my = Math.max(my, Math.abs(expanded[1] - center[1]) + 1);
+  }
+  const outside = (a: UtilityPoint, b = a) => {
     return (
       Math.max(a[0], b[0]) + mx < 0 ||
       Math.min(a[0], b[0]) - mx >= grid.cols ||
@@ -167,20 +212,35 @@ export function packUtilityFixtures(
       Math.min(a[1], b[1]) - my >= grid.rows
     );
   };
+  const glyphCodes = new Map<
+    string,
+    { code: number; part: number; bytes?: readonly [number, number] }
+  >();
   const stamp = (cell: number, glyph: string, part: number) => {
-    const code = glyphIndex(glyph);
-    if (code <= 0 || code > MAX_GLYPHS) return;
+    let cached = glyphCodes.get(glyph);
+    if (!cached) {
+      cached = { code: glyphIndex(glyph), part: -1 };
+      glyphCodes.set(glyph, cached);
+    }
+    if (cached.code <= 0 || cached.code > MAX_GLYPHS) return;
+    if (cached.part !== part) {
+      cached.bytes = packGlyph(cached.code, part);
+      cached.part = part;
+    }
     const at = cell * 4;
-    [out[at], out[at + 1]] = packGlyph(code, part);
+    const [lo, hi] = cached.bytes!;
+    if (out[at] === lo && out[at + 1] === hi && out[at + 3] === alpha) return;
+    [out[at], out[at + 1]] = [lo, hi];
     out[at + 2] = 0;
     out[at + 3] = alpha;
     active.add(cell);
   };
-  const cellAt = (p: UtilityPoint): number => {
-    const c = Math.floor(p[0]),
-      r = Math.floor(p[1]);
+  const cellAtXY = (x: number, y: number): number => {
+    const c = Math.floor(x),
+      r = Math.floor(y);
     return c < 0 || r < 0 || c >= grid.cols || r >= grid.rows ? -1 : r * grid.cols + c;
   };
+  const cellAt = (p: UtilityPoint) => cellAtXY(p[0], p[1]);
   const line = (a: UtilityPoint, b: UtilityPoint, visit: (cell: number, mask: number) => void) => {
     const clipped = clipUtilityLine(a, b, grid.cols, grid.rows);
     if (!clipped) return;
@@ -191,25 +251,18 @@ export function packUtilityFixtures(
     const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 2);
     for (let i = 0; i <= steps; i++) {
       const t = steps ? i / steps : 0,
-        cell = cellAt([start[0] + dx * t, start[1] + dy * t]);
+        cell = cellAtXY(start[0] + dx * t, start[1] + dy * t);
       if (cell >= 0) visit(cell, mask);
     }
   };
   // Sort even for direct packer callers; normal application conversion already sorts.
-  const poles = fixtures
-    .filter((f) => f.kind === 'utility-pole')
-    .sort((a, b) => (a.pole.id < b.pole.id ? -1 : 1));
+  const poles = fixtures.filter((f) => f.kind === 'utility-pole');
+  if (poles.some((f, i) => i > 0 && poles[i - 1]!.pole.id > f.pole.id))
+    poles.sort((a, b) => (a.pole.id < b.pole.id ? -1 : 1));
   for (let owner = 0; owner < poles.length; owner++) {
     const p = poles[owner]!.pole;
-    if (outside(p.at, grid.toCell(...p.at))) continue;
-    const point = (along: number, across: number) =>
-      grid.toCell(
-        ...offsetUtility(
-          p.at,
-          p.heading[0] * along + p.normal[0] * across,
-          p.heading[1] * along + p.normal[1] * across,
-        ),
-      );
+    if (outside(project(p).center)) continue;
+    const point = (along: number, across: number) => localPoint(p, along, across);
     const write = (cell: number, glyph: string, part: number) => {
       if (cell < 0) return;
       const occupied = out[cell * 4 + 3]! > 0;
@@ -222,11 +275,19 @@ export function packUtilityFixtures(
       stamp(cell, glyph, part);
       owners[cell] = owner;
     };
-    if (detailed(p.id, zoom)) {
-      line(point(0, -0.8), point(0, 0.8), (cell, mask) =>
-        write(cell, stroke(mask, true), UtilityPart.crossarm),
-      );
-      for (const n of [-0.8, 0.8]) write(cellAt(point(0, n)), '·', UtilityPart.insulator);
+    if (draw(utilitySeed(p.id), 'detail') < detailVisibility) {
+      const variant = utilityPoleVariant(p.id);
+      const arms = variant === 'double' ? [-0.6, 0.6] : variant === 'bracket' ? [0.7] : [0];
+      if (variant === 'bracket')
+        line(point(0, 0), point(0.7, 0), (cell, mask) =>
+          write(cell, stroke(mask, true), UtilityPart.crossarm),
+        );
+      for (const along of arms) {
+        line(point(along, -0.8), point(along, 0.8), (cell, mask) =>
+          write(cell, stroke(mask, true), UtilityPart.crossarm),
+        );
+        for (const n of [-0.8, 0.8]) write(cellAt(point(along, n)), '·', UtilityPart.insulator);
+      }
       if (p.transformer)
         for (let u = -1; u <= 1; u += 0.25)
           for (let v = 0.6; v <= 1.6; v += 0.25)
@@ -240,11 +301,12 @@ export function packUtilityFixtures(
   for (const f of fixtures) {
     if (f.kind !== 'utility-span') continue;
     const { span: s } = f,
-      detail = detailed(s.id, zoom);
+      seed = utilitySeed(s.id),
+      detail = draw(seed, 'detail') < detailVisibility;
     const count = detail ? 2 + (s.seed % 3) : 1;
-    const from = grid.toCell(...s.from.at),
-      to = grid.toCell(...s.to.at);
-    if (outside(s.from.at, from, to)) continue;
+    const from = project(s.from).center,
+      to = project(s.to).center;
+    if (outside(from, to)) continue;
     const midpoint: UtilityPoint = [
       (s.from.at[0] + s.to.at[0]) / 2,
       (s.from.at[1] + s.to.at[1]) / 2,
@@ -258,16 +320,11 @@ export function packUtilityFixtures(
         line(from, to, cable);
         continue;
       }
-      const offset = (utilityRandom(s.id, `offset-${trace}`) * 2 - 1) * 0.7;
-      const a = grid.toCell(
-        ...offsetUtility(s.from.at, s.from.normal[0] * offset, s.from.normal[1] * offset),
-      );
-      const b = grid.toCell(
-        ...offsetUtility(s.to.at, s.to.normal[0] * offset, s.to.normal[1] * offset),
-      );
+      const offset = (draw(seed, `offset-${trace}`) * 2 - 1) * 0.7;
+      const a = localPoint(s.from, 0, offset);
+      const b = localPoint(s.to, 0, offset);
       const push =
-        (utilityRandom(s.id, `push-${trace}`) * 0.9 + 0.3) *
-        (utilitySeed(s.id + trace) & 1 ? 1 : -1);
+        (draw(seed, `push-${trace}`) * 0.9 + 0.3) * (utilitySeed(String(trace), seed) & 1 ? 1 : -1);
       const mid = grid.toCell(
         ...offsetUtility(midpoint, (-dy / length) * push, (dx / length) * push),
       );
@@ -276,7 +333,7 @@ export function packUtilityFixtures(
     }
     if (detail)
       for (const [i, p] of [s.from, s.to].entries())
-        if (utilityRandom(s.id, `tangle-${i}`) < 0.2) {
+        if (draw(seed, `tangle-${i}`) < 0.2) {
           const sign = i ? -1 : 1;
           const cell = cellAt(
             grid.toCell(

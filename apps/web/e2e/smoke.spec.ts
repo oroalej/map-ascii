@@ -115,6 +115,20 @@ for (const city of cities) {
             .locator('details')
             .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
           await expect(legend).toBeVisible();
+          // Readouts may cover the landmark on a phone when attribution pushes the HUD up.
+          // They must let map gestures through; only HUD controls should intercept input.
+          const scaleBox = (await page.getByLabel(/^Scale:/).boundingBox())!;
+          expect(
+            await canvas.evaluate(
+              (map, point) => document.elementFromPoint(point.x, point.y) === map,
+              { x: scaleBox.x + scaleBox.width / 2, y: scaleBox.y + scaleBox.height / 2 },
+            ),
+            'the scale readout lets pointer events reach the map',
+          ).toBe(true);
+          // Controls in the same HUD remain clickable.
+          await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
+          await expect(coordsButton(page)).toBeVisible();
+          await coordsButton(page).click();
           // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
           // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {

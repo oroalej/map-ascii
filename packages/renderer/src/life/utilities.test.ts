@@ -14,6 +14,7 @@ import {
   utilityViewportVisibility,
   createUtilityPackingScratch,
   packUtilityFixtures,
+  utilityPoleVariant,
 } from './utilities';
 import { LampState } from './lights';
 
@@ -53,6 +54,53 @@ const pack = (fixtures: StreetFixture[], zoom = 20, g = grid) =>
   packFixtures(new Uint8Array(g.cols * g.rows * 4), g, fixtures, zoom, glyph, 0);
 
 describe('utility fixture composition', () => {
+  it('keeps ornaments entering the viewport from an offscreen support', () => {
+    const support = {
+      ...pole('edge-transformer', -51, 0),
+      heading: [0, 1] as [number, number],
+      normal: [1, 0] as [number, number],
+      transformer: true,
+    };
+    const fixtures = utilityFixtures([{ version: 1, kind: 'pole', pole: support }]);
+    const cropped = pack(fixtures, 21);
+    const expanded = pack(fixtures, 21, {
+      ...grid,
+      cols: grid.cols + 20,
+      toCell: (lng, lat) => {
+        const [x, y] = grid.toCell(lng, lat);
+        return [x + 10, y];
+      },
+    });
+    expect(cropped.utilityCells.length).toBeGreaterThan(0);
+    for (let row = 0; row < grid.rows; row++)
+      expect(cropped.texels.slice(row * grid.cols * 4, (row + 1) * grid.cols * 4)).toEqual(
+        expanded.texels.slice(
+          (row * (grid.cols + 20) + 10) * 4,
+          (row * (grid.cols + 20) + 10 + grid.cols) * 4,
+        ),
+      );
+  });
+  it('renders stable single, double and bracket crossarms while keeping the concrete cap', () => {
+    const ids = Array.from({ length: 40 }, (_, i) => `variant-${i}`);
+    const fine = {
+      ...grid,
+      toCell: (lng: number, lat: number): [number, number] => {
+        const [x, y] = grid.toCell(lng, lat);
+        return [(x - 50.5) * 3 + 50.5, (y - 30.5) * 3 + 30.5];
+      },
+    };
+    const outputs = [];
+    for (const variant of ['single', 'double', 'bracket'] as const) {
+      const id = ids.find((id) => utilityPoleVariant(id) === variant)!;
+      expect(id).toBeDefined();
+      const fixtures = [{ kind: 'utility-pole' as const, pole: pole(id, 0, 0) }];
+      const packed = pack(fixtures, 19.5, fine);
+      expect(packed.texels[(30 * grid.cols + 50) * 4 + 1]! & 63).toBe(FixturePart.utilityCap);
+      expect(pack(fixtures, 19.5, fine).texels).toEqual(packed.texels);
+      outputs.push(JSON.stringify([...packed.texels]));
+    }
+    expect(new Set(outputs).size).toBe(3);
+  });
   it('preserves poles and wires when animated flag cloth crosses their cells', () => {
     const base = offsetUtility(origin, -10, 14);
     const flag: StreetFixture = {

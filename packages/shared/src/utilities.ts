@@ -36,20 +36,28 @@ const text = (value: unknown): value is string => typeof value === 'string' && v
 const finite = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 const point = (value: unknown): value is UtilityPoint =>
-  Array.isArray(value) && value.length === 2 && value.every(finite);
-const keys = (value: Record<string, unknown>, required: string[], optional: string[] = []) =>
+  Array.isArray(value) && value.length === 2 && finite(value[0]) && finite(value[1]);
+const keys = (
+  value: Record<string, unknown>,
+  required: readonly string[],
+  allowed: ReadonlySet<string>,
+) =>
   required.every((key) => Object.hasOwn(value, key)) &&
-  Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
+  Object.keys(value).every((key) => allowed.has(key));
+const poleKeys = ['id', 'road', 'component', 'at', 'heading', 'normal', 'transformer'];
+const allowedPoleKeys = new Set([...poleKeys, 'sharedLamp', 'partner']);
+const poleRecordKeys = ['version', 'kind', 'pole'];
+const allowedPoleRecordKeys = new Set(poleRecordKeys);
+const spanRecordKeys = ['version', 'kind', 'span'];
+const allowedSpanRecordKeys = new Set(spanRecordKeys);
+const spanKeys = ['id', 'kind', 'from', 'to', 'seed'];
+const allowedSpanKeys = new Set(spanKeys);
 const direction = (value: unknown): value is UtilityPoint =>
-  point(value) && Math.abs(Math.hypot(...value) - 1) < 0.001;
+  point(value) && Math.abs(Math.hypot(value[0], value[1]) - 1) < 0.001;
 function isUtilityPole(value: unknown): value is UtilityPole {
   return (
     object(value) &&
-    keys(
-      value,
-      ['id', 'road', 'component', 'at', 'heading', 'normal', 'transformer'],
-      ['sharedLamp', 'partner'],
-    ) &&
+    keys(value, poleKeys, allowedPoleKeys) &&
     text(value.id) &&
     text(value.road) &&
     text(value.component) &&
@@ -68,12 +76,12 @@ function isUtilityPole(value: unknown): value is UtilityPole {
 export function isUtilityRecord(value: unknown): value is UtilityRecord {
   if (!object(value) || value.version !== 1) return false;
   if (value.kind === 'pole')
-    return keys(value, ['version', 'kind', 'pole']) && isUtilityPole(value.pole);
-  if (value.kind !== 'span' || !keys(value, ['version', 'kind', 'span'])) return false;
+    return keys(value, poleRecordKeys, allowedPoleRecordKeys) && isUtilityPole(value.pole);
+  if (value.kind !== 'span' || !keys(value, spanRecordKeys, allowedSpanRecordKeys)) return false;
   const span = value.span;
   return (
     object(span) &&
-    keys(span, ['id', 'kind', 'from', 'to', 'seed']) &&
+    keys(span, spanKeys, allowedSpanKeys) &&
     text(span.id) &&
     (span.kind === 'corridor' || span.kind === 'crossing' || span.kind === 'junction') &&
     isUtilityPole(span.from) &&
@@ -116,8 +124,9 @@ export const utilityRecordId = (r: UtilityRecord): string =>
   r.kind === 'pole' ? r.pole.id : r.span.id;
 export const utilitySpanId = (a: string, b: string): string =>
   `utility:span:${JSON.stringify([a, b].sort())}`;
-export function utilitySeed(id: string): number {
-  let h = 0x811c9dc5;
+/** Passing a prior hash appends text without rehashing a long network identifier. */
+export function utilitySeed(id: string, initial = 0x811c9dc5): number {
+  let h = initial;
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
   return h >>> 0;
 }
