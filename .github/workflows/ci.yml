@@ -43,14 +43,14 @@ jobs:
 
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
-  # across two runners: each test renders WebGL in software on a single worker.
+  # across three runners: leave room for setup, export and cleanup within six minutes.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       # Release assets of a private repository download through the API with this token.
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,7 +80,7 @@ jobs:
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 
       # Prepares the static export before Playwright starts or reuses its web server.
-      - run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
       - run: pnpm check:budgets
         if: matrix.shard == 1
