@@ -1,11 +1,642 @@
 {
   "id": "landcover/penafrancia-basilica",
-  "title": "Peñafrancia Basilica grounds grounds",
+  "title": "Peñafrancia Basilica grounds",
   "trees": [
     {
-      "at": [123.19964484, 13.63253787],
-      "crown_m": 6,
-      "kind": "broadleaved"
+      "at": [123.19919129, 13.63306129],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19921103, 13.63302266],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19922557, 13.63298224],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19924183, 13.63294242],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19925897, 13.6329029],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19927784, 13.63286397],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19929411, 13.63282414],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19931211, 13.63278492],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19932404, 13.63274361],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19934378, 13.63270497],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19935831, 13.63266456],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19937545, 13.63262503],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19939432, 13.6325861],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19941059, 13.63254628],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19943119, 13.63250794],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.1994492, 13.63246872],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.1994724, 13.63243127],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19950435, 13.63240148],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19954379, 13.63238241],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19958051, 13.63238452],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19961081, 13.63239026],
+      "kind": "palm",
+      "crown_m": 5.6,
+      "height_m": 18
+    },
+    {
+      "at": [123.19957762, 13.63321471],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19961489, 13.63322516],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19965174, 13.63323663],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19968985, 13.63324504],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19972753, 13.63325447],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19976522, 13.6332639],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19980457, 13.63326924],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19984601, 13.63326948],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19990565, 13.63324453],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19992883, 13.63320475],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19994853, 13.63316378],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19996477, 13.63312162],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.199981, 13.63307945],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.1999981, 13.63303759],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20001521, 13.63299572],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20003057, 13.63295326],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20004507, 13.63291051],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20006044, 13.63286805],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20007841, 13.63282648],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20009378, 13.63278402],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20011088, 13.63274216],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20012712, 13.63269999],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20013513, 13.63265618],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20012804, 13.632613],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.2001055, 13.63257617],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20007491, 13.63254938],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20003969, 13.63253149],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20000239, 13.6325187],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19996249, 13.63250502],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19996322, 13.63331666],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.19998716, 13.63327015],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20002204, 13.63317268],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20003217, 13.6331261],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20004316, 13.63307981],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.2000611, 13.63303591],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20007643, 13.63299111],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20009003, 13.63294571],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20010537, 13.63290091],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.2001207, 13.63285611],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20013864, 13.63281221],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20015005, 13.6327649],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20016754, 13.63271967],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.2001785, 13.63267105],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20019252, 13.63262463],
+      "kind": "palm",
+      "crown_m": 5.8,
+      "height_m": 18
+    },
+    {
+      "at": [123.20003259, 13.63327758],
+      "kind": "broadleaved",
+      "crown_m": 10,
+      "height_m": 12
+    },
+    {
+      "at": [123.19911247, 13.63301215],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19913336, 13.63296343],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19915061, 13.63290183],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19917651, 13.63284086],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19919525, 13.63279258],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19922413, 13.63272914],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19924732, 13.63266026],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19927475, 13.63258585],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19931089, 13.63251675],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.1993469, 13.6324383],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19937832, 13.63237107],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19940453, 13.63230207],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19943623, 13.63222446],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.1994527, 13.63213815],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19947788, 13.63205714],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.19955284, 13.63201649],
+      "kind": "palm",
+      "crown_m": 6.2,
+      "height_m": 18
+    },
+    {
+      "at": [123.1991407, 13.63293336],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19920593, 13.63275433],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.1992544, 13.63261147],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19927881, 13.63253718],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19930621, 13.63246043],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19933929, 13.63238913],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19937422, 13.63232543],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.1994079, 13.63223571],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19943051, 13.63215615],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19946502, 13.63209348],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19948689, 13.63202298],
+      "kind": "broadleaved",
+      "crown_m": 7.5,
+      "height_m": 10
+    },
+    {
+      "at": [123.19941236, 13.63303581],
+      "kind": "broadleaved",
+      "crown_m": 16,
+      "height_m": 14
+    },
+    {
+      "at": [123.19950584, 13.6329014],
+      "kind": "palm",
+      "crown_m": 8,
+      "height_m": 14
+    },
+    {
+      "at": [123.19969433, 13.63295322],
+      "kind": "palm",
+      "crown_m": 8,
+      "height_m": 14
+    },
+    {
+      "at": [123.19958188, 13.63269348],
+      "kind": "palm",
+      "crown_m": 6.8,
+      "height_m": 14
+    },
+    {
+      "at": [123.19976588, 13.63276356],
+      "kind": "palm",
+      "crown_m": 8,
+      "height_m": 14
+    },
+    {
+      "at": [123.20005545, 13.63242514],
+      "kind": "broadleaved",
+      "crown_m": 6.2,
+      "height_m": 9
+    },
+    {
+      "at": [123.2000974, 13.63243137],
+      "kind": "broadleaved",
+      "crown_m": 6.2,
+      "height_m": 9
+    },
+    {
+      "at": [123.20013516, 13.63244548],
+      "kind": "broadleaved",
+      "crown_m": 6.2,
+      "height_m": 9
+    },
+    {
+      "at": [123.20017374, 13.63245755],
+      "kind": "broadleaved",
+      "crown_m": 6.2,
+      "height_m": 9
+    },
+    {
+      "at": [123.20029649, 13.63246937],
+      "kind": "broadleaved",
+      "crown_m": 7,
+      "height_m": 10
+    },
+    {
+      "at": [123.20031488, 13.63242678],
+      "kind": "broadleaved",
+      "crown_m": 7,
+      "height_m": 10
+    },
+    {
+      "at": [123.20034052, 13.63237853],
+      "kind": "broadleaved",
+      "crown_m": 7,
+      "height_m": 10
+    },
+    {
+      "at": [123.20036051, 13.63232718],
+      "kind": "broadleaved",
+      "crown_m": 7,
+      "height_m": 10
     }
   ],
   "rows": [],
@@ -13,31 +644,98 @@
     {
       "cover": "planting",
       "ring": [
-        [123.19964184, 13.63258781],
-        [123.19969428, 13.63257026],
-        [123.19970331, 13.63259574],
-        [123.19965087, 13.63261329],
-        [123.19964184, 13.63258781]
+        [123.19917369, 13.63306806],
+        [123.1994374, 13.63245885],
+        [123.1994862, 13.63239992],
+        [123.19954022, 13.6323742],
+        [123.19961331, 13.63238413],
+        [123.19961212, 13.63239187],
+        [123.19954035, 13.63238356],
+        [123.19949019, 13.6324071],
+        [123.19944396, 13.63246459],
+        [123.19918108, 13.63307176],
+        [123.19917369, 13.63306806]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.19988256, 13.6332599],
+        [123.1999473, 13.63313774],
+        [123.20010407, 13.63274914],
+        [123.2001248, 13.63268872],
+        [123.20013094, 13.63263495],
+        [123.20011615, 13.63259612],
+        [123.20007764, 13.63255964],
+        [123.19995565, 13.63250966],
+        [123.1999594, 13.63250047],
+        [123.200084, 13.63255134],
+        [123.20012427, 13.63259076],
+        [123.2001391, 13.63263193],
+        [123.20013431, 13.63268965],
+        [123.20011275, 13.63275211],
+        [123.19995684, 13.63314102],
+        [123.19989294, 13.63326113],
+        [123.19988256, 13.6332599]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.19933608, 13.63237522],
+        [123.199367321, 13.6323113594],
+        [123.1993825117, 13.6322984066],
+        [123.1993443, 13.63237687],
+        [123.19933608, 13.63237522]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.1994029014, 13.6322386282],
+        [123.1994156158, 13.6322126384],
+        [123.1994237805, 13.6322136657],
+        [123.1994121039, 13.6322376422],
+        [123.1994029014, 13.6322386282]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.1994410792, 13.6321605878],
+        [123.1994554773, 13.6321311562],
+        [123.19944578, 13.6321611792],
+        [123.1994410792, 13.6321605878]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.20000894, 13.63319264],
+        [123.20014881, 13.6327994],
+        [123.20020148, 13.63261723],
+        [123.20020797, 13.63261829],
+        [123.20015575, 13.63280178],
+        [123.20001671, 13.63319298],
+        [123.20000894, 13.63319264]
       ]
     }
   ],
   "status": "draft",
-  "credit": "Peñafrancia Basilica grounds — Belfry reference: © Carlo Joseph Moskito, 2016 (https://commons.wikimedia.org/wiki/User:Carlojoseph14), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); substantially schematic adaptation. Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.; facade reference: Dominic McArthur, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/).",
+  "credit": "Peñafrancia Basilica vegetation: owner-supplied Google Maps overhead / Street View references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Draft estimates; imagery dates unknown.",
   "sources": [
     {
-      "title": "OpenStreetMap: site and surrounding features",
+      "title": "OpenStreetMap: grounds, buildings and roads",
       "url": "https://www.openstreetmap.org/way/838935827",
-      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+      "note": "ODbL. Cached ground extent, standing footprints, pavilion (Centennial Globe) and road alignment preserved. No edit dates interpreted as construction dates."
     },
     {
-      "title": "Independent facility reference",
-      "url": "https://commons.wikimedia.org/wiki/File:Belfry_of_Pe%C3%B1afrancia_Basilica,_Naga_City.jpg",
-      "note": "Commons belfry record supports further tower research. Facade appearance was reviewed in Dominic McArthur's independent photograph; crossing and facade parts are schematic estimates. Forecourt fitted to Basilica Loop; grounds extent is estimated in OSM. Centennial Globe already mapped, not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+      "title": "Owner-supplied annotated Google Maps overhead reference",
+      "note": "Inspected 2026-10-02. All circled vegetation groups traced and registered to pavilion centre and opposite church transept corners; roads and roofs checked. Positions, counts and crown diameters are draft estimates, with estimated trunks kept clear of mapped carriageways/buildings despite registration/OSM uncertainty. Shadows excluded. Replaces the unsupported single-tree/planting placeholders. Imagery/capture date unknown; no timeline dates inferred; reference bitmap is not shipped."
     },
     {
-      "title": "Dominic McArthur: Peñafrancia Basilica Minore, 2014",
-      "url": "https://commons.wikimedia.org/wiki/File:Pe%C3%B1afrancia_Basilica_Minore.jpg",
-      "note": "CC BY-SA 3.0. Independent facade photograph inspected for bell-tower, lawn, planting, trees and paving appearance; coordinates remain schematic OSM-based estimates."
+      "title": "Owner-supplied Google Street View: palm-lined Basilica Road",
+      "note": "Inspected 2026-10-02. Confirms tall palms along the road and narrow low green planting beside curbs, with broader trees behind. Palm family only; species unknown. Row heights estimated at 18 m, isolated palms at 14 m and broadleaf trees at 9–14 m; not surveyed. Copyright year is not a capture date; imagery/capture date unknown."
     }
   ]
 }
