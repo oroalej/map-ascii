@@ -166,7 +166,9 @@ export class SceneSpeechHost {
         tryScene(event.mover, event.kind === 'arrival');
       }
       if (scan) {
-        while (this.sceneBudget > 0 && tile.movers.length) {
+        // Keep one check available for real service events between scan boundaries.
+        // Spending both on background companions can miss a short purchase entirely.
+        while (this.sceneBudget > 1 && tile.movers.length) {
           sceneChecks++;
           this.sceneBudget--;
           tryScene(tile.movers[this.sceneCursor++ % tile.movers.length]!);

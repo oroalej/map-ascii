@@ -75,6 +75,17 @@ const order: DialogueChoice = {
   speakers: [0, 1],
 };
 describe('real local-scene adapters', () => {
+  it('reserves a check for a purchase beginning between background scans', () => {
+    const f = fixture(order);
+    f.tile.scenes.visits.clear();
+    f.host.step(0.1, 21, { rain: 0 }, undefined, []);
+    expect(f.host.speech.size).toBe(0);
+    f.tile.scenes.visits.set(f.person, f.visit);
+    f.tile.scenes.speechEvents.push({ kind: 'purchase', mover: f.person, visit: f.visit, key: {} });
+    f.host.step(0.02, 21, { rain: 0 }, undefined, []);
+    expect(f.host.speech.speech(f.person)).toMatchObject({ exchangeId: 'order', line: 0 });
+    expect(f.visit.time).toBe(3);
+  });
   it('observes a purchase without changing any scene state or navigation fields', () => {
     const f = fixture(order);
     f.tile.scenes.speechEvents.push({ kind: 'purchase', mover: f.person, visit: f.visit, key: {} });
