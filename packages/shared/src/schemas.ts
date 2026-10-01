@@ -631,6 +631,8 @@ export function contentSchemas(languages?: readonly string[]) {
       front: z.enum(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']).optional(),
       parts: z.array(PlanPart).min(1),
       status: z.enum(['draft', 'verified']),
+      /** Attribution for reference imagery, shown with the map credits. */
+      credit: z.string().trim().min(1).optional(),
       sources: Sources,
     })
     .refine(

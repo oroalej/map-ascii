@@ -52,6 +52,8 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = Partial<ShopAnchor> & {
+  /** Versioned RoofPlan JSON, calculated on the complete footprint before tiling. */
+  roof_plan?: string;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */

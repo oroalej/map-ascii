@@ -20,7 +20,7 @@ layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec4 a_meta; // class, height, flags, variant
 layout(location = 2) in uint a_id;
 layout(location = 3) in float a_ridge; // pitched roofs: signed distance to the ridge; crowns: reach from the trunk
-layout(location = 4) in vec2 a_surface; // crown-local coordinates; absent on ground
+layout(location = 4) in vec4 a_surface; // crowns: xy; roofs: along, across, ridgeHalf, endScale
 
 uniform mat4 u_matrix; // tile units -> cell-grid clip space (affine: the map is flat)
 uniform float u_depth[${MAX_CLASSES}];
@@ -39,7 +39,7 @@ flat out vec4 v_meta;
 flat out uint v_id;
 flat out float v_vis;
 out float v_ridge;
-out vec2 v_surface;
+out vec4 v_surface;
 flat out int v_crown;
 
 // Features' depths fall in [0.2, 1); anything past 1 is clipped.
@@ -97,7 +97,7 @@ flat in vec4 v_meta;
 flat in uint v_id;
 flat in float v_vis;
 in float v_ridge;
-in vec2 v_surface;
+in vec4 v_surface;
 flat in int v_crown;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0)
@@ -137,14 +137,29 @@ void main() {
   // Pitched roofs: which slope the cell is on, or the ridge if the ridge line crosses the cell
   // (the distance changes by fwidth across one cell). glyphs/select.ts roofCode.
   float roof = 0.0;
+  float angle = v_meta.w;
   int flags = int(v_meta.z + 0.5);
   if ((flags & ${Flags.ridged}) != 0) {
-    roof = abs(v_ridge) <= 0.5 * fwidth(v_ridge) ? ${RoofCode.ridge}.0
-      : v_ridge > 0.0 ? ${RoofCode.lit}.0 : ${RoofCode.shaded}.0;
+    float along = v_surface.x, across = v_surface.y;
+    float halfRidge = v_surface.z, scale = v_surface.w;
+    float end = scale * (abs(along) - halfRidge), side = abs(across);
+    float ridgeWidth = 0.5 * fwidth(across), hipWidth = 0.5 * fwidth(end - side);
+    if (scale > 0.0 && end > side + hipWidth) {
+      roof = along > 0.0 ? ${RoofCode.endPos}.0 : ${RoofCode.endNeg}.0;
+    } else if (scale > 0.0 && abs(end - side) <= hipWidth && (end > 0.0 || halfRidge == 0.0)) {
+      bool positive = along * across >= 0.0;
+      roof = positive ? ${RoofCode.hipPos}.0 : ${RoofCode.hipNeg}.0;
+      float theta = v_meta.w / 255.0 * ${Math.PI} + (positive ? 1.0 : -1.0) * atan(scale);
+      angle = floor(mod(theta + ${Math.PI}, ${Math.PI}) / ${Math.PI} * 255.0 + 0.5);
+    } else if ((scale == 0.0 || (halfRidge > 0.0 && end <= 0.0)) && side <= ridgeWidth) {
+      roof = ${RoofCode.ridge}.0;
+    } else {
+      roof = across > 0.0 ? ${RoofCode.sidePos}.0 : ${RoofCode.sideNeg}.0;
+    }
   }
-  o_attr = vec4(v_meta.y / 255.0, v_meta.z / 255.0, v_meta.w / 255.0, roof / 255.0);
+  o_attr = vec4(v_meta.y / 255.0, v_meta.z / 255.0, angle / 255.0, roof / 255.0);
   // Crown cells don't need building flags/roof variants. Carry their local surface instead.
-  if (v_crown == 1) o_attr.gb = v_surface * 0.5 + 0.5;
+  if (v_crown == 1) o_attr.gb = v_surface.xy * 0.5 + 0.5;
   o_id = vec4(uvec4(v_id, v_id >> 8u, v_id >> 16u, v_id >> 24u) & 255u) / 255.0;
 }
 `;

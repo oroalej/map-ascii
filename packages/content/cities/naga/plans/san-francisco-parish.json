@@ -29,7 +29,7 @@
     {
       "title": "Wikimedia Commons: San Francisco Church Front View.jpg",
       "url": "https://commons.wikimedia.org/wiki/File:San_Francisco_Church_Front_View.jpg",
-      "note": "Seen from the front: a small dome with a cross behind the façade on the left, and a spired tower behind it on the right."
+      "note": "Seen from the front: a small dome with a cross behind the façade on the left, and a spired tower behind it on the right. Dimensions and placement are visual estimates, not surveyed measurements; retained as draft in the 2026-10-01 review."
     },
     {
       "title": "OpenStreetMap",
@@ -37,5 +37,6 @@
       "note": "Footprint; its north-west end is on Peñafrancia Avenue, which the façade faces. The exact positions of the dome and tower on the roof are estimated."
     }
   ],
-  "status": "draft"
+  "status": "draft",
+  "credit": "Roof reference: San Francisco Church Front View.jpg by Alililibaba (CC BY-SA 4.0, Wikimedia Commons)."
 }

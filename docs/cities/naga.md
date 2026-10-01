@@ -81,3 +81,19 @@ Shop research: OSM shop coverage remains uneven; survey and map missing Centro s
 Neighborhood closeout (2026-10-01): retaining previously dropped non-building shop areas raises standalone markers to 58 food, 80 retail and 47 service; the 242 frontage buildings are unchanged. The recovered areas are bank way `269763741`, wholesale shop way `1202549803`, and fast-food way `1202664551`. Shops and markets now have 429 validated geographic light/commerce anchors computed before clipping. The isolated cached rebuild grows the archive from 2,188,067 to 2,244,135 bytes (+56,068); later independent data rebuilds may change its total. Lighting and nearby activity remain illustrative, not business-opening information.
 
 Street detail: the October 1 rebuild with the market-area direction corrections and signal corrections, including the cathedral, both Magsaysay bridge-side junctions, and four Panganiban locations, retains 4.691 km of mapped sidewalk sides over 2.617 km of roads and derives none. It tags 148 one-way ways and adds 186 illustrative arrow anchors plus 29 signalized stop lines at the nine configured junctions. There are 88 mapped crossing anchors and 18 derived crossings. No mapped stop line resolves: the single undirected mid-block stop node is skipped; no configured signal approach is shorter than its setback. Tiles are rebuilt locally and await publication.
+
+### Building-plan review (2026-10-01)
+
+All eight existing plans remain draft. Cathedral facade belfries and pediment cupola are supported by [Dilindin's photograph](https://commons.wikimedia.org/wiki/File:CATHEDRAL.jpg) (CC BY-SA 4.0); crossing position and dimensions still need independent overhead confirmation. San Francisco's left dome/right tower are supported by [Alililibaba's front view](https://commons.wikimedia.org/wiki/File:San_Francisco_Church_Front_View.jpg) (CC BY-SA 4.0); roof positions remain estimated. The Coliseum retains its draft crown with [Jewel457's reference](https://commons.wikimedia.org/wiki/File:Jesse_M._Robredo_Coliseum.jpg) (CC BY-SA 3.0). Quince Martires retains the previously reviewed tiered geometry and Ralff Nestor Nacor's CC BY-SA 4.0 credit. These credits now reach map attribution.
+
+Rizal's square pedestal remains unchanged and draft: the existing reference could not be retrieved during this review, so its author/license and dimensions still need verification. St. John the Evangelist, St. Pedro Calungsod and St. Peter Baptist retain generic draft pedestals; OSM supports location only. No new geometry is claimed as verified.
+
+| Proposed addition | Disposition and remaining evidence |
+| --- | --- |
+| Peñafrancia Basilica | Backlog. A [Commons belfry photograph](https://commons.wikimedia.org/wiki/File:Belfry_of_Pe%C3%B1afrancia_Basilica,_Naga_City.jpg) supports researching the tower; establish its actual standing footprint, position and dimensions before adding a part. |
+| Naga railway station | Backlog. Use the [2023 PNR station photograph](https://commons.wikimedia.org/wiki/File:PNR_Naga_Station_outside_(Tabuco,_Naga,_Camarines_Sur;_04-15-2023).jpg) for further research; confirm roof outline and dimensions. Do not confuse it with the bus station. |
+| Universidad de Sta. Isabel | Backlog. Landmark `osm:way/276457427` is school grounds, not a roof. Identify the actual building footprint and a usable architectural reference. |
+| Naga Parochial School | Backlog. Landmark `osm:way/1315514528` is school grounds. Identify a standing building and source its roof details. |
+| Archbishop's Residence | Backlog. Retain the ordinary roof until a dated architectural reference supports distinctive parts and their placement. |
+
+The cached OSM extract contains no entrance-tagged nodes. Do not infer surveyed entrances or construction dates from the derived roof geometry. No new landmark plans were added solely to meet a count.

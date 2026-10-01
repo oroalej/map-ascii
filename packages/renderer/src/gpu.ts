@@ -304,7 +304,7 @@ function uploadMesh(
   if (arrays.surface) {
     buffers.push(buffer(gl.ARRAY_BUFFER, arrays.surface));
     gl.enableVertexAttribArray(4);
-    gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(4, arrays.surfaceSize ?? 2, gl.FLOAT, false, 0, 0);
   }
   if (indices) buffers.push(buffer(gl.ELEMENT_ARRAY_BUFFER, indices));
   gl.bindVertexArray(null);

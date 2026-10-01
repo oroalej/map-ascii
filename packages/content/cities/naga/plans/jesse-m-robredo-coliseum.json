@@ -19,12 +19,13 @@
     {
       "title": "Wikimedia Commons: Jesse M. Robredo Coliseum.jpg",
       "url": "https://commons.wikimedia.org/wiki/File:Jesse_M._Robredo_Coliseum.jpg",
-      "note": "A wide low dome with a small round crown at its top."
+      "note": "A wide low dome with a small round crown at its top. Dimensions and placement are visual estimates, not surveyed measurements; retained as draft in the 2026-10-01 review."
     },
     {
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/425056186"
     }
   ],
-  "status": "draft"
+  "status": "draft",
+  "credit": "Roof reference: Jesse M. Robredo Coliseum.jpg by Jewel457 (CC BY-SA 3.0, Wikimedia Commons)."
 }

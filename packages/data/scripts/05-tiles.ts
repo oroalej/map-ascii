@@ -5,6 +5,7 @@ import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { landcoverCredits } from './lib/landcover';
+import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
@@ -54,6 +55,7 @@ export const step: Step = {
     const meta = buildMeta(city, geography, years, [
       ...landcoverCredits(content.landcover),
       ...detailCredits(content.details),
+      ...planCredits(content.plans),
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);

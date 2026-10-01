@@ -41,6 +41,7 @@ import {
 } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
+import { partyWallsGlsl } from './party-walls';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -247,7 +248,13 @@ int awningSide(ivec2 p, vec4 id) {
 const int OUTLINE = 0;
 const int CURBS = 1;
 
+${partyWallsGlsl}
+
 int wallMask(ivec2 p, int mode) {
+  if (mode == OUTLINE) {
+    int party = partyWallMask(p);
+    if (party != -2) return party;
+  }
   vec4 id = groundIdAt(p);
   bool o[9];
   bool edge = false;
@@ -434,11 +441,12 @@ void main() {
   } else if (kind == ${kindCodes.building}) {
     float height = attr.r * 255.0;
     v = ${BUILDING_STEPS.map((limit, i) => `height < ${float(limit)} ? ${i} : `).join('')}${BUILDING_STEPS.length};
+    if (partySeam(p, cls, attr)) v = max(0, v - 1);
     // Roofs from above (glyphs/select.ts roofVariant): the ridge, and lit and shaded slopes;
     // flat roofs are solid. The ridge angle is in the variant byte.
     if (height > 0.0 && u_zoom >= ${float(ROOF_ZOOM)}) {
       int roof = int(attr.a * 255.0 + 0.5);
-      if (roof == ${RoofCode.ridge}) {
+      if (roof == ${RoofCode.ridge} || roof == ${RoofCode.hipPos} || roof == ${RoofCode.hipNeg}) {
         float theta = float(variant) / 255.0 * ${Math.PI};
         float phi = atan(sin(theta) / u_cellAspect, cos(theta));
         int bin = int(floor(phi / ${Math.PI / 4} + 0.5)) % 4;
@@ -447,7 +455,15 @@ void main() {
         return;
       }
       // Without a ridge (flat roofs, landmark parts) the height ramp stays.
-      if (roof != ${RoofCode.none}) v = roof == ${RoofCode.shaded} ? 1 : 2;
+      if (roof == ${RoofCode.sidePos} || roof == ${RoofCode.sideNeg} || roof == ${RoofCode.endPos} || roof == ${RoofCode.endNeg}) {
+        float theta = float(variant) / 255.0 * ${Math.PI};
+        vec2 normal = roof == ${RoofCode.endPos} || roof == ${RoofCode.endNeg}
+          ? vec2(cos(theta), sin(theta)) : vec2(-sin(theta), cos(theta));
+        if (roof == ${RoofCode.sideNeg} || roof == ${RoofCode.endNeg}) normal = -normal;
+        float lit = dot(normal, sunDir());
+        if (lit > 0.25) v = 2;
+        else if (lit < -0.25) v = 1;
+      }
     }
   } else if (kind == ${kindCodes.variant}) {
     if (cls == ${classId('furniture')} && variant >= 9 && variant <= 11) {
