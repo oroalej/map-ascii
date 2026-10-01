@@ -1,3 +1,4 @@
+import { spawnMargin } from './life/births';
 import {
   bandVisibility,
   CLASS_ZOOM,
@@ -716,15 +717,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let agentsDrawn = 0;
 
   const syncLife = (tiles: readonly TileId[]) => {
-    const lifeTiles: LifeTile[] = [];
-    if (lifeActive()) {
-      for (const tile of tiles) {
-        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
-        const loaded = tileCache.get(tile);
-        if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
-      }
+    if (!lifeActive()) {
+      host.clearTiles();
+      return;
     }
-    host.sync(lifeTiles);
+    const lifeTiles: LifeTile[] = [];
+    for (const tile of tiles) {
+      if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      const loaded = tileCache.get(tile);
+      if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
+    }
+    const cell = stepCell(schedule, step ?? 0);
+    host.sync(lifeTiles, [camera.lng, camera.lat], {
+      bounds: viewBounds(),
+      spawnMarginM: spawnMargin(metersPerCssPx(camera) * cell.width, cell.height / cell.width),
+    });
   };
 
   /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */
@@ -1403,6 +1410,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     setReducedMotion(enabled) {
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      if (enabled) host.clearTiles();
       lastLifeStep = performance.now();
       lastSun = -Infinity;
       cellDirty = true;
@@ -1442,6 +1450,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
       life = { ...life, ...settings };
+      if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;

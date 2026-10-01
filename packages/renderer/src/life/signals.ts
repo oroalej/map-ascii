@@ -7,6 +7,7 @@ import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
 import { placeSeed } from './lights';
 import type { Mover } from './simulate';
 import { VEHICLES } from './vehicles';
+import { complete } from './cooperate';
 
 export type SignalColor = 'green' | 'amber' | 'red';
 export type SignalPhase = {
@@ -73,10 +74,16 @@ export class SignalControl {
     geo: LifeGeometry,
     private readonly perMeter: number,
     private readonly along: Float64Array,
+    deferred = false,
   ) {
+    if (!deferred) complete(this.prepare(tile, geo));
+  }
+  *prepare(tile: TileId, geo: LifeGeometry): Generator<void, void, void> {
+    const { perMeter, along } = this;
     const values = geo.signals ?? [];
     const scale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
     for (let i = 0; i < values.length; i += SIGNAL_STRIDE) {
+      yield;
       const x = values[i]!,
         y = values[i + 1]!;
       const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
@@ -93,6 +100,7 @@ export class SignalControl {
       });
     }
     for (let line = 0; line < geo.kinds.length; line++) {
+      yield;
       if (geo.kinds[line]! > LifeLine.path) continue;
       const stops: Stop[] = [];
       for (const s of this.signals) {
@@ -110,6 +118,7 @@ export class SignalControl {
           continue;
         }
         for (let v = geo.starts[line]! + 1; v < geo.starts[line + 1]!; v++) {
+          if ((v & 63) === 0) yield;
           const x = geo.coords[(v - 1) * 2]!,
             y = geo.coords[(v - 1) * 2 + 1]!;
           const dx = geo.coords[v * 2]! - x,
