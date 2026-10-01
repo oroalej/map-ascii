@@ -3,6 +3,7 @@ import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
 import { personGlyphs } from './life/people';
+import { PUFF_GLYPHS } from './life/exhaust';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
 export type ThemeName = 'dark' | 'light';
@@ -540,6 +541,7 @@ export function mapGlyphs(theme: Theme): string[] {
   const set = new Set<string>();
   for (const style of Object.values(theme.styles)) for (const g of style.glyphs) set.add(g);
   const extras = [
+    ...PUFF_GLYPHS,
     ...singleWall,
     ...doubleWall,
     ...sextantGlyphs,

@@ -68,7 +68,7 @@ export function figureFit(
  * How the shader colors a person texel. A figure glyph's tone ink is skin, or a canopy's ribs;
  * a stamped figure's cells (all full ink) say which they show.
  */
-export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3 } as const;
+export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3, puff: 4 } as const;
 export type PersonPart = (typeof PersonPart)[keyof typeof PersonPart];
 
 /** Coverage of the tone ink (0–255); the shader splits full ink from tone at 0.7. */

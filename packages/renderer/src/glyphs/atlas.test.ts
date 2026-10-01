@@ -18,6 +18,7 @@ import {
 import { birdGlyphs } from '../life/birds';
 import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
+import { PUFF_GLYPHS } from '../life/exhaust';
 import { FIGURE_TONE, figureGlyph, figureOf, MIN_FIGURE_PX, personGlyphs } from '../life/people';
 import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
 import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
@@ -255,6 +256,7 @@ describe('glyph set', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
+        ...PUFF_GLYPHS,
         ...fixtureGlyphs,
         ...arrowGlyphs,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),

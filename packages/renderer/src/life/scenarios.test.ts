@@ -106,7 +106,7 @@ describe('combined living-city scenarios', () => {
         const states = new Set<string>();
         for (let frame = 0; frame < 180 * 30; frame++) {
           const agents = s.step(frame);
-          assert.ok(agents.length <= 1200, 'visible cap exceeded');
+          assert.ok(agents.filter((a) => !a.prop).length <= 1200, 'visible cap exceeded');
           for (const tile of worldTiles(s.world).values()) {
             visits = Math.max(visits, tile.scenes.visits.size);
             services = Math.max(services, tile.scenes.services.size);

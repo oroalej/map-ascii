@@ -404,7 +404,13 @@ describe('packLife vehicles', () => {
       expect(tails.length).toBeGreaterThan(0);
       expect(heads.every((c) => forward(c) > 5)).toBe(true);
       expect(tails.every((c) => forward(c) < -5)).toBe(true);
-      expect(found.every((c) => (c.texel[3]! & 15) === Paint.red)).toBe(true);
+      expect(
+        found.every(
+          (c) =>
+            (c.texel[3]! & 15) ===
+            (part(c.texel) === VehiclePart.taillight ? Paint.red & ~1 : Paint.red),
+        ),
+      ).toBe(true);
     }
   });
 });

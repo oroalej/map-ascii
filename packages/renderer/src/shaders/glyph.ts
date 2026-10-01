@@ -26,6 +26,8 @@ import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
+import { BRAKE_COLOR, BRAKE_LAMP } from '../life/lamps';
+import { PUFF_COLOR } from '../life/exhaust';
 import {
   CROWN_LIGHT,
   EDGE_INK,
@@ -267,6 +269,9 @@ vec3 vehicleColor(int byte, float night) {
     return mix(daylit(mix(paint, vec3(1.0, 0.97, 0.86), 0.6)), vec3(1.0, 0.93, 0.7), lit);
   }
   if (part == ${VehiclePart.taillight}) {
+    if ((index & ${BRAKE_LAMP}) != 0 && (byte & 128) == 0)
+      return mix(daylit(vec3(${BRAKE_COLOR.day.map(float).join(', ')})),
+        vec3(${BRAKE_COLOR.night.map(float).join(', ')}) * ${float(BRAKE_COLOR.glow)}, lit);
     return mix(daylit(vec3(0.78, 0.14, 0.1)), vec3(1.0, 0.22, 0.14), lit);
   }
   if (part == ${VehiclePart.mini}) return mix(color, vec3(1.0, 0.95, 0.8), lit * 0.7);
@@ -280,6 +285,10 @@ vec3 personColor(int byte, float coverage) {
   vec3 paint = index < ${PAINT_COUNT} ? u_paints[min(index, ${PAINT_COUNT - 1})] : u_colors[u_person];
   int part = (byte >> 4) & 7;
   // A stamped figure's cells say which ink they show (life/draw.ts stampFigure).
+  if (part == ${PersonPart.puff}) {
+    vec3 smoke = (index & 8) == 0 ? vec3(${PUFF_COLOR.diesel.map(float).join(', ')}) : vec3(${PUFF_COLOR.twoStroke.map(float).join(', ')});
+    return mix(daylit(smoke), smoke * 0.65, lamps() * 0.7);
+  }
   if (part == ${PersonPart.skin}) return daylit(u_colors[u_person]);
   if (part == ${PersonPart.rib}) return daylit(paint * 0.6);
   bool tone = coverage < 0.7;
@@ -510,6 +519,7 @@ void main() {
     int lifeByte = int(life.a * 255.0 + 0.5);
     bool painted = lifeClass == u_vehicle || lifeClass == u_boat || lifeClass == u_train;
     bool person = lifeClass == u_person;
+    bool puff = person && ((lifeByte >> 4) & 7) == ${PersonPart.puff};
     bool bird = lifeClass == u_bird;
     vec3 color = painted
       ? vehicleColor(lifeByte, night)
@@ -518,7 +528,7 @@ void main() {
     if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)
       color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.
-    if (person || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
+    if ((person && !puff) || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
       coverage = coverage > 0.0 ? 1.0 : 0.0;
     }
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
@@ -528,6 +538,7 @@ void main() {
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
+    if (puff) color = mix(back, color, 1.0 - float(lifeByte & 7) / 7.0);
     o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }

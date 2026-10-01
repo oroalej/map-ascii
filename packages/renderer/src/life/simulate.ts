@@ -104,6 +104,9 @@ import {
 } from './vehicles';
 import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
+import { BRAKE, brakeHold, visibleLamps, type VehicleLamps } from './lamps';
+import { ensureVehicleEffects, vehicleEffects, type VehicleEffects } from './vehicle-effects';
+import { emitter, exhaustKind, PUFF, PuffStore, stepEmitter, type PuffKind } from './exhaust';
 import {
   hasTurnSignals,
   TURN_SIGNAL,
@@ -135,6 +138,7 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+const NO_PUFF = () => {};
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
 export type WorldGroundGuard = ((
@@ -443,6 +447,203 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  readonly puffs = new PuffStore();
+  private readonly effectSteps: {
+    m?: Mover;
+    state?: VehicleEffects;
+    v: number;
+    x: number;
+    y: number;
+    hx: number;
+    hy: number;
+  }[] = [];
+  private effectCount = 0;
+
+  private captureEffects(
+    clock: number,
+    dt: number,
+    env?: LifeEnv,
+    shows?: (kind: AgentKind) => boolean,
+    near?: (x: number, y: number) => boolean,
+    pass?: StepPass,
+  ) {
+    this.effectCount = 0;
+    this.puffs.advance(clock, dt, env?.wind, this.perMeter);
+    for (let i = 0; i < this.movers.length; i++) {
+      const m = this.movers[i]!;
+      if (
+        m.kind !== 'vehicle' ||
+        !hasTurnSignals(m.vehicle) ||
+        (pass?.owns && !pass.owns(m)) ||
+        (shows && !shows(m.kind)) ||
+        (near && !near(m.x, m.y)) ||
+        (env?.levels && m.rank >= env.levels[m.kind]) ||
+        this.scenes.visits.has(m)
+      )
+        continue;
+      const state = ensureVehicleEffects(m);
+      const v = (m.v ?? m.speed) / this.perMeter;
+      const e = state.exhaust;
+      const gap = e ? Math.max(0, clock - dt - e.clock) : 0;
+      // Accepted speed cannot exceed the acceleration bound; clearance can only lower it.
+      // Thus these stationary updates have identical effects even if a seam trial rolls back.
+      // Between idle deadlines they need neither a pose nor a deferred movement record.
+      if (
+        v + kinematicsOf(m.vehicle).accel * dt < BRAKE.stopped &&
+        (!exhaustKind(m.vehicle) ||
+          (e &&
+            e.burstNext >= e.burstCount &&
+            e.nextIdle !== Infinity &&
+            e.nextIdle + gap > clock + 1e-9))
+      ) {
+        state.brake = this.scenes.held(m) ? 0 : BRAKE.hold;
+        if (e) {
+          if (gap > 1e-8) {
+            e.nextIdle += gap;
+            e.burstAt += gap;
+          }
+          e.clock = clock;
+          e.stopped += dt;
+        }
+        continue;
+      }
+      this.recordEffects(m, i, clock, dt, state, v);
+    }
+  }
+
+  private recordEffects(
+    m: Mover,
+    index: number,
+    clock: number,
+    dt: number,
+    state: VehicleEffects,
+    v: number,
+  ) {
+    const r = (this.effectSteps[this.effectCount] ??= {
+      m: undefined,
+      state: undefined,
+      v: 0,
+      x: 0,
+      y: 0,
+      hx: 0,
+      hy: 0,
+    });
+    this.effectCount++;
+    r.m = m;
+    r.state = state;
+    r.v = v;
+    const e = r.state.exhaust;
+    const pose =
+      e &&
+      ((e.stopped >= PUFF.pullAway.minStop - 0.1 &&
+        r.v < PUFF.pullAway.v &&
+        r.v + kinematicsOf(m.vehicle).accel * dt >= PUFF.pullAway.v &&
+        Math.min(this.speeds[index]!, this.caps[index]!) >= PUFF.pullAway.v * this.perMeter) ||
+        (e.burstNext < e.burstCount &&
+          e.burstAt + (e.burstNext * PUFF.pullAway.window) / (e.burstCount - 1) <= clock + 1e-9) ||
+        e.nextIdle <= clock + 1e-9)
+        ? this.pose(m)
+        : m;
+    r.x = pose.x;
+    r.y = pose.y;
+    r.hx = pose.hx;
+    r.hy = pose.hy;
+  }
+
+  /** Commit once, after both local movement retries and world seam transactions. */
+  finishEffects(
+    clock: number,
+    dt: number,
+    wind: LifeEnv['wind'],
+    owners?: ReadonlyMap<Mover, TileLife>,
+  ) {
+    for (let i = 0; i < this.effectCount; i++) {
+      const r = this.effectSteps[i]!,
+        m = r.m!;
+      const owner = owners?.get(m) ?? this;
+      const state = r.state!;
+      const v = (m.v ?? m.speed) / owner.perMeter;
+      state.brake = brakeHold(state.brake, r.v, v, dt, owner.scenes.held(m));
+      const kind = exhaustKind(m.vehicle);
+      if (
+        kind &&
+        (r.v < PUFF.pullAway.v ||
+          v < PUFF.pullAway.v ||
+          (state.exhaust && state.exhaust.burstNext < state.exhaust.burstCount))
+      ) {
+        const e = (state.exhaust ??= emitter(
+          m.routing?.seed ??
+            hashString(`${this.routingSeed}/exhaust/${m.vehicle}/${m.line}/${m.x}/${m.y}`),
+          clock - dt,
+        ));
+        const due =
+          e.nextIdle <= clock + 1e-9 ||
+          (e.burstNext < e.burstCount &&
+            e.burstAt + (e.burstNext * PUFF.pullAway.window) / (e.burstCount - 1) <=
+              clock + 1e-9) ||
+          (r.v < PUFF.pullAway.v &&
+            v >= PUFF.pullAway.v &&
+            e.stopped + dt >= PUFF.pullAway.minStop - 1e-9) ||
+          dt >= PUFF.idle[0];
+        stepEmitter(
+          e,
+          kind,
+          r.v,
+          v,
+          clock,
+          dt,
+          due
+            ? (at, life, spread) => {
+                const end = owner.pose(m);
+                const f = frameBetween(this.tile, owner.tile);
+                const fraction = Math.max(0, Math.min(1, (at - (clock - dt)) / dt));
+                const x = f.x + r.x * f.scale,
+                  y = f.y + r.y * f.scale;
+                const hx = r.hx + (end.hx - r.hx) * fraction;
+                const hy = r.hy + (end.hy - r.hy) * fraction;
+                const length = Math.hypot(hx, hy) || 1;
+                const dx = hx / length,
+                  dy = hy / length;
+                const spec = VEHICLES[m.vehicle!],
+                  pm = owner.perMeter;
+                const vx = -dy * spread,
+                  vy = dx * spread;
+                const age = Math.max(0, clock - at);
+                owner.puffs.add({
+                  x:
+                    x +
+                    (end.x - x) * fraction -
+                    ((dx * spec.length) / 2) * pm -
+                    dy * 0.3 * spec.width * pm +
+                    ((wind?.dir[0] ?? 0) * (wind?.strength ?? 0) * PUFF.drift + vx) * age * pm,
+                  y:
+                    y +
+                    (end.y - y) * fraction -
+                    ((dy * spec.length) / 2) * pm +
+                    dx * 0.3 * spec.width * pm +
+                    ((wind?.dir[1] ?? 0) * (wind?.strength ?? 0) * PUFF.drift + vy) * age * pm,
+                  t0: at,
+                  life,
+                  kind,
+                  vehicle: m.vehicle!,
+                  vx,
+                  vy,
+                  hx: dx,
+                  hy: dy,
+                });
+              }
+            : NO_PUFF,
+        );
+      } else if (state.exhaust) {
+        state.exhaust.clock = clock;
+        state.exhaust.stopped = 0;
+        state.exhaust.nextIdle = Infinity;
+      }
+      r.m = undefined;
+      r.state = undefined;
+    }
+    this.effectCount = 0;
+  }
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
@@ -2629,6 +2830,7 @@ export class TileLife {
       table.resolve(clock);
     }
     const speeds = this.followLimits(dt, table);
+    this.captureEffects(clock, dt, env, shows, near, pass);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
@@ -2844,6 +3046,7 @@ export class TileLife {
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
 
   /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
@@ -3115,6 +3318,10 @@ export type VisibleAgent = {
   parked?: boolean;
   /** Detailed motor vehicles only: local side and simulation-clock blink phase. */
   turnSignal?: TurnSignal;
+  lamps?: VehicleLamps;
+  /** Decorative exhaust shares the clone-safe prop dispatch with other transient objects. */
+  prop?: 'puff';
+  puff?: { age: number; kind: PuffKind; vehicle: CraftType };
   /** People: holding a candle (lit at dusk and night). */
   candle?: boolean;
   /**
@@ -4219,6 +4426,7 @@ export class LifeWorld {
       });
     }
     // All original owners have stepped once. New owners start stepping on the next frame.
+    const effectOwners = intents.length ? new Map<Mover, TileLife>() : undefined;
     for (const { source, target, m, before, boundary } of intents) {
       const clipped = Math.hypot(m.x - boundary.x, m.y - boundary.y) < 0.005 * source.perMeter;
       if (ownerAt(source, m) !== target && !clipped) continue;
@@ -4237,6 +4445,7 @@ export class LifeWorld {
         )
       ) {
         this.profiler?.countContinuity('transfers');
+        effectOwners!.set(m, target);
         if (held)
           this.junctions.rebind(
             m,
@@ -4254,6 +4463,8 @@ export class LifeWorld {
         if (m.kind === 'vehicle') guard(source, m);
       }
     }
+    for (const tile of this.tiles.values())
+      tile.finishEffects(this.clock, clamped, wind, effectOwners);
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileLife; m: Mover }[] | undefined;
     for (const tile of this.tiles.values()) {
@@ -4566,6 +4777,16 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
+          const lamps =
+            m.kind === 'vehicle'
+              ? visibleLamps(
+                  m.vehicle,
+                  vehicleEffects(m)?.brake,
+                  life.scenes.held(m),
+                  m.routing,
+                  this.clock,
+                )
+              : undefined;
           out.push({
             kind: m.kind,
             lng,
@@ -4574,7 +4795,11 @@ export class LifeWorld {
             side,
             vehicle: m.vehicle,
             paint: m.paint,
-            turnSignal: m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
+            lamps,
+            turnSignal:
+              m.kind === 'vehicle' && lamps?.kind !== 'hazard'
+                ? visibleTurnSignal(m.routing, this.clock)
+                : undefined,
             flap: 0,
           });
         } else if (m.group) {
@@ -4735,7 +4960,8 @@ export class LifeWorld {
         }
       }
     }
-    if (out.length <= maxAgents) return [...staged, ...out];
+    if (out.length <= maxAgents)
+      return this.withPuffs([...staged, ...out], zoom, center, bounds, levels.vehicle);
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
     const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
@@ -4760,6 +4986,46 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    return kept;
+    return this.withPuffs(kept, zoom, center, bounds, levels.vehicle);
+  }
+
+  private withPuffs(
+    agents: VisibleAgent[],
+    zoom: number,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    activity: number,
+  ) {
+    if (bandVisibility(LIFE_ZOOM.vehicle, zoom) < 1 || activity <= 0) return agents;
+    const candidates: { agent: VisibleAgent; d: number }[] = [];
+    for (const life of this.tiles.values()) {
+      const inside = viewIn(life.tile, bounds, 0);
+      for (const p of life.puffs.active(this.clock)) {
+        if (!inside(p.x, p.y)) continue;
+        const [lng, lat] = tileToLngLat(life.tile, p);
+        candidates.push({
+          d: (lng - center[0]) ** 2 + (lat - center[1]) ** 2,
+          agent: {
+            kind: 'vehicle',
+            prop: 'puff',
+            lng,
+            lat,
+            flap: 0,
+            ahead: tileToLngLat(life.tile, {
+              x: p.x + p.hx * life.perMeter,
+              y: p.y + p.hy * life.perMeter,
+            }),
+            puff: {
+              age: Math.max(0, Math.min(1, (this.clock - p.t0) / p.life)),
+              kind: p.kind,
+              vehicle: p.vehicle,
+            },
+          },
+        });
+      }
+    }
+    candidates.sort((a, b) => a.d - b.d);
+    for (const p of candidates.slice(0, PUFF.visible)) agents.push(p.agent);
+    return agents;
   }
 }

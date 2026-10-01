@@ -32,6 +32,8 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
+import { BRAKE_LAMP } from './lamps';
+import { puffGlyph } from './exhaust';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -58,8 +60,13 @@ export type LifeGrid = {
  * A vehicle's or boat's paint (bits 0–3), part (4–6), and whether it is parked (bit 7: lamps
  * off), in the texel's last byte.
  */
-export const vehicleByte = (paint: number, part: VehiclePart, parked = false) =>
-  (paint & 15) | (part << 4) | (parked ? 128 : 0);
+export const vehicleByte = (paint: number, part: VehiclePart, parked = false, brake = false) =>
+  ((part === VehiclePart.taillight
+    ? (paint & ~BRAKE_LAMP) | (brake && !parked ? BRAKE_LAMP : 0)
+    : paint) &
+    15) |
+  (part << 4) |
+  (parked ? 128 : 0);
 
 /**
  * A vehicle drawn from its plan may hang over open ground at a narrow road's edge, but never
@@ -124,6 +131,7 @@ export function packLife(
 ): number {
   out.fill(0);
   if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
+  drawPuffs(out, grid, agents, glyphIndex);
   const cells = grid.cols * grid.rows;
   if (groundCells.length < cells) groundCells = new Uint8Array(cells);
   else groundCells.fill(0, 0, cells);
@@ -131,6 +139,7 @@ export function packLife(
   // Parked cars reserve their cells before passing traffic or walkers.
   for (const parked of [true, false])
     for (const agent of agents) {
+      if (agent.prop === 'puff') continue;
       if (!!agent.parked !== parked) continue;
       const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
       journal = ground ? { before: new Map(), denied: false } : undefined;
@@ -150,6 +159,36 @@ export function packLife(
     }
   journal = undefined;
   return drawn;
+}
+
+/** Decorative ink owns no ground cells: every subsequently admitted actor can overwrite it. */
+function drawPuffs(
+  out: Uint8Array,
+  grid: LifeGrid,
+  agents: readonly VisibleAgent[],
+  glyphIndex: (g: string) => number,
+) {
+  for (const agent of agents) {
+    if (agent.prop !== 'puff' || !agent.puff || !agent.ahead) continue;
+    const [x, y] = grid.toCell(agent.lng, agent.lat);
+    const [ax, ay] = grid.toCell(...agent.ahead);
+    if (Math.hypot(ax - x, ay - y) * VEHICLES[agent.puff.vehicle].length < STAMP_MIN_CELLS)
+      continue;
+    const col = Math.floor(x),
+      row = Math.floor(y);
+    if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) continue;
+    const at = (row * grid.cols + col) * 4;
+    if (out[at + 2] !== 0) continue;
+    const age = Math.max(0, Math.min(1, agent.puff.age));
+    const glyph = glyphIndex(puffGlyph(age));
+    if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
+    [out[at], out[at + 1]] = packGlyph(glyph, classId('life_person'));
+    out[at + 2] = CellBit.vehicle | CellBit.person;
+    out[at + 3] = personByte(
+      Math.min(7, Math.floor(age * 8)) | (agent.puff.kind === 'twoStroke' ? 8 : 0),
+      PersonPart.puff,
+    );
+  }
 }
 
 /** Draw one agent for `packLife`; returns how many landed on the grid (each person in a group). */
@@ -182,9 +221,15 @@ function drawAgent(
         agent.kind === 'vehicle' &&
         !agent.parked &&
         hasTurnSignals(agent.vehicle) &&
-        agent.turnSignal?.on &&
+        (agent.lamps?.kind === 'hazard' ? agent.lamps.on : agent.turnSignal?.on) &&
         Math.hypot(...across) * spec.width >= 2
-          ? { side: agent.turnSignal.side, glyph: parts[VehiclePart.headlight]! }
+          ? {
+              sides:
+                agent.lamps?.kind === 'hazard'
+                  ? (['left', 'right'] as const)
+                  : [agent.turnSignal!.side],
+              glyph: parts[VehiclePart.headlight]!,
+            }
           : undefined;
       const stamped = stamp(
         out,
@@ -198,7 +243,14 @@ function drawAgent(
           parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
           classId(cls),
           bits,
-          vehicleByte(agent.paint ?? 0, part, agent.parked),
+          vehicleByte(
+            agent.paint ?? 0,
+            part,
+            agent.parked,
+            agent.kind === 'vehicle' &&
+              hasTurnSignals(agent.vehicle) &&
+              agent.lamps?.kind === 'brake',
+          ),
         ],
         indicator,
       );
@@ -673,7 +725,7 @@ function stamp(
   across: [number, number],
   spec: VehicleSpec,
   texel: (part: VehiclePart) => [number, number, number, number],
-  indicator?: { side: TurnSide; glyph: number },
+  indicator?: { sides: readonly TurnSide[]; glyph: number },
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -696,12 +748,23 @@ function stamp(
   let any = false;
   // Nearest existing cells to front/rear corners: never enlarge the vehicle's footprint.
   const lamps = indicator
-    ? [
-        { at: -1, score: Infinity, forward: -length * 0.4 },
-        { at: -1, score: Infinity, forward: length * 0.4 },
-      ]
+    ? indicator.sides.flatMap((side) => [
+        {
+          at: -1,
+          score: Infinity,
+          forward: -length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+        {
+          at: -1,
+          score: Infinity,
+          forward: length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+      ])
     : undefined;
-  const lampRight = indicator?.side === 'left' ? -spec.width * 0.4 : spec.width * 0.4;
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       // The cell's center in meters forward and to the right of the vehicle's center.
@@ -719,11 +782,12 @@ function stamp(
       [out[at], out[at + 1]] = packGlyph(glyph, cls);
       out[at + 2] = bits;
       out[at + 3] = byte;
-      if (lamps && (indicator!.side === 'left' ? right < 0 : right > 0))
+      if (lamps)
         for (const lamp of lamps) {
+          if (lamp.side === 'left' ? right >= 0 : right <= 0) continue;
           // Keep front and rear lamps on their own half, even when viewport clipping hides one.
           if (forward * lamp.forward <= 0) continue;
-          const score = (forward - lamp.forward) ** 2 + (right - lampRight) ** 2;
+          const score = (forward - lamp.forward) ** 2 + (right - lamp.right) ** 2;
           if (score < lamp.score) {
             lamp.at = at;
             lamp.score = score;

@@ -8,6 +8,8 @@ import {
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
 import { Paint, VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { BRAKE_COLOR, BRAKE_LAMP } from '../../../packages/renderer/src/life/lamps';
+import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
@@ -22,7 +24,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
     const block = glyphs.indexOf('█');
     // A controlled detailed fleet for visual QA, independent of live city traffic and timing.
     const cols = 384,
-      rows = 46,
+      rows = 90,
       cw = 6,
       ch = 9;
     const fleet = new Uint8Array(cols * rows * 4);
@@ -36,7 +38,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         toCell: (x, y) => [x, y],
       },
       SIGNAL_VEHICLES.flatMap((vehicle, i) =>
-        [0, 1].map((row) => {
+        [0, 1, 2, 3].map((row) => {
           const x = 32 + i * 64,
             y = 12 + row * 22,
             dx = row === 0 ? 1 : -1;
@@ -49,7 +51,16 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
             ahead: [x + dx * 5.5, y] as [number, number],
             side: [x, y + (dx * 33) / ch] as [number, number],
             flap: 0,
-            turnSignal: { side: row === 0 ? ('left' as const) : ('right' as const), on: true },
+            turnSignal:
+              row < 2
+                ? { side: row === 0 ? ('left' as const) : ('right' as const), on: true }
+                : undefined,
+            lamps:
+              row === 2
+                ? { kind: 'hazard' as const, on: true }
+                : row === 3
+                  ? { kind: 'brake' as const }
+                  : undefined,
           };
         }),
       ),
@@ -159,7 +170,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           u_person: input.person,
           u_bird: input.bird,
         };
-        const n = 12;
+        const n = 21;
         canvas.width = n * input.cw;
         canvas.height = input.ch;
         const selected = new Uint8Array(n * 4),
@@ -168,23 +179,40 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           overlay = new Uint8Array(n * 4);
         for (let x = 0; x < n; x++) {
           const cls =
-            x === 3
+            x === 3 || x === 19
               ? input.roof
               : x === 4 || x === 9
                 ? input.grounds
-                : x === 5 || x === 6
+                : x === 5 || x === 6 || x === 18
                   ? input.crown
                   : input.road;
           selected.set([input.block & 255, cls | ((input.block >> 8) << 6), 0, 0], x * 4);
-          const part = x === 10 ? input.head : x === 11 ? input.tail : input.body;
+          const part =
+            x >= 15
+              ? input.puff
+              : x === 10
+                ? input.head
+                : x === 11 || x >= 12
+                  ? input.tail
+                  : input.body;
           life.set(
             [
               input.block & 255,
-              input.vehicle | ((input.block >> 8) << 6),
+              (x >= 15 ? input.person : input.vehicle) | ((input.block >> 8) << 6),
               x === 9
                 ? input.indicator
                 : input.vehicleBit | (x === 1 || x >= 10 ? 0 : input.indicator),
-              (part << 4) | (x === 8 ? 128 : 0),
+              (part << 4) |
+                (x === 8 || x === 14 ? 128 : 0) |
+                (x === 13 || x === 14
+                  ? input.brake
+                  : x === 12
+                    ? 2
+                    : x === 16
+                      ? 7
+                      : x === 17
+                        ? 8
+                        : 0),
             ],
             x * 4,
           );
@@ -193,6 +221,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
               sub[(y * n * 2 + x * 2 + sx) * 4] = x === 6 && sx === 0 ? input.road : cls;
         }
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 7 * 4);
+        overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 20 * 4);
         const selectedTex = texture(n, 1, selected),
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
@@ -275,6 +304,8 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         body: VehiclePart.body,
         head: VehiclePart.headlight,
         tail: VehiclePart.taillight,
+        puff: PersonPart.puff,
+        brake: BRAKE_LAMP,
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
@@ -284,7 +315,19 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
       for (const x of [1, 3, 4, 5, 7, 8, 9, 10, 11]) expect(frame.cells[x]).not.toEqual(amber);
       expect(frame.crownEdge).not.toEqual(amber);
       expect(frame.cells[7]).toEqual([0, 0, 255]);
+      expect(frame.cells[13]![1]).toBeGreaterThan(frame.cells[12]![1]!);
+      expect(frame.cells[13]).not.toEqual(frame.cells[14]);
+      expect(frame.cells[16]).toEqual(theme.background.slice(0, 3).map((c) => Math.round(c * 255)));
+      expect(frame.cells[17]![2]).toBeGreaterThan(frame.cells[15]![2]!);
+      expect(frame.cells[18]).not.toEqual(frame.cells[15]);
+      expect(frame.cells[19]).not.toEqual(frame.cells[15]);
+      expect(frame.cells[20]).toEqual([0, 0, 255]);
     }
+    result.night.cells[13]!.forEach((c, i) =>
+      expect(
+        Math.abs(c - Math.round(Math.min(1, BRAKE_COLOR.night[i]! * BRAKE_COLOR.glow) * 255)),
+      ).toBeLessThanOrEqual(1),
+    );
     expect(result.off).toEqual(result.day.cells[1]);
     await page
       .locator('canvas')

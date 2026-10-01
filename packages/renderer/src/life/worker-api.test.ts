@@ -199,6 +199,49 @@ describe('life worker protocol', () => {
     expect(() => api.sync([{ key: 'missing', tile: { x: 0, y: 0, z: 16 } }])).toThrow('geometry');
   });
 
+  it('clones identical brake, hazard and exhaust frames through the worker protocol', () => {
+    const scenario = makeScenario('transit', 1);
+    const traffic = { road_major: { jeepney: 1 } };
+    const direct = new LifeWorld(traffic),
+      api = createLifeWorkerApi();
+    direct.sync(scenario.tiles);
+    api.init({ traffic, processions: [] });
+    api.sync(structuredClone(scenario.tiles));
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: scenario.center[0], lat: scenario.center[1], zoom: 20 },
+        size: { width: 640, height: 480 },
+        cssCell: { w: 6, h: 11 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0.2 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 20,
+        bounds: undefined,
+        wind: { dir: [1, 0], strength: 0.2 },
+        weather: { minutes: 720, rain: 0 },
+        cellMeters: 0,
+      },
+      visible: [20, 1, scenario.center],
+    };
+    const seen = { brake: false, hazard: false, puff: false };
+    for (let frame = 0; frame < 100; frame++) {
+      input.gust.time = frame / 10;
+      const expected = runLifeFrame(direct, input);
+      for (const agent of expected.agents) delete agent.consist;
+      const actual = structuredClone(api.frame(input));
+      expect(actual.agents).toEqual(expected.agents);
+      expect(actual.signalClock).toBe(expected.signalClock);
+      for (const agent of actual.agents) {
+        seen.brake ||= agent.lamps?.kind === 'brake';
+        seen.hazard ||= agent.lamps?.kind === 'hazard';
+        seen.puff ||= agent.prop === 'puff';
+      }
+    }
+    expect(seen).toEqual({ brake: true, hazard: true, puff: true });
+  }, 10000);
+
   it('matches inline zoom ownership, cloned revival and hard clearing', () => {
     const scenario = makeScenario('sparse', 1, false);
     const input: FrameInput = {

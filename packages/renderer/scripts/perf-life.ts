@@ -24,7 +24,10 @@ const following = process.argv.includes('--following');
 const allowDiff = process.argv.includes('--allow-diff');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 const casePrefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
-const scratchRoot = resolve(tmpdir());
+const scratchRoot = resolve(
+  process.argv.find((arg) => arg.startsWith('--scratch='))?.slice(10) ?? tmpdir(),
+);
+await mkdir(scratchRoot, { recursive: true });
 const temporary = await mkdtemp(join(scratchRoot, 'atlas-life-perf-'));
 async function removeBenchmarkDirectory() {
   if (

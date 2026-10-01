@@ -7,6 +7,7 @@ import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
 import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
+import { vehicleEffects } from '../vehicle-effects';
 
 export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
@@ -234,14 +235,19 @@ export function makeScenario(
   };
 }
 export function scenarioState(world: LifeWorld) {
-  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile));
+  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile, world.signalClock));
 }
-function tileState(key: string, tile: TileLife) {
+function tileState(key: string, tile: TileLife, clock = tile.elapsed) {
   return {
     key,
     elapsed: tile.elapsed,
+    // Benchmark fixtures also inspect frozen pre-exhaust revisions.
+    puffs: tile.puffs?.snapshot(clock) ?? [],
     flocks: tile.flocks,
-    movers: tile.movers,
+    movers: tile.movers.map((m) => {
+      const state = vehicleEffects(m);
+      return state ? { ...m, ...state } : m;
+    }),
     gatherers: tile.gatherers,
     parked: tile.parked,
     stalls: tile.stalls,
@@ -299,7 +305,7 @@ export function completeScenarioState(world: LifeWorld) {
     tiles: scenarioState(world),
     retired: [...retiredTiles(world)].map(([key, { life, at }]) => ({
       at,
-      ...tileState(key, life),
+      ...tileState(key, life, at),
       scene: scenes(life),
       ceded: internal.history.get(life)?.ceded,
       pending: life.pending.map((p) => ({
