@@ -1,4 +1,5 @@
 import { buildUtilityTiles } from './lib/utility-tiles';
+import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
@@ -84,7 +85,13 @@ export const step: Step = {
     ]);
 
     if (city.streets?.utilities?.derive)
-      await buildUtilityTiles(base, pmtiles, merged, geography.bounds, buildDir);
+      await buildUtilityTiles(
+        base,
+        pmtiles,
+        merged,
+        utilityCoverageBounds(geography.bounds, geography.regionBounds),
+        buildDir,
+      );
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));

@@ -1,6 +1,12 @@
 import { expect, it } from 'vitest';
 import { CityStreets, UtilityRecordSchema } from './schemas';
-import { isUtilityRecord, parseUtilityRecord, utilitySpanId, type UtilityPole } from './utilities';
+import {
+  isUtilityRecord,
+  parseUtilityRecord,
+  utilitySpanId,
+  utilitySeed,
+  type UtilityPole,
+} from './utilities';
 
 const pole: UtilityPole = {
   id: 'a',
@@ -11,6 +17,11 @@ const pole: UtilityPole = {
   normal: [0, 1],
   transformer: false,
 };
+it('keeps incremental named and trace hashes identical to hashing the full identifier', () => {
+  for (const id of ['a', 'utility:span:["osm:way/123/0/main:4","osm:way/456/0/main:8"]'])
+    for (const suffix of [':detail', ':offset-0', ':push-3', ':tangle-1', '2'])
+      expect(utilitySeed(suffix, utilitySeed(id))).toBe(utilitySeed(id + suffix));
+});
 it('keeps utility derivation opt-in and requires provenance when configured', () => {
   expect(CityStreets.parse({}).utilities).toBeUndefined();
   expect(CityStreets.safeParse({ utilities: { derive: true } }).success).toBe(false);
