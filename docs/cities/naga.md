@@ -6,6 +6,8 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 
 ## 1. City config
 
+Ambient dialogue contains 100 illustrative exchanges in fifteen scene categories, with Bikol first and optional English/Tagalog translations. Catalog text and context metadata live in `packages/content/cities/naga/dialogue.json`; `dialogue-review.md` records linguistic references and the outstanding native-speaker review. The catalog includes greetings, reunions, farewells, directions, courtesy, weather, food, school, daily plans, vendor orders/thanks, transit, companions, ball play and place reactions. It uses existing inhabitants and mapped anchors, and makes no claim about actual residents, businesses, fares or schedules. Changes need a web build for production, not tile regeneration.
+
 | Field | Value |
 |---|---|
 | slug | `naga` |

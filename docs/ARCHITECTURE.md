@@ -211,6 +211,12 @@ Speech and human moments share `SPEECH_ZOOM`. Optional greeting-period metadata 
 
 The final synthetic CPU check (355 visible records, 192×60 cells, 200 alternating ten-frame batches) measures packing without/with ownership at 1.444/1.463 ms median and 1.696/1.823 ms p95 (+1.3%/+7.5%). A three-bubble visibility controller with simulated readback completion measures 0.028/0.081 ms median/p95; the reusable ownership array occupies 46,080 bytes. Packed texture bytes match exactly. This measures CPU overhead, not GPU latency or hardware frame rate.
 
+Expanded dialogue separates fifteen optional scene profiles from the four physical moment mechanisms. `life/dialogue.ts` indexes text-free choices by kind, filters hard context/role requirements, and selects from bounded seeded shuffle bags. World-shared recent history retains eight IDs; weak actor histories retain three each. Selection uses its own RNG and never receives language preferences. Temporary tile retirement preserves selectors and scene speech; actual reset clears world history. Legacy unprofiled catalogs remain supported.
+
+`SceneSpeechHost` observes LocalScenes entry/arrival events and existing companion groups. It does not modify routes, queue ownership or dwell timers. Events are bounded to eight, and up to two adapter checks reduce the free moment scan's eight-check allowance. Active scene speech counts toward the same twelve-exchange tile capacity. Explicit speaker slots distinguish customers/vendors and individual companions. `SceneSpeech` cancels cues when the underlying visit or speaker eligibility is lost; service never waits for a reply.
+
+Speech packing adds an optional one-byte member grid and a map of current speaker centers beside the agent-owner grid. The draw loop records each person's actual position/slot; cart and prop cells carry member zero. Whole-agent rollback restores both grids, and packed GPU bytes stay unchanged. Visibility requires both owner and speaking member before the existing surface/readback checks. No new GPU target, pass or readback budget is introduced. Heavy rain no longer globally suppresses all speech: outdoor controllers cancel it, while valid sheltered scene speech still passes normal GPU visibility checks.
+
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.

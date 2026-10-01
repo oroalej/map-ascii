@@ -367,6 +367,8 @@ Add `packages/content/cities/<slug>/dialogue.json` to opt into human speech. `na
 
 The content validator loads the optional catalog and fails on malformed or incomplete entries. Static page generation passes it directly to the app; dialogue changes need no tile regeneration or publishing. Cite linguistic references, and explain composed phrases in source notes. Ambient scripts describe illustrative encounters; they do not establish historical events or quote real residents.
 
+Exchanges may add a `profile` (scene category), `speakers` (one zero-based participant slot per turn), and `conditions`. Conditions match nearby anchor kinds, simulated weather, participant age mix and service/ball events. Metadata is optional for existing packs. Profiled scripts require explicit speaker roles and a compatible mechanism; vendor scripts have two short turns. Worker choices carry metadata, never localized strings. Naga's checks require exactly 100 exchanges with the documented category allocation, complete Bikol/English/Tagalog and no duplicate complete native scripts. Other cities retain the optional 1–100 catalog size. Naga's `dialogue-review.md` documents composed wording, provenance and the outstanding native-speaker review.
+
 ## 9. Publishing tiles
 
 Generated files are gitignored (never commit tiles), so builds get them from GitHub releases instead:
