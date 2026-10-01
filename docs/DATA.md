@@ -100,6 +100,10 @@ Roads also carry `width` (meters: the `width` tag, else `lanes` × 3.2, else 14 
 
 ### Street enrichment
 
+`streets.utilities?: { derive: boolean; source: string }` opts a city into illustrative overhead utilities; omission disables them and `source` must be nonempty. Step 03 retains the original `highway` tag separately from display `kind`. Step 05 uses complete local motorway/trunk/primary/secondary ways and their links, excluding regional, tertiary and smaller streets. It canonicalizes direction and multipart order, places seeded 30 m slots with ±6 m jitter, rejects blocked footprints, water and other carriageways/medians, and bakes corridor, explicit crossing and topologically connected junction spans. A 67% sharing *attempt* can reuse only a retained same-road/same-side lamp within the slot window; it is not a promised shared-pole percentage. Site lanterns and junction lamps are excluded. The maximum corridor gap is 65 m; junction links are at most 35 m.
+
+Utilities are generated separately at archive max zoom, with precise endpoint payloads in a versioned `utility` JSON property, then merged using [`tile-join`](https://github.com/felt/tippecanoe#tile-join) without feature or tile-size dropping. The pipeline restores the base PMTiles v3 header extent/center after the merge and audits unchanged ordinary geometry/order, unique identities, complete survival and matching span endpoints. `utilities-report.json` and `utilities-manifest.json` in the city's build directory record the result. Existing ordinary tiles are still produced by the same Tippecanoe invocation. No new geographic source or surveyed/historical utility claim is introduced. To regenerate after changing this policy or placement, use `pnpm data:build -- --city <slug> --offline --from 03`, then publish and pin the generated assets as described in §9.
+
 Road normalization reads `sidewalk`, `sidewalk:both`, `sidewalk:left`, and `sidewalk:right`. Side-specific tags override `sidewalk:both`, which overrides the general tag; `no`, `none`, and `separate` suppress the band on that side. Widths use `sidewalk:width`, then `sidewalk:both:width`, with side-specific widths overriding each side independently; the fallback is 2 m. Tiles retain `sidewalk`, `sidewalk_width`, `sidewalk_left_width`, `sidewalk_right_width`, and `sidewalk_src: "mapped"`. Left/right follow the original OSM way direction; in downward-positive tile coordinates the left normal is `(dy, -dx)`.
 
 Step 04 may add both sidewalks to untagged, non-region `road_major` and `road_mid` features at 2 m per side, with `sidewalk_src: "derived"`. `city.streets.sidewalks.derive` defaults to true; an explicit sidewalk policy requires a nonempty `source`. A false policy keeps mapped bands only. The legend receives this policy from the city pack. Logs report sidewalk-side kilometers separately from the road kilometers they cover. Naga explicitly disables derivation pending a sourced survey.
@@ -141,6 +145,7 @@ City {                           // cities/<slug>/city.json
   timezone?: string;
   // Street enrichment. An explicit sidewalk policy requires its decision/survey source.
   streets?: {
+    utilities?: { derive: boolean; source: string }; // omission disables utilities
     sidewalks?: { derive?: boolean; source: string }; // derive defaults to true
     directions?: { osm_id: string; oneway: -1 | 0 | 1; source: string }[];
   };
