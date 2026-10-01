@@ -19,7 +19,8 @@ function fixture() {
     },
   };
   const emit = vi.fn();
-  const hover = new LifeHoverController(reads, 100, emit);
+  const inspect = vi.fn();
+  const hover = new LifeHoverController(reads, 100, emit, inspect);
   const life = new Uint8Array(16);
   life[1] = classId('life_vehicle');
   life[2] = CellBit.vehicle;
@@ -50,7 +51,7 @@ function fixture() {
         ),
       );
   };
-  return { hover, frame, emit, requests, reads, finish };
+  return { hover, frame, emit, inspect, requests, reads, finish };
 }
 it('checks surfaces, trees, grounds and birds using agent permissions only', () => {
   const person = classId('life_person'),
@@ -63,6 +64,51 @@ it('checks surfaces, trees, grounds and birds using agent permissions only', () 
   expect(lifeVisibleOnSurface(person, 2, road, classId('building_school'), 0)).toBe(true);
   expect(lifeVisibleOnSurface(person, 2, road, classId('building_school'), 1)).toBe(false);
   expect(lifeVisibleOnSurface(bird, 8, classId('trees'), classId('building'), 4)).toBe(true);
+});
+
+it('renews a held visible agent for a full second without tooltip or pause flicker', () => {
+  const { hover, frame, emit, inspect, requests, finish } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  expect(inspect).not.toHaveBeenCalled();
+  finish();
+  hover.update(frame, 1);
+  for (let at = 40; at <= 1000; at += 40) {
+    hover.update(frame, at);
+    if (requests.length) {
+      expect(requests).toHaveLength(3);
+      finish();
+      hover.update(frame, at + 1);
+    }
+  }
+  expect(inspect.mock.calls).toEqual([[true]]);
+  expect(emit).toHaveBeenCalledTimes(1);
+  hover.pointer(null);
+  expect(inspect.mock.calls).toEqual([[true], [false]]);
+});
+
+it('holds same-owner subcell verification but releases on occlusion or expired evidence', () => {
+  const { hover, frame, inspect, reads, finish } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  hover.pointer([6, 3]);
+  hover.update(frame, 10);
+  expect(inspect.mock.calls).toEqual([[true]]);
+  finish('tree');
+  hover.update(frame, 11);
+  expect(inspect).toHaveBeenLastCalledWith(false);
+  hover.clear();
+  hover.pointer([2, 3]);
+  hover.update(frame, 20);
+  finish();
+  hover.update(frame, 21);
+  reads.size = 6;
+  hover.update(frame, 269);
+  expect(inspect).toHaveBeenLastCalledWith(true);
+  hover.update(frame, 270);
+  expect(inspect).toHaveBeenLastCalledWith(false);
 });
 it('issues one three-read batch at fractional DPR, publishes on frames and updates position', () => {
   const { hover, frame, emit, requests, finish } = fixture();

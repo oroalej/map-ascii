@@ -252,6 +252,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           ...common,
           u_height: canvas.height,
           u_glyphs: fleetSelected,
+          u_lifeTime: 0,
           u_life: fleetLife,
           u_daylight: 1,
           u_overlay: blank,

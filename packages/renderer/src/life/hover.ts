@@ -13,6 +13,7 @@ const permissions = cellBits();
 const trunk = classId('tree');
 const occluders = new Set([trunk, classId('tree_crown'), classId('trees')]);
 const HOVER_VALIDITY_MS = 250;
+const HOVER_RENEW_MS = HOVER_VALIDITY_MS / 2;
 
 /** Mirrors the glyph pass: birds fly above surfaces; other agents use the pointed subcell. */
 export function lifeVisibleOnSurface(
@@ -55,11 +56,14 @@ export class LifeHoverController {
   private serial = 0;
   private pending: { serial: number; key: string; at: number } | undefined;
   private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
+  private held: { agent: VisibleAgent; geometry: string; at: number } | undefined;
+  private inspecting = false;
 
   constructor(
     private readonly readback: Pick<Readback, 'size' | 'request'>,
     private readonly attachment: number,
     private readonly emit: (hover: LifeHover) => void,
+    private readonly inspect: (active: boolean) => void = () => {},
   ) {}
 
   pointer(point: [number, number] | null) {
@@ -72,7 +76,15 @@ export class LifeHoverController {
     this.pending = undefined;
     this.confirmed = undefined;
     this.frame = null;
+    this.held = undefined;
+    this.setInspection(false);
     this.publish(null);
+  }
+
+  private setInspection(active: boolean) {
+    if (active === this.inspecting) return;
+    this.inspecting = active;
+    this.inspect(active);
   }
 
   private publish(label: string | null) {
@@ -114,6 +126,7 @@ export class LifeHoverController {
       label,
       lifeClass,
       lifeFlags,
+      agent,
       key: `${f.geometry}/${col}/${row}/${sx}/${sy}/${label}/${lifeClass}/${lifeFlags}`,
     };
   }
@@ -138,10 +151,29 @@ export class LifeHoverController {
     ) {
       this.confirmed = undefined;
     }
+    if (this.confirmed?.key === c.key) {
+      this.held = this.confirmed.visible
+        ? { agent: c.agent, geometry: frame.geometry, at: this.confirmed.at }
+        : undefined;
+    }
+    // Moving within a held figure can need a new subcell check. Keep the simulation still
+    // while the old evidence is valid, without publishing an unverified tooltip there.
+    const held = this.held;
+    this.setInspection(
+      !!held &&
+        held.agent === c.agent &&
+        held.geometry === frame.geometry &&
+        now - held.at < HOVER_VALIDITY_MS,
+    );
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
     else this.publish(null);
     if (this.pending) return;
-    if (this.confirmed?.key === c.key && this.confirmed.revision === frame.revision) return;
+    if (
+      this.confirmed?.key === c.key &&
+      this.confirmed.revision === frame.revision &&
+      (!this.confirmed.visible || now - this.confirmed.at < HOVER_RENEW_MS)
+    )
+      return;
     if (this.readback.size > MAX_PENDING_READS - 3) return;
     const serial = ++this.serial;
     this.pending = { serial, key: c.key, at: now };

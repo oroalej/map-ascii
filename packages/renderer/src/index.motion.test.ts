@@ -14,6 +14,11 @@ import {
 import { classId } from './classes';
 import type { InputIntents } from './input';
 const input = vi.hoisted(() => ({ intents: undefined as InputIntents | undefined }));
+const visibility = vi.hoisted(() => ({
+  watched: true,
+  changed: undefined as ((watched: boolean) => void) | undefined,
+}));
+import * as Hosts from './life/host';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 import type * as PickingModule from './picking';
@@ -115,7 +120,10 @@ vi.mock('./input', () => ({
 }));
 vi.mock('./pacing', async (load) => ({
   ...(await load<typeof PacingModule>()),
-  watchVisibility: () => ({ watched: () => true, detach() {} }),
+  watchVisibility: (_canvas: HTMLCanvasElement, changed: (watched: boolean) => void) => {
+    visibility.changed = changed;
+    return { watched: () => visibility.watched, detach() {} };
+  },
 }));
 
 describe('live motion preference', () => {
@@ -131,6 +139,7 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    visibility.watched = true;
     vi.mocked(lifeRaster).mockReturnValue(null);
     vi.mocked(lifePass).mockReset().mockReturnValue(0);
     time = 0;
@@ -167,6 +176,145 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  const hoverAgent = () => {
+    atlas.setQuality('high');
+    vi.spyOn(LifeWorld.prototype, 'visible').mockImplementation(function (this: LifeWorld) {
+      return [{ kind: 'person', lng: this.signalClock * 0.00001, lat: 0, flap: this.signalClock }];
+    });
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      for (let i = 0; i < life.length; i += 4) {
+        life[i + 1] = classId('life_person');
+        life[i + 2] = 2;
+      }
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(targets.cols * targets.rows).fill(1),
+        revision: time,
+        light: life,
+        lamps: null,
+      });
+      return 1;
+    });
+    draw(100);
+    input.intents!.hover([2, 3]);
+    draw(150);
+    draw(200);
+  };
+
+  it('keeps the drawn Life pose, traffic clock and tooltip while environmental time advances', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    hoverAgent();
+    const count = step.mock.calls.length;
+    const agents = vi.mocked(lifePass).mock.calls.at(-1)![6];
+    const signal = vi.mocked(fixturePass).mock.calls.at(-1)![6];
+    const lifeTime = vi.mocked(glyphPass).mock.calls.at(-1)![16];
+    for (let at = 250; at <= 1200; at += 50) draw(at);
+    expect(step.mock.calls.length).toBe(count);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(agents);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(signal);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![16]).toBe(lifeTime);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![8]).toBeCloseTo(1.2);
+    expect(hovered.mock.calls).toEqual([[{ label: 'Person (simulated)', point: [2, 3] }]]);
+    input.intents!.hover(null);
+    draw(1220);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
+    expect(atlas.getLife().enabled).toBe(true);
+  });
+
+  it.each(['pan', 'zoom', 'camera', 'theme', 'time'] as const)(
+    'clears inspection on %s and requires fresh hover before pausing again',
+    (action) => {
+      const step = vi.spyOn(LifeWorld.prototype, 'step');
+      const hovered = vi.fn();
+      atlas.on('lifehover', hovered);
+      hoverAgent();
+      if (action === 'pan') input.intents!.pan(20, 0);
+      if (action === 'zoom') input.intents!.zoom(0.2, [0, 0]);
+      if (action === 'camera') atlas.setCamera({ lng: 0.01 });
+      if (action === 'theme') atlas.setTheme('light');
+      if (action === 'time') atlas.setLife({ time: 1320 });
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      draw(250);
+      draw(300);
+      expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.05);
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      input.intents!.hover([2, 3]);
+      draw(350);
+      draw(400);
+      const count = step.mock.calls.length;
+      draw(450);
+      expect(step.mock.calls.length).toBe(count);
+    },
+  );
+
+  it('suppresses hover during flights and does not advance through lost visibility', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    hoverAgent();
+    atlas.flyTo({ lng: 0.01 }, { duration: 1000 });
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    input.intents!.hover([2, 3]);
+    draw(300);
+    draw(350);
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    visibility.watched = false;
+    visibility.changed!(false);
+    draw(5000);
+    time = 10_000;
+    visibility.watched = true;
+    visibility.changed!(true);
+    draw(10_020);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
+  });
+
+  it('draws the coherent held frame when a host publishes a late reply during inspection', () => {
+    atlas.destroy();
+    const original: Hosts.FrameView = {
+      agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
+      procession: undefined,
+      signalClock: 1,
+      cellGuard: () => undefined,
+    };
+    let latest = original;
+    const request = vi.fn(() => true);
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      request,
+      latest: () => latest,
+      setLive() {},
+      play: () => false,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    hoverAgent();
+    const count = request.mock.calls.length;
+    latest = {
+      ...original,
+      signalClock: 2,
+      agents: [{ kind: 'person', lng: 0.01, lat: 0, flap: 1 }],
+      cellGuard: () => undefined,
+    };
+    draw(250);
+    expect(request.mock.calls.length).toBe(count);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(original.agents);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(1);
+    input.intents!.hover(null);
+    draw(270);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(2);
   });
 
   it('emits validated simulated hover and clears it on exit, Life off, reduced motion and context loss', () => {
@@ -490,6 +638,19 @@ describe('live motion preference', () => {
     expect(next.label).not.toEqual(first.label);
     draw(200);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![3].uniforms).toBe(next);
+  });
+
+  it('does not accumulate lost-context time when Life is reenabled before restoration', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    draw(100);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    time = 1000;
+    atlas.setLife({ enabled: false });
+    atlas.setLife({ enabled: true });
+    time = 10_000;
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(10_020);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
   });
 
   it('applies a preference changed while the context was lost to the restored frame', () => {

@@ -713,6 +713,7 @@ export function glyphPass(
   moon = 0,
   sun: Sun | null = null,
   focus = normalizeFocus(null),
+  lifeTime = time,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -737,6 +738,7 @@ export function glyphPass(
     u_background: theme.background.slice(0, 3),
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+    u_lifeTime: lifeTime,
     u_overlay: targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,

@@ -72,6 +72,7 @@ uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
+uniform float u_lifeTime;
 uniform int u_pulse;
 uniform sampler2D u_overlay;
 uniform sampler2D u_labelAtlas;
@@ -161,7 +162,7 @@ float lampOn(int g) {
   if (state == ${LampState.dead}) return 0.0;
   if (state == ${LampState.candle}) {
     float beat = 5.0 + float(g >> 3) * 0.23;
-    return u_shimmer ? 0.8 + 0.2 * sin(u_time * beat + float(g >> 3)) : 1.0;
+    return u_shimmer ? 0.8 + 0.2 * sin(u_lifeTime * beat + float(g >> 3)) : 1.0;
   }
   if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
   int seed = g >> 3;
@@ -565,7 +566,7 @@ void main() {
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
       // A candle, from dusk: warm, each flickering on its own beat.
       float beat = float(cellHash(u_origin + cell) & 7u) + 3.0;
-      float flicker = u_shimmer ? 0.85 + 0.15 * sin(u_time * beat) : 1.0;
+      float flicker = u_shimmer ? 0.85 + 0.15 * sin(u_lifeTime * beat) : 1.0;
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
