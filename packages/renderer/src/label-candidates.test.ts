@@ -50,3 +50,15 @@ it('excludes labels outside their band, in the blackout, and beyond the retained
   expect(labelCandidate({ ...label, lng: -20 }, view, placement)).toBeUndefined();
   expect(labelCandidate({ ...label, lng: -7 }, view, placement)).toBeDefined();
 });
+it('preserves the pixel-space run calculation at fractional fit boundaries', () => {
+  // Rearranging this calculation can round below the seven-width fit for "ABCDE".
+  const run = [
+    [0, 0],
+    [0.01, 3.8888849206328957],
+  ] as const;
+  const dx = run[1][0] - run[0][0],
+    dy = run[1][1] - run[0][1];
+  expect(labelCandidate({ ...label, text: 'ABCDE', run }, view, placement)?.runCells).toBe(
+    Math.hypot(dx * view.labelDev.w, dy * view.labelDev.h) / view.labelDev.w,
+  );
+});

@@ -48,7 +48,9 @@ export function labelCandidate(
   if (label.run) {
     const a = placement.toCell(...label.run[0]),
       b = placement.toCell(...label.run[1]);
-    runCells = Math.hypot(b[0] - a[0], ((b[1] - a[1]) * view.labelDev.h) / view.labelDev.w);
+    runCells =
+      Math.hypot((b[0] - a[0]) * view.labelDev.w, (b[1] - a[1]) * view.labelDev.h) /
+      view.labelDev.w;
   }
   return {
     id: label.id,
