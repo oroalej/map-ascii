@@ -2,6 +2,7 @@ export * from './climate';
 export * from './constants';
 export * from './life-sites';
 export * from './rhythm';
+export * from './seasons';
 export * from './schemas';
 export * from './signal-layout';
 export * from './roof-plan';

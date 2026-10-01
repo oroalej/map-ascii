@@ -1,4 +1,5 @@
 import type { LifeSiteConfig } from './life-sites';
+import type { SeasonConfig } from './seasons';
 
 /**
  * A city's daily rhythm, as far as the map shows it (SPEC.md §4 "Life layer"): how much of each
@@ -50,6 +51,8 @@ export type LifeSchedules = {
 };
 
 export type CityLifeConfig = {
+  /** Sourced annual calendars and their illustrative map decorations. */
+  seasons?: SeasonConfig[];
   signals?: {
     derive?: boolean;
     add?: {

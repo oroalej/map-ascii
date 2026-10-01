@@ -6,7 +6,8 @@ import type {
 import * as z from 'zod';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
-import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
+import { validMonthDay, type SeasonConfig, type SeasonWindow } from './seasons';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
@@ -891,7 +892,95 @@ export const LifeSite = z
  * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
  * (rhythm.ts).
  */
+const MonthDaySchema = z
+  .strictObject({ month: z.int().min(1).max(12), day: z.int().min(1).max(31) })
+  .refine(validMonthDay, 'expected a real month/day');
+export const SeasonWindowSchema = z.union([
+  z.strictObject({ from: MonthDaySchema, to: MonthDaySchema }),
+  z.strictObject({
+    anchor: z.strictObject({
+      month: z.int().min(1).max(12),
+      weekday: z.int().min(0).max(6),
+      nth: z.int().min(1).max(5),
+      offset_days: z.int().min(-31).max(31),
+    }),
+    days_before: z.int().min(0).max(60),
+    days_after: z.int().min(0).max(60),
+  }),
+]) satisfies z.ZodType<SeasonWindow>;
+const SeasonPlaces = z
+  .array(z.enum(PLACE_KINDS))
+  .min(1)
+  .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
+export const Season = z
+  .strictObject({
+    id: z
+      .string()
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
+      .refine((id) => id !== 'auto', 'auto is reserved'),
+    title: LocalizedText,
+    status: z.enum(['draft', 'verified']),
+    window: SeasonWindowSchema,
+    note: z.string().trim().min(1).optional(),
+    lanterns: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        shape: z.literal('star'),
+        near: SeasonPlaces.optional(),
+        radius_m: z.number().min(50).max(3000).optional(),
+      })
+      .refine(
+        (v) => (v.near === undefined) === (v.radius_m === undefined),
+        'give near and radius_m together',
+      )
+      .optional(),
+    bunting: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        near: SeasonPlaces,
+        radius_m: z.number().min(50).max(1000),
+        spacing_m: z.number().min(15).max(80),
+      })
+      .optional(),
+    stalls: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        near: SeasonPlaces,
+        radius_m: z.number().min(50).max(600),
+        per_tile: z.int().min(1).max(24),
+      })
+      .optional(),
+    sources: Sources,
+  })
+  .superRefine((season, ctx) => {
+    if (!season.lanterns && !season.bunting && !season.stalls)
+      ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
+    const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
+      v.includes(TODO_VERIFY),
+    );
+    if (season.status === 'verified' && todo)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: `a verified season cannot contain ${TODO_VERIFY}`,
+      });
+    if (season.status === 'draft' && !season.note?.includes(TODO_VERIFY))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: `a draft season needs a ${TODO_VERIFY} note`,
+      });
+  }) satisfies z.ZodType<SeasonConfig>;
+export type Season = z.infer<typeof Season>;
+
 export const CityLife = z.strictObject({
+  seasons: z
+    .array(Season)
+    .refine(
+      (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
+      'duplicate season id',
+    )
+    .optional(),
   signals: z
     .strictObject({
       derive: z.boolean().optional(),
@@ -1077,6 +1166,14 @@ export const City = z
       for (const issue of text.safeParse(value).error?.issues ?? []) {
         ctx.addIssue({ code: 'custom', path: [...path, ...issue.path], message: issue.message });
       }
+    }
+    for (const [index, season] of (city.life?.seasons ?? []).entries()) {
+      for (const issue of text.safeParse(season.title).error?.issues ?? [])
+        ctx.addIssue({
+          code: 'custom',
+          path: ['life', 'seasons', index, 'title', ...issue.path],
+          message: issue.message,
+        });
     }
   });
 export type City = z.infer<typeof City>;
