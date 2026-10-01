@@ -61,6 +61,7 @@ precision highp int;
 precision highp sampler2D;
 
 uniform sampler2D u_glyphs;
+uniform sampler2D u_foliageLight;
 uniform sampler2D u_atlas;
 uniform vec2 u_cell;
 uniform vec2 u_shift;
@@ -547,13 +548,26 @@ void main() {
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
+  // Forest tips carry green/yellow pigment; the generic white tone makes foliage look dusty.
+  if (cls == u_vehicleOccluders.z) {
+    vec3 pigment = tone == ${Tone.light} ? vec3(1.23,1.15,0.77)
+      : tone == ${Tone.shade} ? vec3(0.65,0.78,0.82)
+      : tone == ${Tone.dry} ? vec3(1.12,1.06,0.78) : vec3(1.0);
+    color = daylit(u_colors[cls]) * pigment;
+  }
   if (cls == u_crownClass && (!edge || int(texelFetch(u_subClass, subAt, 0).r*255.0+0.5) == cls)) {
     // Identity and local surface come from the same sample. Exposed edge ground keeps its fill.
     vec4 sampleId = edge ? texelFetch(u_subId, subAt, 0) : texelFetch(u_id, cell, 0);
     uvec4 bytes = uvec4(sampleId*255.0+0.5);
     uint seed = bytes.r | (bytes.g<<8u) | (bytes.b<<16u) | (bytes.a<<24u);
     vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb*2.0-1.0;
-    color = toned(daylit(u_colors[cls])*crownTint(seed), tone, night) * crownShade(local, crownClumps(local, seed));
+    float cachedLight = edge ? 0.0 : texelFetch(u_foliageLight, cell, 0).r;
+    // Covered edge subsamples retain their own identity/surface; interiors reuse cell lighting.
+    float leafLight = cachedLight > 0.0 ? cachedLight * 1.5
+      : crownShade(local, crownClumps(local, seed)) + crownTexture(local, seed);
+    // Warm leaf tips and cool green hollows; multiplicative pigment preserves class highlights.
+    vec3 pigment = mix(vec3(0.66,0.83,0.82),vec3(1.3,1.16,0.75),smoothstep(0.65,1.15,leafLight));
+    color = toned(daylit(u_colors[cls])*crownTint(seed)*pigment, tone, night) * leafLight;
   }
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];

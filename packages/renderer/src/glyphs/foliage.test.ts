@@ -8,9 +8,11 @@ import {
   CanopyGlyph,
   crownClumps,
   crownShade,
+  crownTexture,
   crownSun,
   crownTint,
   CROWN_LIGHT,
+  CLUMPS,
   foliageVariant,
   foliageShadowHeight,
   inShadow,
@@ -23,31 +25,38 @@ const disc = Array.from(
   (_, i) => [(i % 41) / 20 - 1, Math.floor(i / 41) / 20 - 1] as const,
 ).filter(([x, y]) => x * x + y * y < 1);
 describe('leaf clumps', () => {
-  it('is deterministic, has sparse seams and covers all quadrants without a grid bias', () => {
+  it('has deterministic multiscale relief with analytic normals and no quadrant bias', () => {
     const means = [0, 0, 0, 0];
     const counts = [0, 0, 0, 0];
     for (let seed = 0; seed < 32; seed++) {
       const values = disc.map(([x, y]) => crownClumps(x, y, seed));
       expect(values).toEqual(disc.map(([x, y]) => crownClumps(x, y, seed)));
-      expect(values.filter((c) => c.crevice > 0.6).length / values.length).toBeLessThan(0.3);
-      expect(values.filter((c) => c.top > 0.8).length).toBeGreaterThan(100);
+      expect(
+        values.every((c) => c.top >= 0 && c.top <= 1 && c.crevice >= 0 && c.crevice <= 1),
+      ).toBe(true);
+      expect(
+        Math.max(...values.map((c) => c.top)) - Math.min(...values.map((c) => c.top)),
+      ).toBeGreaterThan(0.5);
+      // Verify derivatives against actual relief, rather than repeating the shader formula.
+      for (const [x, y] of disc.filter((_, i) => i % 71 === 0)) {
+        const h = 0.00001,
+          c = crownClumps(x, y, seed);
+        const dx = (crownClumps(x + h, y, seed).top - crownClumps(x - h, y, seed).top) / (2 * h);
+        const dy = (crownClumps(x, y + h, seed).top - crownClumps(x, y - h, seed).top) / (2 * h);
+        expect(c.nx).toBeCloseTo(-dx * CLUMPS.relief, 3);
+        expect(c.ny).toBeCloseTo(-dy * CLUMPS.relief, 3);
+      }
       disc.forEach(([x, y], i) => {
         if (x === 0 || y === 0) return;
         const q = (x > 0 ? 1 : 0) + (y > 0 ? 2 : 0);
         means[q]! += values[i]!.top;
         counts[q]!++;
       });
-      // Separate local maxima: central clump and six ring clumps survive the seed jitter.
-      const tops = disc.filter(([x, y]) => crownClumps(x, y, seed).top > 0.995);
-      const distinct: (readonly [number, number])[] = [];
-      for (const p of tops)
-        if (distinct.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.2)) distinct.push(p);
-      expect(distinct.length).toBeGreaterThanOrEqual(4);
     }
     const averages = means.map((m, i) => m / counts[i]!);
     expect(Math.max(...averages) / Math.min(...averages)).toBeLessThan(1.1);
   });
-  it('keeps bounds, dense sunward tops, sparse creases and flatter night lighting', () => {
+  it('keeps bounds, softly shaded creases and flatter night lighting', () => {
     const sun = crownSun({ altitude: 60, azimuth: 270 });
     const noon = disc.map(([x, y]) => crownShade(x, y, crownClumps(x, y, 42), sun));
     const night = disc.map(([x, y]) => crownShade(x, y, crownClumps(x, y, 42), sun, true));
@@ -60,18 +69,44 @@ describe('leaf clumps', () => {
     const seams = noon
       .filter((_, i) => crownClumps(...disc[i]!, 42).crevice > 0.6)
       .map((c) => c.level);
-    expect(mean(tops) - mean(seams)).toBeGreaterThan(2);
+    expect(mean(tops) - mean(seams)).toBeGreaterThan(0.5);
+    expect(mean(seams)).toBeGreaterThan(1);
     const range = (a: typeof noon) =>
       Math.max(...a.map((c) => c.light)) - Math.min(...a.map((c) => c.light));
     expect(range(night)).toBeLessThan(range(noon));
     expect(noon.filter((c) => c.level === 0).length / noon.length).toBeLessThan(0.5);
-    const clump = { nx: 0, ny: 0, top: 1, crevice: 0 };
+    const clump = { nx: 0, ny: 0, top: 0.5, crevice: 0 };
     expect(crownShade(-0.5, 0, clump, sun).light).toBeGreaterThan(
       crownShade(0.5, 0, clump, sun).light,
     );
     expect(crownShade(0.5, 0, clump, [-sun[0], sun[1], sun[2]]).light).toBeCloseTo(
       crownShade(-0.5, 0, clump, sun).light,
     );
+  });
+  it('breaks up smooth lobes with anchored texture and avoids a sparse outer ring', () => {
+    const texture = disc.map(([x, y]) => crownTexture(x, y, 42));
+    expect(texture).toEqual(disc.map(([x, y]) => crownTexture(x, y, 42)));
+    expect(texture.filter((v, i) => v !== crownTexture(...disc[i]!, 73)).length).toBeGreaterThan(
+      1000,
+    );
+    expect(Math.min(...texture)).toBeLessThan(-0.12);
+    expect(Math.max(...texture)).toBeGreaterThan(0.12);
+    const outer = disc.filter(([x, y]) => Math.hypot(x, y) > 0.75);
+    const levels = outer.map(([x, y]) =>
+      foliageVariant(0, 0, 0, 0, false, {
+        local: [x, y],
+        id: 42,
+        sun: [0, 0, 1],
+      }),
+    );
+    // Former radius cap made every outer cell a dot/comma/colon: a black annulus.
+    expect(levels.filter((v) => v >= 3).length / levels.length).toBeGreaterThan(0.5);
+    for (const [x, y] of disc.slice(0, 100)) {
+      const ctx = { local: [x, y] as const, id: 42 };
+      expect(foliageVariant(100, 200, 0, 0, false, ctx)).toBe(
+        foliageVariant(900, 800, 99, 0, false, ctx),
+      );
+    }
   });
   it('uses unit sun vectors and a stable, relative tint per identity', () => {
     for (const altitude of [-10, 0, 1, 25, 60, 90])
@@ -81,7 +116,7 @@ describe('leaf clumps', () => {
       new Set(Array.from({ length: 100 }, (_, id) => JSON.stringify(crownTint(id)))).size,
     ).toBe(3);
   });
-  it('flutters by at most one density step and reapplies rim and identity seam caps', () => {
+  it('flutters by at most one density step and keeps identity seams leafy', () => {
     for (const [x, y] of disc)
       for (let time = 0; time < 3; time += 0.4) {
         const ctx = { local: [x, y] as const, id: 33 };
@@ -90,10 +125,11 @@ describe('leaf clumps', () => {
         expect(Math.abs(foliageVariant(500, 600, time, 1, false, ctx) - still)).toBeLessThanOrEqual(
           1,
         );
-        expect(foliageVariant(500, 600, time, 1, true, ctx)).toBeLessThanOrEqual(2);
-        expect(
-          foliageVariant(500, 600, time, 1, false, { ...ctx, boundary: true }),
-        ).toBeLessThanOrEqual(1);
+        expect(foliageVariant(500, 600, time, 1, true, ctx)).toBeLessThanOrEqual(3);
+        const moving = foliageVariant(500, 600, time, 1, false, ctx);
+        const seam = foliageVariant(500, 600, time, 1, false, { ...ctx, boundary: true });
+        expect(seam).toBeGreaterThanOrEqual(1);
+        expect(Math.abs(moving - seam)).toBeLessThanOrEqual(1);
       }
     for (const theme of Object.values(themes)) {
       expect(theme.styles.tree_crown!.glyphs).toEqual(['.', ',', ':', '%', '&', '@']);
@@ -108,7 +144,11 @@ describe('leaf clumps', () => {
         neighbor: () => 'tree_crown' as const,
         neighborId: () => 34,
       };
-      expect(['.', ',']).toContain(selectGlyph(theme, 'tree_crown', ctx));
+      expect(selectGlyph(theme, 'tree_crown', ctx)).toBe(
+        theme.styles.tree_crown!.glyphs[
+          foliageVariant(500, 600, 0, 0, false, { ...ctx, boundary: true })
+        ],
+      );
     }
   });
 });

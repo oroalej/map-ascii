@@ -22,7 +22,8 @@ uniform int u_count[${MAX_CLASSES}];
 uniform ivec2 u_origin;
 uniform float u_time;
 uniform float u_wind;
-out vec4 o_glyph;
+layout(location=0) out vec4 o_glyph;
+layout(location=1) out vec4 o_foliageLight;
 
 ${cellHashGlsl}
 ${vegetationGlsl}
@@ -47,6 +48,7 @@ void main() {
   int state = int(selected.b * 255.0 + 0.5);
   int kind = u_kind[cls];
   o_glyph = selected;
+  o_foliageLight = vec4(0.0);
   int background = int(selected.a * 255.0 + 0.5);
   if ((background & ${FOLIAGE_PENDING}) == 0) return;
   o_glyph.a = float(background & 63) / 255.0;
@@ -72,7 +74,10 @@ void main() {
       else if (idAt(p + sides[i]) != id) boundary = true;
     }
     uint seed = unpackId(id);
-    variant = foliageVariant(w, attr.gb * 2.0 - 1.0, seed, u_time, gust, rim, boundary);
+    float leafLight;
+    variant = foliageVariant(w, attr.gb * 2.0 - 1.0, seed, u_time, gust, rim, boundary, leafLight);
+    // [0, 1.5] covers the bounded surface light plus grain. R8 error is at most 1.5/510.
+    o_foliageLight = vec4(leafLight / 1.5, 0.0, 0.0, 1.0);
     tone = crownIsDry(seed) ? ${Tone.dry} : ${Tone.none};
   }
   vec2 glyph = texelFetch(u_table, ivec2(min(variant, u_count[cls] - 1), cls), 0).rg;

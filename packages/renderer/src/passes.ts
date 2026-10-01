@@ -715,6 +715,7 @@ export function glyphPass(
   gl.useProgram(programs.glyph.program);
   twgl.setUniforms(programs.glyph, {
     u_glyphs: targets.glyphTex,
+    u_foliageLight: targets.foliageLightTex,
     u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
     u_shift: [grid.shiftX, grid.shiftY],

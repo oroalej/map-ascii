@@ -869,32 +869,25 @@ function flutters(h: number, gust: number, time: number): boolean {
 export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 
 /** Shared crown-local clumps, used by individual crowns and the woods lattice. */
-export const CLUMPS = {
-  count: 7,
-  ring: 0.55,
-  jitter: 0.1,
-  radius: 0.46,
-  radiusJitter: 0.06,
-  crease: 0.14,
-} as const;
+export const CLUMPS = { coarse: 2.8, fine: 7.3, relief: 0.65 } as const;
 export const CROWN = { dryEvery: 12 } as const;
-export const CROWN_RAMP = [0.6, 0.72, 0.84, 0.97, 1.1] as const;
+export const CROWN_RAMP = [0.53, 0.65, 0.77, 0.94, 1.13] as const;
 export const CROWN_LIGHT = {
   tilt: 0.6,
   minZ: 0.08,
-  base: 0.78,
-  domeGain: 0.28,
-  clumpGain: 0.35,
-  creaseAO: 0.48,
-  rimAO: 0.18,
-  min: 0.5,
-  max: 1.3,
+  base: 0.66,
+  domeGain: 0.16,
+  clumpGain: 0.36,
+  creaseAO: 0.18,
+  rimAO: 0.12,
+  min: 0.52,
+  max: 1.25,
   nightFlat: 0.35,
 } as const;
 export const CROWN_TINTS = [
-  [0.8, 0.9, 0.82],
+  [0.82, 0.92, 0.9],
   [1, 1, 1],
-  [1.12, 1.1, 0.75],
+  [1.12, 1.06, 0.78],
 ] as const;
 export const CROWN_SUN_MIN_ALT = 25;
 export type CrownSun = readonly [number, number, number];
@@ -913,52 +906,61 @@ export function crownSun(sun: { altitude: number; azimuth: number } | null): Cro
 }
 
 export type CrownClumps = { top: number; crevice: number; nx: number; ny: number };
-const CLUMP_RING = [
-  [1, 0],
-  [0.5, Math.sqrt(3) / 2],
-  [-0.5, Math.sqrt(3) / 2],
-  [-1, 0],
-  [-0.5, -Math.sqrt(3) / 2],
-  [0.5, -Math.sqrt(3) / 2],
-] as const;
 const hashByte = (h: number, shift: number) => ((h >>> shift) & 255) / 255;
 
+/** Smooth seeded height and its analytic derivatives; no extra neighbour samples. */
+function crownNoiseGradient(x: number, y: number, seed: number): readonly [number, number, number] {
+  const ix = Math.floor(x),
+    iy = Math.floor(y);
+  const fx = x - ix,
+    fy = y - iy;
+  const sx = smoothstep(0, 1, fx),
+    sy = smoothstep(0, 1, fy);
+  const at = (dx: number, dy: number) =>
+    hashByte(cellHash(ix + dx + (seed & 65535), iy + dy + (seed >>> 16)), 0);
+  const a = at(0, 0),
+    b = at(1, 0),
+    c = at(0, 1),
+    d = at(1, 1);
+  return [
+    (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy,
+    ((b - a) * (1 - sy) + (d - c) * sy) * 6 * fx * (1 - fx),
+    ((c - a) * (1 - sx) + (d - b) * sx) * 6 * fy * (1 - fy),
+  ];
+}
+
+/** Overlapping scales of leaf relief, with rotated fine branches to avoid square/ring patterns. */
 export function crownClumps(x: number, y: number, seed: number): CrownClumps {
-  const rh = cellHash(seed, 37);
-  const rx = hashByte(rh, 0) * 2 - 1;
-  const ry = hashByte(rh, 8) * 2 - 1;
-  const norm = Math.hypot(rx, ry) || 1;
-  let f1 = Infinity,
-    f2 = Infinity,
-    nx = 0,
-    ny = 0;
-  for (let i = 0; i < CLUMPS.count; i++) {
-    const h = cellHash(seed, i);
-    const [ax, ay] = i === 0 ? [0, 0] : CLUMP_RING[i - 1]!;
-    const cx =
-      (CLUMPS.ring * (ax * rx - ay * ry)) / norm + (hashByte(h, 0) * 2 - 1) * CLUMPS.jitter;
-    const cy =
-      (CLUMPS.ring * (ax * ry + ay * rx)) / norm + (hashByte(h, 8) * 2 - 1) * CLUMPS.jitter;
-    const radius = CLUMPS.radius + (hashByte(h, 16) * 2 - 1) * CLUMPS.radiusJitter;
-    const dx = (x - cx) / radius,
-      dy = (y - cy) / radius;
-    const d = dx * dx + dy * dy;
-    if (d < f1) {
-      f2 = f1;
-      f1 = d;
-      nx = dx;
-      ny = dy;
-    } else if (d < f2) f2 = d;
-  }
+  const a = crownNoiseGradient(x * CLUMPS.coarse, y * CLUMPS.coarse, seed);
+  const b = crownNoiseGradient(
+    (0.8 * x - 0.6 * y) * CLUMPS.fine + 17,
+    (0.6 * x + 0.8 * y) * CLUMPS.fine - 9,
+    seed,
+  );
+  const height = a[0] * 0.65 + b[0] * 0.35;
+  const dx = a[1] * CLUMPS.coarse * 0.65 + (0.8 * b[1] + 0.6 * b[2]) * CLUMPS.fine * 0.35;
+  const dy = a[2] * CLUMPS.coarse * 0.65 + (-0.6 * b[1] + 0.8 * b[2]) * CLUMPS.fine * 0.35;
   return {
-    top: Math.sqrt(Math.max(0, 1 - f1)),
-    crevice: 1 - smoothstep(0, CLUMPS.crease, Math.sqrt(f2) - Math.sqrt(f1)),
-    nx,
-    ny,
+    top: height,
+    crevice: 1 - smoothstep(0.2, 0.65, height),
+    nx: -dx * CLUMPS.relief,
+    ny: -dy * CLUMPS.relief,
   };
 }
 
-/** Sparse creases and rims remain sparse even while leaves flutter. */
+/** Fine leaf tips stay attached to a crown through pan, zoom and sway. */
+export function crownTexture(x: number, y: number, seed: number): number {
+  return (
+    (hashByte(
+      cellHash(Math.floor(x * 29) + (seed & 65535), Math.floor(y * 29) + (seed >>> 16)),
+      8,
+    ) -
+      0.5) *
+    0.28
+  );
+}
+
+/** Density changes gradually; shaded foliage remains a connected leafy mass. */
 export function crownLevel(
   light: number,
   crevice: number,
@@ -966,9 +968,10 @@ export function crownLevel(
   rim = false,
   boundary = false,
 ): number {
-  let level = CROWN_RAMP.filter((t) => light >= t).length;
-  if (crevice > 0.6 || boundary) level = Math.min(level, 1);
-  if (rim || radius > 0.75) level = Math.min(level, 2);
+  const density = light - 0.06 * crevice - 0.08 * smoothstep(0.8, 1.15, radius);
+  let level = CROWN_RAMP.filter((t) => density >= t).length;
+  if (boundary) level = Math.max(1, level - 1);
+  if (rim) level = Math.min(level, 3);
   return level;
 }
 
@@ -982,17 +985,19 @@ export function crownShade(
   const k = CROWN_LIGHT;
   const dz = Math.sqrt(Math.max(k.minZ, 1 - x * x - y * y));
   const dn = Math.hypot(x * k.tilt, y * k.tilt, dz);
-  const cn = Math.hypot(clumps.nx, clumps.ny, Math.max(k.minZ, clumps.top));
+  const cn = Math.hypot(clumps.nx, clumps.ny, 1);
   const dome = (x * k.tilt * sun[0] + y * k.tilt * sun[1] + dz * sun[2]) / dn;
-  const clump =
-    (clumps.nx * sun[0] + clumps.ny * sun[1] + Math.max(k.minZ, clumps.top) * sun[2]) / cn;
+  const clump = (clumps.nx * sun[0] + clumps.ny * sun[1] + sun[2]) / cn;
   const r = Math.hypot(x, y);
   const ao = (1 - k.creaseAO * clumps.crevice) * (1 - k.rimAO * smoothstep(0.75, 1, r));
   const light = Math.max(
     k.min,
     Math.min(
       k.max,
-      (k.base + (night ? k.nightFlat : 1) * (k.domeGain * dome + k.clumpGain * clump)) * ao,
+      (k.base +
+        (night ? k.nightFlat : 1) * (k.domeGain * dome + k.clumpGain * clump) +
+        (clumps.top - 0.5) * 0.7) *
+        ao,
     ),
   );
   return { light, level: crownLevel(light, clumps.crevice, r) };
@@ -1021,11 +1026,13 @@ export function foliageVariant(
 ): number {
   const [lx, ly] = ctx.local ?? [0, 0];
   const clumps = crownClumps(lx, ly, ctx.id ?? 0);
-  let level = crownShade(lx, ly, clumps, ctx.sun, ctx.night).level;
+  const light =
+    crownShade(lx, ly, clumps, ctx.sun, ctx.night).light + crownTexture(lx, ly, ctx.id ?? 0);
+  let level = crownLevel(light, clumps.crevice, Math.hypot(lx, ly));
   if (gust >= TREE_WIND.step)
     level = Math.max(0, Math.min(5, level + (flutters(cellHash(x, y), gust, time) ? 1 : -1)));
-  if (clumps.crevice > 0.6 || ctx.boundary) level = Math.min(level, 1);
-  if (rim || Math.hypot(lx, ly) > 0.75) level = Math.min(level, 2);
+  if (ctx.boundary) level = Math.max(1, level - 1);
+  if (rim) level = Math.min(level, 3);
   return level;
 }
 
@@ -1127,11 +1134,13 @@ export function canopyCell(
   clumps.crevice = Math.max(clumps.crevice, shape.crevice);
   const sn = Math.sqrt(1.49);
   const light = options.sun ?? [sun[0] / sn, sun[1] / sn, 0.7 / sn];
-  let level = crownShade(lx, ly, clumps, light, options.night).level;
+  let level = crownLevel(
+    crownShade(lx, ly, clumps, light, options.night).light + crownTexture(lx, ly, shape.seed),
+    clumps.crevice,
+    Math.hypot(lx, ly),
+  );
   if (gust >= TREE_WIND.step)
     level = Math.max(0, Math.min(5, level + (flutters(cellHash(x, y), gust, time) ? 1 : -1)));
-  if (clumps.crevice > 0.6) level = Math.min(level, 1);
-  if (Math.hypot(lx, ly) > 0.75) level = Math.min(level, 2);
   const tone =
     level <= 1
       ? Tone.shade

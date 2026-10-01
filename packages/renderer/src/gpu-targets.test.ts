@@ -52,7 +52,7 @@ it('keeps selection input distinct from its destination and releases both across
   const { gl, allocated, released } = context();
   const first = createCellTargets(gl, 12, 8, 6, 4);
   const resized = createCellTargets(gl, 24, 16, 12, 8);
-  expect(first.selectTex).not.toBe(first.glyphTex);
+  expect(new Set([first.selectTex, first.glyphTex, first.foliageLightTex]).size).toBe(3);
   expect(first.selectFbo).not.toBe(first.glyphFbo);
   expect(resized.selectTex).not.toBe(first.selectTex);
   deleteCellTargets(gl, first);
@@ -61,7 +61,7 @@ it('keeps selection input distinct from its destination and releases both across
   expect(released).toEqual(allocated);
 });
 
-it.each([1, 4, 5, 21, 22, 29])('rolls back when GPU allocation %i returns null', (nullAt) => {
+it.each([1, 4, 5, 21, 22, 24, 30])('rolls back when GPU allocation %i returns null', (nullAt) => {
   const { gl, allocated, released } = context(0, nullAt);
   expect(() => createCellTargets(gl, 12, 8, 6, 4)).toThrow(
     /graphics (texture|resources) unavailable/,

@@ -21,13 +21,12 @@ export type RGBA = readonly [number, number, number, number];
  * - `grass`: tufts at rest (0–2 dense to thin, 7 sparse), noise-grown and tinted; in a gust of
  *   wind, blades lean right (3) or left (4) with it, or stand upright (6) when it blows along
  *   the columns, or lie flat (5)
- * - `canopy`: clumped tree crowns: a crown's center (0–2, or 5 for palms and 6–7 for conifers
- *   by the variant byte), foliage around it (3), and here and there a clearing (4); in a gust
- *   of wind, the pattern leans downwind and the foliage flutters to 8
+ * - `canopy`: crown-local leaf relief on a stable geographic lattice; density 0-5,
+ *   palm center 6 and conifer centers 7-8; wind leans crowns and flutters by one step
  * - `crop`: rows by `y` (0–1) at rest; in a gust, the rows lean right (2) or left (3) and the
  *   furrows ripple flat (4)
- * - `foliage`: a tree's crown: its rim (0), its inside (1, and a dense 4 here and there); in a
- *   gust, the leaves flutter between 0 and 1
+ * - `foliage`: crown-local multiscale relief and leaf-tip grain select density 0-5;
+ *   wind flutters by one step, touching identities darken by one step
  */
 export type GlyphKind =
   | 'road'
@@ -315,15 +314,15 @@ function makeTheme(background: number, c: Palette): Theme {
         kind: 'canopy',
         glyphs: ['.', ',', ':', '%', '&', '@', 'Ψ', '↑', '♠'],
         color: c.trees,
-        fill: background > 0x7fffff ? 0.35 : 0.16,
+        fill: background > 0x7fffff ? 0.68 : 0.46,
       },
-      // Clump tops carry dense ink in both themes; crevices and rims stay sparse. Wind sways
+      // Mottled leaf clusters carry volume without sparse outline rings. Wind sways
       // the geometry and flutters the density by one step (glyphs/select.ts).
       tree_crown: {
         kind: 'foliage',
         glyphs: ['.', ',', ':', '%', '&', '@'],
         color: c.crown,
-        fill: background > 0x7fffff ? 0.4 : 0.2,
+        fill: background > 0x7fffff ? 0.82 : 0.62,
       },
       farmland: { kind: 'crop', glyphs: ['≡', "'", '/', '\\', '~'], color: c.farmland, fill: 0.08 },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
@@ -378,9 +377,9 @@ export const themes: Record<ThemeName, Theme> = {
     rail: 0x9a8f86,
     station: 0xc8685a,
     park: 0x5aad5a,
-    trees: 0x3e9150,
+    trees: 0x5c8045,
     grass: 0x8cbf5e,
-    crown: 0x3a9a4c,
+    crown: 0x69934f,
     farmland: 0xa9b84c,
     landmark: 0xff6fae,
     monument: 0xd9cbb0,
@@ -432,9 +431,9 @@ export const themes: Record<ThemeName, Theme> = {
     rail: 0x5e5048,
     station: 0x9a3a2c,
     park: 0x3d8a3d,
-    trees: 0x2a6e38,
+    trees: 0x526e32,
     grass: 0x5f8f2c,
-    crown: 0x236a36,
+    crown: 0x557532,
     farmland: 0x7c8a1c,
     landmark: 0xc8246e,
     monument: 0x6b5a3e,

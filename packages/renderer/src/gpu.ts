@@ -81,6 +81,8 @@ export type CellTargets = {
   selectTex: WebGLTexture;
   selectFbo: WebGLFramebuffer;
   glyphTex: WebGLTexture;
+  /** R8 crown lighting computed once per cell; zero marks an uncached edge/non-crown. */
+  foliageLightTex: WebGLTexture;
   /** RGBA8 overlay on the label grid: 16-bit label glyph code, color index (labels.ts). */
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
@@ -234,6 +236,9 @@ export function createCellTargets(
     const glyphTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows), (value) =>
       gl.deleteTexture(value),
     );
+    const foliageLightTex = own(createTexture(gl, gl.R8, gl.RED, cols, rows), (value) =>
+      gl.deleteTexture(value),
+    );
     const overlayTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows), (value) =>
       gl.deleteTexture(value),
     );
@@ -257,6 +262,14 @@ export function createCellTargets(
     const glyphFbo = own(gl.createFramebuffer(), (value) => gl.deleteFramebuffer(value));
     gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT1,
+      gl.TEXTURE_2D,
+      foliageLightTex,
+      0,
+    );
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
     checkComplete(gl, 'glyph');
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -271,6 +284,7 @@ export function createCellTargets(
       selectTex,
       selectFbo,
       glyphTex,
+      foliageLightTex,
       overlayTex,
       lifeTex,
       lightTex,
@@ -293,6 +307,7 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
     t.idTex,
     t.selectTex,
     t.glyphTex,
+    t.foliageLightTex,
     t.overlayTex,
     t.lifeTex,
     t.lightTex,

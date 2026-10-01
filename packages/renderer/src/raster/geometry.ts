@@ -452,7 +452,7 @@ const isBuilding = (cls: string) => cls.startsWith('building');
 /** Direction the light comes from, in tile coordinates (y down): from the south-east. */
 
 /** Sides of the polygon a tree's crown is drawn as. */
-export const CROWN_SIDES = 24;
+export const CROWN_SIDES = 48;
 const CROWN_CIRCUMSCRIPTION = 1 / Math.cos(Math.PI / CROWN_SIDES);
 
 /** A 32-bit FNV-1a hash of a string: a feature's seed, the same in every tile. */
@@ -489,9 +489,9 @@ export function crownRing(center: TilePoint, radius: number, seed: number): Tile
     const a = (-2 * Math.PI * i) / CROWN_SIDES;
     const lumps =
       1 +
-      0.14 * Math.sin(lobes * a + phase1) +
+      0.1 * Math.sin(lobes * a + phase1) +
       0.07 * Math.sin((lobes + 2) * a + phase2) +
-      0.05 * (next() - 0.5);
+      0.14 * (next() - 0.5);
     // Stretched along `axis`, squeezed across it.
     const along = Math.cos(a - axis);
     const across = Math.sin(a - axis);

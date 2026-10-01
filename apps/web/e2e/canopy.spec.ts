@@ -14,6 +14,9 @@ import {
   buildGlyphTables,
   canopyCell,
   crownIsDry,
+  crownClumps,
+  crownShade,
+  crownTexture,
   treeGust,
   Tone,
   TONE_SHIFT,
@@ -55,7 +58,8 @@ for (const theme of ['dark', 'light'] as const) {
           const attrs: number[] = [],
             ids: number[] = [],
             selected: number[] = [],
-            expected: number[] = [];
+            expected: number[] = [],
+            expectedLight: number[] = [];
           for (let y = 0; y < 8; y++)
             for (let x = 0; x < 12; x++) {
               const seed = feature === 'crown73' || (feature === 'boundary' && x >= 6) ? 73 : 42;
@@ -80,6 +84,18 @@ for (const theme of ['dark', 'light'] as const) {
                     sun: [0, 0, 1],
                     night,
                   });
+              const lx = (local[0] / 255) * 2 - 1,
+                ly = (local[1] / 255) * 2 - 1;
+              expectedLight.push(
+                crown
+                  ? Math.round(
+                      ((crownShade(lx, ly, crownClumps(lx, ly, seed), [0, 0, 1], night).light +
+                        crownTexture(lx, ly, seed)) /
+                        1.5) *
+                        255,
+                    )
+                  : 0,
+              );
               const at = (cls * MAX_VARIANTS + chosen.variant) * 2;
               expected.push(
                 tables.table[at]!,
@@ -88,7 +104,17 @@ for (const theme of ['dark', 'light'] as const) {
                 19,
               );
             }
-          leafCases.push({ night, wind, feature, cls, attrs, ids, selected, expected });
+          leafCases.push({
+            night,
+            wind,
+            feature,
+            cls,
+            attrs,
+            ids,
+            selected,
+            expected,
+            expectedLight,
+          });
         }
       }
     const result = await page.evaluate(
@@ -208,9 +234,18 @@ for (const theme of ['dark', 'light'] as const) {
           0,
         );
         const selected = texture(cols, rows);
+        const foliageLight = texture(cols, rows, null, 1);
         const selectFbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, selected, 0);
+        gl.framebufferTexture2D(
+          gl.FRAMEBUFFER,
+          gl.COLOR_ATTACHMENT1,
+          gl.TEXTURE_2D,
+          foliageLight,
+          0,
+        );
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
         const emptyVao = gl.createVertexArray();
         const meshVao = gl.createVertexArray();
         gl.bindVertexArray(meshVao);
@@ -437,6 +472,7 @@ for (const theme of ['dark', 'light'] as const) {
           gl.viewport(0, 0, canvas.width, canvas.height);
           uniforms(glyph, {
             u_glyphs: selected,
+            u_foliageLight: foliageLight,
             u_atlas: atlasTex,
             u_cell: [cw, ch],
             u_height: canvas.height,
@@ -626,7 +662,8 @@ for (const theme of ['dark', 'light'] as const) {
         );
         gl.bindVertexArray(emptyVao);
         gl.viewport(0, 0, cols, rows);
-        let compared = 0;
+        let compared = 0,
+          lightCompared = 0;
         for (const sample of input.leafCases) {
           const classes = new Uint8Array(cols * rows * 4);
           for (let i = 0; i < classes.length; i += 4) classes[i] = sample.cls;
@@ -643,6 +680,14 @@ for (const theme of ['dark', 'light'] as const) {
                 `${sample.feature} night=${sample.night} wind=${sample.wind} byte ${i}: ${bytes[i]} != ${sample.expected[i]}`,
               );
             compared++;
+          }
+          gl.readBuffer(gl.COLOR_ATTACHMENT1);
+          gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+          gl.readBuffer(gl.COLOR_ATTACHMENT0);
+          for (let i = 0; i < sample.expectedLight.length; i++) {
+            if (Math.abs(bytes[i * 4]! - sample.expectedLight[i]!) > 1)
+              throw new Error(`Incorrect cached crown lighting: ${sample.feature}, cell ${i}`);
+            lightCompared++;
           }
         }
         // A landmark woodland outline is resolved by core selection and must keep its wall glyph.
@@ -710,6 +755,7 @@ for (const theme of ['dark', 'light'] as const) {
           revealedPerson,
           occlusion,
           compared,
+          lightCompared,
           crownGlyphs,
           woodsGlyphs,
           samplers,
@@ -799,6 +845,7 @@ for (const theme of ['dark', 'light'] as const) {
       },
     );
     expect(result.compared).toBe(24 * 96 * 4);
+    expect(result.lightCompared).toBe(24 * 96);
     expect(result.classes).toEqual([
       classId('tree_crown'),
       classId('tree_crown'),

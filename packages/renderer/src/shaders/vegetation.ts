@@ -155,12 +155,13 @@ bool flutters(uint h, float gust, float time) {
   return ((int(h >> 2u) + flips) & 1) == 1;
 }
 
-int foliageVariant(ivec2 c, vec2 local, uint seed, float time, float gust, bool rim, bool boundary) {
+int foliageVariant(ivec2 c, vec2 local, uint seed, float time, float gust, bool rim, bool boundary, out float leafLight) {
   vec4 clumps=crownClumps(local,seed);
-  int level=crownLevel(crownShade(local,clumps),clumps.y,length(local));
+  leafLight=crownShade(local,clumps)+crownTexture(local,seed);
+  int level=crownLevel(leafLight,clumps.y,length(local));
   if(gust>=${float(TREE_WIND.step)}) level=clamp(level+(flutters(cellHash(c),gust,time)?1:-1),0,5);
-  if(clumps.y>0.6 || boundary) level=min(level,1);
-  if(rim || length(local)>0.75) level=min(level,2);
+  if(boundary) level=max(1,level-1);
+  if(rim) level=min(level,3);
   return level;
 }
 
@@ -192,10 +193,8 @@ int canopyVariant(ivec2 p, ivec2 w, int variant, float gust, float time, out int
   vec2 local=best/${float(CANOPY.radius)};
   vec4 clumps=crownClumps(local,seed);
   clumps.y=max(clumps.y,1.0-smoothstep(0.0,${float(CANOPY.crease)},sqrt(f2)-sqrt(f1)));
-  int level=crownLevel(crownShade(local,clumps),clumps.y,length(local));
+  int level=crownLevel(crownShade(local,clumps)+crownTexture(local,seed),clumps.y,length(local));
   if(gust>=${float(TREE_WIND.step)}) level=clamp(level+(flutters(cellHash(w),gust,time)?1:-1),0,5);
-  if(clumps.y>0.6) level=min(level,1);
-  if(length(local)>0.75) level=min(level,2);
   tone=level<=1 ? ${Tone.shade} : level>=4 ? ${Tone.light} : seed%${CANOPY.freshEvery}u==0u ? ${Tone.dry} : ${Tone.none};
   return level;
 }
