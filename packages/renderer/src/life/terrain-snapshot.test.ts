@@ -53,7 +53,8 @@ describe('cell terrain snapshots', () => {
             },
           },
     );
-    scenario.world.sync([]);
+    // Replacing static geometry requires a hard reset; an ordinary pan revives its original clone.
+    scenario.world.clearTiles();
     scenario.world.sync(tiles);
     const { snapshot, transferables } = snapshotOf(scenario.world.cellTerrain()!);
     const received = structuredClone(snapshot, { transfer: transferables });

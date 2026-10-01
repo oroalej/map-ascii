@@ -205,13 +205,14 @@ export class Occupancy {
     }
     this.entries.delete(owner);
   }
-  conflicts(owner: object, bodies: readonly Body[]): number {
+  conflicts(owner: object, bodies: readonly Body[], ignore?: object): number {
     const neighbors = this.neighbors;
     neighbors.clear();
     try {
       for (const b of bodies)
         for (const key of this.keys(b)) {
-          for (const other of this.bins.get(key) ?? []) if (other !== owner) neighbors.add(other);
+          for (const other of this.bins.get(key) ?? [])
+            if (other !== owner && other !== ignore) neighbors.add(other);
         }
       let hits = 0;
       for (const other of neighbors) {

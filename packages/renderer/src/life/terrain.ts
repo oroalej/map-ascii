@@ -226,6 +226,11 @@ type TileFragments = {
 export class WorldRoadCache {
   private readonly tiles = new WeakMap<object, TileFragments>();
 
+  /** A frozen tile must not retain crossing dependency chains from its former neighbors. */
+  forget(owner: object): void {
+    this.tiles.delete(owner);
+  }
+
   build(contributions: readonly Contribution[]): RoadAccess {
     const index = new CrossingIndex<IndexedCrossing & { token: CrossingToken }>();
     for (const c of contributions) {

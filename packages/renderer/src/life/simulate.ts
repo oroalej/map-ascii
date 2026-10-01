@@ -6,6 +6,8 @@
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
 import { makeCellGuard } from './cell-guard';
+import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
+import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -40,6 +42,8 @@ import {
   laneOffset,
   LIFE_ZOOM,
   MAX_STEP_S,
+  RETIRE,
+  ADOPT,
   MAX_TILE_AGENTS,
   MAX_TILE_GATHERERS,
   MAX_VISIBLE_AGENTS,
@@ -122,7 +126,11 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
-export type StepPass = { junctions: JunctionTable; trains?: ReadonlyMap<Mover, TrainLimit> };
+export type StepPass = {
+  junctions: JunctionTable;
+  trains?: ReadonlyMap<Mover, TrainLimit>;
+  owns?: (p: { x: number; y: number }) => boolean;
+};
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -411,6 +419,8 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private adoptionGrid?: SegmentGrid;
+  private ownership?: (p: { x: number; y: number }) => boolean;
   private readonly commerceStallsRng: () => number;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
@@ -431,6 +441,58 @@ export class TileLife {
   readonly stalls: Stall[] = [];
   /** People at places: churches, schools, pitches, benches, fields (`spawnGatherers`). */
   readonly gatherers: Gatherer[] = [];
+
+  /** A zoom transfer commits only after a detached preview passes every admission check. */
+  projectFrom(m: Mover, source: TileLife, options: AdoptionOptions = {}): Mover | undefined {
+    this.adoptionGrid ??= new SegmentGrid(this.geo, this.perMeter);
+    return projectMover(this, source, m, this.adoptionGrid, options);
+  }
+
+  adoptFrom(
+    m: Mover,
+    source: TileLife,
+    options: AdoptionOptions = {},
+    admit?: (preview: Mover) => boolean,
+  ): boolean {
+    const replace = options.replace;
+    if (
+      source === this ||
+      !source.movers.includes(m) ||
+      !source.scenes.transferable(m) ||
+      (replace && (!this.movers.includes(replace) || !this.scenes.transferable(replace))) ||
+      this.movers.length - (replace ? 1 : 0) >= MAX_TILE_AGENTS
+    )
+      return false;
+    const preview = this.projectFrom(m, source, options);
+    if (!preview || (admit && !admit(preview))) return false;
+    if (replace) this.release(replace);
+    source.release(m);
+    m.line = preview.line;
+    m.from = preview.from;
+    m.dir = preview.dir;
+    m.d = preview.d;
+    m.x = preview.x;
+    m.y = preview.y;
+    m.hx = preview.hx;
+    m.hy = preview.hy;
+    m.speed = preview.speed;
+    m.v = preview.v;
+    m.next = preview.next;
+    m.came = preview.came;
+    m.junctionRoute = preview.junctionRoute;
+    m.waiting = preview.waiting;
+    m.routing = preview.routing;
+    m.train = preview.train;
+    this.movers.push(m);
+    return true;
+  }
+
+  release(m: Mover): void {
+    const index = this.movers.indexOf(m);
+    if (index >= 0) this.movers.splice(index, 1);
+    this.scenes.release(m);
+    this.localJunctions.release(m);
+  }
   /** Tile units per meter. */
   readonly perMeter: number;
   readonly roadTerrain: PreparedRoadTerrain;
@@ -1276,6 +1338,7 @@ export class TileLife {
   private stepGatherers(dt: number, near?: (x: number, y: number) => boolean, guard?: GroundGuard) {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
+      if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
       if (!this.canIdle(g)) g.pause = 0;
       if (g.pause > 0) {
@@ -1484,7 +1547,7 @@ export class TileLife {
   }
 
   /** Admit a complete train on a running line, with enough trail for every coach. */
-  arrive(line: number, rng: () => number): boolean {
+  arrive(line: number, rng: () => number, owns?: (m: Mover) => boolean): boolean {
     if (this.geo.kinds[line] !== LifeLine.rail || this.movers.length >= MAX_TILE_AGENTS)
       return false;
     const cars = consist(Math.round(between(rng, TRAIN.coaches)));
@@ -1515,7 +1578,12 @@ export class TileLife {
       };
       this.advance(m, progress * this.perMeter, false);
       this.moveTrain(m, length);
-      if (inTile(m) && !m.train!.edge && trainCars(this, m).length === cars.length) {
+      if (
+        inTile(m) &&
+        (!owns || owns(m)) &&
+        !m.train!.edge &&
+        trainCars(this, m).length === cars.length
+      ) {
         this.movers.push(m);
         return true;
       }
@@ -1986,7 +2054,12 @@ export class TileLife {
   }
 
   /** Walk a copied rail cursor without RNG, breadcrumbs, stops, or simulation mutation. */
-  trackAhead(m: Mover, reach: number, visit: (p: Pose & { distance: number }) => void) {
+  trackAhead(
+    m: Mover,
+    reach: number,
+    visit: (p: Pose & { distance: number }) => void,
+    owns?: (p: { x: number; y: number }) => boolean,
+  ) {
     const cursor = { ...m },
       c = this.geo.coords;
     let distance = 0,
@@ -2014,7 +2087,7 @@ export class TileLife {
       distance += step;
       place();
       visit({ x: cursor.x, y: cursor.y, hx: cursor.hx, hy: cursor.hy, distance });
-      if (!inTile(cursor)) {
+      if (!inTile(cursor) || (owns && !owns(cursor))) {
         edge = true;
         break;
       }
@@ -2054,11 +2127,11 @@ export class TileLife {
   }
 
   /** Take out the trains whose head has left the tile, for `LifeWorld.step` to hand over. */
-  takeLeavers(): readonly Mover[] {
+  takeLeavers(reowned?: (m: Mover) => boolean): readonly Mover[] {
     let out: Mover[] | undefined;
     for (let i = this.movers.length - 1; i >= 0; i--) {
       const m = this.movers[i]!;
-      if (!m.train || (m.x >= 0 && m.x < EXTENT && m.y >= 0 && m.y < EXTENT)) continue;
+      if (!m.train || (inTile(m) && !reowned?.(m))) continue;
       (out ??= []).push(m);
       this.movers.splice(i, 1);
     }
@@ -2332,6 +2405,7 @@ export class TileLife {
     pass?: StepPass,
   ) {
     if (dt <= 0) return;
+    this.ownership = pass?.owns;
     this.time += dt;
     const { rng } = this;
     const clock = env?.clock ?? this.time;
@@ -2344,6 +2418,7 @@ export class TileLife {
       guard,
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
+      pass?.owns,
     );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) {
@@ -2370,6 +2445,7 @@ export class TileLife {
           a.i - b.i,
       );
     for (const { i, m } of order) {
+      if (pass?.owns && !pass.owns(m)) continue;
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
       if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
@@ -2638,11 +2714,13 @@ export class TileLife {
     const within = (x: number, y: number, r: number) =>
       (x - flock.x) ** 2 + (y - flock.y) ** 2 < r * r;
     for (const m of this.movers) {
+      if (this.ownership && !this.ownership(m)) continue;
       if (levels && m.rank >= levels[m.kind]) continue;
       if (m.pause > 0 && m.kind !== 'train') continue;
       if (within(m.x, m.y, m.kind === 'dog' ? 2 * reach : reach)) return true;
     }
     for (const g of this.gatherers) {
+      if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || g.pause > 0) continue;
       if (levels && g.rank >= levels.places[g.place]) continue;
       if (within(g.x, g.y, reach)) return true;
@@ -2688,6 +2766,7 @@ export class TileLife {
     const wy = wind ? wind.dir[1] * wind.strength : 0;
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
+      if (this.ownership && !this.ownership(flock)) continue;
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
@@ -2856,6 +2935,13 @@ export type VisibleAgent = {
 };
 
 export type LifeTile = { key: string; tile: TileId; life: LifeGeometry };
+type LifeHistory = { ceded: TileId[]; quotas: Partial<Record<Mover['kind'], number>> };
+type LifeDonor = {
+  key: string;
+  life: TileLife;
+  masks: readonly TileId[];
+  movers: readonly Mover[];
+};
 
 /** The weather people react to: how hard it rains (0–1) and the sun's altitude (degrees). */
 export type LifeWeather = { rain: number; sunAltitude: number };
@@ -2873,7 +2959,7 @@ export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 export class LifeWorld {
   private readonly junctions = new JunctionTable();
-  private readonly roadCache = new WorldRoadCache();
+  private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
     {
@@ -2918,6 +3004,10 @@ export class LifeWorld {
   }
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
   private readonly tiles = new Map<string, TileLife>();
+  private readonly retired = new Map<string, { life: TileLife; at: number }>();
+  private readonly history = new WeakMap<TileLife, LifeHistory>();
+  private covers = new Map<TileLife, readonly TileId[]>();
+  private mixedZoom = false;
   private traffic: ResolvedTraffic;
   private readonly scenes = new Map<string, ProcessionScene>();
   /** Seconds simulated, for played processions. */
@@ -2939,38 +3029,100 @@ export class LifeWorld {
   /** Change the vehicle mix: every tile's agents spawn again with it. */
   setTraffic(traffic?: TrafficMix) {
     this.traffic = resolveTraffic(traffic);
+    this.clearTiles();
+  }
+
+  /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
+  clearTiles() {
     this.tiles.clear();
+    this.retired.clear();
+    this.covers.clear();
+    this.mixedZoom = false;
     this.junctions.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
     this.groundBuffers = new WeakMap();
+    this.roadCache = new WorldRoadCache();
     this.railTopology = undefined;
   }
 
-  /** Spawn agents for tiles that came into view and drop those of tiles that left it. */
-  sync(tiles: readonly LifeTile[]) {
+  private pruneRetired(cap = true) {
+    for (const [key, entry] of this.retired)
+      if (this.clock - entry.at >= RETIRE.seconds) this.retired.delete(key);
+    if (cap)
+      while (this.retired.size > RETIRE.max) this.retired.delete(this.retired.keys().next().value!);
+  }
+
+  private owns(life: TileLife, p: { x: number; y: number }) {
+    return !masked(life.tile, p, this.covers.get(life));
+  }
+
+  /** Revive frozen tiles, then reconcile only regions whose zoom ownership changed. */
+  sync(tiles: readonly LifeTile[], focus?: readonly [number, number]) {
     const start = this.profiler?.time();
     try {
+      this.pruneRetired(false);
+      const previous = new Set(this.tiles.values());
+      const oldCovers = this.covers;
+      const before: LifeDonor[] = [...this.tiles].map(([key, life]) => ({
+        key,
+        life,
+        movers: [...life.movers],
+        masks: [...(oldCovers.get(life) ?? []), ...(this.history.get(life)?.ceded ?? [])],
+      }));
+      for (const [key, { life }] of this.retired)
+        before.push({
+          key,
+          life,
+          movers: [...life.movers],
+          masks: [...(this.history.get(life)?.ceded ?? [])],
+        });
       const keep = new Set<string>();
       const added = new Set<TileLife>();
+      let changed = false;
       const spawnStart = this.profiler?.time();
       for (const { key, tile, life } of tiles) {
         keep.add(key);
         if (!this.tiles.has(key)) {
-          const fresh = new TileLife(tile, life, hashString(key), this.traffic);
+          const saved = this.retired.get(key);
+          const fresh = saved?.life ?? new TileLife(tile, life, hashString(key), this.traffic);
+          this.retired.delete(key);
           this.tiles.set(key, fresh);
-          added.add(fresh);
+          if (!saved) {
+            added.add(fresh);
+            this.history.set(fresh, { ceded: [], quotas: {} });
+          }
+          changed = true;
         }
       }
       if (added.size && spawnStart !== undefined)
         this.profiler!.add('spawn', this.profiler!.time() - spawnStart);
       for (const key of this.tiles.keys())
         if (!keep.has(key)) {
+          const life = this.tiles.get(key)!;
+          this.roadCache.forget(life);
+          this.retired.set(key, { life, at: this.clock });
           this.tiles.delete(key);
-          // Cached transforms own TileLife instances, so release them immediately on eviction.
-          this.groundTerrain = undefined;
-          this.railTopology = undefined;
+          changed = true;
         }
+      if (changed) {
+        this.groundTerrain = undefined;
+        this.railTopology = undefined;
+        this.covers = new Map();
+        const live = [...this.tiles.values()];
+        this.mixedZoom = live.some((life) => life.tile.z !== live[0]!.tile.z);
+        for (const life of live) {
+          const finer = live.filter(
+            (other) => other.tile.z > life.tile.z && overlaps(life.tile, other.tile),
+          );
+          if (finer.length) {
+            const masks: TileId[] = [];
+            for (const other of finer) cede(masks, other.tile, life.tile);
+            this.covers.set(life, masks);
+          }
+          for (const m of life.movers) if (!this.owns(life, m)) this.junctions.release(m);
+        }
+      }
       this.junctions.begin(new Set(this.tiles.values()));
       if (added.size) {
         const guard = this.groundGuard(0, added);
@@ -2984,9 +3136,144 @@ export class LifeWorld {
         }
         if (settleStart !== undefined)
           this.profiler!.add('settle', this.profiler!.time() - settleStart);
+        for (const life of added) {
+          const quotas = this.history.get(life)!.quotas;
+          for (const m of life.movers) if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
+        }
       }
+      if (changed) {
+        const destinations = [...this.tiles.values()].sort(
+          (a, b) =>
+            b.tile.z - a.tile.z ||
+            `${a.tile.z}/${a.tile.x}/${a.tile.y}`.localeCompare(
+              `${b.tile.z}/${b.tile.x}/${b.tile.y}`,
+            ),
+        );
+        const transferred = new Set<Mover>();
+        let guard: ReturnType<LifeWorld['groundGuard']> | undefined;
+        for (const target of destinations) {
+          const donors = before.filter(
+            (d) => d.life.tile.z !== target.tile.z && overlaps(d.life.tile, target.tile),
+          );
+          const was = oldCovers.get(target);
+          if (!donors.length || (previous.has(target) && !was?.length)) continue;
+          const gained = (p: { x: number; y: number }) =>
+            inTile(p) &&
+            this.owns(target, p) &&
+            (!previous.has(target) || masked(target.tile, p, was));
+          guard ??= this.groundGuard();
+          this.carry(target, donors, gained, transferred, guard, focus);
+        }
+        // Cede geographic territory, not just successfully snapped individual movers.
+        for (const donor of before) {
+          const history = this.history.get(donor.life)!;
+          for (const target of destinations) {
+            if (
+              target === donor.life ||
+              target.tile.z === donor.life.tile.z ||
+              !overlaps(target.tile, donor.life.tile)
+            )
+              continue;
+            for (const footprint of ownedFootprints(target.tile, this.covers.get(target)))
+              cede(history.ceded, footprint, donor.life.tile);
+          }
+        }
+        // Live owners reclaim their uncovered territory; retired owners retain their tombstones.
+        for (const life of this.tiles.values())
+          this.history.get(life)!.ceded = [...(this.covers.get(life) ?? [])];
+        // Revivals need the same immediately available cell guard as fresh settlement.
+        if (this.tiles.size && !this.groundTerrain) this.groundGuard();
+      }
+      this.pruneRetired();
     } finally {
       if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
+    }
+  }
+
+  private carry(
+    target: TileLife,
+    donors: readonly LifeDonor[],
+    gained: (p: { x: number; y: number }) => boolean,
+    transferred: Set<Mover>,
+    guard: ReturnType<LifeWorld['groundGuard']>,
+    focus?: readonly [number, number],
+  ) {
+    const center = focus
+      ? lngLatToTile(target.tile, focus[0], focus[1])
+      : { x: EXTENT / 2, y: EXTENT / 2 };
+    for (const kind of ['vehicle', 'boat', 'train'] as const) {
+      const quota = this.history.get(target)!.quotas[kind] ?? 0;
+      let count = target.movers.filter((m) => m.kind === kind && inTile(m)).length;
+      const limit = Math.max(quota, count);
+      const candidates = donors
+        .flatMap((d) => {
+          const f = frameBetween(d.life.tile, target.tile);
+          return d.movers.flatMap((m, index) => {
+            if (
+              transferred.has(m) ||
+              m.kind !== kind ||
+              !inTile(m) ||
+              masked(d.life.tile, m, d.masks) ||
+              !d.life.scenes.transferable(m)
+            )
+              return [];
+            const x = f.x + m.x * f.scale,
+              y = f.y + m.y * f.scale;
+            return gained({ x, y })
+              ? [{ ...d, m, index, x, y, distance: (x - center.x) ** 2 + (y - center.y) ** 2 }]
+              : [];
+          });
+        })
+        .sort(
+          (a, b) =>
+            a.m.rank - b.m.rank ||
+            a.distance - b.distance ||
+            a.key.localeCompare(b.key) ||
+            a.index - b.index,
+        );
+      for (const c of candidates) {
+        if (!c.life.movers.includes(c.m)) continue;
+        let replace: Mover | undefined;
+        if (count >= limit || kind === 'train') {
+          let nearest = Infinity;
+          for (const m of target.movers) {
+            if (
+              m.kind !== kind ||
+              !gained(m) ||
+              transferred.has(m) ||
+              !target.scenes.transferable(m)
+            )
+              continue;
+            const distance = (m.x - c.x) ** 2 + (m.y - c.y) ** 2;
+            if (distance < nearest) {
+              nearest = distance;
+              replace = m;
+            }
+          }
+          if (!replace && kind !== 'train') continue;
+        }
+        const accepted = target.adoptFrom(
+          c.m,
+          c.life,
+          {
+            replace,
+            snapM: kind === 'train' ? TRAIN.handover : ADOPT.snap,
+          },
+          (preview) =>
+            gained(preview) &&
+            (kind !== 'vehicle' || guard(target, preview, undefined, replace, false, c.m)),
+        );
+        if (!accepted) continue;
+        this.junctions.release(c.m);
+        if (replace) {
+          this.junctions.release(replace);
+          guard.remove(replace);
+        }
+        guard.remove(c.m);
+        if (kind === 'vehicle') guard(target, c.m);
+        if (!replace) count++;
+        transferred.add(c.m);
+      }
     }
   }
 
@@ -3115,7 +3402,7 @@ export class LifeWorld {
       const near = bounds && viewIn(life.tile, bounds, 100 * life.perMeter);
       const inView = (p: { x: number; y: number }) => !near || near(p.x, p.y);
       const standing = (p: Parked | Stall, vehicle: CraftType) => {
-        if (!inView(p)) return;
+        if (!inView(p) || !this.owns(life, p)) return;
         const { length, width } = VEHICLES[vehicle];
         const { perMeter } = life;
         const out = buffer(p).live;
@@ -3139,24 +3426,37 @@ export class LifeWorld {
       for (const m of life.movers)
         if (
           inView(m) &&
+          this.owns(life, m) &&
           !life.scenes.hidden(m) &&
           (m.kind === 'vehicle' || isWalker(m.kind)) &&
           (!this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
           occupied.set(m, bodies(life, m, buffer(m).live));
       for (const g of life.gatherers)
-        if (inView(g) && (!this.lastLevels || g.rank < this.lastLevels.places[g.place]))
+        if (
+          inView(g) &&
+          this.owns(life, g) &&
+          (!this.lastLevels || g.rank < this.lastLevels.places[g.place])
+        )
           occupied.set(g, bodies(life, g, buffer(g).live));
     }
     if (buildStart !== undefined)
       this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
-    const check = (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
+    const check = (
+      life: TileLife,
+      owner: GroundAgent,
+      before?: GroundAgent,
+      ignore?: object,
+      reserve = true,
+      identity: GroundAgent = owner,
+    ) => {
+      if (!this.owns(life, owner)) return true;
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
       const previous = before ? bodies(life, before, this.groundPrevious) : next;
-      const oldScore = before ? occupied.conflicts(owner, previous) : 0;
-      const endScore = occupied.conflicts(owner, next);
+      const oldScore = before ? occupied.conflicts(identity, previous, ignore) : 0;
+      const endScore = occupied.conflicts(identity, next, ignore);
       // Existing overlaps at a density change may escape, but never deepen or tunnel through.
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) return false;
       let distance = 0,
@@ -3215,23 +3515,29 @@ export class LifeWorld {
           (roadNear && !roadAccess.allows(sample, crossing))
         )
           return false;
-        if (oldScore === 0 && occupied.conflicts(owner, sample) > 0) return false;
+        if (oldScore === 0 && occupied.conflicts(identity, sample, ignore) > 0) return false;
       }
-      occupied.set(owner, next);
-      pair.trial = pair.live;
-      pair.live = next;
+      if (reserve) {
+        occupied.set(identity, next);
+        pair.trial = pair.live;
+        pair.live = next;
+      }
       return true;
     };
-    if (!this.profiler) return check;
-    return (life: TileLife, owner: GroundAgent, before?: GroundAgent) => {
-      const start = this.profiler!.time();
-      this.profiler!.check();
-      try {
-        return check(life, owner, before);
-      } finally {
-        this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
-      }
-    };
+    const remove = (owner: object) => occupied.delete(owner);
+    if (!this.profiler) return Object.assign(check, { remove });
+    return Object.assign(
+      (...args: Parameters<typeof check>) => {
+        const start = this.profiler!.time();
+        this.profiler!.check();
+        try {
+          return check(...args);
+        } finally {
+          this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
+        }
+      },
+      { remove },
+    );
   }
 
   /**
@@ -3280,6 +3586,11 @@ export class LifeWorld {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
     this.clock += clamped;
+    this.pruneRetired();
+    if (!this.tiles.size) {
+      this.arrivals.clear();
+      return;
+    }
     const shows =
       zoom === undefined
         ? undefined
@@ -3297,6 +3608,7 @@ export class LifeWorld {
     for (const tile of this.tiles.values()) {
       const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
+        this.owns(tile, m) &&
         (!shows || shows(m.kind)) &&
         near(m.x, m.y) &&
         (!env.levels || m.rank < env.levels[m.kind]) &&
@@ -3307,7 +3619,11 @@ export class LifeWorld {
     for (const [key, tile] of this.tiles)
       tile.requestJunctions(this.junctions, eligibility.get(tile)!, this.clock, key);
     this.junctions.resolve(this.clock);
-    const trains = trainLimits([...this.tiles.values()], clamped);
+    const trains = trainLimits(
+      [...this.tiles.values()],
+      clamped,
+      this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
+    );
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
@@ -3316,19 +3632,39 @@ export class LifeWorld {
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
         trains,
+        owns: this.covers.has(tile) ? (p) => this.owns(tile, p) : undefined,
       });
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
-    let leaving: { from: TileId; m: Mover }[] | undefined;
+    let leaving: { from: TileLife; m: Mover }[] | undefined;
     for (const tile of this.tiles.values()) {
-      for (const m of tile.takeLeavers()) (leaving ??= []).push({ from: tile.tile, m });
+      for (const m of tile.takeLeavers(
+        this.mixedZoom ? (m) => trains.has(m) && !this.owns(tile, m) : undefined,
+      ))
+        (leaving ??= []).push({ from: tile, m });
     }
     for (const { from, m } of leaving ?? []) {
       const dx = m.x < 0 ? -1 : m.x >= EXTENT ? 1 : 0;
       const dy = m.y < 0 ? -1 : m.y >= EXTENT ? 1 : 0;
-      for (const next of this.tiles.values()) {
+      const destinations = this.mixedZoom
+        ? [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z)
+        : this.tiles.values();
+      for (const next of destinations) {
         const { tile } = next;
-        if (tile.z === from.z && tile.x === from.x + dx && tile.y === from.y + dy) {
+        if (this.mixedZoom) {
+          if (next === from) continue;
+          const f = frameBetween(from.tile, tile);
+          const p = { x: f.x + m.x * f.scale, y: f.y + m.y * f.scale };
+          if (!inTile(p) || !this.owns(next, p)) continue;
+          if (tile.z === from.tile.z) next.adopt(m, dx, dy);
+          else {
+            // takeLeavers releases array ownership; restore it for transactional zoom admission.
+            from.movers.push(m);
+            if (!next.adoptFrom(m, from, { snapM: TRAIN.handover })) from.release(m);
+          }
+          break;
+        }
+        if (tile.z === from.tile.z && tile.x === from.tile.x + dx && tile.y === from.tile.y + dy) {
           next.adopt(m, dx, dy);
           break;
         }
@@ -3405,7 +3741,9 @@ export class LifeWorld {
           (clock = { rng, left: between(rng, TRAIN.arrivals), occupied: false }),
         );
       }
-      const occupied = route.some((r) => r.life.movers.some((m) => m.train && m.line === r.line));
+      const occupied = route.some((r) =>
+        r.life.movers.some((m) => m.train && m.line === r.line && this.owns(r.life, m)),
+      );
       if (occupied) {
         clock.occupied = true;
         continue;
@@ -3419,7 +3757,13 @@ export class LifeWorld {
       // Try the longest track fragments first; short isolated tracks cannot hold a train.
       const meters = (r: (typeof route)[number]) => r.life.lineLength(r.line) / r.life.perMeter;
       const ordered = [...route].sort((a, b) => meters(b) - meters(a) || a.id - b.id);
-      const arrived = ordered.some((r) => r.life.arrive(r.line, clock.rng));
+      const arrived = ordered.some((r) =>
+        r.life.arrive(
+          r.line,
+          clock.rng,
+          this.covers.has(r.life) ? (m) => this.owns(r.life, m) : undefined,
+        ),
+      );
       clock.left = arrived ? between(clock.rng, TRAIN.arrivals) : 10;
       clock.occupied = arrived;
     }
@@ -3508,6 +3852,7 @@ export class LifeWorld {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
+        if (!this.owns(life, m)) continue;
         if (life.scenes.hidden(m)) continue;
         if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
         if (scene && m.kind === 'boat') continue;
@@ -3563,6 +3908,7 @@ export class LifeWorld {
       if (shows('person')) {
         const vendorsOut = levels.person * crowd;
         for (const s of life.stalls) {
+          if (!this.owns(life, s)) continue;
           if (s.open === false) continue;
           if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
             continue;
@@ -3584,6 +3930,7 @@ export class LifeWorld {
       }
       if (shows('person')) {
         for (const g of life.gatherers) {
+          if (!this.owns(life, g)) continue;
           if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
           const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
@@ -3622,6 +3969,7 @@ export class LifeWorld {
       }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
+          if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
           out.push({
@@ -3640,6 +3988,7 @@ export class LifeWorld {
       // Standby trains: the tile that owns a siding draws its whole train, lamps off.
       if (shows('train')) {
         for (const p of life.standby) {
+          if (!this.owns(life, p)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
           out.push({
             kind: 'train',
@@ -3656,6 +4005,7 @@ export class LifeWorld {
       }
       if (!shows('bird')) continue;
       for (const flock of life.flocks) {
+        if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
         const out_ = spec.nocturnal ? levels.night : levels.bird;
         if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
