@@ -102,7 +102,8 @@ export function projectMover(
   grid: SegmentGrid,
   options: AdoptionOptions = {},
 ): Mover | undefined {
-  if (m.kind !== 'vehicle' && m.kind !== 'boat' && m.kind !== 'train') return;
+  if (m.kind !== 'vehicle' && m.kind !== 'boat' && m.kind !== 'train' && m.kind !== 'person')
+    return;
   const frame = frameBetween(source.tile, target.tile);
   const nudge = (options.nudgeM ?? 0) * source.perMeter;
   const x = frame.x + (m.x + m.hx * nudge) * frame.scale,
@@ -110,7 +111,8 @@ export function projectMover(
   const oldPose = source.pose(m);
   const oldX = frame.x + oldPose.x * frame.scale,
     oldY = frame.y + oldPose.y * frame.scale;
-  const reach = (options.snapM ?? ADOPT.snap) * target.perMeter;
+  const reach =
+    Math.min(options.snapM ?? ADOPT.snap, m.kind === 'person' ? 2 : Infinity) * target.perMeter;
   const bearing = Math.cos(((options.bearingDeg ?? ADOPT.bearing) * Math.PI) / 180);
   const id = source.geo.lineIds?.[m.line];
   let best: { segment: Segment; t: number; dir: 1 | -1; distance: number } | undefined;
@@ -150,7 +152,7 @@ export function projectMover(
   const { segment: s, t, dir } = best;
   const scale = target.perMeter / source.perMeter;
   // A stable preview shape avoids spread/override transitions for the 600-agent batch.
-  // Walking/animal state stays on the original owner; those kinds cannot enter this path.
+  // A preview shares immutable group members; ownership commits retain the original array.
   const preview: Mover = {
     kind: m.kind,
     line: s.line,
@@ -168,6 +170,10 @@ export function projectMover(
     lane: m.lane,
     pause: m.pause,
     rank: m.rank,
+    group: m.group,
+    walked: m.walked,
+    avoid: m.avoid,
+    waiting: m.waiting,
   };
   if (m.routing) {
     preview.routing = {
@@ -193,6 +199,26 @@ export function projectMover(
   ) {
     options.reject?.('pose');
     return;
+  }
+  if (m.kind === 'person') {
+    const before = source.groundBodies(m),
+      after = target.groundBodies(preview);
+    const ratio = (frame.scale * source.perMeter) / target.perMeter;
+    if (
+      before.length !== after.length ||
+      after.some((b, i) => {
+        const a = before[i]!;
+        return (
+          Math.hypot(
+            b.x - frame.x / target.perMeter - a.x * ratio,
+            b.y - frame.y / target.perMeter - a.y * ratio,
+          ) > 2 || b.hx * a.hx + b.hy * a.hy < bearing
+        );
+      })
+    ) {
+      options.reject?.('pose');
+      return;
+    }
   }
   return preview;
 }

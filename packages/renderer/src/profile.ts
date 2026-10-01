@@ -94,9 +94,11 @@ export class FrameProfiler {
     if (data.trace.length === PROFILE_CAPACITY) data.trace.shift();
     data.trace.push({ id, ...value });
   }
-  clearContinuity() {
-    this.identities = new WeakMap();
-    this.incarnations.clear();
+  clearContinuity(clearIdentities = true) {
+    if (clearIdentities) {
+      this.identities = new WeakMap();
+      this.incarnations.clear();
+    }
     this.selected = undefined;
     this.selectionOverride = false;
     this.trace = [];
@@ -189,7 +191,7 @@ export class FrameProfiler {
     this.dropped = 0;
     this.current = undefined;
     this.pending = undefined;
-    this.clearContinuity();
+    this.clearContinuity(false);
   }
   snapshot(gpuRenderer: string | null = null): AtlasProfile {
     const samples: ProfileSample[] = [];

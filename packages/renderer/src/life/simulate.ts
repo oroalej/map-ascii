@@ -3260,7 +3260,7 @@ export class LifeWorld {
     const center = focus
       ? lngLatToTile(target.tile, focus[0], focus[1])
       : { x: EXTENT / 2, y: EXTENT / 2 };
-    for (const kind of ['vehicle', 'boat', 'train'] as const) {
+    for (const kind of ['vehicle', 'boat', 'train', 'person'] as const) {
       const quota = this.history.get(target)!.quotas[kind] ?? 0;
       let count = target.movers.filter((m) => m.kind === kind && inTile(m)).length;
       const limit = Math.max(quota, count);
@@ -3325,11 +3325,12 @@ export class LifeWorld {
           },
           (preview) =>
             gained(preview) &&
-            (kind !== 'vehicle' ||
+            (kind !== 'person' || this.walkingTransfer(target, c.life, c.m, preview)) &&
+            ((kind !== 'vehicle' && kind !== 'person') ||
               guard(
                 target,
                 preview,
-                undefined,
+                kind === 'person' ? this.walkingBefore(target, c.life, c.m, preview) : undefined,
                 replace,
                 false,
                 c.m,
@@ -3349,11 +3350,30 @@ export class LifeWorld {
           guard.remove(replace);
         }
         guard.remove(c.m);
-        if (kind === 'vehicle') guard(target, c.m);
+        if (kind === 'vehicle' || kind === 'person') guard(target, c.m);
         if (!replace) count++;
         transferred.add(c.m);
       }
     }
+  }
+
+  /** One metric coordinate system for all tiles, so clearance also works across a seam. */
+  private walkingBefore(target: TileLife, source: TileLife, m: Mover, preview: Mover): Mover {
+    const f = frameBetween(source.tile, target.tile);
+    return { ...preview, x: f.x + m.x * f.scale, y: f.y + m.y * f.scale, hx: m.hx, hy: m.hy };
+  }
+  private walkingTransfer(target: TileLife, source: TileLife, m: Mover, preview: Mover): boolean {
+    const f = frameBetween(source.tile, target.tile),
+      ratio = (f.scale * source.perMeter) / target.perMeter;
+    const before = source.groundBodies(m),
+      after = target.groundBodies(preview);
+    return after.every((b, i) => {
+      const a = before[i]!;
+      return target.scenes.walkable(
+        { x: f.x + a.x * ratio * target.perMeter, y: f.y + a.y * ratio * target.perMeter },
+        { x: b.x * target.perMeter, y: b.y * target.perMeter },
+      );
+    });
   }
 
   /** One metric coordinate system for all tiles, so clearance also works across a seam. */
