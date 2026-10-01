@@ -1,0 +1,271 @@
+{
+  "native": {
+    "code": "bcl",
+    "label": "Bikol"
+  },
+  "translations": [
+    {
+      "code": "en",
+      "label": "English"
+    },
+    {
+      "code": "fil",
+      "label": "Tagalog"
+    }
+  ],
+  "exchanges": [
+    {
+      "id": "greet-morning",
+      "kind": "greet",
+      "period": "morning",
+      "lines": [
+        {
+          "bcl": "Marhay na aga!",
+          "en": "Good morning!",
+          "fil": "Magandang umaga!"
+        },
+        {
+          "bcl": "Marhay na aga!",
+          "en": "Good morning!",
+          "fil": "Magandang umaga!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ]
+    },
+    {
+      "id": "greet-afternoon",
+      "kind": "greet",
+      "period": "afternoon",
+      "lines": [
+        {
+          "bcl": "Marhay na hapon!",
+          "en": "Good afternoon!",
+          "fil": "Magandang hapon!"
+        },
+        {
+          "bcl": "Marhay na hapon!",
+          "en": "Good afternoon!",
+          "fil": "Magandang hapon!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ]
+    },
+    {
+      "id": "greet-evening",
+      "kind": "greet",
+      "period": "evening",
+      "lines": [
+        {
+          "bcl": "Marhay na banggi!",
+          "en": "Good evening!",
+          "fil": "Magandang gabi!"
+        },
+        {
+          "bcl": "Marhay na banggi!",
+          "en": "Good evening!",
+          "fil": "Magandang gabi!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ]
+    },
+    {
+      "id": "talk-how-are-you",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Kumusta ka?",
+          "en": "How are you?",
+          "fil": "Kumusta ka?"
+        },
+        {
+          "bcl": "Marhay man, salamat.",
+          "en": "I'm fine, thank you.",
+          "fil": "Mabuti naman, salamat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol phrasebook — Naga/Legazpi variety",
+          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
+          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
+        }
+      ]
+    },
+    {
+      "id": "talk-meet-again",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Haloy na kitang dai naghilingan!",
+          "en": "We haven't seen each other in a while!",
+          "fil": "Matagal na tayong hindi nagkikita!"
+        },
+        {
+          "bcl": "Kumusta ka?",
+          "en": "How are you?",
+          "fil": "Kumusta ka?"
+        },
+        {
+          "bcl": "Marhay man, salamat.",
+          "en": "I'm fine, thank you.",
+          "fil": "Mabuti naman, salamat."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        },
+        {
+          "title": "Bikol phrasebook — Naga/Legazpi variety",
+          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
+          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
+        }
+      ]
+    },
+    {
+      "id": "talk-visit",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Pirmi kang yaon digdi?",
+          "en": "Do you come here often?",
+          "fil": "Madalas ka bang pumunta rito?"
+        },
+        {
+          "bcl": "Iyo.",
+          "en": "Yes.",
+          "fil": "Oo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ]
+    },
+    {
+      "id": "talk-thanks",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Salamat na marhay!",
+          "en": "Thank you very much!",
+          "fil": "Maraming salamat!"
+        },
+        {
+          "bcl": "Daing ano man.",
+          "en": "You're welcome.",
+          "fil": "Walang anuman."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol everyday phrases — Omniglot",
+          "url": "https://www.omniglot.com/language/phrases/bikol.htm",
+          "note": "Everyday greetings and conversational expressions; exchanges are fictional simulated speech."
+        }
+      ]
+    },
+    {
+      "id": "ball-here",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Digdi!",
+          "en": "Over here!",
+          "fil": "Dito!"
+        },
+        {
+          "bcl": "Salamat!",
+          "en": "Thanks!",
+          "fil": "Salamat!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar, deictics (digdi: here), magayon: beautiful. Play calls are original fictional exchanges using this vocabulary and the mag- actor-focus imperative."
+        },
+        {
+          "title": "Bikol phrasebook — Naga/Legazpi variety",
+          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
+          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
+        }
+      ]
+    },
+    {
+      "id": "ball-play",
+      "kind": "ball",
+      "lines": [
+        {
+          "bcl": "Magkawat kita!",
+          "en": "Let's play!",
+          "fil": "Maglaro tayo!"
+        },
+        {
+          "bcl": "Iyo!",
+          "en": "Yes!",
+          "fil": "Oo!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol Dictionary — Malcolm W. Mintz, University of Hawai‘i Press",
+          "url": "https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary",
+          "note": "Kawat / magkawat: game / play together; used to compose a short fictional play invitation."
+        },
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar, deictics (digdi: here), magayon: beautiful. Play calls are original fictional exchanges using this vocabulary and the mag- actor-focus imperative."
+        },
+        {
+          "title": "Bikol phrasebook — Naga/Legazpi variety",
+          "url": "https://en.wikivoyage.org/wiki/Bikol_phrasebook",
+          "note": "Naga/Legazpi everyday expressions. Short replies are curated for simulated encounters."
+        }
+      ]
+    },
+    {
+      "id": "look-beautiful",
+      "kind": "look",
+      "lines": [
+        {
+          "bcl": "Magayon!",
+          "en": "Beautiful!",
+          "fil": "Ang ganda!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar, deictics (digdi: here), magayon: beautiful. Play calls are original fictional exchanges using this vocabulary and the mag- actor-focus imperative."
+        }
+      ]
+    }
+  ]
+}

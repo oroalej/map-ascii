@@ -52,6 +52,8 @@ export type LifeGrid = {
   toCell: (lng: number, lat: number) => [number, number];
   /** Reject a complete ground agent when any of its ASCII cells crosses forbidden terrain. */
   allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
+  /** Final painted agent index + 1; zero means no owner (including bird shadows). */
+  owners?: Uint32Array;
 };
 
 /**
@@ -90,10 +92,17 @@ export type LifeGlyphs = { parts: Uint16Array };
 let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
 /** Cells (texel offset / 4) held by ground agents already drawn this frame. */
 let groundCells = new Uint8Array(0);
+let drawingOwners: Uint32Array | undefined;
+let drawingOwner = 0;
 function rememberGroundCell(out: Uint8Array, at: number) {
-  if (!journal || journal.before.has(at)) return;
-  if (groundCells[at / 4]) journal.denied = true;
-  journal.before.set(at, Array.from(out.subarray(at, at + 4)));
+  if (journal && !journal.before.has(at)) {
+    if (groundCells[at / 4]) journal.denied = true;
+    const previous = drawingOwners
+      ? [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners[at / 4]!]
+      : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!];
+    journal.before.set(at, previous);
+  }
+  if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
 }
 /** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
 export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
@@ -123,33 +132,51 @@ export function packLife(
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
 ): number {
   out.fill(0);
-  if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
-  const cells = grid.cols * grid.rows;
-  if (groundCells.length < cells) groundCells = new Uint8Array(cells);
-  else groundCells.fill(0, 0, cells);
-  let drawn = 0;
-  // Parked cars reserve their cells before passing traffic or walkers.
-  for (const parked of [true, false])
-    for (const agent of agents) {
-      if (!!agent.parked !== parked) continue;
-      const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
-      journal = ground ? { before: new Map(), denied: false } : undefined;
-      const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
-      if (journal && grid.allowsGroundCell)
-        for (const at of journal.before.keys())
-          if (!grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))) {
-            journal.denied = true;
-            break;
+  if (grid.owners && grid.owners.length !== grid.cols * grid.rows)
+    throw new RangeError('Wrong owner grid size');
+  drawingOwners = grid.owners;
+  drawingOwners?.fill(0);
+  try {
+    if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
+    const cells = grid.cols * grid.rows;
+    if (groundCells.length < cells) groundCells = new Uint8Array(cells);
+    else groundCells.fill(0, 0, cells);
+    let drawn = 0;
+    // Parked cars reserve their cells before passing traffic or walkers.
+    for (const parked of [true, false])
+      for (let index = 0; index < agents.length; index++) {
+        const agent = agents[index]!;
+        drawingOwner = index + 1;
+        if (!!agent.parked !== parked) continue;
+        const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
+        journal = ground ? { before: new Map(), denied: false } : undefined;
+        const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+        if (journal && grid.allowsGroundCell)
+          for (const at of journal.before.keys())
+            if (
+              !grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
+            ) {
+              journal.denied = true;
+              break;
+            }
+        if (!journal) drawn += n;
+        else if (journal.denied)
+          for (const [at, previous] of journal.before) {
+            // The fifth journal value is CPU ownership, never a fifth texture byte.
+            for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
+            if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
           }
-      if (!journal) drawn += n;
-      else if (journal.denied) for (const [at, previous] of journal.before) out.set(previous, at);
-      else {
-        drawn += n;
-        for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+        else {
+          drawn += n;
+          for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+        }
       }
-    }
-  journal = undefined;
-  return drawn;
+    return drawn;
+  } finally {
+    journal = undefined;
+    drawingOwners = undefined;
+    drawingOwner = 0;
+  }
 }
 
 /** Draw one agent for `packLife`; returns how many landed on the grid (each person in a group). */
@@ -584,6 +611,7 @@ function drawBird(
   const index = glyph ? glyphIndex(glyph) : 0;
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
+  rememberGroundCell(out, at);
   [out[at], out[at + 1]] = packGlyph(index, cls);
   out[at + 2] = bits;
   out[at + 3] = birdByte(species, false, fit === 'cell');
@@ -832,6 +860,7 @@ function drawLine(
     const tip = line.tip && k === marks.length - 1 ? line.tip : undefined;
     const index = tip ? glyphIndex(tip.glyph) : glyph;
     if (index <= 0 || index > MAX_GLYPHS) return;
+    rememberGroundCell(out, at);
     [out[at], out[at + 1]] = packGlyph(index, cls);
     out[at + 2] = CellBit.boat;
     out[at + 3] = vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body);

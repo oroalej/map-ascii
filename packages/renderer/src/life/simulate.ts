@@ -6,6 +6,7 @@
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
 import { makeCellGuard } from './cell-guard';
+import type { SpeechCue } from './moments';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -2864,6 +2865,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  speech?: SpeechCue;
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
   prop?: 'ball';
   glyph?: string;
@@ -3606,7 +3608,18 @@ export class LifeWorld {
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
             pose: life.momentHost.moments.pose(m),
           }));
-          const agent: VisibleAgent = { kind: m.kind, lng, lat, ahead, flap: 0, people };
+          const speech = life.momentHost.moments.speech(m);
+          const agent: VisibleAgent = {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            flap: 0,
+            people,
+            ...(speech && {
+              speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
+            }),
+          };
           out.push(agent);
           owners.set(m, agent);
         } else if (m.kind === 'dog' || m.kind === 'cat') {
@@ -3690,6 +3703,9 @@ export class LifeWorld {
               flap: 0,
               people: [look],
             };
+            const speech = life.momentHost.moments.speech(g);
+            if (speech)
+              agent.speech = { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` };
             out.push(agent);
             owners.set(g, agent);
           }

@@ -1,0 +1,57 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  --speech-bg: #11131b;
+  --speech-fg: #f0ead8;
+  --speech-dim: #beb8a8;
+  --speech-border: #979080;
+}
+.overlay[data-theme='light'] {
+  --speech-bg: #fffdf3;
+  --speech-fg: #272820;
+  --speech-dim: #53564b;
+  --speech-border: #55594c;
+}
+.bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 7px 10px;
+  background: var(--speech-bg);
+  color: var(--speech-fg);
+  border: 1px solid var(--speech-border);
+  font: 14px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+  box-shadow: 2px 3px 0 rgb(0 0 0 / 18%);
+  visibility: hidden;
+}
+.bubble span {
+  display: block;
+}
+.translation {
+  color: var(--speech-dim);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dotted var(--speech-border);
+}
+.bubble::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--tail-x) - 4px);
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  background: var(--speech-bg);
+  border-right: 1px solid var(--speech-border);
+  border-bottom: 1px solid var(--speech-border);
+  transform: rotate(45deg);
+}
+.bubble[data-below='true']::after {
+  bottom: auto;
+  top: -5px;
+  transform: rotate(225deg);
+}

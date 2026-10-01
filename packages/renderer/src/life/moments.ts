@@ -1,5 +1,5 @@
 /** Tile-local social holds. Navigation and terrain admission stay with the simulation. */
-import type { PlaceKind } from '@atlas/shared';
+import { greetingPeriod, type DialogueChoice, type PlaceKind } from '@atlas/shared';
 import type { PersonPose } from './people';
 import { between, random } from './random';
 
@@ -35,6 +35,7 @@ export type MomentAnchor = { x: number; y: number; source: number };
 export type MomentContext = {
   zoom: number;
   rain: number;
+  minutes?: number;
   perMeter: number;
   /** Refreshed only on the fixed scan cadence; order is stable. */
   actors(): readonly MomentActor[];
@@ -49,6 +50,11 @@ export type MomentContext = {
   release(actor: MomentActor): void;
 };
 type Moment = {
+  id: number;
+  dialogue?: DialogueChoice;
+  speechStart?: number;
+  speechHolder: number;
+  lastSpeech: number;
   kind: MomentKind;
   members: MomentActor[];
   start: number;
@@ -70,6 +76,8 @@ const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
 
 export class Moments {
   private readonly rng: () => number;
+  private readonly speechRng: () => number;
+  private serial = 0;
   private time = 0;
   private nextScan = MOMENTS.interval as number;
   private priority = 0;
@@ -93,14 +101,37 @@ export class Moments {
     seed: number,
     readonly enabled = true,
     rng?: () => number,
+    private readonly dialogue: readonly DialogueChoice[] = [],
   ) {
     this.rng = rng ?? random(seed ^ 0x7f4a7c15);
+    this.speechRng = random(seed ^ 0x592cf6a3);
   }
   busy(owner: object) {
     return this.membership.has(owner);
   }
   get size() {
     return this.active.length;
+  }
+  /** A detached cue: participant references never cross the worker boundary. */
+  speech(owner: object): SpeechCue | undefined {
+    const m = this.membership.get(owner);
+    if (!m?.dialogue || m.speechStart === undefined) return;
+    const seconds = m.kind === 'talk' || m.kind === 'look' ? 3 : 2.5;
+    const line = Math.floor((this.time - m.speechStart) / seconds + 1e-9);
+    if (
+      line < 0 ||
+      line >= m.dialogue.turns ||
+      m.members[(m.speechHolder + line) % m.members.length]?.owner !== owner
+    )
+      return;
+    return { id: `${m.id}:${m.speechStart}`, exchangeId: m.dialogue.id, line };
+  }
+  private choose(kind: MomentKind, minutes: number): DialogueChoice | undefined {
+    const choices = this.dialogue.filter(
+      (entry) =>
+        entry.kind === kind && (kind !== 'greet' || entry.period === greetingPeriod(minutes)),
+    );
+    return choices.length ? choices[Math.floor(this.speechRng() * choices.length)] : undefined;
   }
   /** Explicit tile disposal releases even externally inspected test instances. */
   clear(release: (actor: MomentActor) => void) {
@@ -119,7 +150,9 @@ export class Moments {
     const index = m.members.findIndex((a) => a.owner === owner);
     const gesture =
       m.kind === 'greet'
-        ? this.time - m.start < 1
+        ? m.dialogue
+          ? index === Math.floor((this.time - m.start) / 2.5) && (this.time - m.start) % 2.5 < 1
+          : this.time - m.start < 1
         : m.kind === 'look'
           ? m.point && this.time - m.start < 1
           : m.kind === 'talk'
@@ -197,13 +230,19 @@ export class Moments {
         while (this.time + 1e-9 >= m.turnEnd) {
           m.speaker = (m.speaker + 1) % m.members.length;
           m.turnStart = m.turnEnd;
-          m.turnEnd += between(this.rng, MOMENTS.talk.turn);
+          const turn = between(this.rng, MOMENTS.talk.turn);
+          m.turnEnd += m.dialogue ? 3 : turn;
         }
       if (m.kind === 'ball')
         while (this.time + 1e-9 >= m.phaseEnd) {
           m.phaseStart = m.phaseEnd;
           if (m.flying) m.holder = 1 - m.holder;
           m.flying = !m.flying;
+          if (m.dialogue && m.flying && m.phaseStart - m.lastSpeech >= 10) {
+            m.speechStart = m.phaseStart;
+            m.speechHolder = m.holder;
+            m.lastSpeech = m.phaseStart;
+          }
           m.phaseEnd += between(this.rng, m.flying ? MOMENTS.ball.flight : MOMENTS.ball.hold);
         }
     }
@@ -395,6 +434,10 @@ export class Moments {
       admitted.push(a);
     }
     const m: Moment = {
+      id: ++this.serial,
+      dialogue: this.choose(kind, c.minutes ?? 720),
+      speechHolder: 0,
+      lastSpeech: -Infinity,
       kind,
       members,
       start: this.time,
@@ -408,7 +451,12 @@ export class Moments {
       phaseStart: this.time,
       phaseEnd: this.time,
     };
-    if (kind === 'talk') m.turnEnd += between(this.rng, MOMENTS.talk.turn);
+    if (m.dialogue && kind !== 'ball') m.speechStart = m.start;
+    if (m.dialogue && kind === 'greet') m.end = m.start + 5;
+    if (kind === 'talk') {
+      const turn = between(this.rng, MOMENTS.talk.turn);
+      m.turnEnd += m.dialogue ? 3 : turn;
+    }
     if (kind === 'ball') m.phaseEnd += between(this.rng, MOMENTS.ball.hold);
     if (kind === 'look') m.point = this.rng() < 0.5;
     this.active.push(m);
@@ -416,3 +464,5 @@ export class Moments {
     this.stats.started[kind]++;
   }
 }
+
+export type SpeechCue = { id: string; exchangeId: string; line: number };

@@ -173,6 +173,8 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 
 ## Log
 
+- **2026-10-01 — Human speech.** Extend small human moments with visible-speaker bubbles and ten sourced, illustrative Bikol exchanges. Native text stays present with optional English/Tagalog translations; display preferences persist per city. Worker cues, final packed ownership and bounded asynchronous surface checks exclude hidden/stale speakers. Bubbles avoid panels and controls, with three desktop/two phone limits. Local linguistic review remains a content follow-up.
+
 - **2026-10-01 — Utility continuity.** Repair real source-road junctions, short way fragments and safe roadside placement gaps across the visible map region. Naga's utility graph drops from 84 components and 22 isolated supports to four components and no isolated supports; 116 of 117 supported junction groups connect. One constrained junction and two corridor gaps remain reported. Seeded single, double and bracket crossarms retain the existing wire style.
 
 - **2026-10-01 — Utility poles and wires.** Extend static street hardware with city-configured, illustrative overhead utilities. Bake deterministic supports and spans before tiling, share exact retained lamp bases, preserve legacy hardware ownership, and render top-down caps and cable bundles from z18. Naga opts in; the layer stays visible with Life off. Archive integrity, shader masking, and focused browser checks cover the integration.

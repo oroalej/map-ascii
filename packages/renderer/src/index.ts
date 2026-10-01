@@ -4,6 +4,7 @@ import {
   UTILITY_ZOOM,
   shopHours,
   shopOpen,
+  dialogueChoices,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -12,6 +13,7 @@ import type {
   CameraState,
   CityLifeConfig,
   ClimateConfig,
+  DialogueCatalog,
   ProcessionRoute,
   TrafficMix,
 } from '@atlas/shared';
@@ -57,6 +59,8 @@ import {
   fixturePass,
   hasCrowns,
   lifePass,
+  lifeRaster,
+  labelCovers,
   lightPass,
   metersPerCssPx,
   overlayPass,
@@ -94,6 +98,7 @@ import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { createInlineHost, createWorkerHost } from './life/host';
+import { SpeechController, type SpeechInView } from './life/speech';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
   prevailingWind,
@@ -126,6 +131,7 @@ export { DEFAULT_CELLS, type CellSchedule } from './density';
 export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
+export type { SpeechInView } from './life/speech';
 export type { RenderClass } from './classes';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
@@ -153,6 +159,9 @@ export type LifeSettings = {
 };
 
 export type AtlasOptions = {
+  /** Optional curated city-pack speech. Display preferences do not affect simulation. */
+  dialogue?: DialogueCatalog;
+  speech?: boolean;
   /** Static city-pack utility policy; omitted means disabled. */
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
@@ -219,6 +228,8 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  /** Visible simulated speakers, anchored in CSS pixels from the canvas top left. */
+  speechchange: SpeechInView[];
   qualitychange: QualityState;
   camerachange: CameraState;
   /**
@@ -305,6 +316,7 @@ export type AtlasStats = {
 };
 
 export type Atlas = {
+  setSpeech(enabled: boolean): void;
   setQuality(choice: QualityChoice): void;
   getQuality(): QualityChoice;
   /** Move the camera, or fly there with `animate`. */
@@ -468,6 +480,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  let speechEnabled = options.speech ?? true;
+  const speech = new SpeechController(readback, gl.COLOR_ATTACHMENT0, (cues) =>
+    emit('speechchange', cues),
+  );
+  let speechOwners = new Uint32Array(0);
+  let speechGeometry = 0;
   let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
   const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
@@ -629,6 +647,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
     const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values(), programs);
+    speechGeometry++;
     reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
     classesStale = true;
   };
@@ -695,11 +714,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
   const processions = options.processions ?? [];
+  const moments = { dialogue: options.dialogue && dialogueChoices(options.dialogue) };
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
-      ? createWorkerHost(options, processions, profiler)
+      ? createWorkerHost({ ...options, moments }, processions, profiler)
       : (() => {
-          const world = new LifeWorld(options.traffic, profiler);
+          const world = new LifeWorld(options.traffic, profiler, moments);
           world.setProcessions(processions);
           return createInlineHost(world, profiler);
         })();
@@ -789,6 +809,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeAgents = agents;
       return;
     }
+    if (options.dialogue && speechEnabled && speechOwners.length !== targets.cols * targets.rows)
+      speechOwners = new Uint32Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -800,9 +822,49 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       knobs.shadows ? sun : null,
       profiler,
       host.latest()?.cellGuard(placement.toCell),
+      options.dialogue && speechEnabled ? speechOwners : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
+  };
+  const reportSpeech = (now: number) => {
+    if (
+      !speechEnabled ||
+      !options.dialogue ||
+      !lifeActive() ||
+      !watch.watched() ||
+      currentRain() >= 0.5 ||
+      camera.zoom < 18 ||
+      !targets ||
+      !placement ||
+      !lifeAgents.length ||
+      speechOwners.length !== targets.cols * targets.rows
+    ) {
+      speech.clear();
+      return;
+    }
+    const cell = cellDev(),
+      label = themeRes!.label.cellDev;
+    speech.update(
+      {
+        targets,
+        dpr,
+        agents: lifeAgents,
+        owners: speechOwners,
+        life: lifeRaster(targets),
+        geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
+        grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
+        toCell: placement.toCell,
+        size: cssSize(),
+        labelsCover: ([x, y]) =>
+          labelCovers(
+            targets!,
+            (x * dpr + labelGrid.shiftX) / label.w,
+            (y * dpr + labelGrid.shiftY) / label.h,
+          ),
+      },
+      now,
+    );
   };
 
   // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
@@ -1291,6 +1353,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       generation: targetsGeneration,
     });
     readClasses(now);
+    reportSpeech(now);
     profiler?.end();
   };
   raf = requestAnimationFrame(frame);
@@ -1301,6 +1364,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    speech.clear();
     canvas.style.cursor = '';
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
@@ -1343,12 +1407,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const watch = watchVisibility(canvas, (watched) => {
     resetQualitySamples();
     if (watched) lastLifeStep = performance.now();
+    else speech.clear();
   });
 
   /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
   let cameraMoved = false;
   /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
   const applyCamera = (next: CameraState, batched = false) => {
+    speech.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
     lastInput = performance.now();
@@ -1389,6 +1455,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   });
 
   return {
+    setSpeech(enabled) {
+      if (speechEnabled === enabled) return;
+      speechEnabled = enabled;
+      if (!enabled) speech.clear();
+      drawDirty = true;
+    },
     setQuality(choice) {
       quality.setChoice(choice);
     },
@@ -1404,6 +1476,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     flyTo,
     getCamera: () => ({ ...camera }),
     setReducedMotion(enabled) {
+      speech.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
       lastLifeStep = performance.now();
@@ -1445,6 +1518,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
       life = { ...life, ...settings };
+      speech.clear();
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;
@@ -1480,6 +1554,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      speech.clear();
       host.dispose();
       destroyed = true;
       canvas.style.cursor = '';

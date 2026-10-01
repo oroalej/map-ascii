@@ -65,6 +65,8 @@ const atlas = createAtlas(canvas, {
   initialCamera: urlCamera ?? meta.defaultCamera,
   year: 2026,
   utilities: { derive: cityConfig.streets?.utilities?.derive === true }, // optional; omitted disables
+  dialogue: cityPack.dialogue,          // optional validated native/translation catalog
+  speech: true,                        // display preference, independent of simulation
 });
 
 atlas.setCamera(partial, { animate?: boolean, duration?: number });
@@ -72,13 +74,14 @@ atlas.flyTo(target: Partial<CameraState>, { duration?: number });  // duration o
 atlas.getCamera(): CameraState;
 atlas.setYear(year: number, { animate?: boolean });
 atlas.setTheme('dark' | 'light');
+atlas.setSpeech(enabled: boolean);
 atlas.setSelected(featureId | null);
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
 atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
 atlas.on('camerachange' | 'hover' | 'click' | 'flyend' | 'input'
-  | 'classeschange' | 'labelschange' | 'fixtureschange' | 'contextlost' | 'contextrestored', handler);
+  | 'classeschange' | 'labelschange' | 'fixtureschange' | 'speechchange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 
@@ -186,6 +189,16 @@ Rasterization runs only when the camera, year, or tiles change. While watched, a
 **Utility fixtures.** For a city with `streets.utilities.derive`, the data pipeline bakes a complete network before tiling. Placement covers the union of city and map-region bounds. Safe supplemental supports repair junction approaches, short source-way fragments and rejected-slot gaps. Shared source vertices, including interior vertices and short unsupported connectors, define junction groups; a deterministic minimum spanning tree joins their supported branches with spans bounded to 65 m. The pipeline reports unresolved joins and corridor gaps instead of inventing connections between nearby disconnected roads. It preserves the ordinary archive, reads its retained lamp supports using the same pure `shared/lamp-placement.ts` helper as the renderer, and merges a separate max-zoom `utilities` layer. Each versioned JSON record retains string identities and precise geographic endpoints even when its indexing geometry is clipped. The merge audit compares ordinary decoded geometry and feature order, verifies every record survives, and rejects dangling endpoints. The worker validates this layer only at archive max zoom and stores it beside `LifeGeometry`, so utility records never enter simulation snapshots or actor seeds. Detailed supports choose seeded single, double or bracket crossarms without changing the cap, cable palette or rendering masks.
 
 The renderer deduplicates buffered copies and builds static fixtures from those explicit endpoints. It memoizes by unordered contributing payload references; no neighboring-tile search or runtime topology reconstruction is needed. Signals, lamps and flags retain priority, then utility poles claim free cells; a shared cap may replace only its exact lamp owner's base. Shared-base lookup runs only for drawable utility fixtures. Cables combine directional masks commutatively and clip to the cell grid before rasterization, reusing per-target owner/cable scratch arrays. Packing reuses exact projected support centers and local metre-scale ornament directions, with conservative padding for offscreen hardware entering the viewport. Named detail hashes append to a cached identifier hash without changing seeded choices. Shared zoom bands govern hardware opacity and seeded detail. Fixture paints append concrete and cable to the existing six colors. Cable ink leaves the background and traffic visible around its strokes. `fixtureschange.utilities` describes viewport-packed marks, independently of Life and illumination; viewport visibility is cached until placement or viewport cell bounds change, and the existing shader surface mask can hide those marks under cover.
+
+### Human speech
+
+The optional city-pack dialogue catalog is validated by `shared/dialogue.ts`; browser-safe helpers in `dialogue-options.ts` compile only exchange IDs, kind, period and turn count for the Life worker. `Moments` uses a separate seeded dialogue stream and attaches clone-safe `{ id, exchangeId, line }` cues to existing visible people. Native phrases and translations remain in the app. Speech preferences have their own per-city local-storage key, outside URL view state; toggling speech calls `Atlas.setSpeech` without reseeding or restarting Life.
+
+Final Life packing optionally fills a reusable CPU ownership grid, restoring ownership along with texels when a ground stamp is rejected. Bird shadows have no actor ownership. `SpeechController` finds a surviving owned speaker cell and checks the same surface predicate as the glyph shader using one asynchronous batch of three texels (coarse class, sub-cell class and height). It shares the existing eight-read cap, creates no GPU targets, bounds candidates to six/four and output to three/two, and rejects stale camera, raster, ownership or cue results. Confirmation is refreshed after 120 ms and expires after 250 ms. Offscreen and label-covered anchors are excluded. Camera changes, Life off, reduced motion, heavy rain, hidden tabs, context loss and disposal clear the overlay.
+
+`speechchange` carries CSS-pixel anchors to a small imperative DOM overlay. It resolves the city catalog, keeps native and translated `lang` attributes, and measures only changed phrases. A 200 ms layout check handles panels opening around stationary speakers; map input passes through the overlay and ambient lines are hidden from screen readers. HUD controls remain accessible. No per-frame app-wide state writes are needed.
+
+The final synthetic CPU check (355 visible records, 192×60 cells, 200 alternating ten-frame batches) measures packing without/with ownership at 1.444/1.463 ms median and 1.696/1.823 ms p95 (+1.3%/+7.5%). A three-bubble visibility controller with simulated readback completion measures 0.028/0.081 ms median/p95; the reusable ownership array occupies 46,080 bytes. Packed texture bytes match exactly. This measures CPU overhead, not GPU latency or hardware frame rate.
 
 ## 4. Glyph selection rules
 

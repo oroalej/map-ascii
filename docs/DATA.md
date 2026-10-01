@@ -358,6 +358,12 @@ Adding a city needs no renderer or web app changes. If it seems to, the engine h
 7. Add any extra attribution the city's sources need (§6).
 8. Publish the tiles with `pnpm data:publish -- --city <slug>` and commit the `tiles.lock.json` it writes (§9), so CI and deploys have them.
 
+### Optional ambient dialogue
+
+Add `packages/content/cities/<slug>/dialogue.json` to opt into human speech. `native` names the primary language (`code`, `label`); `translations` lists available secondary languages. `exchanges` contains unique IDs, a kind (`greet`, `talk`, `ball`, `look`), localized `lines`, and at least one `sources` record. Greetings require `period: morning | afternoon | evening`. Greetings and ball exchanges have two lines, conversations two or three, monument reactions one. Every line must contain the native language and every offered translation, use declared city languages (English is implicit), and stay within 96 characters without line breaks. All language labels and text belong to the pack.
+
+The content validator loads the optional catalog and fails on malformed or incomplete entries. Static page generation passes it directly to the app; dialogue changes need no tile regeneration or publishing. Cite linguistic references, and explain composed phrases in source notes. Ambient scripts describe illustrative encounters; they do not establish historical events or quote real residents.
+
 ## 9. Publishing tiles
 
 Generated files are gitignored (never commit tiles), so builds get them from GitHub releases instead:

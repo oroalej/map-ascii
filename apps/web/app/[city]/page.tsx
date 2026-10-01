@@ -31,6 +31,7 @@ export default async function CityPage({ params }: Props) {
         climate={city.climate}
         timezone={city.timezone}
         cityLife={city.life}
+        dialogue={pack.dialogue}
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
         landmarks={content.landmarks}

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { DialogueChoice } from '@atlas/shared';
 import { Moments, MOMENTS, type MomentActor, type MomentContext, type MomentKind } from './moments';
 
-function fixture(kind: MomentKind, rng: () => number = () => 0) {
+function fixture(
+  kind: MomentKind,
+  rng: () => number = () => 0,
+  dialogue: readonly DialogueChoice[] = [],
+) {
   const a: MomentActor = {
     owner: {},
     type: kind === 'talk' || kind === 'ball' ? 'gatherer' : 'walker',
@@ -35,7 +40,7 @@ function fixture(kind: MomentKind, rng: () => number = () => 0) {
       facing.delete(actor.owner);
     },
   };
-  return { a, b, actors, c, facing, releases, m: new Moments(42, true, rng) };
+  return { a, b, actors, c, facing, releases, m: new Moments(42, true, rng, dialogue) };
 }
 const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
   for (let i = 0; i < 20 && !f.m.stats.started[kind]; i++) f.m.step(0.1, f.c);
@@ -43,6 +48,79 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  it('gives a greeting two readable turns, matching gestures, then clears the cue', () => {
+    const choices: DialogueChoice[] = ['morning', 'afternoon', 'evening'].map((period) => ({
+      id: `greet-${period}`,
+      kind: 'greet',
+      period: period as DialogueChoice['period'],
+      turns: 2,
+    }));
+    const f = fixture('greet', () => 0, choices);
+    f.c.minutes = 480;
+    start(f, 'greet');
+    expect(f.m.speech(f.a.owner)).toMatchObject({ exchangeId: 'greet-morning', line: 0 });
+    expect(f.m.speech(f.b.owner)).toBeUndefined();
+    f.m.step(2.5, f.c);
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    expect(f.m.speech(f.b.owner)).toMatchObject({ exchangeId: 'greet-morning', line: 1 });
+    expect(f.m.pose(f.b.owner)).toBe('gesture');
+    f.m.step(2.5, f.c);
+    expect(f.m.speech(f.b.owner)).toBeUndefined();
+    expect(f.m.busy(f.a.owner)).toBe(false);
+  });
+  it('finishes a three-turn exchange once, using the actual rotating speaker', () => {
+    const f = fixture('talk', () => 0, [{ id: 'chat', kind: 'talk', turns: 3 }]);
+    start(f, 'talk');
+    expect(f.m.speech(f.a.owner)?.line).toBe(0);
+    f.m.step(3, f.c);
+    expect(f.m.speech(f.b.owner)?.line).toBe(1);
+    expect(f.m.pose(f.b.owner)).toBe('gesture');
+    f.m.step(3, f.c);
+    expect(f.m.speech(f.a.owner)?.line).toBe(2);
+    f.m.step(3, f.c);
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    expect(f.m.speech(f.b.owner)).toBeUndefined();
+  });
+  it('starts a ball exchange at a throw and rate limits further exchanges', () => {
+    const f = fixture('ball', () => 0, [{ id: 'play', kind: 'ball', turns: 2 }]);
+    start(f, 'ball');
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    f.m.step(0.5, f.c);
+    const first = f.m.speech(f.a.owner)!;
+    expect(first).toMatchObject({ exchangeId: 'play', line: 0 });
+    f.m.step(2.5, f.c);
+    expect(f.m.speech(f.b.owner)?.line).toBe(1);
+    f.m.step(2.5, f.c);
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    expect(f.m.speech(f.b.owner)).toBeUndefined();
+    f.m.step(6, f.c);
+    const next = f.m.speech(f.a.owner) ?? f.m.speech(f.b.owner);
+    expect(next?.id).not.toBe(first.id);
+    expect(next?.line).toBe(0);
+  });
+  it('uses a separate deterministic dialogue stream and clears all kinds on cancellation', () => {
+    for (const kind of ['greet', 'talk', 'ball', 'look'] as const) {
+      const choice: DialogueChoice = {
+        id: kind,
+        kind,
+        period: kind === 'greet' ? 'afternoon' : undefined,
+        turns: kind === 'look' ? 1 : 2,
+      };
+      const a = fixture(kind, () => 0, [choice]),
+        b = fixture(kind, () => 0, [choice]);
+      start(a, kind);
+      start(b, kind);
+      expect(a.m.snapshot()).toEqual(b.m.snapshot());
+      if (kind === 'ball') a.m.step(0.5, a.c);
+      expect(structuredClone(a.m.speech(a.a.owner))).toEqual(a.m.speech(a.a.owner));
+      a.c.rain = 0.5;
+      a.m.step(0.1, a.c);
+      expect(a.m.speech(a.a.owner)).toBeUndefined();
+      expect(a.m.speech(a.b.owner)).toBeUndefined();
+      a.m.clear((actor) => a.c.release(actor));
+      expect(a.m.size).toBe(0);
+    }
+  });
   for (const kind of ['greet', 'talk', 'ball', 'look'] as const) {
     it(`starts, faces, holds and releases ${kind} without moving anyone`, () => {
       const f = fixture(kind);

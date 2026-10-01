@@ -27,6 +27,39 @@ const cells = (out: Uint8Array) =>
   Array.from({ length: out.length / 4 }, (_, i) =>
     Array.from(out.subarray(i * 4, i * 4 + 4)),
   ).filter((t) => t[2]);
+it('preserves packed bytes and restores final ownership when a complete speaker is rejected', () => {
+  const agents: VisibleAgent[] = [
+    { kind: 'person', lng: 40.35, lat: 40.45, flap: 0 },
+    { kind: 'person', lng: 40.35, lat: 40.45, flap: 0 },
+  ];
+  const legacy = new Uint8Array(grid.cols * grid.rows * 4),
+    owned = new Uint8Array(legacy.length);
+  const owners = new Uint32Array(grid.cols * grid.rows);
+  const n = packLife(legacy, grid, agents, themes.dark, index);
+  expect(packLife(owned, { ...grid, owners }, agents, themes.dark, index)).toBe(n);
+  expect(owned).toEqual(legacy);
+  expect([...owners].filter(Boolean)).toEqual([1]);
+  packLife(owned, { ...grid, owners, allowsGroundCell: () => false }, agents, themes.dark, index);
+  expect(owners.every((owner) => owner === 0)).toBe(true);
+  expect(owned.every((byte) => byte === 0)).toBe(true);
+  expect(() =>
+    packLife(
+      owned,
+      {
+        ...grid,
+        owners,
+        allowsGroundCell: () => {
+          throw new Error('guard');
+        },
+      },
+      agents,
+      themes.dark,
+      index,
+    ),
+  ).toThrow('guard');
+  expect(packLife(owned, grid, agents, themes.dark, index)).toBe(n);
+  expect(owned).toEqual(legacy);
+});
 function draw(
   figure: PersonLook['figure'],
   pose: PersonLook['pose'],

@@ -9,6 +9,10 @@ describe('loadCityPacks', () => {
     const { packs, errors } = await loadCityPacks(contentRoot);
     expect(errors).toEqual([]);
     expect(packs.length).toBeGreaterThan(0);
+    const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
+    expect(speech?.native.code).toBe('bcl');
+    expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
+    expect(speech?.exchanges).toHaveLength(10);
   });
 
   it('reports every error with its file path', async () => {

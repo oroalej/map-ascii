@@ -3,10 +3,15 @@ import { inTile, PLACE_CODES, PLACE_STRIDE } from './geometry';
 import { Moments, type MomentActor, type MomentAnchor, type MomentContext } from './moments';
 import { FIGURE_SIZE_M, figureFit } from './people';
 import type { Gatherer, LifeEnv, Mover, TileLife } from './simulate';
+import type { DialogueChoice } from '@atlas/shared';
 
 type Owner = (Mover | Gatherer) & { momentFacing?: { hx: number; hy: number } };
 type Guard = (owner: Mover | Gatherer, before?: Mover | Gatherer) => boolean;
-export type MomentOptions = { enabled?: boolean; rng?: () => number };
+export type MomentOptions = {
+  enabled?: boolean;
+  rng?: () => number;
+  dialogue?: readonly DialogueChoice[];
+};
 export class MomentHost {
   readonly moments: Moments;
   private readonly actors = new Map<object, MomentActor>();
@@ -16,7 +21,7 @@ export class MomentHost {
     seed: number,
     options: MomentOptions = {},
   ) {
-    this.moments = new Moments(seed, options.enabled ?? true, options.rng);
+    this.moments = new Moments(seed, options.enabled ?? true, options.rng, options.dialogue);
     const places = tile.geo.places;
     for (let i = 0; i < places.length; i += PLACE_STRIDE)
       if (
@@ -113,6 +118,7 @@ export class MomentHost {
     const c: MomentContext = {
       zoom,
       rain: env?.rain ?? 0,
+      minutes: env?.minutes,
       perMeter: tile.perMeter,
       anchors: this.anchors,
       actors: () => this.refresh(near),

@@ -2,6 +2,7 @@
 
 import type {
   CityLifeConfig,
+  DialogueCatalog,
   ClimateConfig,
   Landmark,
   LandmarkArt,
@@ -21,6 +22,7 @@ import { Hud } from './Hud';
 import { InfoPanel } from './InfoPanel';
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
+import { SpeechBubbles } from './SpeechBubbles';
 import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
 
@@ -45,6 +47,7 @@ export type CityAtlasProps = {
   timezone?: string | undefined;
   /** The daily rhythm of simulated traffic (the city pack's `life`). */
   cityLife?: CityLifeConfig | undefined;
+  dialogue?: DialogueCatalog | undefined;
   /** Whether the city's street layer supplements mapped sidewalks. */
   sidewalksDerived?: boolean;
   utilitiesDerived?: boolean;
@@ -62,6 +65,7 @@ export function CityAtlas({
   climate,
   timezone,
   cityLife,
+  dialogue,
   sidewalksDerived = true,
   utilitiesDerived = false,
   landmarks,
@@ -86,9 +90,11 @@ export function CityAtlas({
         climate={climate}
         timezone={timezone}
         cityLife={cityLife}
+        dialogue={dialogue}
         utilitiesDerived={utilitiesDerived}
       />
       <Hud
+        dialogue={dialogue}
         city={slug}
         subdivisionLabel={subdivisionLabel}
         climate={climate}
@@ -98,6 +104,7 @@ export function CityAtlas({
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
       <HoverTooltip />
+      {dialogue && <SpeechBubbles catalog={dialogue} />}
       <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
       <TourPlayer />
       <Attribution />
