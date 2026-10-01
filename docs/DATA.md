@@ -154,6 +154,8 @@ City {                           // cities/<slug>/city.json
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
   life?: {
+    // Annual illustrative decorations; source the calendar and mark provisional choices draft.
+    seasons?: Season[];
     // Source each mode override or missing site. Give exactly one of osm_id or position.
     sites?: {
       id: string; kind: 'stop' | 'terminal' | 'shelter';
@@ -326,6 +328,12 @@ Validation rules:
 - `end_year > start_year`.
 - Photo `credit` and `license` are required.
 - A land cover file has at least one tree, row, or area, a `credit`, and `sources` naming what it was traced from. Positions come from imagery whose terms allow it (never Google), and each file retires as OSM maps what it holds (pipeline step 04 warns). Prefer separate trees to a woods area where crowns are distinguishable: at close zoom a woods area draws as one continuous canopy.
+
+`Season` records have a unique lowercase kebab-case `id` (`auto` is reserved), localized `title`, `status`, `window`, optional `note`, at least one decoration group and nonempty `sources`. Extra title languages must be declared by the city. Draft notes must contain `TODO(verify)`; verified titles/notes cannot contain it. The strict schema rejects unknown fields and impossible month/day pairs.
+
+Windows are inclusive: `{ from: {month, day}, to: {month, day} }` wraps when the end precedes the start; or `{ anchor: {month, weekday, nth, offset_days}, days_before, days_after }`, with weekdays 0–6, nth 1–5, offset ±31 and margins 0–60 days. A missing leap-day endpoint or fifth weekday skips that occurrence. Matching checks adjacent years, including January anchors whose lead-in begins in December. This does not change historical date tagging or procession scheduling.
+
+Decoration groups: `lanterns: {label, shape: 'star', near?, radius_m?}` (optional near/radius supplied together, radius 50–3000 m); `bunting: {label, near, radius_m, spacing_m}` (radius 50–1000 m, spacing 15–80 m); `stalls: {label, near, radius_m, per_tile}` (radius 50–600 m, cap 1–24). `near` is a nonempty unique list of existing place kinds. Stall eligibility also includes mapped markets. Positions are generated at runtime from loaded geometry; adding a calendar requires no tile rebuild or schema-version change. Calendar sources do not establish surveyed decoration positions.
 
 ## 5. Dating historical features — rules
 

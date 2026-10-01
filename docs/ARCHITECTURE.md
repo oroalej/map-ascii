@@ -92,6 +92,12 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
 
 ## 3. Rendering pipeline (per frame)
 
+Seasonal decoration uses `AtlasOptions.cityLife.seasons` and optional `LifeSettings.season` (default `auto`). `getSeason()` returns a stable, immutable `{id,title,status,note?,labels}` snapshot or null; `seasonchange` fires only on selection changes. Real city date resolution runs initially and with sun/clock updates, independently of fixed time and historical year. Selection invalidates fixture inputs and stale Life replies without moving the camera or resetting ordinary populations.
+
+Placement gathers neighboring loaded place/market centers, because places are half-open tile-owned. The seasonal fixture cache retains only the current geometry/utility/config identities. Eligible crossing spans win on their nearest road; other roads retain fallback spans, so one crossing cannot suppress a whole tile. A city-bound midpoint latitude fixes the metric world lattice across tile rows. Fixture parts 23/24 and three procedural glyphs appended after all legacy glyphs use the existing RGBA fixture texture and shader. Existing hardware, wires and every possible animated flag cloth position own their cells first. Pennants hang 1.5 cells beside their carrier line to preserve visible cables. No new pass, class, cell bit, lamp state or light pool is introduced. `fixtureschange.seasonal?: {lanterns,bunting}` reports viewport-packed ornaments for informational legend rows.
+
+`FrameInput.step.weather.season?: string | null` carries the resolved id through worker/direct execution; omission means none. World selection runs before the zero-dt early return, after ordinary spawn/commerce settlement. Temporary stalls use `seed ^ 0x3c6ef372`, separate lists and local interaction sites. Admission checks full cart/vendor footprints against roads, water, buildings and neighboring occupancy. Scene removal returns visitors and releases reservations; tile changes regenerate/revalidate current seasonal admissions. `movers + seasonalStalls <= 600`; later mover admissions reclaim temporary carts. Existing ordinary stationary caps and visible population exceptions remain unchanged. Life off/reduced motion hides these agents while the fixture pass continues.
+
 1. **Camera → visible tiles.**
    - Compute the view frustum in mercator space.
    - Select tiles at `floor(zoom)` for the view, plus a 1-tile margin.

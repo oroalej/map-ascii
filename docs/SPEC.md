@@ -151,6 +151,14 @@ Raised paved forecourts remain walkable. Their terrace and stair treads use conn
 
 Streetlights and traffic signals remain visible in daylight and with Life off. Compact lamp stars (from z15) and signal dots (from z17) dissolve into detailed top-down plans across z18–18.5. Streetlights show a curb base, road-facing arm, and lamp housing; signals show a support, housing, and three separate lens marks, with only the current red/amber/green phase bright. Small housings are enlarged for readability (at least two cells along a lamp and three separate lens cells in a signal); further zoom scales their world dimensions. Roofs, water, and tree cover mask the hardware, and labels remain above it. Streetlight glow retains dusk/dawn, dead lamps, and flicker. Only the active signal lens emits a short, soft-edged ray in its red, amber, or green color toward approaching traffic, including compact signal dots. It is a faint 4 CSS-pixel stub by day, smoothly growing to 14 CSS pixels and greater brightness at night, when a soft 6 CSS-pixel halo surrounds the lens. These screen-sized rays stay small at close zoom, respect the same cover as the hardware, and stay below labels. Signal colors use the traffic clock and freeze with Life off or reduced motion; before Life runs, they show the deterministic phase at clock zero. These are illustrative top-down fixtures rather than surveyed hardware models.
 
+### Seasonal decorations
+
+The pack's sourced `life.seasons` calendar dresses the current map independently of the historical timeline. Inclusive fixed dates can cross New Year; moving windows use an nth weekday and lead-in/after days. Today follows the real date in the city's time zone, even when the time chip shows a fixed hour. Overlaps choose the first season in pack order.
+
+Star lanterns attach to existing streetlights from z17 and twinkle warmly at night. Bunting appears from z18 near configured place kinds, preferring eligible utility crossings and otherwise spanning road curbs on a shared world lattice. These fixtures remain with Life off; reduced motion freezes their twinkle/fold animation. Hardware and animated flag cloth retain priority. Decorations are illustrative, not surveyed installations.
+
+Temporary vendor carts use mapped paths/plazas near configured places or markets, with full cart/attendant clearance across loaded tile seams. They belong to Life, disappear with Life off or reduced motion, and release their queues when a season ends. Their population and random stream are separate from ordinary vendors; they share the mover and visible-agent budgets. Fiesta crowds remain future work.
+
 ### Shopfronts and neighborhood activity
 
 Mapped food, retail, service and commercial frontages receive kind-colored striped awnings on building walls facing a street or path within three cells, from wall-outline zoom. Standalone mapped shops and amenities use `¤` in their kind's paint; points inside building footprints annotate that building instead. Shops glow while open using the existing shop-hour lighting. Separate commerce streams add vendors and walkers near mapped shops, within the existing tile caps; legacy actors settle and reserve their positions before new candidates are admitted. Scrub, heath, plant nurseries and cemeteries use grass cover, orchards use tree cover, and mapped palm orchards retain their palm kind. Commercial land-use zones receive no special fill.
@@ -194,6 +202,7 @@ Shop areas without a building or another rendered area class receive one interio
 - Coordinates, toggleable.
 - A "Life" toggle for the life layer (§4) and a time chip that cycles live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00 (the city's local time). Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
 - Attribution line, always visible.
+- For packs with seasons, a chip cycles Today and pack titles. Today names the active season when there is one; draft previews disclose their verification note. The choice is remembered in this browser, validated again for each city, and stays out of the shared URL. The legend names visible seasonal hardware and possible temporary vendors on walking routes.
 
 ## 6. Tours
 

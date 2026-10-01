@@ -139,7 +139,9 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - [x] M2 — Places come alive: churchgoers, students, players, people on benches and at monuments, farm workers and carabao, boats on canals; peaks at the pack's Mass and school times.
 - [ ] M3 — Polish: trains on the same track queue; rain splashes on water.
 - [ ] M4 — Transit stops: bus and jeepney stops and terminals from OSM; jeepneys dwell to board and drop people; tricycles queue at terminals.
-- [ ] M5 — Festive seasons: parol lanterns in December, fiesta crowds in September (pack `life.seasons`).
+- [x] M5a — Festive decorations: sourced draft pack calendars, preview chip, star lanterns, bunting and temporary stalls (`life.seasons`); automatic real city date and reduced-motion behavior.
+- [ ] M5b — Fiesta crowds in September, separately from decorative fixtures and vendor carts.
+
 - [ ] M6 — Street processions: a `street` procession kind routed over walkable ways; Naga's Traslación (draft).
 - [ ] M7 — Penitensya: Holy Week penitents as a pack-gated `street` procession (hooded walkers and cross-bearers, nothing graphic); Naga's only once a source confirms the practice there.
 
@@ -171,6 +173,8 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - Which city comes second. It should differ from Naga in at least one of country, admin levels, or languages, to stress the generic model.
 
 ## Log
+
+- **2026-10-01 — Seasonal decorations (M5a).** Strict annual pack calendars, Today/preview chip, star lanterns, crossing/fallback bunting and temporary vendor carts, independent of historical year and fixed time. Both themes retain all 303 legacy glyph indices and use 306/1,024 atlas slots. With nine Centro z16 neighbors loaded, the center tile admits 12 Christmas or 24 fiesta carts after 211 movers and 16 ordinary stalls; counts are illustrative and deterministic. Calendar/schema, placement, hardware ownership, zero-dt lifecycle, worker parity and preferences have unit coverage. Production export, desktop smoke/preview and noon/night Cathedral/Centro captures pass; initial JS 168 KB, renderer 62 KB, tiles 2.4 MB. No tiles rebuilt or published. Both Naga calendars remain draft pending recurring-date and placement verification; fiesta crowds remain M5b.
 
 - **2026-10-01 — Utility continuity.** Repair real source-road junctions, short way fragments and safe roadside placement gaps across the visible map region. Naga's utility graph drops from 84 components and 22 isolated supports to four components and no isolated supports; 116 of 117 supported junction groups connect. One constrained junction and two corridor gaps remain reported. Seeded single, double and bracket crossarms retain the existing wire style.
 
