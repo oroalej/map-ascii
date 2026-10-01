@@ -149,6 +149,11 @@ export function worldTiles(world: LifeWorld): ReadonlyMap<string, TileLife> {
   // Test/benchmark inspection only; no production API or mutable global state.
   return (world as unknown as { tiles: Map<string, TileLife> }).tiles;
 }
+export function retiredTiles(
+  world: LifeWorld,
+): ReadonlyMap<string, { life: TileLife; at: number }> {
+  return (world as unknown as { retired: Map<string, { life: TileLife; at: number }> }).retired;
+}
 /** Baseline revisions can predate stats(); inspect their bins only in tests/benchmarks. */
 export function polygonStats(index: PolygonIndex): ReturnType<PolygonIndex['stats']> {
   if (typeof index.stats === 'function') return index.stats();
@@ -245,7 +250,10 @@ export function makeScenario(
   };
 }
 export function scenarioState(world: LifeWorld) {
-  return [...worldTiles(world)].map(([key, tile]) => ({
+  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile));
+}
+function tileState(key: string, tile: TileLife) {
+  return {
     key,
     elapsed: tile.elapsed,
     flocks: tile.flocks,
@@ -256,7 +264,7 @@ export function scenarioState(world: LifeWorld) {
     visits: [...tile.scenes.visits].map(([m, v]) => ({ owner: tile.movers.indexOf(m), ...v })),
     services: [...tile.scenes.services].map(([m, s]) => ({ owner: tile.movers.indexOf(m), ...s })),
     queues: tile.scenes.sites.map((s) => s.queue.map((m) => tile.movers.indexOf(m))),
-  }));
+  };
 }
 
 /** Includes global clocks for equivalence checks; respawn checks intentionally compare tiles only. */
@@ -265,8 +273,42 @@ export function completeScenarioState(world: LifeWorld) {
     clock: number;
     junctions?: { snapshot(): unknown };
     arrivals: Map<string, { left: number; occupied: boolean }>;
+    history: WeakMap<TileLife, { ceded: unknown }>;
+    viewContext?: unknown;
+    bootstrapped: boolean;
+    birthCursor: number;
+    birthCredit: number;
   };
-  return {
+  const scenes = (tile: TileLife) => {
+    const scene = tile.scenes as unknown as {
+      cooldown: Map<object, number>;
+      stopCooldown: Map<object, object>;
+      wet: boolean;
+      scan: number;
+      cursor: number;
+      minutes: number;
+      hoursDirty: boolean;
+      cityLife: unknown;
+    };
+    return {
+      cooldown: [...scene.cooldown].map(([m, time]) => [
+        tile.movers.indexOf(m as (typeof tile.movers)[number]),
+        time,
+      ]),
+      stopCooldown: [...scene.stopCooldown].map(([m, site]) => [
+        tile.movers.indexOf(m as (typeof tile.movers)[number]),
+        tile.scenes.sites.indexOf(site as (typeof tile.scenes.sites)[number]),
+      ]),
+      sites: tile.scenes.sites,
+      wet: scene.wet,
+      scan: scene.scan,
+      cursor: scene.cursor,
+      minutes: scene.minutes,
+      hoursDirty: scene.hoursDirty,
+      cityLife: scene.cityLife,
+    };
+  };
+  return structuredClone({
     clock: internal.clock,
     junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
@@ -275,5 +317,37 @@ export function completeScenarioState(world: LifeWorld) {
       key,
       state: tile.momentHost.moments.snapshot(),
     })),
-  };
+    retired: [...retiredTiles(world)].map(([key, { life, at }]) => ({
+      at,
+      ...tileState(key, life),
+      scene: scenes(life),
+      ceded: internal.history.get(life)?.ceded,
+      pending: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
+    })),
+    ownership: [...worldTiles(world)].map(([key, life]) => ({
+      key,
+      ceded: internal.history.get(life)?.ceded,
+    })),
+    scenes: [...worldTiles(world)].map(([key, life]) => ({ key, ...scenes(life) })),
+    pending: [...worldTiles(world)].map(([key, life]) => ({
+      key,
+      seeds: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
+    })),
+    viewContext: internal.viewContext,
+    bootstrapped: internal.bootstrapped,
+    birthCursor: internal.birthCursor,
+    birthCredit: internal.birthCredit,
+  });
 }

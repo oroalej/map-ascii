@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type Gatherer, type Mover, type Walker } from './simulate';
-import { activityLevels } from './config';
+import { activityLevels, RETIRE } from './config';
+import { complete } from './cooperate';
 import { completeScenarioState, makeScenario, worldTiles } from './testing/scenarios';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { cellStep, DEFAULT_CELLS, stepCell } from '../density';
@@ -103,6 +104,7 @@ describe('moments through the simulation', () => {
     const social = fixture(true, true);
     social.step();
     expect(social.tile.momentHost.moments.busy(social.a)).toBe(true);
+    expect(social.tile.scenes.transferable(social.a)).toBe(false);
     expect(social.tile.scenes.reserve(social.a, 0)).toBe(false);
     expect(social.tile.scenes.visits.has(social.a)).toBe(false);
   });
@@ -176,11 +178,24 @@ describe('moments through the simulation', () => {
     const capped = f.world.visible(21, levels, f.center, undefined, undefined, 1, 1);
     expect(capped.some((a) => a.prop)).toBe(false);
   });
-  it('releases ownership on eviction and traffic reset and respawns deterministically', () => {
+  it('freezes moments on retirement and revives the same interaction on return', () => {
     const f = fixture();
     f.step();
-    expect(f.tile.momentHost.moments.snapshot().active.length).toBeGreaterThan(0);
+    const before = f.tile.momentHost.moments.snapshot();
+    expect(before.active.length).toBeGreaterThan(0);
     f.world.sync([]);
+    for (let i = 0; i < 10; i++) f.step();
+    expect(f.tile.momentHost.moments.snapshot()).toEqual(before);
+    expect(f.world.visible(21, levels, f.center)).toEqual([]);
+    f.world.sync([f.input]);
+    expect(worldTiles(f.world).get(f.input.key)).toBe(f.tile);
+    expect(f.tile.momentHost.moments.snapshot()).toEqual(before);
+  });
+  it('clears moments on final eviction and hard reset, including retired tiles', () => {
+    const f = fixture();
+    f.step();
+    f.world.sync([]);
+    for (let i = 0; i <= RETIRE.seconds * 10; i++) f.step();
     expect(f.tile.momentHost.moments.snapshot().active).toEqual([]);
     expect(f.tile.momentHost.moments.snapshot().cooldown).toEqual([]);
     expect(f.a.momentFacing).toBeUndefined();
@@ -188,8 +203,32 @@ describe('moments through the simulation', () => {
     const tile = [...worldTiles(f.world).values()][0]!;
     expect(tile).not.toBe(f.tile);
     expect(tile.momentHost.moments.snapshot().active).toEqual([]);
+    const retired = fixture();
+    retired.step();
+    retired.world.sync([]);
+    retired.world.clearTiles();
+    expect(retired.tile.momentHost.moments.size).toBe(0);
+    expect(retired.a.momentFacing).toBeUndefined();
     f.world.setTraffic();
     expect(worldTiles(f.world).size).toBe(0);
+  });
+  it('preserves reaction dialogue when tiles are prepared cooperatively', () => {
+    const input = fixture().input;
+    const world = new LifeWorld(undefined, undefined, {
+      dialogue: [{ id: 'reaction', kind: 'look', turns: 1 }],
+    });
+    const prepared = complete(world.prepareTile(input));
+    world.sync([input], undefined, undefined, new Map([[input.key, prepared]]));
+    expect(worldTiles(world).get(input.key)).toBe(prepared);
+    const center = tileToLngLat(input.tile, { x: 1600, y: 1800 });
+    let spoken = false;
+    for (let i = 0; i < 100; i++) {
+      world.step(0.1, undefined, 21, undefined, undefined, { rain: 0 }, 0.2);
+      spoken ||= world
+        .visible(21, levels, center)
+        .some((agent) => agent.speech?.exchangeId === 'reaction');
+    }
+    expect(spoken).toBe(true);
   });
   it('preserves initial population, looks and random draws when disabled per instance', () => {
     const tiles = makeScenario('moments', 1).tiles;

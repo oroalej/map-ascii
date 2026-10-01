@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JunctionTable, compatible, type Movement } from './junctions';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, type Mover } from './simulate';
+import { continuityMover, continuityTile, left, right } from './testing/continuity';
 
 const life = new TileLife({ z: 16, x: 1, y: 1 }, new LifeBuilder().finish(), 1);
 const mover = () => ({ kind: 'vehicle', vehicle: 'car' }) as Mover;
@@ -22,6 +23,64 @@ const movement = (ix: number, iy: number, ox: number, oy: number, rank = 0): Mov
 const east = movement(1, 0, 1, 0),
   south = movement(0, 1, 0, 1, LifeLine.roadMinor);
 describe('junction arbitration', () => {
+  it('rebinds a seam hold without releasing its physical box or waiting age', () => {
+    const a = continuityTile(left),
+      b = continuityTile(right);
+    const source = new TileLife(a.tile, a.life, 1),
+      target = new TileLife(b.tile, b.life, 2);
+    source.movers.splice(0);
+    target.movers.splice(0);
+    const m = continuityMover(source, 4096.001),
+      waiter = mover();
+    source.movers.push(m);
+    const table = new JunctionTable();
+    const box = {
+      ...east,
+      junction: { ...east.junction, x: 4096, y: m.y, radius: 10 * source.perMeter },
+    };
+    table.request({
+      m,
+      life: source,
+      tileKey: a.key,
+      index: 0,
+      movement: box,
+      inside: true,
+      ready: true,
+    });
+    table.resolve(1);
+    expect(target.adoptFrom(m, source)).toBe(true);
+    table.rebind(m, target, b.key, source);
+    table.begin(new Set([target]));
+    table.refreshCarried(m, () => false, Infinity);
+    table.request({
+      m: waiter,
+      life: target,
+      tileKey: b.key,
+      index: 1,
+      movement: { ...south, junction: { ...box.junction, x: 0 } },
+      ready: true,
+      inside: false,
+    });
+    table.resolve(40);
+    expect(table.granted(m)).toBe(true);
+    expect(table.granted(waiter)).toBe(false);
+    expect(table.waited(m)).toBe(39);
+    m.x = 20 * target.perMeter;
+    table.begin(new Set([target]));
+    table.refreshCarried(m, () => false, Infinity);
+    table.request({
+      m: waiter,
+      life: target,
+      tileKey: b.key,
+      index: 1,
+      movement: { ...south, junction: { ...box.junction, x: 0 } },
+      ready: true,
+      inside: false,
+    });
+    table.resolve(41);
+    expect(table.movement(m)).toBeUndefined();
+    expect(table.granted(waiter)).toBe(true);
+  });
   it('allows same approaches, opposing through traffic and distinct right turns', () => {
     expect(compatible(east, east)).toBe(true);
     expect(compatible(east, movement(-1, 0, -1, 0))).toBe(true);

@@ -19,6 +19,9 @@ import { packLife, buildLifeGlyphs } from '../src/life/draw';
 import { themes } from '../src/theme';
 import { FrameProfiler } from '../src/profile';
 import { tileToLngLat } from '../src/raster/geometry';
+import { spawnMargin } from '../src/life/births';
+import { metersPerCssPx } from '../src/grid';
+import { DEFAULT_CELLS, cellStep, stepCell } from '../src/density';
 import { viewportFor } from '../src/camera';
 import { City } from '@atlas/shared';
 import { activityLevels } from '../src/life/config';
@@ -34,13 +37,16 @@ const matchesCase = (name: string) =>
     .some((prefix) => name.startsWith(prefix));
 const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
+const births = process.argv.includes('--births');
+const control = process.argv.includes('--control');
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
+if (births && !real) throw new Error('--births requires --real and --pan');
 if (real && !pan) throw new Error('--real requires --pan');
 const allowDiff = pan || process.argv.includes('--allow-diff');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
-const scratch = resolve(root, arg('scratch-dir', 'test-results'));
+const scratch = resolve(root, arg('scratch-dir', arg('scratch', 'test-results')));
 const samples = Number(arg('samples', '160'));
 const runs = Number(arg('runs', '5'));
 if (![samples, runs].every((n) => Number.isInteger(n) && n > 0))
@@ -67,10 +73,16 @@ type Stages = 'step' | 'visible' | 'pack' | 'combined';
 try {
   const currentHash = await currentSourceHash(root);
   const frozen = await snapshotRevision(root, baseline, join(temporary, 'baseline'));
-  const before = (await import(frozen.path('life/simulate.ts'))) as { LifeWorld: typeof LifeWorld };
-  const oldDraw = (await import(frozen.path('life/draw.ts'))) as { packLife: typeof packLife };
+  const before = (control ? { LifeWorld } : await import(frozen.path('life/simulate.ts'))) as {
+    LifeWorld: typeof LifeWorld;
+  };
+  const oldDraw = (control ? { packLife } : await import(frozen.path('life/draw.ts'))) as {
+    packLife: typeof packLife;
+  };
   if (real) {
-    const oldSnapshot = (await import(frozen.path('life/terrain-snapshot.ts'))) as {
+    const oldSnapshot = (
+      control ? { snapshotOf } : await import(frozen.path('life/terrain-snapshot.ts'))
+    ) as {
       snapshotOf: typeof snapshotOf;
     };
     const city = arg('real', 'naga');
@@ -112,6 +124,7 @@ try {
         'terrainRoads',
         'terrainRevalidate',
         'terrainEncode',
+        'clearanceBuild',
       ] as const;
       type RealStage = (typeof realStages)[number];
       const summarize = (values: number[]) => ({
@@ -126,28 +139,47 @@ try {
         const timings = Object.fromEntries(
           realStages.map((stage) => [stage, [] as number[]]),
         ) as Record<RealStage, number[]>;
-        world.sync(windows[0]!);
+        const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, 18));
+        const minimum = births
+          ? metersPerCssPx({ lng: cameras[0]!.center[0], lat: cameras[0]!.center[1], zoom: 18 }) *
+            cell.width
+          : 0.9;
+        const view = (i: number) =>
+          births
+            ? {
+                bounds: cameras[i]!.bounds,
+                spawnMarginM: spawnMargin(minimum, cell.height / cell.width),
+              }
+            : undefined;
+        world.sync(windows[0]!, cameras[0]!.center, view(0));
+        let birthGuardBuilds = 0;
+        const internal = world as unknown as { groundGuard(...args: unknown[]): unknown };
+        const buildGuard = internal.groundGuard.bind(world);
+        internal.groundGuard = (...args) => {
+          if (args[3] === true) birthGuardBuilds++;
+          return buildGuard(...args);
+        };
         const initial = world.cellTerrain();
         if (!initial) throw new Error('Initial sync did not initialize terrain');
         encode(initial);
         let version = initial.version;
         profiler.reset();
         const samples = [];
-        for (let frame = 0; frame < 210; frame++) {
-          const shift = Math.floor(frame / 30);
+        for (let frame = 0; frame < (births ? 630 : 210); frame++) {
+          const shift = births ? (frame < 30 ? 0 : 1) : Math.floor(frame / 30);
           const { center, bounds } = cameras[shift]!;
-          const changed = frame > 0 && frame % 30 === 0;
+          const changed = births ? frame === 30 : frame > 0 && frame % 30 === 0;
           profiler.begin(frame / 30);
           const start = performance.now();
-          if (changed) world.sync(windows[shift]!);
+          if (changed) world.sync(windows[shift]!, center, view(shift));
           world.step(
-            1 / 30,
+            births ? 0.1 : 1 / 30,
             undefined,
             18,
             bounds,
             undefined,
             { rain: 0, minutes: 720, cityLife: config.life },
-            0.9,
+            minimum,
           );
           timings[changed ? 'syncFrame' : 'step'].push(performance.now() - start);
           world.visible(18, levels, center, { rain: 0, sunAltitude: 40 }, bounds);
@@ -159,7 +191,14 @@ try {
             version = terrain.version;
           }
           const sample = profiler.drain()!;
-          samples.push(sample);
+          samples.push({
+            ...sample,
+            pendingBirths: [...worldTiles(world).values()].reduce(
+              (sum, tile) => sum + tile.pending.length,
+              0,
+            ),
+            birthGuardBuilds,
+          });
           for (const stage of realStages) {
             if (stage === 'step' || stage === 'syncFrame') continue;
             const ms = sample.ms[stage];
@@ -171,6 +210,11 @@ try {
             realStages.map((stage) => [stage, summarize(timings[stage])]),
           ) as Record<RealStage, ReturnType<typeof summarize>>,
           stats: worldTerrainStats(world),
+          birthGuardBuilds,
+          pendingBirths: [...worldTiles(world).values()].reduce(
+            (sum, tile) => sum + tile.pending.length,
+            0,
+          ),
           samples,
         };
       };
@@ -232,7 +276,8 @@ try {
             at: new Date().toISOString(),
             baseline,
             allowDiff,
-            baselineHash: frozen.hash,
+            baselineHash: control ? currentHash : frozen.hash,
+            control,
             currentHash,
             archiveHash: local.hash,
             configHash,
@@ -249,8 +294,9 @@ try {
             parameters: {
               city,
               runs,
-              frames: 210,
-              shifts: 6,
+              births,
+              frames: births ? 630 : 210,
+              shifts: births ? 1 : 6,
               shiftEvery: 30,
               window: [4, 4],
               strip: ids,
@@ -262,11 +308,11 @@ try {
               viewport: [1920, 1080],
               camera: 'window centre',
               zoom: 18,
-              dt: 1 / 30,
+              dt: births ? 0.1 : 1 / 30,
               minutes: 720,
               rain: 0,
               activity: 1,
-              clearanceMinimumMeters: 0.9,
+              clearanceMinimumMeters: births ? 'two-dimensional CSS schedule at zoom 18' : 0.9,
               traffic: config.traffic,
               cityLife: config.life,
               aggregation: 'median of per-run medians and p95s; counts summed',
@@ -292,6 +338,17 @@ try {
         })),
       );
       console.table(currentRuns[0]!.stats);
+      if (births)
+        console.table({
+          baseline: {
+            pending: oldRuns[0]!.pendingBirths,
+            birthGuardBuilds: oldRuns[0]!.birthGuardBuilds,
+          },
+          current: {
+            pending: currentRuns[0]!.pendingBirths,
+            birthGuardBuilds: currentRuns[0]!.birthGuardBuilds,
+          },
+        });
       console.log(`Report: ${output}`);
     } finally {
       await local.close();
@@ -388,7 +445,8 @@ try {
           at: new Date().toISOString(),
           baseline,
           allowDiff,
-          baselineHash: frozen.hash,
+          baselineHash: control ? currentHash : frozen.hash,
+          control,
           currentHash,
           environment: {
             node: process.version,
@@ -607,7 +665,8 @@ try {
       at: new Date().toISOString(),
       baseline,
       allowDiff,
-      baselineHash: frozen.hash,
+      baselineHash: control ? currentHash : frozen.hash,
+      control,
       currentHash,
       gate: {
         denseMedianPass,
