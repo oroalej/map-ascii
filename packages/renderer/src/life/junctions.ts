@@ -5,6 +5,7 @@ import { JUNCTION } from './config';
 import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
 import type { Mover, TileLife } from './simulate';
 import { VEHICLES } from './vehicles';
+import { frameBetween } from './frames';
 
 export type Arm = {
   line: number;
@@ -224,7 +225,7 @@ export type JunctionRequest = {
   /** Free metres beyond the exit box; pending holders consume this space too. */
   room?: number;
 };
-type Hold = JunctionRequest & { arrival: number; since?: number };
+type Hold = JunctionRequest & { arrival: number; since?: number; carried?: boolean };
 
 /** Two-phase world arbitration. Physical occupants never expire or authorize running red. */
 export class JunctionTable {
@@ -250,6 +251,69 @@ export class JunctionTable {
   }
   release(m: Mover): void {
     this.records.delete(m);
+  }
+  carried(m: Mover): boolean {
+    return !!this.records.get(m)?.carried;
+  }
+  /** Keep the original world reservation and waiting age; only its local coordinate frame changes. */
+  rebind(m: Mover, target: TileLife, tileKey: string, source: TileLife) {
+    const r = this.records.get(m);
+    if (!r) return;
+    const f = frameBetween(source.tile, target.tile);
+    const arm = (a: Arm): Arm => ({
+      ...a,
+      line: -1,
+      along: a.along * f.scale,
+      x: a.x === undefined ? undefined : f.x + a.x * f.scale,
+      y: a.y === undefined ? undefined : f.y + a.y * f.scale,
+      stopAlong: a.stopAlong === undefined ? undefined : a.stopAlong * f.scale,
+    });
+    const old = r.movement;
+    const local = !r.inside && target.junctionIndex.movement(m, 100 * target.perMeter);
+    r.movement =
+      local && local.key === old.key
+        ? local
+        : {
+            ...old,
+            line: -1,
+            stop: old.stop * f.scale,
+            ahead: old.ahead * f.scale,
+            junction: {
+              ...old.junction,
+              x: f.x + old.junction.x * f.scale,
+              y: f.y + old.junction.y * f.scale,
+              radius: old.junction.radius * f.scale,
+              arms: old.junction.arms.map(arm),
+            },
+            entry: old.entry && arm(old.entry),
+            exit: arm(old.exit),
+          };
+    r.carried = !(local && local.key === old.key);
+    r.life = target;
+    r.tileKey = tileKey;
+    r.index = target.movers.indexOf(m);
+  }
+  refreshCarried(m: Mover, ready: (movement: Movement) => boolean, room: number) {
+    const r = this.records.get(m);
+    if (!r?.carried) return;
+    const p = r.movement,
+      j = p.junction,
+      pm = r.life.perMeter;
+    const length = VEHICLES[m.vehicle!].length * pm;
+    const past = (m.x - (p.exit.x ?? j.x)) * p.outHx + (m.y - (p.exit.y ?? j.y)) * p.outHy;
+    if (past > j.radius + length / 2) {
+      this.release(m);
+      return;
+    }
+    p.ahead =
+      ((p.entry?.x ?? j.x) - m.x) * p.inHx +
+      ((p.entry?.y ?? j.y) - m.y) * p.inHy -
+      j.radius -
+      length / 2;
+    r.inside = p.ahead < -0.05 * pm;
+    r.room = room;
+    r.ready = ready(p);
+    this.request(r);
   }
   clear(): void {
     this.records.clear();

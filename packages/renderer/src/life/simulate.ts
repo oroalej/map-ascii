@@ -9,6 +9,7 @@ import { makeCellGuard } from './cell-guard';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
 import { projectMover, SegmentGrid, type AdoptionOptions } from './continuity';
 import type { ContinuityRejection } from './diagnostics';
+import { seamAhead } from './seams';
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
@@ -131,6 +132,7 @@ export type StepPass = {
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
   owns?: (p: { x: number; y: number }) => boolean;
+  seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
 };
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
@@ -420,6 +422,7 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
   private readonly commerceStallsRng: () => number;
@@ -1680,6 +1683,7 @@ export class TileLife {
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
   private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
+    if (this.seamLimits?.get(m)?.crossing) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     if (junctions && this.exitOptions(m, end).length) return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
@@ -1719,6 +1723,12 @@ export class TileLife {
       m.from = to;
       const atEnd = m.dir === 1 ? to === this.last(m.line) : to === this.first(m.line);
       if (atEnd) {
+        // The clipped line end is a geographic seam, not a route choice.
+        if (this.seamLimits?.get(m)?.crossing) {
+          m.from -= m.dir;
+          m.d = length;
+          break;
+        }
         if (junctions) this.turn(m);
         else m.dir = m.dir === 1 ? -1 : 1;
         // A train at the end of the track stops there (`step` turns it round).
@@ -2250,12 +2260,40 @@ export class TileLife {
     clock: number,
     tileKey = '',
   ) {
-    if (!this.junctionIndex.junctions.length) return;
     for (let index = 0; index < this.movers.length; index++) {
       const m = this.movers[index]!;
       if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
       const pm = this.perMeter,
         length = VEHICLES[m.vehicle].length * pm;
+      if (table.carried(m)) {
+        const movement = table.movement(m)!;
+        let room = Infinity;
+        const ex = movement.exit.x ?? movement.junction.x,
+          ey = movement.exit.y ?? movement.junction.y;
+        for (const other of this.movers) {
+          if (other === m || other.kind !== 'vehicle' || !other.vehicle) continue;
+          const past = (other.x - ex) * movement.outHx + (other.y - ey) * movement.outHy;
+          const side = Math.abs((other.x - ex) * movement.outHy - (other.y - ey) * movement.outHx);
+          if (past >= 0 && side < 4 * pm)
+            room = Math.min(
+              room,
+              past / pm - VEHICLES[other.vehicle].length / 2 - movement.junction.radius / pm,
+            );
+        }
+        table.refreshCarried(
+          m,
+          (p) =>
+            this.signals.allows(
+              m,
+              p.entry?.x ?? p.junction.x,
+              p.entry?.y ?? p.junction.y,
+              clock,
+              Math.max(0, p.ahead),
+            ),
+          room,
+        );
+        continue;
+      }
       const previous = table.movement(m);
       let movement = previous;
       if (previous) {
@@ -2414,6 +2452,7 @@ export class TileLife {
   ) {
     if (dt <= 0) return;
     this.ownership = pass?.owns;
+    this.seamLimits = pass?.seams;
     this.time += dt;
     const { rng } = this;
     const clock = env?.clock ?? this.time;
@@ -2570,6 +2609,12 @@ export class TileLife {
       }
       if (m.vehicle) {
         this.motionStats.steps++;
+        const seam = pass?.seams?.get(m);
+        if (seam && !seam.crossing)
+          speeds[i] = Math.min(
+            speeds[i]!,
+            approach(seam.room, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
+          );
         const next = nextSpeed(
           m.v ?? m.speed,
           speeds[i]!,
@@ -2580,6 +2625,7 @@ export class TileLife {
         );
         if (this.caps[i]! + 1e-9 < next) this.motionStats.hardCaps++;
         speeds[i] = Math.min(next, this.caps[i]!);
+        if (seam) speeds[i] = Math.min(speeds[i]!, Math.max(0, seam.room) / dt);
       }
       const distance = speeds[i]! * dt;
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
@@ -3132,10 +3178,8 @@ export class LifeWorld {
             for (const other of finer) cede(masks, other.tile, life.tile);
             this.covers.set(life, masks);
           }
-          for (const m of life.movers) if (!this.owns(life, m)) this.junctions.release(m);
         }
       }
-      this.junctions.begin(new Set(this.tiles.values()));
       if (added.size) {
         const guard = this.groundGuard(0, added);
         const settleStart = this.profiler?.time();
@@ -3196,6 +3240,9 @@ export class LifeWorld {
         // Revivals need the same immediately available cell guard as fresh settlement.
         if (this.tiles.size && !this.groundTerrain) this.groundGuard();
       }
+      for (const life of this.tiles.values())
+        for (const m of life.movers) if (!this.owns(life, m)) this.junctions.release(m);
+      this.junctions.begin(new Set(this.tiles.values()));
       this.pruneRetired();
     } finally {
       if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
@@ -3291,7 +3338,12 @@ export class LifeWorld {
         );
         if (!accepted) continue;
         this.profiler?.countContinuity('transfers');
-        this.junctions.release(c.m);
+        this.junctions.rebind(
+          c.m,
+          target,
+          [...this.tiles].find(([, life]) => life === target)![0],
+          c.life,
+        );
         if (replace) {
           this.junctions.release(replace);
           guard.remove(replace);
@@ -3309,6 +3361,7 @@ export class LifeWorld {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
+    const reservations = new Map<GroundAgent, readonly Body[]>();
     const key = [...this.tiles.keys()].join('|');
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild)
@@ -3554,14 +3607,23 @@ export class LifeWorld {
         }
       }
       if (reserve) {
-        occupied.set(identity, next);
+        const reserved = reservations.get(identity);
+        occupied.set(identity, reserved ? [...next, ...reserved] : next);
         pair.trial = pair.live;
         pair.live = next;
       }
       return true;
     };
-    const remove = (owner: object) => occupied.delete(owner);
-    if (!this.profiler) return Object.assign(check, { remove });
+    const remove = (owner: object) => {
+      occupied.delete(owner);
+      reservations.delete(owner as GroundAgent);
+    };
+    const reserveSeam = (life: TileLife, preview: Mover, identity: Mover) => {
+      const reserved = bodies(life, preview, []).map((b) => ({ ...b }));
+      reservations.set(identity, reserved);
+      occupied.set(identity, [...occupied.bodies(identity), ...reserved]);
+    };
+    if (!this.profiler) return Object.assign(check, { remove, reserveSeam });
     return Object.assign(
       (...args: Parameters<typeof check>) => {
         const start = this.profiler!.time();
@@ -3572,7 +3634,7 @@ export class LifeWorld {
           this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
         }
       },
-      { remove },
+      { remove, reserveSeam },
     );
   }
 
@@ -3660,6 +3722,69 @@ export class LifeWorld {
       clamped,
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
     );
+    const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
+    const intents: {
+      source: TileLife;
+      target: TileLife;
+      m: Mover;
+      before: Mover;
+      boundary: Mover;
+    }[] = [];
+    const inbound = new Map<TileLife, number>();
+    const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
+    const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
+      owners.find((life) => {
+        const f = frameBetween(source.tile, life.tile);
+        const q = { x: f.x + p.x * f.scale, y: f.y + p.y * f.scale };
+        return inTile(q) && this.owns(life, q);
+      });
+    for (const source of this.tiles.values())
+      for (const m of source.movers) {
+        if (
+          (m.kind !== 'vehicle' && m.kind !== 'boat') ||
+          !eligibility.get(source)!(m) ||
+          !source.scenes.transferable(m)
+        )
+          continue;
+        const pm = source.perMeter,
+          k = kinematicsOf(m.vehicle);
+        const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
+        const reach = Math.max(
+          12 * pm,
+          (m.v ?? m.speed) ** 2 / (2 * k.brake * pm) + (length + 2) * pm,
+        );
+        // Cheap uniform-tile rejection keeps the additional work off ordinary inner-tile traffic.
+        if (!this.covers.has(source) && Math.min(m.x, m.y, EXTENT - m.x, EXTENT - m.y) > reach)
+          continue;
+        const seam = seamAhead(source, m, this.covers.get(source) ?? [], reach);
+        if (!seam) continue;
+        this.profiler?.countContinuity('attempts');
+        const target = ownerAt(source, seam.preview);
+        const reject =
+          this.profiler &&
+          ((reason: ContinuityRejection) => this.profiler!.countContinuity(reason));
+        let preview: Mover | undefined;
+        if (!target || target === source) reject?.('ownership');
+        else if (target.movers.length + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
+          reject?.('capQuota');
+        else preview = target.projectFrom(seam.preview, source, { reject });
+        const safe =
+          preview &&
+          target &&
+          (m.kind === 'boat'
+            ? this.boatRoom(target, preview, m, intents)
+            : guard(target, preview, undefined, undefined, false, m, reject));
+        if (safe && target && preview) {
+          guard.reserveSeam(target, preview, m);
+          inbound.set(target, (inbound.get(target) ?? 0) + 1);
+          intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
+          seamLimits.set(m, { room: Infinity, crossing: true });
+        } else
+          seamLimits.set(m, {
+            room: Math.max(0, seam.distance - (length / 2 + FOLLOW.minGap) * pm),
+            crossing: false,
+          });
+      }
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
@@ -3668,8 +3793,45 @@ export class LifeWorld {
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
         trains,
+        seams: seamLimits,
         owns: this.covers.has(tile) ? (p) => this.owns(tile, p) : undefined,
       });
+    }
+    // All original owners have stepped once. New owners start stepping on the next frame.
+    for (const { source, target, m, before, boundary } of intents) {
+      const clipped = Math.hypot(m.x - boundary.x, m.y - boundary.y) < 0.005 * source.perMeter;
+      if (ownerAt(source, m) !== target && !clipped) continue;
+      const held = this.junctions.movement(m);
+      if (
+        target.adoptFrom(
+          m,
+          source,
+          { nudgeM: clipped ? 0.001 : 0 },
+          (preview) =>
+            inTile(preview) &&
+            this.owns(target, preview) &&
+            (m.kind === 'boat'
+              ? this.boatRoom(target, preview, m, [])
+              : guard(target, preview, undefined, undefined, false, m)),
+        )
+      ) {
+        this.profiler?.countContinuity('transfers');
+        if (held)
+          this.junctions.rebind(
+            m,
+            target,
+            [...this.tiles].find(([, life]) => life === target)![0],
+            source,
+          );
+        guard.remove(m);
+        if (m.kind === 'vehicle') guard(target, m);
+      } else {
+        // A final pose/clearance check can fail after a bend or another actor's accepted step.
+        // Keep the original owner at its last safe pose instead of hiding it beyond the seam.
+        Object.assign(m, before, { v: 0 });
+        guard.remove(m);
+        if (m.kind === 'vehicle') guard(source, m);
+      }
     }
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileLife; m: Mover }[] | undefined;
@@ -3714,6 +3876,41 @@ export class LifeWorld {
           const [lng, lat] = tileToLngLat(life.tile, life.pose(m));
           this.profiler.traceTraveler(m, { at: this.clock, tile: key, event: 'step', lng, lat });
         }
+  }
+
+  /** Connected running routes share an arrival clock, including duplicated buffered lines. */
+  private boatRoom(
+    target: TileLife,
+    preview: Mover,
+    identity: Mover,
+    reserved: readonly { source: TileLife; target: TileLife; m: Mover }[],
+  ) {
+    const bodies = target.groundBodies(preview);
+    for (const life of this.tiles.values()) {
+      const f = frameBetween(life.tile, target.tile);
+      const scale = (f.scale * life.perMeter) / target.perMeter;
+      for (const m of life.movers) {
+        if (m === identity || m.kind !== 'boat' || !this.owns(life, m)) continue;
+        const other = life.groundBodies(m).map((b) => ({
+          ...b,
+          x: f.x / target.perMeter + b.x * scale,
+          y: f.y / target.perMeter + b.y * scale,
+          length: b.length * scale + FOLLOW.minGap * 2,
+          width: b.width * scale,
+        }));
+        if (bodies.some((a) => other.some((b) => bodiesOverlap(a, b)))) return false;
+      }
+    }
+    for (const intent of reserved) {
+      if (intent.m.kind !== 'boat' || intent.target !== target) continue;
+      const projected = target.projectFrom(intent.m, intent.source);
+      if (
+        projected &&
+        bodies.some((a) => target.groundBodies(projected).some((b) => bodiesOverlap(a, b)))
+      )
+        return false;
+    }
+    return true;
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */

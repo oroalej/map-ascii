@@ -494,7 +494,7 @@ export class LocalScenes {
     this.scan += dt * movers.length;
     const batch = Math.min(12, Math.floor(this.scan));
     this.scan = Math.min(12, this.scan - batch);
-    for (let i = 0; i < batch; i++) {
+    for (let i = 0; i < batch && movers.length; i++) {
       const m = movers[this.cursor++ % movers.length]!;
       if (
         (owns && !owns(m)) ||

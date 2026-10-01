@@ -205,6 +205,9 @@ export class Occupancy {
     }
     this.entries.delete(owner);
   }
+  bodies(owner: object): readonly Body[] {
+    return this.entries.get(owner)?.bodies ?? [];
+  }
   conflicts(owner: object, bodies: readonly Body[], ignore?: object): number {
     const neighbors = this.neighbors;
     neighbors.clear();

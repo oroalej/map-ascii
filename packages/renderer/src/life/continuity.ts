@@ -10,6 +10,7 @@ export type AdoptionOptions = {
   bearingDeg?: number;
   replace?: Mover;
   reject?: (reason: ContinuityRejection) => void;
+  nudgeM?: number;
 };
 type Segment = {
   line: number;
@@ -103,8 +104,9 @@ export function projectMover(
 ): Mover | undefined {
   if (m.kind !== 'vehicle' && m.kind !== 'boat' && m.kind !== 'train') return;
   const frame = frameBetween(source.tile, target.tile);
-  const x = frame.x + m.x * frame.scale,
-    y = frame.y + m.y * frame.scale;
+  const nudge = (options.nudgeM ?? 0) * source.perMeter;
+  const x = frame.x + (m.x + m.hx * nudge) * frame.scale,
+    y = frame.y + (m.y + m.hy * nudge) * frame.scale;
   const oldPose = source.pose(m);
   const oldX = frame.x + oldPose.x * frame.scale,
     oldY = frame.y + oldPose.y * frame.scale;
