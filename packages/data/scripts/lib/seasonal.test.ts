@@ -30,26 +30,31 @@ const center = (r: { from: SeasonalPoint; to: SeasonalPoint }) => [
   ((r.from[1] + r.to[1]) / 2 - 13) * 111320,
 ];
 
-it('continues 6 m spacing through reversed way fragments and a bend, with curb-to-curb rows', () => {
-  const features = [road(1, [at(0), at(10)]), road(2, [at(10, 14), at(10)])];
-  const result = generateSeasonalBunting(features, [season()]);
-  const positions = result.records.map(center).sort((a, b) => a[0]! + a[1]! - b[0]! - b[1]!);
-  expect(positions).toHaveLength(4);
-  for (const [i, p] of positions.entries()) expect(p[0]! + p[1]!).toBeCloseTo(i * 6, 2);
-  for (const r of result.records) {
-    expect(Math.hypot((r.to[0] - r.from[0]) * mx, (r.to[1] - r.from[1]) * 111320)).toBeCloseTo(
-      9,
-      2,
-    );
-    const a = r.segment[0],
-      b = r.segment[1];
-    expect(
-      (b[0] - a[0]) * mx * ((r.to[0] - r.from[0]) * mx) +
-        (b[1] - a[1]) * 111320 * ((r.to[1] - r.from[1]) * 111320),
-    ).toBeCloseTo(0, 3);
-  }
-  expect(result).toEqual(generateSeasonalBunting(features.slice().reverse(), [season()]));
-});
+it.each([3, 6])(
+  'continues %i m spacing through reversed fragments and a bend, with curb-to-curb rows',
+  (spacing) => {
+    const features = [road(1, [at(0), at(10)]), road(2, [at(10, 14), at(10)])];
+    const s = season();
+    s.bunting!.corridors![0]!.spacing_m = spacing;
+    const result = generateSeasonalBunting(features, [s]);
+    const positions = result.records.map(center).sort((a, b) => a[0]! + a[1]! - b[0]! - b[1]!);
+    expect(positions).toHaveLength(24 / spacing);
+    for (const [i, p] of positions.entries()) expect(p[0]! + p[1]!).toBeCloseTo(i * spacing, 2);
+    for (const r of result.records) {
+      expect(Math.hypot((r.to[0] - r.from[0]) * mx, (r.to[1] - r.from[1]) * 111320)).toBeCloseTo(
+        9,
+        2,
+      );
+      const a = r.segment[0],
+        b = r.segment[1];
+      expect(
+        (b[0] - a[0]) * mx * ((r.to[0] - r.from[0]) * mx) +
+          (b[1] - a[1]) * 111320 * ((r.to[1] - r.from[1]) * 111320),
+      ).toBeCloseTo(0, 3);
+    }
+    expect(result).toEqual(generateSeasonalBunting(features.slice().reverse(), [s]));
+  },
+);
 it('clips both frontages and retains exact endpoints and separate season identities', () => {
   const features: AtlasFeature[] = [
     road(1, [at(0), at(30)]),
@@ -75,6 +80,12 @@ it('clips both frontages and retains exact endpoints and separate season identit
   }
   const b = generateSeasonalBunting(features, [{ ...s, id: 'other' }]);
   expect(b.records.every((r) => !a.records.some((v) => v.id === r.id))).toBe(true);
+  s.bunting!.corridors![0]!.spacing_m = 3;
+  expect(
+    generateSeasonalBunting(features, [s])
+      .records.map(center)
+      .map((p) => Math.round(p[0]!)),
+  ).toEqual([5, 8, 11, 14, 17, 20]);
 });
 it('covers divided terminal branches without duplicating shared junction rows', () => {
   const result = generateSeasonalBunting(
@@ -120,5 +131,7 @@ it('leaves geometry untouched and generates no layer for ordinary calendars', ()
   expect(features).toEqual(before);
   const invalid = season(['osm:way/1']);
   invalid.bunting!.corridors![0]!.spacing_m = 0;
+  expect(() => generateSeasonalBunting(features, [invalid])).toThrow('invalid spacing');
+  invalid.bunting!.corridors![0]!.spacing_m = 2.99;
   expect(() => generateSeasonalBunting(features, [invalid])).toThrow('invalid spacing');
 });

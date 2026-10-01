@@ -13,7 +13,7 @@ export const BuntingCorridorSchema = z
       .refine((v) => new Set(v).size === v.length, 'duplicate ways'),
     from: feature.optional(),
     to: feature.optional(),
-    spacing_m: z.number().min(4).max(80),
+    spacing_m: z.number().min(3).max(80),
     style: z.literal('red-yellow-rectangles'),
   })
   .refine((v) => !v.from || v.from !== v.to, 'endpoints must differ');

@@ -39,8 +39,10 @@ it('accepts exact geographic records and safely ignores corrupt/newer optional p
 it('validates bounded corridor density, unique source ways and explicit distinct endpoints', () => {
   const c = { id: 'route', ways: ['osm:way/1'], spacing_m: 6, style: 'red-yellow-rectangles' };
   expect(BuntingCorridorSchema.parse(c)).toEqual(c);
+  expect(BuntingCorridorSchema.safeParse({ ...c, spacing_m: 3 }).success).toBe(true);
   for (const value of [
     { ...c, spacing_m: 0 },
+    { ...c, spacing_m: 2.99 },
     { ...c, spacing_m: 81 },
     { ...c, ways: [] },
     { ...c, ways: ['osm:way/1', 'osm:way/1'] },

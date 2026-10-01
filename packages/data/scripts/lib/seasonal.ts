@@ -15,7 +15,7 @@ type Edge = { id: string; road: string; width: number; a: Node; b: Node; length:
 const pointKey = (p: SeasonalPoint) => `${p[0].toFixed(7)}/${p[1].toFixed(7)}`;
 
 function bakeCorridor(features: readonly AtlasFeature[], season: string, config: BuntingCorridor) {
-  if (!Number.isFinite(config.spacing_m) || config.spacing_m < 4 || config.spacing_m > 80)
+  if (!Number.isFinite(config.spacing_m) || config.spacing_m < 3 || config.spacing_m > 80)
     throw new Error(`Season ${season}, corridor ${config.id}: invalid spacing`);
   const byId = new Map(
     features.filter((f) => !f.properties.region).map((f) => [f.properties.id, f]),
