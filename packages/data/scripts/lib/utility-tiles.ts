@@ -103,10 +103,10 @@ export async function utilityLampCatalog(archive: PMTiles): Promise<UtilityLamp[
 }
 
 /** Compare decoded content, including feature order; compressed archive bytes may differ. */
-function ordinaryContent(tile: VectorTile): string {
+export function ordinaryContent(tile: VectorTile, excludedLayer = 'utilities'): string {
   return JSON.stringify(
     Object.entries(tile.layers)
-      .filter(([name]) => name !== 'utilities')
+      .filter(([name]) => name !== excludedLayer)
       .map(([name, layer]) => [
         name,
         layer.extent,
@@ -121,6 +121,24 @@ function ordinaryContent(tile: VectorTile): string {
         }),
       ]),
   );
+}
+
+/** tile-join recomputes bounds from buffered geometry; retain the original v3 header. */
+export async function preserveArchiveBounds(basePath: string, output: string) {
+  const source = await open(basePath, 'r'),
+    target = await open(output, 'r+');
+  try {
+    const magic = new Uint8Array(8);
+    await source.read(magic, 0, 8, 0);
+    if (magic[7] !== 3) throw new Error('Overlay merge requires PMTiles v3');
+    const boundsBytes = new Uint8Array(25);
+    const read = await source.read(boundsBytes, 0, 25, 102);
+    if (read.bytesRead !== 25) throw new Error('Incomplete base PMTiles header');
+    await target.write(boundsBytes, 0, 25, 102);
+  } finally {
+    await source.close();
+    await target.close();
+  }
 }
 export async function auditUtilityArchive(
   base: PMTiles,
@@ -228,21 +246,7 @@ export async function buildUtilityTiles(
         ['-o', '{out}', '--force', '--no-tile-size-limit', '{in}', '{second}'],
         utilityPath,
       );
-      // tile-join recomputes bounds from quantized, buffered geometry. Preserve the base
-      // archive's advertised extent/center (PMTiles v3 bytes 102–126), without touching tiles.
-      // Bounds/center live only in the fixed header, not the PMTiles JSON metadata.
-      if (header.specVersion !== 3) throw new Error('Utility merge requires PMTiles v3');
-      const source = await open(basePath, 'r'),
-        target = await open(output, 'r+');
-      try {
-        const boundsBytes = new Uint8Array(25);
-        const read = await source.read(boundsBytes, 0, 25, 102);
-        if (read.bytesRead !== 25) throw new Error('Incomplete base PMTiles header');
-        await target.write(boundsBytes, 0, 25, 102);
-      } finally {
-        await source.close();
-        await target.close();
-      }
+      await preserveArchiveBounds(basePath, output);
     } else await copyFile(basePath, output);
     const result = await openUtilityArchive(output);
     try {

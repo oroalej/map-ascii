@@ -224,12 +224,89 @@
           "days_before": 9,
           "days_after": 0
         },
-        "note": "TODO(verify): The 2026 calendar supports September 11–20, covering the novena and feast day. Confirm the recurring annual rule and decoration/stall positions. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds.",
+        "note": "TODO(verify): The 2026 calendar supports September 11–20, covering the novena and feast day. Confirm the recurring annual rule and decoration/stall positions. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds. Dense red/yellow rectangular banderitas on selected Centro corridors were requested by the project owner on 2026-10-01 using a photograph and marked map references; 6 m rows and curb-to-curb spans are illustrative, not surveyed installations.",
         "bunting": {
           "label": "Fiesta banners",
           "near": ["worship"],
           "radius_m": 400,
-          "spacing_m": 30
+          "spacing_m": 30,
+          "corridors": [
+            {
+              "id": "panganiban-drive",
+              "ways": [
+                "osm:way/23518904",
+                "osm:way/23519164",
+                "osm:way/23519483",
+                "osm:way/23540253",
+                "osm:way/23540254",
+                "osm:way/252223485",
+                "osm:way/272595409",
+                "osm:way/721779874",
+                "osm:way/836685800",
+                "osm:way/836685805",
+                "osm:way/1553212752"
+              ],
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "general-luna",
+              "ways": [
+                "osm:way/596568240",
+                "osm:way/596568242",
+                "osm:way/755073153",
+                "osm:way/1053485826",
+                "osm:way/1373537377",
+                "osm:way/1553212757"
+              ],
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "caceres-link",
+              "ways": ["osm:way/23520783"],
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "elias-angeles",
+              "ways": [
+                "osm:way/596568239",
+                "osm:way/596568243",
+                "osm:way/724187422",
+                "osm:way/936923544",
+                "osm:way/1529540510",
+                "osm:way/1553212755",
+                "osm:way/1553212756",
+                "osm:way/1553218895",
+                "osm:way/1553218896",
+                "osm:way/1560123986"
+              ],
+              "to": "osm:way/23666715",
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "arana-link",
+              "ways": ["osm:way/23520170"],
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "penafrancia-avenue",
+              "ways": [
+                "osm:way/23519386",
+                "osm:way/23521401",
+                "osm:way/23521917",
+                "osm:way/838916319",
+                "osm:way/1529540511",
+                "osm:way/1529540512"
+              ],
+              "to": "osm:way/606888524",
+              "spacing_m": 6,
+              "style": "red-yellow-rectangles"
+            }
+          ]
         },
         "stalls": {
           "label": "Tiangge stalls",

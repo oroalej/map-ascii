@@ -1,4 +1,5 @@
 import { buildUtilityTiles } from './lib/utility-tiles';
+import { buildSeasonalTiles } from './lib/seasonal-tiles';
 import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -62,9 +63,12 @@ export const step: Step = {
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
-    const base = city.streets?.utilities?.derive
-      ? join(buildDir, `${city.slug}.base.pmtiles`)
-      : pmtiles;
+    const seasonal = city.life?.seasons?.some((s) => s.bunting?.corridors?.length);
+    const base =
+      city.streets?.utilities?.derive || seasonal
+        ? join(buildDir, `${city.slug}.base.pmtiles`)
+        : pmtiles;
+    const utilityOutput = seasonal ? join(buildDir, `${city.slug}.utility-base.pmtiles`) : pmtiles;
     const tileInput = join(buildDir, 'tile-input.geojsonseq');
     const records: AtlasFeature[] = [];
     for await (const feature of readFeatures(merged))
@@ -87,9 +91,18 @@ export const step: Step = {
     if (city.streets?.utilities?.derive)
       await buildUtilityTiles(
         base,
-        pmtiles,
+        utilityOutput,
         merged,
         utilityCoverageBounds(geography.bounds, geography.regionBounds),
+        buildDir,
+      );
+
+    if (seasonal)
+      await buildSeasonalTiles(
+        city.streets?.utilities?.derive ? utilityOutput : base,
+        pmtiles,
+        merged,
+        city.life?.seasons,
         buildDir,
       );
 

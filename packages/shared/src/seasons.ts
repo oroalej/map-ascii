@@ -1,6 +1,17 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
 import type { PlaceKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
+export * from './seasonal-record';
+
+/** Selected source ways, optionally trimmed to the frontage of an OSM feature. */
+export type BuntingCorridor = {
+  id: string;
+  ways: string[];
+  from?: string;
+  to?: string;
+  spacing_m: number;
+  style: 'red-yellow-rectangles';
+};
 
 export type MonthDay = { month: number; day: number };
 export type NthWeekday = { month: number; weekday: number; nth: number; offset_days: number };
@@ -14,7 +25,13 @@ export type SeasonConfig = {
   window: SeasonWindow;
   note?: string;
   lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };
-  bunting?: { label: string; near: PlaceKind[]; radius_m: number; spacing_m: number };
+  bunting?: {
+    label: string;
+    near: PlaceKind[];
+    radius_m: number;
+    spacing_m: number;
+    corridors?: BuntingCorridor[];
+  };
   stalls?: { label: string; near: PlaceKind[]; radius_m: number; per_tile: number };
   sources: Source[];
 };

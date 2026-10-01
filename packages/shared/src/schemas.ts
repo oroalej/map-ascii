@@ -8,6 +8,8 @@ import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
 import { validMonthDay, type SeasonConfig, type SeasonWindow } from './seasons';
+import { BuntingCorridorSchema } from './seasonal-schema';
+export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
@@ -940,6 +942,12 @@ export const Season = z
         near: SeasonPlaces,
         radius_m: z.number().min(50).max(1000),
         spacing_m: z.number().min(15).max(80),
+        corridors: z
+          .array(BuntingCorridorSchema)
+          .min(1)
+          .max(32)
+          .refine((v) => new Set(v.map((c) => c.id)).size === v.length, 'duplicate corridor ids')
+          .optional(),
       })
       .optional(),
     stalls: z
