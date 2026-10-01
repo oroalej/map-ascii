@@ -7,3 +7,5 @@ export * from './signal-layout';
 export * from './search';
 export * from './search-options';
 export * from './zoom';
+export { LAMP_PLACEMENT, placeLampSupports, inLampMedian, type LitLine } from './lamp-placement';
+export * from './utilities';

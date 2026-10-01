@@ -2,6 +2,7 @@ import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import {
   doubleLine,
+  fixtureGlyphs,
   arrowGlyphs,
   doubleWall,
   labelCharacters,
@@ -254,6 +255,7 @@ describe('glyph set', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
+        ...fixtureGlyphs,
         ...arrowGlyphs,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,

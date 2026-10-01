@@ -1,5 +1,11 @@
 /** Static street hardware, independent of the life population and lighting texture. */
-import { bandVisibility } from '@atlas/shared';
+import {
+  packUtilityFixtures,
+  utilityViewportVisibility,
+  UtilityPart,
+  type UtilityFixture,
+} from './utilities';
+import { lampSupportKey, bandVisibility } from '@atlas/shared';
 import { MAX_GLYPHS, packGlyph, wallGlyph } from '../glyphs/select';
 import {
   EXTENT,
@@ -22,10 +28,11 @@ import { signalState } from './signals';
 
 type Point = [number, number];
 type FixtureBody = { base: Point; tip: Point; forward: Point; right: Point; seed: number };
-export type StreetFixture = FixtureBody &
+export type LegacyStreetFixture = FixtureBody &
   (
     | {
         kind: 'streetlight';
+        supportKey?: string;
         state: LampState;
         roadCenter: Point;
         site?: boolean;
@@ -34,7 +41,12 @@ export type StreetFixture = FixtureBody &
     | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
     | { kind: 'flagpole'; flag: 'PH' }
   );
-export type FixtureVisibility = { streetlights: boolean; trafficSignals: boolean };
+export type StreetFixture = UtilityFixture | LegacyStreetFixture;
+export type FixtureVisibility = {
+  streetlights: boolean;
+  trafficSignals: boolean;
+  utilities: boolean;
+};
 export type FixtureGrid = LightGrid & {
   cellWidth: number;
   cellHeight: number;
@@ -44,6 +56,7 @@ export type FixtureGrid = LightGrid & {
 
 /** Low six bits of G; the high two bits retain the glyph's ten-bit index. */
 export const FixturePart = {
+  ...UtilityPart,
   base: 1,
   arm: 2,
   housing: 3,
@@ -76,8 +89,8 @@ export const SIGNAL_LIGHT = {
 } as const;
 
 /** Retain tile ownership and the existing curb positions, directions, and phase seeds. */
-export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
-  const out: StreetFixture[] = [];
+export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixture[] {
+  const out: LegacyStreetFixture[] = [];
   const perMeter = 1 / metersPerUnit(tile);
   const scale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
   const body = (x: number, y: number, dx: number, dy: number, reach: number): FixtureBody => {
@@ -103,6 +116,7 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): StreetFixture[] {
     out.push({
       ...fixture,
       kind: 'streetlight',
+      ...(geo.lampSites?.[i / LAMP_STRIDE] !== 1 ? { supportKey: lampSupportKey(tile, x, y) } : {}),
       site: geo.lampSites?.[i / LAMP_STRIDE] === 1,
       style: geo.lampStyles?.[i / LAMP_STRIDE] === 1 ? 'lantern' : 'streetlight',
       state: geo.lamps[i + 2]! as LampState,
@@ -186,6 +200,7 @@ export type PackedFixtures = {
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
+  utilityCells: number[];
 };
 
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
@@ -217,8 +232,9 @@ export function packFixtures(
   out.fill(0);
   const packed: PackedFixtures = {
     texels: out,
-    visibility: { streetlights: false, trafficSignals: false },
+    visibility: { streetlights: false, trafficSignals: false, utilities: false },
     signals: [],
+    utilityCells: [],
   };
   // Signal lenses own their cells before streetlight arms. Only heads on the same authored
   // lantern post share hardware ownership, so their short brackets may meet at the base.
@@ -476,6 +492,38 @@ export function packFixtures(
       packed.signals.push(signal);
     }
   }
+  const sharedBases = new Map<string, number>();
+  for (const [owner, fixture] of ordered.entries()) {
+    if (fixture.kind !== 'streetlight' || !fixture.supportKey) continue;
+    const [x, y] = grid.toCell(...fixture.base);
+    const c = Math.floor(x),
+      r = Math.floor(y),
+      cell = r * grid.cols + c;
+    if (
+      c >= 0 &&
+      c < grid.cols &&
+      r >= 0 &&
+      r < grid.rows &&
+      owners[cell] === owner &&
+      (out[cell * 4 + 1]! & 63) === FixturePart.base
+    )
+      sharedBases.set(fixture.supportKey, cell);
+  }
+  packed.utilityCells = packUtilityFixtures(
+    out,
+    grid,
+    fixtures.filter(
+      (f): f is UtilityFixture => f.kind === 'utility-pole' || f.kind === 'utility-span',
+    ),
+    zoom,
+    glyphIndex,
+    sharedBases,
+  );
+  packed.visibility.utilities = utilityViewportVisibility(
+    packed.utilityCells,
+    grid.cols,
+    grid.visible,
+  );
   return packed;
 }
 

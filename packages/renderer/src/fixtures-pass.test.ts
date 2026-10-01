@@ -24,6 +24,18 @@ it('caches projection and rebuilds only for phase, geometry, grid, or atlas chan
   const placement = { ...placeGrid(view, view.cellDev, 100, 100), toCell: project };
   const fixtures: StreetFixture[] = [
     {
+      kind: 'utility-pole',
+      pole: {
+        id: 'p',
+        road: 'r',
+        component: 'r/0',
+        at: [30, 30],
+        heading: [1, 0],
+        normal: [0, 1],
+        transformer: false,
+      },
+    },
+    {
       kind: 'signal',
       base: [40.5, 40.5],
       tip: [41.5, 40.5],

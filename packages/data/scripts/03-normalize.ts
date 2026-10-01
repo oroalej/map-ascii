@@ -50,6 +50,8 @@ export const TILE_ZOOMS = { min: 6, max: 16 } as const;
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = {
+  /** Original road classification, independent of display tag precedence. */
+  highway?: string;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
@@ -259,6 +261,7 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
+    if (cls.startsWith('road_') && tags.highway) properties.highway = tags.highway;
     if (cls.startsWith('building')) {
       const frontage = (tags.frontage as Frontage | undefined) ?? frontageOf(tags);
       if (frontage) properties.frontage = frontage;

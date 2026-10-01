@@ -154,6 +154,14 @@ export const rainGlyphs = ['|', '\\', '/'] as const;
 export const streetlightGlyph = '*';
 /** Reuse line, casing, and lens glyphs for static street hardware. */
 export const fixtureGlyphs = [
+  '●',
+  '━',
+  '┃',
+  '·',
+  '▣',
+  '∞',
+  '╳',
+  '┼',
   '\u2584',
   '\u263c',
   '\u2605',
@@ -240,8 +248,8 @@ function makeTheme(background: number, c: Palette): Theme {
     accent: c.accent,
     fixturePaints:
       background > 0x7fffff
-        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f]
-        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87],
+        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f, 0x8d8a82, 0x34383e]
+        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87, 0xc9c5bb, 0x6f7782],
     vehiclePaints: c.vehiclePaints,
     awningPaints:
       background > 0x7fffff

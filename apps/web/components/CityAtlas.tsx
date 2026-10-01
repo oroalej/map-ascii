@@ -47,6 +47,7 @@ export type CityAtlasProps = {
   cityLife?: CityLifeConfig | undefined;
   /** Whether the city's street layer supplements mapped sidewalks. */
   sidewalksDerived?: boolean;
+  utilitiesDerived?: boolean;
   landmarks: readonly Landmark[];
   art: readonly LandmarkArt[];
   tours: readonly Tour[];
@@ -62,6 +63,7 @@ export function CityAtlas({
   timezone,
   cityLife,
   sidewalksDerived = true,
+  utilitiesDerived = false,
   landmarks,
   art,
   tours,
@@ -84,6 +86,7 @@ export function CityAtlas({
         climate={climate}
         timezone={timezone}
         cityLife={cityLife}
+        utilitiesDerived={utilitiesDerived}
       />
       <Hud
         city={slug}

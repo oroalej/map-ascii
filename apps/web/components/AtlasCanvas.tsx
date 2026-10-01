@@ -97,7 +97,9 @@ export function AtlasCanvas({
   climate,
   timezone,
   cityLife,
+  utilitiesDerived = false,
 }: {
+  utilitiesDerived?: boolean;
   slug: string;
   name: string;
   subdivisionLabel: string;
@@ -142,6 +144,7 @@ export function AtlasCanvas({
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
       quality,
+      utilities: { derive: utilitiesDerived },
       tilesUrl: `/tiles/${slug}.pmtiles`,
       theme: store.theme,
       cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
@@ -184,7 +187,7 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife]);
+  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife, utilitiesDerived]);
 
   if (!supported) {
     return (

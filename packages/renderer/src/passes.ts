@@ -42,6 +42,7 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
+import { utilityViewportVisibility } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
@@ -594,6 +595,13 @@ export function fixturePass(
     );
     uploadSignalLights(gl, targets, cache.lightTexels);
   }
+  const viewport = screenArea(view, placement.grid, view.cellDev);
+  cache.packed.visibility.utilities = utilityViewportVisibility(
+    cache.packed.utilityCells,
+    targets.cols,
+    (c, r) =>
+      c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
+  );
   return cache.packed.visibility;
 }
 

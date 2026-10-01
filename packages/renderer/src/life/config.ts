@@ -3,6 +3,7 @@
  * from which zoom. Everything is in real-world units, so motion reads the same at any zoom.
  */
 import {
+  LAMP_PLACEMENT,
   curveAt,
   PLACE_KINDS,
   placeShare,
@@ -503,16 +504,10 @@ export const CellBit = {
  */
 export const STREETLIGHT = {
   zoom: { min: 15 } as ZoomBand,
-  spacing: 30,
-  setback: 0.5,
-  minSide: 0.7,
+  ...LAMP_PLACEMENT,
   radius: 12,
   /** How far in over the road a lamp's arm reaches, m: its pool is centered there. */
   reach: 3,
-  median: 25,
-  minMedian: 2,
-  /** No two lamps stand nearer than this, m (at junctions and where roads meet). */
-  minGap: 12,
   dead: 0.1,
   flicker: 0.1,
 } as const;

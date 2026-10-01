@@ -5,7 +5,14 @@
  * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
-import { featureZoomBand, LIFE_SITE_KINDS, SignalLayout, type ZoomBand } from '@atlas/shared';
+import {
+  UtilityRecordSchema,
+  type UtilityRecord,
+  featureZoomBand,
+  LIFE_SITE_KINDS,
+  SignalLayout,
+  type ZoomBand,
+} from '@atlas/shared';
 import earcut from 'earcut';
 import {
   classId,
@@ -162,6 +169,8 @@ export type GroundGeometry = {
 };
 
 export type TileGeometry = GroundGeometry & {
+  /** Static hardware stays outside Life so it is never cloned to the simulation worker. */
+  utilities?: readonly UtilityRecord[];
   /**
    * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
@@ -689,8 +698,17 @@ export function buildTileGeometry(
   const walkingLines: { points: TilePoint[]; width: number; id: number }[] = [];
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
+  const utilities: UtilityRecord[] = [];
 
   for (const [name, layer] of Object.entries(layers)) {
+    if (name === 'utilities') {
+      if (tile && tile.z === maxZoom)
+        for (let i = 0; i < layer.length; i++) {
+          const value = layer.feature(i).properties.utility;
+          utilities.push(UtilityRecordSchema.parse(JSON.parse(String(value))));
+        }
+      continue;
+    }
     if (skippedLayers.has(name)) continue;
     const scale = EXTENT / layer.extent;
     for (let f = 0; f < layer.length; f++) {
@@ -1241,6 +1259,7 @@ export function buildTileGeometry(
     region: finish(regional),
     labels,
     life: life.finish(),
+    ...(utilities.length ? { utilities } : {}),
   };
 }
 

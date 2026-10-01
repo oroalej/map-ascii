@@ -1,3 +1,4 @@
+import { buildUtilityTiles } from './lib/utility-tiles';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
@@ -57,7 +58,10 @@ export const step: Step = {
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
-    tippecanoe(merged, pmtiles, [
+    const base = city.streets?.utilities?.derive
+      ? join(buildDir, `${city.slug}.base.pmtiles`)
+      : pmtiles;
+    tippecanoe(merged, base, [
       '-o',
       '{out}',
       '--force',
@@ -69,6 +73,9 @@ export const step: Step = {
       '--attribution=© OpenStreetMap contributors',
       '{in}',
     ]);
+
+    if (city.streets?.utilities?.derive)
+      await buildUtilityTiles(base, pmtiles, merged, geography.bounds, buildDir);
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));

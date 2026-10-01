@@ -1,3 +1,8 @@
+import type {
+  UtilityPole as UtilityPoleType,
+  UtilitySpan as UtilitySpanType,
+  UtilityRecord as UtilityRecordType,
+} from './utilities';
 import * as z from 'zod';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
@@ -966,6 +971,7 @@ export type Traffic = z.infer<typeof Traffic>;
  */
 /** Optional city policy for derived street details; explicit policy is sourced. */
 export const CityStreets = z.strictObject({
+  utilities: z.strictObject({ derive: z.boolean(), source: z.string().trim().min(1) }).optional(),
   directions: z
     .array(
       z.strictObject({
@@ -1121,6 +1127,7 @@ export type AtlasClass = z.infer<typeof AtlasClass>;
 
 /** Vector tile layers, one per class group. */
 export const TileLayer = z.enum([
+  'utilities',
   'water',
   'roads',
   'buildings',
@@ -1132,3 +1139,36 @@ export const TileLayer = z.enum([
   'events',
 ]);
 export type TileLayer = z.infer<typeof TileLayer>;
+
+/** Utility identities and coordinates survive MVT clipping as a validated JSON property. */
+const UtilityPosition = z.tuple([
+  z.number().min(-180).max(180),
+  z.number().min(-85.051129).max(85.051129),
+]);
+const UtilityDirection = z
+  .tuple([z.number(), z.number()])
+  .refine((v) => Math.abs(Math.hypot(...v) - 1) < 0.001, 'expected unit direction');
+export const UtilityPoleSchema = z.strictObject({
+  id: z.string().min(1),
+  road: z.string().min(1),
+  component: z.string().min(1),
+  at: UtilityPosition,
+  heading: UtilityDirection,
+  normal: UtilityDirection,
+  transformer: z.boolean(),
+  sharedLamp: z.string().min(1).optional(),
+  partner: z.string().min(1).optional(),
+}) satisfies z.ZodType<UtilityPoleType>;
+export const UtilitySpanSchema = z
+  .strictObject({
+    id: z.string().min(1),
+    kind: z.enum(['corridor', 'crossing', 'junction']),
+    from: UtilityPoleSchema,
+    to: UtilityPoleSchema,
+    seed: z.int().min(0).max(0xffffffff),
+  })
+  .refine((v) => v.from.id !== v.to.id, 'self span') satisfies z.ZodType<UtilitySpanType>;
+export const UtilityRecordSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ version: z.literal(1), kind: z.literal('pole'), pole: UtilityPoleSchema }),
+  z.strictObject({ version: z.literal(1), kind: z.literal('span'), span: UtilitySpanSchema }),
+]) satisfies z.ZodType<UtilityRecordType>;
