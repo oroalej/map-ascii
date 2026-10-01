@@ -1,0 +1,24 @@
+{
+  "naga": [
+    {
+      "slug": "plaza-rizal",
+      "at": [123.18490548, 13.6233368]
+    },
+    {
+      "slug": "plaza-quince-martires",
+      "at": [123.185878, 13.62447]
+    },
+    {
+      "slug": "ateneo-de-naga-university",
+      "at": [123.18444793, 13.63101558]
+    },
+    {
+      "slug": "naga-city-peoples-mall",
+      "at": [123.18351208, 13.62167633]
+    },
+    {
+      "slug": "penafrancia-basilica",
+      "at": [123.19981629, 13.632322009]
+    }
+  ]
+}

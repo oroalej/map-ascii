@@ -40,12 +40,21 @@ export function Attribution() {
       <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
         OpenStreetMap contributors
       </a>
-      {extra.map((credit) => (
-        <span key={credit} className={styles.extra}>
-          {' · '}
-          {credit}
-        </span>
-      ))}
+      {extra.length > 0 && (
+        <div
+          className={styles.sources}
+          role="region"
+          aria-label="Additional map sources"
+          tabIndex={0}
+        >
+          {extra.map((credit) => (
+            <span key={credit} className={styles.extra}>
+              {' · '}
+              {credit}
+            </span>
+          ))}
+        </div>
+      )}
     </footer>
   );
 }

@@ -1,8 +1,11 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import type { SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
+const samples = JSON.parse(
+  readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
+) as Record<string, { slug: string; at: number[] }[]>;
 
 // A narrow viewport keeps the legend collapsed and leaves room above attribution. Enable
 // animation only for the Life-on check, after the map has loaded.
@@ -13,12 +16,14 @@ for (const city of cities.filter((city) => city.hasMeta)) {
     `../../../packages/content/cities/${city.slug}/details/`,
     import.meta.url,
   );
-  const details = existsSync(directory)
-    ? readdirSync(directory)
-        .filter((file) => file.endsWith('.json'))
-        .map((file) => JSON.parse(readFileSync(new URL(file, directory), 'utf8')) as SiteDetail)
-    : [];
-  for (const detail of details.filter((detail) => detail.walks.length > 0)) {
+  // Five reviewed exposed surfaces cover the two legacy plazas, a kept campus canopy,
+  // a standing building's apron, and a separate canonical landmark target. Fixtures
+  // keep smoke coverage bounded as packs are added; geometry rules live in Vitest.
+  const cases = samples[city.slug] ?? [];
+  for (const sample of cases) {
+    const detail = JSON.parse(
+      readFileSync(new URL(`${sample.slug}.json`, directory), 'utf8'),
+    ) as SiteDetail;
     test(`${city.name}: ${detail.title} details retain area selection with Life off and on`, async ({
       page,
     }, info) => {
@@ -31,15 +36,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
           JSON.stringify({ enabled: false, time: 'noon', wind: 'calm' }),
         );
       });
-      // A raised surface has its own outline identity but must select the original plaza.
-      const terrace = detail.structures?.find((part) => part.material === 'paving');
-      const [lng, lat] = terrace
-        ? [
-            (terrace.ring[0]![0] + terrace.ring[2]![0]) / 2,
-            (terrace.ring[0]![1] + terrace.ring[2]![1]) / 2,
-          ]
-        : detail.walks[0]!.line[0]!;
-      await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=19`);
+      const [lng, lat] = sample.at;
+      await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=21`);
       await mapReady(page);
       const canvas = page.getByLabel(`Map of ${city.name}`);
       await expect
@@ -49,11 +47,14 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       expect(response.ok()).toBe(true);
       const meta: unknown = await response.json();
       if (!isCityMeta(meta)) throw new Error(`${city.slug}: invalid served city meta`);
-      // A pinned release can predate the detail pack. Check selection on both the original OSM
-      // area and its enriched replacement; detail attribution is required when that layer ships.
-      if (meta.attribution.includes(detail.credit)) {
-        await expect(page.locator('footer')).toContainText(detail.credit);
-      }
+      // CI's pinned release may predate new packs; locally rebuilt tiles must run every case.
+      if (process.env.ATLAS_REQUIRE_DETAILS === '1')
+        expect(meta.attribution).toContain(detail.credit);
+      test.skip(!meta.attribution.includes(detail.credit), 'Pinned tiles predate this detail pack');
+      await expect(page.locator('footer')).toContainText(detail.credit);
+      await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
+      const footer = await page.locator('footer').boundingBox();
+      expect(footer!.height).toBeLessThan(200);
       const box = (await canvas.boundingBox())!;
       const position = { x: box.width / 2, y: box.height / 2 };
       const life = page.getByRole('button', { name: 'Life', exact: true });
@@ -70,7 +71,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
           await canvas.click({ position });
           await expect
             .poll(() => new URL(page.url()).searchParams.get('sel'), { timeout: 1500 })
-            .toBe(detail.osm_id);
+            .toBe(detail.selection_osm_id ?? detail.osm_id);
         }).toPass({ timeout: 20_000 });
         await expect(page.getByRole('complementary', { name: 'Selected place' })).toBeVisible();
         await page.keyboard.press('Escape');
