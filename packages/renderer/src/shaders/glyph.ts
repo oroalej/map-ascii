@@ -21,6 +21,7 @@
 import { Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
+import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
@@ -80,6 +81,8 @@ uniform int u_labelColumns;
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
+uniform bool u_focus;
+uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
@@ -398,10 +401,56 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
     color = lampLit(daylit(u_fixturePaints[6]), rainLight);
   if (part == ${FixturePart.cable} || part == ${FixturePart.tangle})
     color = max(daylit(u_fixturePaints[7]), u_fixturePaints[7] * 0.5);
+  if (u_focus && !(part >= ${FixturePart.red} && part <= ${FixturePart.green}) && part != ${FixturePart.signal}) color *= ${float(FOCUS_DIM)};
   return mix(under, color, ink * fixture.a) + halo;
 }
 
 int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
+
+bool focusedClass(int cls) {
+  return cls > 0 && cls < 64 && (u_focusClasses[cls >> 5] & (1u << uint(cls & 31))) != 0u;
+}
+float focusPulse() { return u_shimmer ? 0.75 + 0.25 * sin(u_time * 3.0) : 1.0; }
+
+// Shared by agent compositing and halo sampling, including canopy edge surfaces.
+bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
+  int bits = int(life.b * 255.0 + 0.5) & ${LIFE_AGENT_MASK};
+  if (bits == 0) return false;
+  int lifeClass = int(life.g * 255.0 + 0.5) & 63;
+  bool nonBird = lifeClass != u_bird;
+  bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
+  int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
+  if (nonBird && (surface == u_vehicleOccluders.x || surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z)) return false;
+  bool grounds = bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0 &&
+    (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r == 0.0;
+  return (u_cellBits[surface] & bits) != 0 || grounds;
+}
+
+vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
+  if (!u_focus) return vec3(0.0);
+  float halo = 0.0;
+  ivec2 size = textureSize(u_glyphs, 0);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    if (x == 0 && y == 0) continue;
+    ivec2 neighbor = cell + ivec2(x, y);
+    if (any(lessThan(neighbor, ivec2(0))) || any(greaterThanEqual(neighbor, size))) continue;
+    vec4 g = texelFetch(u_glyphs, neighbor, 0);
+    int k = int(g.g * 255.0 + 0.5) & 63;
+    bool match = focusedClass(k);
+    vec4 life = texelFetch(u_life, neighbor, 0);
+    if ((int(life.b * 255.0 + 0.5) & ${LIFE_FOCUS_BIT}) != 0) {
+      vec2 local = clamp(grid - vec2(neighbor) * u_cell, vec2(0.0), u_cell - 0.001);
+      ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
+      ivec2 sampleAt = neighbor * sub + clamp(ivec2(local / u_cell * vec2(sub)), ivec2(0), sub - 1);
+      match = match || (lifeAllowed(life, k, neighbor, sampleAt) && lifeAllowed(life, cls, cell, subAt));
+    }
+    if (!match) continue;
+    vec2 delta = max(max(vec2(neighbor) * u_cell - grid, grid - vec2(neighbor + 1) * u_cell), vec2(0.0));
+    float distance = length(delta / u_cell);
+    halo = max(halo, 1.0 - smoothstep(0.0, 1.0, distance));
+  }
+  return u_accent * halo * 0.18 * focusPulse();
+}
 
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
@@ -478,6 +527,9 @@ void main() {
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
   back += glow;
+  vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
+  if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
+  back += focusGlow;
   vec4 fixture = texelFetch(u_fixtures, cell, 0);
   bool fixtureAllowed = fixtureSurface(cls, cell);
   vec3 signalHalo = signalGlow(grid, cell, night, fixtureAllowed);
@@ -492,18 +544,7 @@ void main() {
     back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
   }
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
-  int lifeSurface = cls;
-  bool nonBird = lifeBit != 0 && lifeClass != u_bird;
-  bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
-  if (sampleSurface) {
-    lifeSurface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
-  }
-  // Foliage hides only covered pixels; agents continue underneath, and birds stay above it.
-  bool behindTrees = nonBird &&
-    (lifeSurface == u_vehicleOccluders.x || lifeSurface == u_vehicleOccluders.y || lifeSurface == u_vehicleOccluders.z);
-  bool onGrounds = lifeBit == ${CellBit.person} && (u_cellBits[lifeSurface] & ${CellBit.grounds}) != 0 &&
-    (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r == 0.0;
-  if (lifeBit != 0 && !behindTrees && ((u_cellBits[lifeSurface] & lifeBit) != 0 || onGrounds)) {
+  if (lifeAllowed(life, cls, cell, subAt)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
@@ -528,6 +569,10 @@ void main() {
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
+    if (u_focus) {
+      color = (lifeFlags & ${LIFE_FOCUS_BIT}) != 0 ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
+      if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
+    }
     o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
@@ -600,6 +645,10 @@ void main() {
   // shape reads as one area with a crisp rim.
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
+  if (u_focus) {
+    color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
+    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(u_colors[cls])) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(u_colors[cls])) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
+  }
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;

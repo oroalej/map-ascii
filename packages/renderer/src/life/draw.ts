@@ -4,6 +4,7 @@
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
 import { classId } from '../classes';
+import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
@@ -87,13 +88,40 @@ export type LifeGlyphs = { parts: Uint16Array };
  * whether one of them was already another ground agent's. A whole ground agent is omitted if
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
-let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
+let journal:
+  { before: Map<number, [number, number, number, number, number]>; denied: boolean } | undefined;
+let drawingOwners: Uint32Array | undefined;
+let drawingOwner = 0;
+let drawingFocus = 0;
+
+export type LifePackMetadata = { owners?: Uint32Array; focus?: ReadonlySet<LifeFocus> };
+
+/** Every complete texel write also replaces its frame-local owner. */
+function writeCell(
+  out: Uint8Array,
+  at: number,
+  glyph: number,
+  cls: number,
+  bits: number,
+  byte: number,
+) {
+  [out[at], out[at + 1]] = packGlyph(glyph, cls);
+  out[at + 2] = bits | drawingFocus;
+  out[at + 3] = byte;
+  if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
+}
 /** Cells (texel offset / 4) held by ground agents already drawn this frame. */
 let groundCells = new Uint8Array(0);
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (!journal || journal.before.has(at)) return;
   if (groundCells[at / 4]) journal.denied = true;
-  journal.before.set(at, Array.from(out.subarray(at, at + 4)));
+  journal.before.set(at, [
+    out[at]!,
+    out[at + 1]!,
+    out[at + 2]!,
+    out[at + 3]!,
+    drawingOwners?.[at / 4] ?? 0,
+  ]);
 }
 /** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
 export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
@@ -121,35 +149,58 @@ export function packLife(
   glyphIndex: (glyph: string) => number,
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
+  metadata: LifePackMetadata = {},
 ): number {
-  out.fill(0);
-  if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
   const cells = grid.cols * grid.rows;
-  if (groundCells.length < cells) groundCells = new Uint8Array(cells);
-  else groundCells.fill(0, 0, cells);
-  let drawn = 0;
-  // Parked cars reserve their cells before passing traffic or walkers.
-  for (const parked of [true, false])
-    for (const agent of agents) {
-      if (!!agent.parked !== parked) continue;
-      const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
-      journal = ground ? { before: new Map(), denied: false } : undefined;
-      const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
-      if (journal && grid.allowsGroundCell)
-        for (const at of journal.before.keys())
-          if (!grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))) {
-            journal.denied = true;
-            break;
-          }
-      if (!journal) drawn += n;
-      else if (journal.denied) for (const [at, previous] of journal.before) out.set(previous, at);
-      else {
-        drawn += n;
-        for (const at of journal.before.keys()) groundCells[at / 4] = 1;
-      }
-    }
+  if (metadata.owners && metadata.owners.length !== cells)
+    throw new RangeError('Life owners must match the cell grid');
+  out.fill(0);
+  metadata.owners?.fill(0);
+  drawingOwners = metadata.owners;
+  drawingOwner = 0;
+  drawingFocus = 0;
   journal = undefined;
-  return drawn;
+  try {
+    if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
+    if (groundCells.length < cells) groundCells = new Uint8Array(cells);
+    else groundCells.fill(0, 0, cells);
+    let drawn = 0;
+    // Parked cars reserve their cells before passing traffic or walkers.
+    for (const parked of [true, false])
+      for (let index = 0; index < agents.length; index++) {
+        const agent = agents[index]!;
+        if (!!agent.parked !== parked) continue;
+        drawingOwner = index + 1;
+        drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
+        const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
+        journal = ground ? { before: new Map(), denied: false } : undefined;
+        const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+        if (journal && grid.allowsGroundCell)
+          for (const at of journal.before.keys())
+            if (
+              !grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
+            ) {
+              journal.denied = true;
+              break;
+            }
+        if (!journal) drawn += n;
+        else if (journal.denied)
+          for (const [at, previous] of journal.before) {
+            for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
+            if (drawingOwners) drawingOwners[at / 4] = previous[4];
+          }
+        else {
+          drawn += n;
+          for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+        }
+      }
+    return drawn;
+  } finally {
+    journal = undefined;
+    drawingOwners = undefined;
+    drawingOwner = 0;
+    drawingFocus = 0;
+  }
 }
 
 /** Draw one agent for `packLife`; returns how many landed on the grid (each person in a group). */
@@ -230,9 +281,14 @@ function drawAgent(
   if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  [out[at], out[at + 1]] = packGlyph(index, classId(cls));
-  out[at + 2] = agentBit[agent.kind];
-  out[at + 3] = spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255;
+  writeCell(
+    out,
+    at,
+    index,
+    classId(cls),
+    agentBit[agent.kind],
+    spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
+  );
   return people + 1;
 }
 
@@ -307,9 +363,7 @@ function drawPeople(
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return false;
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
-    [out[at], out[at + 1]] = packGlyph(index, cls);
-    out[at + 2] = bits;
-    out[at + 3] = byte;
+    writeCell(out, at, index, cls, bits, byte);
     return true;
   };
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
@@ -485,9 +539,7 @@ function stampMaster(
       if (index <= 0 || index > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      [out[at], out[at + 1]] = packGlyph(index, cls);
-      out[at + 2] = bits;
-      out[at + 3] = byte;
+      writeCell(out, at, index, cls, bits, byte);
       any = true;
     }
   }
@@ -555,9 +607,7 @@ function drawBird(
   const index = glyph ? glyphIndex(glyph) : 0;
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
-  [out[at], out[at + 1]] = packGlyph(index, cls);
-  out[at + 2] = bits;
-  out[at + 3] = birdByte(species, false, fit === 'cell');
+  writeCell(out, at, index, cls, bits, birdByte(species, false, fit === 'cell'));
   return true;
 }
 
@@ -653,10 +703,8 @@ function drawPet(
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  [out[at], out[at + 1]] = packGlyph(index, cls);
-  out[at + 2] = bits;
   // Drawn like a canopy: the full ink its paint, the tone ink darker (shaders/glyph.ts).
-  out[at + 3] = personByte(paint, PersonPart.canopy);
+  writeCell(out, at, index, cls, bits, personByte(paint, PersonPart.canopy));
   return true;
 }
 
@@ -716,9 +764,7 @@ function stamp(
       if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      [out[at], out[at + 1]] = packGlyph(glyph, cls);
-      out[at + 2] = bits;
-      out[at + 3] = byte;
+      writeCell(out, at, glyph, cls, bits, byte);
       if (lamps && (indicator!.side === 'left' ? right < 0 : right > 0))
         for (const lamp of lamps) {
           // Keep front and rear lamps on their own half, even when viewport clipping hides one.
@@ -803,9 +849,14 @@ function drawLine(
     const tip = line.tip && k === marks.length - 1 ? line.tip : undefined;
     const index = tip ? glyphIndex(tip.glyph) : glyph;
     if (index <= 0 || index > MAX_GLYPHS) return;
-    [out[at], out[at + 1]] = packGlyph(index, cls);
-    out[at + 2] = CellBit.boat;
-    out[at + 3] = vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body);
+    writeCell(
+      out,
+      at,
+      index,
+      cls,
+      CellBit.boat,
+      vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body),
+    );
   });
   return marks.length > 0;
 }

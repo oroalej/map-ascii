@@ -5,6 +5,8 @@
  * on the grid every frame.
  */
 import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+import { normalizeFocus, type LifeFocus } from './focus';
+import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
 import {
@@ -38,6 +40,7 @@ import {
   resetOverlay,
   placeLabels,
   rotatedLabelVertices,
+  overlayCoversPoint,
   type LabelCandidate,
   type Overlay,
 } from './labels';
@@ -137,6 +140,25 @@ function overlayBuffers(targets: CellTargets) {
   }
   resetOverlay(buffers.overlay);
   return buffers;
+}
+
+export function labelsCoverPoint(
+  targets: CellTargets,
+  point: readonly [number, number],
+  dpr: number,
+  grid: PickingGrid,
+): boolean {
+  const overlay = overlays.get(targets)?.overlay;
+  return (
+    !!overlay &&
+    overlayCoversPoint(
+      overlay,
+      point[0] * dpr + grid.shiftX,
+      point[1] * dpr + grid.shiftY,
+      grid.cellWidth,
+      grid.cellHeight,
+    )
+  );
 }
 
 /**
@@ -434,17 +456,32 @@ function sunUniforms(view: View, sun: Sun | null) {
  * alone, kept while the grid stands still (beams go over a copy each frame). Kept per targets,
  * so they are the grid's size and never shared between two maps.
  */
-type Texels = { life: Uint8Array; light: Uint8Array; lamps: Uint8Array | null };
+type Texels = {
+  life: Uint8Array;
+  owners: Uint32Array;
+  revision: number;
+  light: Uint8Array;
+  lamps: Uint8Array | null;
+};
 const texelsOf = new WeakMap<CellTargets, Texels>();
 const texels = (targets: CellTargets): Texels => {
   let found = texelsOf.get(targets);
   if (!found) {
     const size = targets.cols * targets.rows * 4;
-    found = { life: new Uint8Array(size), light: new Uint8Array(size), lamps: null };
+    found = {
+      life: new Uint8Array(size),
+      owners: new Uint32Array(size / 4),
+      revision: 0,
+      light: new Uint8Array(size),
+      lamps: null,
+    };
     texelsOf.set(targets, found);
   }
   return found;
 };
+
+/** The CPU raster belonging to these targets, without allocating or resetting it. */
+export const lifeRaster = (targets: CellTargets) => texelsOf.get(targets) ?? null;
 
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
@@ -461,9 +498,11 @@ export function lifePass(
   sun?: Sun | null,
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
+  focus?: ReadonlySet<LifeFocus>,
 ): number {
   const { cols, rows } = targets;
-  const lifeTexels = texels(targets).life;
+  const buffers = texels(targets);
+  const lifeTexels = buffers.life;
   const packStart = profiler?.time();
   const drawn = packLife(
     lifeTexels,
@@ -481,7 +520,9 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
+    { owners: buffers.owners, focus },
   );
+  buffers.revision++;
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
@@ -671,6 +712,7 @@ export function glyphPass(
   lampShow = 0,
   moon = 0,
   sun: Sun | null = null,
+  focus = normalizeFocus(null),
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -699,6 +741,8 @@ export function glyphPass(
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
+    u_focus: focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0,
+    u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,

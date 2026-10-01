@@ -2,9 +2,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas } from './index';
 import { LifeWorld } from './life/simulate';
-import { cellPass, fixturePass, glyphPass, lifePass, lightPass, selectPass } from './passes';
+import {
+  cellPass,
+  fixturePass,
+  glyphPass,
+  lifePass,
+  lifeRaster,
+  lightPass,
+  selectPass,
+} from './passes';
+import { classId } from './classes';
+import type { InputIntents } from './input';
+const input = vi.hoisted(() => ({ intents: undefined as InputIntents | undefined }));
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
+import type * as PickingModule from './picking';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { LifeBuilder } from './life/geometry';
 import type { TileMesh } from './gpu';
@@ -24,7 +36,7 @@ vi.mock('./gpu', () => ({
     rows: number,
     labelCols: number,
     labelRows: number,
-  ) => ({ cols, rows, labelCols, labelRows }),
+  ) => ({ cols, rows, labelCols, labelRows, glyphFbo: 'glyph', sub: { fbo: 'sub' } }),
   deleteCellTargets: vi.fn(),
 }));
 vi.mock('./passes', async (load) => ({
@@ -35,6 +47,7 @@ vi.mock('./passes', async (load) => ({
   glyphPass: vi.fn(),
   overlayPass: () => [],
   lifePass: vi.fn(() => 0),
+  lifeRaster: vi.fn(() => null),
   lightPass: vi.fn(),
   fixturePass: vi.fn(() => ({ streetlights: false, trafficSignals: false, utilities: false })),
 }));
@@ -55,19 +68,51 @@ vi.mock('./tile-cache', () => ({
   },
 }));
 vi.mock('./readback', () => ({
+  MAX_PENDING_READS: 8,
   Readback: class {
-    poll() {}
-    reset() {}
-    request() {}
+    pending: (() => void)[] = [];
+    get size() {
+      return this.pending.length;
+    }
+    poll() {
+      this.pending.splice(0).forEach((done) => done());
+    }
+    reset() {
+      this.pending.length = 0;
+    }
+    request(
+      fbo: WebGLFramebuffer,
+      attachment: number,
+      _rect: unknown,
+      done: (bytes: Uint8Array) => void,
+    ) {
+      this.pending.push(() =>
+        done(
+          new Uint8Array(
+            (fbo as unknown) === 'glyph'
+              ? [0, classId('road_mid'), 0, 0]
+              : [attachment === 100 ? classId('road_mid') : 0, 0, 0, 0],
+          ),
+        ),
+      );
+    }
   },
 }));
-vi.mock('./picking', () => ({
+vi.mock('./picking', async (load) => ({
+  ...(await load<typeof PickingModule>()),
   MAX_HIGHLIGHT: 64,
   Picker: class {
     issue() {}
+    hover() {}
+    cancelHover() {}
   },
 }));
-vi.mock('./input', () => ({ attachInput: () => () => {} }));
+vi.mock('./input', () => ({
+  attachInput: (_canvas: HTMLCanvasElement, intents: InputIntents) => {
+    input.intents = intents;
+    return () => {};
+  },
+}));
 vi.mock('./pacing', async (load) => ({
   ...(await load<typeof PacingModule>()),
   watchVisibility: () => ({ watched: () => true, detach() {} }),
@@ -86,6 +131,8 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(lifeRaster).mockReturnValue(null);
+    vi.mocked(lifePass).mockReset().mockReturnValue(0);
     time = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => time);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -103,6 +150,7 @@ describe('live motion preference', () => {
     canvas = document.createElement('canvas');
     Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
     gl = {
+      COLOR_ATTACHMENT0: 100,
       getExtension: defaultGetExtension,
       getParameter: vi.fn(),
     } as unknown as WebGL2RenderingContext;
@@ -119,6 +167,79 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('emits validated simulated hover and clears it on exit, Life off, reduced motion and context loss', () => {
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      for (let i = 0; i < life.length; i += 4) {
+        life[i + 1] = classId('life_person');
+        life[i + 2] = 2;
+      }
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(targets.cols * targets.rows).fill(1),
+        revision: time,
+        light: life,
+        lamps: null,
+      });
+      return 1;
+    });
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    draw(100);
+    input.intents!.hover([2, 3]);
+    draw(150);
+    draw(200);
+    expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+    expect(canvas.style.cursor).toBe('');
+    input.intents!.hover(null);
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    input.intents!.hover([2, 3]);
+    draw(250);
+    draw(300);
+    atlas.setLife({ enabled: false });
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    atlas.setLife({ enabled: true });
+    draw(350);
+    draw(400);
+    atlas.setReducedMotion(true);
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    atlas.setReducedMotion(false);
+    draw(450);
+    draw(500);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+  });
+
+  it('copies focus inputs, avoids identical redraws and preserves focus across context restore', () => {
+    atlas.setReducedMotion(true);
+    draw(100);
+    const descriptor = { classes: ['road_mid' as const], life: ['vendors' as const] };
+    atlas.setFocus(descriptor);
+    descriptor.life.length = 0;
+    draw(200);
+    const count = vi.mocked(glyphPass).mock.calls.length;
+    const focused = vi.mocked(glyphPass).mock.calls.at(-1)![15]!;
+    expect([...focused.life]).toEqual(['vendors']);
+    atlas.setFocus({ classes: ['road_mid'], life: ['vendors'] });
+    draw(250);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(count);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(300);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![15]!.key).toBe(focused.key);
+    atlas.setFocus(null);
+    draw(350);
+    expect(
+      vi
+        .mocked(glyphPass)
+        .mock.calls.at(-1)![15]!
+        .mask.every((word) => word === 0),
+    ).toBe(true);
   });
 
   it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', () => {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
 import { packLife } from '../../../packages/renderer/src/life/draw';
@@ -120,6 +121,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
               else if (info.type === gl.FLOAT_VEC3) gl.uniform3fv(loc, a);
               else if (info.type === gl.INT_VEC2) gl.uniform2iv(loc, a);
               else if (info.type === gl.INT_VEC3) gl.uniform3iv(loc, a);
+              else if (info.type === gl.UNSIGNED_INT_VEC2) gl.uniform2uiv(loc, a);
               else gl.uniform1iv(loc, a);
             }
           }
@@ -146,6 +148,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           u_labelAtlas: atlas,
           u_labelColor: [0, 0, 1],
           u_background: input.background,
+          u_accent: [0.2, 0.8, 1],
           u_colors: colors,
           u_fillColors: colors,
           u_cellBits: input.bits,
@@ -197,7 +200,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
           overlayTex = texture(n, 1, overlay);
-        const render = (daylight: number) => {
+        const render = (daylight: number, focused = false, mapFocus = false) => {
           gl.viewport(0, 0, canvas.width, canvas.height);
           uniforms({
             ...common,
@@ -207,6 +210,8 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
             u_subClass: subTex,
             u_overlay: overlayTex,
             u_daylight: daylight,
+            u_focus: focused ? 1 : 0,
+            u_focusClasses: mapFocus ? [(1 << input.roof) >>> 0, 0] : [0, 0],
           });
           gl.drawArrays(gl.TRIANGLES, 0, 3);
           const pixels = new Uint8Array(canvas.width * canvas.height * 4);
@@ -220,6 +225,15 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         };
         const day = render(1),
           night = render(0);
+        // Focus metadata must never become a surface permission or recolour amber indicators.
+        for (let x = 0; x < n; x++) life[x * 4 + 2]! |= input.focusBit;
+        gl.bindTexture(gl.TEXTURE_2D, lifeTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
+        const focusedDay = render(1, true),
+          focusedNight = render(0, true);
+        const mapFocused = render(1, true, true);
+        // Strip focus metadata, keeping ordinary agent permissions and indicator flags.
+        for (let x = 0; x < n; x++) life[x * 4 + 2]! &= ~input.focusBit;
         life[2] = input.vehicleBit;
         gl.bindTexture(gl.TEXTURE_2D, lifeTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
@@ -244,7 +258,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         });
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off };
+        return { day, night, off, focusedDay, focusedNight, mapFocused };
       },
       {
         vertex: fullscreenVertex,
@@ -272,13 +286,14 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         occluders: [classId('tree'), classId('tree_crown'), classId('trees')],
         vehicleBit: CellBit.vehicle | CellBit.person,
         indicator: TURN_SIGNAL_BIT,
+        focusBit: LIFE_FOCUS_BIT,
         body: VehiclePart.body,
         head: VehiclePart.headlight,
         tail: VehiclePart.taillight,
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
-    for (const frame of [result.day, result.night]) {
+    for (const frame of [result.day, result.night, result.focusedDay, result.focusedNight]) {
       for (const x of [0, 2, 6])
         frame.cells[x]!.forEach((c, i) => expect(Math.abs(c - amber[i]!)).toBeLessThanOrEqual(1));
       for (const x of [1, 3, 4, 5, 7, 8, 9, 10, 11]) expect(frame.cells[x]).not.toEqual(amber);
@@ -286,6 +301,9 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
       expect(frame.cells[7]).toEqual([0, 0, 255]);
     }
     expect(result.off).toEqual(result.day.cells[1]);
+    expect(result.focusedDay.cells[1]).toEqual([51, 204, 255]);
+    expect(result.focusedDay.cells[3]).toEqual(result.day.cells[3]!.map((c) => Math.round(c / 2)));
+    expect(result.mapFocused.cells[3]).toEqual([51, 204, 255]);
     await page
       .locator('canvas')
       .screenshot({ path: testInfo.outputPath(`turn-signals-${name}.png`) });
