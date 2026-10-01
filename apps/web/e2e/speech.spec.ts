@@ -14,20 +14,29 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
       'utf8',
     ),
   ) as DialogueCatalog;
-  const meta = JSON.parse(
-    readFileSync(new URL('../public/tiles/naga.meta.json', import.meta.url), 'utf8'),
-  ) as { defaultCamera: { lng: number; lat: number } };
-  await page.setViewportSize({ width: 800, height: 560 });
+  const search = JSON.parse(
+    readFileSync(new URL('../public/tiles/naga.search-index.json', import.meta.url), 'utf8'),
+  ) as { entries: { name: string; lng: number; lat: number }[] };
+  const center = search.entries.find((entry) => entry.name === 'Plaza Rizal')!;
+  await page.setViewportSize({ width: 640, height: 640 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   // Hold real actors after admission and script the cue clock so UI assertions do not race
   // movement. Real tiles, packing, GPU visibility and controls stay live; unit tests prove timing.
   await page.addInitScript(() => {
-    const scope = window as unknown as { speechFixture: { exchangeId: string; line: number } };
+    localStorage.setItem(
+      'atlas.life',
+      JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
+    );
+    localStorage.setItem('atlas.quality', JSON.stringify('high'));
+    const scope = window as unknown as {
+      speechFixture: { exchangeId: string; line: number };
+      holdSpeakers: boolean;
+    };
     scope.speechFixture = { exchangeId: 'greet-afternoon', line: 0 };
+    scope.holdSpeakers = false;
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       private wrapped = new Map<EventListenerOrEventListenerObject, EventListener>();
-      private frames = 0;
       override postMessage(
         message: unknown,
         transfer: Transferable[] | StructuredSerializeOptions = [],
@@ -36,7 +45,7 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
           path?: string[];
           argumentList?: { value?: { step?: { dt: number } } }[];
         };
-        if (payload.path?.[0] === 'frame' && ++this.frames > 6) {
+        if (payload.path?.[0] === 'frame' && scope.holdSpeakers) {
           const step = payload.argumentList?.[0]?.value?.step;
           if (step) step.dt = 0;
         }
@@ -79,14 +88,16 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
       }
     };
   });
-  await page.goto(
-    `/${city.slug}?lng=${meta.defaultCamera.lng}&lat=${meta.defaultCamera.lat}&z=19.5`,
-  );
+  await page.goto(`/${city.slug}?lng=${center.lng}&lat=${center.lat}&z=19.5`);
   await mapReady(page);
   await page.locator('summary').filter({ hasText: 'Legend' }).click();
-  const bubbles = page.locator('[data-speech-bubble]:visible');
+  const bubbles = page.locator('[data-speech-bubble]');
   const native = bubbles.locator(`[lang="${catalog.native.code}"]`).first();
   await expect(native).toHaveText('Marhay na hapon!', { timeout: 30_000 });
+  await expect(bubbles.locator(`[lang="${catalog.native.code}"]:visible`).first()).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { holdSpeakers: boolean }).holdSpeakers = true;
+  });
   const selector = page.getByRole('combobox', { name: 'Speech translation' });
   await selector.selectOption('en');
   await expect(bubbles.locator('[lang="en"]').first()).toHaveText('Good afternoon!');

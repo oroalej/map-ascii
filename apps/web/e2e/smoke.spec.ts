@@ -84,7 +84,9 @@ for (const city of cities) {
         const box = page.getByRole('combobox', { name: 'Search places' });
         await expect(box).toBeFocused();
         await box.fill(city.smokeLandmark);
-        await expect(page.getByRole('option').first()).toContainText(city.smokeLandmark);
+        await expect(page.getByRole('listbox').getByRole('option').first()).toContainText(
+          city.smokeLandmark,
+        );
         await box.press('Enter');
         const panel = page.getByRole('complementary', { name: 'Selected place' });
         await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
