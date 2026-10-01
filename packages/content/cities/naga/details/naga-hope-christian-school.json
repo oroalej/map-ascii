@@ -15,7 +15,8 @@
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
     },
     {
       "id": "pavilion-roof",
@@ -67,6 +68,10 @@
       "title": "Independent facility reference",
       "url": "https://www.nagahope.edu.ph/facilities.php",
       "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. A small schematic pavilion is placed in the open campus near the frontage; exact position and dimensions require a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ]
 }

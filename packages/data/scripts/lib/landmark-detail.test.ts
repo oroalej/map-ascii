@@ -145,6 +145,26 @@ describe('new landmark detail geometry (offline)', () => {
       for (const walk of detail.walks) check(seatingFootprint(walk.line, walk.width_m), walk.id);
       for (const seat of detail.seating)
         check(seatingFootprint(seat.line, seat.width_m, seat.bench_spans), seat.id, true);
+      for (const part of detail.structures.filter((part) => part.ground_override)) {
+        const shape: MultiPolygon = { type: 'MultiPolygon', coordinates: [[part.ring]] };
+        // Benches can stand on paving; standing footprints and carriageways cannot be erased.
+        for (const f of source) {
+          if (!bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number])) continue;
+          const obstacle =
+            f.geometry.type === 'Polygon' &&
+            f.properties.class.startsWith('building') &&
+            (f.properties.height ?? 0) > 0
+              ? f.geometry
+              : f.geometry.type === 'LineString' && f.properties.class.startsWith('road')
+                ? seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)
+                : undefined;
+          if (obstacle)
+            expect(
+              intersection(coordinates(shape), coordinates(obstacle)),
+              `${part.id} / ${f.properties.id}`,
+            ).toEqual([]);
+        }
+      }
       const cover = covers.find((c) => c.id === `landcover/${detail.id.slice(7)}`);
       // Existing Cathedral/USI landcover includes frontage beyond the OSM grounds. It is
       // unchanged here; only new landcover must satisfy this stricter site containment check.
@@ -166,4 +186,76 @@ describe('new landmark detail geometry (offline)', () => {
         expect(f.properties.detail_parent).toBe(target);
     }, 10000);
   }
+});
+
+describe('source-backed landmark facilities', () => {
+  it('retains the mapped Civic Center pool water while placing the rim and deck outside it', () => {
+    const detail = details.find((d) => d.id === 'detail/naga-city-civic-center')!;
+    const pool = source.find((f) => f.properties.id === 'osm:way/222976574')!;
+    expect(pool.properties.class).toBe('water_area');
+    if (pool.geometry.type !== 'Polygon') throw Error('expected the mapped pool polygon');
+    expect(difference(coordinates(pool.geometry), coordinates(areaFor(detail)))).toEqual([]);
+    const rim = detail.structures.filter((s) => s.id.startsWith('pool-rim-'));
+    const deck = detail.structures.filter((s) => s.id.startsWith('pool-deck-'));
+    expect(rim.length).toBeGreaterThan(0);
+    expect(deck.length).toBeGreaterThan(0);
+    for (const part of [...rim, ...deck])
+      expect(intersection([part.ring], coordinates(pool.geometry)), part.id).toEqual([]);
+    for (const part of deck) expect(part.ground_override, part.id).toBe(true);
+    const result = mergeSiteDetails(source, [detail]);
+    expect(result.features.find((f) => f.properties.id === pool.properties.id)).toEqual(pool);
+    for (const part of result.features.filter((f) => f.properties.id.includes('/structure-pool-')))
+      expect(part.properties.detail_parent).toBe(detail.osm_id);
+  });
+
+  it('fits the three Porta Mariae openings to its mapped footprint and retains the distinct arch', () => {
+    const detail = details.find((d) => d.id === 'detail/cathedral-grounds')!;
+    const gate = source.find((f) => f.properties.id === 'osm:way/358807129')!.geometry as Polygon;
+    const piers = detail.structures.filter((s) => s.id.startsWith('porta-pier-'));
+    expect(piers).toHaveLength(4);
+    for (const part of [...piers, detail.structures.find((s) => s.id === 'porta-span')!])
+      expect(difference([part.ring], coordinates(gate)), part.id).toEqual([]);
+    for (let i = 0; i < piers.length - 1; i++)
+      expect(intersection([piers[i]!.ring], [piers[i + 1]!.ring])).toEqual([]);
+    const result = mergeSiteDetails(source, [detail]);
+    for (const id of ['osm:way/358807129', 'osm:way/358808865'])
+      expect(result.features.find((f) => f.properties.id === id)).toEqual(
+        source.find((f) => f.properties.id === id),
+      );
+  });
+
+  it('uses mapped perimeter routes for Ateneo canopies and preserves its mapped facilities', () => {
+    const detail = details.find((d) => d.id === 'detail/ateneo-de-naga-university')!;
+    const area = areaFor(detail);
+    const routes = source.filter(
+      (f) => f.properties.class === 'path' && f.geometry.type === 'LineString',
+    );
+    expect(detail.structures.every((s) => s.overhead && s.material === 'roof')).toBe(true);
+    for (const part of detail.structures) {
+      const route = routes.find((f) =>
+        part.id.startsWith(`covered-walk-${f.properties.id.split('/')[1]}-`),
+      );
+      expect(route, part.id).toBeDefined();
+      if (route!.geometry.type !== 'LineString') throw Error('expected a mapped footway');
+      expect(
+        difference(
+          [part.ring],
+          // Allow centimetres for curved-corner simplification and coordinate quantization.
+          coordinates(seatingFootprint(route!.geometry.coordinates as LngLat[], 2.2)),
+        ),
+        part.id,
+      ).toEqual([]);
+    }
+    const retained = source.filter(
+      (f) =>
+        (['parking', 'pitch', 'park'].includes(f.properties.class) &&
+          f.geometry.type === 'Polygon' &&
+          intersection(coordinates(f.geometry), coordinates(area)).length) ||
+        ['osm:way/222404483', 'osm:way/222405530', 'osm:way/222405532'].includes(f.properties.id),
+    );
+    expect(retained.filter((f) => f.properties.class === 'parking').length).toBeGreaterThan(0);
+    const result = mergeSiteDetails(source, [detail]);
+    for (const f of retained)
+      expect(result.features.find((v) => v.properties.id === f.properties.id)).toEqual(f);
+  });
 });

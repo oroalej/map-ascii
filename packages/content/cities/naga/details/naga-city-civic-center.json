@@ -5,17 +5,139 @@
   "surface": "paving",
   "structures": [
     {
-      "id": "museum-forecourt",
+      "id": "museum-forecourt-1",
       "ring": [
-        [123.1971266, 13.62841542],
+        [123.19719409, 13.62850308],
+        [123.19719686, 13.62847024],
+        [123.19721905, 13.6284217],
+        [123.19722594, 13.62841542],
         [123.19723752, 13.62841542],
         [123.19723752, 13.62851424],
-        [123.1971266, 13.62851424],
-        [123.1971266, 13.62841542]
+        [123.19719535, 13.62851424],
+        [123.19719409, 13.62850308]
       ],
       "height_m": 0.15,
       "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pool-rim-0-0",
+      "ring": [
+        [123.19695359496953, 13.628714210417373],
+        [123.19709559867553, 13.628705819772067],
+        [123.1970917, 13.6287101],
+        [123.196958, 13.628718],
+        [123.19695359496953, 13.628714210417373]
+      ],
+      "height_m": 0.25,
+      "material": "stone",
       "overhead": false
+    },
+    {
+      "id": "pool-deck-0-0",
+      "ring": [
+        [123.1969335276085, 13.628696946763183],
+        [123.1971133593085, 13.628686320955927],
+        [123.19709559867553, 13.628705819772067],
+        [123.19695359496953, 13.628714210417373],
+        [123.1969335276085, 13.628696946763183]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pool-rim-1-0",
+      "ring": [
+        [123.19695359496953, 13.628714210417373],
+        [123.196958, 13.628718],
+        [123.1969723, 13.6289459],
+        [123.19696840132447, 13.628950180227932],
+        [123.19695359496953, 13.628714210417373]
+      ],
+      "height_m": 0.25,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "pool-deck-1-0",
+      "ring": [
+        [123.1969335276085, 13.628696946763183],
+        [123.19695359496953, 13.628714210417373],
+        [123.19696840132447, 13.628950180227932],
+        [123.1969506406915, 13.628969679044072],
+        [123.19694805603788, 13.628928487256667],
+        [123.1969570252454, 13.62891203071326],
+        [123.19695700797186, 13.628912021821431],
+        [123.1969570809645, 13.628911915657564],
+        [123.19695718650544, 13.6289114],
+        [123.1969570809645, 13.628910884342437],
+        [123.19695678040668, 13.628910447197269],
+        [123.19695643022312, 13.628910219797586],
+        [123.19695643866034, 13.628910203997485],
+        [123.19694659738218, 13.628905240569017],
+        [123.1969335276085, 13.628696946763183]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pool-rim-2-0",
+      "ring": [
+        [123.19696840132447, 13.628950180227932],
+        [123.1969723, 13.6289459],
+        [123.197106, 13.628938],
+        [123.19711040503047, 13.628941789582626],
+        [123.19696840132447, 13.628950180227932]
+      ],
+      "height_m": 0.25,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "pool-deck-2-0",
+      "ring": [
+        [123.1969506406915, 13.628969679044072],
+        [123.19696840132447, 13.628950180227932],
+        [123.19711040503047, 13.628941789582626],
+        [123.1971304723915, 13.628959053236816],
+        [123.1969506406915, 13.628969679044072]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pool-rim-3-0",
+      "ring": [
+        [123.1970917, 13.6287101],
+        [123.19709559867553, 13.628705819772067],
+        [123.19711040503047, 13.628941789582626],
+        [123.197106, 13.628938],
+        [123.1970917, 13.6287101]
+      ],
+      "height_m": 0.25,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "pool-deck-3-0",
+      "ring": [
+        [123.19709559867553, 13.628705819772067],
+        [123.1971133593085, 13.628686320955927],
+        [123.1971304723915, 13.628959053236816],
+        [123.19711040503047, 13.628941789582626],
+        [123.19709559867553, 13.628705819772067]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [
@@ -57,7 +179,17 @@
     {
       "title": "Independent facility reference",
       "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
-      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+      "note": "Official facilities description documents a pool and sports grounds. The direct OSM API query now confirms the current mapped swimming-pool footprint, omitted by the old fetch query. Existing trees, Pet Park, parking, tennis/skate facilities and monuments are preserved. No construction date is inferred from OSM edit timestamps."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
+    },
+    {
+      "title": "OpenStreetMap: Civic Center Swimming Pool",
+      "url": "https://www.openstreetmap.org/way/222976574",
+      "note": "Current footprint retrieved from the primary OSM API on 2026-10-01 and ingested through the data pipeline. Water uses the mapped polygon unchanged. A 0.45 m stone rim and deck extending 2.5 m from the pool edge are draft width/height estimates, clipped to the Civic Center grounds and clear of standing buildings. This establishes mapped location and shape, not a surveyed deck extent or construction date. No Google Maps imagery was inspected."
     }
-  ]
+  ],
+  "selection_osm_id": "osm:way/462785043"
 }

@@ -7,11 +7,11 @@
     {
       "id": "porta-pier-0",
       "ring": [
-        [123.18669271, 13.62752386],
-        [123.18670392, 13.62751758],
-        [123.18672241, 13.6275487],
-        [123.1867112, 13.62755498],
-        [123.18669271, 13.62752386]
+        [123.1865956713277, 13.62746237491304],
+        [123.18660617656886, 13.627455031148996],
+        [123.18662776655, 13.627484201146334],
+        [123.18661726130884, 13.627491544910379],
+        [123.1865956713277, 13.62746237491304]
       ],
       "height_m": 10,
       "material": "stone",
@@ -20,11 +20,11 @@
     {
       "id": "porta-pier-1",
       "ring": [
-        [123.18673698, 13.62749903],
-        [123.18674819, 13.62749274],
-        [123.18676667, 13.62752386],
-        [123.18675547, 13.62753014],
-        [123.18673698, 13.62749903]
+        [123.1866371920371, 13.627433349559917],
+        [123.18664769727697, 13.627426005795872],
+        [123.18666928725546, 13.62745517579321],
+        [123.18665878201558, 13.627462519557255],
+        [123.1866371920371, 13.627433349559917]
       ],
       "height_m": 10,
       "material": "stone",
@@ -33,11 +33,11 @@
     {
       "id": "porta-pier-2",
       "ring": [
-        [123.18678125, 13.62747419],
-        [123.18679245, 13.6274679],
-        [123.18681094, 13.62749902],
-        [123.18679973, 13.62750531],
-        [123.18678125, 13.62747419]
+        [123.1866787127465, 13.627404324206791],
+        [123.18668921798509, 13.627396980442747],
+        [123.18671080796094, 13.627426150440085],
+        [123.18670030272234, 13.62743349420413],
+        [123.1866787127465, 13.627404324206791]
       ],
       "height_m": 10,
       "material": "stone",
@@ -46,11 +46,11 @@
     {
       "id": "porta-pier-3",
       "ring": [
-        [123.18682551, 13.62744935],
-        [123.18683672, 13.62744306],
-        [123.18685521, 13.62747418],
-        [123.186844, 13.62748047],
-        [123.18682551, 13.62744935]
+        [123.1867202334559, 13.627375298853668],
+        [123.1867307386932, 13.627367955089623],
+        [123.18675232866639, 13.627397125086961],
+        [123.18674182342909, 13.627404468851006],
+        [123.1867202334559, 13.627375298853668]
       ],
       "height_m": 10,
       "material": "stone",
@@ -59,28 +59,94 @@
     {
       "id": "porta-span",
       "ring": [
-        [123.18669271, 13.62752386],
-        [123.1868368, 13.62744302],
-        [123.18685529, 13.62747414],
-        [123.1867112, 13.62755498],
-        [123.18669271, 13.62752386]
+        [123.18659567133065, 13.627462374913039],
+        [123.18673073869218, 13.627367955089625],
+        [123.18675232866934, 13.627397125086963],
+        [123.18661726130782, 13.627491544910377],
+        [123.18659567133065, 13.627462374913039]
       ],
       "height_m": 11,
       "material": "roof",
       "overhead": true
     },
     {
-      "id": "processional-forecourt",
+      "id": "processional-forecourt-0",
       "ring": [
-        [123.18677759, 13.62779823],
-        [123.18692969, 13.62771289],
-        [123.18706834, 13.62794627],
-        [123.18691624, 13.62803161],
-        [123.18677759, 13.62779823]
+        [123.18662327, 13.62749818],
+        [123.18675836, 13.62740365],
+        [123.18699388, 13.6277001],
+        [123.18691109, 13.62775575],
+        [123.1868558, 13.62779088],
+        [123.18683128, 13.62776001],
+        [123.18684532, 13.62776632],
+        [123.1868698, 13.62776875],
+        [123.18689373, 13.62776314],
+        [123.18691428, 13.62775015],
+        [123.18692938, 13.62773132],
+        [123.18693709, 13.6277087],
+        [123.18693689, 13.62768529],
+        [123.18692846, 13.62766256],
+        [123.18691318, 13.62764435],
+        [123.18689293, 13.62763196],
+        [123.1868697, 13.62762665],
+        [123.18684597, 13.62762886],
+        [123.18682463, 13.62763817],
+        [123.1868068, 13.62765417],
+        [123.18679562, 13.62767418],
+        [123.18679151, 13.6276971],
+        [123.18679408, 13.62771319],
+        [123.18662327, 13.62749818]
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "processional-forecourt-1",
+      "ring": [
+        [123.18689207, 13.62783653],
+        [123.18694379, 13.62780366],
+        [123.18694348, 13.6278032],
+        [123.1869441, 13.62780279],
+        [123.18694442, 13.62780324],
+        [123.18703009, 13.62774567],
+        [123.18707589, 13.62780332],
+        [123.18693501, 13.62789058],
+        [123.18689207, 13.62783653]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "processional-forecourt-2",
+      "ring": [
+        [123.18697131, 13.62793627],
+        [123.18711219, 13.62784901],
+        [123.18714942, 13.62789588],
+        [123.18700669, 13.62798081],
+        [123.18697131, 13.62793627]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "processional-forecourt-3",
+      "ring": [
+        [123.18704306, 13.62802658],
+        [123.18718579, 13.62794165],
+        [123.18721937, 13.62798392],
+        [123.18707383, 13.6280653],
+        [123.18704306, 13.62802658]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -119,6 +185,15 @@
       "title": "Independent facility reference",
       "url": "https://tourism.naga.gov.ph/attractions/the-porta-mariae/",
       "note": "Porta Mariae published dimensions: 18 m wide, 4 m deep, 11 m high. Four piers and overhead span show three walkable openings; exact pier thickness and orientation estimated around the OSM gate. Existing Cathedral roof plan and landcover order retained. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "OpenStreetMap: two distinct arches",
+      "url": "https://www.openstreetmap.org/way/358808865",
+      "note": "Quadricentennial Arch is a distinct mapped building between Porta Mariae (way 358807129) and the Cathedral. Retain both existing footprints. Porta Mariae parts are centered and oriented on its mapped footprint, using published 18 × 4 × 11 m dimensions. The schematic processional paving is split around standing buildings and the full widths of mapped carriageways; no road or arch is replaced."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ],
   "selection_osm_id": "osm:way/23666715"

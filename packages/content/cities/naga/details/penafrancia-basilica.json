@@ -5,17 +5,36 @@
   "surface": "keep",
   "structures": [
     {
-      "id": "pilgrim-forecourt",
+      "id": "pilgrim-forecourt-0",
       "ring": [
-        [123.19961349, 13.63232906],
-        [123.19987569, 13.63224133],
+        [123.19961814, 13.63234218],
+        [123.1998099, 13.63240259],
+        [123.19995037, 13.63245209],
         [123.19997199, 13.63251312],
         [123.19970979, 13.63260086],
-        [123.19961349, 13.63232906]
+        [123.19961814, 13.63234218]
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pilgrim-forecourt-1",
+      "ring": [
+        [123.19968858, 13.63230394],
+        [123.19970525, 13.63229836],
+        [123.19992278, 13.63237425],
+        [123.19992561, 13.63238221],
+        [123.19982958, 13.63234838],
+        [123.19982851, 13.6323484],
+        [123.19982862, 13.63234805],
+        [123.19968858, 13.63230394]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -69,6 +88,10 @@
       "title": "Dominic McArthur: Peñafrancia Basilica Minore, 2014",
       "url": "https://commons.wikimedia.org/wiki/File:Pe%C3%B1afrancia_Basilica_Minore.jpg",
       "note": "CC BY-SA 3.0. Independent facade photograph inspected for bell-tower, lawn, planting, trees and paving appearance; coordinates remain schematic OSM-based estimates."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ],
   "selection_osm_id": "osm:way/23670362"

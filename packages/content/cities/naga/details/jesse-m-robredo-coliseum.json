@@ -20,15 +20,17 @@
     {
       "id": "north-entry-step",
       "ring": [
-        [123.1882249, 13.62061719],
-        [123.1882896, 13.62061719],
-        [123.1882896, 13.62062168],
-        [123.1882249, 13.62062168],
-        [123.1882249, 13.62061719]
+        [123.18823249525904, 13.620611031169329],
+        [123.18830071933563, 13.620608827854282],
+        [123.18830086818062, 13.620613181141154],
+        [123.18826280826649, 13.620617242658577],
+        [123.18823274083967, 13.620618213694275],
+        [123.18823249525904, 13.620611031169329]
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -64,6 +66,10 @@
       "title": "Independent facility reference",
       "url": "https://commons.wikimedia.org/wiki/File:Jesse_M._Robredo_Coliseum.jpg",
       "note": "Independent arena photo and existing plan show entrance roofs and low round crown. A narrow apron stays inside the mapped encircling drive. Preserve the existing dome; unsurveyed roof-rim tier and large parking expansion omitted. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a draft estimate."
     }
   ],
   "grounds": [

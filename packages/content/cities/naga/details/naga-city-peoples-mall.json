@@ -20,15 +20,17 @@
     {
       "id": "south-step",
       "ring": [
-        [123.18342013, 13.62008868],
-        [123.18346235, 13.62010695],
-        [123.18345972, 13.62011269],
-        [123.1834175, 13.62009443],
-        [123.18342013, 13.62008868]
+        [123.18338340099325, 13.620091622093714],
+        [123.18338406938935, 13.62009015566508],
+        [123.18342334406115, 13.620100958488319],
+        [123.18348780766716, 13.620128711586482],
+        [123.18348481276904, 13.620135282247762],
+        [123.18338340099325, 13.620091622093714]
       ],
-      "height_m": 0.3,
+      "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -56,6 +58,10 @@
       "title": "Independent facility reference",
       "url": "https://commons.wikimedia.org/wiki/File:Naga_City_People%27s_Mall,_May_2025.jpg",
       "note": "Independent south riverfront photograph shows roofed frontage, broad access stairs and a lamp. The OSM market footprint spans Zamora Street; keep that existing road overlay. Do not claim a surveyed roof-deck parking layout. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a draft estimate."
     }
   ],
   "grounds": [

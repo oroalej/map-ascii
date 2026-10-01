@@ -7,15 +7,16 @@
     {
       "id": "front-step",
       "ring": [
-        [123.19885957, 13.62624724],
-        [123.19892142, 13.626314],
-        [123.1989118, 13.62632241],
-        [123.19884995, 13.62625566],
-        [123.19885957, 13.62624724]
+        [123.19878580850853, 13.62627951006241],
+        [123.19886008363538, 13.626199449686982],
+        [123.19886557557524, 13.62620426198743],
+        [123.19879130044839, 13.626284322362858],
+        [123.19878580850853, 13.62627951006241]
       ],
-      "height_m": 0.3,
+      "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [
@@ -51,6 +52,10 @@
       "title": "Independent facility reference",
       "url": "https://commons.wikimedia.org/wiki/File:Naga_City_Hall,_Apr_2024.jpg",
       "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a draft estimate."
     }
   ],
   "grounds": [

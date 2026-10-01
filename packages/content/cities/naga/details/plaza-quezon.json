@@ -29,14 +29,15 @@
       "id": "stage-front",
       "ring": [
         [123.1850666, 13.62389988],
-        [123.1852145, 13.62389988],
-        [123.1852145, 13.62392683],
+        [123.1851716, 13.62389988],
+        [123.18507525, 13.62392683],
         [123.1850666, 13.62392683],
         [123.1850666, 13.62389988]
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -86,6 +87,10 @@
       "title": "City ordinance: public plaza lighting facilities",
       "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-1999-027/",
       "note": "Supports existing plaza lighting; schematic fixtures do not claim the layout of the unverified redevelopment."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ]
 }

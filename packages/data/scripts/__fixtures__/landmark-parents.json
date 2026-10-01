@@ -31380,5 +31380,440 @@
       "minzoom": 6,
       "maxzoom": 10
     }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1839442,
+          13.6302518
+        ],
+        [
+          123.1838759,
+          13.6301071
+        ],
+        [
+          123.1837991,
+          13.6299322
+        ],
+        [
+          123.1837883,
+          13.6299263
+        ],
+        [
+          123.1836827,
+          13.6299683
+        ],
+        [
+          123.1836613,
+          13.6299002
+        ],
+        [
+          123.1836251,
+          13.6297852
+        ],
+        [
+          123.183421,
+          13.6298272
+        ],
+        [
+          123.1833862,
+          13.6296755
+        ],
+        [
+          123.1833787,
+          13.6296448
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222412318",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1836535,
+          13.6302108
+        ],
+        [
+          123.1836886,
+          13.6302731
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/221923865",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1838605,
+          13.6304038
+        ],
+        [
+          123.1838184,
+          13.6303079
+        ],
+        [
+          123.1839442,
+          13.6302518
+        ],
+        [
+          123.1841953,
+          13.6301399
+        ],
+        [
+          123.1842203,
+          13.630206
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/224703848",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1838911,
+          13.6306991
+        ],
+        [
+          123.1838638,
+          13.6306309
+        ],
+        [
+          123.1839274,
+          13.630597
+        ],
+        [
+          123.1839363,
+          13.6305844
+        ],
+        [
+          123.1839545,
+          13.6305638
+        ],
+        [
+          123.1841787,
+          13.6304633
+        ],
+        [
+          123.1844398,
+          13.6303463
+        ],
+        [
+          123.1847737,
+          13.6301966
+        ],
+        [
+          123.1848012,
+          13.6301818
+        ],
+        [
+          123.1847988,
+          13.6301584
+        ],
+        [
+          123.1848876,
+          13.6301141
+        ],
+        [
+          123.1846551,
+          13.6296195
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222412317",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1837817,
+          13.631152
+        ],
+        [
+          123.1837649,
+          13.6311598
+        ],
+        [
+          123.1837092,
+          13.6311858
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222424916",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.184067,
+          13.6310951
+        ],
+        [
+          123.1841024,
+          13.6311709
+        ],
+        [
+          123.1841534,
+          13.631152
+        ],
+        [
+          123.1842299,
+          13.6313525
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222424917",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1839023,
+          13.6316518
+        ],
+        [
+          123.1844824,
+          13.6313896
+        ],
+        [
+          123.1845954,
+          13.6313386
+        ],
+        [
+          123.1849562,
+          13.6311761
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222412319",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1844824,
+          13.6313896
+        ],
+        [
+          123.1845757,
+          13.631603
+        ],
+        [
+          123.1846081,
+          13.6316042
+        ],
+        [
+          123.1846534,
+          13.6317102
+        ],
+        [
+          123.1846826,
+          13.6317838
+        ],
+        [
+          123.1845973,
+          13.6318118
+        ],
+        [
+          123.1848335,
+          13.6325072
+        ],
+        [
+          123.1848236,
+          13.6325341
+        ],
+        [
+          123.1847682,
+          13.6325533
+        ],
+        [
+          123.1846746,
+          13.6325849
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222412320",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          123.1852361,
+          13.6297488
+        ],
+        [
+          123.1852717,
+          13.6297498
+        ],
+        [
+          123.1854948,
+          13.6302199
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222420360",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            123.1970917,
+            13.6287101
+          ],
+          [
+            123.197106,
+            13.628938
+          ],
+          [
+            123.1969723,
+            13.6289459
+          ],
+          [
+            123.196958,
+            13.628718
+          ],
+          [
+            123.1970917,
+            13.6287101
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222976574",
+      "class": "water_area",
+      "name": "Civic Center Swimming Pool",
+      "kind": "leisure=swimming_pool",
+      "subdivision": "Dayangdang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "water",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
   }
 ]

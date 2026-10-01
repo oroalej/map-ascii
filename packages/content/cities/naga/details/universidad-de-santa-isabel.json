@@ -9,13 +9,60 @@
       "ring": [
         [123.18872168, 13.62915685],
         [123.18879562, 13.62915685],
-        [123.18879562, 13.62922871],
+        [123.18879562, 13.62920848],
+        [123.18879267, 13.62920916],
+        [123.18876149, 13.62922714],
+        [123.18875999, 13.62922871],
         [123.18872168, 13.62922871],
         [123.18872168, 13.62915685]
       ],
       "height_m": 0.15,
       "material": "paving",
-      "overhead": false
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "quad-covered-walk-1-0",
+      "ring": [
+        [123.18827984002218, 13.627949914360695],
+        [123.18829651748742, 13.627942150272581],
+        [123.18836460473567, 13.628089402630069],
+        [123.18834792727044, 13.628097166718183],
+        [123.18827984002218, 13.627949914360695]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "quad-covered-walk-3-0",
+      "ring": [
+        [123.18851279996427, 13.627818946520426],
+        [123.18852944741566, 13.627811134149841],
+        [123.18855105908722, 13.627854793691832],
+        [123.1885475195955, 13.62785664719727],
+        [123.18854726819504, 13.627858218523176],
+        [123.18862688090704, 13.628007967680157],
+        [123.18866852960849, 13.628092105699036],
+        [123.18865187039151, 13.628099894300963],
+        [123.18851279996427, 13.627818946520426]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "quad-covered-walk-4-0",
+      "ring": [
+        [123.18863831511624, 13.628095788857799],
+        [123.18865637951193, 13.628087820116821],
+        [123.18866402048808, 13.628104179883177],
+        [123.18864634327434, 13.628111977826707],
+        [123.18863831511624, 13.628095788857799]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
     }
   ],
   "flagpoles": [],
@@ -54,6 +101,15 @@
       "title": "Independent facility reference",
       "url": "https://www.usi.edu.ph/_files/ugd/48eaaf_591c22c5c2e843efab8fe37e9d947a5a.pdf",
       "note": "Official independent illustrated campus map identifies the chapel and courtyard facilities. Small paved chapel approach and seats are schematic; preserve existing landcover order. OSM boundary includes Naga Central School I: no detail is added to that northern section. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
+    },
+    {
+      "title": "Official USI illustrated campus map, two-page spread (PDF pages 398–399)",
+      "url": "https://www.usi.edu.ph/_files/ugd/48eaaf_591c22c5c2e843efab8fe37e9d947a5a.pdf",
+      "note": "Inspected the actual illustrated spread. Roofed arcades frame the southern academic quadrangles. Draft overhead strips follow the corresponding southern OSM courtyard footway 556406561; geometry is clipped clear of standing buildings. Widths and heights are estimated. No fixtures are added to the northern Naga Central School I area. The illustrated map has no verified current imagery date; gate locations and named open-space assignment still require alignment evidence."
     }
   ]
 }

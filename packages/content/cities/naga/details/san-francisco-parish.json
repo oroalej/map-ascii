@@ -5,19 +5,6 @@
   "surface": "paving",
   "structures": [
     {
-      "id": "front-step",
-      "ring": [
-        [123.18622666, 13.62460625],
-        [123.18626976, 13.62457233],
-        [123.18627558, 13.62457931],
-        [123.18623248, 13.62461323],
-        [123.18622666, 13.62460625]
-      ],
-      "height_m": 0.15,
-      "material": "paving",
-      "overhead": false
-    },
-    {
       "id": "marker",
       "ring": [
         [123.18626626, 13.62462933],
@@ -55,7 +42,11 @@
     {
       "title": "Independent facility reference",
       "url": "https://tourism.naga.gov.ph/san-francisco-church-historical-marker-home-at-last/",
-      "note": "Official report confirms the historical marker returned in February 2025. Keep the existing sourced roof plan. Small forecourt and marker are illustrative; unsourced facade statue pedestals omitted. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+      "note": "Official report confirms the historical marker returned in February 2025. Keep the existing sourced roof plan. The earlier facade tread intersected the standing church and is removed. A broad tread outside the actual northwest facade conflicts with the cached full-width Peñafrancia Avenue carriageway (way 1529540512); frontage alignment needs a current reference. Unsourced facade statue pedestals remain omitted. Marker and lamp placement remains schematic. No Google Maps imagery was inspected and no timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ],
   "grounds": [
