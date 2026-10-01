@@ -61,8 +61,9 @@ void main() {
   float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
   int tone;
   int variant;
+  float leafLight;
   if (kind == ${kindCodes.canopy}) {
-    variant = canopyVariant(p, w, int(attr.b * 255.0 + 0.5), gust, u_time, tone);
+    variant = canopyVariant(p, w, int(attr.b * 255.0 + 0.5), gust, u_time, tone, leafLight);
   } else {
     vec4 id = idAt(p);
     bool rim = false;
@@ -74,12 +75,11 @@ void main() {
       else if (idAt(p + sides[i]) != id) boundary = true;
     }
     uint seed = unpackId(id);
-    float leafLight;
     variant = foliageVariant(w, attr.gb * 2.0 - 1.0, seed, u_time, gust, rim, boundary, leafLight);
-    // [0, 1.5] covers the bounded surface light plus grain. R8 error is at most 1.5/510.
-    o_foliageLight = vec4(leafLight / 1.5, 0.0, 0.0, 1.0);
     tone = crownIsDry(seed) ? ${Tone.dry} : ${Tone.none};
   }
+  // [0, 1.5] covers bounded leaf lighting; R8 error is at most 1.5/510.
+  o_foliageLight = vec4(leafLight / 1.5, 0.0, 0.0, 1.0);
   vec2 glyph = texelFetch(u_table, ivec2(min(variant, u_count[cls] - 1), cls), 0).rg;
   o_glyph.r = glyph.r;
   o_glyph.g = float(cls + (int(glyph.g * 255.0 + 0.5) << 6)) / 255.0;

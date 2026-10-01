@@ -1118,27 +1118,26 @@ export function canopyCell(
   dir: WindDir = DEFAULT_WIND_DIR,
   sun: WindDir = DEFAULT_SUN,
   options: { grid?: CanopyGrid; sun?: CrownSun; night?: boolean } = {},
-): { variant: number; tone: number } {
+): { variant: number; tone: number; light: number } {
   const shape = canopyShape(
     x,
     y,
     [dir[0] * canopyLean(gust), dir[1] * canopyLean(gust)],
     options.grid,
   );
-  if (shape.center && variant === 1) return { variant: CanopyGlyph.palm, tone: Tone.none };
-  if (shape.center && variant === 2)
-    return { variant: CanopyGlyph.needle + ((shape.seed >>> 16) & 1), tone: Tone.none };
-  if (shape.clearing) return { variant: 0, tone: Tone.shade };
   const [lx, ly] = shape.local;
   const clumps = crownClumps(lx, ly, shape.seed);
   clumps.crevice = Math.max(clumps.crevice, shape.crevice);
   const sn = Math.sqrt(1.49);
-  const light = options.sun ?? [sun[0] / sn, sun[1] / sn, 0.7 / sn];
-  let level = crownLevel(
-    crownShade(lx, ly, clumps, light, options.night).light + crownTexture(lx, ly, shape.seed),
-    clumps.crevice,
-    Math.hypot(lx, ly),
-  );
+  const sunVector = options.sun ?? [sun[0] / sn, sun[1] / sn, 0.7 / sn];
+  const light = shape.clearing
+    ? 0.48
+    : crownShade(lx, ly, clumps, sunVector, options.night).light + crownTexture(lx, ly, shape.seed);
+  if (shape.center && variant === 1) return { variant: CanopyGlyph.palm, tone: Tone.none, light };
+  if (shape.center && variant === 2)
+    return { variant: CanopyGlyph.needle + ((shape.seed >>> 16) & 1), tone: Tone.none, light };
+  if (shape.clearing) return { variant: 0, tone: Tone.shade, light };
+  let level = crownLevel(light, clumps.crevice, Math.hypot(lx, ly));
   if (gust >= TREE_WIND.step)
     level = Math.max(0, Math.min(5, level + (flutters(cellHash(x, y), gust, time) ? 1 : -1)));
   const tone =
@@ -1149,7 +1148,7 @@ export function canopyCell(
         : shape.seed % CANOPY.freshEvery === 0
           ? Tone.dry
           : Tone.none;
-  return { variant: level, tone };
+  return { variant: level, tone, light };
 }
 
 export const canopyVariant = (

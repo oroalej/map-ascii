@@ -38,6 +38,9 @@ import {
   foliageSelectFragment,
   FOLIAGE_PENDING,
 } from '../../../packages/renderer/src/shaders/foliage-select';
+import { foliageInkSample } from '../../../packages/renderer/src/glyphs/foliage-ink';
+import { foliageInkGlsl } from '../../../packages/renderer/src/shaders/foliage-ink';
+import { cellHashGlsl } from '../../../packages/renderer/src/shaders/hash';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
 for (const theme of ['dark', 'light'] as const) {
@@ -94,7 +97,7 @@ for (const theme of ['dark', 'light'] as const) {
                         1.5) *
                         255,
                     )
-                  : 0,
+                  : Math.round((('light' in chosen ? chosen.light : 0) / 1.5) * 255),
               );
               const at = (cls * MAX_VARIANTS + chosen.variant) * 2;
               expected.push(
@@ -117,6 +120,19 @@ for (const theme of ['dark', 'light'] as const) {
           });
         }
       }
+    const leafInkExpected = Array.from({ length: 12 * 6 * 8 * 9 }, (_, i) => {
+      const x = i % 72,
+        y = Math.floor(i / 72);
+      const at = foliageInkSample(
+        x % 6,
+        y % 9,
+        6,
+        9,
+        -500000 + Math.floor(x / 6),
+        800000 + Math.floor(y / 9),
+      );
+      return at && (at[0] + at[1]) % 3 === 0 ? 255 : 0;
+    });
     const result = await page.evaluate(
       (input) => {
         const cols = 12,
@@ -235,6 +251,8 @@ for (const theme of ['dark', 'light'] as const) {
         );
         const selected = texture(cols, rows);
         const foliageLight = texture(cols, rows, null, 1);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         const selectFbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, selected, 0);
@@ -473,6 +491,7 @@ for (const theme of ['dark', 'light'] as const) {
           uniforms(glyph, {
             u_glyphs: selected,
             u_foliageLight: foliageLight,
+            u_woodsCenters: input.woodsCenters,
             u_atlas: atlasTex,
             u_cell: [cw, ch],
             u_height: canvas.height,
@@ -735,6 +754,39 @@ for (const theme of ['dark', 'light'] as const) {
         gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, copied);
         if (copied.some((b, i) => b !== preserved[i]))
           throw new Error('Foliage pass changed preserved cell metadata');
+        // Bright neighboring slots expose any rotated sample that escapes its own glyph.
+        const poisoned = new Uint8Array(cw * 3 * ch).fill(255);
+        for (let y = 0; y < ch; y++)
+          for (let x = 0; x < cw; x++) poisoned[y * cw * 3 + cw + x] = (x + y) % 3 === 0 ? 255 : 0;
+        const leafAtlas = texture(cw * 3, ch, poisoned, 1);
+        const leafInkProgram = program(
+          input.fullscreenVertex,
+          `#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D u_atlas;
+uniform vec2 u_cell;
+out vec4 o_color;
+${input.cellHashGlsl}
+${input.foliageInkGlsl}
+void main() {
+  ivec2 pixel=ivec2(gl_FragCoord.xy);
+  ivec2 cell=pixel/ivec2(u_cell);
+  float ink=foliageInk(ivec2(int(u_cell.x),0),pixel-cell*ivec2(u_cell),ivec2(-500000,800000)+cell);
+  o_color=vec4(ink,0.0,0.0,1.0);
+}`,
+        );
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.useProgram(leafInkProgram);
+        uniforms(leafInkProgram, { u_atlas: leafAtlas, u_cell: [cw, ch] });
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        const inkPixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, inkPixels);
+        for (let i = 0; i < input.leafInkExpected.length; i++) {
+          if (inkPixels[i * 4] !== input.leafInkExpected[i])
+            throw new Error(`Leaf ink sampled the wrong atlas pixel at ${i}`);
+        }
         if (gl.getError() !== gl.NO_ERROR) throw new Error('Foliage parity WebGL error');
         return {
           classes: [
@@ -765,6 +817,10 @@ for (const theme of ['dark', 'light'] as const) {
       {
         landmarkFlag: Flags.landmark,
         leafCases,
+        leafInkExpected,
+        cellHashGlsl,
+        foliageInkGlsl,
+        woodsCenters: themes[theme].styles.trees!.glyphs.slice(6, 9).map(index),
         edgeState: EDGE_STATE,
         cellVertex,
         cellFragment,

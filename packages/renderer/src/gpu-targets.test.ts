@@ -6,6 +6,8 @@ function context(failAt = 0, nullAt = 0) {
     released = new Set<object>();
   let checks = 0,
     allocations = 0;
+  let bound: object;
+  const filters = new Map<object, Map<number, number>>();
   const make = () => {
     if (++allocations === nullAt) return null;
     const handle = {};
@@ -18,16 +20,27 @@ function context(failAt = 0, nullAt = 0) {
   };
   const gl = {
     FRAMEBUFFER_COMPLETE: 1,
+    TEXTURE_2D: 0x0de1,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_MAG_FILTER: 0x2800,
+    NEAREST: 0x2600,
+    LINEAR: 0x2601,
     createTexture: vi.fn(make),
     createFramebuffer: vi.fn(make),
     createRenderbuffer: vi.fn(make),
     deleteTexture: vi.fn(drop),
     deleteFramebuffer: vi.fn(drop),
     deleteRenderbuffer: vi.fn(drop),
-    bindTexture: vi.fn(),
+    bindTexture: vi.fn((_target: number, texture: object) => {
+      bound = texture;
+    }),
     pixelStorei: vi.fn(),
     texImage2D: vi.fn(),
-    texParameteri: vi.fn(),
+    texParameteri: vi.fn((_target: number, parameter: number, value: number) => {
+      const textureFilters = filters.get(bound) ?? new Map<number, number>();
+      textureFilters.set(parameter, value);
+      filters.set(bound, textureFilters);
+    }),
     bindFramebuffer: vi.fn(),
     framebufferTexture2D: vi.fn(),
     framebufferRenderbuffer: vi.fn(),
@@ -36,8 +49,19 @@ function context(failAt = 0, nullAt = 0) {
     drawBuffers: vi.fn(),
     checkFramebufferStatus: () => (++checks === failAt ? 0 : 1),
   };
-  return { gl: gl as unknown as GL, allocated, released };
+  return { gl: gl as unknown as GL, allocated, released, filters };
 }
+
+it('smooths only foliage light, keeping packed glyph and picking metadata exact', () => {
+  const { gl, filters } = context();
+  const targets = createCellTargets(gl, 12, 8, 6, 4);
+  for (const parameter of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) {
+    expect(filters.get(targets.foliageLightTex)?.get(parameter)).toBe(gl.LINEAR);
+    for (const texture of [targets.glyphTex, targets.selectTex, targets.idTex, targets.attrTex])
+      expect(filters.get(texture)?.get(parameter)).toBe(gl.NEAREST);
+  }
+  deleteCellTargets(gl, targets);
+});
 
 it.each([1, 2, 3, 4, 5, 6])(
   'releases partial raster and glyph targets if framebuffer %i fails',

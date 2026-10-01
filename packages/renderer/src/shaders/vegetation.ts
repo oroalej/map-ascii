@@ -171,7 +171,7 @@ bool crownIsDry(uint id) {
 }
 
 // Fixed projected lattice. The integer block origin is never converted to a large float.
-int canopyVariant(ivec2 p, ivec2 w, int variant, float gust, float time, out int tone) {
+int canopyVariant(ivec2 p, ivec2 w, int variant, float gust, float time, out int tone, out float leafLight) {
   vec2 pos=u_canopyPhase+(vec2(p)-u_windDir*(gust*${float(CANOPY.sway)}))*u_canopyStep;
   ivec2 g=ivec2(floor(pos));
   vec2 frac=fract(pos);
@@ -184,16 +184,18 @@ int canopyVariant(ivec2 p, ivec2 w, int variant, float gust, float time, out int
     float dd=dot(d,d);
     if(dd<f1) { f2=f1; f1=dd; seed=h; best=d; } else if(dd<f2) f2=dd;
   }
+  vec2 local=best/${float(CANOPY.radius)};
+  vec4 clumps=crownClumps(local,seed);
+  clumps.y=max(clumps.y,1.0-smoothstep(0.0,${float(CANOPY.crease)},sqrt(f2)-sqrt(f1)));
+  bool clearing=f1>${float(CANOPY.clearing * CANOPY.clearing)} && ((cellHash(w)>>8u)&255u)<${Math.round(CANOPY.gaps * 256)}u;
+  leafLight=clearing ? 0.48 : crownShade(local,clumps)+crownTexture(local,seed);
   tone=${Tone.none};
   if(all(lessThan(abs(best),u_canopyStep*0.5))) {
     if(variant==1) return ${CanopyGlyph.palm};
     if(variant==2) return ${CanopyGlyph.needle}+int((seed>>16u)&1u);
   }
-  if(f1>${float(CANOPY.clearing * CANOPY.clearing)} && ((cellHash(w)>>8u)&255u)<${Math.round(CANOPY.gaps * 256)}u) { tone=${Tone.shade}; return 0; }
-  vec2 local=best/${float(CANOPY.radius)};
-  vec4 clumps=crownClumps(local,seed);
-  clumps.y=max(clumps.y,1.0-smoothstep(0.0,${float(CANOPY.crease)},sqrt(f2)-sqrt(f1)));
-  int level=crownLevel(crownShade(local,clumps)+crownTexture(local,seed),clumps.y,length(local));
+  if(clearing) { tone=${Tone.shade}; return 0; }
+  int level=crownLevel(leafLight,clumps.y,length(local));
   if(gust>=${float(TREE_WIND.step)}) level=clamp(level+(flutters(cellHash(w),gust,time)?1:-1),0,5);
   tone=level<=1 ? ${Tone.shade} : level>=4 ? ${Tone.light} : seed%${CANOPY.freshEvery}u==0u ? ${Tone.dry} : ${Tone.none};
   return level;

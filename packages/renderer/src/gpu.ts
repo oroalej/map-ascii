@@ -239,6 +239,9 @@ export function createCellTargets(
     const foliageLightTex = own(createTexture(gl, gl.R8, gl.RED, cols, rows), (value) =>
       gl.deleteTexture(value),
     );
+    // Continuous crown surfaces: glyph metadata remains nearest-filtered in its own texture.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     const overlayTex = own(createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows), (value) =>
       gl.deleteTexture(value),
     );
