@@ -4,6 +4,8 @@ import { DialogueSelector, type DialogueContext, type DialogueMemory } from './d
 import { MOMENTS, type SpeechCue } from './moments';
 import type { PersonPose } from './people';
 
+/** Leave room for physical encounters instead of filling every slot with passing groups. */
+export const SCENE_SPEECH_CAPACITY = 4;
 export type SceneSpeaker = { owner: object; member: number; figure: string };
 export type SceneExchange = {
   key: object;
@@ -52,7 +54,7 @@ export class SceneSpeech {
   }
   admit(scene: SceneExchange, freeCapacity: number) {
     if (
-      freeCapacity <= this.active.length ||
+      Math.min(freeCapacity, SCENE_SPEECH_CAPACITY) <= this.active.length ||
       this.seen.has(scene.key) ||
       !scene.valid() ||
       scene.speakers.some(

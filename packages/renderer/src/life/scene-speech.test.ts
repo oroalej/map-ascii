@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SceneSpeech, type SceneExchange } from './scene-speech';
+import { SCENE_SPEECH_CAPACITY, SceneSpeech, type SceneExchange } from './scene-speech';
 import type { DialogueChoice } from '@atlas/shared';
 
 const vendor: DialogueChoice = {
@@ -28,6 +28,13 @@ function fixture(choice = vendor) {
   return { a, b, state, scenes, scene };
 }
 describe('scene-owned dialogue', () => {
+  it('leaves capacity for physical encounters when many groups can speak', () => {
+    const host = fixture().scenes;
+    for (let i = 0; i < SCENE_SPEECH_CAPACITY; i++)
+      expect(host.admit(fixture().scene, 12)).toBe(true);
+    expect(host.admit(fixture().scene, 12)).toBe(false);
+    expect(host.size).toBe(4);
+  });
   it('places thanks in the final three seconds without changing the service lifetime', () => {
     const f = fixture({ ...vendor, profile: 'vendor-thanks' });
     f.scene.remaining = 8;

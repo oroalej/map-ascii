@@ -13,24 +13,32 @@ export function placeSpeech(
   occupied: readonly SpeechRect[],
 ) {
   const [x, y] = point,
-    gap = 14,
     pad = 8;
   if (x < pad || y < pad || x > viewport.width - pad || y > viewport.height - pad) return null;
-  for (const below of [false, true])
-    for (const offset of [0.5, 0.2, 0.8]) {
-      const left = Math.max(
-        pad,
-        Math.min(viewport.width - size.width - pad, x - size.width * offset),
-      );
-      const box = { ...size, left, top: below ? y + gap : y - size.height - gap };
-      if (
-        box.top < pad ||
-        box.top + box.height > viewport.height - pad ||
-        box.left + box.width > viewport.width - pad ||
-        occupied.some((other) => overlaps(box, other))
-      )
-        continue;
-      return { ...box, below, tail: x - left };
+  for (const below of [false, true]) {
+    for (const gap of [14, 22, 30]) {
+      const top = below ? y + gap : y - size.height - gap;
+      const candidates = [0.5, 0.2, 0.8].map((offset) => x - size.width * offset);
+      // Fixed offsets miss narrow gaps between the HUD and attribution. Align with
+      // obstacle edges as well, while keeping the tail inside the actual bubble.
+      for (const other of occupied) {
+        if (top >= other.top + other.height + 6 || top + size.height + 6 <= other.top) continue;
+        for (const left of [other.left + other.width + 6, other.left - size.width - 6])
+          if (x - left >= pad && x - left <= size.width - pad) candidates.push(left);
+      }
+      for (const candidate of candidates) {
+        const left = Math.max(pad, Math.min(viewport.width - size.width - pad, candidate));
+        const box = { ...size, left, top };
+        if (
+          box.top < pad ||
+          box.top + box.height > viewport.height - pad ||
+          box.left + box.width > viewport.width - pad ||
+          occupied.some((other) => overlaps(box, other))
+        )
+          continue;
+        return { ...box, below, tail: x - left };
+      }
     }
+  }
   return null;
 }
