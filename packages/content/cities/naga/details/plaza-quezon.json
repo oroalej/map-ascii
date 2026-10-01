@@ -1,0 +1,91 @@
+{
+  "id": "detail/plaza-quezon",
+  "osm_id": "osm:way/201276958",
+  "title": "Plaza Quezon",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "stage-roof",
+      "ring": [
+        [123.18497, 13.624139],
+        [123.1849876, 13.6240811],
+        [123.1850281, 13.6240469],
+        [123.1850982, 13.6240127],
+        [123.185176, 13.6239944],
+        [123.185229, 13.6240136],
+        [123.1852833, 13.6240459],
+        [123.1852602, 13.6240983],
+        [123.185219, 13.6241317],
+        [123.1851483, 13.6241647],
+        [123.1850631, 13.6241894],
+        [123.1850135, 13.6241737],
+        [123.18497, 13.624139]
+      ],
+      "height_m": 6,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "stage-front",
+      "ring": [
+        [123.1850666, 13.62389988],
+        [123.1852145, 13.62389988],
+        [123.1852145, 13.62392683],
+        [123.1850666, 13.62392683],
+        [123.1850666, 13.62389988]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "southern-crossing",
+      "line": [
+        [123.1850019, 13.62385945],
+        [123.1852792, 13.62385945]
+      ],
+      "width_m": 2
+    }
+  ],
+  "seating": [],
+  "lamps": [
+    {
+      "id": "south-east",
+      "at": [123.18529768, 13.62390437],
+      "bearing": 0,
+      "reach_m": 0.5,
+      "heads": 1,
+      "style": "streetlight"
+    },
+    {
+      "id": "south-west",
+      "at": [123.18499266, 13.62391335],
+      "bearing": 0,
+      "reach_m": 0.5,
+      "heads": 1,
+      "style": "streetlight"
+    }
+  ],
+  "status": "draft",
+  "credit": "Plaza Quezon — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/201276958",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www2.naga.gov.ph/proposed-ordinance/nb1_2025-0845-renaming-plaza-quezon/",
+      "note": "Post-2024 redevelopment completion and proposed renaming are not verified. Conservative stage-front terrace and perimeter access only; stage footprint comes from OSM. Stage lighting positions are schematic; new fountains and redesigned planting omitted. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    },
+    {
+      "title": "City ordinance: public plaza lighting facilities",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-1999-027/",
+      "note": "Supports existing plaza lighting; schematic fixtures do not claim the layout of the unverified redevelopment."
+    }
+  ]
+}
