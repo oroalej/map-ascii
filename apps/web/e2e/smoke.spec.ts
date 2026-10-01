@@ -74,6 +74,40 @@ for (const city of cities) {
 
     test.describe('with map data', () => {
       test.skip(!city.hasMeta, 'no generated tiles; run pnpm data:build');
+      test('previews seasonal decorations, retains the preference and keeps the URL unchanged', async ({
+        page,
+      }) => {
+        test.skip(!city.seasons.length, 'no festive calendar in this pack');
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
+        await page.goto(`/${city.slug}?z=19`);
+        await mapReady(page);
+        const today = page.getByRole('button', { name: 'Season: Today', exact: true });
+        await expect(today).toBeVisible();
+        // Initial camera normalization writes the default coordinates asynchronously.
+        await expect.poll(() => query(page).lat).toBeTruthy();
+        await expect.poll(() => query(page).lng).toBeTruthy();
+        const before = query(page),
+          first = city.seasons[0]!;
+        await today.click();
+        const preview = page.getByRole('button', {
+          name: `Season: ${first.title.en}`,
+          exact: true,
+        });
+        await expect(preview).toBeVisible();
+        if (first.status === 'draft') await expect(preview).toHaveAttribute('title', /Draft/);
+        if (first.lanterns)
+          await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
+        expect(query(page)).toEqual(before);
+        await page.reload();
+        await mapReady(page);
+        await expect(preview).toBeVisible();
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        if (first.lanterns)
+          await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
+        expect(errors).toEqual([]);
+      });
 
       test(`search finds "${city.smokeLandmark}", flies there, and opens the panel`, async ({
         page,

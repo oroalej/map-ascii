@@ -4,6 +4,46 @@ import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('reports seasonal hardware with Life off and temporary vendors only where paths can support them', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { lanterns: 'Parols', bunting: 'Pennants', stalls: 'Fair carts' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: true, bunting: true },
+  };
+  const entries = legendEntries('dark', 20, ['path'], { season, fixtures, life: false });
+  expect(entries.filter((e) => e.id).map((e) => e.id)).toEqual([
+    'info:season-lanterns',
+    'info:season-bunting',
+  ]);
+  expect(entries.filter((e) => e.id).every((e) => e.classes.length === 0)).toBe(true);
+  expect(
+    legendEntries('light', 20, ['path'], { season, fixtures, life: true }).find(
+      (e) => e.id === 'info:season-stalls',
+    )?.label,
+  ).toBe('Fair carts (simulated)');
+  expect(
+    legendEntries('dark', 20, ['water_river'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 16, ['path'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['path'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { lanterns: false, bunting: false } },
+    }).some((e) => e.id),
+  ).toBe(false);
+});
 
 it('describes utilities with Life off, only when reported, and switches glyphs at 19.5', () => {
   const entry = (zoom: number, utilities?: boolean) =>

@@ -138,7 +138,7 @@ export function AtlasCanvas({
     };
     store.initCamera(camera);
     // The life layer's settings are remembered in this browser, not in the URL.
-    const lifePrefs = loadLifePrefs();
+    const lifePrefs = loadLifePrefs(cityLife?.seasons);
     useLifeStore.setState(lifePrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });

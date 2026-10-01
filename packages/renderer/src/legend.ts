@@ -21,6 +21,8 @@ import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
+import type { FixtureVisibility } from './life/fixtures';
+import type { SeasonState } from './index';
 import { Paint, VEHICLES } from './life/vehicles';
 import {
   CLASS_LABELS,
@@ -32,6 +34,8 @@ import {
 } from './theme';
 
 export type LegendEntry = {
+  /** Informational decorations have stable ids and no selectable focus category. */
+  id?: `info:season-${'lanterns' | 'bunting' | 'stalls'}`;
   /** The classes the entry covers (a marker and its building class share one). */
   classes: RenderClass[];
   label: string;
@@ -215,11 +219,15 @@ export function legendEntries(
     lights = false,
     sidewalksDerived = true,
     fixtures,
+    season,
   }: {
     life?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
-    fixtures?: { streetlights: boolean; trafficSignals: boolean; utilities?: boolean };
+    fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
+      utilities?: boolean;
+    };
+    season?: SeasonState | null;
   } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
@@ -321,6 +329,33 @@ export function legendEntries(
       label: 'Utility poles and wires (illustrative)',
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
       color: css(theme.fixturePaints[7]!),
+    });
+  if (season?.labels.lanterns && fixtures?.seasonal?.lanterns)
+    entries.push({
+      id: 'info:season-lanterns',
+      classes: [],
+      label: season.labels.lanterns,
+      glyphs: '★',
+      color: css(theme.fixturePaints[9]!),
+    });
+  if (season?.labels.bunting && fixtures?.seasonal?.bunting)
+    entries.push({
+      id: 'info:season-bunting',
+      classes: [],
+      label: season.labels.bunting,
+      glyphs: '▼▽',
+      color: css(theme.fixturePaints[8]!),
+    });
+  if (
+    season?.labels.stalls &&
+    life &&
+    zoom >= 17.5 &&
+    (!onScreen || onScreen.has('path') || onScreen.has('park'))
+  )
+    entries.push({
+      ...vendorsEntry(theme),
+      id: 'info:season-stalls',
+      label: `${season.labels.stalls} (simulated)`,
     });
   return entries;
 }

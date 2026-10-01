@@ -20,6 +20,7 @@ function renderer() {
   return {
     atlas: {
       on,
+      getSeason: () => null,
       getStats: () => ({ quality: { choice: 'high', tier: 0, name: 'high' } }),
     } as unknown as Atlas,
     emit<K extends keyof AtlasEventMap>(event: K, value: AtlasEventMap[K]) {

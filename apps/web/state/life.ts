@@ -38,16 +38,16 @@ export const WIND_CHOICES: readonly WindChoice[] = ['live', ...WIND_STRENGTHS];
  * The life layer's settings (SPEC.md §4 "Life layer"): a viewer preference, not view state, so
  * it is remembered in this browser rather than mirrored in the URL.
  */
-export type LifePrefs = { enabled: boolean; time: TimeChoice; wind: WindChoice };
+export type LifePrefs = { enabled: boolean; time: TimeChoice; wind: WindChoice; season?: string };
 
-const DEFAULTS: LifePrefs = { enabled: true, time: 'live', wind: 'live' };
+const DEFAULTS: LifePrefs = { enabled: true, time: 'live', wind: 'live', season: 'auto' };
 
 export const useLifeStore = create<LifePrefs>()(() => ({ ...DEFAULTS }));
 
 const KEY = 'atlas.life';
 
 /** The saved preferences, or the defaults (storage can be missing or blocked). */
-export function loadLifePrefs(): LifePrefs {
+export function loadLifePrefs(seasons: readonly { id: string }[] = []): LifePrefs {
   try {
     const raw = window.localStorage.getItem(KEY);
     const saved = raw ? (JSON.parse(raw) as Partial<LifePrefs>) : {};
@@ -55,6 +55,7 @@ export function loadLifePrefs(): LifePrefs {
       enabled: typeof saved.enabled === 'boolean' ? saved.enabled : true,
       time: timeChoice(saved.time),
       wind: WIND_CHOICES.includes(saved.wind as WindChoice) ? (saved.wind as WindChoice) : 'live',
+      season: seasons.some((s) => s.id === saved.season) ? saved.season : 'auto',
     };
   } catch {
     return { ...DEFAULTS };
@@ -70,8 +71,9 @@ export function saveLifePrefs(prefs: LifePrefs) {
 }
 
 /** The renderer's settings for the preferences. */
-export const lifeSettings = ({ enabled, time, wind }: LifePrefs): LifeSettings => ({
+export const lifeSettings = ({ enabled, time, wind, season }: LifePrefs): LifeSettings => ({
   enabled,
   time: time === 'live' ? 'live' : TIME_MINUTES[time],
   wind,
+  season: season ?? 'auto',
 });

@@ -12,6 +12,7 @@
 
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -72,6 +73,7 @@
 .bottomLeft {
   position: fixed;
   left: 12px;
+  max-width: calc(100vw - 24px);
   bottom: 12px;
   display: flex;
   flex-direction: column;

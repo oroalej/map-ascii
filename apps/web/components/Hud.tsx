@@ -25,6 +25,8 @@ import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
+import { SeasonControl, useSeasonState } from './SeasonControl';
+import type { SeasonConfig } from '@atlas/shared';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -154,9 +156,11 @@ function Legend({
     [atlas],
   );
   const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
+  const season = useSeasonState();
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures],
+    () =>
+      legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures, season }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season],
   );
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
@@ -429,6 +433,7 @@ export function Hud({
   climate,
   timezone,
   sidewalksDerived = true,
+  seasons,
 }: {
   city: string;
   subdivisionLabel: string;
@@ -436,6 +441,7 @@ export function Hud({
   /** The city's IANA time zone (its pack's `timezone`). */
   timezone?: string | undefined;
   sidewalksDerived?: boolean;
+  seasons?: readonly SeasonConfig[] | undefined;
 }) {
   const hasCamera = useAtlasStore((s) => s.camera !== null);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
@@ -473,6 +479,7 @@ export function Hud({
         </div>
         <div className={styles.row}>
           <LifeControls climate={climate} timezone={timezone} />
+          <SeasonControl seasons={seasons} />
           <QualityControl />
         </div>
         <ProcessionControls />

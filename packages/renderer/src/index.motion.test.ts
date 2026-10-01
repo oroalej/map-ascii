@@ -178,6 +178,85 @@ describe('live motion preference', () => {
     draw(200);
     expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
   });
+  it('resolves the real city date immediately, independently of year/time, and changes fixtures without moving', () => {
+    atlas.destroy();
+    let date = new Date('2026-11-30T16:01:00Z');
+    const tile = { z: 16, x: 32768, y: 32768 },
+      builder = new LifeBuilder();
+    builder.addLamps([2000, 2000, 0, 7, 2010, 2000, 2020, 2000]);
+    const loaded: LoadedTile = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: builder.finish(),
+    };
+    vi.spyOn(TileCache.prototype, 'tilesToDraw').mockReturnValue([tile]);
+    vi.spyOn(TileCache.prototype, 'get').mockReturnValue(loaded);
+    const winter = {
+      id: 'winter',
+      title: { en: 'Winter' },
+      status: 'draft' as const,
+      note: 'TODO(verify)',
+      sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
+      window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
+      lanterns: { label: 'Stars', shape: 'star' as const },
+    };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 19 },
+      year: 1900,
+      now: () => date,
+      timezone: 'Asia/Manila',
+      cityLife: { source: 'Synthetic calendar', seasons: [winter] },
+      life: { enabled: false, time: 1320 },
+    });
+    expect(atlas.getSeason()?.id).toBe('winter');
+    expect(atlas.getSeason()).toBe(atlas.getSeason());
+    const events = vi.fn();
+    atlas.on('seasonchange', events);
+    draw(10);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
+    const camera = atlas.getCamera();
+    date = new Date('2027-01-07T04:00:00Z');
+    draw(1100);
+    expect(atlas.getSeason()).toBe(null);
+    expect(events).toHaveBeenCalledWith(null);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(false);
+    atlas.setLife({ season: 'winter' });
+    expect(atlas.getSeason()?.id).toBe('winter');
+    draw(1200);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
+    atlas.setLife({ season: 'unknown' });
+    expect(atlas.getSeason()).toBe(null);
+    expect(atlas.getCamera()).toEqual(camera);
+    atlas.setLife({ season: 'winter' });
+    atlas.setCamera({ zoom: 14 });
+    draw(1300);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
+    atlas.setCamera({ zoom: 19 });
+    draw(1400);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
+  });
 
   it('leaves profiling disabled by default and resets enabled profiles on context loss', () => {
     draw(10);

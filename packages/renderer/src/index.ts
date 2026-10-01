@@ -4,6 +4,7 @@ import {
   UTILITY_ZOOM,
   shopHours,
   shopOpen,
+  resolveSeason,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -90,7 +91,13 @@ import {
 } from './life/lights';
 import { moonlight } from './life/moon';
 import { createUtilityFixtureCache } from './life/utilities';
-import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life/fixtures';
+import {
+  tileFixtures,
+  type StreetFixture,
+  type FixtureVisibility,
+  type LegacyStreetFixture,
+} from './life/fixtures';
+import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { createInlineHost, createWorkerHost } from './life/host';
@@ -136,7 +143,17 @@ export { cityTime, type LocalTime } from './life/clock';
  * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
  * the time of day the map is lit for.
  */
+export type SeasonState = Readonly<{
+  id: string;
+  title: string;
+  status: 'draft' | 'verified';
+  note?: string;
+  labels: Readonly<{ lanterns?: string; bunting?: string; stalls?: string }>;
+}>;
+
 export type LifeSettings = {
+  /** Pack season id for preview; omitted or 'auto' follows the real city date. */
+  season?: string;
   /** Show the agents (never with reduced motion, which keeps the map still). */
   enabled: boolean;
   /**
@@ -259,6 +276,7 @@ export type AtlasEventMap = {
   lightschange: boolean;
   /** Hardware packed inside the viewport, independent of Life and illumination. */
   fixtureschange: FixtureVisibility;
+  seasonchange: SeasonState | null;
   /**
    * The names of places, landmarks, and monuments on screen changed (street names aren't
    * included), in placement order: most important first. For a text alternative to the map.
@@ -329,6 +347,7 @@ export type Atlas = {
   /** Turn the life layer on or off, or change the time of day. */
   setLife(settings: Partial<LifeSettings>): void;
   getLife(): LifeSettings;
+  getSeason(): SeasonState | null;
   /**
    * Play a procession from its start as a time-lapse. False when it isn't one of the city's or
    * the life layer is off.
@@ -395,7 +414,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const interactive = options.interactive ?? (() => true);
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
-  let life: LifeSettings = { enabled: true, time: 'live', wind: 'live', ...options.life };
+  let life: LifeSettings = {
+    enabled: true,
+    time: 'live',
+    wind: 'live',
+    season: 'auto',
+    ...options.life,
+  };
   const now = options.now ?? (() => new Date());
   /** Where the city's clock is (life/clock.ts). */
   const zone: ClockZone = {
@@ -404,6 +429,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
+  const resolveCurrentSeason = () => {
+    const local = cityTime(now(), zone);
+    return resolveSeason(options.cityLife?.seasons, life.season, local.year, local.day);
+  };
+  let season = resolveCurrentSeason();
+  const seasonState = (): SeasonState | null =>
+    season
+      ? Object.freeze({
+          id: season.id,
+          title: season.title.en,
+          status: season.status,
+          ...(season.note ? { note: season.note } : {}),
+          labels: Object.freeze({
+            ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
+            ...(season.bunting ? { bunting: season.bunting.label } : {}),
+            ...(season.stalls ? { stalls: season.stalls.label } : {}),
+          }),
+        })
+      : null;
+  let seasonSnapshot = seasonState();
   /**
    * The wind at `time` seconds in world axes (x east, y south), which are the grid's (the map is
    * north-up): the season's (or the chosen strength), veering and breathing; still with reduced
@@ -764,7 +809,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           zoom: camera.zoom,
           bounds: viewBounds(),
           wind: worldWind(time),
-          weather: { rain: currentRain(), minutes: cityMinutes, cityLife: options.cityLife },
+          weather: {
+            rain: currentRain(),
+            minutes: cityMinutes,
+            cityLife: options.cityLife,
+            season: season?.id ?? null,
+          },
           cellMeters: metersPerCssPx(camera) * cssCell.width,
         },
         visible: [
@@ -923,9 +973,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
   };
   let fixtures: StreetFixture[] = [];
-  const fixtureTiles = new WeakMap<LoadedTile['life'], StreetFixture[]>();
+  const fixtureTiles = new WeakMap<LoadedTile['life'], LegacyStreetFixture[]>();
   let fixturesKey = '';
   const cachedUtilities = createUtilityFixtureCache();
+  const cachedSeasonal = createSeasonalFixtureCache();
+  let fixtureSeason = season;
   let fixtureInputs: readonly LoadedTile[] = [];
   let hadUtilities = false;
   const syncFixtures = (tiles: readonly TileId[]) => {
@@ -933,6 +985,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       fixtures = [];
       fixtureInputs = [];
       hadUtilities = false;
+      cachedSeasonal([], undefined, 0);
       return;
     }
     const inputs = tiles
@@ -941,10 +994,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       .filter((t): t is LoadedTile => !!t);
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
-    if (showUtilities === hadUtilities && sameReferenceMembers(inputs, fixtureInputs)) return;
+    if (
+      showUtilities === hadUtilities &&
+      season === fixtureSeason &&
+      sameReferenceMembers(inputs, fixtureInputs)
+    )
+      return;
+    fixtureSeason = season;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
     fixtures = [];
+    const seasonalGroups: SeasonalTile[] = [];
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
       const loaded = tileCache.get(tile);
@@ -955,11 +1015,20 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         fixtureTiles.set(loaded.life, found);
       }
       fixtures.push(...found);
+      seasonalGroups.push({
+        tile,
+        life: loaded.life,
+        fixtures: found,
+        ...(loaded.utilities ? { utilities: loaded.utilities } : {}),
+      });
     }
     const utilityGroups = showUtilities
       ? inputs.flatMap((t) => (t.utilities ? [t.utilities] : []))
       : [];
     fixtures.push(...cachedUtilities(utilityGroups));
+    fixtures.push(
+      ...cachedSeasonal(seasonalGroups, season, (options.bounds[1] + options.bounds[3]) / 2),
+    );
   };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
@@ -974,7 +1043,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsDrawn,
       { time, strength: wind.strength },
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities}`;
+    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);
@@ -1021,9 +1090,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
   let lastSun = -Infinity;
+  const updateSeason = () => {
+    const next = resolveCurrentSeason();
+    if (next === season) return;
+    season = next;
+    seasonSnapshot = seasonState();
+    host.invalidateFrame();
+    lifeAgents = [];
+    cellDirty = true;
+    cellsFor = null;
+    emit('seasonchange', seasonSnapshot);
+  };
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
+    updateSeason();
     // A procession under way by its schedule, when the map follows the real clock.
     let live: { id: string; progress: number } | undefined;
     if (life.time === 'live') {
@@ -1445,12 +1526,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
       life = { ...life, ...settings };
+      updateSeason();
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;
       cellsFor = null;
     },
     getLife: () => ({ ...life }),
+    getSeason: () => seasonSnapshot,
     playProcession(id) {
       if (!lifeActive() || !host.play(id)) return false;
       drawDirty = true;

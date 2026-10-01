@@ -94,6 +94,7 @@ export function CityAtlas({
         climate={climate}
         timezone={timezone}
         sidewalksDerived={sidewalksDerived}
+        seasons={cityLife?.seasons}
       />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
