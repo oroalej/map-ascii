@@ -53,3 +53,6 @@ apps/web/public/tiles/imagery/
 
 # agent handoff plans (Claude writes them, Codex implements them; see AGENTS.md)
 .plans/
+
+# nested agent worktrees (see AGENTS.md "Git")
+worktrees/

@@ -71,6 +71,8 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 
 - Several agent sessions (Claude Code, Codex) often edit this working tree at once, so `git status` can show someone else's half-finished edits, sometimes in the files you're changing.
 - Continue working when another session has uncommitted edits, including in files needed for your task. Preserve those edits and keep your changes scoped to your task. Concurrent edits alone must not trigger a pause or permission request.
+- A follow-up to an existing task (an adjustment, fix, review fix, or next phase) continues in that task's worktree and branch. Find them with `git worktree list` and the task's row in `.plans/README.md`, then work there. Don't create a new worktree or branch for a follow-up, and don't add suffixes like `-ii`, `-hardening` or `-pause`.
+- Create a new worktree (`git worktree add worktrees/<short> -b codex/<topic> main`) only for a new task, when the task's branch has already merged into `main`, or when the user asks for one. `worktrees/` is gitignored; older worktrees may still sit beside the repo at `../naga-ascii-<short>`, so `git worktree list` is the source of truth.
 - Before each commit, run `git status` and `git branch`: another session may have switched branches.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`. If a file you must commit also holds another session's uncommitted edits, ask before committing it.
 - Commit messages are gitmoji + conventional commits, lowercase and imperative: `✨ feat(life): …`, `🐛 fix(renderer): …`, `⚡️ perf(web): …`, `📝 docs(roadmap): …`. Match `git log`.
@@ -81,6 +83,7 @@ Implementation plans live in the gitignored `.plans/` folder of the main checkou
 
 - Each task has one folder, `.plans/<status>/<task>/`, where `<status>` is `todo`, `active`, `paused` or `done`. `handoff.md` is the plan.
 - Put every scratch file for the task in its folder: screenshots, capture scripts, logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
+- A handoff for a follow-up names the task's existing worktree and branch (from its `.plans/README.md` row), not a new one.
 - When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
 - Before ending the session, delete every file in the task folder except `handoff.md` and files the handoff marks **keep**. In your report, list what you deleted and what you kept.
 

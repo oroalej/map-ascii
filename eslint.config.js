@@ -16,6 +16,7 @@ export default tseslint.config(
       '**/playwright-report/**',
       '**/test-results/**',
       '.plans/**',
+      'worktrees/**',
       '**/next-env.d.ts',
       'packages/data/raw/**',
       'packages/data/build/**',
