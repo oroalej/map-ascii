@@ -54,6 +54,32 @@
   line-height: 1.6;
 }
 
+.legendEntry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.legendEntry:hover,
+.legendEntry[aria-pressed='true'] {
+  color: #ffd35c;
+  background: rgb(255 255 255 / 8%);
+}
+
+.legendEntry:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
+}
+
 .glyphs {
   flex: none;
   width: 9ch;

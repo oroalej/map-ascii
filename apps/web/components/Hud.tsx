@@ -138,6 +138,7 @@ function Legend({
   const theme = useAtlasStore((s) => s.theme);
   const atlas = useAtlasInstance((s) => s.atlas);
   const life = useLifeShown();
+  const focused = useUiStore((s) => s.legendFocus);
   // The classes on screen, as the renderer last reported them (none reported yet: zoom only).
   const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
   useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
@@ -158,6 +159,16 @@ function Legend({
     () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures }),
     [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures],
   );
+  // Replacements start clean; cleanup touches only the instance it belongs to.
+  useEffect(() => {
+    useUiStore.setState({ legendFocus: null });
+    return () => atlas?.setFocus(null);
+  }, [atlas]);
+  useEffect(() => {
+    const entry = entries.find((entry) => entry.label === focused && entry.focus);
+    atlas?.setFocus(entry?.focus ?? null);
+    if (focused && !entry) useUiStore.setState({ legendFocus: null });
+  }, [atlas, entries, focused]);
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [toggled, setToggled] = useState<boolean | null>(null);
@@ -177,16 +188,40 @@ function Legend({
       <ul aria-label="What the glyphs on screen mean">
         {entries.map((entry) => (
           <li key={entry.label}>
-            <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-              {entry.icons
-                ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                : entry.glyphs}
-            </span>
-            <span>
-              {entry.label === 'Subdivision boundary'
-                ? `${capitalize(subdivisionLabel)} boundary`
-                : entry.label}
-            </span>
+            {entry.focus ? (
+              <button
+                type="button"
+                className={styles.legendEntry}
+                aria-pressed={focused === entry.label}
+                onClick={() =>
+                  useUiStore.setState({ legendFocus: focused === entry.label ? null : entry.label })
+                }
+              >
+                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                  {entry.icons
+                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                    : entry.glyphs}
+                </span>
+                <span>
+                  {entry.label === 'Subdivision boundary'
+                    ? `${capitalize(subdivisionLabel)} boundary`
+                    : entry.label}
+                </span>
+              </button>
+            ) : (
+              <>
+                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                  {entry.icons
+                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                    : entry.glyphs}
+                </span>
+                <span>
+                  {entry.label === 'Subdivision boundary'
+                    ? `${capitalize(subdivisionLabel)} boundary`
+                    : entry.label}
+                </span>
+              </>
+            )}
           </li>
         ))}
       </ul>

@@ -1,12 +1,14 @@
-import type { Atlas, AtlasEventMap } from '@atlas/renderer';
+import type { Atlas, AtlasEventMap, LegendFocus } from '@atlas/renderer';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useLifeStore } from '@/state/life';
+import { useUiStore } from '@/state/ui';
 import { Hud } from './Hud';
 
 function renderer() {
+  const focus = vi.fn<(descriptor: LegendFocus | null) => void>();
   const listeners = new Map<keyof AtlasEventMap, Set<(value: unknown) => void>>();
   const on: Atlas['on'] = (event, handler) => {
     const listener = (value: unknown) => handler(value as AtlasEventMap[typeof event]);
@@ -20,12 +22,14 @@ function renderer() {
   return {
     atlas: {
       on,
+      setFocus: focus,
       getStats: () => ({ quality: { choice: 'high', tier: 0, name: 'high' } }),
     } as unknown as Atlas,
     emit<K extends keyof AtlasEventMap>(event: K, value: AtlasEventMap[K]) {
       for (const listener of listeners.get(event) ?? []) listener(value);
     },
     listeners,
+    focus,
   };
 }
 
@@ -44,6 +48,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }));
   useAtlasStore.setState({ ...initialAtlasState(), camera: { lng: 0, lat: 0, zoom: 19 } });
   useLifeStore.setState({ enabled: false });
+  useUiStore.setState({ legendFocus: null, lifeHover: null });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -65,6 +70,34 @@ const mount = async (instance: ReturnType<typeof renderer>) => {
     await Promise.resolve();
   });
 };
+
+it('toggles one focus, retains it through collapse and panels, and clears missing entries or atlas swaps', async () => {
+  const instance = renderer();
+  await mount(instance);
+  act(() => instance.emit('classeschange', ['road_mid', 'water_river']));
+  const buttons = () => [...legend().querySelectorAll<HTMLButtonElement>('button')];
+  const road = buttons().find((button) => /road/i.test(button.textContent ?? ''))!;
+  expect(road).toBeDefined();
+  act(() => road.click());
+  expect(road.getAttribute('aria-pressed')).toBe('true');
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: ['road_mid'], life: [] });
+  const key = useUiStore.getState().legendFocus;
+  act(() => legend().querySelector('summary')!.click());
+  select('place');
+  select(null);
+  expect(useUiStore.getState().legendFocus).toBe(key);
+  act(() => road.click());
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  act(() => road.click());
+  act(() => instance.emit('classeschange', ['water_river']));
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  act(() => buttons()[0]!.click());
+  const next = renderer();
+  act(() => useAtlasInstance.setState({ atlas: next.atlas }));
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+  expect(next.focus).toHaveBeenLastCalledWith(null);
+});
 
 it('retains fixture entries and the collapsed preference after a panel closes without new events', async () => {
   const instance = renderer();
@@ -91,6 +124,33 @@ it('retains fixture entries and the collapsed preference after a panel closes wi
   expect(legend().hidden).toBe(false);
   expect(legend().open).toBe(false);
   expect(labels()).toEqual(before);
+});
+
+it('replaces focus, updates merged descriptors and clears Life focus when Life is disabled', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  const button = (name: string) =>
+    [...legend().querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.endsWith(name),
+    )!;
+  act(() => instance.emit('classeschange', ['building_school', 'road_mid']));
+  act(() => button('School').click());
+  const label = useUiStore.getState().legendFocus;
+  act(() => instance.emit('classeschange', ['building_school', 'marker_school', 'road_mid']));
+  expect(useUiStore.getState().legendFocus).toBe(label);
+  expect(instance.focus.mock.calls.at(-1)![0]?.classes).toContain('marker_school');
+  act(() => button('Street vendors (simulated)').click());
+  expect(button('School').getAttribute('aria-pressed')).toBe('false');
+  expect(button('Street vendors (simulated)').getAttribute('aria-pressed')).toBe('true');
+  act(() =>
+    instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: true }),
+  );
+  expect(button('Streetlights')).toBeUndefined();
+  expect(button('Utility poles and wires (illustrative)')).toBeUndefined();
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
 });
 
 it('receives fixture changes while hidden and forgets the old atlas when replaced', async () => {
