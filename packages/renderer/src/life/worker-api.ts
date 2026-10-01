@@ -88,7 +88,7 @@ export function createLifeWorkerApi() {
       lastTerrain = undefined;
       terrainSent = false;
     },
-    sync(tiles: readonly SyncTile[]) {
+    sync(tiles: readonly SyncTile[], focus?: readonly [number, number]) {
       const keep = new Set(tiles.map((t) => t.key));
       const resolved = tiles.map(({ key, tile, life }) => {
         const geometry = life ?? geometries.get(key);
@@ -99,10 +99,16 @@ export function createLifeWorkerApi() {
       for (const key of geometries.keys()) if (!keep.has(key)) geometries.delete(key);
       // Sync happens between frame requests. Carry its timing into the next frame result.
       profiler?.begin(0);
-      world.sync(resolved);
+      world.sync(resolved, focus);
       const sample = profiler?.drain();
       if (sample) profiler!.merge(sample);
       if (!tiles.length) terrainSent = false;
+    },
+    clearTiles() {
+      world.clearTiles();
+      geometries.clear();
+      lastTerrain = undefined;
+      terrainSent = false;
     },
     frame(input: FrameInput): FrameResult {
       profiler?.begin(input.gust.time * 1000);

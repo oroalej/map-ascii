@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { LifeWorld } from './simulate';
 import { makeScenario } from './testing/scenarios';
-import { createLifeWorkerApi, type FrameInput } from './worker-api';
+import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
+import { continuityTile, left, parent, right } from './testing/continuity';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
 import type { ProcessionRoute } from '@atlas/shared';
@@ -138,5 +139,52 @@ describe('life worker protocol', () => {
     const api = createLifeWorkerApi();
     api.init({ processions: [], profiling: false });
     expect(() => api.sync([{ key: 'missing', tile: { x: 0, y: 0, z: 16 } }])).toThrow('geometry');
+  });
+
+  it('matches inline zoom ownership, cloned revival and hard clearing', () => {
+    const scenario = makeScenario('sparse', 1, false);
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: scenario.center[0], lat: scenario.center[1], zoom: 18 },
+        size: { width: 1920, height: 1080 },
+        cssCell: { w: 10, h: 18 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 18,
+        bounds: undefined,
+        wind: undefined,
+        weather: undefined,
+        cellMeters: 0,
+      },
+      visible: [18, scenario.levels, scenario.center],
+    };
+    const direct = new LifeWorld(),
+      api = createLifeWorkerApi();
+    api.init({ processions: [], profiling: false });
+    const coarse = continuityTile(parent),
+      a = continuityTile(left),
+      b = continuityTile(right);
+    for (const tiles of [[coarse], [coarse, a], [a], [a, b], [coarse, a], [coarse], [], [coarse]]) {
+      direct.sync(tiles, scenario.center);
+      api.sync(structuredClone(tiles), scenario.center);
+      for (let frame = 0; frame < 4; frame++) {
+        const expected = runLifeFrame(direct, input);
+        for (const agent of expected.agents) delete agent.consist;
+        const actual = api.frame(input);
+        expect(actual.agents).toEqual(expected.agents);
+        expect(actual.signalClock).toBe(expected.signalClock);
+      }
+    }
+    direct.clearTiles();
+    api.clearTiles();
+    expect(() => api.sync([{ key: coarse.key, tile: coarse.tile }])).toThrow('geometry');
+    direct.sync([coarse]);
+    api.sync([structuredClone(coarse)]);
+    const expected = runLifeFrame(direct, input);
+    for (const agent of expected.agents) delete agent.consist;
+    expect(api.frame(input).agents).toEqual(expected.agents);
   });
 });
