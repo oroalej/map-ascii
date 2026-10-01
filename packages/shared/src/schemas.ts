@@ -1116,6 +1116,10 @@ export const CityMeta = z.object({
   yearRange: z.tuple([Year, Year]),
   /** Extra credits this city's layers need, beyond OpenStreetMap. */
   attribution: z.array(z.string().min(1)),
+  /** Optional layout fingerprints; older pinned archives omit them. */
+  detail_layouts: z
+    .record(z.string().regex(/^detail\/[a-z0-9-]+$/), z.string().regex(/^[0-9a-f]{64}$/))
+    .optional(),
 });
 export type CityMeta = z.infer<typeof CityMeta>;
 

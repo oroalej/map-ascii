@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import type { City, CityArt } from '@atlas/shared';
+import { SiteDetail, type City, type CityArt } from '@atlas/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
+import { detailLayoutKey } from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
 // A fixture city that is not tied to any real place (ARCHITECTURE.md §9).
@@ -192,6 +193,24 @@ describe('pipeline (02–04) on the fixture extract', () => {
       ['Imagery', 'DEM'],
     );
     expect(credited.attribution).toEqual(['DEM', 'Imagery']);
+  });
+
+  it('records only the supplied detail layouts while accepting legacy metadata calls', async () => {
+    const geography = await readJson<Geography>(join(ctx.buildDir, files.geography));
+    const detail = SiteDetail.parse({
+      id: 'detail/fixture',
+      osm_id: 'osm:way/105',
+      title: 'Fixture plaza',
+      surface: 'paving',
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    expect(buildMeta(city, geography, [1890, 2026]).detail_layouts).toBeUndefined();
+    expect(buildMeta(city, geography, [1890, 2026], [], []).detail_layouts).toEqual({});
+    expect(buildMeta(city, geography, [1890, 2026], [], [detail]).detail_layouts).toEqual({
+      [detail.id]: detailLayoutKey(detail),
+    });
   });
 
   it('checks that tours point at features in the data and stay in the region', () => {

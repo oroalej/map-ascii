@@ -2,7 +2,7 @@ import { buildUtilityTiles } from './lib/utility-tiles';
 import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
+import { CityMeta, SubdivisionAreas, type City, type SiteDetail } from '@atlas/shared';
 import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normalize';
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
@@ -10,6 +10,7 @@ import { roofTileRecords } from './lib/roof-tiles';
 import { landcoverCredits } from './lib/landcover';
 import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
+import { detailLayoutKey } from './lib/detail-layout';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
 
@@ -34,6 +35,7 @@ export function buildMeta(
   geography: Geography,
   years: [number, number],
   credits: readonly string[] = [],
+  details?: readonly SiteDetail[],
 ): CityMeta {
   return CityMeta.parse({
     slug: city.slug,
@@ -45,6 +47,7 @@ export function buildMeta(
     defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
     attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
+    detail_layouts: details && Object.fromEntries(details.map((d) => [d.id, detailLayoutKey(d)])),
   });
 }
 
@@ -55,11 +58,17 @@ export const step: Step = {
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
     const years = await yearRange(merged, new Date().getFullYear());
-    const meta = buildMeta(city, geography, years, [
-      ...landcoverCredits(content.landcover),
-      ...detailCredits(content.details),
-      ...planCredits(content.plans),
-    ]);
+    const meta = buildMeta(
+      city,
+      geography,
+      years,
+      [
+        ...landcoverCredits(content.landcover),
+        ...detailCredits(content.details),
+        ...planCredits(content.plans),
+      ],
+      content.details,
+    );
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     const base = city.streets?.utilities?.derive

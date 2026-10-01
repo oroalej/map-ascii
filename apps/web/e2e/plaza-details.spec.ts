@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
+import { detailLayoutKey } from '../../../packages/data/scripts/lib/detail-layout';
 import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
 const samples = JSON.parse(
@@ -47,10 +48,16 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       expect(response.ok()).toBe(true);
       const meta: unknown = await response.json();
       if (!isCityMeta(meta)) throw new Error(`${city.slug}: invalid served city meta`);
-      // CI's pinned release may predate new packs; locally rebuilt tiles must run every case.
-      if (process.env.ATLAS_REQUIRE_DETAILS === '1')
+      // Credits survive layout edits, so also match the exact current geometry/selection.
+      const currentLayout = meta.detail_layouts?.[detail.id] === detailLayoutKey(detail);
+      if (process.env.ATLAS_REQUIRE_DETAILS === '1') {
         expect(meta.attribution).toContain(detail.credit);
-      test.skip(!meta.attribution.includes(detail.credit), 'Pinned tiles predate this detail pack');
+        expect(currentLayout, 'Locally rebuilt tiles must match this detail layout').toBe(true);
+      }
+      test.skip(
+        !meta.attribution.includes(detail.credit) || !currentLayout,
+        'Pinned tiles predate this detail layout',
+      );
       await expect(page.locator('footer')).toContainText(detail.credit);
       await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
       const footer = await page.locator('footer').boundingBox();

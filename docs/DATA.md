@@ -50,7 +50,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Exclude pipeline-only `highway` properties from ordinary tiles. For cities opting into utilities, read retained lamp supports from that base archive, bake the network from the complete merged features, tile a separate max-zoom `utilities` layer, and merge/audit it before copying the final archive.
    - Zoom ranges: Region layers z6–z11; detail layers z12–z16 (overzoom to z19 in the client).
    - Output `<city>.pmtiles` (via `pmtiles convert` if needed) and copy it to `apps/web/public/tiles/`.
-   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
+   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution. Optional `detail_layouts` maps detail ids to SHA-256 fingerprints of parsed geometry and selection fields. Smoke fixtures match these fingerprints before testing an exposed surface; unchanged credits alone cannot establish tile freshness. Older pinned archives remain readable, but their unmatched detail smoke cases skip unless `ATLAS_REQUIRE_DETAILS=1` requires locally rebuilt layouts.
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 7. **`07-processions`**
