@@ -52,7 +52,7 @@ export const cities = readdirSync(citiesDir)
 export type TourFile = {
   id: string;
   title: { en: string };
-  steps: { narration: { en: string } }[];
+  steps: { narration: { en: string }; duration_ms: number }[];
 };
 
 /**
