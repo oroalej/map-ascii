@@ -57,6 +57,8 @@ import {
   fixturePass,
   hasCrowns,
   lifePass,
+  lifeRaster,
+  labelsCoverPoint,
   lightPass,
   metersPerCssPx,
   overlayPass,
@@ -70,6 +72,8 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { LifeHoverController, type LifeHover } from './life/hover';
+import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
@@ -127,6 +131,7 @@ export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { RenderClass } from './classes';
+export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
 export type { WindChoice } from './life/wind';
@@ -219,6 +224,8 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  /** A visible simulated agent under the mouse, in canvas CSS pixels. */
+  lifehover: LifeHover;
   qualitychange: QualityState;
   camerachange: CameraState;
   /**
@@ -305,6 +312,8 @@ export type AtlasStats = {
 };
 
 export type Atlas = {
+  /** Transient legend focus; null restores ordinary map colours. */
+  setFocus(focus: LegendFocus | null): void;
   setQuality(choice: QualityChoice): void;
   getQuality(): QualityChoice;
   /** Move the camera, or fly there with `animate`. */
@@ -438,6 +447,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
@@ -468,6 +478,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  const lifeHover = new LifeHoverController(readback, gl.COLOR_ATTACHMENT0, (hover) =>
+    emit('lifehover', hover),
+  );
   let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
   const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
@@ -539,6 +552,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (targets) deleteCellTargets(gl, targets);
       targets = createCellTargets(gl, cols, rows, labelCols, labelRows);
       targetsGeneration++;
+      lifeHover.clear();
     }
     // Zooming out stops where the bounds fill the view (SPEC.md §3).
     const size = cssSize();
@@ -802,6 +816,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       knobs.shadows ? sun : null,
       profiler,
       host.latest()?.cellGuard(placement.toCell),
+      focus.life,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -1263,6 +1278,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         lampShow(),
         moon,
         sun,
+        focus,
       );
       drawDirty = false;
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
@@ -1293,6 +1309,34 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       generation: targetsGeneration,
     });
     readClasses(now);
+    const raster = lifeRaster(targets);
+    lifeHover.update(
+      lifeShown && lifeActive() && raster
+        ? {
+            targets,
+            grid: {
+              shiftX: grid.shiftX,
+              shiftY: grid.shiftY,
+              cellWidth: cellDev().w,
+              cellHeight: cellDev().h,
+            },
+            dpr,
+            geometry: `${targetsGeneration}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            revision: raster.revision,
+            owners: raster.owners,
+            life: raster.life,
+            agents: lifeAgents,
+            labelsCover: (point) =>
+              labelsCoverPoint(targets!, point, dpr, {
+                shiftX: labelGrid.shiftX,
+                shiftY: labelGrid.shiftY,
+                cellWidth: view().labelDev.w,
+                cellHeight: view().labelDev.h,
+              }),
+          }
+        : null,
+      now,
+    );
     profiler?.end();
   };
   raf = requestAnimationFrame(frame);
@@ -1303,6 +1347,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    lifeHover.pointer(null);
     canvas.style.cursor = '';
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
@@ -1344,6 +1389,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // agents carry on from where they stood.
   const watch = watchVisibility(canvas, (watched) => {
     resetQualitySamples();
+    if (!watched) lifeHover.pointer(null);
     if (watched) lastLifeStep = performance.now();
   });
 
@@ -1374,6 +1420,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
     hover: (point) => {
+      lifeHover.pointer(point);
       pointerOver = point !== null;
       if (!point) canvas.style.cursor = '';
       if (point) {
@@ -1391,6 +1438,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   });
 
   return {
+    setFocus(input) {
+      const next = normalizeFocus(input);
+      if (next.key === focus.key) return;
+      focus = next;
+      drawDirty = true;
+    },
     setQuality(choice) {
       quality.setChoice(choice);
     },
@@ -1409,6 +1462,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
       if (enabled) host.clearTiles();
+      if (enabled) lifeHover.clear();
       lastLifeStep = performance.now();
       lastSun = -Infinity;
       cellDirty = true;
@@ -1447,6 +1501,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
+      if (settings.enabled === false) lifeHover.clear();
       life = { ...life, ...settings };
       if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
@@ -1484,6 +1539,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      lifeHover.pointer(null);
       host.dispose();
       destroyed = true;
       canvas.style.cursor = '';

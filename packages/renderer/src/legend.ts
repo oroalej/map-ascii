@@ -6,6 +6,7 @@
  */
 import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
 import { ROAD_AREA_ZOOM } from './glyphs/select';
+import type { LegendFocus, LifeFocus } from './focus';
 import {
   classDepths,
   classId,
@@ -32,6 +33,8 @@ import {
 } from './theme';
 
 export type LegendEntry = {
+  /** A clickable entry's map classes and simulated-agent groups, after label merging. */
+  focus?: LegendFocus;
   /** The classes the entry covers (a marker and its building class share one). */
   classes: RenderClass[];
   label: string;
@@ -322,5 +325,19 @@ export function legendEntries(
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
       color: css(theme.fixturePaints[7]!),
     });
+  const lifeGroups: Partial<Record<RenderClass, LifeFocus>> = {
+    life_vehicle: 'traffic',
+    life_person: 'people',
+    life_boat: 'boats',
+    life_train: 'trains',
+    life_bird: 'birds',
+  };
+  for (const entry of entries) {
+    const classes = entry.classes.filter((cls) => isCellClass(cls));
+    const life = entry.classes.flatMap((cls) => (lifeGroups[cls] ? [lifeGroups[cls]] : []));
+    if (entry.label === 'Street vendors (simulated)') life.push('vendors');
+    if (entry.label === 'Cats and dogs (simulated)') life.push('pets');
+    if (classes.length || life.length) entry.focus = { classes, life };
+  }
   return entries;
 }

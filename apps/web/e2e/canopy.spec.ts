@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import {
   classDepths,
   classId,
@@ -105,6 +106,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             else if (info.type === gl.INT_VEC2) gl.uniform2iv(loc, a);
             else if (info.type === gl.INT_VEC3) gl.uniform3iv(loc, a);
             else if (info.type === gl.UNSIGNED_INT) gl.uniform1uiv(loc, a);
+            else if (info.type === gl.UNSIGNED_INT_VEC2) gl.uniform2uiv(loc, a);
             else gl.uniform1iv(loc, a);
           }
         }
@@ -284,7 +286,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       colors[input.roof * 3 + 2] = 1;
       colors[input.person * 3] = 1;
       colors[input.bird * 3] = 1;
-      const render = (zoom = 20) => {
+      const render = (zoom = 20, focused = false) => {
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.viewport(0, 0, cols, rows);
         uniforms(select, {
@@ -321,6 +323,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           u_colors: colors,
           u_fillColors: colors,
           u_daylight: 1,
+          u_focus: focused ? 1 : 0,
+          u_focusClasses: [0, 0],
+          u_accent: [0, 0.5, 1],
           u_labelCell: [cw, ch],
           u_crownClass: input.crown,
           u_crownSun: [0, 0, 1],
@@ -376,7 +381,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         life.fill(0);
         for (let x = 0; x < 6; x++)
           life.set(
-            [input.carGlyph & 255, cls | ((input.carGlyph >> 8) << 6), bit, byte],
+            [input.carGlyph & 255, cls | ((input.carGlyph >> 8) << 6), bit | input.focusBit, byte],
             (2 * cols + x) * 4,
           );
         upload(lifeTex, cols, rows, life);
@@ -429,8 +434,10 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           }
           setAgent(0, 0, 0);
           const withoutLife = render();
+          const focusedWithoutLife = render(20, true);
           setAgent(agent.cls, agent.bit, agent.byte);
           const pixels = render();
+          const focusedPixels = render(20, true);
           occlusion.push({
             name: agent.name,
             bird: agent.cls === input.bird,
@@ -441,6 +448,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             covered: pixel(pixels, 2 * cw + 2, 2 * ch + 4),
             edgeWithoutLife: pixel(withoutLife, cw + 4, 2 * ch + 4),
             coveredWithoutLife: pixel(withoutLife, 2 * cw + 2, 2 * ch + 4),
+            focusedCovered: pixel(focusedPixels, 2 * cw + 2, 2 * ch + 4),
+            focusedWithoutLife: pixel(focusedWithoutLife, 2 * cw + 2, 2 * ch + 4),
+            focusedClear: pixel(focusedPixels, 2, 2 * ch + 4),
           });
         }
       }
@@ -499,6 +509,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       boat: classId('life_boat'),
       train: classId('life_train'),
       personBit: CellBit.person,
+      focusBit: LIFE_FOCUS_BIT,
       agents: [
         ...['walker', 'seated person', 'vendor attendant', 'cat', 'dog'].map((name) => ({
           name,
@@ -573,6 +584,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       expect(p[1]).toBeLessThan(10);
     }
     if (!sample.bird) {
+      expect(sample.focusedCovered, `${sample.name}: focus must not leak through foliage`).toEqual(
+        sample.focusedWithoutLife,
+      );
       expect(
         sample.edgeCovered,
         `${sample.name}: hidden at surface ${sample.occluder} edge`,
@@ -581,6 +595,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         sample.coveredWithoutLife,
       );
     }
+    expect(sample.focusedClear).toEqual([0, 128, 255]);
     if (sample.occluder !== classId('tree') || sample.bird) {
       expect(sample.edgeClear[0], `${sample.name}: visible outside canopy edge`).toBeGreaterThan(
         100,

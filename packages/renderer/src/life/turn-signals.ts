@@ -14,9 +14,9 @@ const motorVehicles = new Set<CraftType>(SIGNAL_VEHICLES);
 export const hasTurnSignals = (vehicle: CraftType | undefined): vehicle is MotorVehicle =>
   vehicle !== undefined && motorVehicles.has(vehicle);
 
-/** B holds permission bits 0–6; bit 7 marks a lit indicator, never a terrain permission. */
+/** B uses agent permissions only; focus (32) and indicators (128) are independent flags. */
 export const TURN_SIGNAL_BIT = 128;
-export const LIFE_AGENT_MASK = 127;
+export const LIFE_AGENT_MASK = 1 | 2 | 4 | 8 | 64;
 export const TURN_SIGNAL_COLOR = [1, 0.55, 0.08] as const;
 export const TURN_SIGNAL = {
   leadMeters: 20,

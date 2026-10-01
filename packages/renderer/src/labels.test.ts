@@ -11,10 +11,23 @@ import {
   labelVisibility,
   placeLabels,
   wrapText,
+  overlayCoversPoint,
 } from './labels';
 
 // A toy glyph index: ASCII letters and '?' map to their char code; anything else is unknown.
 const index = (c: string) => (/^[A-Za-z?]$/.test(c) ? c.charCodeAt(0) : undefined);
+
+it('suppresses life hover under normal and rotated label halo quads', () => {
+  const overlay = createOverlay(20, 10);
+  overlay.glyphs[21] = 1;
+  expect(overlayCoversPoint(overlay, 15, 27, 10, 18)).toBe(true);
+  expect(overlayCoversPoint(overlay, 5, 27, 10, 18)).toBe(false);
+  overlay.rotated.push({ id: 1, col: 5, row: 4, angle: Math.PI / 2, codes: [66, 67], vis: 1 });
+  expect(overlayCoversPoint(overlay, 55, 99, 10, 18)).toBe(true);
+  expect(overlayCoversPoint(overlay, 75, 81, 10, 18)).toBe(false);
+  overlay.rotated[0]!.vis = 0;
+  expect(overlayCoversPoint(overlay, 55, 99, 10, 18)).toBe(false);
+});
 
 it('reuses and clears overlay storage with the same packed bytes as a fresh overlay', () => {
   const reused = createOverlay(40, 20);

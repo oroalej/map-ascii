@@ -210,6 +210,43 @@ export type RotatedLabel = {
   vis: number;
 };
 
+/** Includes blank label halos, and the rotated quads actually retained by the dissolve. */
+export function overlayCoversPoint(
+  overlay: Overlay,
+  x: number,
+  y: number,
+  cellWidth: number,
+  cellHeight: number,
+): boolean {
+  const col = Math.floor(x / cellWidth),
+    row = Math.floor(y / cellHeight);
+  if (
+    col >= 0 &&
+    row >= 0 &&
+    col < overlay.cols &&
+    row < overlay.rows &&
+    overlay.glyphs[row * overlay.cols + col]
+  )
+    return true;
+  for (const label of overlay.rotated) {
+    const dx = x - (label.col + 0.5) * cellWidth,
+      dy = y - (label.row + 0.5) * cellHeight;
+    const c = Math.cos(label.angle),
+      s = Math.sin(label.angle);
+    const localX = c * dx + s * dy,
+      localY = -s * dx + c * dy;
+    if (Math.abs(localY) >= cellHeight * 0.7) continue;
+    const index = Math.floor(localX / cellWidth + label.codes.length / 2);
+    if (
+      index >= -1 &&
+      index <= label.codes.length &&
+      labelCellShows(label.id, index + 1, label.vis)
+    )
+      return true;
+  }
+  return false;
+}
+
 /** The whole word rotates; its baseline never points upside down. */
 export function uprightStreetAngle(angle: number): number {
   return ((((angle + Math.PI / 2) % Math.PI) + Math.PI) % Math.PI) - Math.PI / 2;
