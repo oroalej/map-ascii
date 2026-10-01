@@ -35,7 +35,6 @@ import {
 } from './gpu';
 import {
   createOverlay,
-  labelVisibility,
   packOverlay,
   resetOverlay,
   placeLabels,
@@ -44,6 +43,9 @@ import {
   type LabelCandidate,
   type Overlay,
 } from './labels';
+import { labelArea, labelCandidate, labelScreenArea } from './label-candidates';
+import { labelIntersectsArea } from './label-layout';
+import type { LabelMemory, LabelSlot } from './label-stability';
 import { cellBits } from './life/config';
 import {
   createUtilityPackingScratch,
@@ -130,16 +132,42 @@ export function prepareCrowns(
   return drawn;
 }
 
-const overlays = new WeakMap<CellTargets, { overlay: Overlay; packed: Uint8Array }>();
+const overlays = new WeakMap<
+  CellTargets,
+  { overlay: Overlay; packed: Uint8Array; memory: LabelMemory }
+>();
 function overlayBuffers(targets: CellTargets) {
   let buffers = overlays.get(targets);
   if (!buffers) {
     const overlay = createOverlay(targets.labelCols, targets.labelRows);
-    buffers = { overlay, packed: new Uint8Array(overlay.glyphs.length * 4) };
+    buffers = { overlay, packed: new Uint8Array(overlay.glyphs.length * 4), memory: new Map() };
     overlays.set(targets, buffers);
   }
   resetOverlay(buffers.overlay);
   return buffers;
+}
+
+/** Read the previous acceptance without resetting its glyphs, collision boxes or slots. */
+export const labelMemory = (targets: CellTargets): ReadonlyMap<number, LabelSlot> | undefined =>
+  overlays.get(targets)?.memory;
+
+export const forgetLabelPlacement = (targets: CellTargets): void => {
+  overlays.delete(targets);
+};
+
+/** Retained placements outside the viewport stay in memory but not the accessible list. */
+export function labelsInView(
+  targets: CellTargets,
+  view: View,
+  grid: Grid,
+  placed: readonly LabelCandidate[],
+): LabelCandidate[] {
+  const bounds = overlays.get(targets)?.overlay.placements;
+  const area = labelScreenArea(view, grid);
+  return placed.filter(({ id }) => {
+    const box = bounds?.get(id);
+    return box !== undefined && labelIntersectsArea(box, area);
+  });
 }
 
 export function labelsCoverPoint(
@@ -312,17 +340,11 @@ export function overlayPass(
   placement: GridPlacement,
   labels: Iterable<TileLabel>,
   { streetText }: Programs,
+  focus: readonly number[] = [],
 ): LabelCandidate[] {
-  const { camera, labelDev } = view;
-  const { toCell } = placement;
-  /** A street run's length in label cells across, which a rotated name must fit. */
-  const runCells = ([from, to]: NonNullable<TileLabel['run']>) => {
-    const a = toCell(...from),
-      b = toCell(...to);
-    return Math.hypot((b[0] - a[0]) * labelDev.w, (b[1] - a[1]) * labelDev.h) / labelDev.w;
-  };
-  const { overlay, packed } = overlayBuffers(targets);
-  const area = screenArea(view, placement.grid, view.labelDev);
+  const { labelDev } = view;
+  const { overlay, packed, memory } = overlayBuffers(targets);
+  const area = labelArea(view, placement);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
     const index = glyphs.index(char);
@@ -331,34 +353,13 @@ export function overlayPass(
 
   const candidates: LabelCandidate[] = [];
   for (const label of labels) {
-    const vis = labelVisibility(label.band, camera.zoom);
-    if (vis <= 0) continue;
-    const [col, row] = toCell(label.lng, label.lat);
-    // No box of a label's (none wider or taller than its text, a few cells from its anchor)
-    // reaches the area from further out.
-    const reach = label.text.length + 3;
-    if (
-      col < area.left - reach ||
-      col >= area.right + reach ||
-      row < area.top - reach ||
-      row >= area.bottom + reach
-    ) {
-      continue;
-    }
-    candidates.push({
-      id: label.id,
-      text: label.text,
-      rank: label.rank,
-      vis,
-      col: Math.floor(col),
-      row: Math.floor(row),
-      // Street names follow the street.
-      mode: label.angle !== undefined ? 'rotated' : 'beside',
-      angle: label.angle,
-      runCells: label.run && runCells(label.run),
-    });
+    const candidate = labelCandidate(label, view, placement);
+    if (candidate) candidates.push(candidate);
   }
-  const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w);
+  const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w, {
+    memory,
+    focus,
+  });
   uploadOverlay(gl, targets, packOverlay(overlay, packed));
   // Most views have no rotated names, before or after: nothing to upload.
   if (overlay.rotated.length > 0 || streetText.count > 0) {

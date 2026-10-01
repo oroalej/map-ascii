@@ -4,6 +4,23 @@
  * cities, subdivisions, smaller places), landmarks, and monuments.
  */
 import { bandVisibility, type ZoomBand } from '@atlas/shared';
+import { layoutLabels, TAKEN_PAD, type Box } from './label-layout';
+import { STREET_REPEAT, type PlaceStability } from './label-stability';
+export {
+  LABEL_WIDTH,
+  labelFitsArea,
+  rotatedLabelBox,
+  uprightStreetAngle,
+  wrapText,
+} from './label-layout';
+export {
+  KEEP_OVERHANG,
+  STREET_REPEAT,
+  labelFocus,
+  type LabelMemory,
+  type LabelSlot,
+  type PlaceStability,
+} from './label-stability';
 
 /** Label priority: lower ranks are placed first. */
 export const LabelRank = {
@@ -65,14 +82,9 @@ export function labelCellShows(id: number, k: number, vis: number): boolean {
   return (h >>> 8) / 0x1000000 < vis;
 }
 
-/** Longest line before a label wraps, in cells. */
-export const LABEL_WIDTH = 18;
-
 /** Overlay glyph codes: 0 = nothing (the map shows), 1 = blank (hides the map), else index + 1. */
 export const OVERLAY_NONE = 0;
 export const OVERLAY_BLANK = 1;
-
-type Box = { left: number; top: number; width: number; height: number };
 
 /** The overlay grid (the same size as the cell grid) and what has been placed on it. */
 export type Overlay = {
@@ -83,6 +95,8 @@ export type Overlay = {
   glyphs: Uint16Array;
   /** Boxes taken so far, which later placements avoid. */
   taken: Box[];
+  /** Accepted text bounds, excluding halos, for visible-label reporting. */
+  placements?: Map<number, Box>;
   /**
    * The same boxes by cell, 1 where taken, over the grid and `TAKEN_PAD` cells around it, so a
    * placement checks its own cells instead of every box placed.
@@ -90,15 +104,13 @@ export type Overlay = {
   takenCells?: Uint8Array;
 };
 
-/** How far past the grid's edges `takenCells` reaches (at least a label's halo). */
-const TAKEN_PAD = 4;
-
 export const createOverlay = (cols: number, rows: number): Overlay => ({
   rotated: [],
   cols,
   rows,
   glyphs: new Uint16Array(cols * rows),
   taken: [],
+  placements: new Map(),
   takenCells: new Uint8Array((cols + 2 * TAKEN_PAD) * (rows + 2 * TAKEN_PAD)),
 });
 
@@ -108,42 +120,7 @@ export function resetOverlay(overlay: Overlay) {
   overlay.glyphs.fill(0);
   overlay.takenCells?.fill(0);
   overlay.taken.length = 0;
-}
-
-/** Whether `box` is within `takenCells` (the grid and its pad). */
-const inTakenCells = (o: Overlay, b: Box) =>
-  b.left >= -TAKEN_PAD &&
-  b.top >= -TAKEN_PAD &&
-  b.left + b.width <= o.cols + TAKEN_PAD &&
-  b.top + b.height <= o.rows + TAKEN_PAD;
-
-/** Whether `box` overlaps any box taken so far. */
-function isTaken(o: Overlay, b: Box): boolean {
-  const cells = o.takenCells;
-  if (!cells || !inTakenCells(o, b)) return o.taken.some((p) => overlaps(p, b));
-  const stride = o.cols + 2 * TAKEN_PAD;
-  for (let y = b.top; y < b.top + b.height; y++) {
-    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
-    for (let x = b.left; x < b.left + b.width; x++) if (cells[row + x]) return true;
-  }
-  return false;
-}
-
-/** Take `box`, so later placements avoid it. */
-function take(o: Overlay, b: Box) {
-  o.taken.push(b);
-  const cells = o.takenCells;
-  if (!cells) return;
-  const stride = o.cols + 2 * TAKEN_PAD;
-  // A box past the pad stays out of the cells: `isTaken` checks the list for boxes that reach it.
-  const x0 = Math.max(b.left, -TAKEN_PAD);
-  const x1 = Math.min(b.left + b.width, o.cols + TAKEN_PAD);
-  const y0 = Math.max(b.top, -TAKEN_PAD);
-  const y1 = Math.min(b.top + b.height, o.rows + TAKEN_PAD);
-  for (let y = y0; y < y1; y++) {
-    const row = (y + TAKEN_PAD) * stride + TAKEN_PAD;
-    for (let x = x0; x < x1; x++) cells[row + x] = 1;
-  }
+  overlay.placements?.clear();
 }
 
 /** The overlay as RGBA8 texels: glyph code low byte, high byte, 0, 0. */
@@ -163,12 +140,6 @@ export function packOverlay(
 
 /** The part of the grid placements may use: [left, top] inclusive to [right, bottom] exclusive. */
 export type LabelArea = { left: number; top: number; right: number; bottom: number };
-
-const overlaps = (a: Box, b: Box) =>
-  a.left < b.left + b.width &&
-  b.left < a.left + a.width &&
-  a.top < b.top + b.height &&
-  b.top < a.top + a.height;
 
 const fullArea = (o: Overlay): LabelArea => ({ left: 0, top: 0, right: o.cols, bottom: o.rows });
 
@@ -247,32 +218,6 @@ export function overlayCoversPoint(
   return false;
 }
 
-/** The whole word rotates; its baseline never points upside down. */
-export function uprightStreetAngle(angle: number): number {
-  return ((((angle + Math.PI / 2) % Math.PI) + Math.PI) % Math.PI) - Math.PI / 2;
-}
-
-export function rotatedLabelBox(
-  col: number,
-  row: number,
-  width: number,
-  angle: number,
-  aspect = 1.8,
-): Box {
-  const c = Math.abs(Math.cos(angle)),
-    s = Math.abs(Math.sin(angle));
-  const w = c * (width + 2) + s * aspect * 1.4;
-  const h = (s * (width + 2)) / aspect + c * 1.4;
-  const left = Math.floor(col + 0.5 - w / 2),
-    top = Math.floor(row + 0.5 - h / 2);
-  return {
-    left,
-    top,
-    width: Math.ceil(col + 0.5 + w / 2) - left,
-    height: Math.ceil(row + 0.5 + h / 2) - top,
-  };
-}
-
 /** A quad's two triangles, as (u, v) corners. */
 const QUAD_UV = [0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1] as const;
 
@@ -311,126 +256,44 @@ export function rotatedLabelVertices(
   return Float32Array.from(data);
 }
 
-/** Labels with the same text closer than this (cells) are one: the first placed wins. */
-export const DUPLICATE_DISTANCE = 30;
+/** Streets repeat by screen distance; other names appear once per placement. */
+export const repeatDistance = (rank: number): number =>
+  rank === LabelRank.roadMajor || rank === LabelRank.street || rank === LabelRank.streetMinor
+    ? STREET_REPEAT
+    : Infinity;
 
-/** Each label text's lines at `LABEL_WIDTH`, and their width in characters, wrapped once. */
-const wrapped = new Map<string, { lines: string[]; width: number }>();
-const WRAPPED_MAX = 20_000;
-function wrapOnce(text: string) {
-  let found = wrapped.get(text);
-  if (!found) {
-    const lines = wrapText(text);
-    found = { lines, width: Math.max(0, ...lines.map((l) => [...l].length)) };
-    if (wrapped.size >= WRAPPED_MAX) wrapped.clear();
-    wrapped.set(text, found);
-  }
-  return found;
-}
-
-/** Split text into lines of at most `width` characters at word boundaries. */
-export function wrapText(text: string, width = LABEL_WIDTH): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.trim().split(/\s+/)) {
-    if (!word) continue;
-    if (line && line.length + 1 + word.length > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line ? `${line} ${word}` : word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-/** Candidate text boxes around an anchor: below, above, right, left. */
-function besideBoxes(col: number, row: number, width: number, height: number): Box[] {
-  const centered = col - Math.floor(width / 2);
-  return [
-    { left: centered, top: row + 1, width, height },
-    { left: centered, top: row - height, width, height },
-    { left: col + 2, top: row - Math.floor(height / 2), width, height },
-    { left: col - 1 - width, top: row - Math.floor(height / 2), width, height },
-  ];
-}
-
-/** A box grown by the one-cell halo, left and right of the text. */
-const withHalo = (b: Box): Box => ({ ...b, left: b.left - 1, width: b.width + 2 });
-
-/**
- * Place labels in rank order. Characters the atlas lacks are drawn as `?`. Each label gets a
- * one-cell halo; a label whose text fits nowhere inside `area` (e.g. the on-screen cells)
- * without overlapping what is already placed is dropped, and so is one whose text was already
- * placed nearby (a street's other ways). Returns the labels placed, in placement order.
- */
+/** Place collision-free layouts, retaining slots and prioritizing selected/hovered names. */
 export function placeLabels(
   overlay: Overlay,
   candidates: readonly LabelCandidate[],
   glyphIndex: (char: string) => number | undefined,
   area: LabelArea = fullArea(overlay),
   aspect = 1.8,
+  stability: PlaceStability = {},
 ): LabelCandidate[] {
-  const out: LabelCandidate[] = [];
-  const sorted = [...candidates].sort((a, b) => a.rank - b.rank || a.id - b.id);
+  const layouts = layoutLabels(overlay, candidates, area, aspect, stability, repeatDistance);
   const question = glyphIndex('?') ?? 0;
-  const placed = new Map<string, { col: number; row: number }[]>();
   const glyphOf = (char: string) =>
     char === ' ' ? OVERLAY_BLANK : (glyphIndex(char) ?? question) + 1;
-
-  const inArea = (b: Box) =>
-    b.left >= area.left &&
-    b.top >= area.top &&
-    b.left + b.width <= area.right &&
-    b.top + b.height <= area.bottom;
-
-  for (const label of sorted) {
-    const nearby = placed.get(label.text) ?? [];
-    if (nearby.some((p) => Math.hypot(p.col - label.col, p.row - label.row) < DUPLICATE_DISTANCE)) {
+  for (const layout of layouts) {
+    const { label } = layout;
+    overlay.placements?.set(label.id, layout.textBounds);
+    if (layout.slot === -1) {
+      overlay.rotated.push({
+        id: label.id,
+        col: label.col,
+        row: label.row,
+        angle: layout.angle,
+        codes: layout.chars.map((c) => (c === ' ' ? 0 : (glyphIndex(c) ?? question))),
+        vis: label.vis ?? 1,
+      });
       continue;
     }
-    const accept = (box: Box) => {
-      take(overlay, box);
-      if (nearby.length === 0) placed.set(label.text, nearby);
-      nearby.push({ col: label.col, row: label.row });
-      out.push(label);
-    };
-    if (label.mode === 'rotated') {
-      const chars = [...label.text.trim()];
-      const angle = uprightStreetAngle(label.angle ?? 0);
-      const box = rotatedLabelBox(label.col, label.row, chars.length, angle, aspect);
-      const fitsRun = label.runCells === undefined || chars.length + 2 <= label.runCells;
-      if (chars.length && fitsRun && inArea(box) && !isTaken(overlay, box)) {
-        accept(box);
-        overlay.rotated.push({
-          id: label.id,
-          col: label.col,
-          row: label.row,
-          angle,
-          codes: chars.map((c) => (c === ' ' ? 0 : (glyphIndex(c) ?? question))),
-          vis: label.vis ?? 1,
-        });
-        continue;
-      }
-      // Short runs, screen edges and collisions get a readable horizontal fallback.
-    }
-    const { lines, width } = wrapOnce(label.text);
-    if (lines.length === 0 || !lines[0]) continue;
-    const box = besideBoxes(label.col, label.row, width, lines.length).find(
-      (b) => inArea(b) && !isTaken(overlay, withHalo(b)),
-    );
-    if (!box) continue;
-    const halo = withHalo(box);
-    accept(halo);
-
-    // A fading label keeps only some of its cells (text and halo alike); the map shows through
-    // the rest.
+    const { box, collision: halo, lines, width } = layout;
     const vis = label.vis ?? 1;
-    const shows = (x: number, y: number) =>
-      labelCellShows(label.id, (y - halo.top) * halo.width + (x - halo.left), vis);
     const put = (x: number, y: number, glyph: number) => {
-      if (shows(x, y)) write(overlay, x, y, glyph);
+      if (labelCellShows(label.id, (y - halo.top) * halo.width + (x - halo.left), vis))
+        write(overlay, x, y, glyph);
     };
     for (let y = halo.top; y < halo.top + halo.height; y++) {
       for (let x = halo.left; x < halo.left + halo.width; x++) put(x, y, OVERLAY_BLANK);
@@ -441,5 +304,5 @@ export function placeLabels(
       chars.forEach((char, j) => put(start + j, box.top + i, glyphOf(char)));
     });
   }
-  return out;
+  return layouts.map(({ label }) => label);
 }
