@@ -5,6 +5,7 @@ import type { Readback } from '../readback';
 import type { VisibleAgent } from './simulate';
 import type { SpeechCue } from './moments';
 import { lifeVisibleOnSurface } from './surface-visibility';
+import type { SpeakerGrid } from './draw';
 
 const CONFIRMATION_MS = 1000;
 const RECHECK_MS = 120;
@@ -16,6 +17,7 @@ export type SpeechFrame = {
   dpr: number;
   geometry: string;
   owners: Uint32Array;
+  speakers?: SpeakerGrid;
   life: Uint8Array;
   agents: readonly VisibleAgent[];
   toCell: (lng: number, lat: number) => [number, number];
@@ -67,8 +69,9 @@ export class SpeechController {
       { targets, grid, dpr } = frame;
     for (let i = 0; i < frame.agents.length; i++) {
       const agent = frame.agents[i]!;
-      if (!agent.speech || agent.kind !== 'person' || agent.prop || agent.vehicle) continue;
-      const [x, y] = frame.toCell(agent.lng, agent.lat);
+      if (!agent.speech || agent.kind !== 'person' || agent.prop || agent.aboard) continue;
+      if ((agent.vehicle || agent.speech.member !== undefined) && !frame.speakers) continue;
+      const [x, y] = frame.speakers?.points.get(i + 1) ?? frame.toCell(agent.lng, agent.lat);
       const point: [number, number] = [
         (x * grid.cellWidth - grid.shiftX) / dpr,
         (y * grid.cellHeight - grid.shiftY) / dpr,
@@ -92,7 +95,9 @@ export class SpeechController {
             row < 0 ||
             col >= targets.cols ||
             row >= targets.rows ||
-            frame.owners[row * targets.cols + col] !== i + 1
+            frame.owners[row * targets.cols + col] !== i + 1 ||
+            (frame.speakers &&
+              frame.speakers.members[row * targets.cols + col] !== (agent.speech.member ?? 0) + 1)
           )
             continue;
           const distance = (col + 0.5 - x) ** 2 + (row + 0.5 - y) ** 2;

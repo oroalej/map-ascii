@@ -65,6 +65,26 @@ function fixture() {
   return { frame, queue, events, readback, controller, finish, clock };
 }
 describe('speech visibility', () => {
+  it('rejects a visible cart or wrong group member and confirms only the speaking person cells', () => {
+    const f = fixture();
+    const agent = f.frame.agents[0]!;
+    agent.vehicle = 'cart';
+    agent.speech!.member = 0;
+    f.frame.speakers = { members: new Uint8Array(400), points: new Map([[1, [10.5, 10.5]]]) };
+    f.controller.update(f.frame, 0);
+    expect(f.queue).toHaveLength(0);
+    f.frame.speakers.members[210] = 2;
+    f.controller.update(f.frame, 100);
+    expect(f.queue).toHaveLength(0);
+    f.frame.speakers.members[210] = 1;
+    f.controller.update(f.frame, 200);
+    f.finish();
+    f.controller.update(f.frame, 201);
+    expect(f.events.at(-1)).toHaveLength(1);
+    f.frame.speakers.members[210] = 0;
+    f.controller.update(f.frame, 202);
+    expect(f.events.at(-1)).toEqual([]);
+  });
   it.each([
     [800, 3, 50],
     [500, 2, 100],

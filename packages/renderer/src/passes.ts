@@ -475,6 +475,7 @@ export function lifePass(
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
   owners?: Uint32Array,
+  speakers?: LifeGrid['speakers'],
 ): number {
   const { cols, rows } = targets;
   const lifeTexels = texels(targets).life;
@@ -489,6 +490,7 @@ export function lifePass(
       toCell: placement.toCell,
       allowsGroundCell,
       owners,
+      speakers,
     },
     agents,
     theme,

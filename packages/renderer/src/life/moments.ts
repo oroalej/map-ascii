@@ -1,13 +1,14 @@
 /** Tile-local social holds. Navigation and terrain admission stay with the simulation. */
 import {
-  greetingPeriod,
   SPEECH_ZOOM,
+  type DialogueAnchor,
   type DialogueChoice,
   type GreetingPeriods,
   type PlaceKind,
 } from '@atlas/shared';
 import type { PersonPose } from './people';
 import { between, random } from './random';
+import { DialogueSelector, type DialogueMemory } from './dialogue';
 
 export type MomentKind = DialogueChoice['kind'];
 export const MOMENTS = {
@@ -50,11 +51,14 @@ export type MomentActor<Owner extends object = object> = {
   /** Original place record ordinal, never an inferred coordinate match. */
   source?: number;
 };
-export type MomentAnchor = { x: number; y: number; source: number };
+export type MomentAnchor = { x: number; y: number; source: number; kind?: DialogueAnchor };
 export type MomentContext<Owner extends object = object> = {
   zoom: number;
   rain: number;
   minutes?: number;
+  wind?: number;
+  reserved?: number;
+  sceneChecks?: number;
   perMeter: number;
   /** Refreshed only on the fixed scan cadence; order is stable. */
   actors(): readonly MomentActor<Owner>[];
@@ -74,6 +78,8 @@ type Moment<Owner extends object = object> = {
   speechStart?: number;
   speechHolder: number;
   lastSpeech: number;
+  caught?: number;
+  focus?: MomentAnchor;
   kind: MomentKind;
   members: MomentActor<Owner>[];
   start: number;
@@ -105,7 +111,7 @@ const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
 
 export class Moments<Owner extends object = object> {
   private readonly rng: () => number;
-  private readonly speechRng: () => number;
+  readonly selector: DialogueSelector;
   private serial = 0;
   private time = 0;
   private nextScan = MOMENTS.interval as number;
@@ -136,9 +142,10 @@ export class Moments<Owner extends object = object> {
     rng?: () => number,
     private readonly dialogue: readonly DialogueChoice[] = [],
     private readonly periods?: Readonly<GreetingPeriods>,
+    memory?: DialogueMemory,
   ) {
     this.rng = rng ?? random(seed ^ 0x7f4a7c15);
-    this.speechRng = random(seed ^ 0x592cf6a3);
+    this.selector = new DialogueSelector(seed, dialogue, periods, memory);
   }
   busy(owner: object) {
     return this.membership.has(owner);
@@ -151,22 +158,21 @@ export class Moments<Owner extends object = object> {
     const m = this.membership.get(owner);
     if (!m?.dialogue || m.speechStart === undefined) return;
     const seconds = MOMENTS[m.kind].speechTurn;
-    const line = Math.floor((this.time - m.speechStart) / seconds + 1e-9);
+    const caught = m.dialogue.conditions?.event === 'catch';
+    const line = caught
+      ? m.caught === undefined
+        ? 0
+        : 1
+      : Math.floor((this.time - m.speechStart) / seconds + 1e-9);
+    const slot = m.dialogue.speakers?.[line] ?? line;
     if (
       line < 0 ||
       line >= m.dialogue.turns ||
-      m.members[(m.speechHolder + line) % m.members.length]?.owner !== owner
+      (caught && m.caught !== undefined && this.time - m.caught >= seconds) ||
+      m.members[(m.speechHolder + slot) % m.members.length]?.owner !== owner
     )
       return;
     return { id: `${m.id}:${m.speechStart}`, exchangeId: m.dialogue.id, line };
-  }
-  private choose(kind: MomentKind, minutes: number): DialogueChoice | undefined {
-    const choices = this.dialogue.filter(
-      (entry) =>
-        entry.kind === kind &&
-        (kind !== 'greet' || entry.period === greetingPeriod(minutes, this.periods)),
-    );
-    return choices.length ? choices[Math.floor(this.speechRng() * choices.length)] : undefined;
   }
   /** Explicit tile disposal releases even externally inspected test instances. */
   clear(release: (actor: MomentActor<Owner>) => void) {
@@ -179,11 +185,31 @@ export class Moments<Owner extends object = object> {
     this.pending.clear();
     this.ids.clear();
     this.neighborCursor.clear();
+    this.selector.clear();
   }
   pose(owner: object): PersonPose | undefined {
     const m = this.membership.get(owner);
     if (!m) return undefined;
     const index = m.members.findIndex((a) => a.owner === owner);
+    if (m.dialogue?.profile && m.kind !== 'ball') {
+      const elapsed = this.time - m.start;
+      const seconds = MOMENTS[m.kind].speechTurn;
+      const line = Math.floor(elapsed / seconds);
+      const speaking = m.dialogue.speakers?.[line] === index;
+      const phase = elapsed % seconds;
+      const profile = m.dialogue.profile;
+      const gesture =
+        profile === 'farewell'
+          ? speaking && line === m.dialogue.turns - 1 && phase > seconds - 1
+          : profile === 'directions'
+            ? speaking && index === 1
+            : profile === 'reunion'
+              ? speaking && phase < 0.8
+              : profile === 'place-reaction'
+                ? phase < 1
+                : speaking && phase < MOMENTS.gesture;
+      return gesture ? 'gesture' : 'attentive';
+    }
     const gesture =
       m.kind === 'greet'
         ? m.dialogue
@@ -277,14 +303,27 @@ export class Moments<Owner extends object = object> {
       if (m.kind === 'ball')
         while (this.time + 1e-9 >= m.phaseEnd) {
           m.phaseStart = m.phaseEnd;
-          if (m.flying) m.holder = 1 - m.holder;
+          if (m.flying) {
+            m.holder = 1 - m.holder;
+            if (m.speechStart !== undefined && m.caught === undefined) m.caught = m.phaseStart;
+            if (
+              m.dialogue?.conditions?.event === 'pass' &&
+              m.phaseStart - m.lastSpeech >= MOMENTS.ball.speechCooldown
+            ) {
+              m.speechStart = m.phaseStart;
+              m.speechHolder = m.holder;
+              m.lastSpeech = m.phaseStart;
+            }
+          }
           m.flying = !m.flying;
           if (
             m.dialogue &&
+            m.dialogue.conditions?.event !== 'pass' &&
             m.flying &&
             m.phaseStart - m.lastSpeech >= MOMENTS.ball.speechCooldown
           ) {
             m.speechStart = m.phaseStart;
+            m.caught = undefined;
             m.speechHolder = m.holder;
             m.lastSpeech = m.phaseStart;
           }
@@ -328,7 +367,9 @@ export class Moments<Owner extends object = object> {
     if (p.kind === 'look')
       return (
         (a.type === 'walker' ||
-          (a.idle && a.place === 'monument' && a.source === p.anchor!.source)) &&
+          (a.idle &&
+            (a.place === 'monument' || a.place === 'fountain') &&
+            a.source === p.anchor!.source)) &&
         distance(a, p.anchor!) / c.perMeter <= MOMENTS.look.reach
       );
     if (
@@ -353,6 +394,7 @@ export class Moments<Owner extends object = object> {
     );
   }
   private scan(c: MomentContext<Owner>) {
+    const budget = Math.max(0, MOMENTS.checks - (c.sceneChecks ?? 0));
     const actors = c.actors();
     const present = new Set(actors.map((a) => a.owner));
     const alive = (a: MomentActor<Owner>) => (c.alive ? c.alive(a) : present.has(a.owner));
@@ -379,8 +421,8 @@ export class Moments<Owner extends object = object> {
       }
       if (
         this.time + 1e-9 < p.next ||
-        retries >= MOMENTS.checks ||
-        this.active.length >= MOMENTS.capacity ||
+        retries >= budget ||
+        this.active.length + (c.reserved ?? 0) >= MOMENTS.capacity ||
         (p.kind === 'ball' && this.active.filter((m) => m.kind === 'ball').length >= MOMENTS.balls)
       )
         continue;
@@ -402,7 +444,10 @@ export class Moments<Owner extends object = object> {
     // Visitors already looking at their monument should not wait behind a tile's walkers
     // for their first reaction. The shared cursor still visits every candidate afterward.
     const visitors = visitorReactions
-      ? actors.filter((a) => a.type === 'gatherer' && a.place === 'monument' && a.idle)
+      ? actors.filter(
+          (a) =>
+            a.type === 'gatherer' && (a.place === 'monument' || a.place === 'fountain') && a.idle,
+        )
       : [];
     const lists = [
       walkers,
@@ -440,20 +485,23 @@ export class Moments<Owner extends object = object> {
       }
       return undefined;
     };
-    for (let check = retries; check < MOMENTS.checks; check++) {
+    for (let check = retries; check < budget; check++) {
       const k = (this.priority + check) % kinds.length,
         kind = kinds[k]!;
       this.stats.checks++;
       const list = lists[k]!;
-      if (!list.length || this.active.length >= MOMENTS.capacity) continue;
+      if (!list.length || this.active.length + (c.reserved ?? 0) >= MOMENTS.capacity) continue;
       const a = list[this.cursor[k]!++ % list.length]!;
       if (!this.free(a)) continue;
       if (kind === 'look') {
-        if (!c.anchors.length) continue;
+        const lookAnchors = c.anchors.filter(
+          (a) => !a.kind || ['monument', 'fountain', 'plaza'].includes(a.kind),
+        );
+        if (!lookAnchors.length) continue;
         const visitor = a.type === 'gatherer';
         const anchor = visitor
-          ? c.anchors.find((entry) => entry.source === a.source)
-          : c.anchors[this.neighbors[k]!++ % c.anchors.length];
+          ? lookAnchors.find((entry) => entry.source === a.source)
+          : lookAnchors[this.neighbors[k]!++ % lookAnchors.length];
         if (!anchor) continue;
         const d = distance(a, anchor) / c.perMeter;
         if (d <= 0 || d > MOMENTS.look.reach || !this.available(a, c)) continue;
@@ -519,7 +567,7 @@ export class Moments<Owner extends object = object> {
           const members = [a, b];
           if (this.rng() < MOMENTS.talk.third) {
             // One extra bounded candidate, charged against the same scan budget.
-            if (++check < MOMENTS.checks) {
+            if (++check < budget) {
               this.stats.checks++;
               const third = neighbor(a, k);
               if (
@@ -583,9 +631,45 @@ export class Moments<Owner extends object = object> {
       }
       admitted.push(a);
     }
+    const nearby = c.anchors.filter((a) =>
+      members.every((member) => distance(member, a) / c.perMeter <= MOMENTS.look.reach),
+    );
+    const dialogue = this.selector.choose(
+      kind,
+      {
+        minutes: c.minutes ?? 720,
+        rain: c.rain,
+        wind: c.wind ?? 0,
+        place: members[0]?.place,
+        figures: members.map((a) => a.figure),
+        anchors: (anchor ? [anchor] : nearby).map((a) => a.kind ?? 'monument'),
+      },
+      members.map((a) => a.owner),
+      false,
+    );
+    const focus = dialogue?.conditions?.anchor
+      ? nearby.find((a) => a.kind === dialogue.conditions!.anchor)
+      : undefined;
+    if (focus && dialogue?.profile === 'directions') {
+      const respondent = members[1]!;
+      const d = distance(respondent, focus);
+      if (
+        d <= 1e-9 ||
+        !c.face(respondent, (focus.x - respondent.x) / d, (focus.y - respondent.y) / d)
+      ) {
+        for (const actor of admitted) c.release(actor);
+        return false;
+      }
+    }
+    if (dialogue)
+      this.selector.admit(
+        dialogue,
+        members.map((a) => a.owner),
+      );
     const m: Moment<Owner> = {
       id: ++this.serial,
-      dialogue: this.choose(kind, c.minutes ?? 720),
+      dialogue,
+      focus,
       speechHolder: 0,
       lastSpeech: -Infinity,
       kind,
@@ -604,6 +688,8 @@ export class Moments<Owner extends object = object> {
     if (m.dialogue && kind !== 'ball') m.speechStart = m.start;
     if (m.dialogue && kind === 'greet')
       m.end = m.start + MOMENTS.greet.speechTurn * m.dialogue.turns;
+    if (m.dialogue?.profile && kind === 'talk')
+      m.end = m.start + MOMENTS.talk.speechTurn * m.dialogue.turns;
     if (kind === 'talk') {
       const turn = between(this.rng, MOMENTS.talk.turn);
       m.turnEnd += m.dialogue ? MOMENTS.talk.speechTurn : turn;
@@ -617,4 +703,4 @@ export class Moments<Owner extends object = object> {
   }
 }
 
-export type SpeechCue = { id: string; exchangeId: string; line: number };
+export type SpeechCue = { id: string; exchangeId: string; line: number; member?: number };

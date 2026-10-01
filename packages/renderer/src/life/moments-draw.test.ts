@@ -27,6 +27,45 @@ const cells = (out: Uint8Array) =>
   Array.from({ length: out.length / 4 }, (_, i) =>
     Array.from(out.subarray(i * 4, i * 4 + 4)),
   ).filter((t) => t[2]);
+it('tracks the actual speaking member and vendor separately from other people and cart cells', () => {
+  const owners = new Uint32Array(grid.cols * grid.rows);
+  const speakers = {
+    members: new Uint8Array(owners.length),
+    points: new Map<number, [number, number]>(),
+  };
+  const out = new Uint8Array(owners.length * 4);
+  const person = { figure: 'adult' as const, paint: 2, lateral: 0, back: 0, flap: 0 };
+  const agent: VisibleAgent = {
+    kind: 'person',
+    lng: 40,
+    lat: 40,
+    ahead: [44, 40],
+    side: [40, 44],
+    flap: 0,
+    people: [person, { ...person, lateral: 1 }],
+    speech: { id: 'group', exchangeId: 'call', line: 1, member: 1 },
+  };
+  packLife(out, { ...grid, owners, speakers }, [agent], themes.dark, index);
+  expect(new Set([...speakers.members].filter(Boolean))).toEqual(new Set([1, 2]));
+  expect(speakers.points.get(1)![1]).toBeGreaterThan(40);
+  agent.vehicle = 'cart';
+  agent.people = [{ ...person, lateral: 1 }];
+  agent.speech!.member = 0;
+  packLife(out, { ...grid, owners, speakers }, [agent], themes.dark, index);
+  expect([...owners].some((owner, i) => owner === 1 && speakers.members[i] === 0)).toBe(true);
+  expect([...owners].some((owner, i) => owner === 1 && speakers.members[i] === 1)).toBe(true);
+  const legacy = new Uint8Array(out.length);
+  packLife(legacy, grid, [agent], themes.dark, index);
+  expect(out).toEqual(legacy);
+  packLife(
+    out,
+    { ...grid, owners, speakers, allowsGroundCell: () => false },
+    [agent],
+    themes.dark,
+    index,
+  );
+  expect(speakers.members.every((slot) => slot === 0)).toBe(true);
+});
 it('preserves packed bytes and restores final ownership when a complete speaker is rejected', () => {
   const agents: VisibleAgent[] = [
     { kind: 'person', lng: 40.35, lat: 40.45, flap: 0 },

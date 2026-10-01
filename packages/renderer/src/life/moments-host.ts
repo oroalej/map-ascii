@@ -1,9 +1,11 @@
 /** Admission adapter: the social controller never writes route cursors or meeting paths. */
-import { inTile, PLACE_CODES, PLACE_STRIDE } from './geometry';
+import { inTile, PLACE_CODES, PLACE_STRIDE, SITE_STRIDE, LifeLine } from './geometry';
 import { Moments, type MomentActor, type MomentAnchor, type MomentContext } from './moments';
 import { FIGURE_SIZE_M, figureFit } from './people';
 import type { Gatherer, LifeEnv, Mover, TileLife } from './simulate';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
+import type { DialogueMemory } from './dialogue';
+import { SceneSpeechHost } from './scene-speech-host';
 
 type Owner = Mover | Gatherer;
 type Guard = (owner: Mover | Gatherer, before?: Mover | Gatherer) => boolean;
@@ -12,9 +14,14 @@ export type MomentOptions = {
   rng?: () => number;
   dialogue?: readonly DialogueChoice[];
   periods?: Readonly<GreetingPeriods>;
+  memory?: DialogueMemory;
 };
 export class MomentHost {
   readonly moments: Moments<Owner>;
+  private readonly sceneHost: SceneSpeechHost;
+  get scenes() {
+    return this.sceneHost.speech;
+  }
   private readonly actors = new Map<Owner, MomentActor<Owner>>();
   private readonly anchors: MomentAnchor[] = [];
   constructor(
@@ -22,20 +29,44 @@ export class MomentHost {
     seed: number,
     options: MomentOptions = {},
   ) {
+    this.sceneHost = new SceneSpeechHost(tile, seed, options);
     this.moments = new Moments<Owner>(
       seed,
       options.enabled ?? true,
       options.rng,
       options.dialogue,
       options.periods,
+      options.memory,
     );
     const places = tile.geo.places;
     for (let i = 0; i < places.length; i += PLACE_STRIDE)
       if (
-        PLACE_CODES[places[i + 2]!] === 'monument' &&
+        ['monument', 'fountain', 'bench'].includes(PLACE_CODES[places[i + 2]!]!) &&
         inTile({ x: places[i]!, y: places[i + 1]! })
       )
-        this.anchors.push({ x: places[i]!, y: places[i + 1]!, source: i / PLACE_STRIDE });
+        this.anchors.push({
+          x: places[i]!,
+          y: places[i + 1]!,
+          source: i / PLACE_STRIDE,
+          kind:
+            PLACE_CODES[places[i + 2]!] === 'bench'
+              ? 'seat'
+              : (PLACE_CODES[places[i + 2]!] as 'monument' | 'fountain'),
+        });
+    const geo = tile.geo;
+    for (let i = 0; i < geo.sites.length; i += SITE_STRIDE)
+      if (geo.sites[i + 2]! < 2 && inTile({ x: geo.sites[i]!, y: geo.sites[i + 1]! }))
+        this.anchors.push({ x: geo.sites[i]!, y: geo.sites[i + 1]!, source: -1 - i, kind: 'stop' });
+    for (let i = 0; i < geo.kinds.length; i++)
+      if (geo.kinds[i] === LifeLine.plaza) {
+        const at = geo.starts[i]! * 2;
+        this.anchors.push({
+          x: geo.coords[at]!,
+          y: geo.coords[at + 1]!,
+          source: -10000 - i,
+          kind: 'plaza',
+        });
+      }
   }
   private refresh(near?: (x: number, y: number) => boolean) {
     const out: MomentActor<Owner>[] = [];
@@ -80,6 +111,7 @@ export class MomentHost {
     return owner.source;
   }
   clear() {
+    this.sceneHost.clear();
     this.moments.clear((actor) => {
       delete actor.owner.momentFacing;
     });
@@ -104,6 +136,13 @@ export class MomentHost {
     cellAspect: number,
   ) {
     const { tile } = this;
+    const anchors = [
+      ...this.anchors,
+      ...tile.stalls
+        .filter((s) => s.open !== false)
+        .map((s, i) => ({ x: s.x, y: s.y, source: -20000 - i, kind: 'stall' as const })),
+    ];
+    const sceneChecks = this.sceneHost.step(dt, zoom, env, near, anchors);
     const eligible = (actor: MomentActor<Owner>) => {
       const owner = actor.owner;
       if (!inTile(owner) || (near && !near(owner.x, owner.y))) return false;
@@ -111,6 +150,7 @@ export class MomentHost {
         if (
           owner.kind !== 'person' ||
           owner.group?.length !== 1 ||
+          this.scenes.busy(owner) ||
           tile.scenes.visits.has(owner) ||
           (env?.levels && owner.rank >= env.levels.person)
         )
@@ -127,8 +167,11 @@ export class MomentHost {
       zoom,
       rain: env?.rain ?? 0,
       minutes: env?.minutes,
+      wind: env?.wind?.strength,
+      reserved: this.scenes.size,
+      sceneChecks,
       perMeter: tile.perMeter,
-      anchors: this.anchors,
+      anchors,
       actors: () => {
         living = new Set<Owner>([...tile.movers, ...tile.gatherers]);
         return this.refresh(near);

@@ -89,6 +89,7 @@ import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
 import { MomentHost, type MomentOptions } from './moments-host';
+import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
@@ -3326,6 +3327,7 @@ export class LifeWorld {
     private readonly momentOptions?: MomentOptions,
   ) {
     this.traffic = resolveTraffic(traffic);
+    this.momentOptions = { ...momentOptions, memory: new DialogueMemory() };
   }
 
   /** Change the vehicle mix: every tile's agents spawn again with it. */
@@ -3336,6 +3338,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.momentOptions?.memory?.clear();
     this.preparationEpoch++;
     this.preparedTerrain = new WeakMap();
     this.preparedSettled = new WeakSet();
@@ -4641,16 +4644,16 @@ export class LifeWorld {
           });
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
-          const people = m.group.map((w): PersonLook => ({
+          const people = m.group.map((w, member): PersonLook => ({
             figure: w.figure === 'adult' && w.umbrella < umbrellas ? 'umbrella' : w.figure,
             paint: w.figure === 'adult' && w.umbrella < umbrellas ? w.canopy : w.shirt,
             lateral: w.lateral,
             back: w.back,
             // Standing still, feet together.
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
-            pose: life.momentHost.moments.pose(m),
+            pose: life.momentHost.moments.pose(m) ?? life.momentHost.scenes.pose(m, member),
           }));
-          const speech = life.momentHost.moments.speech(m);
+          const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
             lng,
@@ -4686,6 +4689,7 @@ export class LifeWorld {
             continue;
           if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
+          const speech = life.momentHost.scenes.speech(s);
           out.push({
             kind: 'person',
             lng,
@@ -4696,7 +4700,19 @@ export class LifeWorld {
             covered: s.covered,
             paint: s.paint,
             flap: 0,
-            people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
+            people: [
+              {
+                figure: 'adult',
+                paint: s.shirt,
+                lateral: s.side,
+                back: 0,
+                flap: 0,
+                pose: life.momentHost.scenes.pose(s, 0),
+              },
+            ],
+            ...(speech && {
+              speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
+            }),
           });
         }
       }

@@ -46,6 +46,9 @@ export function SpeechBubbles({ catalog }: { catalog: DialogueCatalog }) {
           nodes.set(cue.id, (entry = { node, text: '', size: { width: 0, height: 0 } }));
         }
         const key = `${text[catalog.native.code]}\n${translation ? text[translation] : ''}\n${window.innerWidth}`;
+        entry.node.dataset.speechExchange = cue.exchangeId;
+        entry.node.dataset.speechLine = String(cue.line);
+        entry.node.dataset.speechMember = String(cue.member ?? 0);
         if (entry.text !== key) {
           const native = document.createElement('span');
           native.lang = catalog.native.code;

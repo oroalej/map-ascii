@@ -487,6 +487,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     emit('speechchange', cues),
   );
   let speechOwners = new Uint32Array(0);
+  const speechSpeakers = {
+    members: new Uint8Array(0),
+    points: new Map<number, [number, number]>(),
+  };
   let speechGeometry = 0;
   let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
@@ -823,6 +827,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
     if (trackSpeech && speechOwners.length !== targets.cols * targets.rows)
       speechOwners = new Uint32Array(targets.cols * targets.rows);
+    if (trackSpeech && speechSpeakers.members.length !== speechOwners.length)
+      speechSpeakers.members = new Uint8Array(speechOwners.length);
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -835,6 +841,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       host.latest()?.cellGuard(placement.toCell),
       trackSpeech ? speechOwners : undefined,
+      trackSpeech ? speechSpeakers : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -845,7 +852,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !options.dialogue ||
       !lifeActive() ||
       !watch.watched() ||
-      currentRain() >= MOMENTS.rain ||
       camera.zoom < MOMENTS.zoom ||
       !targets ||
       !placement ||
@@ -863,6 +869,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         dpr,
         agents: lifeAgents,
         owners: speechOwners,
+        speakers: speechSpeakers,
         life: lifeRaster(targets),
         geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },

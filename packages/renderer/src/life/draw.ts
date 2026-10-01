@@ -54,7 +54,10 @@ export type LifeGrid = {
   allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
+  speakers?: SpeakerGrid;
 };
+/** Per-person packing, independent of cart and group owner identity. */
+export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
 
 /**
  * A vehicle's or boat's paint (bits 0–3), part (4–6), and whether it is parked (bit 7: lamps
@@ -94,6 +97,8 @@ let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
 let groundCells = new Uint8Array(0);
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
+let drawingSpeakers: SpeakerGrid | undefined;
+let drawingMember = 0;
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
@@ -101,8 +106,10 @@ function rememberGroundCell(out: Uint8Array, at: number) {
       ? [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners[at / 4]!]
       : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!];
     journal.before.set(at, previous);
+    if (drawingSpeakers) previous.push(drawingSpeakers.members[at / 4]!);
   }
   if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
+  if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
 /** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
 export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
@@ -136,6 +143,14 @@ export function packLife(
     throw new RangeError('Wrong owner grid size');
   drawingOwners = grid.owners;
   drawingOwners?.fill(0);
+  drawingSpeakers = grid.speakers;
+  if (
+    drawingSpeakers &&
+    (!drawingOwners || drawingSpeakers.members.length !== grid.cols * grid.rows)
+  )
+    throw new RangeError('Speaker packing requires matching owner and member grids');
+  drawingSpeakers?.members.fill(0);
+  drawingSpeakers?.points.clear();
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
     const cells = grid.cols * grid.rows;
@@ -147,6 +162,7 @@ export function packLife(
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
         drawingOwner = index + 1;
+        drawingMember = 0;
         if (!!agent.parked !== parked) continue;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
@@ -165,6 +181,7 @@ export function packLife(
             // The fifth journal value is CPU ownership, never a fifth texture byte.
             for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
             if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
+            if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
           }
         else {
           drawn += n;
@@ -176,6 +193,8 @@ export function packLife(
     journal = undefined;
     drawingOwners = undefined;
     drawingOwner = 0;
+    drawingSpeakers = undefined;
+    drawingMember = 0;
   }
 }
 
@@ -245,12 +264,14 @@ function drawAgent(
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
         : 0;
+      drawingMember = 0;
       return (stamped ? 1 : 0) + vendor;
     }
   }
   if (agent.bird && agent.ahead)
     return drawBird(out, grid, agent, [col, row], theme, glyphIndex) ? 1 : 0;
   const people = agent.people ? drawPeople(out, grid, agent, [col, row], glyphIndex) : 0;
+  drawingMember = 0;
   const c = Math.floor(col);
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return people;
@@ -377,6 +398,7 @@ function drawPeople(
     // Laid out in meters, around the agent's own point.
     const spacing = Math.max(...looks.map((look) => FIGURE_SIZE_M[look.figure]));
     looks.forEach((look, i) => {
+      drawingMember = i + 1;
       const beside =
         clearance > 0 && look.lateral !== 0
           ? Math.sign(look.lateral) * (clearance + FIGURE_SIZE_M[look.figure] / 2 + 0.1)
@@ -384,6 +406,8 @@ function drawPeople(
       const back = look.back * spacing;
       const cx = col + right[0] * beside - along[0] * back;
       const cy = row + right[1] * beside - along[1] * back;
+      if (agent.speech && (agent.speech.member ?? 0) === i)
+        drawingSpeakers?.points.set(drawingOwner, [cx, cy]);
       const fit = fits[i]!;
       const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
@@ -420,6 +444,7 @@ function drawPeople(
   // The cart's half-width in cells, across its heading.
   const clear = clearance * Math.hypot(...right);
   looks.forEach((look, i) => {
+    drawingMember = i + 1;
     const lateral =
       clearance > 0 && look.lateral !== 0
         ? Math.sign(look.lateral) * Math.max(size, Math.ceil(clear + size / 2))
@@ -427,6 +452,8 @@ function drawPeople(
     const back = look.back * size;
     const c = c0 + rx * lateral - fx * back;
     const r = r0 + ry * lateral - fy * back;
+    if (agent.speech && (agent.speech.member ?? 0) === i)
+      drawingSpeakers?.points.set(drawingOwner, [c + size / 2, r + size / 2]);
     const fit = fits[i]!;
     let any: boolean;
     if (fit === 'big') {
