@@ -16,9 +16,9 @@ const view: View = {
   labelDev: { w: 10, h: 18 },
   detailZoom: 19,
 };
-const placement = (pan = 0): GridPlacement => ({
+const placement = (pan = 0, horizontal = 0): GridPlacement => ({
   grid: { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 },
-  toCell: (lng, lat) => [lng, lat - pan],
+  toCell: (lng, lat) => [lng + horizontal, lat - pan],
   tileMatrix: () => [],
 });
 const street = (lng: number, length: number, lat = 4): TileLabel => ({
@@ -34,7 +34,7 @@ const street = (lng: number, length: number, lat = 4): TileLabel => ({
     [lng + length / 2, lat],
   ],
 });
-function fixture() {
+function fixture(atView = view) {
   const names = new AtlasLabels();
   const gl = {
     bindTexture: vi.fn(),
@@ -48,10 +48,10 @@ function fixture() {
     label: { atlas: { index: (c: string) => c.charCodeAt(0) } },
   } as unknown as ThemeResources;
   const programs = { streetText: { buffer: null, count: 0 } } as unknown as Programs;
-  const draw = (labels: TileLabel[], pan = 0) => {
-    const at = placement(pan);
-    names.collect(targets, view, at, labels);
-    return names.draw(gl, targets, theme, view, at, programs, 0, 0);
+  const draw = (labels: TileLabel[], pan = 0, horizontal = 0) => {
+    const at = placement(pan, horizontal);
+    names.collect(targets, atView, at, labels);
+    return names.draw(gl, targets, theme, atView, at, programs, 0, 0);
   };
   return { names, targets, draw };
 }
@@ -81,5 +81,14 @@ describe('cached atlas labels', () => {
       visible = street(7, 6, 10);
     expect(draw([old])[0]).toBe(old);
     expect(draw([old, visible], 6)[0]).toBe(visible);
+  });
+  it('keeps an anchor whose remembered slot must fall back onto the screen', () => {
+    const { draw, targets } = fixture({ ...view, height: 18 });
+    const old = { ...street(-2, 6, 0), text: 'ABCDE', angle: undefined, run: undefined };
+    const incoming = { ...old, lng: -10 };
+    expect(draw([old])[0]).toBe(old);
+    expect(labelMemory(targets)?.get(1)).toBe(2);
+    expect(draw([incoming, old], 0, 13)[0]).toBe(old);
+    expect(labelMemory(targets)?.get(1)).toBe(3);
   });
 });

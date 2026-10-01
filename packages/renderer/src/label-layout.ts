@@ -208,19 +208,20 @@ export function labelFitsArea(
   });
 }
 
-/** Visibility for copy selection and the accessible visible-label list; no halo-only names. */
+/** Visibility of the first admissible slot before collisions; text bounds exclude halos. */
 export function labelTouchesArea(
   label: LabelCandidate,
-  area: LabelArea,
+  screen: LabelArea,
+  allowed: LabelArea,
   aspect = 1.8,
   slot?: LabelSlot,
 ): boolean {
-  const remembered = slot !== undefined && slotLayout(label, slot, aspect);
-  if (remembered) return labelIntersectsArea(remembered.textBounds, area);
-  return labelSlots(label.mode).some((choice) => {
+  for (const choice of labelSlots(label.mode, slot)) {
     const layout = slotLayout(label, choice, aspect);
-    return layout !== undefined && labelIntersectsArea(layout.textBounds, area);
-  });
+    if (layout && inside(layout.box, allowed))
+      return labelIntersectsArea(layout.textBounds, screen);
+  }
+  return false;
 }
 
 /** Reserve layouts first; labels.ts writes glyphs using the accepted layout and the same dissolve. */

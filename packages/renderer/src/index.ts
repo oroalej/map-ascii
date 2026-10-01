@@ -61,7 +61,6 @@ import {
   labelsCoverPoint,
   lightPass,
   metersPerCssPx,
-  overlayPass,
   streetTextPass,
   placeGrid,
   screenArea,
@@ -72,6 +71,7 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { AtlasLabels } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
@@ -580,6 +580,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
   const { source } = tileCache;
 
+  const names = new AtlasLabels();
+
   const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
     const a = screenArea(v, map.grid);
     const b = screenArea(v, labels.grid, v.labelDev);
@@ -609,6 +611,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     placement = next;
     grid = next.grid;
     labelGrid = nextLabels.grid;
+    reportLabels(names.inView(targets, v, labelGrid));
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -627,13 +630,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
-    const labels = new Map<number, TileLabel>();
+    const labels: TileLabel[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
       for (const tile of ids) {
         const loaded = tileCache.get(tile);
         if (!loaded) continue;
-        for (const label of loaded.labels) labels.set(label.id, label);
+        for (const label of loaded.labels) labels.push(label);
         out.push({ tile, mesh: loaded.mesh });
       }
       return out;
@@ -642,12 +645,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values(), programs);
-    reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
+    names.collect(targets, v, labelPlacement, labels);
+    reportLabels(
+      names.draw(gl, targets, themeRes, v, labelPlacement, programs, selectedIndex(), hoverIndex),
+    );
     classesStale = true;
   };
 
-  /** The last `labelschange` payload's feature ids, to send it only on change. */
+  /** Compare the whole visible-label payload, including changed names and source anchors. */
   let labelsKey = '';
   const reportLabels = (placed: readonly TileLabel[]) => {
     const inView: LabelInView[] = [];
@@ -666,7 +671,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (!kind || !featureId) continue;
       inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
     }
-    const key = inView.map((l) => l.featureId).join('|');
+    const key = JSON.stringify(inView);
     if (key === labelsKey) return;
     labelsKey = key;
     emit('labelschange', inView);
@@ -1092,6 +1097,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hoverIndex = 0;
   const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
 
+  const selectedIndex = () => (selectedId ? source.indexOf(selectedId) : 0);
+
   const highlights = () => {
     let highlightCount = 0;
     for (const id of highlightedIds) {
@@ -1100,7 +1107,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     return {
       hover: hoverIndex,
-      selected: selectedId ? source.indexOf(selectedId) : 0,
+      selected: selectedIndex(),
       highlight: highlightIndices,
       highlightCount,
     };
@@ -1226,6 +1233,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
       const v = view();
+      if (!cellsDrawn) {
+        const relabeled = names.relabel(
+          gl,
+          targets,
+          themeRes,
+          v,
+          programs,
+          selectedIndex(),
+          hoverIndex,
+        );
+        if (relabeled) {
+          labelGrid = relabeled.grid;
+          reportLabels(relabeled.labels);
+        }
+      }
       const wind = worldWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
@@ -1234,7 +1256,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         wind.strength > 0 &&
         hasCrowns(crownTiles) &&
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
-      if (placement && (cellsDrawn || swaying)) {
+      if (placement && (cellsDrawn || (swaying && animating))) {
         const crownStart = performance.now();
         crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
@@ -1347,6 +1369,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    names.clear();
+    reportLabels([]);
     lifeHover.pointer(null);
     canvas.style.cursor = '';
     hoverIndex = 0;
@@ -1539,6 +1563,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      names.clear();
       lifeHover.pointer(null);
       host.dispose();
       destroyed = true;

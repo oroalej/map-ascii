@@ -56,6 +56,12 @@ describe('stable placement layouts', () => {
     expect(place([target], {}, roomy)[0]?.slot).toBe(0);
   });
   it('retains text two cells past the edge and drops it beyond the overhang', () => {
+    const memory: LabelMemory = new Map();
+    const starting = label({ col: -2 });
+    expect(place([starting], { memory })[0]?.slot).toBe(2);
+    const panned = { ...starting, col: -4 };
+    expect(place([panned], { memory })[0]?.slot).toBe(2);
+    expect(place([panned])).toEqual([]);
     const target = label({ col: 15, text: 'ABCDE' });
     expect(place([target], { memory: new Map([[1, 2]]) })[0]?.slot).toBe(2);
     expect(place([target]).some(({ slot }) => slot === 2)).toBe(false);
@@ -138,7 +144,7 @@ describe('stable placement layouts', () => {
   });
   it('checks fallback visibility when a remembered rotated slot no longer fits its run', () => {
     const street = label({ col: 10, mode: 'rotated', runCells: 2 });
-    expect(labelTouchesArea(street, area, 1.8, -1)).toBe(true);
+    expect(labelTouchesArea(street, area, area, 1.8, -1)).toBe(true);
   });
   it('matches cell and box collision lookup outside the padded grid', () => {
     const candidates = Array.from({ length: 200 }, (_, id) =>

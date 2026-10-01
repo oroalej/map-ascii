@@ -4,7 +4,7 @@ import { placeGrid, type Grid, type GridPlacement, type View } from './grid';
 import { labelArea, labelCandidate, labelScreenArea } from './label-candidates';
 import { collectLabels } from './label-collection';
 import { labelFitsArea, labelTouchesArea } from './label-layout';
-import { labelFocus } from './label-stability';
+import { labelFocus, retentionArea } from './label-stability';
 import type { LabelCandidate } from './labels';
 import { forgetLabelPlacement, labelMemory, labelsInView, overlayPass } from './passes';
 import type { TileLabel } from './raster/geometry';
@@ -48,7 +48,13 @@ export class AtlasLabels {
         const prepared = candidate(label);
         return (
           prepared !== undefined &&
-          labelTouchesArea(prepared, screen, aspect, memory?.get(label.id))
+          labelTouchesArea(
+            prepared,
+            screen,
+            retentionArea(area, memory?.has(label.id) ?? false),
+            aspect,
+            memory?.get(label.id),
+          )
         );
       },
     );
