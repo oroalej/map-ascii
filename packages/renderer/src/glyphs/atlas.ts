@@ -15,6 +15,7 @@ import {
   type FigureGlyph,
 } from '../life/people';
 import { STALL_GLYPH } from '../life/vehicles';
+import { SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
@@ -298,6 +299,42 @@ function drawStall(slot: Slot) {
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
  * figure, a bird, a dog, or a vendor's cart.
  */
+function drawSeasonal(slot: Slot, index: number) {
+  const points: [number, number][] =
+    index === 0
+      ? Array.from({ length: 10 }, (_, i) => {
+          const angle = (i * Math.PI) / 5 - Math.PI / 2,
+            radius = i % 2 ? 0.21 : 0.48;
+          return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
+        })
+      : [
+          [0.05, 0.25],
+          [0.95, 0.25],
+          [index === 1 ? 0.35 : 0.65, 0.85],
+        ];
+  for (let y = 0; y < slot.h; y++)
+    for (let x = 0; x < slot.w; x++) {
+      let coverage = 0;
+      for (let sy = 0; sy < 4; sy++)
+        for (let sx = 0; sx < 4; sx++) {
+          const px = (x + (sx + 0.5) / 4) / slot.w,
+            py = (y + (sy + 0.5) / 4) / slot.h;
+          let inside = false;
+          for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const a = points[i]!,
+              b = points[j]!;
+            if (
+              a[1] > py !== b[1] > py &&
+              px < ((b[0] - a[0]) * (py - a[1])) / (b[1] - a[1]) + a[0]
+            )
+              inside = !inside;
+          }
+          if (inside) coverage++;
+        }
+      slot.data[(slot.y0 + y) * slot.stride + slot.x0 + x] = Math.round((255 * coverage) / 16);
+    }
+}
+
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
@@ -313,6 +350,8 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === STALL_GLYPH) drawStall(slot);
+  else if ((SEASONAL_GLYPHS as readonly string[]).includes(glyph))
+    drawSeasonal(slot, SEASONAL_GLYPHS.indexOf(glyph as (typeof SEASONAL_GLYPHS)[number]));
   else return false;
   return true;
 }

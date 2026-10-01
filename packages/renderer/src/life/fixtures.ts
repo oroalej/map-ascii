@@ -27,6 +27,12 @@ import {
   type LightGrid,
 } from './lights';
 import { signalState } from './signals';
+import {
+  packSeasonalFixtures,
+  SeasonalPart,
+  type SeasonalFixture,
+  type SeasonalVisibility,
+} from './seasonal';
 
 type Point = [number, number];
 type FixtureBody = { base: Point; tip: Point; forward: Point; right: Point; seed: number };
@@ -43,11 +49,12 @@ export type LegacyStreetFixture = FixtureBody &
     | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
     | { kind: 'flagpole'; flag: 'PH' }
   );
-export type StreetFixture = UtilityFixture | LegacyStreetFixture;
+export type StreetFixture = UtilityFixture | LegacyStreetFixture | SeasonalFixture;
 export type FixtureVisibility = {
   streetlights: boolean;
   trafficSignals: boolean;
   utilities: boolean;
+  seasonal?: SeasonalVisibility;
 };
 export type FixtureGrid = LightGrid & {
   cellWidth: number;
@@ -59,6 +66,7 @@ export type FixtureGrid = LightGrid & {
 /** Low six bits of G; the high two bits retain the glyph's ten-bit index. */
 export const FixturePart = {
   ...UtilityPart,
+  ...SeasonalPart,
   base: 1,
   arm: 2,
   housing: 3,
@@ -607,6 +615,34 @@ export function packFixtures(
   // Animated cloth must retain the utility cells stamped after legacy hardware.
   for (const cell of packed.utilityCells) owners[cell] = -2;
   updateFixtureFlags(packed, motion);
+  const seasonal = fixtures.filter(
+    (f): f is SeasonalFixture => f.kind === 'season-lantern' || f.kind === 'season-bunting',
+  );
+  if (seasonal.length) {
+    // Reserve every possible cloth position for decoration admission, while leaving
+    // the real cloth owners free for subsequent animation frames.
+    const admission = owners.slice();
+    for (const flag of packed.flags) {
+      const lift = Math.ceil(flag.rows / 2 + 1);
+      for (
+        let y = Math.max(0, flag.top - lift);
+        y < Math.min(grid.rows, flag.top + flag.rows + lift);
+        y++
+      )
+        for (let x = Math.max(0, flag.x + 1); x < Math.min(grid.cols, flag.x + 1 + flag.cols); x++)
+          if (admission[y * grid.cols + x] === -1) admission[y * grid.cols + x] = -4;
+    }
+    packed.visibility.seasonal = packSeasonalFixtures(
+      out,
+      grid,
+      seasonal,
+      zoom,
+      glyphIndex,
+      admission,
+    );
+    for (let cell = 0; cell < admission.length; cell++)
+      if (admission[cell] === -3) owners[cell] = -3;
+  }
   return packed;
 }
 
