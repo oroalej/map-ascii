@@ -467,6 +467,45 @@ export const SiteDetail = z
   });
 export type SiteDetail = z.infer<typeof SiteDetail>;
 
+/** Sourced burial layouts; row endpoints are marker centres, not a cemetery boundary. */
+export const Cemetery = z
+  .strictObject({
+    id: z.string().regex(/^cemetery\/[a-z0-9-]+$/),
+    osm_id: OsmId,
+    title: z.string().min(1).max(512),
+    rows: z
+      .array(
+        z
+          .strictObject({
+            id: DetailKey,
+            line: z
+              .tuple([LngLat, LngLat])
+              .refine(([a, b]) => a[0] !== b[0] || a[1] !== b[1], 'row endpoints must differ'),
+            count: z.int().min(1).max(200),
+            kind: z.enum(['flush', 'slab', 'vault']),
+            width_m: z.number().positive().max(6),
+            length_m: z.number().positive().max(10),
+            height_m: z.number().nonnegative().max(5),
+          })
+          .refine((row) => (row.kind === 'flush' ? row.height_m === 0 : row.height_m > 0), {
+            path: ['height_m'],
+            message: 'flush markers must be ground-level; slabs and vaults must be raised',
+          }),
+      )
+      .min(1)
+      .max(500),
+    status: z.enum(['draft', 'verified']),
+    credit: z.string().min(1),
+    sources: Sources,
+  })
+  .superRefine((pack, ctx) => {
+    if (new Set(pack.rows.map((row) => row.id)).size !== pack.rows.length)
+      ctx.addIssue({ code: 'custom', path: ['rows'], message: 'duplicate burial row id' });
+    if (pack.rows.reduce((count, row) => count + row.count, 0) > 15_000)
+      ctx.addIssue({ code: 'custom', path: ['rows'], message: 'too many burial markers' });
+  });
+export type Cemetery = z.infer<typeof Cemetery>;
+
 /** When a procession runs (the `Procession` schema's `schedule`). */
 /** An IANA time zone, e.g. "Asia/Manila". */
 export const TimeZone = z
@@ -754,6 +793,7 @@ export function contentSchemas(languages?: readonly string[]) {
     LandmarkPlan,
     Landcover,
     SiteDetail,
+    Cemetery,
     Procession,
   };
 }

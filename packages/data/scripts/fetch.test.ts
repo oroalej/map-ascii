@@ -36,6 +36,7 @@ it('fetches commerce and neighborhood vegetation without commercial land-use zon
     'dentist',
     'scrub|heath',
     'orchard|plant_nursery|cemetery',
+    'nwr["amenity"="grave_yard"]',
     '[bbox:1,2,3,4]',
   ])
     expect(q).toContain(tag);

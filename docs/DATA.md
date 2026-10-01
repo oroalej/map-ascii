@@ -15,7 +15,7 @@ The pipeline and schemas are city-agnostic. Each city gives its inputs through a
 | Mapillary / KartaView | Street-level photos in the info panel | CC BY-SA | Link out or embed per their terms |
 | Archival maps, photos, records (local libraries, universities, parish archives, private collections) | Historical layers, stories, then/now photos | Per item — record permission in content | Must have written permission for anything not public domain |
 
-**Do not use** Google Maps or Street View tiles or imagery.
+Do not embed or serve Google Maps or Street View tiles or imagery. The owner-authorized `landmark-details` references are used to author draft geographic content; their bitmaps remain in ignored handoff evidence, with sources and uncertainty recorded in the city packs.
 
 ## 2. Pipeline (`pnpm data:build`)
 
@@ -42,6 +42,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
    - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, woods, shrub, or planting-bed areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`, `shrubs`, `planting`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
+   - Merge sourced `cemeteries/` burial rows onto existing `landuse=cemetery` or `amenity=grave_yard` areas. Retain grass, boundary geometry, drives, facilities and monuments; cemetery identity takes precedence over incidental park/garden tags. Explicit flush plaques, raised slabs and vaults use flat stone `building_part` polygons with stable `cemetery:<slug>/<row-id>-<n>` ids and the cemetery's name/selection. Add a matching curated landmark record to enable pointer selection; its identity travels with each burial part for cold tile loads. Whole markers outside the boundary, in holes, on standing roofs/water, in full road/path widths or at tree/monument trunks are omitted. Reject missing/wrong/duplicate parents, overlapping rows and layouts with no surviving markers. Credits join map attribution. Positions and row counts may be draft estimates; never infer burial identities, dates or a surveyed grave inventory from a representative layout.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
    - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. Without curated grounds, `surface: "paving"` changes the area's ground class while retaining its id, labels, and landmark metadata. `surface: "keep"` retains its fill and tile range. A simple `grounds` ring must contain the complete standing building or point anchor and may not overlap another detail site; paving then adds separate unoutlined grounds without replacing the parent. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side. Optional `bench_spans` select named sections by inclusive start/end vertex indices and widen them to the specified `width_m`. Spans must have unique ids, non-overlapping ranges within the line (shared endpoints are allowed), and widths at least the base rim width. Omission seats the entire line as before; `[]` creates a rim without pause anchors. Rim and bench sections are unioned in a common meter frame into one footprint, preserving the planted hole and avoiding internal seams; anchors use only the bench sections and their widths; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, building parents without grounds, out-of-bounds geometry, and routes across raised beds, monument parts or standing buildings (overhead roofs remain walkable); mapped benches and lamps within 3 m suppress curated duplicates. Optional `flagpoles` relocate existing OSM flagpole points by id, preserving their identity and refreshing label anchors and subdivision membership. Reject missing or non-flagpole targets, duplicate targets across detail packs, and positions outside the parent or inside raised obstacles. Omitted overrides default to an empty array. Optional `flag: "PH"` explicitly selects a Philippine flag marker at the mapped pole; omitted designs retain the generic pole glyph. The code is carried through tiles and worker fixture geometry, independent of Life. Credits join the generated meta attribution.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
@@ -83,10 +84,10 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `shrubs` | curated shrub polygons from `landcover/` |
 | `planting` | curated soil and sparse ground cover in planting beds; `raised` beds block ground agents |
 | `trees` | `natural=wood`, `landuse=forest|orchard` (kind in `variant`, including mapped palm orchards) |
-| `grass` | `landuse=grass|meadow|village_green|plant_nursery|cemetery`, `natural=grassland|scrub|heath`, `leisure=recreation_ground` or `landuse=recreation_ground` (a park wins if both are tagged) |
+| `grass` | `landuse=grass|meadow|village_green|plant_nursery|cemetery`, `amenity=grave_yard`, `natural=grassland|scrub|heath`, `leisure=recreation_ground` or `landuse=recreation_ground` (a park wins on recreation grounds; cemetery identity wins on burial lawns) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
-| `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
+| `building_part` | not from OSM tags: plan-view landmark parts from `plans/`, and flat stone burial geometry from `cemeteries/` (pipeline step 04) |
 | `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, `trees`, `shrubs`, or `planting` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
@@ -271,6 +272,22 @@ Landcover {                      // cities/<slug>/landcover/*.json — trees and
   sources: Source[];
 }
 TreeKind = 'broadleaved' | 'palm' | 'needleleaved';   // unset: the generic tree
+
+Cemetery {                      // cities/<slug>/cemeteries/*.json — sourced burial layouts
+  id: string;                    // "cemetery/<slug>"
+  osm_id: string; title: string; // existing mapped cemetery area; explicit cemetery label
+  rows: {
+    id: string;                  // stable unique key
+    line: [[lng, lat], [lng, lat]]; // distinct first/last marker centres; singleton uses midpoint
+    count: number;               // 1–200 representative markers, not an inventory
+    kind: 'flush' | 'slab' | 'vault';
+    width_m: number; length_m: number; height_m: number;
+  }[];                           // 1–500 rows, at most 15,000 markers per pack
+  status: 'draft' | 'verified';
+  credit: string; sources: Source[];
+}
+// Width runs along the row; length is perpendicular. Flush height must be zero;
+// slabs/vaults must be raised. Small heights retain the renderer's existing metre quantization.
 
 SiteDetail {                     // cities/<slug>/details/*.json — sourced outdoor detail
   id: string;                    // "detail/<slug>"

@@ -24,6 +24,20 @@ describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);
   const line = (tags: Record<string, string>) => classify(tags, 'line', 10);
 
+  it('retains cemetery identity on burial lawns with park or garden tags', () => {
+    const cases: Record<string, string>[] = [
+      { landuse: 'cemetery', leisure: 'park' },
+      { landuse: 'cemetery', leisure: 'garden' },
+      { amenity: 'grave_yard', leisure: 'garden' },
+    ];
+    for (const tags of cases) {
+      expect(area(tags)).toBe('grass');
+      expect(kindOf(tags)).toMatch(/^(landuse=cemetery|amenity=grave_yard)$/);
+    }
+    expect(area({ building: 'chapel', landuse: 'cemetery' })).toBe('building_religious');
+    expect(area({ leisure: 'garden' })).toBe('park');
+  });
+
   it('maps highways by hierarchy, including links', () => {
     expect(line({ highway: 'trunk' })).toBe('road_major');
     expect(line({ highway: 'primary_link' })).toBe('road_major');

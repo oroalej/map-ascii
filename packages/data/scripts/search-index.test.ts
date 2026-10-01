@@ -1,6 +1,55 @@
 import { describe, expect, it } from 'vitest';
 import type { SearchEntry } from '@atlas/shared';
-import { entryBbox, inRegion } from './06-search-index';
+import type { ContentBundle } from '@atlas/content';
+import type { AtlasFeature } from './03-normalize';
+import { entryBbox, inRegion, searchEntries } from './06-search-index';
+
+it('uses explicit stable label anchors for searchable areas instead of an exterior centroid', () => {
+  const feature: AtlasFeature = {
+    type: 'Feature',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [123, 13],
+          [123.01, 13],
+          [123.01, 13.001],
+          [123.001, 13.001],
+          [123.001, 13.01],
+          [123, 13.01],
+          [123, 13],
+        ],
+      ],
+    },
+    properties: {
+      id: 'osm:way/1',
+      class: 'grass',
+      landmark: true,
+      name: 'Fixture cemetery',
+      label_lng: 123.0005,
+      label_lat: 13.005,
+      osm_name: 'Memorial Park',
+    },
+    tippecanoe: { layer: 'landuse', minzoom: 13, maxzoom: 16 },
+  };
+  const content = {
+    landmarks: [],
+    events: [],
+    'name-history': [],
+    tours: [],
+    art: [],
+    plans: [],
+    landcover: [],
+    details: [],
+    cemeteries: [],
+    processions: [],
+  } satisfies ContentBundle;
+  expect(searchEntries([feature], [], content)[0]).toMatchObject({
+    lng: 123.0005,
+    lat: 13.005,
+    altNames: ['Memorial Park'],
+  });
+});
 
 describe('entryBbox', () => {
   it('keeps a bbox with area, rounded', () => {

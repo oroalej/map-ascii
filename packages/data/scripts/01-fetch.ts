@@ -99,7 +99,7 @@ export const trafficQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bb
 out body;`;
 export const neighborhoodQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
 (nwr["shop"]; nwr["amenity"~"^(restaurant|fast_food|cafe|bar|pub|food_court|ice_cream|pharmacy|bank|clinic|dentist|internet_cafe)$"];
-nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"];);
+nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"]; nwr["amenity"="grave_yard"];);
 out body; >; out skel qt;`;
 
 /** Outdoor recreation grounds, separately queried to retain all existing download caches. */

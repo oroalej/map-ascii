@@ -248,7 +248,7 @@ it('excludes pipeline-only highway from base tiling while retaining it for utili
       subdivision: { label: { en: 'District' } },
       languages: ['en'],
     },
-    content: { landcover: [], details: [], plans: [] },
+    content: { landcover: [], details: [], plans: [], cemeteries: [] },
     buildDir: dir,
     outDir: join(dir, 'public'),
   } as unknown as StepContext;

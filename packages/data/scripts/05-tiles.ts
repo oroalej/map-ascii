@@ -8,6 +8,7 @@ import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normal
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
 import { roofTileRecords } from './lib/roof-tiles';
 import { landcoverCredits } from './lib/landcover';
+import { cemeteryCredits } from './lib/cemeteries';
 import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
 import { detailLayoutKey } from './lib/detail-layout';
@@ -64,6 +65,7 @@ export const step: Step = {
       years,
       [
         ...landcoverCredits(content.landcover),
+        ...cemeteryCredits(content.cemeteries),
         ...detailCredits(content.details),
         ...planCredits(content.plans),
       ],

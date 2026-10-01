@@ -78,6 +78,7 @@ const content: ContentBundle = {
   ],
   processions: [],
   details: [],
+  cemeteries: [],
 };
 
 let ctx: StepContext;

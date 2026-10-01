@@ -70,8 +70,11 @@ const altNamesOf = (p: AtlasProperties): string[] =>
     .map((v) => v.trim())
     .filter((v) => v && v !== p.name);
 
-/** A point on the feature: a point's own position, a line's middle vertex, an area's centroid. */
+/** Prefer the stable label anchor; otherwise use a point, line midpoint or area centroid. */
 function pointOn(geometry: Geometry, feature: Feature): Position {
+  const properties = feature.properties as AtlasProperties | null;
+  if (Number.isFinite(properties?.label_lng) && Number.isFinite(properties?.label_lat))
+    return [properties!.label_lng!, properties!.label_lat!];
   if (geometry.type === 'Point') return geometry.coordinates;
   const line =
     geometry.type === 'LineString'

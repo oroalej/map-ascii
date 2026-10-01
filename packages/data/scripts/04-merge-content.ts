@@ -9,6 +9,7 @@ import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
 import { enrichRoofs } from './lib/roofs';
 import { landcoverFeatures } from './lib/landcover';
+import { mergeCemeteries } from './lib/cemeteries';
 import { mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
 import { mergeTraffic } from './lib/traffic';
@@ -119,12 +120,13 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
-    const detail = mergeSiteDetails(
+    const cemeteries = mergeCemeteries(
       [...merged, ...parts, ...landcover.features],
-      content.details,
-      subdivisions,
+      content.cemeteries,
     );
+    if (cemeteries.stats.length) console.log(`  cemeteries: ${JSON.stringify(cemeteries.stats)}`);
+    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    const detail = mergeSiteDetails(cemeteries.features, content.details, subdivisions);
     for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }

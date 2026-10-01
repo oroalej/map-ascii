@@ -184,6 +184,8 @@ export function classify(
 
   // Areas
   if (tags.building && tags.building !== 'no') return buildingKind(tags) ?? 'building';
+  // Burial lawns can also carry park/garden tags; their cemetery identity takes precedence.
+  if (tags.landuse === 'cemetery' || tags.amenity === 'grave_yard') return 'grass';
   const kindOfBuilding = buildingKind(tags);
   if (kindOfBuilding) return kindOfBuilding;
   // Church grounds (e.g. "Cathedral Grounds"); without building=* they get no height.
@@ -335,6 +337,8 @@ const kindKeys = [
 
 /** The tag that defines what a feature is, e.g. `amenity=university`, for the info panel. */
 export function kindOf(tags: Tags): string | undefined {
+  if ((!tags.building || tags.building === 'no') && tags.landuse === 'cemetery')
+    return 'landuse=cemetery';
   for (const key of kindKeys) {
     const value = tags[key];
     if (value && value !== 'yes') return `${key}=${value}`;
