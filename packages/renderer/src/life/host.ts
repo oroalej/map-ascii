@@ -123,7 +123,9 @@ export function createWorkerHost(
       if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
         generation++;
         terrain = undefined;
-        if (view) view = { ...view, agents: [], cellGuard: () => undefined };
+        // Keep the last complete frame while nonempty geometry loads. It is never combined
+        // with a different generation; the next valid reply replaces agents and guard together.
+        if (!keep.size && view) view = { ...view, agents: [], cellGuard: () => undefined };
       }
       const payload = next.map(({ key, tile, life }) => {
         const entry = sent.has(key) ? { key, tile } : { key, tile, life };

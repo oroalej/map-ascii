@@ -178,6 +178,16 @@ describe('pipelined Life host', () => {
     await flush();
     expect(host.latest()?.signalClock).toBe(1);
     host.request(s.input);
+    const retained = host.latest();
+    const nextTile = s.tiles[0]!;
+    host.sync([
+      { ...nextTile, key: 'neighbor', tile: { ...nextTile.tile, x: nextTile.tile.x + 1 } },
+    ]);
+    expect(host.latest()).toBe(retained);
+    resolve(result(2));
+    await flush();
+    expect(host.latest()).toBe(retained);
+    host.request(s.input);
     host.sync([]);
     host.sync(s.tiles);
     resolve(result(2));
