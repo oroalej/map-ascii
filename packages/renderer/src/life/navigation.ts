@@ -1,7 +1,8 @@
 import { usableLines } from './config';
 import type { LifeGeometry, LifeLine } from './geometry';
 import { boundsOf, pointInside, PolygonIndex, type Body } from './occupancy';
-import { prepareRoadTerrain, type RoadAccess } from './terrain';
+import { prepareRoadTerrainSteps, type RoadAccess } from './terrain';
+import { complete } from './cooperate';
 
 export type WalkPoint = { x: number; y: number };
 type Edge = { a: number; b: number; length: number };
@@ -32,26 +33,33 @@ export class WalkingGraph {
   private readonly obstacleBins = new Map<string, number[]>();
   private readonly edgeBins = new Map<string, number[]>();
   private readonly bin: number;
-  private readonly roadAccess: RoadAccess;
+  private roadAccess!: RoadAccess;
 
   constructor(
     geo: LifeGeometry,
     readonly perMeter: number,
+    deferred = false,
   ) {
     this.bin = 20 * perMeter;
+    if (!deferred) complete(this.prepare(geo));
+  }
+  *prepare(geo: LifeGeometry): Generator<void, void, void> {
+    const { perMeter } = this;
     const crossings = (geo.areas ?? []).filter((a) => a.kind === 'crossing').map((a) => a.rings);
-    this.roadAccess = prepareRoadTerrain(geo, perMeter).access;
+    this.roadAccess = (yield* prepareRoadTerrainSteps(geo, perMeter)).access;
     const crossingReach = new PolygonIndex();
-    for (const polygon of crossings) crossingReach.add(polygon);
+    for (const polygon of crossings) yield* crossingReach.addSteps(polygon);
     for (let i = 0; i < geo.obstacleClosed.length; i++) {
       const points: WalkPoint[] = [];
-      for (let v = geo.obstacleStarts[i]!; v < geo.obstacleStarts[i + 1]!; v++)
+      for (let v = geo.obstacleStarts[i]!; v < geo.obstacleStarts[i + 1]!; v++) {
+        if ((v & 63) === 0) yield;
         points.push({ x: geo.obstacles[v * 2]!, y: geo.obstacles[v * 2 + 1]! });
+      }
       if (points.length < 2) continue;
       const bounds = boundsOf(points);
       const index = this.obstacles.length;
       this.obstacles.push({ points, bounds, closed: geo.obstacleClosed[i] === 1 });
-      this.index(this.obstacleBins, bounds, index);
+      yield* this.indexSteps(this.obstacleBins, bounds, index);
     }
     const nodes = new Map<string, number>();
     const node = (p: WalkPoint) => {
@@ -89,6 +97,7 @@ export class WalkingGraph {
       // Only mapped walking lines and plaza routes, including decoded mapped sidewalks.
       if (!usableLines.person.includes(kind)) continue;
       for (let v = geo.starts[l]!; v < geo.starts[l + 1]! - 1; v++) {
+        yield;
         const a = { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! };
         const b = { x: geo.coords[v * 2 + 2]!, y: geo.coords[v * 2 + 3]! };
         edge(a, b);
@@ -99,6 +108,7 @@ export class WalkingGraph {
     const originalPoints = this.points.length;
     const reach = 3 * perMeter;
     for (let i = 0; crossings.length && i < originalPoints; i++) {
+      yield;
       const p = this.points[i]!;
       if (!crossingReach.hits([{ ...p, hx: 1, hy: 0, length: 2 * reach, width: 2 * reach }]))
         continue;
@@ -124,7 +134,9 @@ export class WalkingGraph {
     }
     // Join nearby mapped walking ends with the same terrain check as a site connector.
     const bins = new Map<string, number[]>();
-    this.points.forEach((p, i) => {
+    for (let i = 0; i < this.points.length; i++) {
+      const p = this.points[i]!;
+      yield;
       const bx = Math.floor(p.x / this.bin);
       const by = Math.floor(p.y / this.bin);
       for (let x = bx - 1; x <= bx + 1; x++)
@@ -139,16 +151,25 @@ export class WalkingGraph {
           }
         }
       this.index(bins, [p.x, p.y, p.x, p.y], i);
-    });
+    }
   }
 
   private index(map: Map<string, number[]>, bounds: number[], value: number) {
+    complete(this.indexSteps(map, bounds, value));
+  }
+  private *indexSteps(
+    map: Map<string, number[]>,
+    bounds: number[],
+    value: number,
+  ): Generator<void, void, void> {
+    let bins = 0;
     for (let x = Math.floor(bounds[0]! / this.bin); x <= Math.floor(bounds[2]! / this.bin); x++)
       for (let y = Math.floor(bounds[1]! / this.bin); y <= Math.floor(bounds[3]! / this.bin); y++) {
         const key = `${x},${y}`;
         const list = map.get(key) ?? [];
         list.push(value);
         map.set(key, list);
+        if ((++bins & 63) === 0) yield;
       }
   }
 

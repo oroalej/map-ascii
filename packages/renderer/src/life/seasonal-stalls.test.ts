@@ -49,6 +49,38 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it('reconciles a changed season on revival and regenerates carts after a hard clear', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+    const mover = life.movers[0];
+    world.sync([]);
+    select(world, null);
+    world.sync(tiles);
+    select(world, null);
+    expect(worldTiles(world).get('seasonal')).toBe(life);
+    expect(life.movers[0]).toBe(mover);
+    expect(life.seasonalStalls).toEqual([]);
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+    world.clearTiles();
+    world.sync(tiles);
+    select(world);
+    const fresh = worldTiles(world).get('seasonal')!;
+    expect(fresh).not.toBe(life);
+    expect(fresh.seasonalStalls.length).toBeGreaterThan(0);
+  });
+
+  it('admits mixed-zoom seasonal carts only within the finest resident footprint', () => {
+    const { world, life, tiles } = setup();
+    const fine = { z: tile.z + 1, x: tile.x * 2, y: tile.y * 2 };
+    world.sync([...tiles, { key: 'fine', tile: fine, life: tiles[0]!.life }]);
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+    expect(life.seasonalStalls.every((s) => s.x >= 2048 || s.y >= 2048)).toBe(true);
+    expect(worldTiles(world).get('fine')!.seasonalStalls.length).toBeGreaterThan(0);
+  });
+
   it('uses tile-owned neighboring markets even when selected worship places are absent', () => {
     const { world, life, tiles } = setup(false, false),
       neighbor = new LifeBuilder();

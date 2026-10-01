@@ -54,6 +54,55 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('keeps a covered customer frozen while an owned customer can buy at the queue front', () => {
+    const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]);
+    const index = scene.sites.findIndex((s) => s.kind === 'vendor');
+    const covered = person(40),
+      owned = person(41);
+    expect(scene.reserve(covered, index)).toBe(true);
+    expect(scene.reserve(owned, index)).toBe(true);
+    for (const visit of scene.visits.values()) {
+      visit.state = 'wait';
+      visit.time = 60;
+    }
+    const frozen = structuredClone({ ...scene.visits.get(covered), site: undefined });
+    scene.step(
+      0.1,
+      [covered, owned],
+      { rain: 0 },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (p) => p.x >= 41,
+    );
+    expect({ ...scene.visits.get(covered), site: undefined }).toEqual(frozen);
+    expect(scene.visits.get(owned)?.state).toBe('purchase');
+  });
+
+  it('refreshes a vendor that regains ownership after its opening time changed while covered', () => {
+    const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]);
+    scene.step(0.1, [], { rain: 0, minutes: 720 });
+    expect(stall.open).toBe(true);
+    scene.step(
+      0.1,
+      [],
+      { rain: 0, minutes: 180 },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => false,
+    );
+    expect(stall.open).toBe(true);
+    scene.step(0.1, [], { rain: 0, minutes: 180 });
+    expect(stall.open).toBe(false);
+  });
+
   const crossingScene = (siteX = 110) => {
     const b = new LifeBuilder();
     b.line(

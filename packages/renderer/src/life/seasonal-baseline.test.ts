@@ -1,4 +1,4 @@
-/** Captured from main b97ef42 before seasonal rendering/simulation changes. */
+/** Simulation captured from main af120b1; legacy fixture bytes remain from b97ef42. */
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { makeScenario, completeScenarioState, SCENARIOS } from './testing/scenarios';
@@ -7,11 +7,11 @@ import { packFixtures, updateFixtureFlags } from './fixtures';
 import { LampState, packLights } from './lights';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const baseline = {
-  sparse: 'c3e1b62f60429d70e90664bfd329e0b08dcf6fce8d5330d3e1761d0dea30925b',
-  junction: '8a71b2058e8607dbafc33423a42ff14ee8e501d90166bb20ea45480ba7170128',
-  crossroads: '4cdf614fcd177142b81d86dad60ab2f254e4c438245a179d28ccff56cbb43442',
-  transit: '0c862daea63e4280b12df241c8c1b4acbd0d85c7d3344d199faba0dd862732e8',
-  rain: '0de6d3a10df927f6d47e9f5c2514a055cc2d34e265e9955c52a6bb2a60475b79',
+  sparse: '336f2a4e852b4557413c404035b2233676e0397e8f1906360bc0107e368f1c54',
+  junction: 'f30dbc262262fa971a2f9f9e33ddd23811f79d6229768e687291f1a5b72d1318',
+  crossroads: 'cbd39406b344264e6c115abbbe40578a2bc3b94af9f1b0b26d4f2755b3088d08',
+  transit: '7c6649be292233c8ea9366b5087005314310e5f1be8a3e90489fdd0a29e4546a',
+  rain: '8cb98cb73ad454c27a2ac2b4d234780a4f90fb43c5b575c0b02ed806fb1dc933',
 };
 for (const kind of SCENARIOS)
   it(`preserves the unseasoned ${kind} simulation`, () => {

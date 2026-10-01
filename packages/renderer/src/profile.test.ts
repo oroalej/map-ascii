@@ -73,6 +73,22 @@ describe('bounded frame profiles', () => {
     report.samples[0]!.ms.callback = 999;
     expect(p.snapshot().stages.callback.medianMs).toBe(8);
   });
+  it('retains background preparation CPU and measures individual slices across worker merges', () => {
+    const worker = new FrameProfiler(() => 0),
+      main = new FrameProfiler(() => 0);
+    worker.preparationSlice(2);
+    worker.preparationSlice(3);
+    worker.begin(1);
+    worker.preparationSlice(1);
+    const sample = worker.drain()!;
+    expect(sample.ms.prepareSlice).toBe(6);
+    main.merge(sample);
+    main.begin(1);
+    main.end();
+    const report = main.snapshot();
+    expect(report.stages.prepareSlice).toEqual({ count: 3, medianMs: 2, p95Ms: 3 });
+    expect(report.samples[0]!.ms.prepareSlice).toBe(6);
+  });
   it('keeps only its bounded chronological window and clears active samples on reset', () => {
     const p = new FrameProfiler(() => 0);
     for (let i = 0; i < PROFILE_CAPACITY + 3; i++) {

@@ -13,6 +13,7 @@ function lookahead(
   origin: TileLife,
   m: Mover,
   lives: readonly TileLife[],
+  owns?: (life: TileLife, p: { x: number; y: number }) => boolean,
 ): { points: Sample[]; end?: number } {
   const points: Sample[] = [];
   let life = origin,
@@ -22,34 +23,41 @@ function lookahead(
   const visited = new Set<string>();
   for (let hops = 0; hops < 64 && distance < reach; hops++) {
     const f = frameBetween(life.tile, origin.tile);
-    const result = life.trackAhead(cursor, (reach - distance) / f.scale, (p) =>
-      points.push({
-        x: f.x + p.x * f.scale,
-        y: f.y + p.y * f.scale,
-        hx: p.hx,
-        hy: p.hy,
-        distance: distance + p.distance * f.scale,
-        life,
-      }),
+    const result = life.trackAhead(
+      cursor,
+      (reach - distance) / f.scale,
+      (p) =>
+        points.push({
+          x: f.x + p.x * f.scale,
+          y: f.y + p.y * f.scale,
+          hx: p.hx,
+          hy: p.hy,
+          distance: distance + p.distance * f.scale,
+          life,
+        }),
+      owns && ((p) => owns(life, p)),
     );
     distance += result.distance * f.scale;
     if (result.end) return { points, end: distance };
     if (!result.edge || distance >= reach) break;
     let next: { life: TileLife; cursor: Mover } | undefined;
     for (const candidate of lives) {
-      if (candidate === life || candidate.tile.z !== life.tile.z) continue;
+      if (candidate === life || (!owns && candidate.tile.z !== life.tile.z)) continue;
       const map = frameBetween(life.tile, candidate.tile);
       const x = map.x + result.cursor.x * map.scale,
         y = map.y + result.cursor.y * map.scale;
       if (x < -0.01 || y < -0.01 || x > EXTENT + 0.01 || y > EXTENT + 0.01) continue;
-      const projected = candidate.projectRail({ ...result.cursor, x, y });
-      if (projected) {
+      const projected =
+        candidate.tile.z === life.tile.z
+          ? candidate.projectRail({ ...result.cursor, x, y })
+          : candidate.projectFrom(result.cursor, life, { snapM: TRAIN.handover });
+      if (projected && (!owns || owns(candidate, projected))) {
         next = { life: candidate, cursor: projected };
         break;
       }
     }
     if (!next) break; // An unloaded edge is not a real terminus.
-    const key = `${next.life.tile.x}/${next.life.tile.y}/${next.cursor.line}/${next.cursor.dir}/${Math.round(next.cursor.d)}`;
+    const key = `${next.life.tile.z}/${next.life.tile.x}/${next.life.tile.y}/${next.cursor.line}/${next.cursor.dir}/${Math.round(next.cursor.d)}`;
     if (visited.has(key)) break;
     visited.add(key);
     life = next.life;
@@ -59,9 +67,15 @@ function lookahead(
 }
 
 /** Pure prepass: all leaders, including dwelling trains, are measured before anyone moves. */
-export function trainLimits(lives: readonly TileLife[], dt: number): Map<Mover, TrainLimit> {
+export function trainLimits(
+  lives: readonly TileLife[],
+  dt: number,
+  owns?: (life: TileLife, p: { x: number; y: number }) => boolean,
+): Map<Mover, TrainLimit> {
   const trains = lives.flatMap((life) =>
-    life.movers.filter((m) => m.train && !m.train.edge).map((m) => ({ life, m })),
+    life.movers
+      .filter((m) => m.train && !m.train.edge && (!owns || owns(life, m)))
+      .map((m) => ({ life, m })),
   );
   const limits = new Map<Mover, TrainLimit>();
   for (const { life, m } of trains) {
@@ -70,7 +84,12 @@ export function trainLimits(lives: readonly TileLife[], dt: number): Map<Mover, 
     const limit: TrainLimit = { target: m.speed, cap: Infinity, station: Infinity };
     limits.set(m, limit);
     if (m.pause > 0 || m.train!.reverse) continue;
-    const { points, end } = lookahead(life, m, lives);
+    const { points, end } = lookahead(
+      life,
+      m,
+      owns ? [...lives].sort((a, b) => b.tile.z - a.tile.z) : lives,
+      owns,
+    );
     const constrain = (gap: number, lead = 0) => {
       limit.target = Math.min(limit.target, approach(gap, lead, brake));
       limit.cap = Math.min(limit.cap, Math.max(0, gap) / dt);
@@ -87,6 +106,7 @@ export function trainLimits(lives: readonly TileLife[], dt: number): Map<Mover, 
         const f = frameBetween(stationLife.tile, life.tile);
         const stations = stationLife.geo.stations;
         for (let k = 0; k < stations.length; k += 2) {
+          if (owns && !owns(stationLife, { x: stations[k]!, y: stations[k + 1]! })) continue;
           const x = f.x + stations[k]! * f.scale,
             y = f.y + stations[k + 1]! * f.scale;
           let closest = Infinity,
