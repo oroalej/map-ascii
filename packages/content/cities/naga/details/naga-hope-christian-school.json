@@ -1,0 +1,72 @@
+{
+  "id": "detail/naga-hope-christian-school",
+  "osm_id": "osm:way/276457437",
+  "title": "Naga Hope Christian School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "pavilion-floor",
+      "ring": [
+        [123.19803352, 13.61966939],
+        [123.19812455, 13.61965379],
+        [123.19813257, 13.61969803],
+        [123.19804154, 13.61971363],
+        [123.19803352, 13.61966939]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "pavilion-roof",
+      "ring": [
+        [123.19803352, 13.61966939],
+        [123.19812455, 13.61965379],
+        [123.19813257, 13.61969803],
+        [123.19804154, 13.61971363],
+        [123.19803352, 13.61966939]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "pavilion-access",
+      "line": [
+        [123.19812002, 13.61971066],
+        [123.19814775, 13.61979151]
+      ],
+      "width_m": 1
+    }
+  ],
+  "seating": [
+    {
+      "id": "pavilion-bench",
+      "line": [
+        [123.19806484, 13.61967785],
+        [123.19810125, 13.61967161]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Naga Hope Christian School — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/276457437",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.nagahope.edu.ph/facilities.php",
+      "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. A small schematic pavilion is placed in the open campus near the frontage; exact position and dimensions require a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "landcover/naga-hope-christian-school",
+  "title": "Naga Hope Christian School grounds",
+  "trees": [
+    {
+      "at": [123.19803683, 13.61973761],
+      "crown_m": 5,
+      "kind": "broadleaved"
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.19801755, 13.61967617],
+        [123.1980312, 13.61967383],
+        [123.19803762, 13.61970922],
+        [123.19802397, 13.61971156],
+        [123.19801755, 13.61967617]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga Hope Christian School — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/276457437",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.nagahope.edu.ph/facilities.php",
+      "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. A small schematic pavilion is placed in the open campus near the frontage; exact position and dimensions require a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+    }
+  ]
+}
