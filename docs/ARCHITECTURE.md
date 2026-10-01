@@ -405,7 +405,7 @@ CPU profile, top 15 functions by self time across the whole one-round process, i
 
 Both B and the C candidate pass production budgets: initial JS 165 KB / 250 KB, renderer 58 KB / 120 KB, tiles 2.1 MB / 40 MB. B's simulation chunk is 143,126 bytes / 48,706 gzip, with the full six-chunk worker graph 358,447 / 121,045 bytes. C's candidate is 143,964 / 48,897 for simulation and 360,406 / 121,563 for the graph. Neither graph contains `twgl` or `getContext`.
 
-**Part C stop gate fired.** The five-run pan comparison against `b827946` did not reach a 30% syncFrame p95 reduction in any dense kind, despite improved browser latency. No C production code is committed. The tested candidate, including its regression tests, is saved locally as `test-results/terrain-incremental-candidate.patch`; `git apply --check` succeeds against B. The accepted runtime contains A plus B. Candidate checks and captures above describe the rejected experiment.
+**Part C stop gate fired.** The five-run pan comparison against `b827946` did not reach a 30% syncFrame p95 reduction in any dense kind, despite improved browser latency. No C production code is committed. The tested candidate, including its regression tests, is preserved locally as `.plans/terrain-incremental-candidate.patch` (also retained in `test-results/`). Its SHA-256 is `21e6f1568488d05c6aa7e93199c4bb5161a8b67be5a45b29a73678c3ddd2057c`; `git apply --check` succeeds against `7e8786f`. Later diagnostic edits in `occupancy.ts` require adapting that hunk before reapplying it. The accepted runtime contains A plus B. Candidate checks and captures above describe the rejected experiment.
 
 | Dense pan fixture | SyncFrame baseline to C median / p95, ms | SyncFrame p95 change | Step baseline to C median / p95, ms | Step p95 change |
 | --- | ---: | ---: | ---: | ---: |
@@ -417,6 +417,46 @@ Both B and the C candidate pass production budgets: initial JS 165 KB / 250 KB, 
 No pan step or syncFrame p95 regression exceeds 5%, so none requires a repeat. The C non-pan full timing/equality matrix was not run: the pan stop gate was evaluated first to avoid a lengthy benchmark for a candidate that cannot ship. C passes the existing worker/direct and cell-guard equality tests and new incremental/fresh terrain tests, but no claim of all-fixture C equality is made. A's noisy preliminary p95 regressions were not acceptance evidence or repeated; B's one-sample timing values likewise have no inferential use. This is an explicit verification-order deviation from C6, preserving its mandatory stop decision.
 
 Verification and deviations: A and B passed exact state/visible/packed comparisons in all 30 original fixtures. B's equality-only run uses `--runs=1 --samples=1`; its timing rows are not performance estimates. The initial A timing matrix overlapped the pan harness and has contention, so it is not used for acceptance. Changed tests, renderer typecheck, web typecheck and script typecheck pass. Early concurrent test runs had timeout-only failures; focused reruns passed, and C's 400 affected tests passed with `--maxWorkers=2`. `pnpm lint` reports only five pre-existing ignored `.plans` scratch-script parsing errors; lint excluding `.plans/**` passes. Full CI and desktop/mobile e2e are left to CI as directed. The updated A5-A7 work is a separate commit because A was already committed. Pan setup was corrected to exclude initial population and measure exactly eight window changes. The candidate road-cache identity tests retain polygon references before updates because the access object is now persistent; guard equality tests retain their assertions.
+
+##### Real-tile follow-up: control gate stopped optimization (October 1, 2026)
+
+Parts D and E of the follow-up are retained: `.plans/**` is now ignored by normal lint, the candidate patch is preserved outside transient test output, and the performance scripts share a FileHandle archive reader. `PolygonIndex.stats()` is read-only and is called outside timed simulation work. A testing accessor also reports blocked/water indexes and reads bins from older revisions without adding a LifeWorld public method.
+
+`pnpm perf:world --baseline=<revision> --real[=<city>] --pan --output=<path>` decodes the real tiles once before timing and gives the same tile objects to each revision. The initial registered fixture is Naga: z16, x55189–55198, y30262–30265. Other city slugs fail explicitly until they have a registered fixture. All 40 tiles existed; none were skipped. Fewer than 24 tiles is a stop condition. A 4×4 window shifts right one column every 30 frames for six shifts over 210 frames. The z18 camera follows the window centre at 1920×1080, dt=1/30, noon/calm, activity 1, city-pack traffic/life configuration, and 0.9 m clearance minimum.
+
+Each run uses a FrameProfiler and its revision's own snapshot encoder. Initial sync and initial encoding are excluded. One complete paired warmup precedes five alternating baseline/current pairs. `syncFrame` measures sync plus step on the six shift frames; `step` measures the other 204 frames. Encoding happens outside those timers only when the terrain version changes. Other stages retain only actual samples, never synthetic zeroes. Table values are the median of five per-run medians / median of five per-run p95s, with sample counts summed. With only six arrivals per run, each arrival-stage p95 is that run's maximum. The JSON retains every frame sample and each run's summaries, statistics, parameters, source/dependency/archive/config hashes, and machine information.
+
+The control invocation was `pnpm perf:world --baseline=HEAD --real --pan --output=test-results/world-real-pan-base.json`, with HEAD at `7c3e0dd`. To reproduce the same comparison, pin `--baseline=7c3e0dd` while using that revision's runtime sources. Both source hashes were exactly `ba258162fa13b20b8bb94659f8124ad38de1643d3f5caed8cb6656f7c1958a1d`. Using E rather than the proposed `7e8786f` for this control ensures byte-identical source graphs, including diagnostics. The process was Node 24.12.0 on Windows 10.0.19045, Ryzen 5 2600X. No tests or builds ran alongside the capture.
+
+| Stage | Identical baseline median / p95 ms (count) | Identical current median / p95 ms (count) | p95 change |
+| --- | ---: | ---: | ---: |
+| `syncFrame` | 134.57 / 173.80 (30) | 128.38 / 169.20 (30) | -2.65% |
+| `step` | 5.78 / 11.48 (1020) | 5.85 / 12.80 (1020) | +11.49% |
+| `sync` | 123.60 / 166.37 (30) | 123.44 / 162.40 (30) | -2.39% |
+| `spawn` | 18.61 / 32.72 (30) | 19.47 / 36.38 (30) | +11.21% |
+| `settle` | 43.66 / 56.55 (30) | 43.81 / 61.72 (30) | +9.14% |
+| `terrainRebuild` | 52.15 / 66.11 (30) | 49.24 / 63.78 (30) | -3.52% |
+| `terrainRoads` | 28.75 / 38.09 (30) | 27.74 / 32.73 (30) | -14.09% |
+| `terrainRevalidate` | 1.67 / 2.85 (30) | 1.73 / 2.37 (30) | -16.68% |
+| `terrainEncode` | 26.83 / 37.49 (30) | 28.59 / 40.82 (30) | +8.89% |
+
+Both revisions and all five runs returned the same final-window bin statistics:
+
+| Index | Polygons | Bins | Items | Max bins per polygon | Mean bins per polygon |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| roads | 2462 | 16021 | 27211 | 360 | 11.05 |
+| forbidden | 2596 | 15998 | 28430 | 360 | 10.95 |
+| trees | 28 | 446 | 544 | 360 | 19.43 |
+| blocked | 3836 | 12104 | 19439 | 140 | 5.07 |
+| water | 10 | 4107 | 4335 | 1363 | 433.50 |
+
+**E's ±5% noise gate failed** for step and encoding p95; syncFrame and rebuild passed. No rerun was selected to obtain a passing control. An unrelated Next process, outside this workspace, consumed 6.66 CPU seconds during a subsequent two-second diagnostic interval (about 3.3 cores). It was not stopped or changed. This is a plausible contention source, not proof of why particular samples were slow. Encode per-run p95 ranged from 35.89–63.54 ms on the baseline and 36.61–98.04 ms on current. These timings establish measurement instability, not a regression between identical revisions.
+
+The road/forbidden max-bin count does meet F's >200 decision rule, despite their means staying below 20. It confirms bbox inflation, but does not establish how much encoding time it causes. **F, G, and H were skipped at the infrastructure stop gate**: no coverage change, snapshot cheapening, incremental-terrain re-evaluation, or decode optimization was attempted or committed. C retains its original rejected status; it has not been judged by the new real-tile gate. Independent H can continue after a failed optimization gate, but not while the required initial measurement gate is invalid. Accordingly `perf:tiles --strip`, `--tiles`, and `--baseline` are still planned flags, not implemented interfaces.
+
+For a later coverage trial, geometric coverage with pad 0 is insufficient: a tiny gap near a grid corner can still hit under `segmentCrossing`'s tolerance while the body and polygon occupy distinct geometric bins. Preserve a conservative tolerance halo, clipped to the original bbox bin set. `hits` must stay exact; `near` may remove only false positives that cannot affect bodies contained in the queried swept clearance envelope. A later decode comparison must use each revision's registry factory and check every archive zoom, rather than just the existing z15+ scan. Browser `decodeMs` remains a mean over up to 50 recent decodes, distinct from the archive's per-tile medians.
+
+Local verification: normal lint, renderer typecheck, renderer-script typecheck, and all 394 affected tests in 38 files passed. The unchanged z15+ tile scan also exercised the extracted reader with one round; its timings are not acceptance evidence. Runtime rendering behavior is unchanged, so production/budget rebuilds, browser captures, the full suite, and desktop/mobile e2e were not repeated; full CI remains responsible for its normal checks. The accepted follow-up consists of housekeeping, diagnostics/harnesses, and this report. Optimization commits and F/G/H acceptance checks were skipped as required by the failed E gate.
 
 Raw reports remain in ignored `test-results/`: `browser-pan-baseline.json`, `browser-pan-b.json`, `browser-pan-c.json`, `tiles-decode.json` (including hotspot summary), `tiles-decode-cpuprof.json`, `tiles-cpuprof/*.cpuprofile`, `world-terrain-profile.json`, `world-terrain-snapshot.json`, `world-pan.json`, and `bundle-terrain-{b,c}.json`.
 
