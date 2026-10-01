@@ -6,12 +6,22 @@ import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-site
 import {
   artChars,
   ATLAS_CLASSES,
+  FRONTAGE_KINDS,
   CAMERA_RANGES,
   BOAT_TYPES,
   VEHICLE_TYPES,
   YEAR_RANGE,
   type TrafficMix,
 } from './constants';
+
+export const Frontage = z.enum(FRONTAGE_KINDS);
+/** Scalars retained through vector-tile clipping; all three must be supplied together. */
+export const ShopAnchor = z.object({
+  shop_lng: z.number().finite().min(-180).max(180),
+  shop_lat: z.number().finite().min(-85.051129).max(85.051129),
+  shop_radius_m: z.number().finite().positive(),
+});
+export type ShopAnchor = z.infer<typeof ShopAnchor>;
 
 /** A BCP 47-style language code: "fil", "bcl", "pt-BR". */
 export const LanguageCode = z

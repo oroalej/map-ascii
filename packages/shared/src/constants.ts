@@ -4,6 +4,10 @@
  * schemas build on them, so each value has one source.
  */
 
+/** Shopfront kinds shared without importing build-time validation into the renderer. */
+export const FRONTAGE_KINDS = ['food', 'retail', 'service', 'commercial'] as const;
+export type FrontageKind = (typeof FRONTAGE_KINDS)[number];
+
 /** Feature classes the pipeline assigns and the renderer themes (DATA.md §3, SPEC.md §4). */
 export const ATLAS_CLASSES = [
   'water_river',

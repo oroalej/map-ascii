@@ -81,15 +81,15 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `seating` | sourced real-width stone seating and planter edges from `details/` |
 | `shrubs` | curated shrub polygons from `landcover/` |
 | `planting` | curated soil and sparse ground cover in planting beds; `raised` beds block ground agents |
-| `trees` | `natural=wood`, `landuse=forest` (kind in `variant`) |
-| `grass` | `landuse=grass|meadow|village_green`, `natural=grassland`, `leisure=recreation_ground` (a park wins if both are tagged) |
+| `trees` | `natural=wood`, `landuse=forest|orchard` (kind in `variant`, including mapped palm orchards) |
+| `grass` | `landuse=grass|meadow|village_green|plant_nursery|cemetery`, `natural=grassland|scrub|heath`, `leisure=recreation_ground` (a park wins if both are tagged) |
 | `farmland` | `landuse=farmland|paddy` / `crop=rice` |
 | `monument` | `historic=monument|memorial`, `memorial=statue|bust`, `tourism=artwork` |
 | `building_part` | not from OSM tags: plan-view landmark parts from the city pack's `plans/` (pipeline step 04) |
 | `tree` | `natural=tree` (points), `natural=tree_row` (lines) (kind in `variant`; `height` and `crown`); also the city pack's curated `landcover/` trees and rows (pipeline step 04); its areas are `grass`, `parking`, `trees`, `shrubs`, or `planting` |
 | `barrier` | `barrier=fence|wall|hedge|gate` (kind in `variant`) |
 | `entrance` | `entrance=*` |
-| `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop|street_lamp`, road transport platforms, sourced tricycle ranks, `man_made=flagpole` (kind in `variant`; shelters with buildings keep their building class) |
+| `furniture` | `amenity=bench|fountain|shelter|bus_station`, `highway=bus_stop|street_lamp`, road transport platforms, sourced tricycle ranks, `man_made=flagpole`; standalone food/retail/service shops (kind in `variant`; shelters with buildings keep their building class) |
 | `parking` | `amenity=parking` |
 | `pitch` | `leisure=pitch` |
 
@@ -363,3 +363,5 @@ After direction overrides, `lib/signal-layout.ts` resolves each controller into 
 ### Neighborhood enrichment
 
 The separate `detail-neighborhood.osm.json` query fetches shops, selected food/service amenities, craft, scrub/heath, orchards, plant nurseries and cemeteries. `03-normalize` runs `lib/frontage.ts` while raw tags and building polygons still exist: a bbox grid and polygon containment associate shop nodes with footprints, including holes. Food wins over service, retail and generic commercial tags. Assigned nodes are suppressed as standalone markers; embedded malls/supermarkets retain the market class and contribute their names to unnamed footprints. Other shop points use furniture variants `shop_food`, `shop_retail`, `shop_service`; building roof variants stay intact. Tiles carry `frontage` as a separate property. The worker packs frontage/kind bits without adding classes, caps shop lights and buffered commerce centers at 150 per tile, and transfers commerce separately for deterministic additive spawning.
+
+Assignment chooses the smallest containing footprint, with stable OSM-id ties; outer boundaries are included and hole boundaries excluded. Commerce polygons otherwise lacking a render class become one interior point marker, retaining their OSM id and name. They annotate a building only if their whole area is contained in it. The shared `Frontage` schema validates the generated value; similarly named raw OSM annotations are ignored. `ShopAnchor` validates `shop_lng`, `shop_lat`, and `shop_radius_m` together. These are computed before clipping, from the largest polygon component's interior anchor (or a point's mapped position) and the full footprint's radius. Every tile copy uses that anchor, but only its containing tile owns the shop light. Commerce entries are deduplicated and capped by stable source id; older archives without anchors use the prior geometry fallback. Existing tile buffers bound the available proximity evidence; this does not promise complete shop coverage within 60 m beyond every tile edge.

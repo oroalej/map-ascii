@@ -5,7 +5,14 @@
  * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
-import { featureZoomBand, LIFE_SITE_KINDS, SignalLayout, type ZoomBand } from '@atlas/shared';
+import {
+  featureZoomBand,
+  FRONTAGE_KINDS,
+  LIFE_SITE_KINDS,
+  SignalLayout,
+  type ZoomBand,
+  type FrontageKind,
+} from '@atlas/shared';
 import earcut from 'earcut';
 import {
   classId,
@@ -748,15 +755,34 @@ export function buildTileGeometry(
         labels.push({ id, text, lng, lat, ...curated });
       }
       let flags = landmark ? Flags.landmark : 0;
-      const frontage = ['food', 'retail', 'service', 'commercial'].indexOf(
-        String(feature.properties.frontage),
-      );
+      const frontage = FRONTAGE_KINDS.indexOf(feature.properties.frontage as FrontageKind);
       if (frontage >= 0 && isBuilding(className))
         flags |=
           Flags.frontage |
           (frontage & 1 ? Flags.frontageLow : 0) |
           (frontage & 2 ? Flags.frontageHigh : 0);
       const variant = variantCode(className, feature.properties.variant);
+      const { shop_lng, shop_lat, shop_radius_m } = feature.properties;
+      const shopPosition =
+        tile &&
+        typeof shop_lng === 'number' &&
+        typeof shop_lat === 'number' &&
+        Number.isFinite(shop_lng) &&
+        Number.isFinite(shop_lat) &&
+        typeof shop_radius_m === 'number' &&
+        Number.isFinite(shop_radius_m) &&
+        shop_radius_m > 0
+          ? lngLatToTile(tile, shop_lng, shop_lat)
+          : undefined;
+      const addShop = (fallback: TilePoint, radius: number, commerce = true) => {
+        const p = shopPosition ?? fallback;
+        if (commerce) life.commerceAt(p, featureId);
+        life.shop(
+          p,
+          shopPosition && unitMeters ? Number(shop_radius_m) / unitMeters : radius,
+          featureId,
+        );
+      };
       const width = Number(feature.properties.width ?? 0);
       const marker = markerFor[className as keyof typeof markerFor];
       const place = isRegion ? undefined : placeFor(className, variant);
@@ -979,11 +1005,10 @@ export function buildTileGeometry(
               variant <= 11 &&
               unitMeters
             ) {
-              life.commerceAt(p);
-              life.shop(p, SHOP.pointRadius / 2 / unitMeters);
+              addShop(p, SHOP.pointRadius / 2 / unitMeters);
             }
-            if (className === 'building_market' && !isRegion && unitMeters && inTile) {
-              life.shop(p, SHOP.pointRadius / 2 / unitMeters);
+            if (className === 'building_market' && !isRegion && unitMeters) {
+              addShop(p, SHOP.pointRadius / 2 / unitMeters, !!shopPosition);
             }
             if (place && inTile)
               life.place(p, place, 0, false, Number(feature.properties.seat_bearing ?? NaN));
@@ -1194,11 +1219,10 @@ export function buildTileGeometry(
           }
           // A shop or market glows while it is open (life/lights.ts), from its tile.
           if (!isRegion && (className === 'building_market' || frontage >= 0)) {
-            life.commerceAt(center);
             const reach = Math.max(
               ...largest.ring.map((q) => Math.hypot(q.x - center.x, q.y - center.y)),
             );
-            life.shop(center, reach);
+            addShop(center, reach);
           }
           // A roost belongs to the tile that holds it, not to its neighbors' buffers.
           const inside = center.x >= 0 && center.x < EXTENT && center.y >= 0 && center.y < EXTENT;

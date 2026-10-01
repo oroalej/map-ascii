@@ -41,6 +41,36 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   features,
 });
 
+it('retains shop areas as anchored markers and ignores raw frontage annotations', () => {
+  const shop: Feature = {
+    type: 'Feature',
+    id: 'way/shop',
+    properties: { amenity: 'bank', name: 'Bank' },
+    geometry: square(0.002, 0.002, 0.003, 0.003),
+  };
+  const building: Feature = {
+    type: 'Feature',
+    id: 'way/building',
+    properties: { building: 'yes', frontage: 'invented' },
+    geometry: square(0.005, 0.005, 0.006, 0.006),
+  };
+  const features = normalize(collection(shop, building), boundary, 10).features;
+  expect(features.find((f) => f.properties.id === 'osm:way/shop')).toMatchObject({
+    geometry: { type: 'Point', coordinates: [0.0025, 0.0025] },
+    properties: {
+      name: 'Bank',
+      class: 'furniture',
+      variant: 'shop_service',
+      shop_lng: 0.0025,
+      shop_lat: 0.0025,
+      shop_radius_m: 5,
+    },
+  });
+  expect(
+    features.find((f) => f.properties.id === 'osm:way/building')!.properties.frontage,
+  ).toBeUndefined();
+});
+
 it('retains road tags and directed stop anchors through normalization', () => {
   const tagged = road('way/10', 'secondary', 0.005);
   tagged.properties = {

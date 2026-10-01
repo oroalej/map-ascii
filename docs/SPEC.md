@@ -151,6 +151,8 @@ Streetlights and traffic signals remain visible in daylight and with Life off. C
 
 Mapped food, retail, service and commercial frontages receive kind-colored striped awnings on building walls facing a street or path within three cells, from wall-outline zoom. Standalone mapped shops and amenities use `¤` in their kind's paint; points inside building footprints annotate that building instead. Shops glow while open using the existing shop-hour lighting. Separate commerce streams add vendors and walkers near mapped shops, within the existing tile caps; legacy actors settle and reserve their positions before new candidates are admitted. Scrub, heath, plant nurseries and cemeteries use grass cover, orchards use tree cover, and mapped palm orchards retain their palm kind. Commercial land-use zones receive no special fill.
 
+Shop areas without a building or another rendered area class receive one interior `¤` marker; a wholly contained shop area annotates its building instead. Overlapping buildings use the smallest containing footprint with stable identity ties. Shop lights keep one geographic anchor and owner across tile seams. Additional commerce walkers require mapped walking routes, as other pedestrians do; commerce proximity never authorizes walking on a carriageway. The unchanged-legacy-prefix guarantee applies when actors are admitted, not to later motion after actors interact. Opening times and activity are simulated, not evidence that a real business is currently open.
+
 ## 5. Interactions
 
 | Input | Action |

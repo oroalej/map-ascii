@@ -676,7 +676,7 @@ export function glyphPass(
     u_bird: classId('life_bird'),
     u_paints: themeRes.uniforms.paints,
     u_awningPaints: themeRes.uniforms.awnings,
-    u_frontageMask: themeRes.uniforms.frontageMask,
+    u_frontageClasses: themeRes.uniforms.frontageClasses,
     u_birdPaints: themeRes.uniforms.birds,
     u_rain: weather.rain,
     u_rainSlant: weather.wind?.dir[0] ?? 0,

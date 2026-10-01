@@ -1,6 +1,36 @@
 import type { City } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
-import { mergeResponses, railQuery, regionQueries, splitBbox, trafficQuery } from './01-fetch';
+import {
+  mergeResponses,
+  neighborhoodQuery,
+  railQuery,
+  regionQueries,
+  splitBbox,
+  trafficQuery,
+} from './01-fetch';
+
+it('fetches commerce and neighborhood vegetation without commercial land-use zones', () => {
+  const q = neighborhoodQuery('1,2,3,4');
+  for (const tag of [
+    'nwr["shop"]',
+    'nwr["craft"]',
+    'food_court',
+    'dentist',
+    'scrub|heath',
+    'orchard|plant_nursery|cemetery',
+    '[bbox:1,2,3,4]',
+  ])
+    expect(q).toContain(tag);
+  expect(q).not.toContain('residential');
+  expect(q).not.toContain('commercial');
+  const bare = { type: 'node' as const, id: 10, lat: 1, lon: 2 };
+  const tagged = { ...bare, tags: { shop: 'florist' } };
+  for (const elements of [
+    [bare, tagged],
+    [tagged, bare],
+  ])
+    expect(mergeResponses(elements.map((e) => ({ elements: [e] }))).elements).toEqual([tagged]);
+});
 
 const city = {
   slug: 'fixture',

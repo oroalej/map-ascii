@@ -397,6 +397,47 @@ describe('classifyRings', () => {
     expect(Array.from(result.life.commerce!)).toContain(-10);
     expect(result.life.shops.length).toBe(6);
   });
+  it('keeps one owned shop light and the same commerce anchor across clipped tile copies', () => {
+    const left = { z: 16, x: 55192, y: 30266 },
+      right = { ...left, x: left.x + 1 };
+    const [shop_lng, shop_lat] = tileToLngLat(left, { x: 4050, y: 1100 });
+    const geometries = [left, right].map((tile, i) => {
+      const lo = i ? -80 : 3900,
+        hi = i ? 304 : 4176;
+      return buildTileGeometry(
+        {
+          buildings: layer([
+            feature(
+              3,
+              {
+                id: 'seam-shop',
+                class: 'building_station',
+                height: 6,
+                frontage: 'food',
+                shop_lng,
+                shop_lat,
+                shop_radius_m: 30,
+              },
+              [
+                [
+                  [lo, 1000],
+                  [hi, 1000],
+                  [hi, 1200],
+                  [lo, 1200],
+                  [lo, 1000],
+                ],
+              ],
+            ),
+          ]),
+        },
+        createIdRegistry(),
+        tile,
+      );
+    });
+    expect(geometries.map((g) => g.life.shops.length)).toEqual([3, 0]);
+    expect(geometries[0]!.life.commerce![0]! - geometries[1]!.life.commerce![0]!).toBeCloseTo(4096);
+    expect(geometries[0]!.life.shops[2]! * metersPerUnit(left)).toBeCloseTo(30);
+  });
   it('rasterizes crossing anchors as road quads and transfers buffered signals without point glyphs', () => {
     const tile = { z: 16, x: 55192, y: 30266 };
     const result = buildTileGeometry(
