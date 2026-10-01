@@ -1020,6 +1020,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         life: loaded.life,
         fixtures: found,
         ...(loaded.utilities ? { utilities: loaded.utilities } : {}),
+        ...(loaded.seasonal ? { seasonal: loaded.seasonal } : {}),
       });
     }
     const utilityGroups = showUtilities

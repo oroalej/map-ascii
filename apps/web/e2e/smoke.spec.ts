@@ -106,6 +106,18 @@ for (const city of cities) {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         if (first.lanterns)
           await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
+        for (const season of city.seasons.slice(1)) {
+          await page.getByRole('button', { name: /^Season:/ }).click();
+          const chip = page.getByRole('button', {
+            name: `Season: ${season.title.en}`,
+            exact: true,
+          });
+          await expect(chip).toBeVisible();
+          if (season.status === 'draft') await expect(chip).toHaveAttribute('title', /Draft/);
+          expect(query(page)).toEqual(before);
+        }
+        await page.getByRole('button', { name: /^Season:/ }).click();
+        await expect(today).toBeVisible();
         expect(errors).toEqual([]);
       });
 

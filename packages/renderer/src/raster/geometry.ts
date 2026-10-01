@@ -7,6 +7,8 @@
  */
 import {
   parseUtilityRecord,
+  parseSeasonalRecord,
+  type SeasonalRecord,
   isLitRoad,
   TILE_EXTENT as EXTENT,
   MERCATOR_METERS,
@@ -198,6 +200,7 @@ export type GroundGeometry = {
 export type TileGeometry = GroundGeometry & {
   /** Static hardware stays outside Life so it is never cloned to the simulation worker. */
   utilities?: readonly UtilityRecord[];
+  seasonal?: readonly SeasonalRecord[];
   /**
    * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
@@ -762,8 +765,17 @@ export function buildTileGeometry(
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
   const utilities: UtilityRecord[] = [];
+  const seasonal: SeasonalRecord[] = [];
 
   for (const [name, layer] of Object.entries(layers)) {
+    if (name === 'seasons') {
+      if (tile && tile.z === maxZoom)
+        for (let i = 0; i < layer.length; i++) {
+          const record = parseSeasonalRecord(layer.feature(i).properties.seasonal);
+          if (record) seasonal.push(record);
+        }
+      continue;
+    }
     if (name === 'utilities') {
       if (tile && tile.z === maxZoom)
         for (let i = 0; i < layer.length; i++) {
@@ -1387,6 +1399,7 @@ export function buildTileGeometry(
     labels,
     life: life.finish(),
     ...(utilities.length ? { utilities } : {}),
+    ...(seasonal.length ? { seasonal } : {}),
   };
 }
 

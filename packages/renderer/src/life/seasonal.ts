@@ -6,6 +6,7 @@ import {
   type SeasonConfig,
   type UtilityRecord,
   type UtilitySpan,
+  type SeasonalRecord,
 } from '@atlas/shared';
 import {
   EXTENT,
@@ -26,13 +27,21 @@ import { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
 export { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
 export type SeasonalFixture =
   | { kind: 'season-lantern'; lamp: Extract<LegacyStreetFixture, { kind: 'streetlight' }> }
-  | { kind: 'season-bunting'; id: string; from: Point; to: Point; seed: number };
+  | {
+      kind: 'season-bunting';
+      id: string;
+      from: Point;
+      to: Point;
+      seed: number;
+      style?: 'red-yellow-rectangles';
+    };
 export type SeasonalVisibility = { lanterns: boolean; bunting: boolean };
 export type SeasonalTile = {
   tile: TileId;
   life: LifeGeometry;
   fixtures: readonly LegacyStreetFixture[];
   utilities?: readonly UtilityRecord[];
+  seasonal?: readonly SeasonalRecord[];
 };
 export type SeasonAnchor = { at: Point; kind: PlaceKind | 'market' };
 type Geography = Pick<SeasonalTile, 'tile' | 'life'>;
@@ -132,6 +141,14 @@ export function seasonalFixtures(
   if (!season) return [];
   const anchors = collectSeasonAnchors(groups);
   const result: SeasonalFixture[] = [];
+  const corridors = new Map(season.bunting?.corridors?.map((c) => [c.id, c]));
+  const dense = new Map<string, SeasonalRecord>();
+  for (const group of groups)
+    for (const r of group.seasonal ?? [])
+      if (r.season === season.id && corridors.get(r.corridor)?.ways.includes(r.road))
+        dense.set(r.id, r);
+  const segments = new Map<string, SeasonalRecord>();
+  for (const r of dense.values()) segments.set(JSON.stringify(r.segment), r);
   const spans = new Map<string, UtilitySpan>();
   for (const group of groups)
     for (const record of group.utilities ?? [])
@@ -153,7 +170,36 @@ export function seasonalFixtures(
         }
     }
     if (!season.bunting) continue;
-    const near = seasonProximity(group.tile, anchors, season.bunting.near, season.bunting.radius_m);
+    const baseNear = seasonProximity(
+      group.tile,
+      anchors,
+      season.bunting.near,
+      season.bunting.radius_m,
+    );
+    const coverage = [...segments.values()].map((r) => {
+      const a = lngLatToTile(group.tile, ...r.segment[0]),
+        b = lngLatToTile(group.tile, ...r.segment[1]);
+      const dx = b.x - a.x,
+        dy = b.y - a.y,
+        length2 = dx * dx + dy * dy;
+      const from = lngLatToTile(group.tile, ...r.from),
+        to = lngLatToTile(group.tile, ...r.to);
+      return {
+        a,
+        dx,
+        dy,
+        length2,
+        reach2: (Math.hypot(to.x - from.x, to.y - from.y) / 2 + 1 / metersPerUnit(group.tile)) ** 2,
+      };
+    });
+    const near = (x: number, y: number) =>
+      baseNear(x, y) &&
+      !coverage.some((c) => {
+        const u = ((x - c.a.x) * c.dx + (y - c.a.y) * c.dy) / c.length2;
+        return (
+          u >= 0 && u <= 1 && (x - c.a.x - u * c.dx) ** 2 + (y - c.a.y - u * c.dy) ** 2 <= c.reach2
+        );
+      });
     const covered = new Set<number>();
     for (const span of spans.values()) {
       const at: Point = [
@@ -202,6 +248,15 @@ export function seasonalFixtures(
     for (const fixture of fallbackBunting(group, season.bunting, near, latitude, covered))
       if (fixture.kind === 'season-bunting') bunting.set(fixture.id, fixture);
   }
+  for (const r of dense.values())
+    bunting.set(r.id, {
+      kind: 'season-bunting',
+      id: r.id,
+      from: r.from,
+      to: r.to,
+      seed: r.seed & 31,
+      style: 'red-yellow-rectangles',
+    });
   result.push(...[...bunting.values()].sort((a, b) => a.id.localeCompare(b.id)));
   return result;
 }
@@ -224,6 +279,7 @@ export function createSeasonalFixtureCache() {
           g.life === p.life &&
           g.fixtures === p.fixtures &&
           g.utilities === p.utilities &&
+          g.seasonal === p.seasonal &&
           g.tile.z === p.tile.z &&
           g.tile.x === p.tile.x &&
           g.tile.y === p.tile.y
@@ -322,18 +378,33 @@ export function packSeasonalFixtures(
         grid.rows,
       );
       if (!clipped) continue;
-      const [a, b] = clipped,
+      const dense = fixture.style === 'red-yellow-rectangles';
+      const [a, b]: [Point, Point] = dense
+          ? [
+              [from[0] + ox, from[1] + oy],
+              [to[0] + ox, to[1] + oy],
+            ]
+          : clipped,
         spanX = b[0] - a[0],
         spanY = b[1] - a[1];
       const count = Math.max(1, Math.ceil(Math.max(Math.abs(spanX), Math.abs(spanY))));
-      for (let n = 0; n <= count; n++)
+      const axis = Math.abs(spanX) >= Math.abs(spanY) ? 0 : 1;
+      const delta = axis === 0 ? spanX : spanY;
+      const start =
+        dense && delta ? Math.max(0, Math.ceil(((clipped[0][axis] - a[axis]) / delta) * count)) : 0;
+      const end =
+        dense && delta
+          ? Math.min(count, Math.floor(((clipped[1][axis] - a[axis]) / delta) * count))
+          : count;
+      for (let n = start; n <= end; n++)
         visibility.bunting =
           write(
             a[0] + (spanX * n) / count,
             a[1] + (spanY * n) / count,
-            SEASONAL_GLYPHS[1 + ((n + fixture.seed) & 1)]!,
+            SEASONAL_GLYPHS[(dense ? 3 : 1) + ((n + fixture.seed) & 1)]!,
             SeasonalPart.bunting,
-            ((fixture.seed & 31) << 3) | ((Math.floor(n / 2) + fixture.seed) % 3),
+            ((fixture.seed & 31) << 3) |
+              (dense ? (n + fixture.seed) & 1 : (Math.floor(n / 2) + fixture.seed) % 3),
             alpha,
           ) || visibility.bunting;
     }

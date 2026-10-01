@@ -307,11 +307,18 @@ function drawSeasonal(slot: Slot, index: number) {
             radius = i % 2 ? 0.21 : 0.48;
           return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
         })
-      : [
-          [0.05, 0.25],
-          [0.95, 0.25],
-          [index === 1 ? 0.35 : 0.65, 0.85],
-        ];
+      : index >= 3
+        ? [
+            [0.08, 0.22],
+            [0.92, 0.22],
+            [index === 3 ? 0.82 : 0.92, 0.87],
+            [index === 3 ? 0.08 : 0.18, 0.87],
+          ]
+        : [
+            [0.05, 0.25],
+            [0.95, 0.25],
+            [index === 1 ? 0.35 : 0.65, 0.85],
+          ];
   for (let y = 0; y < slot.h; y++)
     for (let x = 0; x < slot.w; x++) {
       let coverage = 0;
