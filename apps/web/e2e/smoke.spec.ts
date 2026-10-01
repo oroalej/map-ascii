@@ -296,6 +296,8 @@ for (const city of cities) {
       });
 
       test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
+        // Bound cold software-WebGL work so drawing cannot starve the capture timer in CI.
+        await page.setViewportSize({ width: 640, height: 480 });
         await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
         await mapReady(page);
         await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
