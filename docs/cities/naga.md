@@ -51,6 +51,19 @@ Tour narration must be fact-checked against sources before shipping. Draft text 
 
 The draft `life.seasons` records preview Christmas (December 1–January 6, star parols, church-area bunting, up to 12 temporary carts per tile) and Peñafrancia fiesta (third Sunday of September minus nine days through the feast, church-area bunting and up to 24 carts per tile). Stalls can also use mapped market proximity. City government sources document December Kamundagan lights and a 2019 trade fair; official 2026 church/tourism calendars support September 11–20 that year. These sources do not verify the January 6 end, annual recurrence, decoration geometry, or current stall locations. Both records retain explicit `TODO(verify)` notes. Confirm the recurring calendar, parol practice and permitted locations before marking either verified; fiesta crowds are still pending.
 
+The project owner's photograph and marked Centro maps (2026-10-01) request crowded red/yellow rectangular Fiesta banderitas on the following union. The pack references complete OSM ways, not hand-authored coordinates; 6 m transverse rows and curb-to-curb width are illustrative. The local rebuild yields 805 rows over approximately 4.8 km. Christmas and other roads keep their existing decorations. Peñafrancia ends at the **Shrine and Parish of Our Lady of Peñafrancia** (`osm:way/606888524`), distinct from the Basilica; Elias Angeles ends at Cathedral frontage (`osm:way/23666715`). The endpoint centroids project onto the road, so this is a frontage interpretation rather than a surveyed installation boundary.
+
+| Corridor | Requested extent | Approx. length | Rows |
+| --- | --- | ---: | ---: |
+| Panganiban Drive | Entire mapped length, including terminal branches | 1,764 m | 294 |
+| General Luna | P. Burgos to Caceres | 359 m | 60 |
+| Caceres | General Luna to Elias Angeles | 145 m | 25 |
+| Elias Angeles | Caceres through Plaza Rizal to Cathedral | 817 m | 137 |
+| Arana | Elias Angeles to Peñafrancia | 42 m | 8 |
+| Peñafrancia Avenue | Panganiban through San Francisco to the old Shrine | 1,682 m | 281 |
+
+These positions remain `TODO(verify)` under the Fiesta record. Verify coverage and placement against permitted field evidence before marking them surveyed. Dense corridors need locally rebuilt tiles; the pinned release remains unchanged until publication is authorized.
+
 Record each item in `packages/content/cities/naga/` with its sources:
 
 - Founding and key dates for the Basilica Minore, the Naga Metropolitan Cathedral, Plaza Quince Martires, Plaza Rizal, the Naga City Hall, the public market, and the major bridges over the Naga River.

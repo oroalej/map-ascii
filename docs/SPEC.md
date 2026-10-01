@@ -157,6 +157,8 @@ The pack's sourced `life.seasons` calendar dresses the current map independently
 
 Star lanterns attach to existing streetlights from z17 and twinkle warmly at night. Bunting appears from z18 near configured place kinds, preferring eligible utility crossings and otherwise spanning road curbs on a shared world lattice. These fixtures remain with Life off; reduced motion freezes their twinkle/fold animation. Hardware and animated flag cloth retain priority. Decorations are illustrative, not surveyed installations.
 
+A pack can select denser corridors by OSM road identity, with optional landmark endpoints. Their transverse rows follow complete road geometry through bends and tile seams, independently of nearby place samples. Dense red/yellow rectangular banderitas replace ordinary bunting only within those sections; other roads retain their existing decorations. Naga's Fiesta preview uses 6 m rows on its selected Centro corridors.
+
 Temporary vendor carts use mapped paths/plazas near configured places or markets, with full cart/attendant clearance across loaded tile seams. They belong to Life, disappear with Life off or reduced motion, and release their queues when a season ends. Their population and random stream are separate from ordinary vendors; they share the mover and visible-agent budgets. Fiesta crowds remain future work.
 
 ### Shopfronts and neighborhood activity
