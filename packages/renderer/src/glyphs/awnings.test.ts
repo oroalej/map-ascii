@@ -2,13 +2,13 @@ import { expect, it } from 'vitest';
 import { awningSide, awningCode, packGlyph, unpackGlyph } from './select';
 import { mapGlyphs, themes } from '../theme';
 import { classId, renderClasses } from '../classes';
-import { themeUniforms } from '../theme-uniforms';
+import { CellBit, cellBits } from '../life/config';
 
 it('colors eligible classes above 31 without aliasing unrelated classes', () => {
-  const { frontageClasses } = themeUniforms(themes.dark);
+  const bits = cellBits();
   expect(classId('building_station')).toBeGreaterThan(31);
   for (const cls of renderClasses)
-    expect(frontageClasses[classId(cls)]).toBe(
+    expect(Number((bits[classId(cls)]! & CellBit.frontage) !== 0)).toBe(
       Number(cls.startsWith('building') || cls === 'furniture'),
     );
   const packed = packGlyph(290, classId('building_station'));

@@ -1,4 +1,6 @@
 /** Versioned, bounded roof partitions. This module is safe to import in the tile worker. */
+import { ROOF_PLAN_MAX_LEAVES, ROOF_PLAN_MAX_NODES } from './constants';
+import type { AtlasClass } from './schemas';
 export type RoofPoint = [number, number];
 export type RoofNode =
   | { type: 'split'; at: RoofPoint; angleDeg: number; negative: number; positive: number }
@@ -24,7 +26,7 @@ export function isRoofPlan(value: unknown): value is RoofPlan {
     Math.abs(value.origin[1]) > 85.05112878 ||
     !Array.isArray(value.nodes) ||
     value.nodes.length < 1 ||
-    value.nodes.length > 7
+    value.nodes.length > ROOF_PLAN_MAX_NODES
   )
     return false;
   const parents = new Uint8Array(value.nodes.length);
@@ -54,7 +56,11 @@ export function isRoofPlan(value: unknown): value is RoofPlan {
       }
     } else return false;
   }
-  return leaves <= 4 && parents[0] === 0 && parents.slice(1).every((count) => count === 1);
+  return (
+    leaves <= ROOF_PLAN_MAX_LEAVES &&
+    parents[0] === 0 &&
+    parents.slice(1).every((count) => count === 1)
+  );
 }
 
 export function parseRoofPlan(value: unknown): RoofPlan | undefined {
@@ -87,11 +93,12 @@ export function roofFrame(origin: readonly [number, number]) {
   };
 }
 
-export const ROOF_BUILDING_CLASSES: readonly string[] = [
+export const ROOF_BUILDING_CLASSES: readonly AtlasClass[] = [
   'building',
   'building_religious',
   'building_school',
   'building_market',
   'building_station',
 ];
-export const isRoofBuilding = (cls: string) => ROOF_BUILDING_CLASSES.includes(cls);
+export const isRoofBuilding = (cls: string) =>
+  (ROOF_BUILDING_CLASSES as readonly string[]).includes(cls);

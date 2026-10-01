@@ -52,7 +52,12 @@ it('joins horizontal party walls and preserves corner-only contact', () => {
 });
 it('does not merge heights or styles, or darken a seam twice', () => {
   const center: WallCell = { id: 1, height: 6, eligible: true, style: 1 };
-  expect(partySeam(center, { ...center, id: 2 }, { ...center, id: 3 })).toBe(true);
+  expect(partySeam(center, { ...center, id: 2 }, { ...center, id: 3 })).toBe(false);
+  const unoutlined = { ...center, style: 0 };
+  expect(partySeam(unoutlined, { ...unoutlined, id: 2 }, unoutlined)).toBe(true);
+  expect(partySeam(unoutlined, { ...unoutlined, id: 2, landmark: true }, unoutlined)).toBe(false);
+  expect(partySeam(unoutlined, { ...unoutlined, id: 2, style: 1 }, unoutlined)).toBe(false);
+  expect(partySeam(unoutlined, unoutlined, unoutlined)).toBe(false);
   expect(partySeam(center, { ...center, id: 2, height: 12 }, center)).toBe(false);
   expect(partySeam(center, { ...center, id: 2, style: 2 }, center)).toBe(false);
   expect(

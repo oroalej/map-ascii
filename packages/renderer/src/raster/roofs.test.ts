@@ -9,7 +9,8 @@ import {
   type TileFeatureLike,
 } from './geometry';
 import { classId, Flags, variantCode } from '../classes';
-import { plannedSurface } from './roofs';
+import { plannedSurface, packRoofSurface, roofSurface, RoofShape, type RoofSurface } from './roofs';
+import { roofSurfaceCode } from '../glyphs/roofs';
 
 const tile = { z: 16, x: 55193, y: 30264 };
 const origin = tileToLngLat(tile, { x: 4080, y: 2000 });
@@ -99,6 +100,8 @@ it('keeps mixed fill surfaces aligned and excludes parts, timber, flat roofs and
   const geo = build(features),
     fills = geo.fills;
   expect(fills.surfaceSize).toBe(4);
+  expect(fills.surface).toBeInstanceOf(Int16Array);
+  expect(fills.surface!.byteLength).toBe(fills.ids.length * 8);
   expect(fills.surface).toHaveLength(fills.ids.length * 4);
   for (let i = 0; i < fills.ids.length; i++) {
     const ridged = (fills.meta[i * 4 + 2]! & Flags.ridged) !== 0;
@@ -122,7 +125,45 @@ it('transfers each roof/crown buffer once and falls back on invalid or old plans
   expect(new Set(buffers).size).toBe(buffers.length);
   const received = structuredClone(geo, { transfer: buffers });
   expect(received.fills.surface!.length).toBe(received.fills.ids.length * 4);
+  expect(received.fills.surface).toBeInstanceOf(Int16Array);
+  expect(received.fills.surfaceScale).toBe(1 / 64);
   expect(buffers.every((buffer) => buffer.byteLength === 0)).toBe(true);
+});
+
+it('packs physical roof faces without changing classification away from derivative boundaries', () => {
+  for (const shape of [RoofShape.gabled, RoofShape.hipped, RoofShape.pyramidal]) {
+    const samples: RoofSurface[] = [];
+    for (const x of [-4, -2, 0, 2, 4])
+      for (const y of [-2, -1, 0, 1, 2])
+        samples.push(roofSurface({ x, y }, { x: 0, y: 0 }, 0, 5, 3, shape));
+    const packed = packRoofSurface(Float32Array.from(samples.flat()), samples.length);
+    expect(packed.surface).toBeInstanceOf(Int16Array);
+    samples.forEach((sample, i) => {
+      const decoded = Array.from(
+        packed.surface.slice(i * 4, i * 4 + 4),
+        (v, j) => v * (j === 3 ? 1 / 32767 : packed.surfaceScale!),
+      ) as RoofSurface;
+      expect(roofSurfaceCode(decoded, 0.2, 0.2)).toBe(roofSurfaceCode(sample, 0.2, 0.2));
+      decoded.forEach((v, j) =>
+        expect(Math.abs(v - sample[j]!)).toBeLessThan(j === 3 ? 1 / 32767 : 1 / 128 + 0.00001),
+      );
+    });
+  }
+});
+it('extends range without wrapping, zero-fills trailing non-roofs and retains tiny pyramid scales', () => {
+  const source = new Float32Array([1000000, -1000000, 500000, 1]);
+  const packed = packRoofSurface(source, 2);
+  expect(packed.surfaceScale).toBeGreaterThan(1 / 64);
+  expect(packed.surface[0]! * packed.surfaceScale!).toBeCloseTo(1000000);
+  expect(packed.surface[1]! * packed.surfaceScale!).toBeCloseTo(-1000000);
+  expect(Array.from(packed.surface.slice(4))).toEqual([0, 0, 0, 0]);
+  const fallback = packRoofSurface(new Float32Array([1, 1, 0, 0.000001]), 2);
+  expect(fallback.surface).toBeInstanceOf(Float32Array);
+  expect(fallback.surface[3]).toBeGreaterThan(0);
+  expect(Array.from(fallback.surface.slice(4))).toEqual([0, 0, 0, 0]);
+  const widePyramid = packRoofSurface(new Float32Array([1, 1, 0, 2]), 1);
+  expect(widePyramid.surface).toBeInstanceOf(Float32Array);
+  expect(widePyramid.surface[3]).toBe(2);
 });
 it('preserves roof distances across neighboring and parent tiles in one world frame', () => {
   const leaf = plan.nodes[1]!;

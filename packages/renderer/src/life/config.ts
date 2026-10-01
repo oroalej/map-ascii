@@ -4,6 +4,7 @@
  */
 import {
   curveAt,
+  SHOP_POINT_RADIUS_M,
   PLACE_KINDS,
   placeShare,
   rhythmFor,
@@ -477,6 +478,8 @@ export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
  * may be drawn there, and how the night lights it.
  */
 export const CellBit = {
+  /** Shop paint eligibility, independent of the class id's bit-mask range. */
+  frontage: 256,
   vehicle: 1,
   person: 2,
   boat: 4,
@@ -538,7 +541,12 @@ export const FLOOD = { spill: 6, maxRadius: 30, pointRadius: 6, strength: 0.55 }
  * spills `spill` m past the footprint, counted at most `maxRadius` m from its center, `strength`
  * at its brightest; a point shop counts as `pointRadius` m across.
  */
-export const SHOP = { spill: 8, maxRadius: 30, pointRadius: 10, strength: 0.9 } as const;
+export const SHOP = {
+  spill: 8,
+  maxRadius: 30,
+  pointRadius: SHOP_POINT_RADIUS_M * 2,
+  strength: 0.9,
+} as const;
 
 /** A vendor's cart carries a bulb at night: a pool `radius` m across, `strength` at its brightest. */
 export const BULB = { radius: 3, strength: 0.6 } as const;
@@ -592,6 +600,7 @@ export function cellBits(): Int32Array {
     if (water.includes(cls)) b |= CellBit.boat;
     if (lit.includes(cls)) b |= CellBit.window;
     if (groundClasses.includes(cls)) b |= CellBit.grounds;
+    if (cls.startsWith('building') || cls === 'furniture') b |= CellBit.frontage;
     bits[id] = b;
   }
   return bits;

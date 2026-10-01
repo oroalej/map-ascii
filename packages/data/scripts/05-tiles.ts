@@ -2,8 +2,9 @@ import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
-import { TILE_ZOOMS, type AtlasProperties } from './03-normalize';
-import { readFeatures, readJson, writeJson } from './lib/io';
+import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normalize';
+import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
+import { roofTileRecords } from './lib/roof-tiles';
 import { landcoverCredits } from './lib/landcover';
 import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
@@ -59,7 +60,12 @@ export const step: Step = {
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
-    tippecanoe(merged, pmtiles, [
+    const tileInput = join(buildDir, 'tile-input.geojsonseq');
+    const records: AtlasFeature[] = [];
+    for await (const feature of readFeatures(merged))
+      records.push(...roofTileRecords(feature as AtlasFeature));
+    await writeFeatures(tileInput, records);
+    tippecanoe(tileInput, pmtiles, [
       '-o',
       '{out}',
       '--force',

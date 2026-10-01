@@ -1,25 +1,32 @@
 /** CPU reference of shaders/party-walls.ts. Only cardinal raster contacts form party walls. */
+import { Dir, wallMask } from './select';
 export type WallCell = {
   id: number;
   eligible: boolean;
   height: number;
   style: number;
+  landmark?: boolean;
   seeThrough?: boolean;
 };
 const directions = [
-  [0, -1, 1],
-  [1, 0, 2],
-  [0, 1, 4],
-  [-1, 0, 8],
+  [0, -1, Dir.N],
+  [1, 0, Dir.E],
+  [0, 1, Dir.S],
+  [-1, 0, Dir.W],
 ] as const;
 
 export function partySeam(center: WallCell, east: WallCell, south: WallCell): boolean {
   return (
     center.eligible &&
     center.height > 0 &&
+    center.style === 0 &&
     [east, south].some(
       (q) =>
-        q.eligible && q.height === center.height && q.style === center.style && q.id !== center.id,
+        q.eligible &&
+        q.height === center.height &&
+        q.style === 0 &&
+        !!q.landmark === !!center.landmark &&
+        q.id !== center.id,
     )
   );
 }
@@ -39,14 +46,7 @@ export function partyWallMask(
   const shared = (x: number, y: number, dx: number, dy: number) =>
     member(x, y) && member(x + dx, y + dy) && sample(x, y).id !== sample(x + dx, y + dy).id;
   const externalMask = (x: number, y: number): number | null => {
-    const o = (dx: number, dy: number) => outside(x + dx, y + dy);
-    if (![-1, 0, 1].some((dx) => [-1, 0, 1].some((dy) => (dx || dy) && o(dx, dy)))) return null;
-    return (
-      (!o(0, -1) && (o(-1, 0) || o(-1, -1) || o(1, 0) || o(1, -1)) ? 1 : 0) |
-      (!o(1, 0) && (o(0, -1) || o(1, -1) || o(0, 1) || o(1, 1)) ? 2 : 0) |
-      (!o(0, 1) && (o(-1, 0) || o(-1, 1) || o(1, 0) || o(1, 1)) ? 4 : 0) |
-      (!o(-1, 0) && (o(0, -1) || o(-1, -1) || o(0, 1) || o(-1, 1)) ? 8 : 0)
-    );
+    return wallMask((dx, dy) => outside(x + dx, y + dy));
   };
   const active = (x: number, y: number) =>
     member(x, y) && (externalMask(x, y) !== null || shared(x, y, 1, 0) || shared(x, y, 0, 1));
@@ -63,7 +63,7 @@ export function partyWallMask(
   };
   let mask = 0;
   for (const [x, y, bit] of directions) {
-    const reverse = bit === 1 ? 4 : bit === 2 ? 8 : bit === 4 ? 1 : 2;
+    const reverse = bit === Dir.N ? Dir.S : bit === Dir.E ? Dir.W : bit === Dir.S ? Dir.N : Dir.E;
     if (active(x, y) && (proposes(0, 0, x, y, bit) || proposes(x, y, -x, -y, reverse))) mask |= bit;
   }
   return mask;

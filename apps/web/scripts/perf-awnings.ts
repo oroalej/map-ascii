@@ -2,15 +2,19 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Native GL methods retain their receiver. */
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { spawn, execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { cities } from '../e2e/helpers';
-import { classId, groundClasses } from '../../../packages/renderer/src/classes';
+import { serveExport } from './serve-export';
+import { classId, Flags, groundClasses } from '../../../packages/renderer/src/classes';
 import { awningReport, type AwningSample } from './awning-report';
 import { verifyAwningColors } from './awning-shader';
+import { partyWallsGlsl } from '../../../packages/renderer/src/shaders/party-walls';
+import { wallJoinGlsl } from '../../../packages/renderer/src/shaders/wall-mask';
+import { ROOF_BUILDING_CLASSES } from '../../../packages/shared/src/roof-plan';
+import { verifyPartyWalls } from './party-wall-shader';
 import { prepareExport } from './static-export';
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 
@@ -22,6 +26,7 @@ for (let attempt = 0; await prepareExport(); attempt++) {
     throw new Error('Sources are still changing; rerun after the other build finishes');
 }
 const sourceHash = await currentSourceHash(root);
+const partyMode = process.argv.includes('--party-walls');
 const port = Number(process.env.E2E_PORT ?? 3218);
 const city = cities.find(
   (c) => c.hasMeta && (!process.env.PERF_CITY || c.slug === process.env.PERF_CITY),
@@ -30,24 +35,14 @@ if (!city) throw new Error('Build the requested city before capturing awning acc
 const meta = JSON.parse(
   await readFile(resolve(root, `apps/web/out/tiles/${city.slug}.meta.json`), 'utf8'),
 ) as { defaultCamera: { lat: number; lng: number } };
-const camera = { ...meta.defaultCamera, zoom: 18 };
+const zoom = Number(process.env.PERF_ZOOM ?? 18);
+if (!Number.isFinite(zoom) || zoom < 0 || zoom > 21) throw new Error('Invalid PERF_ZOOM');
+const camera = { ...meta.defaultCamera, zoom };
+const outputName = partyMode ? `party-walls${zoom === 18 ? '' : `-z${zoom}`}` : 'awnings';
 const tileHash = createHash('sha256')
   .update(await readFile(resolve(root, `apps/web/out/tiles/${city.slug}.pmtiles`)))
   .digest('hex');
-const expected = await readFile(resolve(root, `apps/web/out/${city.slug}.html`), 'utf8');
-const require = createRequire(import.meta.url);
-const servePackage = require.resolve('serve/package.json');
-const { bin } = require('serve/package.json') as { bin: string | Record<string, string> };
-const server = spawn(
-  process.execPath,
-  [
-    resolve(dirname(servePackage), typeof bin === 'string' ? bin : bin.serve!),
-    'out',
-    '-l',
-    String(port),
-  ],
-  { cwd: resolve(root, 'apps/web'), windowsHide: true, stdio: 'ignore' },
-);
+const server = await serveExport(root, port, city.slug);
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 type Capture = {
   on: boolean;
@@ -57,6 +52,7 @@ type Capture = {
   renderer: string | null;
   buildings: number;
   awnings: number;
+  contacts?: number;
   errors: string[];
   disjoint: number;
   read: boolean;
@@ -66,19 +62,6 @@ type Capture = {
 };
 type CaptureWindow = Window & { awningCapture: Capture };
 try {
-  let ready = false;
-  for (let i = 0; i < 100; i++) {
-    try {
-      const html = await (await fetch(`http://localhost:${port}/${city.slug}`)).text();
-      if (html !== expected) throw new Error(`Port ${port} is not serving this checkout`);
-      ready = true;
-      break;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('checkout')) throw error;
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!ready) throw new Error('Could not serve the static export');
   browser = await chromium.launch({
     headless: process.env.PERF_HEADLESS === 'true',
     channel: process.env.PERF_BROWSER_CHANNEL,
@@ -95,7 +78,16 @@ try {
   await page.clock.setFixedTime(new Date('2026-10-01T04:00:00Z'));
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  const installCapture = ({ buildingClasses }: { buildingClasses: number[] }) => {
+  const installCapture = (input: {
+    buildingClasses: number[];
+    roofClasses: number[];
+    landmark: number;
+    crown: number;
+    party: boolean;
+    partySource: string;
+    bypass: string;
+  }) => {
+    const { buildingClasses } = input;
     localStorage.setItem('atlas.quality', JSON.stringify('high'));
     localStorage.setItem(
       'atlas.life',
@@ -122,6 +114,47 @@ try {
       vector = proto.uniform2fv,
       integer = proto.uniform1i,
       draw = proto.drawArrays;
+    const linked = proto.linkProgram,
+      used = proto.useProgram;
+    const bypasses = new Map<WebGLProgram, WebGLProgram>();
+    const current = new WeakMap<WebGL2RenderingContext, WebGLProgram>();
+    const originalUniforms = new Map<string, unknown>();
+    if (input.party) {
+      proto.linkProgram = function (program) {
+        linked.call(this, program);
+        const shaders = this.getAttachedShaders(program) ?? [];
+        const fragment = shaders.find(
+          (s) => this.getShaderParameter(s, this.SHADER_TYPE) === this.FRAGMENT_SHADER,
+        );
+        const source = fragment && this.getShaderSource(fragment);
+        if (!source?.includes(input.partySource)) return;
+        const off = this.createProgram();
+        for (const shader of shaders) {
+          const type = this.getShaderParameter(shader, this.SHADER_TYPE) as number;
+          const copy = this.createShader(type)!;
+          this.shaderSource(
+            copy,
+            type === this.FRAGMENT_SHADER
+              ? source.replace(input.partySource, input.bypass)
+              : this.getShaderSource(shader)!,
+          );
+          this.compileShader(copy);
+          if (!this.getShaderParameter(copy, this.COMPILE_STATUS))
+            throw new Error(this.getShaderInfoLog(copy)!);
+          this.attachShader(off, copy);
+          this.deleteShader(copy);
+        }
+        linked.call(this, off);
+        if (!this.getProgramParameter(off, this.LINK_STATUS))
+          throw new Error(this.getProgramInfoLog(off)!);
+        bypasses.set(program, off);
+      };
+      proto.useProgram = function (program) {
+        const actual = program && !c.on ? (bypasses.get(program) ?? program) : program;
+        if (actual) current.set(this, actual);
+        used.call(this, actual);
+      };
+    }
     const names = new WeakMap<WebGLUniformLocation, string>();
     const programs = new WeakMap<WebGLProgram, boolean>();
     type Extension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
@@ -143,8 +176,31 @@ try {
       else vector.call(this, at, value, offset, length);
     };
     proto.uniform1i = function (at, value) {
-      integer.call(this, at, at && names.get(at) === 'u_awnings' ? Number(c.on) : value);
+      integer.call(
+        this,
+        at,
+        at && names.get(at) === 'u_awnings' ? Number(input.party || c.on) : value,
+      );
     };
+    // TWGL caches original-program uniform locations. Resolve the same names on the bypass.
+    if (input.party)
+      for (const key of Object.getOwnPropertyNames(proto).filter((k) => /^uniform/.test(k))) {
+        const methods = proto as unknown as Record<string, unknown>;
+        const method = methods[key];
+        if (typeof method !== 'function') continue;
+        originalUniforms.set(key, method);
+        methods[key] = function (
+          this: WebGL2RenderingContext,
+          at: WebGLUniformLocation | null,
+          ...values: unknown[]
+        ) {
+          const program = current.get(this),
+            name = at && names.get(at);
+          const mapped = program && name ? location.call(this, program, name) : at;
+          if (mapped && name) names.set(mapped, name);
+          Reflect.apply(method, this, [mapped, ...values]);
+        };
+      }
     proto.drawArrays = function (mode, first, count) {
       // eslint-disable-next-line @typescript-eslint/no-this-alias -- Nested readback helpers share this GL receiver.
       const gl = this,
@@ -228,6 +284,45 @@ try {
       };
       const ids = texturePixels('u_id'),
         attributes = texturePixels('u_attr');
+      let contacts = 0;
+      if (input.party) {
+        const cls = texturePixels('u_class'),
+          baseCls = texturePixels('u_baseClass'),
+          baseAttr = texturePixels('u_baseAttr'),
+          baseIds = texturePixels('u_baseId');
+        const cell = (index: number) => {
+          const crown = cls[index] === input.crown;
+          const a = crown ? baseAttr : attributes,
+            id = crown ? baseIds : ids;
+          return {
+            cls: (crown ? baseCls : cls)[index]!,
+            height: a[index]!,
+            landmark: a[index + 1]! & input.landmark,
+            id:
+              id[index]! | (id[index + 1]! << 8) | (id[index + 2]! << 16) | (id[index + 3]! << 24),
+          };
+        };
+        for (let y = 0; y < height; y++)
+          for (let x = 0; x < width; x++) {
+            const a = cell((y * width + x) * 4);
+            if (!input.roofClasses.includes(a.cls) || !a.height) continue;
+            for (const [dx, dy] of [
+              [1, 0],
+              [0, 1],
+            ]) {
+              if (x + dx! >= width || y + dy! >= height) continue;
+              const b = cell(((y + dy!) * width + x + dx!) * 4);
+              if (
+                input.roofClasses.includes(b.cls) &&
+                b.height === a.height &&
+                b.landmark === a.landmark &&
+                b.id !== a.id
+              )
+                contacts++;
+            }
+          }
+      }
+      c.contacts = input.party ? contacts : undefined;
       const buildings = new Set<number>(),
         awnings = new Set<number>();
       let hash = 2166136261;
@@ -255,6 +350,11 @@ try {
     c.dispose = () => {
       for (const [gl, ctx] of contexts) for (const p of ctx.pending) gl.deleteQuery(p.query);
       contexts.clear();
+      for (const [key, method] of originalUniforms)
+        (proto as unknown as Record<string, unknown>)[key] = method;
+      for (const [gl] of contexts) for (const off of bypasses.values()) gl.deleteProgram(off);
+      proto.linkProgram = linked;
+      proto.useProgram = used;
       proto.getUniformLocation = location;
       proto.uniform1f = scalar;
       proto.uniform2fv = vector;
@@ -264,7 +364,19 @@ try {
   };
   // Install tsx's serialization helper before evaluating the capture function itself.
   await page.addInitScript({
-    content: `globalThis.__name = (value) => value; (${installCapture.toString()})(${JSON.stringify({ buildingClasses: groundClasses.map(classId) })});`,
+    content: `globalThis.__name = (value) => value; (${installCapture.toString()})(${JSON.stringify(
+      {
+        buildingClasses: groundClasses.map(classId),
+        roofClasses: ROOF_BUILDING_CLASSES.map(classId),
+        landmark: Flags.landmark,
+        crown: classId('tree_crown'),
+        party: partyMode,
+        partySource: partyWallsGlsl,
+        bypass: `${wallJoinGlsl}
+const bool partyCached3=false; uint partyIds[25]; bool partyThrough[25]; bool partyRoof[25];
+int partyWallMask(ivec2 p){return -2;} bool partySeam(ivec2 p,int cls,vec4 attr){return false;}`,
+      },
+    )});`,
   });
   await page.goto(
     `http://localhost:${port}/${city.slug}?lat=${camera.lat}&lng=${camera.lng}&z=${camera.zoom}`,
@@ -291,6 +403,7 @@ try {
         renderer: c.renderer,
         buildings: c.buildings,
         awnings: c.awnings,
+        contacts: c.contacts,
         errors: c.errors,
         disjoint: c.disjoint,
         reads: c.reads,
@@ -357,6 +470,15 @@ try {
   } finally {
     await probe.close();
   }
+  const partyProbe = await browser.newPage();
+  let partyShaderChecks: Awaited<ReturnType<typeof verifyPartyWalls>> = [];
+  try {
+    partyShaderChecks = await verifyPartyWalls(partyProbe);
+  } catch (error) {
+    errors.push(String(error));
+  } finally {
+    await partyProbe.close();
+  }
   const evidence = {
     ...final,
     errors: [...errors, ...final.errors],
@@ -371,7 +493,9 @@ try {
   };
   const report = {
     ...awningReport(evidence),
+    mode: partyMode ? 'party-walls' : 'awnings',
     shaderChecks,
+    partyShaderChecks,
     evidence,
     city: city.slug,
     camera,
@@ -391,8 +515,10 @@ try {
   };
   const out = resolve(root, process.env.PERF_OUTPUT ?? 'test-results');
   await mkdir(out, { recursive: true });
-  await writeFile(resolve(out, 'awnings.json'), JSON.stringify(report, null, 2));
-  await page.screenshot({ path: resolve(out, 'awnings-centro.png') });
+  await writeFile(resolve(out, `${outputName}.json`), JSON.stringify(report, null, 2));
+  await page.screenshot({
+    path: resolve(out, `${outputName}-centro.png`),
+  });
   await page.evaluate(() => (window as unknown as CaptureWindow).awningCapture.dispose?.());
   console.log(
     JSON.stringify({
@@ -403,5 +529,5 @@ try {
   process.exitCode = report.exitCode;
 } finally {
   await browser?.close();
-  server.kill();
+  server.close();
 }

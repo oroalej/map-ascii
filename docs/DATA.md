@@ -271,7 +271,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   osm_id: string; title: string; surface: 'paving';
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
-    material: 'wood' | 'stone' | 'roof'; overhead: boolean;
+    material: 'wood' | 'stone' | 'roof' | 'paving'; overhead: boolean;
   }[]; // default []; simple closed footprints wholly inside the parent area
   flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
@@ -293,6 +293,12 @@ but they create no ground obstacles. Supports and platforms are blocked footprin
 routes and bench anchors must clear these ground parts; an overhead part may span a route.
 The merge rejects structures crossing the plaza edge, a concavity, or a hole, even if all
 their vertices lie inside. Existing detail records need no changes.
+
+`material: 'paving'` supplies a walkable raised surface or stair tread, requires
+`overhead: false`, and creates no ground obstacle. It emits the `paving` class with
+`variant: 'terrace'`, retaining fractional `height` values and a `detail_parent` selection
+identity. Its connected outlines show from z18. Adjacent treads use non-overlapping
+footprints so their boundaries remain distinct even at equal quantized heights.
 
 LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
   id: string;                    // "art/<slug>"
@@ -362,7 +368,7 @@ After direction overrides, `lib/signal-layout.ts` resolves each controller into 
 
 ### Neighborhood enrichment
 
-The separate `detail-neighborhood.osm.json` query fetches shops, selected food/service amenities, craft, scrub/heath, orchards, plant nurseries and cemeteries. `03-normalize` runs `lib/frontage.ts` while raw tags and building polygons still exist: a bbox grid and polygon containment associate shop nodes with footprints, including holes. Food wins over service, retail and generic commercial tags. Assigned nodes are suppressed as standalone markers; embedded malls/supermarkets retain the market class and contribute their names to unnamed footprints. Other shop points use furniture variants `shop_food`, `shop_retail`, `shop_service`; building roof variants stay intact. Tiles carry `frontage` as a separate property. The worker packs frontage/kind bits without adding classes, caps shop lights and buffered commerce centers at 150 per tile, and transfers commerce separately for deterministic additive spawning.
+The separate `detail-neighborhood.osm.json` query fetches shops, selected food/service amenities, craft, scrub/heath, orchards, plant nurseries and cemeteries. `03-normalize` runs `lib/frontage.ts` while raw tags and building polygons still exist: a bbox grid and polygon containment associate shop nodes with footprints, including holes. Food wins over service, retail and generic commercial tags. Assigned nodes are suppressed as standalone markers; embedded malls/supermarkets retain the market class and contribute their names to unnamed footprints. Other shop points use furniture variants `shop_food`, `shop_retail`, `shop_service`; building roof variants stay intact. Tiles carry `frontage` as a separate property. Point shops share a 5 m radius with the renderer through `SHOP_POINT_RADIUS_M`; changing it requires regenerating their derived anchors. The worker packs frontage/kind bits without adding classes, caps shop lights and buffered commerce centers at 150 per tile, and transfers commerce separately for deterministic additive spawning.
 
 Assignment chooses the smallest containing footprint, with stable OSM-id ties; outer boundaries are included and hole boundaries excluded. Commerce polygons otherwise lacking a render class become one interior point marker, retaining their OSM id and name. They annotate a building only if their whole area is contained in it. The shared `Frontage` schema validates the generated value; similarly named raw OSM annotations are ignored. `ShopAnchor` validates `shop_lng`, `shop_lat`, and `shop_radius_m` together. These are computed before clipping, from the largest polygon component's interior anchor (or a point's mapped position) and the full footprint's radius. Every tile copy uses that anchor, but only its containing tile owns the shop light. Commerce entries are deduplicated and capped by stable source id; older archives without anchors use the prior geometry fallback. Existing tile buffers bound the available proximity evidence; this does not promise complete shop coverage within 60 m beyond every tile edge.
 
@@ -370,6 +376,6 @@ Assignment chooses the smallest containing footprint, with stable OSM-id ties; o
 
 Step 04 adds optional scalar JSON `roof_plan` to standing buildings only. `RoofPlanSchema` and the worker's bounded validator share version 1: one `[lng, lat]` origin, at most seven forward-linked binary nodes, and at most four roof leaves. A split has `at` (local east/south meters), `angleDeg` (line direction in [0,180)), and `negative`/`positive` child indices. A leaf has `center`, `angleDeg`, `halfLengthM` and `halfWidthM`. Local coordinates and dimensions are bounded to 1,000 km, tree ownership is unique, and serialized input is capped at 4,096 characters. Unknown versions and malformed plans are ignored safely.
 
-The pipeline analyzes collinearity at 0.3 m without changing the footprint. Candidates have at most 16 simplified vertices, at least 90% of perimeter aligned within 15 degrees of dominant orthogonal edges, and rectangularity below 0.85. Only convex off-axis bevels are admitted. Reflex-vertex cuts produce at most four leaves, each at least 3 m wide and 90% rectangular; selection favors fewer leaves, then better minimum rectangularity. Holes, multipolygons, flat roofs, grounds and unsupported shapes fall back. Coordinates are rounded to 0.1 m and angles to 0.01 degree. A city build fails if more than 10% of standing buildings get plans. Original geometry, identity, dates, labels and Life obstacles are unchanged.
+The pipeline analyzes collinearity at 0.3 m without changing the footprint. Candidates have at most 16 simplified vertices, at least 90% of perimeter aligned within 15 degrees of dominant orthogonal edges, and rectangularity below 0.85. Only convex off-axis bevels are admitted. Partition search uses that simplified analysis ring, so sub-tolerance survey noise does not become additional split candidates. Reflex-vertex cuts produce at most four leaves, each at least 3 m wide and 90% rectangular; selection favors fewer leaves, then better minimum rectangularity. Holes, multipolygons, flat roofs, grounds and unsupported shapes fall back. Coordinates are rounded to 0.1 m and angles to 0.01 degree. For cities with at least 200 standing buildings, enrichment fails if more than 10% get plans; smaller packs have no ratio gate. Stale generated plans are cleared before eligibility is evaluated. Tile records include the JSON only from z15, using nonoverlapping zoom ranges without duplicating a footprint at any zoom. Original geometry, identity, dates, labels and Life obstacles are unchanged.
 
 Renderer defaults: absent roof shape becomes hipped; `flat`, `gabled`, `hipped` and `pyramidal` have explicit behavior; any other explicit shape falls back to gabled. These are illustrative inferences, not historical or surveyed facts. Landmark plan `at` anchors require a standing building; point monuments retain `offset_m`. Optional plan `credit` strings are deduplicated into city metadata attribution. Reference URLs and estimate qualifications remain in `sources`.

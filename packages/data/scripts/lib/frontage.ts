@@ -1,7 +1,7 @@
 import bbox from '@turf/bbox';
 import pointInPolygon from '@turf/boolean-point-in-polygon';
 import { difference } from 'polyclip-ts';
-import { ShopAnchor, type FrontageKind } from '@atlas/shared';
+import { ShopAnchor, SHOP_POINT_RADIUS_M, type FrontageKind } from '@atlas/shared';
 import type { Feature, FeatureCollection, Polygon, MultiPolygon, Position } from 'geojson';
 import { classify, type Tags } from './classify';
 export type Frontage = FrontageKind;
@@ -95,7 +95,7 @@ export function shopAnchor(feature: Feature): ShopAnchor | undefined {
   const mx = 111_320 * Math.cos((lat! * Math.PI) / 180);
   const radius =
     g.type === 'Point'
-      ? 5
+      ? SHOP_POINT_RADIUS_M
       : Math.max(
           1,
           ...polygons(g)

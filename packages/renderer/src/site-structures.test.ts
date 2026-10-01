@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { classId, crownSurfaces, MAX_CLASSES, renderClasses } from './classes';
+import { classId, crownSurfaces, MAX_CLASSES, renderClasses, variantCode } from './classes';
+import { wallStyle } from './glyphs/select';
 import { CellBit, cellBits } from './life/config';
 import { WalkingGraph } from './life/navigation';
 import {
@@ -37,6 +38,30 @@ const rectangle = (
 });
 
 describe('outdoor structure rendering', () => {
+  it('keeps sub-meter terraces visible, outlined and walkable with parent selection metadata', () => {
+    const terrace = rectangle('terrace', 100, 200, 500, 20, false);
+    terrace.properties = {
+      id: 'terrace',
+      class: 'paving',
+      height: 0.15,
+      variant: 'terrace',
+      detail_parent: 'osm:way/1',
+    };
+    const registry = createIdRegistry();
+    const result = buildTileGeometry(
+      { landuse: { extent: EXTENT, length: 1, feature: () => terrace } },
+      registry,
+      { z: 16, x: 55209, y: 30264 },
+    );
+    expect(result.life.obstacleClosed).toHaveLength(0);
+    expect(result.life.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(0);
+    expect(result.fills.meta[1]).toBe(1);
+    expect(result.fills.meta[3]).toBe(variantCode('paving', 'terrace'));
+    expect(registry.takeNew()[0]).toMatchObject({ height: 0.15, parentId: 'osm:way/1' });
+    expect(cellBits()[classId('paving')]! & CellBit.person).toBe(CellBit.person);
+    expect(wallStyle('scatter', false, 0, 18, true)).toBe('single');
+    expect(wallStyle('scatter', false, 0, 17.9, true)).toBeNull();
+  });
   it('renders overhead beams without blocking walking beneath them; supports still block full bodies', () => {
     const features = [
       rectangle('beam', 100, 200, 500, 20, true),

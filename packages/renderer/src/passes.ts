@@ -54,6 +54,8 @@ import {
   packFixtures,
   packSignalLights,
   updateFixtureSignals,
+  updateFixtureFlags,
+  type FixtureMotion,
   type PackedFixtures,
   type StreetFixture,
   type FixtureVisibility,
@@ -168,11 +170,21 @@ export function cellPass(
   const regionMatrices = layers.region.map(({ tile }) => placement.tileMatrix(tile));
   const drawFlat = () => {
     layers.region.forEach(({ mesh }, i) => {
-      twgl.setUniforms(program, { u_matrix: regionMatrices[i]! });
+      twgl.setUniforms(program, {
+        u_matrix: regionMatrices[i]!,
+        u_surfaceScale:
+          mesh.region.fills.surfaceScale !== undefined
+            ? [mesh.region.fills.surfaceScale, 1 / 32767]
+            : [1, 1],
+      });
       drawGround(gl, mesh.region);
     });
     layers.tiles.forEach(({ mesh }, i) => {
-      twgl.setUniforms(program, { u_matrix: matrices[i]! });
+      twgl.setUniforms(program, {
+        u_matrix: matrices[i]!,
+        u_surfaceScale:
+          mesh.fills.surfaceScale !== undefined ? [mesh.fills.surfaceScale, 1 / 32767] : [1, 1],
+      });
       drawGround(gl, mesh);
     });
   };
@@ -533,6 +545,7 @@ export function fixturePass(
   fixtures: readonly StreetFixture[],
   clock: number,
   repack: boolean,
+  motion: FixtureMotion = { time: 0, strength: 0 },
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
@@ -561,6 +574,7 @@ export function fixturePass(
       view.camera.zoom,
       (glyph) => resources.map.atlas.index(glyph),
       clock,
+      motion,
     );
     cache = {
       packed,
@@ -578,8 +592,11 @@ export function fixturePass(
   } else {
     changed = updateFixtureSignals(cache.packed, clock);
   }
-  if (changed) {
+  const flagsChanged = updateFixtureFlags(cache.packed, motion);
+  if (changed || flagsChanged) {
     uploadFixtures(gl, targets, cache.packed.texels);
+  }
+  if (changed) {
     packSignalLights(
       cache.lightTexels,
       cache.packed,
@@ -676,7 +693,6 @@ export function glyphPass(
     u_bird: classId('life_bird'),
     u_paints: themeRes.uniforms.paints,
     u_awningPaints: themeRes.uniforms.awnings,
-    u_frontageClasses: themeRes.uniforms.frontageClasses,
     u_birdPaints: themeRes.uniforms.birds,
     u_rain: weather.rain,
     u_rainSlant: weather.wind?.dir[0] ?? 0,

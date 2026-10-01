@@ -4,9 +4,9 @@ import { expect, test } from '@playwright/test';
 import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
 
-// A compact viewport keeps the legend collapsed and software rendering bounded. Enable
+// A narrow viewport keeps the legend collapsed and leaves room above attribution. Enable
 // animation only for the Life-on check, after the map has loaded.
-test.use({ viewport: { width: 600, height: 600 }, reducedMotion: 'reduce' });
+test.use({ viewport: { width: 600, height: 800 }, reducedMotion: 'reduce' });
 
 for (const city of cities.filter((city) => city.hasMeta)) {
   const directory = new URL(
@@ -31,7 +31,14 @@ for (const city of cities.filter((city) => city.hasMeta)) {
           JSON.stringify({ enabled: false, time: 'noon', wind: 'calm' }),
         );
       });
-      const [lng, lat] = detail.walks[0]!.line[0]!;
+      // A raised surface has its own outline identity but must select the original plaza.
+      const terrace = detail.structures?.find((part) => part.material === 'paving');
+      const [lng, lat] = terrace
+        ? [
+            (terrace.ring[0]![0] + terrace.ring[2]![0]) / 2,
+            (terrace.ring[0]![1] + terrace.ring[2]![1]) / 2,
+          ]
+        : detail.walks[0]!.line[0]!;
       await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=19`);
       await mapReady(page);
       const canvas = page.getByLabel(`Map of ${city.name}`);

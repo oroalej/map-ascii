@@ -58,6 +58,8 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
   detail_overhead?: boolean;
+  /** Selection identity of a walkable surface authored inside an OSM area. */
+  detail_parent?: string;
   seat_bearing?: number;
   /** Country flag design explicitly supplied by a city detail pack. */
   flag?: 'PH';

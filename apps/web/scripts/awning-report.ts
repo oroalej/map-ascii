@@ -8,6 +8,8 @@ export type AwningEvidence = {
   errors: string[];
   stable: boolean;
   disjoint: number;
+  /** Party-wall mode requires compatible contacts, rather than an awning coverage ratio. */
+  contacts?: number;
 };
 
 const stats = (values: number[]) => {
@@ -39,14 +41,19 @@ export function awningReport(evidence: AwningEvidence) {
     ...(!evidence.stable ? ['Scene geometry changed'] : []),
     ...(evidence.disjoint ? ['GPU clock disjoint during capture'] : []),
     ...(blocks.some((b) => b.count < 60) ? ['Insufficient valid samples'] : []),
-    ...(!evidence.buildings || !evidence.awnings
-      ? ['Scene does not exercise visible awnings']
+    ...(!evidence.buildings ||
+    (evidence.contacts === undefined ? !evidence.awnings : !evidence.contacts)
+      ? [
+          evidence.contacts === undefined
+            ? 'Scene does not exercise visible awnings'
+            : 'Scene has no compatible party-wall contacts',
+        ]
       : []),
   ];
   const growth = on.p95 !== null && off.p95 !== null ? on.p95 - off.p95 : null;
   const limit = off.p95 === null ? null : Math.max(0.5, off.p95 * 0.1);
   const status =
-    evidence.errors.length || (share !== null && share > 0.3)
+    evidence.errors.length || (evidence.contacts === undefined && share !== null && share > 0.3)
       ? 'fail'
       : pendingReasons.length
         ? 'pending'

@@ -8,7 +8,7 @@
  * its cells, picked by a per-cell hash of the world cell, so it dissolves into what is under it
  * and the pattern stays put while panning.
  */
-import { Flags, MAX_CLASSES, TIER_STEP } from '../classes';
+import { classId, Flags, MAX_CLASSES, TIER_STEP } from '../classes';
 import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
@@ -19,10 +19,11 @@ export const cellVertex = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec4 a_meta; // class, height, flags, variant
 layout(location = 2) in uint a_id;
-layout(location = 3) in float a_ridge; // pitched roofs: signed distance to the ridge; crowns: reach from the trunk
+layout(location = 3) in float a_ridge; // crowns: reach from the trunk; zero on ground geometry
 layout(location = 4) in vec4 a_surface; // crowns: xy; roofs: along, across, ridgeHalf, endScale
 
 uniform mat4 u_matrix; // tile units -> cell-grid clip space (affine: the map is flat)
+uniform vec2 u_surfaceScale; // packed roofs: distance meters/step and endScale/step; float surfaces: 1,1
 uniform float u_depth[${MAX_CLASSES}];
 uniform float u_vis[${MAX_CLASSES}]; // 0-1 per class id
 uniform float u_zoom;
@@ -38,7 +39,6 @@ uniform ivec2 u_origin;     // world cell of grid cell (0, 0)
 flat out vec4 v_meta;
 flat out uint v_id;
 flat out float v_vis;
-out float v_ridge;
 out vec4 v_surface;
 flat out int v_crown;
 
@@ -66,6 +66,9 @@ void main() {
   }
   // Taller features win within a tier (a_meta.y is height in meters, 0–255).
   float depth = u_depth[cls] - a_meta.y / 255.0 * ${TIER_STEP * 0.9};
+  // A terrace is still paving: its sub-meter surface beats the parent plaza without
+  // gaining the priority of a roof or covering planted islands.
+  if (cls == ${classId('paving')} && a_meta.w > 0.0) depth -= ${TIER_STEP * 0.01};
   if ((int(a_meta.z + 0.5) & ${Flags.crossing}) != 0) depth -= ${TIER_STEP * 0.01};
   // Grounds (no height) go under the grass, parks, and water on them.
   if (maskBit(u_groundMask, cls) == 1 && a_meta.y == 0.0) depth = u_groundDepth;
@@ -83,8 +86,7 @@ void main() {
   v_meta = a_meta;
   v_id = a_id;
   v_vis = vis;
-  v_ridge = a_ridge;
-  v_surface = a_surface;
+  v_surface = crown ? a_surface : a_surface * vec4(vec3(u_surfaceScale.x), u_surfaceScale.y);
   v_crown = crown ? 1 : 0;
 }
 `;
@@ -96,7 +98,6 @@ precision highp int;
 flat in vec4 v_meta;
 flat in uint v_id;
 flat in float v_vis;
-in float v_ridge;
 in vec4 v_surface;
 flat in int v_crown;
 
@@ -134,8 +135,8 @@ void main() {
     if (float(h >> 8u) / 16777216.0 >= v_vis) discard;
   }
   o_class = vec4(v_meta.x / 255.0, 0.0, 0.0, 1.0);
-  // Pitched roofs: which slope the cell is on, or the ridge if the ridge line crosses the cell
-  // (the distance changes by fwidth across one cell). glyphs/select.ts roofCode.
+  // Pitched roofs: physical along/across distances and end parameters select the face,
+  // ridge or hip crossing this cell, with derivative widths at either sampling resolution.
   float roof = 0.0;
   float angle = v_meta.w;
   int flags = int(v_meta.z + 0.5);

@@ -1,12 +1,12 @@
 ﻿/** Capture a visible desktop browser. Static export freshness is prepared by the command wrapper. */
 import { chromium, type Browser } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { cpus, release } from 'node:os';
-import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cities } from '../e2e/helpers';
+import { serveExport } from './serve-export';
 // This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 
@@ -18,35 +18,7 @@ const port = Number(process.env.E2E_PORT ?? 3198);
 const pan = process.argv.includes('--pan');
 const city = cities.find((c) => c.hasMeta);
 if (!city) throw new Error('Build city tiles before capturing a profile');
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_PORT');
-const require = createRequire(import.meta.url);
-const pkg = require.resolve('serve/package.json');
-const { bin } = require('serve/package.json') as { bin: string | Record<string, string> };
-const serve = resolve(dirname(pkg), typeof bin === 'string' ? bin : bin.serve!);
-const expected = await readFile(resolve(root, 'apps/web/out', `${city.slug}.html`), 'utf8');
-const server = spawn(process.execPath, [serve, 'out', '-l', String(port)], {
-  cwd: resolve(root, 'apps/web'),
-  windowsHide: true,
-  stdio: 'ignore',
-});
-let ready = false;
-for (let attempt = 0; attempt < 100; attempt++) {
-  try {
-    const response = await fetch(`http://localhost:${port}/${city.slug}`);
-    if ((await response.text()) === expected) {
-      ready = true;
-      break;
-    }
-  } catch {
-    /* Server is starting. */
-  }
-  if (server.exitCode !== null) break;
-  await new Promise((r) => setTimeout(r, 100));
-}
-if (!ready) {
-  server.kill();
-  throw new Error(`Could not serve this export on port ${port}; choose an unused E2E_PORT`);
-}
+const server = await serveExport(root, port, city.slug);
 let browser: Browser | undefined;
 try {
   browser = await chromium.launch({ headless: false });
@@ -146,5 +118,5 @@ try {
   }
 } finally {
   await browser?.close();
-  server.kill();
+  server.close();
 }

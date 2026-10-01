@@ -32,6 +32,26 @@ const detail = SiteDetail.parse({
 });
 
 describe('site structure merge', () => {
+  it('keeps terraces and stairs walkable, preserves fractional heights and points selection to the plaza', () => {
+    const terrace = {
+      ...detail.structures[0]!,
+      id: 'terrace',
+      material: 'paving' as const,
+      height_m: 0.6,
+      overhead: false,
+    };
+    const features = mergeSiteDetails([parent], [{ ...detail, structures: [terrace] }]).features;
+    const surface = features.find((f) => f.properties.id === 'detail:test/structure-terrace')!;
+    expect(surface.properties).toMatchObject({
+      class: 'paving',
+      height: 0.6,
+      variant: 'terrace',
+      detail_parent: parent.properties.id,
+      detail_overhead: false,
+    });
+    expect(surface.properties.detail_blocked).toBeUndefined();
+    expect(features.some((f) => f.properties.detail_route)).toBe(true);
+  });
   it('keeps a walking route underneath overhead cover and preserves the landmark', () => {
     const before = structuredClone(parent);
     const features = mergeSiteDetails([parent], [detail]).features;

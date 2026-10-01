@@ -3,6 +3,7 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   isRoofBuilding,
+  RoofShape,
   type AtlasClass,
 } from '@atlas/shared';
 
@@ -235,13 +236,14 @@ export const TREE_KINDS = ['palm', 'needleleaved', 'broadleaved'] as const;
  */
 export function variantCode(className: string, variant: unknown): number {
   if (isRoofBuilding(className)) {
-    if (variant === undefined || variant === null || variant === '') return 3;
-    if (variant === 'flat') return 1;
-    if (variant === 'hipped') return 3;
-    if (variant === 'pyramidal') return 4;
-    return 2;
+    if (variant === undefined || variant === null || variant === '') return RoofShape.hipped;
+    if (variant === 'flat') return RoofShape.flat;
+    if (variant === 'hipped') return RoofShape.hipped;
+    if (variant === 'pyramidal') return RoofShape.pyramidal;
+    return RoofShape.gabled;
   }
   if (typeof variant !== 'string') return 0;
+  if (className === 'paving') return variant === 'terrace' ? 1 : 0;
   if (className === 'furniture')
     return (
       [
@@ -264,7 +266,8 @@ export function variantCode(className: string, variant: unknown): number {
   if (className === 'tree' || className === 'trees') {
     return (TREE_KINDS as readonly string[]).indexOf(variant) + 1;
   }
-  if (className.startsWith('building')) return variant === 'flat' ? 1 : 2;
+  if (className.startsWith('building'))
+    return variant === 'flat' ? RoofShape.flat : RoofShape.gabled;
   // A siding, spur, or yard track, where trains stand by.
   if (className === 'rail') return 1;
   return 0;

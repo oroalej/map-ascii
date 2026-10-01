@@ -3945,6 +3945,71 @@
       "height_m": 3.5,
       "material": "wood",
       "overhead": false
+    },
+    {
+      "id": "rizal-forecourt",
+      "ring": [
+        [123.18476308, 13.62328624],
+        [123.18499228, 13.623216],
+        [123.18504787, 13.62338735],
+        [123.18481867, 13.62345758],
+        [123.18476308, 13.62328624]
+      ],
+      "height_m": 0.6,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-front-step-1",
+      "ring": [
+        [123.18499228, 13.623216],
+        [123.18499845, 13.62321411],
+        [123.18505404, 13.62338546],
+        [123.18504787, 13.62338735],
+        [123.18499228, 13.623216]
+      ],
+      "height_m": 0.6,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-front-step-2",
+      "ring": [
+        [123.18499845, 13.62321411],
+        [123.18500462, 13.62321222],
+        [123.18506021, 13.62338357],
+        [123.18505404, 13.62338546],
+        [123.18499845, 13.62321411]
+      ],
+      "height_m": 0.45,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-front-step-3",
+      "ring": [
+        [123.18500462, 13.62321222],
+        [123.18501079, 13.62321033],
+        [123.18506638, 13.62338168],
+        [123.18506021, 13.62338357],
+        [123.18500462, 13.62321222]
+      ],
+      "height_m": 0.3,
+      "material": "paving",
+      "overhead": false
+    },
+    {
+      "id": "rizal-front-step-4",
+      "ring": [
+        [123.18501079, 13.62321033],
+        [123.18501696, 13.62320844],
+        [123.18507255, 13.62337979],
+        [123.18506638, 13.62338168],
+        [123.18501079, 13.62321033]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false
     }
   ],
   "status": "draft",
@@ -3968,6 +4033,10 @@
     {
       "title": "Project owner: Plaza Rizal reference views, 1 October 2026",
       "note": "Owner-requested full plaza detail: northern open paving, curved planted seating islands, mature crowns, perimeter timber pergolas with planting, and a southern bandstand. Supplied Google Maps/Street View screenshots are not distributed, georeferenced or traced; the authored layout is a schematic estimate anchored to the OSM plaza and independently photographed features. Pergola dimensions and individual planting positions need a ground survey."
+    },
+    {
+      "title": "Project owner: raised forecourt, 1 October 2026",
+      "note": "Owner-requested raised monument/flagpole forecourt with four broad front steps. Heights (0.6 m terrace, 0.15 m rises), tread widths and footprints are illustrative estimates fitted to OSM and corroborated by the credited independent photographs; no construction date is inferred."
     }
   ]
 }

@@ -4,6 +4,7 @@ import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscr
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
+import { cellBits } from '../../../packages/renderer/src/life/config';
 
 /** Controlled shader coverage complements the city capture, which may have no station shop. */
 export async function verifyAwningColors(page: Page) {
@@ -89,7 +90,7 @@ export async function verifyAwningColors(page: Page) {
           u_daylight: 1,
           u_colors: colors,
           u_fillColors: colors,
-          u_frontageClasses: input.frontageClasses,
+          u_cellBits: input.cellBits,
           u_awningPaints: input.paints,
         };
         let unit = 0;
@@ -128,7 +129,7 @@ export async function verifyAwningColors(page: Page) {
         vertex: fullscreenVertex,
         fragment: glyphFragment,
         maxClasses: MAX_CLASSES,
-        frontageClasses: Array.from(uniforms.frontageClasses),
+        cellBits: Array.from(cellBits()),
         paints: uniforms.awnings,
       },
     );

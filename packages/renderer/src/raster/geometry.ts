@@ -19,11 +19,12 @@ import {
   foldRoofAngle,
   roofAngleByte,
   roofBounds,
-  roofSurface,
+  roofParameters,
+  packRoofSurface,
   RoofShape,
   partitionRoofTriangles,
-  plannedSurface,
-  type RoofSurface,
+  plannedRoofFrame,
+  type RoofSurfaceFrame,
 } from './roofs';
 import {
   classId,
@@ -53,8 +54,6 @@ import { DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP } from '../life/config';
 import { habitatOf } from '../life/birds';
 import { LampState, placeSeed, placeTileLamps, type LitLine } from '../life/lights';
 
-/** The variant code of a flat roof (classes.ts `variantCode`). */
-const FLAT_ROOF = 1;
 const CROWN_SWEEP_FACTOR =
   1 +
   Math.max(...Object.values(WIND_PRESETS)) *
@@ -69,16 +68,18 @@ export const MERCATOR_METERS = 40_075_016.686;
 export const skippedLayers: ReadonlySet<string> = new Set(['events']);
 
 export type GeometryArrays = {
-  /** Optional crown (2) or roof (4) floats per vertex. Absent on other geometry. */
-  surface?: Float32Array;
+  /** Crown (2 Float32) or roof (4 Int16, with float fallback) components per vertex. */
+  surface?: Float32Array | Int16Array;
   surfaceSize?: 2 | 4;
+  /** Distance step in meters for packed roof surfaces; endScale uses 1/32767. */
+  surfaceScale?: number;
   /** x, y per vertex. */
   positions: Int16Array;
   /** class id, height (m, 0–255), flags, variant (or ridge angle) per vertex. */
   meta: Uint8Array;
   /** Feature index (1-based; 0 = none) per vertex. */
   ids: Uint32Array;
-  /** Pitched roofs: signed distance to the ridge in tile units, positive on the lit slope. */
+  /** Crown reach from the trunk in tile units; zero for roofs and other ground geometry. */
   ridge: Int16Array;
 };
 
@@ -254,6 +255,8 @@ export type FeatureInfo = {
   /** OSM kind, e.g. `amenity=school`. */
   kind?: string;
   height?: number;
+  /** Walkable detail surfaces resolve pointer selection to this parent area. */
+  parentId?: string;
 };
 
 /** A feature's info from its tile properties. */
@@ -269,6 +272,7 @@ export function featureInfo(
   if (typeof p.landmark_id === 'string') info.landmarkId = p.landmark_id;
   if (typeof p.kind === 'string') info.kind = p.kind;
   if (typeof p.height === 'number' && p.height > 0) info.height = p.height;
+  if (typeof p.detail_parent === 'string') info.parentId = p.detail_parent;
   return info;
 }
 
@@ -312,7 +316,7 @@ class Builder {
   positions: number[] = [];
   meta: number[] = [];
   ids: number[] = [];
-  ridge: number[] = [];
+  ridge: number[] | undefined;
   indices: number[] = [];
 
   get count() {
@@ -328,35 +332,49 @@ class Builder {
     id: number,
     variant = 0,
     ridge = 0,
-    surface?: RoofSurface,
+    frame?: RoofSurfaceFrame,
   ) {
-    if (surface) {
+    const roundedX = Math.round(x),
+      roundedY = Math.round(y);
+    if (ridge) {
+      this.ridge ??= [];
+      this.ridge[this.count] = ridge;
+    }
+    if (frame) {
       const offset = this.count * 4;
       if (!this.surface || this.surface.length < offset + 4) {
         const next = new Float32Array(Math.max(offset + 4, (this.surface?.length ?? 128) * 2));
         if (this.surface) next.set(this.surface);
         this.surface = next;
       }
-      this.surface.set(surface, offset);
+      const px = roundedX - frame.cx,
+        py = roundedY - frame.cy;
+      this.surface[offset] = (px * frame.ux + py * frame.uy) * frame.unit;
+      this.surface[offset + 1] = (py * frame.ux - px * frame.uy) * frame.unit;
+      this.surface[offset + 2] = frame.ridgeHalf;
+      this.surface[offset + 3] = frame.endScale;
     }
-    this.positions.push(Math.round(x), Math.round(y));
+    this.positions.push(roundedX, roundedY);
     this.meta.push(cls, height, flags, variant);
     this.ids.push(id);
-    this.ridge.push(ridge);
   }
 
   finish(): GeometryArrays {
-    let surface: Float32Array | undefined;
-    if (this.surface) {
-      surface = new Float32Array(this.count * 4);
-      surface.set(this.surface.subarray(0, surface.length));
-    }
+    const packed = this.surface ? packRoofSurface(this.surface, this.count) : undefined;
+    const positions = new Int16Array(this.positions.length);
+    for (let i = 0; i < positions.length; i++)
+      positions[i] = Math.max(-32768, Math.min(32767, this.positions[i]!));
+    // Only crowns have nonzero ridge reach. Ground meshes need no temporary JS ridge array.
+    const ridge = new Int16Array(this.count);
+    if (this.ridge)
+      for (let i = 0; i < ridge.length; i++)
+        ridge[i] = Math.max(-32768, Math.min(32767, Math.round(this.ridge[i] ?? 0)));
     return {
-      ...(surface ? { surface, surfaceSize: 4 as const } : {}),
-      positions: Int16Array.from(this.positions, (v) => Math.max(-32768, Math.min(32767, v))),
-      meta: Uint8Array.from(this.meta),
-      ids: Uint32Array.from(this.ids),
-      ridge: Int16Array.from(this.ridge, (v) => Math.max(-32768, Math.min(32767, Math.round(v)))),
+      ...(packed ? { ...packed, surfaceSize: 4 as const } : {}),
+      positions,
+      meta: new Uint8Array(this.meta),
+      ids: new Uint32Array(this.ids),
+      ridge,
     };
   }
 }
@@ -500,15 +518,14 @@ export function pointsAlong(line: readonly TilePoint[], step: number): TilePoint
 }
 
 /**
- * A pitched roof's ridge, from the footprint's principal axis through its centroid (the long
- * axis of a rectangle). `distance` is signed so that positive is the slope facing the light,
- * and `angle` is the ridge direction as a byte (0–255 over 0–180°, tile y pointing down).
+ * A pitched roof's frame, from its principal axis and oriented bounds. Physical distances
+ * are written directly to the surface buffer; `angle` is the ridge direction byte.
  */
 export function roofRidge(
   ring: readonly TilePoint[],
   shape: number = RoofShape.gabled,
   unitMeters = 1,
-) {
+): RoofSurfaceFrame {
   let folded = foldRoofAngle(principalAxis(ring).theta);
   let box = roofBounds(ring, folded);
   if (box.halfWidth > box.halfLength) {
@@ -517,24 +534,20 @@ export function roofRidge(
   }
   const ux = Math.cos(folded),
     uy = Math.sin(folded);
-  const parameters = roofSurface(
-    box.center,
-    box.center,
-    folded,
+  const parameters = roofParameters(
     Math.max(0.001, box.halfLength),
     Math.max(0.001, box.halfWidth),
     shape,
   );
-  const ridgeHalf = parameters[2] * unitMeters,
-    endScale = parameters[3];
   return {
-    distance: (p: TilePoint) => ux * (p.y - box.center.y) - uy * (p.x - box.center.x),
+    cx: box.center.x,
+    cy: box.center.y,
+    ux,
+    uy,
+    unit: unitMeters,
+    ridgeHalf: parameters.ridgeHalf * unitMeters,
+    endScale: parameters.endScale,
     angle: roofAngleByte(folded),
-    surface: (p: TilePoint): RoofSurface => {
-      const x = p.x - box.center.x,
-        y = p.y - box.center.y;
-      return [(x * ux + y * uy) * unitMeters, (y * ux - x * uy) * unitMeters, ridgeHalf, endScale];
-    },
   };
 }
 
@@ -547,12 +560,21 @@ export function principalAxis(ring: readonly TilePoint[]) {
     ring.length > 1 && ring[0]!.x === ring.at(-1)!.x && ring[0]!.y === ring.at(-1)!.y
       ? ring.length - 1
       : ring.length;
-  let [cx, cy] = [0, 0];
-  for (let i = 0; i < n; i++) [cx, cy] = [cx + ring[i]!.x / n, cy + ring[i]!.y / n];
-  let [sxx, syy, sxy] = [0, 0, 0];
+  let cx = 0,
+    cy = 0;
   for (let i = 0; i < n; i++) {
-    const [dx, dy] = [ring[i]!.x - cx, ring[i]!.y - cy];
-    [sxx, syy, sxy] = [sxx + dx * dx, syy + dy * dy, sxy + dx * dy];
+    cx += ring[i]!.x / n;
+    cy += ring[i]!.y / n;
+  }
+  let sxx = 0,
+    syy = 0,
+    sxy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = ring[i]!.x - cx,
+      dy = ring[i]!.y - cy;
+    sxx += dx * dx;
+    syy += dy * dy;
+    sxy += dx * dy;
   }
   const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
   return { cx, cy, ux: Math.cos(theta), uy: Math.sin(theta), theta };
@@ -1198,7 +1220,7 @@ export function buildTileGeometry(
       } else if (feature.type === 3) {
         let largest: { ring: TilePoint[]; area: number } | undefined;
         const plan =
-          ridges && tile && isRoofBuilding(className) && height > 0 && variant !== FLAT_ROOF
+          ridges && tile && isRoofBuilding(className) && height > 0 && variant !== RoofShape.flat
             ? parseRoofPlan(feature.properties.roof_plan)
             : undefined;
         const planOrigin = plan && tile ? lngLatToTile(tile, ...plan.origin) : undefined;
@@ -1244,23 +1266,24 @@ export function buildTileGeometry(
           }
           const base = fills.count;
           const ridge =
-            ridges && isRoofBuilding(className) && height > 0 && variant !== FLAT_ROOF
+            !usePlan &&
+            ridges &&
+            isRoofBuilding(className) &&
+            height > 0 &&
+            variant !== RoofShape.flat
               ? roofRidge(polygon[0]!, variant, unitMeters ?? 1)
               : undefined;
           const pieces = usePlan ? partition : undefined;
           if (pieces && plan && planOrigin && tile) {
+            const frames = new Map<(typeof pieces)[number]['leaf'], RoofSurfaceFrame>();
             for (const piece of pieces) {
+              let frame = frames.get(piece.leaf);
+              if (!frame) {
+                frame = plannedRoofFrame(piece.leaf, planOrigin, planUnit!, variant);
+                frames.set(piece.leaf, frame);
+              }
               const start = fills.count;
               for (const p of piece.points) {
-                const surface = plannedSurface(
-                  p,
-                  piece.leaf,
-                  plan,
-                  planOrigin,
-                  tile.z,
-                  variant,
-                  planUnit,
-                );
                 fills.vertex(
                   p.x,
                   p.y,
@@ -1268,16 +1291,15 @@ export function buildTileGeometry(
                   height,
                   flags | Flags.ridged,
                   id,
-                  roofAngleByte((piece.leaf.angleDeg * Math.PI) / 180),
+                  frame.angle,
                   0,
-                  surface,
+                  frame,
                 );
               }
               fills.indices.push(start, start + 1, start + 2);
             }
           } else {
             for (const p of points) {
-              const rounded = { x: Math.round(p.x), y: Math.round(p.y) };
               if (ridge) {
                 fills.vertex(
                   p.x,
@@ -1287,8 +1309,8 @@ export function buildTileGeometry(
                   flags | Flags.ridged,
                   id,
                   ridge.angle,
-                  ridge.distance(p),
-                  ridge.surface(rounded),
+                  0,
+                  ridge,
                 );
               } else {
                 fills.vertex(p.x, p.y, cls, height, flags, id, variant);

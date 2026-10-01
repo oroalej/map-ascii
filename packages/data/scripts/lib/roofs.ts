@@ -1,5 +1,7 @@
 import {
   isRoofBuilding,
+  foldRoofAngle as fold,
+  ROOF_PLAN_MAX_LEAVES,
   roofFrame,
   RoofPlanSchema,
   type RoofNode,
@@ -16,7 +18,6 @@ const area2 = (r: Ring) =>
     return a + p[0] * q[1] - p[1] * q[0];
   }, 0);
 const area = (r: Ring) => Math.abs(area2(r)) / 2;
-const fold = (a: number) => ((a % Math.PI) + Math.PI) % Math.PI;
 const round = (x: number, places = 1) => Math.round(x * 10 ** places) / 10 ** places;
 const rotate = (p: RoofPoint, theta: number): RoofPoint => [
   p[0] * Math.cos(theta) - p[1] * Math.sin(theta),
@@ -125,7 +126,7 @@ export function roofPlan(input: Ring, origin: RoofPoint = [0, 0]): RoofPlan | un
     )
       return;
   }
-  const full = clean(input).map((p) => rotate(p, -theta));
+  const full = ring.map((p) => rotate(p, -theta));
   if (bounds(full).rectangularity >= 0.85) return;
   const memo = new Map<string, Tree | undefined>();
   const solve = (r: Ring, budget: number): Tree | undefined => {
@@ -197,7 +198,7 @@ export function roofPlan(input: Ring, origin: RoofPoint = [0, 0]): RoofPlan | un
     memo.set(key, best);
     return best;
   };
-  const tree = solve(full, 4);
+  const tree = solve(full, ROOF_PLAN_MAX_LEAVES);
   if (!tree || tree.leaves < 2) return;
   const nodes: RoofNode[] = [];
   const emit = (t: Tree): number => {
@@ -241,6 +242,7 @@ export function enrichRoofs(features: AtlasFeature[]) {
   };
   for (const f of features) {
     const p = f.properties;
+    delete p.roof_plan;
     if (
       !isRoofBuilding(p.class) ||
       !(p.height! > 0) ||
@@ -248,7 +250,6 @@ export function enrichRoofs(features: AtlasFeature[]) {
     )
       continue;
     stats.buildings++;
-    delete p.roof_plan;
     if (p.variant === 'flat') {
       stats.rejected.flat++;
       continue;
@@ -274,5 +275,7 @@ export function enrichRoofs(features: AtlasFeature[]) {
     const n = plan.nodes.filter((node) => node.type === 'roof').length;
     stats.leaves[n] = (stats.leaves[n] ?? 0) + 1;
   }
+  if (stats.buildings >= 200 && stats.plans > stats.buildings * 0.1)
+    throw new Error('Roof plans exceed 10% of standing buildings; inspect candidate rules');
   return stats;
 }

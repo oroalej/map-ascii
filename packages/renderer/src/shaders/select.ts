@@ -114,7 +114,8 @@ vec4 idAt(ivec2 p) {
 bool crownAt(ivec2 p) { return classAt(p) == ${classId('tree_crown')}; }
 int groundClassAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
-  return crownAt(p) ? int(texelFetch(u_baseClass, p, 0).r * 255.0 + 0.5) : classAt(p);
+  int c=classAt(p);
+  return c==${classId('tree_crown')} ? int(texelFetch(u_baseClass, p, 0).r * 255.0 + 0.5) : c;
 }
 vec4 groundAttrAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_class, 0) - 1);
@@ -155,7 +156,8 @@ int fillClass(int cls) {
 }
 
 // The wall row a feature's outline uses at this zoom, or -1 (glyphs/select.ts wallStyle).
-int wallRowFor(int kind, vec4 attr) {
+int wallRowFor(int kind, vec4 attr, int cls) {
+  if (cls == ${classId('paving')} && attr.b > 0.0 && u_zoom >= ${float(OUTLINE_ZOOM.building)}) return ${WALL_SINGLE_ROW};
   // Low stone edges keep an outline even when their height rounds to zero in the byte buffer.
   if (kind == ${kindCodes.seating} && u_zoom >= ${float(OUTLINE_ZOOM.building)}) return ${WALL_SINGLE_ROW};
   // Crown gb attributes encode the local surface, rather than feature flags.
@@ -212,7 +214,7 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
       fgAttr = sampleAttr;
     }
   }
-  if (fg == 0 || wallRowFor(u_kind[fg], fgAttr) >= 0) return false;
+  if (fg == 0 || wallRowFor(u_kind[fg], fgAttr, fg) >= 0) return false;
   int mask = 0;
   int bg = 0;
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
@@ -257,27 +259,26 @@ int wallMask(ivec2 p, int mode) {
   }
   vec4 id = groundIdAt(p);
   bool o[9];
-  bool edge = false;
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       ivec2 q = p + ivec2(dx, dy);
-      int c = groundClassAt(q);
-      bool seeThrough = maskBit(u_seeThrough, c) == 1;
-      bool sidewalk = (int(groundAttrAt(q).g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0;
-      bool outside = mode == CURBS
-        ? sidewalk || (maskBit(u_roadMask, c) == 0 && !seeThrough)
-        : groundIdAt(q) != id && !seeThrough;
+      int i=(dy+2)*5+dx+2;
+      bool outside;
+      if (mode==OUTLINE && partyCached3) {
+        uint neighbor=partyRoof[i] ? partyIds[i] : unpackId(groundIdAt(q));
+        outside=neighbor!=unpackId(id) && !partyThrough[i];
+      } else {
+        int c = groundClassAt(q);
+        bool seeThrough = maskBit(u_seeThrough, c) == 1;
+        if (mode==CURBS) {
+          bool sidewalk=(int(groundAttrAt(q).g*255.0+0.5) & ${Flags.sidewalk}) != 0;
+          outside=sidewalk || (maskBit(u_roadMask,c)==0 && !seeThrough);
+        } else outside=groundIdAt(q)!=id && !seeThrough;
+      }
       o[(dy + 1) * 3 + dx + 1] = outside;
-      edge = edge || outside;
     }
   }
-  if (!edge) return -1;
-  int mask = 0;
-  if (!o[1] && (o[3] || o[0] || o[5] || o[2])) mask |= ${Dir.N};
-  if (!o[5] && (o[1] || o[2] || o[7] || o[8])) mask |= ${Dir.E};
-  if (!o[7] && (o[3] || o[6] || o[5] || o[8])) mask |= ${Dir.S};
-  if (!o[3] && (o[1] || o[0] || o[7] || o[6])) mask |= ${Dir.W};
-  return mask;
+  return joinMask(o);
 }
 
 int imod(int a, int n) {
@@ -388,7 +389,7 @@ void main() {
   }
 
   // Outlines at close zoom (glyphs/select.ts wallStyle).
-  int wallRow = wallRowFor(kind, attr);
+  int wallRow = wallRowFor(kind, attr, cls);
   if (wallRow >= 0) {
     int mask = wallMask(p, OUTLINE);
     if (mask >= 0) {

@@ -47,3 +47,8 @@ it('fails errors, excessive coverage, and a measured select regression', () => {
       exitCode: 1,
     });
 });
+it('requires party-wall contacts independently of awning coverage', () => {
+  expect(awningReport({ ...evidence(), awnings: 0, contacts: 20 }).status).toBe('pass');
+  expect(awningReport({ ...evidence(), contacts: 0 }).status).toBe('pending');
+  expect(awningReport({ ...evidence(), contacts: 20, awnings: 80 }).status).toBe('pass');
+});

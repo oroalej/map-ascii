@@ -130,8 +130,6 @@ export const step: Step = {
     }
     const roofs = enrichRoofs(detail.features);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
-    if (roofs.plans > roofs.buildings * 0.1)
-      throw new Error('Roof plans exceed 10% of standing buildings; inspect candidate rules');
     await writeFeatures(join(buildDir, files.merged), detail.features);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +

@@ -361,7 +361,9 @@ export function wallStyle(
   landmark: boolean,
   height: number,
   zoom: number,
+  terrace = false,
 ): WallStyle | null {
+  if (terrace && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (kind === 'seating' && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
   if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
