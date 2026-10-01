@@ -3,6 +3,10 @@ import { MomentHost } from './moments-host';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, type Gatherer, type Mover } from './simulate';
 import { metersPerUnit } from '../raster/geometry';
+import { tileToLngLat } from '../raster/geometry';
+import { metersPerCssPx } from '../grid';
+import { cellStep, DEFAULT_CELLS, stepCell } from '../density';
+import { FIGURE_SIZE_M, figureFit } from './people';
 
 const tileId = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tileId);
@@ -37,6 +41,40 @@ function walkers(t: TileLife, separation = 2.5) {
 }
 
 describe('moment admission adapter', () => {
+  it('admits safely spaced greetings across actual desktop and phone cell schedules', () => {
+    for (const phone of [false, true])
+      for (const zoom of [18, 19, 19.5, 20, 20.5, 21]) {
+        const [lng, lat] = tileToLngLat(tileId, { x: 1000, y: 1000 });
+        const css = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
+        const w = phone ? Math.max(6, css.width) : css.width;
+        const aspect = Math.round(w * DEFAULT_CELLS.aspect) / w;
+        const width = metersPerCssPx({ lng, lat, zoom }) * w;
+        const diagonal = Math.hypot(width, width * aspect),
+          size = FIGURE_SIZE_M.umbrella;
+        const fit = figureFit('umbrella', size / width);
+        const radius =
+          (fit === 'stamp'
+            ? size / Math.SQRT2 + diagonal
+            : fit === 'big'
+              ? 2 * diagonal
+              : diagonal) + 0.05;
+        for (const overlap of [false, true]) {
+          const t = tile();
+          const [a, b] = walkers(t, radius * 2 + (overlap ? -0.1 : 1));
+          const before = structuredClone([a, b]);
+          const host = new MomentHost(t, 5, { rng: () => 0 });
+          host.step(0.1, zoom, { rain: 0 }, undefined, undefined, width, aspect);
+          expect(host.moments.stats.started.greet).toBe(overlap ? 0 : 1);
+          expect(
+            [a, b].map((owner) => {
+              const copy = { ...owner } as Mover & { momentFacing?: unknown };
+              delete copy.momentFacing;
+              return copy;
+            }),
+          ).toEqual(before);
+        }
+      }
+  });
   it('admits singleton groups and rejects missing or multiple physical members', () => {
     for (const count of [0, 1, 2]) {
       const t = tile(),

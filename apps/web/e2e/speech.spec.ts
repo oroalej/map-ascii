@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import type { DialogueCatalog } from '@atlas/shared';
-import type { VisibleAgent } from '../../../packages/renderer/src/life/simulate';
+import type { City, DialogueCatalog } from '@atlas/shared';
+import type { FrameInput, FrameResult } from '../../../packages/renderer/src/life/worker-api';
+import { naturalSpeech } from '../../../packages/renderer/scripts/natural-speech';
 import { cities, mapReady } from './helpers';
 
-test('speech bubbles keep Bikol and switch English/Tagalog translations and conversation replies', async ({
+test('natural speech bubbles keep Bikol and switch English/Tagalog translations', async ({
   page,
 }, testInfo) => {
   const city = cities.find((entry) => entry.slug === 'naga' && entry.hasMeta)!;
@@ -14,14 +15,27 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
       'utf8',
     ),
   ) as DialogueCatalog;
+  const config = JSON.parse(
+    readFileSync(
+      new URL('../../../packages/content/cities/naga/city.json', import.meta.url),
+      'utf8',
+    ),
+  ) as City;
   const search = JSON.parse(
     readFileSync(new URL('../public/tiles/naga.search-index.json', import.meta.url), 'utf8'),
   ) as { entries: { name: string; lng: number; lat: number }[] };
   const center = search.entries.find((entry) => entry.name === 'Plaza Rizal')!;
-  await page.setViewportSize({ width: 640, height: 640 });
+  const camera = { lng: center.lng, lat: center.lat, zoom: 19.5 };
+  const size = { width: 1024, height: 768 };
+  // Normal seeded real-tile simulation, including terrain rejection and final packing ownership.
+  const evidence = await naturalSpeech(config, catalog, camera, { ...size, height: 1024 });
+  expect(evidence.seconds).toBeLessThanOrEqual(60);
+  await testInfo.attach('natural-packed-speech', {
+    body: JSON.stringify(evidence),
+    contentType: 'application/json',
+  });
+  await page.setViewportSize(size);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  // Hold real actors after admission and script the cue clock so UI assertions do not race
-  // movement. Real tiles, packing, GPU visibility and controls stay live; unit tests prove timing.
   await page.addInitScript(() => {
     localStorage.setItem(
       'atlas.life',
@@ -29,156 +43,106 @@ test('speech bubbles keep Bikol and switch English/Tagalog translations and conv
     );
     localStorage.setItem('atlas.quality', JSON.stringify('high'));
     const scope = window as unknown as {
-      speechFixture: { exchangeId: string; line: number };
       holdSpeakers: boolean;
-      speechDiagnostics: {
-        frames: number;
-        eligible: number;
-        maxEligible: number;
-        fences: number;
-        completed: number;
-        maxLatency: number;
-      };
+      speechDiagnostics: { frames: number; cues: number };
     };
-    scope.speechFixture = { exchangeId: 'greet-afternoon', line: 0 };
     scope.holdSpeakers = false;
-    const diagnostics = (scope.speechDiagnostics = {
-      frames: 0,
-      eligible: 0,
-      maxEligible: 0,
-      fences: 0,
-      completed: 0,
-      maxLatency: 0,
-    });
-    // Test-only latency counters explain software-GPU failures without changing renderer APIs.
-    const starts = new WeakMap<WebGLSync, number>();
-    const glPrototype = WebGL2RenderingContext.prototype;
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- invoke with the original GL receiver below
-    const fenceSync = glPrototype.fenceSync;
-    glPrototype.fenceSync = function (condition, flags) {
-      const sync = fenceSync.call(this, condition, flags);
-      if (sync) {
-        starts.set(sync, performance.now());
-        diagnostics.fences++;
-      }
-      return sync;
-    };
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- invoke with the original GL receiver below
-    const getSyncParameter = glPrototype.getSyncParameter;
-    glPrototype.getSyncParameter = function (sync, pname) {
-      const result: unknown = getSyncParameter.call(this, sync, pname);
-      const started = starts.get(sync);
-      if (pname === this.SYNC_STATUS && result === this.SIGNALED && started !== undefined) {
-        diagnostics.completed++;
-        diagnostics.maxLatency = Math.max(diagnostics.maxLatency, performance.now() - started);
-        starts.delete(sync);
-      }
-      return result;
-    };
+    scope.speechDiagnostics = { frames: 0, cues: 0 };
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
-      private wrapped = new Map<EventListenerOrEventListenerObject, EventListener>();
+      private clockId = 0;
+      private holdUntil = 0;
+      private input?: FrameInput;
+      private held = new Set<string>();
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        super.addEventListener('message', (event: MessageEvent<{ value?: FrameResult }>) => {
+          const agents = event.data.value?.agents;
+          if (!agents) return;
+          scope.speechDiagnostics.frames++;
+          scope.speechDiagnostics.cues += agents.filter((a) => a.speech).length;
+          if (!this.input || performance.now() < this.holdUntil) return;
+          const { camera, size } = this.input.gust;
+          const project = (lng: number, lat: number) => {
+            const sin = Math.sin((lat * Math.PI) / 180),
+              scale = 512 * 2 ** camera.zoom;
+            return [
+              ((lng + 180) / 360) * scale,
+              (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale,
+            ];
+          };
+          const [cx, cy] = project(camera.lng, camera.lat);
+          // Pause only an actual worker-produced speaker in the view, to let slow software-GPU
+          // readbacks complete. Never alter actors, cues, chance outcomes or admission.
+          if (
+            agents.some((agent) => {
+              if (!agent.speech || this.held.has(agent.speech.id)) return false;
+              const [x, y] = project(agent.lng, agent.lat);
+              const inside =
+                Math.abs(x! - cx!) < size.width / 2 - 24 &&
+                Math.abs(y! - cy!) < size.height / 2 - 24;
+              if (inside) this.held.add(agent.speech.id);
+              return inside;
+            })
+          )
+            this.holdUntil = performance.now() + 8_000;
+        });
+      }
       override postMessage(
         message: unknown,
         transfer: Transferable[] | StructuredSerializeOptions = [],
       ) {
         const payload = message as {
+          id: string;
           path?: string[];
-          argumentList?: { value?: { step?: { dt: number } } }[];
+          argumentList?: { value?: FrameInput }[];
         };
-        if (payload.path?.[0] === 'frame' && scope.holdSpeakers) {
-          const step = payload.argumentList?.[0]?.value?.step;
-          if (step) step.dt = 0;
+        const input = payload.path?.[0] === 'frame' ? payload.argumentList?.[0]?.value : undefined;
+        if (input) {
+          this.input = input;
+          input.step.dt = scope.holdSpeakers || performance.now() < this.holdUntil ? 0 : 0.1;
+          // Advance the normal fixed-step clock by up to half a second per drawn frame.
+          // Comlink ignores these unique reply IDs; every worker response stays unmodified.
+          if (input.step.dt > 0)
+            for (let i = 0; i < 4; i++) {
+              super.postMessage({ ...payload, id: `speech-clock-${++this.clockId}` });
+            }
         }
         if (Array.isArray(transfer)) super.postMessage(message, transfer);
         else super.postMessage(message, transfer);
       }
-      override addEventListener(
-        type: string,
-        listener: EventListenerOrEventListenerObject | null,
-        options?: boolean | AddEventListenerOptions,
-      ) {
-        if (!listener) return;
-        if (type !== 'message') return super.addEventListener(type, listener, options);
-        const wrapped: EventListener = (event) => {
-          const data = (event as MessageEvent).data as { value?: { agents?: VisibleAgent[] } };
-          if (data.value?.agents) {
-            diagnostics.frames++;
-            diagnostics.eligible = 0;
-          }
-          data.value?.agents?.forEach((agent, i) => {
-            if (
-              agent.kind === 'person' &&
-              !agent.vehicle &&
-              !agent.aboard &&
-              !agent.prop &&
-              agent.people?.length === 1
-            ) {
-              agent.speech = { id: `smoke-speaker-${i}`, ...scope.speechFixture };
-              diagnostics.eligible++;
-            }
-          });
-          diagnostics.maxEligible = Math.max(diagnostics.maxEligible, diagnostics.eligible);
-          if (typeof listener === 'function') listener.call(this, event);
-          else listener.handleEvent(event);
-        };
-        this.wrapped.set(listener, wrapped);
-        super.addEventListener(type, wrapped, options);
-      }
-      override removeEventListener(
-        type: string,
-        listener: EventListenerOrEventListenerObject | null,
-        options?: boolean | EventListenerOptions,
-      ) {
-        if (!listener) return;
-        super.removeEventListener(type, this.wrapped.get(listener) ?? listener, options);
-        this.wrapped.delete(listener);
-      }
     };
   });
-  await page.goto(`/${city.slug}?lng=${center.lng}&lat=${center.lat}&z=19.5`);
+  await page.goto(`/${city.slug}?lng=${center.lng}&lat=${center.lat}&z=19`);
   await mapReady(page);
   await page.locator('summary').filter({ hasText: 'Legend' }).click();
-  const bubbles = page.locator('[data-speech-bubble]');
+  const bubbles = page.locator('[data-speech-bubble]:visible');
   const native = bubbles.locator(`[lang="${catalog.native.code}"]`).first();
   try {
-    await expect(native).toHaveText('Marhay na hapon!', { timeout: 30_000 });
+    await expect(native).toBeVisible({ timeout: 30_000 });
   } catch (error) {
     const diagnostics = await page.evaluate(
       () => (window as unknown as { speechDiagnostics: object }).speechDiagnostics,
     );
-    await testInfo.attach('speech-diagnostics', {
+    await testInfo.attach('natural-worker-speech', {
       body: JSON.stringify(diagnostics),
       contentType: 'application/json',
     });
-    console.log('Speech admission diagnostics:', diagnostics);
     throw error;
   }
-  await expect(bubbles.locator(`[lang="${catalog.native.code}"]:visible`).first()).toBeVisible();
   await page.evaluate(() => {
     (window as unknown as { holdSpeakers: boolean }).holdSpeakers = true;
   });
+  const text = await native.textContent();
+  const line = catalog.exchanges
+    .flatMap((exchange) => exchange.lines)
+    .find((line) => line[catalog.native.code] === text)!;
+  expect(line).toBeDefined();
   const selector = page.getByRole('combobox', { name: 'Speech translation' });
   await selector.selectOption('en');
-  await expect(bubbles.first().locator('[lang]')).toHaveText([
-    'Marhay na hapon!',
-    'Good afternoon!',
-  ]);
+  await expect(bubbles.first().locator('[lang]')).toHaveText([text ?? '', line.en ?? '']);
   await selector.selectOption('fil');
-  await expect(bubbles.first().locator('[lang]')).toHaveText([
-    'Marhay na hapon!',
-    'Magandang hapon!',
-  ]);
-  await page.evaluate(() => {
-    (window as unknown as { speechFixture: object }).speechFixture = {
-      exchangeId: 'talk-how-are-you',
-      line: 1,
-    };
-  });
-  await expect(bubbles.first().locator('[lang]')).toHaveText([
-    'Marhay man, salamat.',
-    'Mabuti naman, salamat.',
-  ]);
+  await expect(bubbles.first().locator('[lang]')).toHaveText([text ?? '', line.fil ?? '']);
   await page.getByRole('button', { name: 'Speech', exact: true }).click();
-  await expect(bubbles).toHaveCount(0);
+  await expect(page.locator('[data-speech-bubble]')).toHaveCount(0);
 });

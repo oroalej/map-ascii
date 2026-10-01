@@ -4,7 +4,8 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSpeechStore } from '@/state/speech';
-import { useAtlasInstance } from '@/state/store';
+import { useAtlasInstance, useAtlasStore } from '@/state/store';
+import { useLifeStore } from '@/state/life';
 import { SpeechBubbles } from './SpeechBubbles';
 import { SpeechControls } from './SpeechControls';
 
@@ -29,6 +30,13 @@ const catalog: DialogueCatalog = {
 let container: HTMLDivElement, root: Root, listener: ((cues: SpeechInView[]) => void) | undefined;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  useLifeStore.setState({ enabled: true });
+  useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 19 } });
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(180);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(60);
   useSpeechStore.setState({ enabled: true, translation: null });
@@ -59,6 +67,22 @@ afterEach(() => {
   useAtlasInstance.setState({ atlas: null });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+it('explains when Life, zoom or reduced motion prevents speech', () => {
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(container.textContent).toContain('Turn Life on to see speech.');
+  act(() => {
+    useLifeStore.setState({ enabled: true });
+    useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 17 } });
+  });
+  expect(container.textContent).toContain('Zoom to z18 or closer to see speech.');
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 19 } }));
+  expect(container.textContent).toContain('Speech pauses while reduced motion is on.');
 });
 const cue = (line = 0): SpeechInView => ({
   id: 'speaker',

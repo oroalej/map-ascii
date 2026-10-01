@@ -48,6 +48,60 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  it('accommodates pair and third-member clearance without relaxing minimum separation', () => {
+    for (const kind of ['greet', 'talk', 'ball'] as const) {
+      const f = fixture(kind);
+      f.c.clearance = () => 6;
+      f.b.x = 13;
+      if (kind === 'talk') f.actors.push({ ...f.a, owner: {}, x: 6.5, y: 12 });
+      start(f, kind);
+      expect(f.m.snapshot().active[0]!.members).toHaveLength(kind === 'talk' ? 3 : 2);
+    }
+  });
+  it.each(['greet', 'talk', 'ball', 'look'] as const)(
+    'retries accepted %s admission without rerolling its chance or exceeding the scan budget',
+    (kind) => {
+      let rolls = 0;
+      const f = fixture(kind, () => {
+        rolls++;
+        return 0;
+      });
+      let attempts = 0;
+      f.c.face = () => {
+        attempts++;
+        return false;
+      };
+      for (let i = 0; i < 5; i++) f.m.step(0.1, f.c);
+      const initialRolls = rolls,
+        initialAttempts = attempts;
+      expect(initialAttempts).toBeGreaterThan(0);
+      for (let i = 0; i < 5; i++) f.m.step(0.1, f.c);
+      expect(attempts).toBe(initialAttempts);
+      expect(rolls).toBe(initialRolls);
+      const checks = f.m.stats.checks;
+      f.c.face = () => true;
+      for (let i = 0; i < 5; i++) f.m.step(0.1, f.c);
+      expect(f.m.stats.started[kind]).toBe(1);
+      expect(f.m.stats.checks - checks).toBeLessThanOrEqual(5 * MOMENTS.checks);
+      expect(f.m.snapshot().pending).toEqual([]);
+    },
+  );
+  it.each(['separation', 'eligibility', 'rain', 'zoom'])(
+    'discards pending greetings on lost %s',
+    (reason) => {
+      const f = fixture('greet');
+      f.c.face = () => false;
+      f.m.step(0.1, f.c);
+      expect(f.m.snapshot().pending).toHaveLength(1);
+      if (reason === 'separation') f.b.x = 10;
+      if (reason === 'eligibility') f.c.eligible = () => false;
+      if (reason === 'rain') f.c.rain = 1;
+      if (reason === 'zoom') f.c.zoom = 17;
+      f.m.step(0.1, f.c);
+      expect(f.m.snapshot().pending).toEqual([]);
+      expect(f.m.size).toBe(0);
+    },
+  );
   it('gives a greeting two readable turns, matching gestures, then clears the cue', () => {
     const choices: DialogueChoice[] = ['morning', 'afternoon', 'evening'].map((period) => ({
       id: `greet-${period}`,

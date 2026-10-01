@@ -69,6 +69,12 @@ type Moment = {
   phaseEnd: number;
 };
 type Approach = { a: MomentActor; b: MomentActor | MomentAnchor; radius: number };
+type Pending = {
+  kind: MomentKind;
+  members: MomentActor[];
+  anchor?: MomentAnchor;
+  next: number;
+};
 const kinds: readonly MomentKind[] = ['greet', 'talk', 'ball', 'look'];
 const social = new Set<PlaceKind>(['monument', 'fountain', 'worship', 'school']);
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
@@ -88,6 +94,7 @@ export class Moments {
   private readonly cooldown = new Map<object, number>();
   private readonly episodes = new Map<object, { idle: boolean; talk: boolean; ball: boolean }>();
   private readonly approaches = new Map<string, Approach>();
+  private readonly pending = new Map<string, Pending>();
   private readonly membership = new Map<object, Moment>();
   private readonly active: Moment[] = [];
   readonly stats = {
@@ -141,6 +148,7 @@ export class Moments {
     this.cooldown.clear();
     this.episodes.clear();
     this.approaches.clear();
+    this.pending.clear();
     this.ids.clear();
     this.neighborCursor.clear();
   }
@@ -190,6 +198,10 @@ export class Moments {
       cooldown: [...this.cooldown].map(([owner, end]) => [id(owner), end]),
       episodes: [...this.episodes].map(([owner, state]) => [id(owner), { ...state }]),
       approaches: [...this.approaches.keys()],
+      pending: [...this.pending].map(([key, p]) => [
+        key,
+        { ...p, members: p.members.map((a) => id(a.owner)) },
+      ]),
     };
   }
   private finish(m: Moment, context: MomentContext, canceled: boolean) {
@@ -247,6 +259,7 @@ export class Moments {
         }
     }
     if (!weather) {
+      this.pending.clear();
       this.nextScan = this.time + MOMENTS.interval;
       return;
     }
@@ -260,6 +273,38 @@ export class Moments {
   }
   private free(a: MomentActor) {
     return !this.busy(a.owner) && (this.cooldown.get(a.owner) ?? 0) <= this.time;
+  }
+  private reach(a: MomentActor, b: MomentActor, base: number, c: MomentContext) {
+    return Math.max(base, c.clearance(a) + c.clearance(b) + 2);
+  }
+  private attempt(key: string, p: Pending, c: MomentContext) {
+    if (this.start(p.kind, p.members, p.anchor, c)) this.pending.delete(key);
+    else {
+      p.next = this.time + 1;
+      this.pending.set(key, p);
+    }
+  }
+  private retryable(p: Pending, c: MomentContext) {
+    if (p.members.some((a) => !this.available(a, c))) return false;
+    const a = p.members[0]!;
+    if (p.kind === 'look') return distance(a, p.anchor!) / c.perMeter <= 15;
+    if (p.kind === 'greet' && a.hx * p.members[1]!.hx + a.hy * p.members[1]!.hy >= -0.5)
+      return false;
+    if (
+      p.kind !== 'greet' &&
+      p.members.some((b) => !b.idle || b.source !== a.source || b.place !== a.place)
+    )
+      return false;
+    return p.members.every((b, i) =>
+      p.members.slice(i + 1).every((d) => {
+        const separation = distance(b, d) / c.perMeter;
+        return (
+          separation >= c.clearance(b) + c.clearance(d) &&
+          separation <= this.reach(b, d, p.kind === 'greet' ? 3 : p.kind === 'talk' ? 8 : 10, c) &&
+          (p.kind !== 'ball' || separation >= 4)
+        );
+      }),
+    );
   }
   private scan(c: MomentContext) {
     const actors = c.actors();
@@ -280,6 +325,23 @@ export class Moments {
       )
         this.approaches.delete(key);
     for (const [owner, end] of this.cooldown) if (end <= this.time) this.cooldown.delete(owner);
+    let retries = 0;
+    for (const [key, p] of this.pending) {
+      if (p.members.some((a) => !present.has(a.owner)) || !this.retryable(p, c)) {
+        this.pending.delete(key);
+        continue;
+      }
+      if (
+        this.time + 1e-9 < p.next ||
+        retries >= MOMENTS.checks ||
+        this.active.length >= MOMENTS.capacity ||
+        (p.kind === 'ball' && this.active.filter((m) => m.kind === 'ball').length >= MOMENTS.balls)
+      )
+        continue;
+      retries++;
+      this.stats.checks++;
+      this.attempt(key, p, c);
+    }
     const width = MOMENTS.binMeters * c.perMeter;
     const bins = new Map<string, MomentActor[]>();
     const key = (x: number, y: number) => `${x},${y}`;
@@ -325,7 +387,7 @@ export class Moments {
       }
       return undefined;
     };
-    for (let check = 0; check < MOMENTS.checks; check++) {
+    for (let check = retries; check < MOMENTS.checks; check++) {
       const k = (this.priority + check) % kinds.length,
         kind = kinds[k]!;
       this.stats.checks++;
@@ -341,7 +403,8 @@ export class Moments {
         const approach = `look:${this.ids.get(a.owner)}:${anchor.source}`;
         if (this.approaches.has(approach)) continue;
         this.approaches.set(approach, { a, b: anchor, radius: 20 });
-        if (this.rng() < MOMENTS.look.chance) this.start(kind, [a], anchor, c);
+        if (this.rng() < MOMENTS.look.chance)
+          this.attempt(approach, { kind, members: [a], anchor, next: this.time }, c);
         continue;
       }
       const b = neighbor(a, k);
@@ -349,13 +412,15 @@ export class Moments {
       const d = distance(a, b) / c.perMeter;
       if (d <= 0 || d < c.clearance(a) + c.clearance(b)) continue;
       if (kind === 'greet') {
-        if (b.type !== 'walker' || d > 3 || a.hx * b.hx + a.hy * b.hy >= -0.5) continue;
+        if (b.type !== 'walker' || d > this.reach(a, b, 3, c) || a.hx * b.hx + a.hy * b.hy >= -0.5)
+          continue;
         const ids = [this.ids.get(a.owner)!, this.ids.get(b.owner)!].sort((a, b) => a - b);
         const approach = `greet:${ids.join(':')}`;
         if (this.approaches.has(approach)) continue;
         if (!this.available(a, c) || !this.available(b, c)) continue;
-        this.approaches.set(approach, { a, b, radius: 4 });
-        if (this.rng() < MOMENTS.greet.chance) this.start(kind, [a, b], undefined, c);
+        this.approaches.set(approach, { a, b, radius: this.reach(a, b, 3, c) + 1 });
+        if (this.rng() < MOMENTS.greet.chance)
+          this.attempt(approach, { kind, members: [a, b], next: this.time }, c);
       } else {
         if (
           a.type !== 'gatherer' ||
@@ -368,7 +433,7 @@ export class Moments {
           continue;
         const episode = this.episodes.get(a.owner)!;
         if (kind === 'talk') {
-          if (!social.has(a.place!) || d > 8 || episode.talk) continue;
+          if (!social.has(a.place!) || d > this.reach(a, b, 8, c) || episode.talk) continue;
           if (!this.available(a, c) || !this.available(b, c)) continue;
           episode.talk = true;
           if (this.rng() >= MOMENTS.talk.chance) continue;
@@ -384,23 +449,24 @@ export class Moments {
                 third !== b &&
                 third.type === 'gatherer' &&
                 third.source === a.source &&
+                third.place === a.place &&
                 third.idle &&
                 this.available(third, c) &&
                 members.every(
                   (p) =>
                     distance(p, third) / c.perMeter >= c.clearance(p) + c.clearance(third) &&
-                    distance(p, third) / c.perMeter <= 8,
+                    distance(p, third) / c.perMeter <= this.reach(p, third, 8, c),
                 )
               )
                 members.push(third);
             }
           }
-          this.start(kind, members, undefined, c);
+          this.attempt(`talk:${this.ids.get(a.owner)}`, { kind, members, next: this.time }, c);
         } else {
           const childOnly = a.place === 'school' || (children.get(a.source!) ?? 0) >= 2;
           if (
             d < 4 ||
-            d > 10 ||
+            d > this.reach(a, b, 10, c) ||
             episode.ball ||
             (childOnly && (a.figure !== 'child' || b.figure !== 'child')) ||
             this.active.filter((m) => m.kind === 'ball').length >= MOMENTS.balls
@@ -408,7 +474,12 @@ export class Moments {
             continue;
           if (!this.available(a, c) || !this.available(b, c)) continue;
           episode.ball = true;
-          if (this.rng() < MOMENTS.ball.chance) this.start(kind, [a, b], undefined, c);
+          if (this.rng() < MOMENTS.ball.chance)
+            this.attempt(
+              `ball:${this.ids.get(a.owner)}`,
+              { kind, members: [a, b], next: this.time },
+              c,
+            );
         }
       }
     }
@@ -429,7 +500,7 @@ export class Moments {
       const d = distance(a, center);
       if (d <= 1e-9 || !c.face(a, (center.x - a.x) / d, (center.y - a.y) / d)) {
         for (let i = admitted.length - 1; i >= 0; i--) c.release(admitted[i]!);
-        return;
+        return false;
       }
       admitted.push(a);
     }
@@ -462,6 +533,7 @@ export class Moments {
     this.active.push(m);
     for (const a of members) this.membership.set(a.owner, m);
     this.stats.started[kind]++;
+    return true;
   }
 }
 
