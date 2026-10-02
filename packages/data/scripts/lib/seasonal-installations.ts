@@ -6,6 +6,7 @@ import {
   LEGACY_LOCAL_METERS_PER_DEGREE,
   pointInPolygon as inside,
   offsetUtility,
+  carnivalRing,
   type SeasonConfig,
   type SeasonalRecord,
   type SeasonalDisplayRecord,
@@ -68,11 +69,12 @@ export function generateSeasonalInstallations(
         throw new Error(`Season installation ${config.id}: missing or mismatched grounds`);
       if (
         !anchor ||
-        !rings(anchor).length ||
+        !(rings(anchor).length || (grounds && lines(anchor).length)) ||
         !(buildingLights
           ? isRoofBuilding(anchor.properties.class) && Number(anchor.properties.height) > 0
           : grounds
             ? anchor.properties.class.startsWith('building') ||
+              anchor.properties.class.startsWith('road_') ||
               ['park', 'paving'].includes(anchor.properties.class)
             : ['park', 'paving'].includes(anchor.properties.class))
       )
@@ -89,7 +91,7 @@ export function generateSeasonalInstallations(
       });
       const polygon = ll.map((r) => r.map(project));
       if (grounds) {
-        const source = rings(anchor).flat().map(project);
+        const source = [...rings(anchor).flat(), ...(lines(anchor).flat() as Point[])].map(project);
         const center: Point = [
           (Math.min(...source.map((p) => p[0])) + Math.max(...source.map((p) => p[0]))) / 2,
           (Math.min(...source.map((p) => p[1])) + Math.max(...source.map((p) => p[1]))) / 2,
@@ -150,7 +152,98 @@ export function generateSeasonalInstallations(
           seed: utilitySeed(id),
         };
       };
-      if (config.kind === 'christmas-tree') {
+      if (config.kind === 'carnival') {
+        if (!grounds)
+          throw new Error(`Season installation ${config.id}: carnival requires grounds`);
+        const footprints: Point[][] = [];
+        for (const component of config.components) {
+          const ring = carnivalRing(component).map(project);
+          const edges = ring.slice(1).map((b, i) => [ring[i]!, b] as const);
+          if (
+            ring.some((p) => !inside(p, polygon)) ||
+            polygon.some((r) =>
+              r
+                .slice(1)
+                .some((b, i) => edges.some(([c, d]) => segmentDistance(r[i]!, b, c, d) < 1e-6)),
+            )
+          )
+            throw new Error(
+              `Season installation ${config.id}/${component.id}: footprint leaves grounds`,
+            );
+          const occupied = local.some((f) => {
+            if (!(
+              f.properties.class.startsWith('building') ||
+              f.properties.class.startsWith('road_') ||
+              [
+                'path',
+                'monument',
+                'tree',
+                'barrier',
+                'furniture',
+                'seating',
+                'shrubs',
+                'planting',
+              ].includes(f.properties.class)
+            ))
+              return false;
+            if (f.geometry.type === 'Point') {
+              const p = project(f.geometry.coordinates);
+              return (
+                inside(p, [ring]) ||
+                ring.some((q) => obstacleDistance(q, f) < 1) ||
+                edges.some(
+                  ([a, b]) =>
+                    distance(p, a, b) <
+                    1 + (f.properties.class === 'tree' ? Number(f.properties.crown ?? 6) / 2 : 5),
+                )
+              );
+            }
+            const rs = rings(f).map((r) => r.map(project));
+            if (rs.length)
+              return (
+                ring.some((p) => inside(p, rs)) ||
+                rs.some((r) => r.some((p) => inside(p, [ring]))) ||
+                rs.some((r) =>
+                  r
+                    .slice(1)
+                    .some((b, i) => edges.some(([c, d]) => segmentDistance(r[i]!, b, c, d) < 1)),
+                )
+              );
+            return lines(f).some(
+              (l) =>
+                l.some((p) => inside(project(p), [ring])) ||
+                l
+                  .slice(1)
+                  .some((b, i) =>
+                    edges.some(
+                      ([c, d]) =>
+                        segmentDistance(project(l[i] as Point), project(b), c, d) <
+                        Number(f.properties.width ?? 2) / 2 + 1,
+                    ),
+                  ),
+            );
+          });
+          if (occupied)
+            throw new Error(`Season installation ${config.id}/${component.id}: occupied footprint`);
+          if (component.style !== 'midway') {
+            if (
+              footprints.some(
+                (r) =>
+                  ring.some((p) => inside(p, [r])) ||
+                  r.some((p) => inside(p, [ring])) ||
+                  r
+                    .slice(1)
+                    .some((b, i) => edges.some(([c, d]) => segmentDistance(r[i]!, b, c, d) < 1)),
+              )
+            )
+              throw new Error(
+                `Season installation ${config.id}/${component.id}: overlapping carnival footprints`,
+              );
+            footprints.push(ring);
+          }
+          records.push({ ...component, ...base(component.id), kind: 'carnival' });
+        }
+      } else if (config.kind === 'christmas-tree') {
         const obstacles = local.filter(
           (f) =>
             (f !== anchor || grounds !== undefined) &&
@@ -421,6 +514,7 @@ export function generateSeasonalInstallations(
 export function seasonalRecordGeometry(r: SeasonalRecord): Geometry {
   if (r.kind === 'bunting' || r.kind === 'light-string')
     return { type: 'LineString', coordinates: [r.from, r.to] };
+  if (r.kind === 'carnival') return { type: 'Polygon', coordinates: [carnivalRing(r)] };
   const ring: Point[] = [];
   for (let i = 0; i < 32; i++) {
     const a = (i * Math.PI) / 16;

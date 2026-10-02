@@ -428,6 +428,14 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   if (part == ${FixturePart.festiveTree}) {
     color = lampLit(daylit(vec3(0.08, 0.42, 0.22) * (0.65 + 0.35 * float(info) / 255.0)), rainLight);
   }
+  if (part == ${FixturePart.carnivalRoof}) {
+    int tint = info & 7;
+    vec3 paint = tint == 1 ? vec3(0.85, 0.12, 0.18) : tint == 2 ? vec3(0.10, 0.65, 0.42) :
+      tint == 3 ? vec3(0.95, 0.26, 0.55) : tint == 4 ? vec3(0.45, 0.25, 0.85) : vec3(0.98, 0.87, 0.58);
+    color = lampLit(daylit(paint), rainLight);
+  }
+  if (part == ${FixturePart.carnivalGround}) color = lampLit(daylit(info == 1 ? vec3(0.37, 0.32, 0.27) : info == 2 ? vec3(0.19, 0.23, 0.29) : vec3(0.24, 0.22, 0.20)), rainLight);
+  if (part == ${FixturePart.carnivalFrame}) color = lampLit(daylit(vec3(0.61, 0.66, 0.70)), rainLight);
   if (part == ${FixturePart.festiveWire} || part == ${FixturePart.buildingWire}) color = daylit(u_fixturePaints[7]);
   if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight}) {
     int tint = info & 7;

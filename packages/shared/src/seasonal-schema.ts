@@ -1,9 +1,28 @@
 import type { SeasonalRecord } from './seasons';
 import { z } from 'zod';
+import { CARNIVAL_STYLES, type CarnivalComponent } from './seasonal-record';
 
 const point = z.tuple([z.number().min(-180).max(180), z.number().min(-85.051129).max(85.051129)]);
 const way = z.string().regex(/^osm:way\/\d+$/);
 const feature = z.string().regex(/^osm:(node|way|relation)\/\d+$/);
+const carnival = {
+  style: z.enum(CARNIVAL_STYLES),
+  at: point,
+  size_m: z.tuple([z.number().min(3).max(120), z.number().min(3).max(120)]),
+  angle_deg: z.number().min(-180).max(180),
+};
+const validCarnival = (v: Omit<CarnivalComponent, 'id'>) =>
+  (v.style === 'midway' || v.size_m.every((n) => n <= 30)) &&
+  (v.style !== 'carousel' || v.size_m[0] === v.size_m[1]);
+export const CarnivalComponentSchema = z
+  .strictObject({
+    id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    ...carnival,
+  })
+  .refine(
+    validCarnival,
+    'rides are at most 30 m; carousel footprints must be circular',
+  ) satisfies z.ZodType<CarnivalComponent>;
 export const BuntingCorridorSchema = z
   .strictObject({
     id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
@@ -47,6 +66,9 @@ const installation = {
 };
 export const SeasonalRecordSchema = z.union([
   SeasonalBuntingRecordSchema,
+  z
+    .strictObject({ ...installation, kind: z.literal('carnival'), ...carnival })
+    .refine(validCarnival, 'invalid carnival footprint'),
   z.strictObject({
     ...installation,
     kind: z.enum(['christmas-tree', 'decorated-canopy']),

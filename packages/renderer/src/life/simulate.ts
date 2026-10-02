@@ -26,6 +26,7 @@ import { admitBirths, outsideView, type LifeViewContext, type PendingSeed } from
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
+  carnivalRing,
   type PlaceKind,
   type ProcessionRoute,
   type TrafficMix,
@@ -3297,7 +3298,8 @@ export class LifeWorld {
       return;
     }
     const installGround =
-      changed && config?.installations?.some((i) => i.kind === 'christmas-tree');
+      changed &&
+      config?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
     if (changed && (config?.installations?.length || this.seasonalConfig?.installations?.length))
       this.groundTerrain = undefined;
     this.seasonalConfig = config;
@@ -3306,7 +3308,11 @@ export class LifeWorld {
     if (installGround) {
       const guard = this.groundGuard(0, undefined, undefined, true);
       for (const life of this.tiles.values())
-        if (life.geo.seasonalTrees?.some((r) => admitsInstallation(r, config!))) {
+        if (
+          [...(life.geo.seasonalTrees ?? []), ...(life.geo.seasonalRides ?? [])].some((r) =>
+            admitsInstallation(r, config!),
+          )
+        ) {
           life.settleGround((owner, before) => guard(life, owner, before));
           life.settleAnimals((owner, before) => guard(life, owner, before));
         }
@@ -3869,20 +3875,30 @@ export class LifeWorld {
     if (ref && this.seasonalConfig?.installations?.length) {
       const found = new Set<string>();
       for (const life of lives)
-        for (const record of life.geo.seasonalTrees ?? []) {
+        for (const record of [
+          ...(life.geo.seasonalTrees ?? []),
+          ...(life.geo.seasonalRides ?? []),
+        ]) {
           if (
             found.has(record.id) ||
-            record.kind !== 'christmas-tree' ||
+            (record.kind !== 'christmas-tree' &&
+              (record.kind !== 'carnival' || record.style === 'midway')) ||
             !admitsInstallation(record, this.seasonalConfig)
           )
             continue;
           found.add(record.id);
           const at = lngLatToTile(ref.tile, ...record.at);
-          const radius = record.radius_m / Math.cos(Math.PI / 16);
-          const ring = Array.from({ length: 17 }, (_, i) => ({
-            x: at.x / ref.perMeter + Math.cos((i * Math.PI) / 8) * radius,
-            y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
-          }));
+          const radius = record.kind === 'carnival' ? 0 : record.radius_m / Math.cos(Math.PI / 16);
+          const ring =
+            record.kind === 'carnival'
+              ? carnivalRing(record).map((p) => {
+                  const q = lngLatToTile(ref.tile, ...p);
+                  return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
+                })
+              : Array.from({ length: 17 }, (_, i) => ({
+                  x: at.x / ref.perMeter + Math.cos((i * Math.PI) / 8) * radius,
+                  y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
+                }));
           yield* terrain.blocked.addSteps([ring]);
           yield* terrain.trees.addSteps([ring]);
         }

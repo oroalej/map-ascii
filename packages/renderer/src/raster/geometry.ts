@@ -9,6 +9,7 @@ import {
   parseUtilityRecord,
   parseSeasonalRecord,
   type SeasonalDisplayRecord,
+  type SeasonalCarnivalRecord,
   type SeasonalRecord,
   isLitRoad,
   TILE_EXTENT as EXTENT,
@@ -1400,6 +1401,13 @@ export function buildTileGeometry(
     labels,
     life: {
       ...life.finish(),
+      ...(seasonal.some((r) => r.kind === 'carnival' && r.style !== 'midway')
+        ? {
+            seasonalRides: seasonal.filter(
+              (r): r is SeasonalCarnivalRecord => r.kind === 'carnival' && r.style !== 'midway',
+            ),
+          }
+        : {}),
       ...(seasonal.some((r) => r.kind === 'christmas-tree')
         ? {
             seasonalTrees: seasonal.filter(

@@ -199,7 +199,7 @@
             "day": 6
           }
         },
-        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction.",
+        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot.",
         "lanterns": {
           "label": "Parol lanterns",
           "shape": "star"
@@ -250,6 +250,21 @@
           {
             "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
             "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+          },
+          {
+            "title": "City Government of Davao: Perya sa Pasko Fiesta (2025-12-26)",
+            "url": "https://davaocity.gov.ph/tourism/hulagway-sa-pasko-fiesta-2025-winner-highlights-safe-joyful-christmas/",
+            "note": "Reference for Filipino Christmas carnival rides, festive colors and food stalls, not evidence for this Naga lot."
+          },
+          {
+            "title": "SM Prime: holiday rides and Grand Carousel (2025-12-23)",
+            "url": "https://www.smprime.com/company_releases/experience-holiday-magic-at-sm-where-moments-become-memories/",
+            "note": "Reference for illuminated holiday attractions and carousel design; ride dimensions and layout here are illustrative."
+          },
+          {
+            "title": "Philippine News Agency: Carnival preps (2021-12-03)",
+            "url": "https://www.pna.gov.ph/photos/51975",
+            "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
           }
         ],
         "installations": [
@@ -446,6 +461,135 @@
             "mount": "canopy",
             "bulb_spacing_m": 0.4,
             "palette": "christmas"
+          },
+          {
+            "id": "sabang-christmas-perya",
+            "anchor": "osm:way/1053960480",
+            "label": "Christmas carnival",
+            "sources": [
+              {
+                "title": "Project owner: marked LCC Sabang Christmas carnival lot (2026-10-02)",
+                "url": "https://www.openstreetmap.org/way/1053960480",
+                "note": "Owner-requested illustrative perya west of Felix Plazo Street, northwest of LCC Mall Sabang. Boundary registered against the complete mapped road and mall roof; not a surveyed parcel, current-year inventory or verified annual venue."
+              },
+              {
+                "title": "City Government of Davao: Perya sa Pasko Fiesta (2025-12-26)",
+                "url": "https://davaocity.gov.ph/tourism/hulagway-sa-pasko-fiesta-2025-winner-highlights-safe-joyful-christmas/",
+                "note": "Reference for Filipino Christmas carnival rides, festive colors and food stalls, not evidence for this Naga lot."
+              },
+              {
+                "title": "SM Prime: holiday rides and Grand Carousel (2025-12-23)",
+                "url": "https://www.smprime.com/company_releases/experience-holiday-magic-at-sm-where-moments-become-memories/",
+                "note": "Reference for illuminated holiday attractions and carousel design; ride dimensions and layout here are illustrative."
+              },
+              {
+                "title": "Philippine News Agency: Carnival preps (2021-12-03)",
+                "url": "https://www.pna.gov.ph/photos/51975",
+                "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
+              }
+            ],
+            "grounds": "sabang-carnival-lot",
+            "kind": "carnival",
+            "components": [
+              {
+                "id": "midway",
+                "style": "midway",
+                "at": [123.17936048, 13.62038222],
+                "size_m": [36, 104],
+                "angle_deg": -20
+              },
+              {
+                "id": "carousel",
+                "style": "carousel",
+                "at": [123.17938385, 13.62064162],
+                "size_m": [18, 18],
+                "angle_deg": -20
+              },
+              {
+                "id": "wheel",
+                "style": "ferris-wheel",
+                "at": [123.1795485, 13.62062162],
+                "size_m": [7, 22],
+                "angle_deg": -20
+              },
+              {
+                "id": "bumper-cars",
+                "style": "bumper-cars",
+                "at": [123.1792171, 13.62022262],
+                "size_m": [16, 21],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-1",
+                "style": "booth",
+                "at": [123.17949868, 13.62040981],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-2",
+                "style": "booth",
+                "at": [123.17946707, 13.6203254],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-3",
+                "style": "booth",
+                "at": [123.17943546, 13.62024098],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-4",
+                "style": "booth",
+                "at": [123.17940384, 13.62015657],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-5",
+                "style": "booth",
+                "at": [123.17937223, 13.62007215],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-1",
+                "style": "booth",
+                "at": [123.17923492, 13.6203884],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-2",
+                "style": "booth",
+                "at": [123.17926653, 13.62047281],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-1",
+                "style": "booth",
+                "at": [123.17941984, 13.62082965],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-2",
+                "style": "booth",
+                "at": [123.17950236, 13.62080046],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-3",
+                "style": "booth",
+                "at": [123.17961093, 13.62076205],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              }
+            ]
           }
         ],
         "grounds": [
@@ -472,6 +616,24 @@
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
                 "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              }
+            ]
+          },
+          {
+            "id": "sabang-carnival-lot",
+            "anchor": "osm:way/1053960480",
+            "ring": [
+              [123.17938, 13.62092],
+              [123.17976, 13.62083],
+              [123.17937, 13.61984],
+              [123.17898, 13.61997],
+              [123.17938, 13.62092]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: marked LCC Sabang Christmas carnival lot (2026-10-02)",
+                "url": "https://www.openstreetmap.org/way/1053960480",
+                "note": "Owner-requested illustrative perya west of Felix Plazo Street, northwest of LCC Mall Sabang. Boundary registered against the complete mapped road and mall roof; not a surveyed parcel, current-year inventory or verified annual venue."
               }
             ]
           }

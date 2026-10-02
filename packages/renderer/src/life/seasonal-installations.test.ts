@@ -1,6 +1,11 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { expect, it } from 'vitest';
-import type { SeasonConfig, SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
+import type {
+  SeasonConfig,
+  SeasonalDisplayRecord,
+  SeasonalLightStringRecord,
+  SeasonalCarnivalRecord,
+} from '@atlas/shared';
 import {
   admitsInstallation,
   festivePulse,
@@ -46,6 +51,19 @@ const string: SeasonalLightStringRecord = {
   to: [tree.at[0] + 0.0001, tree.at[1] + 0.0002],
 };
 const source = [{ title: 'Reference', url: 'https://example.com/' }];
+const carnival: SeasonalCarnivalRecord = {
+  version: 1,
+  kind: 'carnival',
+  id: 'ride',
+  installation: 'fair',
+  season: tree.season,
+  anchor: tree.anchor,
+  seed: 19,
+  style: 'carousel',
+  at: tileToLngLat(tile, { x: 2500, y: 2000 }),
+  size_m: [18, 18],
+  angle_deg: -20,
+};
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
@@ -54,6 +72,15 @@ const season: SeasonConfig = {
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: source,
   installations: [
+    {
+      id: 'fair',
+      kind: 'carnival',
+      anchor: tree.anchor,
+      label: 'Carnival',
+      sources: source,
+      grounds: 'lot',
+      components: [],
+    },
     {
       id: 'tree',
       kind: 'christmas-tree',
@@ -202,7 +229,7 @@ it('admits explicit roof mounting only for matching building layouts and packs s
     ...season,
     installations: [
       {
-        ...season.installations![1]!,
+        ...season.installations![2]!,
         kind: 'light-string',
         layout: 'building-perimeter',
         spacing_m: 3,
@@ -243,7 +270,7 @@ it('admits explicit roof mounting only for matching building layouts and packs s
     ...season,
     installations: [
       {
-        ...season.installations![1]!,
+        ...season.installations![2]!,
         kind: 'light-string',
         layout: 'perimeter',
         spacing_m: 3,
@@ -275,7 +302,14 @@ it('preserves lamp hardware and the full animated flag reservation under overlap
   };
   const flag = { ...lamp, kind: 'flagpole' as const, flag: 'PH' as const };
   const displays = seasonalFixtures(
-    [{ tile, life: new LifeBuilder().finish(), fixtures: [], seasonal: [tree, string] }],
+    [
+      {
+        tile,
+        life: new LifeBuilder().finish(),
+        fixtures: [],
+        seasonal: [tree, string, { ...carnival, at: tree.at }],
+      },
+    ],
     season,
     13.6,
   );
@@ -359,7 +393,11 @@ it('settles existing actors away from a newly activated physical display', () =>
     expect(trees.hits(life.groundBodies(m))).toBe(false);
 });
 it('keeps direct and worker frames equivalent through installation activation, eviction and reload', () => {
-  const geo = { ...new LifeBuilder().finish(), seasonalTrees: [tree] };
+  const geo = {
+    ...new LifeBuilder().finish(),
+    seasonalTrees: [tree],
+    seasonalRides: [carnival, carnival],
+  };
   const tiles = [{ key: 'site', tile, life: geo }];
   const world = new LifeWorld();
   world.setSeasons(simulationSeasons([season]));

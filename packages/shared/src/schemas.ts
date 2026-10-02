@@ -8,7 +8,7 @@ import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
 import { validMonthDay, type SeasonConfig, type SeasonGrounds, type SeasonWindow } from './seasons';
-import { BuntingCorridorSchema } from './seasonal-schema';
+import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
@@ -943,6 +943,23 @@ export const Season = z
     installations: z
       .array(
         z.discriminatedUnion('kind', [
+          z.strictObject({
+            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
+            label: z.string().trim().min(1),
+            sources: Sources,
+            grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            kind: z.literal('carnival'),
+            components: z
+              .array(CarnivalComponentSchema)
+              .min(1)
+              .max(48)
+              .refine(
+                (v) => new Set(v.map((c) => c.id)).size === v.length,
+                'duplicate carnival components',
+              )
+              .refine((v) => v.filter((c) => c.style === 'midway').length <= 1, 'only one midway'),
+          }),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
             anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),

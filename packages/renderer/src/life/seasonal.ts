@@ -289,7 +289,14 @@ export function seasonalFixtures(
         road: fixture.id,
       };
   result.push(...[...bunting.values()].sort((a, b) => a.id.localeCompare(b.id)));
-  result.push(...[...displays.values()].sort((a, b) => a.record.id.localeCompare(b.record.id)));
+  result.push(
+    ...[...displays.values()].sort(
+      (a, b) =>
+        Number(!(a.record.kind === 'carnival' && a.record.style === 'midway')) -
+          Number(!(b.record.kind === 'carnival' && b.record.style === 'midway')) ||
+        a.record.id.localeCompare(b.record.id),
+    ),
+  );
   return result;
 }
 

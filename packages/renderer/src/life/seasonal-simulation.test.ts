@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import type { SeasonConfig } from '@atlas/shared';
 import { simulationSeasons } from './seasonal-simulation';
 
-it('sends only stall admission and physical tree identities, omitting static decoration and prose', () => {
+it('sends only stall admission and physical installation identities, omitting layout and prose', () => {
   const season: SeasonConfig = {
     id: 'winter',
     title: { en: 'Winter' },
@@ -12,6 +12,17 @@ it('sends only stall admission and physical tree identities, omitting static dec
     sources: [{ title: 'Calendar', url: 'https://example.com/' }],
     stalls: { label: 'Carts', near: ['worship'], radius_m: 300, per_tile: 12 },
     installations: [
+      {
+        id: 'fair',
+        kind: 'carnival',
+        anchor: 'osm:way/1',
+        label: 'Carnival',
+        grounds: 'lot',
+        components: [
+          { id: 'carousel', style: 'carousel', at: [0, 0], size_m: [18, 18], angle_deg: 0 },
+        ],
+        sources: [],
+      },
       {
         id: 'tree',
         kind: 'christmas-tree',
@@ -36,12 +47,15 @@ it('sends only stall admission and physical tree identities, omitting static dec
     {
       id: 'winter',
       stalls: { near: ['worship'], radius_m: 300, per_tile: 12 },
-      installations: [{ id: 'tree', anchor: 'osm:way/1', kind: 'christmas-tree' }],
+      installations: [
+        { id: 'fair', anchor: 'osm:way/1', kind: 'carnival' },
+        { id: 'tree', anchor: 'osm:way/1', kind: 'christmas-tree' },
+      ],
     },
   ]);
   expect(
     simulationSeasons([
-      { ...season, stalls: undefined, installations: [season.installations![1]!] },
+      { ...season, stalls: undefined, installations: [season.installations![2]!] },
     ]),
   ).toEqual([]);
 });

@@ -4,14 +4,16 @@ import type { SeasonConfig } from '@atlas/shared';
 export type SimulationSeason = {
   id: string;
   stalls?: Pick<NonNullable<SeasonConfig['stalls']>, 'near' | 'radius_m' | 'per_tile'>;
-  installations?: readonly { id: string; anchor: string; kind: 'christmas-tree' }[];
+  installations?: readonly { id: string; anchor: string; kind: 'christmas-tree' | 'carnival' }[];
 };
 
 export function simulationSeasons(seasons: readonly SeasonConfig[] = []): SimulationSeason[] {
   return seasons.flatMap(({ id, stalls, installations }) => {
-    const trees = installations
-      ?.filter((i) => i.kind === 'christmas-tree')
-      .map(({ id, anchor }) => ({ id, anchor, kind: 'christmas-tree' as const }));
+    const trees = installations?.flatMap((i) =>
+      i.kind === 'christmas-tree' || i.kind === 'carnival'
+        ? [{ id: i.id, anchor: i.anchor, kind: i.kind }]
+        : [],
+    );
     if (!stalls && !trees?.length) return [];
     return [
       {

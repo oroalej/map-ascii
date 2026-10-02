@@ -3,7 +3,12 @@
  * along and the places birds gather over, in tile units. Built in the tile worker next to the
  * render geometry (raster/geometry.ts), and kept on the main thread for the simulation.
  */
-import type { PlaceKind, SignalLayout, SeasonalDisplayRecord } from '@atlas/shared';
+import type {
+  PlaceKind,
+  SignalLayout,
+  SeasonalDisplayRecord,
+  SeasonalCarnivalRecord,
+} from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
@@ -95,6 +100,7 @@ export const roostClasses: ReadonlySet<string> = new Set([
 export type LifeGeometry = {
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
   seasonalTrees?: readonly SeasonalDisplayRecord[];
+  seasonalRides?: readonly SeasonalCarnivalRecord[];
   /** Buffered mapped commerce centers, used only by separate additive spawn streams. */
   commerce?: Float32Array;
   /** Buffered signal centers, radius in meters, two bearings, mapped flag. */

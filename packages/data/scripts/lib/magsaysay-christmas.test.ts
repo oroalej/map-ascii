@@ -11,6 +11,7 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
   const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
   const config = {
     ...season,
+    grounds: season.grounds!.filter((g) => g.id.startsWith('magsaysay-')),
     installations: season.installations!.filter((i) => i.id.startsWith('magsaysay-')),
   };
   expect(config.installations).toHaveLength(3);
@@ -20,7 +21,7 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
   const result = generateSeasonalInstallations(features, [config]);
   const red = polygon([reference.red]),
     yellow = polygon([reference.yellow]);
-  const orange = polygon([config.grounds![0]!.ring]);
+  const orange = polygon([config.grounds[0]!.ring]);
   const house = features.find((f) => f.properties.id === config.installations[0]!.anchor)!;
   if (house.geometry.type !== 'Polygon') throw new Error('expected complete house');
   const roof = polygon(house.geometry.coordinates);

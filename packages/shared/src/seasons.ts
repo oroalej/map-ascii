@@ -1,7 +1,7 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
 import type { PlaceKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
-import type { SeasonalPoint } from './seasonal-record';
+import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
 export * from './seasonal-record';
 
 /** Selected source ways, optionally trimmed to the frontage of an OSM feature. */
@@ -64,6 +64,7 @@ export type SeasonInstallation = {
       palette?: 'warm' | 'christmas';
     }
   | { kind: 'decorated-canopy' }
+  | { kind: 'carnival'; grounds: string; components: CarnivalComponent[] }
 );
 
 /** A calendar day, as days since 1970-01-01 (the existing Life clock's arithmetic). */

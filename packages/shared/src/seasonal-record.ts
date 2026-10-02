@@ -37,8 +37,30 @@ export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
   bulb_spacing_m?: number;
   palette?: 'warm' | 'christmas';
 };
+export const CARNIVAL_STYLES = [
+  'midway',
+  'carousel',
+  'ferris-wheel',
+  'bumper-cars',
+  'booth',
+] as const;
+export type CarnivalComponent = {
+  id: string;
+  style: (typeof CARNIVAL_STYLES)[number];
+  at: SeasonalPoint;
+  /** Width and length in meters; angle is counterclockwise from east. */
+  size_m: [number, number];
+  angle_deg: number;
+};
+export type SeasonalCarnivalRecord = SeasonalInstallationRecord &
+  Omit<CarnivalComponent, 'id'> & {
+    kind: 'carnival';
+  };
 export type SeasonalRecord =
-  SeasonalBuntingRecord | SeasonalDisplayRecord | SeasonalLightStringRecord;
+  | SeasonalBuntingRecord
+  | SeasonalDisplayRecord
+  | SeasonalLightStringRecord
+  | SeasonalCarnivalRecord;
 
 const fields = new Set([
   'version',
@@ -67,6 +89,52 @@ const text = (value: unknown) => typeof value === 'string' && value.length > 0;
 export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
+  if (v.kind === 'carnival') {
+    const keys = [
+      'version',
+      'kind',
+      'id',
+      'season',
+      'installation',
+      'anchor',
+      'seed',
+      'style',
+      'at',
+      'size_m',
+      'angle_deg',
+    ];
+    const size = v.size_m;
+    return (
+      Object.keys(v).length === keys.length &&
+      Object.keys(v).every((k) => keys.includes(k)) &&
+      v.version === 1 &&
+      text(v.id) &&
+      text(v.season) &&
+      text(v.installation) &&
+      typeof v.anchor === 'string' &&
+      /^osm:(node|way|relation)\/\d+$/.test(v.anchor) &&
+      typeof v.seed === 'number' &&
+      Number.isInteger(v.seed) &&
+      v.seed >= 0 &&
+      v.seed <= 0xffffffff &&
+      typeof v.style === 'string' &&
+      (CARNIVAL_STYLES as readonly string[]).includes(v.style) &&
+      point(v.at) &&
+      typeof v.angle_deg === 'number' &&
+      Number.isFinite(v.angle_deg) &&
+      Math.abs(v.angle_deg) <= 180 &&
+      Array.isArray(size) &&
+      size.length === 2 &&
+      size.every(
+        (n) =>
+          typeof n === 'number' &&
+          Number.isFinite(n) &&
+          n >= 3 &&
+          n <= (v.style === 'midway' ? 120 : 30),
+      ) &&
+      (v.style !== 'carousel' || size[0] === size[1])
+    );
+  }
   if (v.kind !== 'bunting') {
     const display = v.kind === 'christmas-tree' || v.kind === 'decorated-canopy';
     const keys = display
