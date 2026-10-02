@@ -924,6 +924,39 @@ export const Season = z
     status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
     note: z.string().trim().min(1).optional(),
+    installations: z
+      .array(
+        z.discriminatedUnion('kind', [
+          z.strictObject({
+            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+            label: z.string().trim().min(1),
+            sources: Sources,
+            kind: z.literal('christmas-tree'),
+            radius_m: z.number().min(1).max(12),
+          }),
+          z.strictObject({
+            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+            label: z.string().trim().min(1),
+            sources: Sources,
+            kind: z.literal('light-string'),
+            layout: z.enum(['paths', 'perimeter']),
+            spacing_m: z.number().min(3).max(12),
+          }),
+          z.strictObject({
+            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+            label: z.string().trim().min(1),
+            sources: Sources,
+            kind: z.literal('decorated-canopy'),
+          }),
+        ]),
+      )
+      .min(1)
+      .max(32)
+      .refine((v) => new Set(v.map((i) => i.id)).size === v.length, 'duplicate installation ids')
+      .optional(),
     lanterns: z
       .strictObject({
         label: z.string().trim().min(1),
@@ -961,7 +994,7 @@ export const Season = z
     sources: Sources,
   })
   .superRefine((season, ctx) => {
-    if (!season.lanterns && !season.bunting && !season.stalls)
+    if (!season.lanterns && !season.bunting && !season.stalls && !season.installations?.length)
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
     const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
       v.includes(TODO_VERIFY),

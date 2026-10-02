@@ -5,7 +5,7 @@ import {
   type BuntingCorridor,
   type SeasonConfig,
   type SeasonalPoint,
-  type SeasonalRecord,
+  type SeasonalBuntingRecord,
 } from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
 import { lines, width } from './road-geometry';
@@ -150,7 +150,7 @@ function bakeCorridor(features: readonly AtlasFeature[], season: string, config:
       n = e.a === n ? e.b : e.a;
     }
   }
-  const records = new Map<string, SeasonalRecord>();
+  const records = new Map<string, SeasonalBuntingRecord>();
   for (const e of selected.slice().sort((a, b) => a.id.localeCompare(b.id))) {
     const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b,
       b = a === e.a ? e.b : e.a;
@@ -192,7 +192,7 @@ export function generateSeasonalBunting(
   features: readonly AtlasFeature[],
   seasons?: readonly SeasonConfig[],
 ) {
-  const records: SeasonalRecord[] = [],
+  const records: SeasonalBuntingRecord[] = [],
     stats: { season: string; corridor: string; ways: number; meters: number; rows: number }[] = [];
   for (const season of seasons ?? [])
     for (const corridor of season.bunting?.corridors ?? []) {

@@ -9,6 +9,7 @@ import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeFeatures, writeJson } from './io';
 import { tippecanoe } from './tippecanoe';
 import { generateSeasonalBunting } from './seasonal';
+import { generateSeasonalInstallations, seasonalRecordGeometry } from './seasonal-installations';
 import {
   openUtilityArchive,
   ordinaryContent,
@@ -79,12 +80,14 @@ export async function buildSeasonalTiles(
   const features: AtlasFeature[] = [];
   for await (const f of readFeatures(mergedPath)) features.push(f as AtlasFeature);
   const generated = generateSeasonalBunting(features, seasons);
+  const displays = generateSeasonalInstallations(features, seasons);
+  const combined = [...generated.records, ...displays.records];
   const base = await openUtilityArchive(basePath);
   try {
     const header = await base.archive.getHeader();
-    const records: Feature[] = generated.records.map((r) => ({
+    const records: Feature[] = combined.map((r) => ({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [r.from, r.to] },
+      geometry: seasonalRecordGeometry(r),
       properties: { seasonal: JSON.stringify(SeasonalRecordSchema.parse(r)) },
     }));
     const input = join(buildDir, 'seasons.geojsonl'),
@@ -114,15 +117,16 @@ export async function buildSeasonalTiles(
     } else await copyFile(basePath, output);
     const result = await openUtilityArchive(output);
     try {
-      const audit = await auditSeasonalArchive(base.archive, result.archive, generated.records);
+      const audit = await auditSeasonalArchive(base.archive, result.archive, combined);
       const report = {
         corridors: generated.stats,
+        installations: displays.stats,
         audit,
         baseBytes: (await stat(basePath)).size,
         outputBytes: (await stat(output)).size,
       };
       await writeJson(join(buildDir, 'seasons-report.json'), report, true);
-      await writeJson(join(buildDir, 'seasons-manifest.json'), generated.records);
+      await writeJson(join(buildDir, 'seasons-manifest.json'), combined);
       console.log(`  seasons: ${JSON.stringify(report)}`);
     } finally {
       await result.close();

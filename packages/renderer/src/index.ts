@@ -99,6 +99,7 @@ import {
   type LegacyStreetFixture,
 } from './life/fixtures';
 import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
+import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { createInlineHost, createWorkerHost } from './life/host';
@@ -149,7 +150,12 @@ export type SeasonState = Readonly<{
   title: string;
   status: 'draft' | 'verified';
   note?: string;
-  labels: Readonly<{ lanterns?: string; bunting?: string; stalls?: string }>;
+  labels: Readonly<{
+    lanterns?: string;
+    bunting?: string;
+    stalls?: string;
+    installations?: string;
+  }>;
 }>;
 
 export type LifeSettings = {
@@ -446,6 +452,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
             ...(season.bunting ? { bunting: season.bunting.label } : {}),
             ...(season.stalls ? { stalls: season.stalls.label } : {}),
+            ...(season.installations?.length
+              ? {
+                  installations: [...new Set(season.installations.map((i) => i.label))].join(', '),
+                }
+              : {}),
           }),
         })
       : null;
@@ -865,6 +876,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
   // lighting, like windows, so they show with the life layer off and with reduced motion too.
   let lamps: VisibleLamp[] = [];
+  let festiveLamps: VisibleLamp[] = [];
+  let festiveLightVersion = 0;
   /** The shops on screen, each with its own hours, and which of them are open (by index). */
   let shops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
   let shopsKey = '';
@@ -874,16 +887,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
    * The lamps lit now (street and flood lamps, and the open shops) and which shops are open, as
    * a key; worked out again only when the lamps or the city's minute change.
    */
-  let lit = { lamps, shops, minutes: NaN, all: [] as VisibleLamp[], key: '' };
+  let lit = { lamps, shops, festiveLamps, minutes: NaN, all: [] as VisibleLamp[], key: '' };
   const litNow = () => {
-    if (lit.lamps !== lamps || lit.shops !== shops || lit.minutes !== cityMinutes) {
+    if (
+      lit.lamps !== lamps ||
+      lit.shops !== shops ||
+      lit.minutes !== cityMinutes ||
+      lit.festiveLamps !== festiveLamps
+    ) {
       const open = shops.map((s) => shopOpen(s.hours, cityMinutes));
       lit = {
         lamps,
         shops,
         minutes: cityMinutes,
-        all: [...lamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
-        key: open.map((o) => (o ? '1' : '0')).join(''),
+        festiveLamps,
+        all: [...lamps, ...festiveLamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
+        key: open.map((o) => (o ? '1' : '0')).join('') + `/festive:${festiveLightVersion}`,
       };
     }
     return lit;
@@ -987,9 +1006,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let fixtureSeason = season;
   let fixtureInputs: readonly LoadedTile[] = [];
   let hadUtilities = false;
+  let fixtureDisplaysShown = false;
   const syncFixtures = (tiles: readonly TileId[]) => {
     if (camera.zoom < 15) {
       fixtures = [];
+      if (festiveLamps.length) {
+        festiveLamps = [];
+        festiveLightVersion++;
+      }
       fixtureInputs = [];
       hadUtilities = false;
       cachedSeasonal([], undefined, 0);
@@ -1001,12 +1025,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       .filter((t): t is LoadedTile => !!t);
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
+    const displaysShown = camera.zoom >= 18;
     if (
+      displaysShown === fixtureDisplaysShown &&
       showUtilities === hadUtilities &&
       season === fixtureSeason &&
       sameReferenceMembers(inputs, fixtureInputs)
     )
       return;
+    fixtureDisplaysShown = displaysShown;
     fixtureSeason = season;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
@@ -1037,6 +1064,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     fixtures.push(
       ...cachedSeasonal(seasonalGroups, season, (options.bounds[1] + options.bounds[3]) / 2),
     );
+    festiveLamps = installationLamps(
+      fixtures.filter((f): f is InstallationFixture => f.kind === 'season-installation'),
+      camera.zoom,
+    );
+    festiveLightVersion++;
   };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
@@ -1051,7 +1083,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsDrawn,
       { time, strength: wind.strength },
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false}`;
+    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);

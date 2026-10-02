@@ -42,6 +42,38 @@ const roads: TileLayerLike = {
     ],
   }),
 };
+it('sends only physical trees to the Life worker and keeps exact envelopes independent of clipping', () => {
+  const common = {
+    version: 1,
+    id: 'tree',
+    season: 'winter',
+    installation: 'tree',
+    anchor: 'osm:way/1',
+    seed: 1,
+  };
+  const tree = { ...common, kind: 'christmas-tree', at: [123.185, 13.62], radius_m: 5 };
+  const crown = { ...tree, id: 'crown', kind: 'decorated-canopy' };
+  const string = {
+    ...common,
+    id: 'cord',
+    kind: 'light-string',
+    from: [123.185, 13.62],
+    to: [123.186, 13.62],
+  };
+  const payloads = [tree, crown, string, { ...tree, version: 2 }];
+  const layer: TileLayerLike = {
+    ...seasonal,
+    length: payloads.length,
+    feature: (i) => ({
+      ...seasonal.feature(0),
+      properties: { seasonal: JSON.stringify(payloads[i]) },
+    }),
+  };
+  const result = buildTileGeometry({ roads, seasons: layer }, createIdRegistry(), tile, 16);
+  expect(result.seasonal).toEqual([tree, crown, string]);
+  expect(result.life.seasonalTrees).toEqual([tree]);
+  expect(result.fills).toEqual(buildTileGeometry({ roads }, createIdRegistry(), tile, 16).fills);
+});
 it('keeps world spans outside ordinary geometry, picking and the simulation worker', () => {
   const registry = createIdRegistry(),
     index = vi.spyOn(registry, 'index');

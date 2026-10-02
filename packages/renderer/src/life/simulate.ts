@@ -106,6 +106,7 @@ import {
 import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { collectSeasonAnchors, seasonProximity, type SeasonAnchor } from './seasonal';
+import { admitsInstallation } from './seasonal-installations';
 import {
   hasTurnSignals,
   TURN_SIGNAL,
@@ -3226,11 +3227,29 @@ export class LifeWorld {
   private seasonsDirty = false;
 
   private syncSeason(season: string | null | undefined, cityLife?: CityLifeConfig) {
-    const config = cityLife?.seasons?.find((s) => s.id === season && s.stalls);
+    const config = cityLife?.seasons?.find(
+      (s) => s.id === season && (s.stalls || s.installations?.length),
+    );
     if (config === this.seasonalConfig && !this.seasonsDirty) return;
+    const installGround =
+      config !== this.seasonalConfig &&
+      config?.installations?.some((i) => i.kind === 'christmas-tree');
+    if (
+      config !== this.seasonalConfig &&
+      (config?.installations?.length || this.seasonalConfig?.installations?.length)
+    )
+      this.groundTerrain = undefined;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
     for (const life of this.tiles.values()) life.clearSeasonalStalls();
+    if (installGround) {
+      const guard = this.groundGuard(0, undefined, undefined, true);
+      for (const life of this.tiles.values())
+        if (life.geo.seasonalTrees?.some((r) => admitsInstallation(r, config!))) {
+          life.settleGround((owner, before) => guard(life, owner, before));
+          life.settleAnimals((owner, before) => guard(life, owner, before));
+        }
+    }
     if (!config?.stalls) return;
     const anchors = collectSeasonAnchors(
       [...this.tiles.values()].map((life) => ({ tile: life.tile, life: life.geo })),
@@ -3242,6 +3261,14 @@ export class LifeWorld {
         anchors,
         (owner, before) => this.owns(life, owner) && guard(life, owner, before),
       );
+  }
+  private terrainKey(keys: readonly string[]) {
+    return (
+      keys.join('|') +
+      (this.seasonalConfig?.installations?.some((i) => i.kind === 'christmas-tree')
+        ? `|installations:${this.seasonalConfig.id}`
+        : '')
+    );
   }
   preparationEpoch = 0;
   hasBootstrapped() {
@@ -3325,7 +3352,10 @@ export class LifeWorld {
       b.length *= o.scale;
       b.width *= o.scale;
     }
-    return terrain.roadAccess.allows(bodies, false);
+    return (
+      terrain.roadAccess.allows(bodies, false) &&
+      (!this.seasonalConfig?.installations?.length || !terrain.blocked.hits(bodies))
+    );
   }
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
   private readonly tiles = new Map<string, TileLife>();
@@ -3462,7 +3492,8 @@ export class LifeWorld {
         this.groundTerrain = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
-          if (terrain?.key === [...this.tiles.keys()].join('|')) this.groundTerrain = terrain;
+          if (terrain?.key === this.terrainKey([...this.tiles.keys()]))
+            this.groundTerrain = terrain;
           this.preparedTerrain.delete(life);
         }
         this.railTopology = undefined;
@@ -3716,7 +3747,7 @@ export class LifeWorld {
     const lives = entries.map(([, life]) => life);
     const ref = lives[0];
     const terrain: GroundTerrain = {
-      key: entries.map(([key]) => key).join('|'),
+      key: this.terrainKey(entries.map(([key]) => key)),
       ref,
       blocked: new PolygonIndex(),
       water: new PolygonIndex(),
@@ -3760,6 +3791,27 @@ export class LifeWorld {
       yield;
       contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
       for (const polygon of cached.trees) yield* terrain.trees.addSteps(polygon);
+    }
+    if (ref && this.seasonalConfig?.installations?.length) {
+      const found = new Set<string>();
+      for (const life of lives)
+        for (const record of life.geo.seasonalTrees ?? []) {
+          if (
+            found.has(record.id) ||
+            record.kind !== 'christmas-tree' ||
+            !admitsInstallation(record, this.seasonalConfig)
+          )
+            continue;
+          found.add(record.id);
+          const at = lngLatToTile(ref.tile, ...record.at);
+          const radius = record.radius_m / Math.cos(Math.PI / 16);
+          const ring = Array.from({ length: 17 }, (_, i) => ({
+            x: at.x / ref.perMeter + Math.cos((i * Math.PI) / 8) * radius,
+            y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
+          }));
+          yield* terrain.blocked.addSteps([ring]);
+          yield* terrain.trees.addSteps([ring]);
+        }
     }
     const roadsStart = profile ? this.profiler?.time() : undefined;
     terrain.roadAccess = yield* this.roadCache.buildSteps(contributions);
@@ -3809,6 +3861,7 @@ export class LifeWorld {
       const sandbox = new LifeWorld();
       for (const [key, life] of next) sandbox.tiles.set(key, life);
       sandbox.groundTerrain = terrain;
+      sandbox.seasonalConfig = this.seasonalConfig;
       sandbox.lastLevels = this.lastLevels;
       sandbox.mixedZoom = [...next.values()].some(
         (life) => life.tile.z !== next.values().next().value!.tile.z,
@@ -3875,7 +3928,10 @@ export class LifeWorld {
         const stall = life.stalls[i]!;
         const sample = life.groundBodies(stall, 0, this.groundSample);
         for (const body of sample) toRef(o, body);
-        if (!this.groundTerrain!.roadAccess.allows(sample, false)) {
+        if (
+          !this.groundTerrain!.roadAccess.allows(sample, false) ||
+          (this.seasonalConfig?.installations?.length && this.groundTerrain!.blocked.hits(sample))
+        ) {
           life.scenes.removeStall(stall);
           life.stalls.splice(i, 1);
         }
@@ -3907,7 +3963,7 @@ export class LifeWorld {
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const reservations = new Map<GroundAgent, readonly Body[]>();
-    const key = [...this.tiles.keys()].join('|');
+    const key = this.terrainKey([...this.tiles.keys()]);
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
     const { blocked, water } = this.groundTerrain!;

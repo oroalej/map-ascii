@@ -63,7 +63,9 @@ export const step: Step = {
     ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
-    const seasonal = city.life?.seasons?.some((s) => s.bunting?.corridors?.length);
+    const seasonal = city.life?.seasons?.some(
+      (s) => s.bunting?.corridors?.length || s.installations?.length,
+    );
     const base =
       city.streets?.utilities?.derive || seasonal
         ? join(buildDir, `${city.slug}.base.pmtiles`)

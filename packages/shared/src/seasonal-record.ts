@@ -1,6 +1,6 @@
 /** Pipeline-baked bunting. Geographic endpoints survive tile clipping unchanged. */
 export type SeasonalPoint = [number, number];
-export type SeasonalRecord = {
+export type SeasonalBuntingRecord = {
   version: 1;
   kind: 'bunting';
   id: string;
@@ -13,6 +13,27 @@ export type SeasonalRecord = {
   segment: [SeasonalPoint, SeasonalPoint];
   seed: number;
 };
+
+type SeasonalInstallationRecord = {
+  version: 1;
+  id: string;
+  season: string;
+  installation: string;
+  anchor: string;
+  seed: number;
+};
+export type SeasonalDisplayRecord = SeasonalInstallationRecord & {
+  kind: 'christmas-tree' | 'decorated-canopy';
+  at: SeasonalPoint;
+  radius_m: number;
+};
+export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
+  kind: 'light-string';
+  from: SeasonalPoint;
+  to: SeasonalPoint;
+};
+export type SeasonalRecord =
+  SeasonalBuntingRecord | SeasonalDisplayRecord | SeasonalLightStringRecord;
 
 const fields = new Set([
   'version',
@@ -41,6 +62,34 @@ const text = (value: unknown) => typeof value === 'string' && value.length > 0;
 export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
+  if (v.kind !== 'bunting') {
+    const display = v.kind === 'christmas-tree' || v.kind === 'decorated-canopy';
+    const keys = display
+      ? ['version', 'kind', 'id', 'season', 'installation', 'anchor', 'seed', 'at', 'radius_m']
+      : ['version', 'kind', 'id', 'season', 'installation', 'anchor', 'seed', 'from', 'to'];
+    return (
+      (display || v.kind === 'light-string') &&
+      Object.keys(v).length === keys.length &&
+      Object.keys(v).every((k) => keys.includes(k)) &&
+      v.version === 1 &&
+      text(v.id) &&
+      text(v.season) &&
+      text(v.installation) &&
+      typeof v.anchor === 'string' &&
+      /^osm:(node|way|relation)\/\d+$/.test(v.anchor) &&
+      typeof v.seed === 'number' &&
+      Number.isInteger(v.seed) &&
+      v.seed >= 0 &&
+      v.seed <= 0xffffffff &&
+      (display
+        ? point(v.at) &&
+          typeof v.radius_m === 'number' &&
+          Number.isFinite(v.radius_m) &&
+          v.radius_m >= 0.5 &&
+          v.radius_m <= 20
+        : point(v.from) && point(v.to) && (v.from[0] !== v.to[0] || v.from[1] !== v.to[1]))
+    );
+  }
   return (
     Object.keys(v).length === fields.size &&
     Object.keys(v).every((k) => fields.has(k)) &&

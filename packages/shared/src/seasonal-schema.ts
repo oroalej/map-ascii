@@ -17,7 +17,7 @@ export const BuntingCorridorSchema = z
     style: z.literal('red-yellow-rectangles'),
   })
   .refine((v) => !v.from || v.from !== v.to, 'endpoints must differ');
-export const SeasonalRecordSchema = z
+export const SeasonalBuntingRecordSchema = z
   .strictObject({
     version: z.literal(1),
     kind: z.literal('bunting'),
@@ -35,3 +35,24 @@ export const SeasonalRecordSchema = z
     (v) => v.segment[0][0] !== v.segment[1][0] || v.segment[0][1] !== v.segment[1][1],
     'empty source segment',
   );
+
+const installation = {
+  version: z.literal(1),
+  id: z.string().min(1),
+  season: z.string().min(1),
+  installation: z.string().min(1),
+  anchor: feature,
+  seed: z.int().min(0).max(0xffffffff),
+};
+export const SeasonalRecordSchema = z.union([
+  SeasonalBuntingRecordSchema,
+  z.strictObject({
+    ...installation,
+    kind: z.enum(['christmas-tree', 'decorated-canopy']),
+    at: point,
+    radius_m: z.number().min(0.5).max(20),
+  }),
+  z
+    .strictObject({ ...installation, kind: z.literal('light-string'), from: point, to: point })
+    .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty light string'),
+]);

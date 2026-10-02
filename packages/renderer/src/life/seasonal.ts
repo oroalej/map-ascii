@@ -7,6 +7,7 @@ import {
   type UtilityRecord,
   type UtilitySpan,
   type SeasonalRecord,
+  type SeasonalBuntingRecord,
 } from '@atlas/shared';
 import {
   EXTENT,
@@ -22,11 +23,17 @@ import { lightByte, LampState, placeSeed } from './lights';
 import { clipUtilityLine } from './utilities';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { buntingWidth, selectBuntingRows, type BuntingPriority } from './bunting-junctions';
+import {
+  admitsInstallation,
+  packInstallation,
+  type InstallationFixture,
+} from './seasonal-installations';
 
 type Point = [number, number];
 import { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
 export { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
 export type SeasonalFixture =
+  | InstallationFixture
   | { kind: 'season-lantern'; lamp: Extract<LegacyStreetFixture, { kind: 'streetlight' }> }
   | {
       kind: 'season-bunting';
@@ -37,7 +44,7 @@ export type SeasonalFixture =
       style?: 'red-yellow-rectangles';
       priority?: BuntingPriority;
     };
-export type SeasonalVisibility = { lanterns: boolean; bunting: boolean };
+export type SeasonalVisibility = { lanterns: boolean; bunting: boolean; installations?: boolean };
 export type SeasonalTile = {
   tile: TileId;
   life: LifeGeometry;
@@ -144,12 +151,20 @@ export function seasonalFixtures(
   const anchors = collectSeasonAnchors(groups);
   const result: SeasonalFixture[] = [];
   const corridors = new Map(season.bunting?.corridors?.map((c) => [c.id, c]));
-  const dense = new Map<string, SeasonalRecord>();
+  const displays = new Map<string, InstallationFixture>();
+  const dense = new Map<string, SeasonalBuntingRecord>();
   for (const group of groups)
-    for (const r of group.seasonal ?? [])
-      if (r.season === season.id && corridors.get(r.corridor)?.ways.includes(r.road))
+    for (const r of group.seasonal ?? []) {
+      if (r.kind !== 'bunting' && admitsInstallation(r, season))
+        displays.set(r.id, { kind: 'season-installation', record: r });
+      else if (
+        r.kind === 'bunting' &&
+        r.season === season.id &&
+        corridors.get(r.corridor)?.ways.includes(r.road)
+      )
         dense.set(r.id, r);
-  const segments = new Map<string, SeasonalRecord>();
+    }
+  const segments = new Map<string, SeasonalBuntingRecord>();
   for (const r of dense.values()) segments.set(JSON.stringify(r.segment), r);
   const spans = new Map<string, UtilitySpan>();
   for (const group of groups)
@@ -274,6 +289,7 @@ export function seasonalFixtures(
         road: fixture.id,
       };
   result.push(...[...bunting.values()].sort((a, b) => a.id.localeCompare(b.id)));
+  result.push(...[...displays.values()].sort((a, b) => a.record.id.localeCompare(b.record.id)));
   return result;
 }
 
@@ -320,7 +336,7 @@ export function packSeasonalFixtures(
   glyphIndex: (glyph: string) => number,
   owners: Int32Array,
 ): SeasonalVisibility {
-  const visibility = { lanterns: false, bunting: false };
+  const visibility: SeasonalVisibility = { lanterns: false, bunting: false };
   const rows = bandVisibility({ min: 18 }, zoom) ? selectBuntingRows(fixtures, grid) : undefined;
   const write = (
     x: number,
@@ -329,6 +345,7 @@ export function packSeasonalFixtures(
     part: number,
     info: number,
     alpha: number,
+    replace = false,
   ): boolean => {
     const c = Math.floor(x),
       r = Math.floor(y);
@@ -336,7 +353,13 @@ export function packSeasonalFixtures(
     const cell = r * grid.cols + c,
       at = cell * 4,
       index = glyphIndex(glyph);
-    if (owners[cell] !== -1 || out[at + 3] || index <= 0 || index > MAX_GLYPHS) return false;
+    if (
+      (!replace && (owners[cell] !== -1 || out[at + 3])) ||
+      (replace && owners[cell] !== -1 && owners[cell] !== -5) ||
+      index <= 0 ||
+      index > MAX_GLYPHS
+    )
+      return false;
     [out[at], out[at + 1]] = packGlyph(index, part);
     out[at + 2] = info;
     out[at + 3] = alpha;
@@ -347,6 +370,20 @@ export function packSeasonalFixtures(
     const min = fixture.kind === 'season-lantern' ? 17 : 18;
     const alpha = Math.round(bandVisibility({ min }, zoom) * 255);
     if (!alpha) continue;
+    if (fixture.kind === 'season-installation') {
+      visibility.installations =
+        packInstallation(fixture.record, grid, (x, y, glyph, part, info, replace) => {
+          const c = Math.floor(x),
+            r = Math.floor(y);
+          const valid = c >= 0 && r >= 0 && c < grid.cols && r < grid.rows;
+          const before = valid ? owners[r * grid.cols + c] : undefined;
+          const ok = write(x, y, glyph, part, info, alpha, replace);
+          if (valid && (before === -1 || before === -5) && owners[r * grid.cols + c] === -3)
+            owners[r * grid.cols + c] = -5;
+          return ok;
+        }) || visibility.installations === true;
+      continue;
+    }
     if (fixture.kind === 'season-lantern') {
       const { lamp } = fixture;
       const at = grid.toCell(...lamp.tip),

@@ -44,6 +44,7 @@ import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
+import { festivePulseGlsl } from '../life/seasonal-installations';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -364,12 +365,19 @@ vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
 }
 
 ${buntingMotionGlsl}
+${festivePulseGlsl}
 
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
 vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
-  if (!allowed || fixture.a == 0.0) return under + halo;
+  if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
+  if (!allowed) {
+    // Crown-mounted bulbs sit on the foliage; ordinary hardware stays beneath it.
+    int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
+    if (part != ${FixturePart.festiveLight} || !foliage) return under + halo;
+  }
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
@@ -411,6 +419,17 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   }
   if (part == ${FixturePart.bunting}) {
     color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * buntingFold), rainLight);
+  }
+  if (part == ${FixturePart.festiveTree}) {
+    color = lampLit(daylit(vec3(0.08, 0.42, 0.22) * (0.65 + 0.35 * float(info) / 255.0)), rainLight);
+  }
+  if (part == ${FixturePart.festiveWire}) color = daylit(u_fixturePaints[7]);
+  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament}) {
+    int tint = info & 7;
+    vec3 paint = tint == 1 ? vec3(1.0, 0.22, 0.17) : tint == 2 ? vec3(0.26, 0.95, 0.42) :
+      tint == 3 ? vec3(1.0, 0.28, 0.63) : tint == 4 ? vec3(0.70, 0.38, 1.0) :
+      tint == 5 ? vec3(1.0, 0.97, 0.86) : vec3(1.0, 0.77, 0.32);
+    color = mix(lampLit(daylit(paint * 0.78), rainLight), paint * festivePulse(info >> 3), darkness());
   }
   return mix(under, color, ink * fixture.a) + halo;
 }

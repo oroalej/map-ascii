@@ -4,6 +4,36 @@ import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('names visible installations with Life off and drops the entry after leaving the site or season', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { installations: 'Christmas trees and lights' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: false, bunting: false, installations: true },
+  };
+  for (const theme of ['dark', 'light'] as const)
+    expect(
+      legendEntries(theme, 20, ['park'], { season, fixtures, life: false }).find(
+        (e) => e.id === 'info:season-installations',
+      )?.label,
+    ).toBe('Christmas trees and lights');
+  expect(
+    legendEntries('dark', 20, ['park'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { ...fixtures.seasonal, installations: false } },
+    }).some((e) => e.id === 'info:season-installations'),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['park'], { fixtures }).some(
+      (e) => e.id === 'info:season-installations',
+    ),
+  ).toBe(false);
+});
 it('reports seasonal hardware with Life off and temporary vendors only where paths can support them', () => {
   const season = {
     id: 'winter',

@@ -35,7 +35,7 @@ import {
 
 export type LegendEntry = {
   /** Informational decorations have stable ids and no selectable focus category. */
-  id?: `info:season-${'lanterns' | 'bunting' | 'stalls'}`;
+  id?: `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations'}`;
   /** The classes the entry covers (a marker and its building class share one). */
   classes: RenderClass[];
   label: string;
@@ -336,6 +336,14 @@ export function legendEntries(
       classes: [],
       label: season.labels.lanterns,
       glyphs: '★',
+      color: css(theme.fixturePaints[9]!),
+    });
+  if (season?.labels.installations && fixtures?.seasonal?.installations)
+    entries.push({
+      id: 'info:season-installations',
+      classes: [],
+      label: season.labels.installations,
+      glyphs: '\u2736\u2605',
       color: css(theme.fixturePaints[9]!),
     });
   if (season?.labels.bunting && fixtures?.seasonal?.bunting)

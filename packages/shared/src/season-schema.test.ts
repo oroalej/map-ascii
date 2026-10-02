@@ -11,6 +11,27 @@ const season = {
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('requires sourced, bounded and unique installation definitions and admits installation-only seasons', () => {
+    const tree = {
+      id: 'tree',
+      anchor: 'osm:way/1',
+      label: 'Tree',
+      kind: 'christmas-tree',
+      radius_m: 4,
+      sources: season.sources,
+    };
+    const only = { ...season, lanterns: undefined, installations: [tree] };
+    expect(Season.safeParse(only).success).toBe(true);
+    for (const installations of [
+      [{ ...tree, sources: [] }],
+      [{ ...tree, radius_m: 0 }],
+      [{ ...tree, anchor: 'unmapped' }],
+      [tree, tree],
+      [{ ...tree, layout: 'paths' }],
+      [],
+    ])
+      expect(Season.safeParse({ ...only, installations }).success).toBe(false);
+  });
   it('accepts sourced drafts and fully verified records', () => {
     expect(Season.safeParse(season).success).toBe(true);
     expect(

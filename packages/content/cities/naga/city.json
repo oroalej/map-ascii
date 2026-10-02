@@ -185,11 +185,25 @@
     "seasons": [
       {
         "id": "christmas",
-        "title": { "en": "Christmas" },
+        "title": {
+          "en": "Christmas"
+        },
         "status": "draft",
-        "window": { "from": { "month": 12, "day": 1 }, "to": { "month": 1, "day": 6 } },
-        "note": "TODO(verify): Naga's Kamundagan celebration supports December. January 6 is an illustrative preview endpoint requiring local confirmation. Citywide parol placement, church-area banners and stall radii/densities are illustrative, not a survey or an annual event timetable.",
-        "lanterns": { "label": "Parol lanterns", "shape": "star" },
+        "window": {
+          "from": {
+            "month": 12,
+            "day": 1
+          },
+          "to": {
+            "month": 1,
+            "day": 6
+          }
+        },
+        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction.",
+        "lanterns": {
+          "label": "Parol lanterns",
+          "shape": "star"
+        },
         "bunting": {
           "label": "Christmas banners",
           "near": ["worship"],
@@ -212,15 +226,186 @@
             "title": "City of Naga: Ordinance No. 2019-098 — Kamundagan Food, Agri and Trade Fair",
             "url": "https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2019-098/",
             "note": "Documents the December 14–24, 2019 fair and vendor tents. The simulation does not reconstruct the historical street closure or claim these stall positions."
+          },
+          {
+            "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+            "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+            "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+          },
+          {
+            "title": "City of Naga: October-December 2018 newsletter",
+            "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+            "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+          },
+          {
+            "title": "City of Naga: 2022 procurement monitoring report, project 22-10-1110-1061",
+            "url": "https://www2.naga.gov.ph/wp-content/uploads/2022/08/pmr-2-2022.pdf",
+            "note": "Christmas decorations for public plazas, parks and City Hall grounds. Exact type and placement at City Hall are illustrative."
+          },
+          {
+            "title": "Brigada News: Kamundagan displays varied in December 2022",
+            "url": "https://www.brigadanews.ph/dating-sigla-ng-kamundagan-festival-sa-naga-city-hindi-pa-naibalik/",
+            "note": "December 3, 2022: giant Plaza Quezon tree absent; Plaza Rizal and Quince Martires illuminated. Supports multi-year interpretation rather than claiming a current exact layout."
+          }
+        ],
+        "installations": [
+          {
+            "id": "rizal-tree",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "radius_m": 2.5
+          },
+          {
+            "id": "rizal-light-canopies",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "paths",
+            "spacing_m": 5
+          },
+          {
+            "id": "rizal-decorated-trees",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "decorated-canopy",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ]
+          },
+          {
+            "id": "quezon-tree",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 5
+          },
+          {
+            "id": "quezon-small-tree-a",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 1.6
+          },
+          {
+            "id": "quezon-small-tree-b",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 1.6
+          },
+          {
+            "id": "quezon-perimeter-lights",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "perimeter",
+            "spacing_m": 5
+          },
+          {
+            "id": "quince-light-canopies",
+            "anchor": "osm:way/201276957",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "paths",
+            "spacing_m": 5
+          },
+          {
+            "id": "quince-decorated-trees",
+            "anchor": "osm:way/201276957",
+            "label": "Christmas trees and lights",
+            "kind": "decorated-canopy",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ]
+          },
+          {
+            "id": "city-hall-perimeter-lights",
+            "anchor": "osm:way/177077167",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "City of Naga: 2022 procurement monitoring report, project 22-10-1110-1061",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2022/08/pmr-2-2022.pdf",
+                "note": "Christmas decorations for public plazas, parks and City Hall grounds. Exact type and placement at City Hall are illustrative."
+              }
+            ],
+            "layout": "perimeter",
+            "spacing_m": 5
           }
         ]
       },
       {
         "id": "penafrancia-fiesta",
-        "title": { "en": "Peñafrancia fiesta" },
+        "title": {
+          "en": "Peñafrancia fiesta"
+        },
         "status": "draft",
         "window": {
-          "anchor": { "month": 9, "weekday": 0, "nth": 3, "offset_days": 0 },
+          "anchor": {
+            "month": 9,
+            "weekday": 0,
+            "nth": 3,
+            "offset_days": 0
+          },
           "days_before": 9,
           "days_after": 0
         },
@@ -344,7 +529,10 @@
         "strength": "breeze"
       }
     ],
-    "default": { "from": 90, "strength": "calm" },
+    "default": {
+      "from": 90,
+      "strength": "calm"
+    },
     "source": "PAGASA, Climate of the Philippines: the northeast monsoon (amihan) blows about November to March, the southwest monsoon (habagat) about June to September, with easterly trade winds between them. https://www.pagasa.dost.gov.ph/information/climate-philippines"
   }
 }

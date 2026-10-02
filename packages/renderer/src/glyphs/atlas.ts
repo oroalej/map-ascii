@@ -301,24 +301,50 @@ function drawStall(slot: Slot) {
  */
 function drawSeasonal(slot: Slot, index: number) {
   const points: [number, number][] =
-    index === 0
-      ? Array.from({ length: 10 }, (_, i) => {
-          const angle = (i * Math.PI) / 5 - Math.PI / 2,
-            radius = i % 2 ? 0.21 : 0.48;
-          return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
+    index === 5
+      ? Array.from({ length: 16 }, (_, i) => {
+          const a = (i * Math.PI) / 8,
+            r = i % 2 ? 0.32 : 0.49;
+          return [0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r];
         })
-      : index >= 3
-        ? [
-            [0.08, 0.22],
-            [0.92, 0.22],
-            [index === 3 ? 0.82 : 0.92, 0.87],
-            [index === 3 ? 0.08 : 0.18, 0.87],
-          ]
-        : [
-            [0.05, 0.25],
-            [0.95, 0.25],
-            [index === 1 ? 0.35 : 0.65, 0.85],
-          ];
+      : index === 6
+        ? Array.from({ length: 16 }, (_, i) => {
+            const a = (i * Math.PI) / 8;
+            return [0.5 + Math.cos(a) * 0.29, 0.5 + Math.sin(a) * 0.19];
+          })
+        : index === 7
+          ? [
+              [0.42, 0.16],
+              [0.58, 0.16],
+              [0.77, 0.32],
+              [0.77, 0.59],
+              [0.94, 0.73],
+              [0.64, 0.73],
+              [0.58, 0.87],
+              [0.42, 0.87],
+              [0.36, 0.73],
+              [0.06, 0.73],
+              [0.23, 0.59],
+              [0.23, 0.32],
+            ]
+          : index === 0
+            ? Array.from({ length: 10 }, (_, i) => {
+                const angle = (i * Math.PI) / 5 - Math.PI / 2,
+                  radius = i % 2 ? 0.21 : 0.48;
+                return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
+              })
+            : index >= 3
+              ? [
+                  [0.08, 0.22],
+                  [0.92, 0.22],
+                  [index === 3 ? 0.82 : 0.92, 0.87],
+                  [index === 3 ? 0.08 : 0.18, 0.87],
+                ]
+              : [
+                  [0.05, 0.25],
+                  [0.95, 0.25],
+                  [index === 1 ? 0.35 : 0.65, 0.85],
+                ];
   for (let y = 0; y < slot.h; y++)
     for (let x = 0; x < slot.w; x++) {
       let coverage = 0;

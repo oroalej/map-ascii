@@ -17,6 +17,37 @@ const row: SeasonalRecord = {
   ],
   seed: 12,
 };
+it('reads every installation kind and rejects invalid envelopes without blocking older maps', () => {
+  const base = {
+    version: 1,
+    id: 'display',
+    season: 'winter',
+    installation: 'tree',
+    anchor: 'osm:way/1',
+    seed: 1,
+  };
+  for (const kind of ['christmas-tree', 'decorated-canopy']) {
+    const record = { ...base, kind, at: [123, 13], radius_m: 5 };
+    expect(parseSeasonalRecord(JSON.stringify(record))).toEqual(SeasonalRecordSchema.parse(record));
+    for (const extra of [
+      { version: 2 },
+      { radius_m: Infinity },
+      { radius_m: 0 },
+      { radius_m: 21 },
+      { anchor: 'unknown' },
+      { at: [0, 91] },
+      { extra: 1 },
+    ]) {
+      const value = { ...record, ...extra };
+      expect(isSeasonalRecord(value)).toBe(false);
+      expect(SeasonalRecordSchema.safeParse(value).success).toBe(false);
+    }
+  }
+  const string = { ...base, kind: 'light-string', from: [123, 13], to: [123.001, 13] };
+  expect(parseSeasonalRecord(JSON.stringify(string))).toEqual(SeasonalRecordSchema.parse(string));
+  expect(parseSeasonalRecord(JSON.stringify({ ...string, to: string.from }))).toBeUndefined();
+  expect(parseSeasonalRecord(JSON.stringify({ ...base, kind: 'future-display' }))).toBeUndefined();
+});
 it('accepts exact geographic records and safely ignores corrupt/newer optional payloads', () => {
   expect(SeasonalRecordSchema.parse(row)).toEqual(row);
   expect(parseSeasonalRecord(JSON.stringify(row))).toEqual(row);

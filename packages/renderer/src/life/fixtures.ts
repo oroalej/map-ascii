@@ -621,7 +621,10 @@ export function packFixtures(
   let seasonal = seasonalInputs.get(fixtures);
   if (!seasonal) {
     seasonal = fixtures.filter(
-      (f): f is SeasonalFixture => f.kind === 'season-lantern' || f.kind === 'season-bunting',
+      (f): f is SeasonalFixture =>
+        f.kind === 'season-lantern' ||
+        f.kind === 'season-bunting' ||
+        f.kind === 'season-installation',
     );
     seasonalInputs.set(fixtures, seasonal);
   }
@@ -648,7 +651,7 @@ export function packFixtures(
       admission,
     );
     for (let cell = 0; cell < admission.length; cell++)
-      if (admission[cell] === -3) owners[cell] = -3;
+      if (admission[cell] === -3 || admission[cell] === -5) owners[cell] = -3;
   }
   return packed;
 }

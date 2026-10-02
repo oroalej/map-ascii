@@ -24,6 +24,20 @@ it('keeps seasonal geometry, ownership and texture uploads cached while wind and
   const placement = { ...placeGrid(view, view.cellDev, 100, 100), toCell: project };
   const fixtures: StreetFixture[] = [
     {
+      kind: 'season-installation',
+      record: {
+        version: 1,
+        kind: 'christmas-tree',
+        id: 'tree',
+        season: 'winter',
+        installation: 'tree',
+        anchor: 'osm:way/1',
+        at: [40, 40],
+        radius_m: 5,
+        seed: 1,
+      },
+    },
+    {
       kind: 'season-bunting',
       id: 'row',
       from: [20, 30],

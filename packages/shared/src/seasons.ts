@@ -24,6 +24,7 @@ export type SeasonConfig = {
   status: 'draft' | 'verified';
   window: SeasonWindow;
   note?: string;
+  installations?: SeasonInstallation[];
   lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };
   bunting?: {
     label: string;
@@ -35,6 +36,18 @@ export type SeasonConfig = {
   stalls?: { label: string; near: PlaceKind[]; radius_m: number; per_tile: number };
   sources: Source[];
 };
+
+/** Layouts are illustrative; anchors and all geography are resolved by the pipeline. */
+export type SeasonInstallation = {
+  id: string;
+  anchor: string;
+  label: string;
+  sources: Source[];
+} & (
+  | { kind: 'christmas-tree'; radius_m: number }
+  | { kind: 'light-string'; layout: 'paths' | 'perimeter'; spacing_m: number }
+  | { kind: 'decorated-canopy' }
+);
 
 /** A calendar day, as days since 1970-01-01 (the existing Life clock's arithmetic). */
 export const epochDay = (year: number, month: number, day: number): number =>

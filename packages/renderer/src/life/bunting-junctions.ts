@@ -9,7 +9,7 @@ type Row = {
   style?: 'red-yellow-rectangles';
   priority?: BuntingPriority;
 };
-type Fixture = Row | { kind: 'season-lantern' };
+type Fixture = Row | { kind: 'season-lantern' | 'season-installation' };
 export type ProjectedBunting = { from: Point; to: Point };
 type Grid = { toCell: (lng: number, lat: number) => Point };
 const ordered = new WeakMap<readonly Fixture[], readonly Row[]>();

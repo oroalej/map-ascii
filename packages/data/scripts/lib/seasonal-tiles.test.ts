@@ -75,6 +75,26 @@ it('audits identical buffered copies while preserving every ordinary layer and u
       /changed base geometry|lost tile/,
     );
 });
+it('retains every installation kind in buffered tiles without changing pre-existing content', async () => {
+  const common = {
+    version: 1 as const,
+    id: 'tree',
+    season: 'winter',
+    installation: 'tree',
+    anchor: 'osm:way/1',
+    seed: 1,
+  };
+  const records: SeasonalRecord[] = [
+    row,
+    { ...common, kind: 'christmas-tree', at: [0.001, -0.001], radius_m: 5 },
+    { ...common, id: 'crown', kind: 'decorated-canopy', at: [0.002, -0.002], radius_m: 4 },
+    { ...common, id: 'cord', kind: 'light-string', from: [0.001, -0.001], to: [0.002, -0.002] },
+  ];
+  expect(await auditSeasonalArchive(archive(base()), archive(withRows(records)), records)).toEqual({
+    tiles: 2,
+    records: 4,
+  });
+});
 it('rejects missing or changed rows, duplicate identities, malformed records and changed bounds', async () => {
   await expect(auditSeasonalArchive(archive(base()), archive(withRows([])), [row])).rejects.toThrow(
     'Tiling lost',
