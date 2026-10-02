@@ -1,0 +1,20 @@
+{
+  "id": "landmark/bicol-access-health-centrum",
+  "osm_id": "osm:way/293702442",
+  "name": {
+    "en": "Bicol Access Health Centrum"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/way/293702442",
+      "note": "Mapped footprint matched to the owner-requested site."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference identifies the site and guides restrained outdoor detail."
+    }
+  ]
+}

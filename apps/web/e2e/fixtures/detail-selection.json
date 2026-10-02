@@ -87,6 +87,26 @@
     {
       "slug": "magsaysay-bridge",
       "at": [123.195494075, 13.633044548]
+    },
+    {
+      "slug": "naga-city-montessori-school",
+      "at": [123.19474837, 13.622682725]
+    },
+    {
+      "slug": "mother-seton-hospital",
+      "at": [123.197129148, 13.618527603]
+    },
+    {
+      "slug": "nicc-hospital",
+      "at": [123.193138324, 13.617008295]
+    },
+    {
+      "slug": "bicol-medical-center",
+      "at": [123.198794978, 13.623852581]
+    },
+    {
+      "slug": "bicol-access-health-centrum",
+      "at": [123.192114342, 13.618618498]
     }
   ]
 }
