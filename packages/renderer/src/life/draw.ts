@@ -94,7 +94,7 @@ export type LifeGlyphs = { parts: Uint16Array };
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
 let journal:
-  | { before: Map<number, [number, number, number, number, number, number]>; denied: boolean }
+  | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
   | undefined;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
@@ -123,14 +123,21 @@ let drawingMember = 0;
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
-    journal.before.set(at, [
-      out[at]!,
-      out[at + 1]!,
-      out[at + 2]!,
-      out[at + 3]!,
-      drawingOwners?.[at / 4] ?? 0,
-      drawingSpeakers?.members[at / 4] ?? 0,
-    ]);
+    // Preserve the ordinary five-value owner journal; speech adds its member
+    // only when enabled, avoiding an unused slot in every painted-cell array.
+    journal.before.set(
+      at,
+      drawingSpeakers
+        ? [
+            out[at]!,
+            out[at + 1]!,
+            out[at + 2]!,
+            out[at + 3]!,
+            drawingOwners?.[at / 4] ?? 0,
+            drawingSpeakers.members[at / 4]!,
+          ]
+        : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
+    );
   }
   if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
