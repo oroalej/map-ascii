@@ -4,6 +4,24 @@ import { makeScenario } from './testing/scenarios';
 import { snapshotOf } from './terrain-snapshot';
 
 describe('transferred polygon indexes', () => {
+  it('rebuilds detached cached serialization buffers and invalidates them on added geometry', () => {
+    const terrain = makeScenario('crossroads', 1).world.cellTerrain()!;
+    const first = snapshotOf(terrain);
+    const expected = structuredClone(first.snapshot);
+    structuredClone(first.snapshot, { transfer: first.transferables });
+    expect(snapshotOf(terrain).snapshot).toEqual(expected);
+    const index = new PolygonIndex();
+    expect(index.toFlat().polygons.polys).toHaveLength(1);
+    index.add([
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 0 },
+      ],
+    ]);
+    expect(index.toFlat().polygons.polys).toHaveLength(2);
+  });
   it('matches mutable terrain for seeded bodies, bin edges, degenerate and distant bodies', () => {
     const terrain = makeScenario('crossroads', 4).world.cellTerrain()!;
     const { snapshot, transferables } = snapshotOf(terrain);

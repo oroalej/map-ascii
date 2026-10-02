@@ -14,6 +14,7 @@ import { isWalker, usableLines, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { approach, type MotionLimit } from './motion';
+import { complete } from './cooperate';
 
 export const INTERACTIONS = {
   stopQueue: 6,
@@ -85,10 +86,16 @@ export class LocalScenes {
     seed: number,
     stalls: readonly Stall[],
     private readonly idleGuard?: (mover: Mover) => boolean,
+    deferred = false,
   ) {
-    this.graph = new WalkingGraph(geo, perMeter);
+    this.graph = new WalkingGraph(geo, perMeter, true);
     this.rng = random(seed ^ 0xb5297a4d);
+    if (!deferred) complete(this.prepare(geo, stalls));
+  }
+  *prepare(geo: LifeGeometry, stalls: readonly Stall[]): Generator<void, void, void> {
+    yield* this.graph.prepare(geo);
     for (let i = 0; i < geo.sites.length; i += SITE_STRIDE) {
+      yield;
       const kind = LIFE_SITE_KINDS[geo.sites[i + 2]!];
       if (!kind) continue;
       const site: Site = {
@@ -109,10 +116,13 @@ export class LocalScenes {
       if (!entrance || !inTile(entrance)) continue;
       site.x = entrance.x;
       site.y = entrance.y;
-      this.attachRoad(site, geo);
+      yield* this.attachRoad(site, geo);
       this.sites.push(site);
     }
-    for (const stall of stalls) this.addStall(stall);
+    for (const stall of stalls) {
+      this.addStall(stall);
+      yield;
+    }
   }
 
   addStall(stall: Stall) {
@@ -177,11 +187,12 @@ export class LocalScenes {
     this.stopCooldown.delete(m);
   }
 
-  private attachRoad(site: Site, geo: LifeGeometry) {
+  private *attachRoad(site: Site, geo: LifeGeometry): Generator<void, void, void> {
     let best = 25 * this.perMeter;
     for (let line = 0; line < geo.kinds.length; line++) {
       if (!usableLines.vehicle.includes(geo.kinds[line]! as LifeLine)) continue;
       for (let v = geo.starts[line]!; v < geo.starts[line + 1]! - 1; v++) {
+        if ((v & 63) === 0) yield;
         const ax = geo.coords[v * 2]!;
         const ay = geo.coords[v * 2 + 1]!;
         const dx = geo.coords[v * 2 + 2]! - ax;
@@ -494,7 +505,7 @@ export class LocalScenes {
     this.scan += dt * movers.length;
     const batch = Math.min(12, Math.floor(this.scan));
     this.scan = Math.min(12, this.scan - batch);
-    for (let i = 0; i < batch; i++) {
+    for (let i = 0; i < batch && movers.length; i++) {
       const m = movers[this.cursor++ % movers.length]!;
       if (
         (owns && !owns(m)) ||

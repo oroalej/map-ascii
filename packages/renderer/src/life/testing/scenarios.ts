@@ -258,6 +258,10 @@ export function completeScenarioState(world: LifeWorld) {
     junctions?: { snapshot(): unknown };
     arrivals: Map<string, { left: number; occupied: boolean }>;
     history: WeakMap<TileLife, { ceded: unknown }>;
+    viewContext?: unknown;
+    bootstrapped: boolean;
+    birthCursor: number;
+    birthCredit: number;
   };
   const scenes = (tile: TileLife) => {
     const scene = tile.scenes as unknown as {
@@ -298,11 +302,32 @@ export function completeScenarioState(world: LifeWorld) {
       ...tileState(key, life),
       scene: scenes(life),
       ceded: internal.history.get(life)?.ceded,
+      pending: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
     })),
     ownership: [...worldTiles(world)].map(([key, life]) => ({
       key,
       ceded: internal.history.get(life)?.ceded,
     })),
     scenes: [...worldTiles(world)].map(([key, life]) => ({ key, ...scenes(life) })),
+    pending: [...worldTiles(world)].map(([key, life]) => ({
+      key,
+      seeds: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
+    })),
+    viewContext: internal.viewContext,
+    bootstrapped: internal.bootstrapped,
+    birthCursor: internal.birthCursor,
+    birthCredit: internal.birthCredit,
   });
 }

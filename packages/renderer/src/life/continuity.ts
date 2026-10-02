@@ -3,11 +3,14 @@ import { LifeLine, type LifeGeometry } from './geometry';
 import { frameBetween } from './frames';
 import { VEHICLES } from './vehicles';
 import type { Mover, TileLife } from './simulate';
+import type { ContinuityRejection } from './diagnostics';
 
 export type AdoptionOptions = {
   snapM?: number;
   bearingDeg?: number;
   replace?: Mover;
+  reject?: (reason: ContinuityRejection) => void;
+  nudgeM?: number;
 };
 type Segment = {
   line: number;
@@ -99,39 +102,57 @@ export function projectMover(
   grid: SegmentGrid,
   options: AdoptionOptions = {},
 ): Mover | undefined {
-  if (m.kind !== 'vehicle' && m.kind !== 'boat' && m.kind !== 'train') return;
+  if (m.kind !== 'vehicle' && m.kind !== 'boat' && m.kind !== 'train' && m.kind !== 'person')
+    return;
   const frame = frameBetween(source.tile, target.tile);
-  const x = frame.x + m.x * frame.scale,
-    y = frame.y + m.y * frame.scale;
+  const nudge = (options.nudgeM ?? 0) * source.perMeter;
+  const x = frame.x + (m.x + m.hx * nudge) * frame.scale,
+    y = frame.y + (m.y + m.hy * nudge) * frame.scale;
   const oldPose = source.pose(m);
   const oldX = frame.x + oldPose.x * frame.scale,
     oldY = frame.y + oldPose.y * frame.scale;
-  const reach = (options.snapM ?? ADOPT.snap) * target.perMeter;
+  const reach =
+    Math.min(options.snapM ?? ADOPT.snap, m.kind === 'person' ? 2 : Infinity) * target.perMeter;
   const bearing = Math.cos(((options.bearingDeg ?? ADOPT.bearing) * Math.PI) / 180);
   const id = source.geo.lineIds?.[m.line];
   let best: { segment: Segment; t: number; dir: 1 | -1; distance: number } | undefined;
+  let rejection: ContinuityRejection = 'geometry';
   for (const segment of grid.near(x, y, reach)) {
     const { line, ax, ay, dx, dy, length } = segment;
     const kind = target.geo.kinds[line]! as LifeLine;
     if (!usableLines[m.kind].includes(kind)) continue;
     if (id && grid.identified && target.geo.lineIds?.[line] !== id) continue;
-    if (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat') continue;
+    if (m.kind === 'boat' && kind === LifeLine.canal && m.vehicle === 'motorboat') {
+      rejection = 'directionCraft';
+      continue;
+    }
     const width = target.geo.widths[line];
-    if (m.kind === 'vehicle' && m.vehicle && width && VEHICLES[m.vehicle].width > width) continue;
+    if (m.kind === 'vehicle' && m.vehicle && width && VEHICLES[m.vehicle].width > width) {
+      rejection = 'directionCraft';
+      continue;
+    }
     const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length ** 2));
     const distance = Math.hypot(ax + dx * t - x, ay + dy * t - y);
     if (distance > reach || (best && distance >= best.distance)) continue;
     const dir: 1 | -1 = m.hx * dx + m.hy * dy >= 0 ? 1 : -1;
-    if (m.kind === 'vehicle' && target.geo.oneway?.[line] && target.geo.oneway[line] !== dir)
+    if (m.kind === 'vehicle' && target.geo.oneway?.[line] && target.geo.oneway[line] !== dir) {
+      rejection = 'directionCraft';
       continue;
-    if (!m.train && ((oldPose.hx * dx + oldPose.hy * dy) * dir) / length < bearing) continue;
+    }
+    if (!m.train && ((oldPose.hx * dx + oldPose.hy * dy) * dir) / length < bearing) {
+      rejection = 'pose';
+      continue;
+    }
     best = { segment, t, dir, distance };
   }
-  if (!best) return;
+  if (!best) {
+    options.reject?.(rejection);
+    return;
+  }
   const { segment: s, t, dir } = best;
   const scale = target.perMeter / source.perMeter;
   // A stable preview shape avoids spread/override transitions for the 600-agent batch.
-  // Walking/animal state stays on the original owner; those kinds cannot enter this path.
+  // A preview shares immutable group members; ownership commits retain the original array.
   const preview: Mover = {
     kind: m.kind,
     line: s.line,
@@ -149,6 +170,10 @@ export function projectMover(
     lane: m.lane,
     pause: m.pause,
     rank: m.rank,
+    group: m.group,
+    walked: m.walked,
+    avoid: m.avoid,
+    waiting: m.waiting,
   };
   if (m.routing) {
     preview.routing = {
@@ -171,7 +196,77 @@ export function projectMover(
     !m.train &&
     (Math.hypot(pose.x - oldX, pose.y - oldY) > reach ||
       pose.hx * oldPose.hx + pose.hy * oldPose.hy < bearing)
-  )
+  ) {
+    options.reject?.('pose');
     return;
+  }
+  if (m.kind === 'person') {
+    const before = source.groundBodies(m),
+      after = target.groundBodies(preview);
+    const ratio = (frame.scale * source.perMeter) / target.perMeter;
+    if (
+      before.length !== after.length ||
+      after.some((b, i) => {
+        const a = before[i]!;
+        return (
+          Math.hypot(
+            b.x - frame.x / target.perMeter - a.x * ratio,
+            b.y - frame.y / target.perMeter - a.y * ratio,
+          ) > 2 || b.hx * a.hx + b.hy * a.hy < bearing
+        );
+      })
+    ) {
+      options.reject?.('pose');
+      return;
+    }
+  }
   return preview;
+}
+
+/** Stable nearest replacement: candidates are grouped once for a destination transaction. */
+export function nearestReplacement<T>(
+  candidates: ReadonlySet<T>,
+  point: { x: number; y: number },
+  position: (item: T) => { x: number; y: number },
+) {
+  let selected: T | undefined,
+    nearest = Infinity;
+  for (const item of candidates) {
+    const p = position(item);
+    const distance = (p.x - point.x) ** 2 + (p.y - point.y) ** 2;
+    if (distance < nearest) {
+      nearest = distance;
+      selected = item;
+    }
+  }
+  return selected;
+}
+
+export function walkingBefore(
+  target: TileLife,
+  source: TileLife,
+  mover: Mover,
+  preview: Mover,
+): Mover {
+  const f = frameBetween(source.tile, target.tile);
+  return {
+    ...preview,
+    x: f.x + mover.x * f.scale,
+    y: f.y + mover.y * f.scale,
+    hx: mover.hx,
+    hy: mover.hy,
+  };
+}
+export function walkingTransfer(target: TileLife, source: TileLife, mover: Mover, preview: Mover) {
+  const f = frameBetween(source.tile, target.tile),
+    ratio = (f.scale * source.perMeter) / target.perMeter;
+  const before = source.groundBodies(mover),
+    after = target.groundBodies(preview);
+  return after.every((b, i) => {
+    const a = before[i]!;
+    return target.scenes.walkable(
+      { x: f.x + a.x * ratio * target.perMeter, y: f.y + a.y * ratio * target.perMeter },
+      { x: b.x * target.perMeter, y: b.y * target.perMeter },
+    );
+  });
 }

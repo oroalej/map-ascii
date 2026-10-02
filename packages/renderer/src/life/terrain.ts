@@ -1,6 +1,7 @@
 import { DEFAULT_ROAD_WIDTH_M } from './config';
 import { LifeLine, type LifeGeometry } from './geometry';
 import { boundsOf, PolygonIndex, type Body, type Point, type Polygon } from './occupancy';
+import { complete } from './cooperate';
 
 /** The same rectangular segment footprint used by the road rasterizer. */
 export function stripRing(a: Point, b: Point, halfWidth: number): Point[] {
@@ -19,6 +20,9 @@ export function stripRing(a: Point, b: Point, halfWidth: number): Point[] {
 
 /** Fixtures and older life geometry can derive road envelopes from their retained widths. */
 export function carriageways(geo: LifeGeometry, perMeter: number): Polygon[] {
+  return complete(carriagewaySteps(geo, perMeter));
+}
+function* carriagewaySteps(geo: LifeGeometry, perMeter: number): Generator<void, Polygon[], void> {
   const retained = geo.areas?.filter((a) => a.kind === 'carriageway').map((a) => a.rings);
   if (retained?.length) return retained;
   const roads: Polygon[] = [];
@@ -26,6 +30,7 @@ export function carriageways(geo: LifeGeometry, perMeter: number): Polygon[] {
     if (geo.kinds[line]! > LifeLine.roadMinor) continue;
     const halfWidth = ((geo.widths[line] || DEFAULT_ROAD_WIDTH_M) * perMeter) / 2;
     for (let v = geo.starts[line]!; v < geo.starts[line + 1]! - 1; v++) {
+      if ((v & 63) === 0) yield;
       const ring = stripRing(
         { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! },
         { x: geo.coords[v * 2 + 2]!, y: geo.coords[v * 2 + 3]! },
@@ -96,11 +101,19 @@ class CrossingIndex<T extends IndexedCrossing> {
     return out;
   }
   add(entry: T) {
-    for (const key of this.keys(entry.polygon)) {
-      const entries = this.bins.get(key) ?? [];
-      entries.push(entry);
-      this.bins.set(key, entries);
-    }
+    complete(this.addSteps(entry));
+  }
+  *addSteps(entry: T): Generator<void, void, void> {
+    let count = 0;
+    const [x0, y0, x1, y1] = boundsOf(entry.polygon[0]!);
+    for (let x = Math.floor(x0 / ROAD_BIN_M); x <= Math.floor(x1 / ROAD_BIN_M); x++)
+      for (let y = Math.floor(y0 / ROAD_BIN_M); y <= Math.floor(y1 / ROAD_BIN_M); y++) {
+        const key = `${x},${y}`;
+        const entries = this.bins.get(key) ?? [];
+        entries.push(entry);
+        this.bins.set(key, entries);
+        if ((++count & 127) === 0) yield;
+      }
   }
   nearby(polygon: Polygon): Set<T> {
     const [x0, y0, x1, y1] = boundsOf(polygon[0]!);
@@ -126,27 +139,40 @@ const cut = (pieces: readonly Polygon[], crossings: Iterable<Polygon>): Polygon[
 export class RoadAccess {
   readonly roads = new PolygonIndex();
   readonly forbidden = new PolygonIndex();
-  readonly piecesByRoad: readonly (readonly Polygon[])[];
+  piecesByRoad!: readonly (readonly Polygon[])[];
 
   constructor(
     roads: readonly Polygon[],
     crossings: readonly Polygon[],
     pieces?: readonly (readonly Polygon[])[],
+    deferred = false,
   ) {
+    if (!deferred) complete(this.prepare(roads, crossings, pieces));
+  }
+  *prepare(
+    roads: readonly Polygon[],
+    crossings: readonly Polygon[],
+    pieces?: readonly (readonly Polygon[])[],
+  ): Generator<void, void, void> {
     if (pieces) this.piecesByRoad = pieces;
     else {
       const index = new CrossingIndex<IndexedCrossing>();
-      for (const polygon of crossings) index.add({ polygon });
-      this.piecesByRoad = roads.map((road) =>
-        cut(
-          [road],
-          [...index.nearby(road)].map((c) => c.polygon),
-        ),
-      );
+      for (const polygon of crossings) yield* index.addSteps({ polygon });
+      const fragments: Polygon[][] = [];
+      for (const road of roads) {
+        fragments.push(
+          cut(
+            [road],
+            [...index.nearby(road)].map((c) => c.polygon),
+          ),
+        );
+        yield;
+      }
+      this.piecesByRoad = fragments;
     }
-    for (const road of roads) this.roads.add(road);
+    for (const road of roads) yield* this.roads.addSteps(road);
     for (const fragments of this.piecesByRoad)
-      for (const polygon of fragments) this.forbidden.add(polygon);
+      for (const polygon of fragments) yield* this.forbidden.addSteps(polygon);
   }
 
   /** Assemble cached pieces without performing crossing subtraction again. */
@@ -186,16 +212,31 @@ const prepared = new WeakMap<LifeGeometry, Map<number, PreparedRoadTerrain>>();
 
 /** Geometry is immutable; share its metric preparation across its tile and walking graph. */
 export function prepareRoadTerrain(geo: LifeGeometry, perMeter: number): PreparedRoadTerrain {
+  return complete(prepareRoadTerrainSteps(geo, perMeter));
+}
+export function* prepareRoadTerrainSteps(
+  geo: LifeGeometry,
+  perMeter: number,
+): Generator<void, PreparedRoadTerrain, void> {
   let variants = prepared.get(geo);
   if (!variants) prepared.set(geo, (variants = new Map<number, PreparedRoadTerrain>()));
   const cached = variants.get(perMeter);
   if (cached) return cached;
   const metric = (polygon: Polygon) => transformPolygon(polygon, 0, 0, 1 / perMeter);
-  const roads = carriageways(geo, perMeter).map(metric);
-  const crossings = (geo.areas ?? [])
-    .filter((a) => a.kind === 'crossing')
-    .map((a) => metric(a.rings));
-  const terrain = { roads, crossings, access: new RoadAccess(roads, crossings) };
+  const roads: Polygon[] = [],
+    crossings: Polygon[] = [];
+  for (const road of yield* carriagewaySteps(geo, perMeter)) {
+    roads.push(metric(road));
+    yield;
+  }
+  for (const a of geo.areas ?? [])
+    if (a.kind === 'crossing') {
+      crossings.push(metric(a.rings));
+      yield;
+    }
+  const access = new RoadAccess(roads, crossings, undefined, true);
+  yield* access.prepare(roads, crossings);
+  const terrain = { roads, crossings, access };
   variants.set(perMeter, terrain);
   return terrain;
 }
@@ -232,6 +273,10 @@ export class WorldRoadCache {
   }
 
   build(contributions: readonly Contribution[]): RoadAccess {
+    return complete(this.buildSteps(contributions));
+  }
+  *buildSteps(contributions: readonly Contribution[]): Generator<void, RoadAccess, void> {
+    const caches = new Map<object, TileFragments>();
     const index = new CrossingIndex<IndexedCrossing & { token: CrossingToken }>();
     for (const c of contributions) {
       let cached = this.tiles.get(c.owner);
@@ -249,6 +294,10 @@ export class WorldRoadCache {
         };
         this.tiles.set(c.owner, cached);
       }
+      // A yielding build must own its cache records: foreground retirement/rebuild can run
+      // between slices. Polygon results are immutable, so same-origin weak maps can be shared.
+      cached = { ...cached, roads: cached.roads.map((fragments) => ({ ...fragments })) };
+      caches.set(c.owner, cached);
       const origin = `${c.x},${c.y},${c.scale}`;
       if (cached.origin !== origin) {
         cached.origin = origin;
@@ -256,13 +305,15 @@ export class WorldRoadCache {
         cached.pieces = new WeakMap();
       }
       for (const token of cached.tokens)
-        index.add({ token, polygon: this.transform(cached, token.source, c) });
+        yield* index.addSteps({ token, polygon: this.transform(cached, token.source, c) });
     }
     const roads: Polygon[] = [],
       pieces: Polygon[][] = [];
     for (const c of contributions) {
-      const cached = this.tiles.get(c.owner)!;
-      c.terrain.roads.forEach((road, i) => {
+      const cached = caches.get(c.owner)!;
+      for (let i = 0; i < c.terrain.roads.length; i++) {
+        yield;
+        const road = c.terrain.roads[i]!;
         const worldRoad = this.transform(cached, road, c);
         const nearby = [...index.nearby(worldRoad)].filter(
           (entry) => entry.token.owner !== c.owner,
@@ -288,9 +339,12 @@ export class WorldRoadCache {
           cached.pieces.set(fragments.pieces, worldPieces);
         }
         pieces.push(worldPieces);
-      });
+      }
     }
-    return RoadAccess.fromPrepared(roads, pieces);
+    const access = new RoadAccess(roads, [], pieces, true);
+    yield* access.prepare(roads, [], pieces);
+    for (const [owner, cached] of caches) this.tiles.set(owner, cached);
+    return access;
   }
 
   private transform(cache: TileFragments, polygon: Polygon, c: Contribution): Polygon {
