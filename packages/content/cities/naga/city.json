@@ -22,6 +22,12 @@
   "languages": ["fil", "bcl"],
   "timezone": "Asia/Manila",
   "streets": {
+    "exclusions": [
+      {
+        "osm_id": "osm:way/1357110991",
+        "source": "Project owner annotated atlas image (2026-10-02): remove the internal service road across Plaza Quezon from the displayed map. This is an undated display correction, not a claim of demolition or an edit to OpenStreetMap."
+      }
+    ],
     "utilities": {
       "derive": true,
       "source": "Project decision (2026-10-01): illustrative overhead utility poles and wires along major and secondary roads, requested by the project owner. Placement is derived from OSM roads; it is not a survey of utility infrastructure."

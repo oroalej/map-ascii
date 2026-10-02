@@ -1116,6 +1116,19 @@ export type Traffic = z.infer<typeof Traffic>;
 /** Optional city policy for derived street details; explicit policy is sourced. */
 export const CityStreets = z.strictObject({
   utilities: z.strictObject({ derive: z.boolean(), source: z.string().trim().min(1) }).optional(),
+  /** Sourced display corrections, applied before roads generate traffic or utilities. */
+  exclusions: z
+    .array(
+      z.strictObject({
+        osm_id: z.string().regex(/^osm:way\/\d+$/, 'expected osm:way/<id>'),
+        source: z.string().trim().min(1),
+      }),
+    )
+    .refine(
+      (items) => new Set(items.map((item) => item.osm_id)).size === items.length,
+      'duplicate road exclusion target',
+    )
+    .optional(),
   directions: z
     .array(
       z.strictObject({

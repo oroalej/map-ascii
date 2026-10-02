@@ -2,6 +2,8 @@
 
 Naga City, Camarines Sur, Philippines is the **first city** in ASCII Atlas. Phases 1–6 of [`ROADMAP.md`](../ROADMAP.md) build the engine against it.
 
+Plaza Quezon display correction (2026-10-02): the project owner's marked atlas screenshot requests removing internal service way `1357110991` across the plaza. `streets.exclusions` suppresses that exact road before deriving traffic and utilities; existing plaza paving fills the strip. Surrounding streets, the standing stage, planting and pedestrian routes retain their geometry. This supersedes the earlier instruction to retain this service road; it is an undated map correction, not an OSM edit or a historical demolition claim.
+
 This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITECTURE.md`, `DATA.md`) describe behavior for any city and use Naga only as an example. The machine-readable version of this brief lives in `packages/content/cities/naga/city.json`. See `DATA.md` §4 for the `City` schema.
 
 ## 1. City config

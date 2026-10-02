@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { onewayOf, sidewalkOf, classify, variantOf } from './classify';
-import { applyRoadDirections, deriveSidewalks, onewayArrows, streetStats } from './streets';
+import {
+  applyRoadDirections,
+  applyRoadExclusions,
+  deriveSidewalks,
+  onewayArrows,
+  streetStats,
+} from './streets';
 import { mergeTraffic } from './traffic';
 import type { AtlasFeature } from '../03-normalize';
 
@@ -114,6 +120,77 @@ describe('street tags', () => {
     expect(streetStats(derived).derivedSidewalkKm).toBeCloseTo(
       streetStats(derived).derivedRoadKm * 2,
     );
+  });
+});
+
+describe('curated road exclusions', () => {
+  const item = { osm_id: 'osm:way/1', source: 'Owner annotated atlas' };
+  const target = () =>
+    road(
+      item.osm_id,
+      [
+        [0, 0],
+        [0.001, 0],
+      ],
+      { oneway: 1 },
+    );
+
+  it('removes the exact road at every level before traffic while preserving neighboring features', () => {
+    const removed = target();
+    const region = { ...removed, properties: { ...removed.properties, region: true } };
+    const neighbor = road(
+      'osm:way/2',
+      [
+        [0, 0],
+        [0, 0.001],
+      ],
+      { oneway: 1 },
+    );
+    const plaza: AtlasFeature = {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [0.001, 0],
+            [0, 0.001],
+            [0, 0],
+          ],
+        ],
+      },
+      properties: { id: 'osm:way/3', class: 'paving' },
+      tippecanoe: { layer: 'landuse', minzoom: 12, maxzoom: 16 },
+    };
+    const features = [removed, region, neighbor, plaza];
+    expect(applyRoadExclusions(features, undefined)).toBe(features);
+    const filtered = applyRoadExclusions(features, [item]);
+    expect(filtered).toEqual([neighbor, plaza]);
+    expect(filtered[0]).toBe(neighbor);
+    expect(filtered[1]).toBe(plaza);
+    expect(features).toHaveLength(4);
+    const traffic = mergeTraffic(filtered, { derive: false });
+    const arrows = traffic.filter((f) => f.properties.variant === 'oneway_arrow');
+    expect(arrows.length).toBeGreaterThan(0);
+    expect(
+      arrows.every((f) => f.properties.id.startsWith(`${neighbor.properties.id}:oneway:`)),
+    ).toBe(true);
+    expect(traffic.some((f) => f.properties.id === item.osm_id)).toBe(false);
+  });
+
+  it('rejects stale, region-only, non-road, non-line and duplicate targets', () => {
+    const f = target();
+    expect(() => applyRoadExclusions([], [item])).toThrow('not found');
+    expect(() =>
+      applyRoadExclusions([{ ...f, properties: { ...f.properties, region: true } }], [item]),
+    ).toThrow('not found');
+    expect(() =>
+      applyRoadExclusions([{ ...f, properties: { ...f.properties, class: 'path' } }], [item]),
+    ).toThrow('not a road');
+    expect(() =>
+      applyRoadExclusions([{ ...f, geometry: { type: 'Point', coordinates: [0, 0] } }], [item]),
+    ).toThrow('not a road LineString');
+    expect(() => applyRoadExclusions([f], [item, item])).toThrow('Duplicate');
   });
 });
 

@@ -13,6 +13,7 @@ import { mergeCemeteries } from './lib/cemeteries';
 import { mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
 import { mergeTraffic } from './lib/traffic';
+import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 
@@ -101,10 +102,11 @@ export function checkTours(
 export const step: Step = {
   name: '04-merge-content',
   async run({ city, content, buildDir, outDir }) {
-    const features: AtlasFeature[] = [];
+    let features: AtlasFeature[] = [];
     for await (const f of readFeatures(join(buildDir, files.normalized))) {
       features.push(f as AtlasFeature);
     }
+    features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
     const merged = applyLandcoverTreeOverrides(
       mergeTraffic(
