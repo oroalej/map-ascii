@@ -1,0 +1,1648 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.201787, 13.621738],
+          [123.201793, 13.621845],
+          [123.201823, 13.621843],
+          [123.201827, 13.621904],
+          [123.201789, 13.621906],
+          [123.201792, 13.621958],
+          [123.201703, 13.621964],
+          [123.201699, 13.621896],
+          [123.201636, 13.6219],
+          [123.201634, 13.621865],
+          [123.201693, 13.621861],
+          [123.20169, 13.621804],
+          [123.201744, 13.6218],
+          [123.201741, 13.621741],
+          [123.201787, 13.621738]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665340",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.201513, 13.620707],
+          [123.201538, 13.620811],
+          [123.201473, 13.620824],
+          [123.201449, 13.62072],
+          [123.201513, 13.620707]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668214",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.201981, 13.621105],
+          [123.202029, 13.62126],
+          [123.201951, 13.621283],
+          [123.201903, 13.621128],
+          [123.201981, 13.621105]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668837",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.200901, 13.621715],
+          [123.200917, 13.621795],
+          [123.200821, 13.621812],
+          [123.200805, 13.621733],
+          [123.200901, 13.621715]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669402",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.201883, 13.621202],
+          [123.201904, 13.621291],
+          [123.20167, 13.621343],
+          [123.201649, 13.621255],
+          [123.201883, 13.621202]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670418",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2008421, 13.6212995],
+          [123.2008661, 13.6214904],
+          [123.2006537, 13.6215156],
+          [123.2006297, 13.6213247],
+          [123.2008421, 13.6212995]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671237",
+      "class": "building",
+      "frontage": "service",
+      "shop_lng": 123.2007479,
+      "shop_lat": 13.62140755,
+      "shop_radius_m": 15.76681065507607,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2011057, 13.6217542],
+          [123.2012246, 13.6216883],
+          [123.2013394, 13.6218454],
+          [123.2010998, 13.622032],
+          [123.2011057, 13.6217542]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675139",
+      "class": "building",
+      "frontage": "service",
+      "shop_lng": 123.201192375,
+      "shop_lat": 13.621829975,
+      "shop_radius_m": 24.6188098790391,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.200905, 13.621584],
+          [123.200916, 13.621692],
+          [123.2008, 13.621705],
+          [123.200788, 13.621595],
+          [123.200905, 13.621584]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675367",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.201822, 13.621737],
+          [123.201937, 13.621738],
+          [123.201936, 13.621863],
+          [123.201843, 13.621862],
+          [123.201843, 13.621823],
+          [123.201822, 13.621823],
+          [123.201822, 13.621737]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675768",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2010925, 13.6210799],
+          [123.201072, 13.6211013],
+          [123.2010453, 13.6211147],
+          [123.2010155, 13.6211187],
+          [123.2009879, 13.6211134],
+          [123.2009634, 13.6210999],
+          [123.2009445, 13.6210796],
+          [123.2009331, 13.6210545],
+          [123.2009305, 13.6210273],
+          [123.2009368, 13.6210006],
+          [123.2009515, 13.6209772],
+          [123.200973, 13.6209595],
+          [123.2009991, 13.6209493],
+          [123.2010272, 13.6209476],
+          [123.2010562, 13.6209553],
+          [123.2010808, 13.6209721],
+          [123.2010982, 13.6209959],
+          [123.2011064, 13.621024],
+          [123.2011044, 13.6210531],
+          [123.2010925, 13.6210799]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223489",
+      "class": "grass",
+      "kind": "landuse=grass",
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2012259, 13.6214666],
+          [123.2011904, 13.6213165],
+          [123.2013504, 13.6212776],
+          [123.2013337, 13.6212031],
+          [123.2014648, 13.6211718],
+          [123.2014837, 13.6212474],
+          [123.201567, 13.6212269],
+          [123.2016003, 13.6213532],
+          [123.2015159, 13.6213748],
+          [123.2015359, 13.6214536],
+          [123.2013915, 13.6214882],
+          [123.2013859, 13.6214569],
+          [123.2013682, 13.6214601],
+          [123.2013537, 13.6214547],
+          [123.201347, 13.6214396],
+          [123.2012259, 13.6214666]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/605107791",
+      "class": "building_religious",
+      "name": "Immaculate Conception Parish",
+      "kind": "amenity=place_of_worship",
+      "denomination": "roman_catholic",
+      "height": 15,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2004896, 13.6223578],
+        [123.2005414, 13.6223434],
+        [123.2010255, 13.6220969],
+        [123.2011407, 13.622052],
+        [123.20157, 13.6218032],
+        [123.2017077, 13.6217066],
+        [123.2018444, 13.6216387],
+        [123.2018919, 13.62163],
+        [123.2019281, 13.621635],
+        [123.2019583, 13.6216396],
+        [123.20199, 13.6216593],
+        [123.2020234, 13.6216852],
+        [123.202041, 13.6217503]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519724",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Reno Street",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.20157, 13.6218032],
+        [123.2015663, 13.6239784]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519868",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Broadway Avenue",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2011613, 13.6211086],
+        [123.2011369, 13.6211416],
+        [123.2011045, 13.6211674],
+        [123.2010617, 13.6211856],
+        [123.2010153, 13.6211911],
+        [123.2009692, 13.6211834],
+        [123.2009273, 13.6211632],
+        [123.2009, 13.6211401]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223484",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Naga Rotonda",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2009, 13.6211401],
+        [123.2008162, 13.621127],
+        [123.2007325, 13.621122],
+        [123.2006438, 13.6211241],
+        [123.2005021, 13.6211267]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223485",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Panganiban Drive",
+      "kind": "highway=secondary",
+      "width": 5,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2011045, 13.6211674],
+        [123.2010742, 13.6212696],
+        [123.2010562, 13.6214041],
+        [123.2010575, 13.6215641],
+        [123.2010495, 13.621756],
+        [123.2010268, 13.6219042]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223486",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 5,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2011164, 13.620909],
+        [123.2012517, 13.6209367],
+        [123.2013532, 13.6209519],
+        [123.2015184, 13.6209469],
+        [123.2018996, 13.6209316]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223487",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Maharlika Highway",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2009045, 13.6209238],
+        [123.2009071, 13.6208509],
+        [123.2008871, 13.6207759],
+        [123.2008496, 13.6206431]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223488",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Roxas Avenue",
+      "kind": "highway=primary",
+      "width": 3.2,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2010702, 13.6208854],
+        [123.2011164, 13.620909]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/721779676",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Maharlika Highway",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2018996, 13.6209316],
+        [123.2015216, 13.6210117],
+        [123.2013678, 13.621043],
+        [123.2012701, 13.6210759],
+        [123.2011613, 13.6211086]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/721779677",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Maharlika Highway",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2008496, 13.6206431],
+        [123.2009371, 13.6207277],
+        [123.201005, 13.6208103],
+        [123.2010702, 13.6208854]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/721779678",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Roxas Avenue",
+      "kind": "highway=primary",
+      "width": 3.2,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2010268, 13.6219042],
+        [123.2009874, 13.621752],
+        [123.200981, 13.6215655],
+        [123.2009804, 13.6214235],
+        [123.2009565, 13.6212656],
+        [123.2009273, 13.6211632]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/721779873",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 5,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2005021, 13.6211267],
+        [123.2006206, 13.621091],
+        [123.2007192, 13.6210605],
+        [123.2007935, 13.6210238],
+        [123.2008683, 13.6209786]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/721779874",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Panganiban Drive",
+      "kind": "highway=secondary",
+      "width": 5,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2018996, 13.6209316],
+        [123.2020354, 13.6209108],
+        [123.2022499, 13.6208887],
+        [123.2023793, 13.6208833]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/760083147",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Maharlika Highway",
+      "kind": "highway=primary",
+      "width": 12,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2009045, 13.6209238],
+        [123.2009401, 13.6208975],
+        [123.2009817, 13.6208817],
+        [123.2010262, 13.6208775],
+        [123.2010702, 13.6208854]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/763589722",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Naga Rotonda",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2011164, 13.620909],
+        [123.2011525, 13.6209458],
+        [123.2011721, 13.620984],
+        [123.2011804, 13.621026],
+        [123.2011767, 13.6210686],
+        [123.2011613, 13.6211086]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/763589723",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Naga Rotonda",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2008683, 13.6209786],
+        [123.2008835, 13.6209494],
+        [123.2009045, 13.6209238]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/793411605",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Naga Rotonda",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2009, 13.6211401],
+        [123.2008749, 13.6211045],
+        [123.2008607, 13.6210637],
+        [123.2008584, 13.6210206],
+        [123.2008683, 13.6209786]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/793413520",
+      "class": "road_major",
+      "highway": "primary",
+      "name": "Naga Rotonda",
+      "kind": "highway=primary",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.2010377, 13.6210606]
+    },
+    "properties": {
+      "id": "osm:node/12717296948",
+      "class": "place_label",
+      "name": "Concepcion Pequeña",
+      "kind": "place=quarter",
+      "place": "quarter",
+      "subdivision_label": true,
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "labels",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.200895, 13.62155]
+    },
+    "properties": {
+      "id": "osm:node/11949027321",
+      "class": "furniture",
+      "shop_lng": 123.200895,
+      "shop_lat": 13.62155,
+      "shop_radius_m": 5,
+      "name": "Rural Bank of San Jose",
+      "kind": "amenity=bank",
+      "variant": "shop_service",
+      "subdivision": "Concepcion Pequeña",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.204543, 13.629065],
+          [123.204588, 13.629071],
+          [123.204579, 13.629135],
+          [123.204534, 13.62913],
+          [123.204543, 13.629065]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665089",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.204591, 13.628601],
+          [123.204602, 13.628669],
+          [123.204553, 13.628675],
+          [123.204543, 13.62861],
+          [123.204591, 13.628601]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665393",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2049865, 13.627355],
+          [123.2053133, 13.627374],
+          [123.206062, 13.62793],
+          [123.2063679, 13.6286137],
+          [123.2063182, 13.6287103],
+          [123.2049398, 13.6287363],
+          [123.204926, 13.6283877],
+          [123.2049306, 13.6273913],
+          [123.2049865, 13.627355]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/222976551",
+      "class": "building_school",
+      "name": "Naga City Science High School",
+      "kind": "amenity=school",
+      "addr:street": "Leon Sa Aureus Street",
+      "operator": "Naga North District",
+      "subdivision": "Balatas",
+      "subdivision_approx": true,
+      "start_year": 1994,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2050363, 13.6283927],
+          [123.2050309, 13.6282344],
+          [123.2050264, 13.6281067],
+          [123.2058123, 13.628081],
+          [123.2058222, 13.6283671],
+          [123.2050363, 13.6283927]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/746057997",
+      "class": "building",
+      "name": "Main Building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2058536, 13.6283828],
+          [123.2058551, 13.6282672],
+          [123.2061862, 13.6282711],
+          [123.2061848, 13.6283867],
+          [123.2060161, 13.6283847],
+          [123.2058536, 13.6283828]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/746057998",
+      "class": "building",
+      "name": "Viva Building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2059809, 13.6286735],
+          [123.2059754, 13.6284474],
+          [123.2062717, 13.6284407],
+          [123.2062772, 13.6286667],
+          [123.2059809, 13.6286735]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/746057999",
+      "class": "pitch",
+      "name": "Covered Court",
+      "kind": "leisure=pitch",
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2061111, 13.6282483],
+          [123.2061142, 13.6281725],
+          [123.2061613, 13.6281743],
+          [123.2061582, 13.6282501],
+          [123.2061111, 13.6282483]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071180",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.206038, 13.6281785],
+          [123.2060419, 13.6280925],
+          [123.206107, 13.6280953],
+          [123.2061031, 13.6281812],
+          [123.206038, 13.6281785]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071181",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2059415, 13.6281744],
+          [123.2059399, 13.6280975],
+          [123.2060161, 13.6280961],
+          [123.2060176, 13.6281729],
+          [123.2059415, 13.6281744]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071182",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.205841, 13.6281833],
+          [123.2058406, 13.628093],
+          [123.2059248, 13.6280927],
+          [123.2059251, 13.628183],
+          [123.205841, 13.6281833]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071183",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2054542, 13.6276729],
+          [123.2054058, 13.6276294],
+          [123.2054203, 13.6275669],
+          [123.2054833, 13.6275479],
+          [123.2055317, 13.6275913],
+          [123.2055172, 13.6276539],
+          [123.2054542, 13.6276729]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071184",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2052536, 13.6276193],
+          [123.2052593, 13.6274667],
+          [123.2053625, 13.6274704],
+          [123.2053568, 13.6276229],
+          [123.2052536, 13.6276193]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071185",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2059397, 13.6286897],
+          [123.2055708, 13.6286918],
+          [123.2055703, 13.6286006],
+          [123.2059391, 13.6285985],
+          [123.2059397, 13.6286897]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071186",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2050854, 13.6286999],
+          [123.2050848, 13.6285943],
+          [123.2055361, 13.6285917],
+          [123.2055367, 13.6286973],
+          [123.2050854, 13.6286999]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071187",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2059098, 13.6280787],
+          [123.2058045, 13.6278372],
+          [123.2058724, 13.6278092],
+          [123.2059777, 13.6280507],
+          [123.2059098, 13.6280787]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071188",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2057592, 13.6278362],
+          [123.2055351, 13.6276573],
+          [123.2055851, 13.6275982],
+          [123.2058092, 13.627777],
+          [123.2057592, 13.6278362]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/881071189",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2084523, 13.6294736],
+          [123.207175, 13.6298558],
+          [123.2072095, 13.6303163],
+          [123.2082608, 13.6305793],
+          [123.2083376, 13.630717],
+          [123.2085272, 13.6306326],
+          [123.2084433, 13.631762],
+          [123.2083654, 13.6317223],
+          [123.2082421, 13.6314095],
+          [123.2078317, 13.6314617],
+          [123.2076748, 13.6314434],
+          [123.2080141, 13.632344],
+          [123.2074677, 13.6328042],
+          [123.2071357, 13.6325905],
+          [123.2070134, 13.6327324],
+          [123.2069296, 13.6331351],
+          [123.2066573, 13.633289],
+          [123.2063655, 13.6328827],
+          [123.206001, 13.6325104],
+          [123.2059139, 13.6323463],
+          [123.205679, 13.6324771],
+          [123.2054652, 13.6320692],
+          [123.2056684, 13.6319281],
+          [123.2046026, 13.6305563],
+          [123.2046063, 13.630459],
+          [123.2047616, 13.6303049],
+          [123.20459, 13.6283935],
+          [123.2047484, 13.627534],
+          [123.2047511, 13.6273881],
+          [123.2049306, 13.6273913],
+          [123.2049398, 13.6287363],
+          [123.2063182, 13.6287103],
+          [123.2063679, 13.6286137],
+          [123.206062, 13.62793],
+          [123.2053133, 13.627374],
+          [123.2053214, 13.6273303],
+          [123.2054552, 13.6273275],
+          [123.2056269, 13.6272871],
+          [123.2061231, 13.6271841],
+          [123.2061982, 13.6271776],
+          [123.2062505, 13.6271906],
+          [123.2063001, 13.6272119],
+          [123.207702, 13.6278053],
+          [123.2077905, 13.627941],
+          [123.2084523, 13.6294736]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1535599852",
+      "class": "farmland",
+      "kind": "landuse=farmland",
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2051228, 13.6277434],
+        [123.2051198, 13.627963],
+        [123.205179, 13.628018],
+        [123.2053237, 13.6280245],
+        [123.2054097, 13.6279525],
+        [123.2054371, 13.6278858],
+        [123.2052607, 13.6277858],
+        [123.2051228, 13.6277434]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518908",
+      "class": "road_minor",
+      "highway": "service",
+      "name": "Naga City Science HS Road",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1996182, 13.6258696],
+        [123.1999963, 13.6259951],
+        [123.2002651, 13.6261156],
+        [123.2008687, 13.6263647],
+        [123.201206, 13.6265172],
+        [123.201513, 13.6266282],
+        [123.201562, 13.6266542],
+        [123.2020157, 13.626829],
+        [123.202075, 13.6268528],
+        [123.2023227, 13.6269497],
+        [123.202484, 13.6270182],
+        [123.2029742, 13.627169],
+        [123.2031333, 13.6271948],
+        [123.2034357, 13.6272273],
+        [123.2036923, 13.6272361],
+        [123.2039242, 13.6272445],
+        [123.2040818, 13.6272563],
+        [123.204409, 13.627285],
+        [123.2046163, 13.627299],
+        [123.2051301, 13.6273255]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519204",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "Leon Sa Aureus Street",
+      "kind": "highway=tertiary",
+      "width": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2051301, 13.6273255],
+        [123.205183, 13.6273275],
+        [123.2053214, 13.6273303],
+        [123.2054552, 13.6273275],
+        [123.2056269, 13.6272871],
+        [123.2061231, 13.6271841],
+        [123.2061982, 13.6271776],
+        [123.2062505, 13.6271906],
+        [123.2063001, 13.6272119],
+        [123.207702, 13.6278053]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/905736479",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "City Science-Balatas Road",
+      "kind": "highway=tertiary",
+      "width": 10,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2051301, 13.6273255],
+        [123.2051228, 13.6277434]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/905768292",
+      "class": "road_minor",
+      "highway": "service",
+      "name": "Naga City Science HS Road",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2139083, 13.6293888],
+        [123.2137474, 13.6293797],
+        [123.2134913, 13.6293745],
+        [123.2131546, 13.6293536],
+        [123.2128918, 13.6293875],
+        [123.212347, 13.6295338],
+        [123.2122024, 13.6295726],
+        [123.2119181, 13.6296508],
+        [123.2109141, 13.6298737],
+        [123.2105254, 13.6299673],
+        [123.2101747, 13.6300561],
+        [123.2099658, 13.6301126],
+        [123.2096973, 13.6301643],
+        [123.2093941, 13.6302034],
+        [123.2090789, 13.6302425],
+        [123.2089233, 13.63029],
+        [123.2088268, 13.6303409],
+        [123.2087893, 13.6303642],
+        [123.2087424, 13.6304002],
+        [123.2086812, 13.6304802],
+        [123.208611, 13.6306446],
+        [123.2085749, 13.6308052],
+        [123.2085653, 13.6311843],
+        [123.2085699, 13.6313027],
+        [123.2085822, 13.6315983],
+        [123.2085914, 13.6317673],
+        [123.2085543, 13.6319306],
+        [123.2085284, 13.6320162],
+        [123.2084915, 13.6321003],
+        [123.2084169, 13.6321764],
+        [123.208291, 13.6322763],
+        [123.2082606, 13.6322977],
+        [123.2081737, 13.6323518],
+        [123.2081171, 13.6323857],
+        [123.2079135, 13.6325226],
+        [123.2074677, 13.6328042],
+        [123.2073885, 13.6328542],
+        [123.2069296, 13.6331351],
+        [123.2066134, 13.6333544],
+        [123.2062644, 13.6335559],
+        [123.2061238, 13.6336372],
+        [123.205959, 13.6337473],
+        [123.2058048, 13.6338407],
+        [123.2056779, 13.6339447],
+        [123.2054842, 13.6340605],
+        [123.2052169, 13.6342225],
+        [123.2050663, 13.6342886],
+        [123.2049055, 13.6343306],
+        [123.2047202, 13.6343376],
+        [123.2045331, 13.6343274],
+        [123.2036791, 13.6342276],
+        [123.2032353, 13.6341772],
+        [123.2030641, 13.6341596],
+        [123.2029789, 13.6341509],
+        [123.2023833, 13.634064],
+        [123.2016779, 13.6339311],
+        [123.2008204, 13.6337151],
+        [123.2000138, 13.6334885],
+        [123.1995354, 13.6333312],
+        [123.1990346, 13.6331465],
+        [123.1988318, 13.6330581],
+        [123.1986438, 13.6329608],
+        [123.1983719, 13.6327871],
+        [123.1980274, 13.6325234],
+        [123.1976035, 13.6321464],
+        [123.1975128, 13.6320617],
+        [123.196861, 13.631478],
+        [123.1967731, 13.6314016]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521696",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Balatas-Cararayan Road",
+      "kind": "highway=secondary",
+      "width": 6,
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  }
+]
