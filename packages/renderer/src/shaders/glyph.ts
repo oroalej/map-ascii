@@ -27,7 +27,7 @@ import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BRAKE_COLOR, BRAKE_LAMP } from '../life/lamps';
-import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/exhaust';
+import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
   CROWN_LIGHT,
   EDGE_INK,

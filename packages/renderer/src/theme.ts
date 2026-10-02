@@ -3,7 +3,7 @@ import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
 import { personGlyphs } from './life/people';
-import { PUFF_GLYPHS } from './life/exhaust';
+import { PUFF_GLYPHS } from './life/puff-style';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 
 export type ThemeName = 'dark' | 'light';

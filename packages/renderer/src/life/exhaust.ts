@@ -2,6 +2,8 @@ import { VEHICLES, type CraftType } from './vehicles';
 import { frameBetween } from './frames';
 import { lngLatToTile, tileToLngLat } from '@atlas/shared';
 import type { TileId } from '../tiles';
+import { PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
+export { PUFF_AGE_MASK, PUFF_KIND_BIT, PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
 
 export const PUFF = {
   cap: 96,
@@ -13,13 +15,9 @@ export const PUFF = {
   spread: 0.4,
   tailpipeOffset: 0.3,
 } as const;
-export const PUFF_AGE_MASK = 7;
-export const PUFF_KIND_BIT = 8;
 /** Reply-owned packet: final actor index, position, age and kind. */
 export const PUFF_STRIDE = 5;
 export const EMPTY_PUFFS = new Float64Array(0);
-export const PUFF_COLOR = { diesel: [0.45, 0.45, 0.45], twoStroke: [0.55, 0.6, 0.64] } as const;
-export const PUFF_GLYPHS = ['°', '∘', '·'] as const;
 export type PuffKind = keyof typeof PUFF_COLOR;
 export type Puff = {
   sourceId: number;
