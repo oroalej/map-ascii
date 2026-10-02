@@ -1,0 +1,20 @@
+{
+  "id": "landmark/sti-college-naga",
+  "osm_id": "osm:node/254753694",
+  "name": {
+    "en": "STI College - Naga"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/node/254753694",
+      "note": "ODbL. Complete source footprints, boundaries, roads, mapped trunks and identities retained."
+    },
+    {
+      "title": "Owner-supplied additional roadside and campus references",
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence. The college point anchors a draft visual grounds envelope around the preserved mapped academic roof and western open lawn; it is not a mapped property boundary."
+    }
+  ]
+}

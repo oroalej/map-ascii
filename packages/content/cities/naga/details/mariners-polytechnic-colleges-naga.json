@@ -1,0 +1,94 @@
+{
+  "id": "detail/mariners-polytechnic-colleges-naga",
+  "osm_id": "osm:way/1307197972",
+  "title": "Mariners Polytechnic Colleges - Naga",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "additional-approach-1-1",
+      "ring": [
+        [123.189471991, 13.623645263],
+        [123.189447426, 13.623657767],
+        [123.189466456, 13.623693074],
+        [123.189473646, 13.623786534],
+        [123.189501299, 13.623784524],
+        [123.189493681, 13.623685507],
+        [123.189471991, 13.623645263]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-2-1",
+      "ring": [
+        [123.189753263, 13.623644261],
+        [123.189905193, 13.623630756],
+        [123.189902668, 13.623603918],
+        [123.189818422, 13.623611407],
+        [123.189769217, 13.623617218],
+        [123.189768554, 13.623616849],
+        [123.18976838, 13.623615855],
+        [123.189751046, 13.623617396],
+        [123.189563494, 13.623629967],
+        [123.189441495, 13.623635356],
+        [123.189442754, 13.623662277],
+        [123.189565078, 13.623656874],
+        [123.189753263, 13.623644261]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-3-1",
+      "ring": [
+        [123.189703742, 13.62375402],
+        [123.189681913, 13.62373061],
+        [123.189661365, 13.623748707],
+        [123.189693213, 13.62378286],
+        [123.189808383, 13.62376564],
+        [123.189987436, 13.623751289],
+        [123.189985157, 13.623724431],
+        [123.189805131, 13.62373886],
+        [123.189703742, 13.62375402]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-4-1",
+      "ring": [
+        [123.189939244, 13.623536427],
+        [123.189953126, 13.623634464],
+        [123.189980597, 13.62363079],
+        [123.189966716, 13.623532753],
+        [123.189939244, 13.623536427]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/1307197972",
+      "note": "ODbL. Complete source footprints, boundaries, roads, mapped trunks and identities retained."
+    },
+    {
+      "title": "Owner-supplied additional roadside and campus references",
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

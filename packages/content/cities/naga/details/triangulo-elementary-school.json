@@ -1,0 +1,149 @@
+{
+  "id": "detail/triangulo-elementary-school",
+  "osm_id": "osm:way/336326118",
+  "title": "Triangulo Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "additional-approach-1-1",
+      "ring": [
+        [123.190243479, 13.616487288],
+        [123.189941509, 13.616518509],
+        [123.189802881, 13.616582881],
+        [123.189814836, 13.616607197],
+        [123.189825689, 13.616602158],
+        [123.189822567, 13.616578592],
+        [123.189822997, 13.616577845],
+        [123.189898419, 13.616568386],
+        [123.189949172, 13.616544818],
+        [123.190217391, 13.616517087],
+        [123.190225046, 13.616652485],
+        [123.190307306, 13.616636939],
+        [123.190302184, 13.616635472],
+        [123.190299582, 13.616634304],
+        [123.190294973, 13.616631371],
+        [123.190292832, 13.61662952],
+        [123.190289298, 13.616625413],
+        [123.190287801, 13.616623037],
+        [123.190285646, 13.616618111],
+        [123.190284656, 13.616613766],
+        [123.190250989, 13.616620128],
+        [123.190243479, 13.616487288]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-2-1",
+      "ring": [
+        [123.190285903, 13.616618787],
+        [123.190284939, 13.616615484],
+        [123.190284492, 13.616612733],
+        [123.190284332, 13.616610022],
+        [123.190284812, 13.616604755],
+        [123.190280656, 13.616551283],
+        [123.190253005, 13.616553313],
+        [123.190285308, 13.616968925],
+        [123.190326465, 13.617000592],
+        [123.190343677, 13.616979463],
+        [123.190312044, 13.616955124],
+        [123.190285903, 13.616618787]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-3-1",
+      "ring": [
+        [123.189844907, 13.616197722],
+        [123.189818304, 13.616205326],
+        [123.189866912, 13.616365949],
+        [123.189867849, 13.616365296],
+        [123.18986857, 13.616365542],
+        [123.189912321, 13.616417014],
+        [123.189897942, 13.616372972],
+        [123.189844907, 13.616197722]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-3-2",
+      "ring": [
+        [123.189921509, 13.616534265],
+        [123.189947941, 13.616526115],
+        [123.189916285, 13.616429156],
+        [123.189893317, 13.616447913],
+        [123.189921509, 13.616534265]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-4-1",
+      "ring": [
+        [123.190285063, 13.616130083],
+        [123.190257696, 13.616134425],
+        [123.190266485, 13.616186748],
+        [123.190282498, 13.616184588],
+        [123.190282986, 13.616184687],
+        [123.190283319, 13.616185132],
+        [123.190303332, 13.616325501],
+        [123.19030319, 13.616326034],
+        [123.190302702, 13.616326312],
+        [123.190278592, 13.616329563],
+        [123.19028259, 13.616385251],
+        [123.190294886, 13.61638339],
+        [123.190295666, 13.616383788],
+        [123.190307482, 13.616457581],
+        [123.19031554, 13.616457034],
+        [123.190297298, 13.616202914],
+        [123.190285063, 13.616130083]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-5-1",
+      "ring": [
+        [123.18983489, 13.616888857],
+        [123.189861684, 13.616881913],
+        [123.189831112, 13.616770492],
+        [123.189795871, 13.616688588],
+        [123.189770287, 13.616698984],
+        [123.189804803, 13.616779202],
+        [123.18983489, 13.616888857]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/336326118",
+      "note": "ODbL. Complete source footprints, boundaries, roads, mapped trunks and identities retained."
+    },
+    {
+      "title": "Owner-supplied additional roadside and campus references",
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

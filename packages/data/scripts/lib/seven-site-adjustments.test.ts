@@ -125,14 +125,16 @@ describe('seven-site planting adjustments', () => {
     expect(covers[0]!.areas.every((a) => a.cover !== 'woods')).toBe(true);
   });
 
-  it('keeps Magsaysay crowns small and at least 24 metres apart along retained carriageways', () => {
+  it('allows the later Magsaysay canopy enlargement while keeping spaced roadside trunks', () => {
     const cover = covers[6]!;
     expect(cover.trees.length).toBeGreaterThan(20);
-    expect(cover.trees.length).toBeLessThan(70);
+    expect(cover.trees.length).toBeLessThan(105);
     for (const [i, tree] of cover.trees.entries()) {
-      expect(tree.crown_m).toBe(7);
+      expect(tree.crown_m).toBeGreaterThanOrEqual(17);
+      expect(tree.crown_m).toBeLessThanOrEqual(20);
       for (const other of cover.trees.slice(i + 1))
-        expect(distance(tree.at, other.at)).toBeGreaterThan(23.9);
+        // Opposite curbs may be closer; the newer signed-side guard checks row spacing.
+        expect(distance(tree.at, other.at)).toBeGreaterThan(12);
     }
   });
 
