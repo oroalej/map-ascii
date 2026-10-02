@@ -2,7 +2,7 @@ import { VEHICLES, type CraftType } from './vehicles';
 import { frameBetween } from './frames';
 import { lngLatToTile, tileToLngLat } from '@atlas/shared';
 import type { TileId } from '../tiles';
-import { PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
+import { type PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
 export { PUFF_AGE_MASK, PUFF_KIND_BIT, PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
 
 export const PUFF = {
