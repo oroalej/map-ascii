@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas } from './index';
 import { LifeWorld } from './life/simulate';
+import { uploadEffectClocks } from './gpu';
 import {
   cellPass,
   fixturePass,
@@ -19,6 +20,7 @@ const visibility = vi.hoisted(() => ({
   changed: undefined as ((watched: boolean) => void) | undefined,
 }));
 import * as Hosts from './life/host';
+import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 import type * as PickingModule from './picking';
@@ -43,6 +45,7 @@ vi.mock('./gpu', () => ({
     labelRows: number,
   ) => ({ cols, rows, labelCols, labelRows, glyphFbo: 'glyph', sub: { fbo: 'sub' } }),
   deleteCellTargets: vi.fn(),
+  uploadEffectClocks: vi.fn(),
 }));
 vi.mock('./passes', async (load) => ({
   ...(await load<typeof PassesModule>()),
@@ -170,12 +173,50 @@ describe('live motion preference', () => {
       initialCamera: { lat: 0, lng: 0, zoom: 18 },
       year: 2026,
       life: { time: 720, wind: 'storm' },
+      lifeHoverPause: 'all',
     });
   });
   afterEach(() => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      timezone: 'UTC',
+      now: () => new Date('2026-10-02T12:00:00Z'),
+      life: { time: 720, wind: 'calm' },
+      lifeWorker: false,
+    });
+    let clocks: Float32Array | undefined;
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0, candle: true, effectClock: -2 },
+    ]);
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      clocks ??= new Float32Array(targets.cols * targets.rows * 2).fill(-2);
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(targets.cols * targets.rows),
+        revision: 1,
+        light: life,
+        lamps: null,
+        clocksActive: true,
+        clocks,
+      });
+      return 1;
+    });
+    draw(100);
+    draw(150);
+    expect(lightPass).not.toHaveBeenCalled();
+    expect(uploadEffectClocks).toHaveBeenLastCalledWith(gl, expect.anything(), clocks);
+    expect(uploadEffectClocks).toHaveBeenCalledTimes(1);
   });
 
   const hoverAgent = () => {
@@ -203,6 +244,66 @@ describe('live motion preference', () => {
     draw(150);
     draw(200);
   };
+
+  it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
+    atlas.destroy();
+    let generation = 1,
+      clock = 0;
+    let first = 0,
+      second = 0;
+    let latest: Hosts.FrameView | undefined;
+    const request = vi.fn((frame: FrameInput) => {
+      clock += frame.step.dt;
+      if (frame.inspection?.id !== 1) first += 0.000001;
+      second += 0.000001;
+      latest = {
+        generation,
+        signalClock: clock,
+        procession: undefined,
+        cellGuard: () => undefined,
+        inspection: { id: frame.inspection?.id ?? null, revision: frame.inspection?.revision ?? 0 },
+        agents: [
+          { kind: 'person', inspectionId: 1, lng: first, lat: 0, flap: 0 },
+          { kind: 'person', inspectionId: 2, lng: second, lat: 0, flap: 0 },
+        ],
+      };
+      return true;
+    });
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      clearTiles() {},
+      request,
+      latest: () => latest,
+      setLive() {},
+      play: () => false,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    hoverAgent();
+    draw(250);
+    const held = first,
+      moving = second,
+      signal = clock;
+    for (const at of [300, 350, 400]) draw(at);
+    expect(first).toBe(held);
+    expect(second).toBeGreaterThan(moving);
+    expect(clock).toBeGreaterThan(signal);
+    expect(request.mock.calls.at(-1)![0].inspection?.id).toBe(1);
+    generation++;
+    draw(450);
+    draw(490);
+    expect(request.mock.calls.at(-1)![0].inspection?.id).toBeNull();
+    input.intents!.hover(null);
+    draw(530);
+    expect(first).toBeGreaterThan(held);
+  });
 
   it('keeps the drawn Life pose, traffic clock and tooltip while environmental time advances', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
@@ -299,6 +400,7 @@ describe('live motion preference', () => {
       initialCamera: { lat: 0, lng: 0, zoom: 18 },
       year: 2026,
       lifeWorker: false,
+      lifeHoverPause: 'all',
     });
     hoverAgent();
     const count = request.mock.calls.length;
@@ -344,6 +446,7 @@ describe('live motion preference', () => {
       year: 2026,
       lifeWorker: false,
       life: { time: 'live' },
+      lifeHoverPause: 'all',
       now: () => new Date('2026-09-19T08:00:00Z'),
       processions: [
         {

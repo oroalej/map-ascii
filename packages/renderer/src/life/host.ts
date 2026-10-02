@@ -7,8 +7,12 @@ import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
+import type { InspectionAck } from './inspection';
+let nextGeneration = 0;
 
 export type FrameView = {
+  generation?: number;
+  inspection?: InspectionAck;
   agents: VisibleAgent[];
   procession: ProcessionRun | undefined;
   signalClock: number;
@@ -20,7 +24,7 @@ export interface LifeHost {
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
-  setLive(id: string | undefined, progress?: number): void;
+  setLive(id: string | undefined, progress?: number, occurrence?: string): void;
   play(id: string): boolean;
   stop(): void;
   dispose(): void;
@@ -35,6 +39,7 @@ export function createInlineHost(
   const preparation = new LifePreparation(world, profiler, preparationClock);
   let disposed = false;
   let acceptedPost: number | undefined;
+  let generation = ++nextGeneration;
   return {
     sync: (tiles, focus, context) => {
       if (disposed) return;
@@ -42,6 +47,7 @@ export function createInlineHost(
       if (!tiles.length) view = undefined;
     },
     clearTiles() {
+      generation = ++nextGeneration;
       world.clearTiles();
       preparation.clear();
       view = undefined;
@@ -59,6 +65,7 @@ export function createInlineHost(
       const terrain = world.cellTerrain();
       view = {
         ...result,
+        generation,
         cellGuard: (toCell) =>
           terrain &&
           makeCellGuard(
@@ -82,7 +89,7 @@ export function createInlineHost(
         procession: world.procession(),
       };
     },
-    setLive: (id, progress) => world.setLive(id, progress),
+    setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
     play: (id) => world.play(id),
     stop: () => world.stop(),
     dispose: () => {
@@ -95,13 +102,13 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix },
+  options: { traffic?: TrafficMix; itemInspection?: boolean },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler);
+    const world = new LifeWorld(options.traffic, profiler, options.itemInspection);
     world.setProcessions(processions);
     return createInlineHost(world, profiler);
   };
@@ -114,7 +121,7 @@ export function createWorkerHost(
   let ready = false,
     inFlight = false,
     disposed = false,
-    generation = 0,
+    generation = ++nextGeneration,
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
@@ -124,7 +131,7 @@ export function createWorkerHost(
   let tiles: readonly LifeTile[] = [];
   let focus: readonly [number, number] | undefined;
   let viewContext: LifeViewContext | undefined;
-  let live: { id: string | undefined; progress?: number } = { id: undefined };
+  let live: { id: string | undefined; progress?: number; occurrence?: string } = { id: undefined };
   let played: string | undefined;
   const sent = new Set<string>();
   const release = () => {
@@ -133,20 +140,27 @@ export function createWorkerHost(
   };
   const fail = () => {
     if (disposed || fallback) return;
-    generation++;
+    generation = ++nextGeneration;
     ready = false;
     release();
     fallback = inline();
     fallback.sync(tiles, focus, viewContext);
-    fallback.setLive(live.id, live.progress);
+    fallback.setLive(live.id, live.progress, live.occurrence);
     if (played) fallback.play(played);
   };
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
   // Comlink posts messages in order; init and all synchronous sync/command calls precede frames.
-  void remote.init({ traffic: options.traffic, processions, profiling: !!profiler }).then(() => {
-    if (!disposed && !fallback) ready = true;
-  }, fail);
+  void remote
+    .init({
+      traffic: options.traffic,
+      processions,
+      profiling: !!profiler,
+      itemInspection: options.itemInspection,
+    })
+    .then(() => {
+      if (!disposed && !fallback) ready = true;
+    }, fail);
   return {
     sync(next, nextFocus, nextView) {
       if (disposed) return;
@@ -160,7 +174,7 @@ export function createWorkerHost(
       const keep = new Set(next.map((tile) => tile.key));
       if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
         if (!nextView || !keep.size) {
-          generation++;
+          generation = ++nextGeneration;
           terrain = undefined;
         }
         // Keep the last complete frame while nonempty geometry loads. It is never combined
@@ -183,7 +197,7 @@ export function createWorkerHost(
       tiles = [];
       focus = undefined;
       viewContext = undefined;
-      generation++;
+      generation = ++nextGeneration;
       acceptedPost = undefined;
       profiler?.clearContinuity();
       terrain = undefined;
@@ -218,6 +232,8 @@ export function createWorkerHost(
           const cellTerrain = terrain;
           view = {
             agents: result.agents,
+            generation,
+            inspection: result.inspection,
             procession: result.procession,
             signalClock: result.signalClock,
             cellGuard: (toCell) =>
@@ -238,11 +254,11 @@ export function createWorkerHost(
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return view;
     },
-    setLive(id, progress) {
+    setLive(id, progress, occurrence) {
       if (disposed) return;
-      live = { id, progress };
-      if (fallback) fallback.setLive(id, progress);
-      else void remote.setLive(id, progress).catch(fail);
+      live = { id, progress, occurrence };
+      if (fallback) fallback.setLive(id, progress, occurrence);
+      else void remote.setLive(id, progress, occurrence).catch(fail);
     },
     play(id) {
       if (disposed || !processions.some((route) => route.id === id)) return false;
@@ -261,7 +277,7 @@ export function createWorkerHost(
     dispose() {
       if (disposed) return;
       disposed = true;
-      generation++;
+      generation = ++nextGeneration;
       worker.removeEventListener('error', fail);
       worker.removeEventListener('messageerror', fail);
       if (fallback) fallback.dispose();

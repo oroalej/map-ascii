@@ -86,6 +86,8 @@ uniform bool u_focus;
 uniform bool u_focusLife;
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
+uniform sampler2D u_effectClocks;
+uniform bool u_hasEffectClocks;
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
@@ -158,12 +160,18 @@ const vec3 LAMP_WHITE = vec3(1.0, 0.9, 0.7);
 // A shop's warm interior light, spilling out of its door.
 const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 
-float lampOn(int g) {
+float effectTime(ivec2 cell, int channel) {
+  if (!u_hasEffectClocks) return u_lifeTime;
+  float token = texelFetch(u_effectClocks, cell, 0)[channel];
+  return token <= -2.0 ? -token - 2.0 : u_lifeTime - max(0.0, token);
+}
+
+float lampOn(int g, float time) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
   if (state == ${LampState.candle}) {
     float beat = 5.0 + float(g >> 3) * 0.23;
-    return u_shimmer ? 0.8 + 0.2 * sin(u_lifeTime * beat + float(g >> 3)) : 1.0;
+    return u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
   }
   if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
   int seed = g >> 3;
@@ -221,7 +229,9 @@ float reflection(vec2 at, ivec2 cell) {
     int g = int(t.g * 255.0 + 0.5);
     // Beams don't reach across the water; lamps, floods, and candles do.
     if ((g & 7) == ${LampState.beam}) continue;
-    float s = texture(u_light, p / vec2(size)).r * lampOn(g) * switchedOn(g);
+    ivec2 candleCell = clamp(ivec2(floor(p)), ivec2(0), size - 1);
+    float clock = (g & 7) == ${LampState.candle} ? effectTime(candleCell, 1) : u_lifeTime;
+    float s = texture(u_light, p / vec2(size)).r * lampOn(g, clock) * switchedOn(g);
     best = max(best, s * (1.0 - float(k) / 12.0));
   }
   float ripple = u_shimmer ? 0.55 + 0.45 * sin(row * 2.1 + u_time * 2.3) : 0.8;
@@ -390,7 +400,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
   if (part == ${FixturePart.flagFoot}) color = daylit(vec3(0.43, 0.39, 0.33));
   if (part == ${FixturePart.casing}) color = daylit(u_fixturePaints[1]);
   if (part == ${FixturePart.lamp}) {
-    float lit = lampOn(info) * switchedOn(info);
+    float lit = lampOn(info, u_lifeTime) * switchedOn(info);
     color = mix(color, u_fixturePaints[2], lit);
   }
   if (part >= ${FixturePart.red} && part <= ${FixturePart.green}) {
@@ -521,7 +531,8 @@ void main() {
   vec4 light = texelFetch(u_light, cell, 0);
   float lampsNow = lamps() * u_lampShow;
   int lampG = int(light.g * 255.0 + 0.5);
-  float lampLight = lampsNow > 0.0 ? lampOn(lampG) * switchedOn(lampG) * u_lampShow : 0.0;
+  float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
+  float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock) * switchedOn(lampG) * u_lampShow : 0.0;
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
   bool flood = (lampG & 7) == ${LampState.flood};
   // Floodlights and candles light wherever they are; streetlights light the ground.
@@ -588,7 +599,7 @@ void main() {
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
       // A candle, from dusk: warm, each flickering on its own beat.
       float beat = float(cellHash(u_origin + cell) & 7u) + 3.0;
-      float flicker = u_shimmer ? 0.85 + 0.15 * sin(u_lifeTime * beat) : 1.0;
+      float flicker = u_shimmer ? 0.85 + 0.15 * sin(effectTime(cell, 0) * beat) : 1.0;
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);

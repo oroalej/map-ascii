@@ -36,6 +36,7 @@ export function lifeVisibleOnSurface(
 }
 
 export type HoverFrame = {
+  generation?: number;
   targets: Pick<CellTargets, 'cols' | 'rows' | 'glyphFbo' | 'sub'>;
   grid: GridPlacement;
   dpr: number;
@@ -58,6 +59,7 @@ export class LifeHoverController {
   private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
   private held: { agent: VisibleAgent; geometry: string; at: number } | undefined;
   private inspecting = false;
+  private inspectedAgent: VisibleAgent | undefined;
   private lastUpdate: number | undefined;
   private intervals: number[] = [];
 
@@ -66,6 +68,7 @@ export class LifeHoverController {
     private readonly attachment: number,
     private readonly emit: (hover: LifeHover) => void,
     private readonly inspect: (active: boolean) => void = () => {},
+    private readonly inspectItem: (agent: VisibleAgent | null) => void = () => {},
   ) {}
 
   pointer(point: [number, number] | null) {
@@ -89,7 +92,21 @@ export class LifeHoverController {
     this.publish(null);
   }
 
-  private setInspection(active: boolean) {
+  private setInspection(active: boolean, agent?: VisibleAgent) {
+    if (!active && this.inspectedAgent) {
+      this.inspectedAgent = undefined;
+      this.inspectItem(null);
+    } else if (
+      active &&
+      agent &&
+      (!this.inspectedAgent ||
+        (agent.inspectionId !== undefined
+          ? agent.inspectionId !== this.inspectedAgent.inspectionId
+          : agent !== this.inspectedAgent))
+    ) {
+      this.inspectedAgent = agent;
+      this.inspectItem(agent);
+    }
     if (active === this.inspecting) return;
     this.inspecting = active;
     this.inspect(active);
@@ -135,7 +152,7 @@ export class LifeHoverController {
       lifeClass,
       lifeFlags,
       agent,
-      key: `${f.geometry}/${col}/${row}/${sx}/${sy}/${label}/${lifeClass}/${lifeFlags}`,
+      key: `${f.generation ?? 0}/${agent.inspectionId ?? ''}/${f.geometry}/${col}/${row}/${sx}/${sy}/${label}/${lifeClass}/${lifeFlags}`,
     };
   }
 
@@ -174,17 +191,21 @@ export class LifeHoverController {
     const held = this.held;
     this.setInspection(
       !!held &&
-        held.agent === c.agent &&
+        (held.agent === c.agent ||
+          (c.agent.inspectionId !== undefined &&
+            held.agent.inspectionId === c.agent.inspectionId)) &&
         held.geometry === frame.geometry &&
         now - held.at < validity,
+      c.agent,
     );
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
     else this.publish(null);
     if (this.pending) return;
     if (
       this.confirmed?.key === c.key &&
-      this.confirmed.revision === frame.revision &&
-      (!this.confirmed.visible || now - this.confirmed.at < HOVER_RENEW_MS)
+      (c.agent.inspectionId !== undefined || this.confirmed.revision === frame.revision) &&
+      ((c.agent.inspectionId === undefined && !this.confirmed.visible) ||
+        now - this.confirmed.at < HOVER_RENEW_MS)
     )
       return;
     if (this.readback.size > MAX_PENDING_READS - 3) return;

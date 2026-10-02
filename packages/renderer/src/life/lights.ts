@@ -130,6 +130,8 @@ function pool(
   ry: number,
   strength: number,
   g: number,
+  clocks?: Float32Array,
+  clock = -1,
 ) {
   const { cols, rows } = grid;
   const c0 = Math.max(0, Math.floor(cx - rx) - 1);
@@ -145,6 +147,7 @@ function pool(
       if (d >= 1) {
         if (!head && out[at + 3] === 0) {
           out[at + 1] = g;
+          if (clocks) clocks[(at / 4) * 2 + 1] = clock;
           out[at + 3] = 255;
         }
         continue;
@@ -155,6 +158,7 @@ function pool(
       out[at] = value;
       if (head) continue;
       out[at + 1] = g;
+      if (clocks) clocks[(at / 4) * 2 + 1] = clock;
       out[at + 3] = 255;
     }
   }
@@ -296,6 +300,7 @@ export function packCandles(
   grid: LightGrid,
   agents: readonly VisibleAgent[],
   cellsPerMeter: number,
+  clocks?: Float32Array,
 ): number {
   // At least a cell and a half, so a crowd's candles still read zoomed out.
   const radius = Math.max(1.5, CANDLE.radius * cellsPerMeter);
@@ -308,9 +313,20 @@ export function packCandles(
     const [cx, cy] = grid.toCell(agent.lng, agent.lat);
     if (cx < -r || cy < -r || cx > grid.cols + r || cy > grid.rows + r) return;
     if (agent.candle) {
-      pool(out, grid, cx, cy, r, r, CANDLE.strength, lightByte(LampState.candle, i));
+      pool(
+        out,
+        grid,
+        cx,
+        cy,
+        r,
+        r,
+        CANDLE.strength,
+        lightByte(LampState.candle, agent.candleSeed ?? i),
+        clocks,
+        agent.effectClock ?? -1,
+      );
     } else {
-      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i));
+      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i), clocks);
     }
     lit++;
   });

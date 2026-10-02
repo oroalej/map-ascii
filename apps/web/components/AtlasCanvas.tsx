@@ -27,6 +27,10 @@ const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
 const SMALL_SCREEN = '(max-width: 640px)';
 const SMALL_SCREEN_MIN_CELL = 6;
+const configuredHoverPause = process.env.NEXT_PUBLIC_LIFE_HOVER_PAUSE ?? 'item';
+if (configuredHoverPause !== 'item' && configuredHoverPause !== 'all')
+  throw new Error('NEXT_PUBLIC_LIFE_HOVER_PAUSE must be item or all');
+const lifeHoverPause: 'item' | 'all' = configuredHoverPause === 'all' ? 'all' : 'item';
 
 /** The map's cell sizes by zoom (SPEC.md §2 "Cell size"), with a floor on small screens. */
 const cellSchedule = (small: boolean): CellSchedule =>
@@ -143,6 +147,7 @@ export function AtlasCanvas({
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
+      lifeHoverPause,
       quality,
       utilities: { derive: utilitiesDerived },
       tilesUrl: `/tiles/${slug}.pmtiles`,

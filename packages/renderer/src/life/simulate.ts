@@ -85,6 +85,7 @@ import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from '
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { LifeInspection } from './inspection';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
@@ -238,6 +239,7 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  inspecting?: object;
   clock?: number;
   minutes?: number;
   cityLife?: CityLifeConfig;
@@ -443,6 +445,7 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private inspected?: object;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
@@ -1491,6 +1494,7 @@ export class TileLife {
   private stepGatherers(dt: number, near?: (x: number, y: number) => boolean, guard?: GroundGuard) {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
+      if (this.inspected === g) continue;
       if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
       if (!this.canIdle(g)) g.pause = 0;
@@ -2527,7 +2531,11 @@ export class TileLife {
       speeds[i] = Math.min(
         speeds[i]!,
         room / FOLLOW.headway,
-        approach(room, leader.v ?? leader.speed, kinematicsOf(m.vehicle).brake * pm),
+        approach(
+          room,
+          this.inspected === leader ? 0 : (leader.v ?? leader.speed),
+          kinematicsOf(m.vehicle).brake * pm,
+        ),
       );
       caps[i] = Math.min(caps[i]!, room / dt);
     };
@@ -2600,6 +2608,7 @@ export class TileLife {
     pass?: StepPass,
   ) {
     if (dt <= 0) return;
+    this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
     this.time += dt;
@@ -2615,6 +2624,7 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
       pass?.owns,
+      this.inspected,
     );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) {
@@ -2641,6 +2651,7 @@ export class TileLife {
           a.i - b.i,
       );
     for (const { i, m } of order) {
+      if (this.inspected === m) continue;
       if (pass?.owns && !pass.owns(m)) continue;
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
@@ -3069,7 +3080,7 @@ export class TileLife {
 }
 
 /** A train's cars to draw, front to back, each on the track behind the head. */
-export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
+export function trainCars(life: TileLife, m: Mover, inspected = false): VisibleAgent[] {
   const { tile, perMeter } = life;
   const trail = [m.x, m.y, ...m.train!.trail];
   const out: VisibleAgent[] = [];
@@ -3080,22 +3091,42 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
     back += length + TRAIN.coupling;
     if (!at) break;
     const [lng, lat] = tileToLngLat(tile, at);
-    out.push({
-      kind: 'train',
-      lng,
-      lat,
-      ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
-      side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
-      vehicle: car,
-      paint: m.paint,
-      flap: 0,
-    });
+    out.push(
+      inspected
+        ? {
+            kind: 'train',
+            inspectionId: undefined,
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
+            side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
+            vehicle: car,
+            paint: m.paint,
+            flap: 0,
+          }
+        : {
+            kind: 'train',
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
+            side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
+            vehicle: car,
+            paint: m.paint,
+            flap: 0,
+          },
+    );
   }
   return out;
 }
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  /** Assigned only in item mode; factories reserve its slot to avoid property-array allocation. */
+  inspectionId?: number;
+  /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
+  effectClock?: number;
+  /** Stable candle-pool phase seed in per-item mode. */
+  candleSeed?: number;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -3171,6 +3202,7 @@ type GroundTerrain = {
 };
 
 export class LifeWorld {
+  readonly inspection?: LifeInspection;
   preparationEpoch = 0;
   hasBootstrapped() {
     return this.bootstrapped;
@@ -3266,7 +3298,7 @@ export class LifeWorld {
   /** Seconds simulated, for played processions. */
   private clock = 0;
   private played: { id: string; start: number } | undefined;
-  private live: { id: string; progress: number } | undefined;
+  private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
   private lastRain = 0;
@@ -3275,8 +3307,10 @@ export class LifeWorld {
   constructor(
     traffic?: TrafficMix,
     private readonly profiler?: FrameProfiler,
+    itemInspection = false,
   ) {
     this.traffic = resolveTraffic(traffic);
+    if (itemInspection) this.inspection = new LifeInspection();
   }
 
   /** Change the vehicle mix: every tile's agents spawn again with it. */
@@ -3287,6 +3321,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.inspection?.clear();
     this.preparationEpoch++;
     this.preparedTerrain = new WeakMap();
     this.preparedSettled = new WeakSet();
@@ -4103,6 +4138,7 @@ export class LifeWorld {
         ? undefined
         : (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const env: LifeEnv = {
+      inspecting: this.inspection?.owner,
       clock: this.clock,
       levels: this.lastLevels,
       rain: this.lastRain,
@@ -4130,6 +4166,7 @@ export class LifeWorld {
       [...this.tiles.values()],
       clamped,
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
+      env.inspecting,
     );
     const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
     const intents: {
@@ -4150,6 +4187,7 @@ export class LifeWorld {
     for (const source of this.tiles.values())
       for (const m of source.movers) {
         if (
+          env.inspecting === m ||
           (m.kind !== 'vehicle' && m.kind !== 'boat') ||
           !eligibility.get(source)!(m) ||
           !source.scenes.transferable(m)
@@ -4481,8 +4519,8 @@ export class LifeWorld {
   }
 
   /** The procession under way by its schedule, and how far through it is; or none. */
-  setLive(id: string | undefined, progress = 0) {
-    this.live = id && this.scenes.has(id) ? { id, progress } : undefined;
+  setLive(id: string | undefined, progress = 0, occurrence?: string) {
+    this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
   }
 
   /** The procession to show: one being played, else a live one. */
@@ -4493,7 +4531,7 @@ export class LifeWorld {
       if (progress < 1) return { id: this.played.id, progress, live: false };
       this.played = undefined;
     }
-    return this.live && { ...this.live, live: true };
+    return this.live && { id: this.live.id, progress: this.live.progress, live: true };
   }
 
   get size() {
@@ -4528,6 +4566,12 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const inspection = this.inspection;
+    inspection?.begin(this.clock);
+    // Choose the plain fallback once, outside the per-actor loop.
+    const push: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
+      ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
+      : (_owner, agent) => out.push(agent);
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
@@ -4538,6 +4582,10 @@ export class LifeWorld {
           crowds: zoom >= PROCESSION.crowdZoom,
           crews: zoom >= PROCESSION.crewZoom,
           bounds,
+          inspection,
+          scope: run.live
+            ? `live/${this.live?.occurrence ?? run.id}`
+            : `play/${this.played?.start}`,
         })
       : [];
     for (const life of this.tiles.values()) {
@@ -4553,7 +4601,8 @@ export class LifeWorld {
           if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
             this.previouslyVisible.add(m);
           // A train is long, and there are few: all its cars, wherever its head is.
-          for (const car of trainCars(life, m)) out.push({ ...car, consist: m.train });
+          for (const car of trainCars(life, m, this.inspection !== undefined))
+            push(m, { ...car, consist: m.train });
           continue;
         }
         if (!inView(m.x, m.y)) continue;
@@ -4566,17 +4615,37 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
-          out.push({
-            kind: m.kind,
-            lng,
-            lat,
-            ahead,
-            side,
-            vehicle: m.vehicle,
-            paint: m.paint,
-            turnSignal: m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
-            flap: 0,
-          });
+          push(
+            m,
+            this.inspection
+              ? {
+                  kind: m.kind,
+                  inspectionId: undefined,
+                  lng,
+                  lat,
+                  ahead,
+                  side,
+                  vehicle: m.vehicle,
+                  paint: m.paint,
+                  turnSignal:
+                    m.kind === 'vehicle'
+                      ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
+                      : undefined,
+                  flap: 0,
+                }
+              : {
+                  kind: m.kind,
+                  lng,
+                  lat,
+                  ahead,
+                  side,
+                  vehicle: m.vehicle,
+                  paint: m.paint,
+                  turnSignal:
+                    m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
+                  flap: 0,
+                },
+          );
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
           const people = m.group.map((w): PersonLook => ({
@@ -4587,7 +4656,12 @@ export class LifeWorld {
             // Standing still, feet together.
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
           }));
-          out.push({ kind: m.kind, lng, lat, ahead, flap: 0, people });
+          push(
+            m,
+            this.inspection
+              ? { kind: m.kind, inspectionId: undefined, lng, lat, ahead, flap: 0, people }
+              : { kind: m.kind, lng, lat, ahead, flap: 0, people },
+          );
         } else if (m.kind === 'dog' || m.kind === 'cat') {
           // Standing, sniffing, or lying down, it keeps still.
           const still = m.pause > 0 || life.scenes.still(m);
@@ -4596,9 +4670,19 @@ export class LifeWorld {
           const stillFlap = cat ? (m.grooming ? 3 : 2) : m.lying ? 2 : 0;
           const stride = cat ? CAT.stride : DOG.stride;
           const flap = still ? stillFlap : Math.floor((m.walked ?? 0) / stride) & 1;
-          out.push({ kind: m.kind, lng, lat, ahead, paint: m.paint, flap });
+          push(
+            m,
+            this.inspection
+              ? { kind: m.kind, inspectionId: undefined, lng, lat, ahead, paint: m.paint, flap }
+              : { kind: m.kind, lng, lat, ahead, paint: m.paint, flap },
+          );
         } else {
-          out.push({ kind: m.kind, lng, lat, ahead, flap: 0 });
+          push(
+            m,
+            this.inspection
+              ? { kind: m.kind, inspectionId: undefined, lng, lat, ahead, flap: 0 }
+              : { kind: m.kind, lng, lat, ahead, flap: 0 },
+          );
         }
       }
       if (shows('person')) {
@@ -4610,18 +4694,35 @@ export class LifeWorld {
             continue;
           if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
-          out.push({
-            kind: 'person',
-            lng,
-            lat,
-            ahead: tileToLngLat(tile, { x: s.x + s.hx * perMeter, y: s.y + s.hy * perMeter }),
-            side: tileToLngLat(tile, { x: s.x - s.hy * perMeter, y: s.y + s.hx * perMeter }),
-            vehicle: 'cart',
-            covered: s.covered,
-            paint: s.paint,
-            flap: 0,
-            people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
-          });
+          push(
+            s,
+            this.inspection
+              ? {
+                  kind: 'person',
+                  inspectionId: undefined,
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: s.x + s.hx * perMeter, y: s.y + s.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: s.x - s.hy * perMeter, y: s.y + s.hx * perMeter }),
+                  vehicle: 'cart',
+                  covered: s.covered,
+                  paint: s.paint,
+                  flap: 0,
+                  people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
+                }
+              : {
+                  kind: 'person',
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: s.x + s.hx * perMeter, y: s.y + s.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: s.x - s.hy * perMeter, y: s.y + s.hx * perMeter }),
+                  vehicle: 'cart',
+                  covered: s.covered,
+                  paint: s.paint,
+                  flap: 0,
+                  people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
+                },
+          );
         }
       }
       if (shows('person')) {
@@ -4645,21 +4746,57 @@ export class LifeWorld {
             const x = g.x + g.hx * 1.8 * perMeter;
             const y = g.y + g.hy * 1.8 * perMeter;
             const [lng, lat] = at(x, y);
-            out.push({
-              kind: 'person',
-              lng,
-              lat,
-              ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
-              side: at(x - g.hy * perMeter, y + g.hx * perMeter),
-              vehicle: 'carabao',
-              paint: g.carabao,
-              flap: 0,
-              people: [{ ...look, lateral: 1 }],
-            });
+            push(
+              g,
+              this.inspection
+                ? {
+                    kind: 'person',
+                    inspectionId: undefined,
+                    lng,
+                    lat,
+                    ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
+                    side: at(x - g.hy * perMeter, y + g.hx * perMeter),
+                    vehicle: 'carabao',
+                    paint: g.carabao,
+                    flap: 0,
+                    people: [{ ...look, lateral: 1 }],
+                  }
+                : {
+                    kind: 'person',
+                    lng,
+                    lat,
+                    ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
+                    side: at(x - g.hy * perMeter, y + g.hx * perMeter),
+                    vehicle: 'carabao',
+                    paint: g.carabao,
+                    flap: 0,
+                    people: [{ ...look, lateral: 1 }],
+                  },
+            );
           } else {
             const [lng, lat] = at(g.x, g.y);
             const ahead = at(g.x + g.hx * perMeter, g.y + g.hy * perMeter);
-            out.push({ kind: 'person', lng, lat, ahead, flap: 0, people: [look] });
+            push(
+              g,
+              this.inspection
+                ? {
+                    kind: 'person',
+                    inspectionId: undefined,
+                    lng,
+                    lat,
+                    ahead,
+                    flap: 0,
+                    people: [look],
+                  }
+                : {
+                    kind: 'person',
+                    lng,
+                    lat,
+                    ahead,
+                    flap: 0,
+                    people: [look],
+                  },
+            );
           }
         }
       }
@@ -4668,17 +4805,33 @@ export class LifeWorld {
           if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          out.push({
-            kind: 'vehicle',
-            lng,
-            lat,
-            ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-            side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-            vehicle: p.vehicle,
-            paint: p.paint,
-            parked: true,
-            flap: 0,
-          });
+          push(
+            p,
+            this.inspection
+              ? {
+                  kind: 'vehicle',
+                  inspectionId: undefined,
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+                  vehicle: p.vehicle,
+                  paint: p.paint,
+                  parked: true,
+                  flap: 0,
+                }
+              : {
+                  kind: 'vehicle',
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+                  vehicle: p.vehicle,
+                  paint: p.paint,
+                  parked: true,
+                  flap: 0,
+                },
+          );
         }
       }
       // Standby trains: the tile that owns a siding draws its whole train, lamps off.
@@ -4686,17 +4839,33 @@ export class LifeWorld {
         for (const p of life.standby) {
           if (!this.owns(life, p)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          out.push({
-            kind: 'train',
-            lng,
-            lat,
-            ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-            side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-            vehicle: p.vehicle,
-            paint: p.paint,
-            parked: true,
-            flap: 0,
-          });
+          push(
+            p,
+            this.inspection
+              ? {
+                  kind: 'train',
+                  inspectionId: undefined,
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+                  vehicle: p.vehicle,
+                  paint: p.paint,
+                  parked: true,
+                  flap: 0,
+                }
+              : {
+                  kind: 'train',
+                  lng,
+                  lat,
+                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+                  vehicle: p.vehicle,
+                  paint: p.paint,
+                  parked: true,
+                  flap: 0,
+                },
+          );
         }
       }
       if (!shows('bird')) continue;
@@ -4704,7 +4873,11 @@ export class LifeWorld {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
         const out_ = spec.nocturnal ? levels.night : levels.bird;
-        if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
+        if (
+          flock.rank >= out_ * crowd ||
+          (!inView(flock.x, flock.y) && !flock.birds.some((bird) => inspection?.hasBird(bird)))
+        )
+          continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
@@ -4723,7 +4896,8 @@ export class LifeWorld {
           const x = flock.x + bird.ox * cos - bird.oy * sin;
           const y = flock.y + bird.ox * sin + bird.oy * cos;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const flap = sitting ? 0 : Math.floor(life.elapsed * spec.flap + bird.phase * 2) & 1;
+          const birdTime = inspection?.clock(bird, life.elapsed) ?? life.elapsed;
+          const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
           const face = sitting ? bird.phase * 2 * Math.PI : heading + (bird.phase - 0.5) * 0.6;
@@ -4731,11 +4905,18 @@ export class LifeWorld {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          out.push({ kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } });
+          push(
+            bird,
+            { kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } },
+            spec.speed,
+          );
         }
       }
     }
-    if (out.length <= maxAgents) return [...staged, ...out];
+    if (out.length <= maxAgents) {
+      const result = [...staged, ...out];
+      return inspection?.finish(result) ?? result;
+    }
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
     const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
@@ -4760,6 +4941,6 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    return kept;
+    return inspection?.finish(kept, true) ?? kept;
   }
 }

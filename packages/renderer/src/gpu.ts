@@ -19,11 +19,12 @@ export function createTexture(
   width: number,
   height: number,
   data: ArrayBufferView | null = null,
+  type: number = gl.UNSIGNED_BYTE,
 ): WebGLTexture {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, gl.UNSIGNED_BYTE, data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, data);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -46,6 +47,8 @@ export type CellTargets = {
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
   lifeTex: WebGLTexture;
+  /** Lazy RG32F per-item candle clock tokens; never a render attachment. */
+  effectClockTex?: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
   lightTex: WebGLTexture;
   /** Static fixtures: ten-bit glyph, part, lamp/phase state, opacity. */
@@ -192,6 +195,7 @@ export function createCellTargets(
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
+  if (t.effectClockTex) gl.deleteTexture(t.effectClockTex);
   for (const tex of [
     t.classTex,
     t.attrTex,
@@ -242,6 +246,28 @@ export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lightTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+export function uploadEffectClocks(gl: GL, targets: CellTargets, values: Float32Array | undefined) {
+  if (!values) {
+    if (targets.effectClockTex) gl.deleteTexture(targets.effectClockTex);
+    targets.effectClockTex = undefined;
+    return;
+  }
+  if (!targets.effectClockTex) {
+    targets.effectClockTex = createTexture(
+      gl,
+      gl.RG32F,
+      gl.RG,
+      targets.cols,
+      targets.rows,
+      values,
+      gl.FLOAT,
+    );
+  } else {
+    gl.bindTexture(gl.TEXTURE_2D, targets.effectClockTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, targets.cols, targets.rows, gl.RG, gl.FLOAT, values);
+  }
 }
 
 /** Replace the independent street-hardware texture. */

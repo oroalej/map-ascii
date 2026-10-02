@@ -314,7 +314,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       colors[input.roof * 3 + 2] = 1;
       colors[input.person * 3] = 1;
       colors[input.bird * 3] = 1;
-      const render = (zoom = 20, focused = false) => {
+      const render = (
+        zoom = 20,
+        focused = false,
+        lifeTime = 0,
+        clocks?: WebGLTexture,
+        daylight = 1,
+      ) => {
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.viewport(0, 0, cols, rows);
         uniforms(select, {
@@ -350,10 +356,14 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           u_columns: input.glyphs.length,
           u_colors: colors,
           u_fillColors: colors,
-          u_daylight: 1,
+          u_daylight: daylight,
           u_focus: focused ? 1 : 0,
           u_focusLife: focused ? 1 : 0,
-          u_lifeTime: 0,
+          u_lifeTime: lifeTime,
+          u_shimmer: clocks ? 1 : 0,
+          u_effectClocks: clocks ?? blank,
+          u_hasEffectClocks: clocks ? 1 : 0,
+          u_light: blank,
           u_focusClasses: [0, 0],
           u_accent: [0, 0.5, 1],
           u_labelCell: [cw, ch],
@@ -513,6 +523,31 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           });
         }
       }
+      // One real shader check: a held candle's clock stays fixed while another advances.
+      for (const target of [live, sub]) {
+        const surfaces = new Uint8Array(target.w * target.h * 4);
+        for (let cell = 0; cell < surfaces.length; cell += 4) surfaces[cell] = input.road;
+        upload(target.textures[0]!, target.w, target.h, surfaces);
+        upload(target.textures[1]!, target.w, target.h, new Uint8Array(surfaces.length));
+      }
+      setAgent(input.person, input.personBit, input.candleByte);
+      const clockTokens = new Float32Array(cols * rows * 2).fill(-1);
+      for (let row = 0; row < rows; row++)
+        for (let col = 0; col < 2; col++) clockTokens[(row * cols + col) * 2] = -2.4;
+      const clocks = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, clocks);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, cols, rows, 0, gl.RG, gl.FLOAT, clockTokens);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      const early = render(20, false, 0, clocks, 0);
+      const late = render(20, false, 0.2, clocks, 0);
+      const candleClocks = {
+        heldEarly: pixel(early, 2, 2 * ch + 4),
+        heldLate: pixel(late, 2, 2 * ch + 4),
+        otherEarly: pixel(early, 3 * cw + 2, 2 * ch + 4),
+        otherLate: pixel(late, 3 * cw + 2, 2 * ch + 4),
+      };
+      gl.deleteTexture(clocks);
       if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
       return {
         classes: [
@@ -534,6 +569,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         revealedCar,
         revealedPerson,
         occlusion,
+        candleClocks,
       };
     },
     {
@@ -570,6 +606,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       boat: classId('life_boat'),
       train: classId('life_train'),
       personBit: CellBit.person,
+      candleByte: personByte(0, PersonPart.canopy, true),
       focusBit: LIFE_FOCUS_BIT,
       agents: [
         ...['walker', 'seated person', 'vendor attendant', 'cat', 'dog'].map((name) => ({
@@ -624,6 +661,8 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
   expect(result.higherCrown).toBe(21);
   expect(result.orderIndependent).toBe(true);
   expect(result.roundTrip).toEqual(result.expectedRoundTrip);
+  expect(result.candleClocks.heldLate).toEqual(result.candleClocks.heldEarly);
+  expect(result.candleClocks.otherLate).not.toEqual(result.candleClocks.otherEarly);
   for (const p of [result.clearCar, result.edgeClear]) {
     expect(p[0]).toBeGreaterThan(100);
     expect(p[1]).toBeLessThan(10);

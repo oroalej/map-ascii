@@ -20,7 +20,8 @@ function fixture() {
   };
   const emit = vi.fn();
   const inspect = vi.fn();
-  const hover = new LifeHoverController(reads, 100, emit, inspect);
+  const inspectItem = vi.fn();
+  const hover = new LifeHoverController(reads, 100, emit, inspect, inspectItem);
   const life = new Uint8Array(16);
   life[1] = classId('life_vehicle');
   life[2] = CellBit.vehicle;
@@ -51,8 +52,44 @@ function fixture() {
         ),
       );
   };
-  return { hover, frame, emit, inspect, requests, reads, finish };
+  return { hover, frame, emit, inspect, inspectItem, requests, reads, finish };
 }
+
+it('renews negative evidence at 125 ms for stable identities without holding the actor', () => {
+  const { hover, frame, requests, finish, inspectItem } = fixture();
+  frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish('tree');
+  hover.update(frame, 1);
+  for (let now = 16; now < 125; now += 16) hover.update({ ...frame, revision: now }, now);
+  expect(requests).toHaveLength(0);
+  expect(inspectItem).not.toHaveBeenCalled();
+  hover.update({ ...frame, revision: 125 }, 125);
+  expect(requests).toHaveLength(3);
+  finish();
+  hover.update(frame, 126);
+  expect(inspectItem).toHaveBeenLastCalledWith(frame.agents[0]);
+});
+
+it('renews stable identities at 125 ms while unrelated raster revisions and array objects change', () => {
+  const { hover, frame, finish, requests, inspectItem } = fixture();
+  frame.generation = 7;
+  frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  for (let now = 16; now < 125; now += 16)
+    hover.update({ ...frame, revision: now, agents: frame.agents.map((a) => ({ ...a })) }, now);
+  expect(requests).toHaveLength(0);
+  expect(inspectItem).toHaveBeenCalledTimes(1);
+  hover.update({ ...frame, revision: 125 }, 125);
+  expect(requests).toHaveLength(3);
+  finish();
+  hover.update({ ...frame, agents: [{ ...frame.agents[0]!, inspectionId: 11 }] }, 130);
+  expect(inspectItem).toHaveBeenLastCalledWith(null);
+  expect(requests).toHaveLength(3);
+});
 it('checks surfaces, trees, grounds and birds using agent permissions only', () => {
   const person = classId('life_person'),
     bird = classId('life_bird'),

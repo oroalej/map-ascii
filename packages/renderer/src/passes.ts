@@ -25,6 +25,7 @@ import {
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
   uploadLights,
@@ -457,6 +458,8 @@ function sunUniforms(view: View, sun: Sun | null) {
  * so they are the grid's size and never shared between two maps.
  */
 type Texels = {
+  clocks?: Float32Array;
+  clocksActive?: boolean;
   held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
   owners: Uint32Array;
@@ -500,7 +503,7 @@ export function lifePass(
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
   focus?: ReadonlySet<LifeFocus>,
-  /** Immutable paired agent/terrain frame, supplied only during inspection. */
+  /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
   heldFrame?: object,
 ): number {
   const { cols, rows } = targets;
@@ -549,6 +552,15 @@ export function lifePass(
     { owners: buffers.owners, focus },
   );
   buffers.revision++;
+  buffers.clocksActive = agents.some((agent) => agent.candle && agent.effectClock !== undefined);
+  if (buffers.clocksActive) {
+    buffers.clocks ??= new Float32Array(cols * rows * 2);
+    buffers.clocks.fill(-1);
+    for (let cell = 0; cell < buffers.owners.length; cell++) {
+      const agent = agents[buffers.owners[cell]! - 1];
+      if (agent?.candle) buffers.clocks[cell * 2] = agent.effectClock ?? -1;
+    }
+  }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
@@ -586,8 +598,11 @@ export function lightPass(
   packBeams(lightTexels, grid, agents);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
-  packCandles(lightTexels, grid, agents, 1 / cellMeters!);
+  const clocks = buffers.clocksActive ? buffers.clocks : undefined;
+  if (clocks) for (let cell = 0; cell < cols * rows; cell++) clocks[cell * 2 + 1] = -1;
+  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks);
   uploadLights(gl, targets, lightTexels);
+  if (clocks || targets.effectClockTex) uploadEffectClocks(gl, targets, clocks);
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
@@ -778,6 +793,8 @@ export function glyphPass(
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
+    u_hasEffectClocks: targets.effectClockTex !== undefined,
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,

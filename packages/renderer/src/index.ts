@@ -28,7 +28,7 @@ import {
 } from './camera';
 import { classesIn, type RenderClass } from './classes';
 import { DEFAULT_FONT } from './glyphs/atlas';
-import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
+import { createCellTargets, deleteCellTargets, uploadEffectClocks, type CellTargets } from './gpu';
 import {
   cellStep,
   DEFAULT_CELLS,
@@ -160,6 +160,8 @@ export type LifeSettings = {
 };
 
 export type AtlasOptions = {
+  /** Per-item hover pause; 'all' restores the previous global inspection path. */
+  lifeHoverPause?: 'item' | 'all';
   /** Static city-pack utility policy; omitted means disabled. */
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
@@ -454,6 +456,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let lastInput = -Infinity;
   const start = performance.now();
   const lifePause = new LifePause<FrameView>(start, life.enabled && !reducedMotion);
+  const itemInspection = options.lifeHoverPause !== 'all';
+  let inspected: { id: number; generation: number | undefined } | undefined;
+  let inspectionRevision = 0;
   const livePause = new LivePauseOffset();
   let drawnLife: FrameView | undefined;
   /** Timing stats (`getStats`): when recent frames were drawn, and smoothed durations. */
@@ -488,8 +493,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     gl.COLOR_ATTACHMENT0,
     (hover) => emit('lifehover', hover),
     (active) => {
-      if (active) lifePause.pause(drawnLife, performance.now());
-      else lifePause.resume(performance.now());
+      if (!itemInspection) {
+        if (active) lifePause.pause(drawnLife, performance.now());
+        else lifePause.resume(performance.now());
+      }
+      drawDirty = true;
+    },
+    (agent) => {
+      if (!itemInspection) return;
+      inspected =
+        agent?.inspectionId === undefined
+          ? undefined
+          : { id: agent.inspectionId, generation: drawnLife?.generation };
+      inspectionRevision++;
       drawDirty = true;
     },
   );
@@ -724,9 +740,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const processions = options.processions ?? [];
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
-      ? createWorkerHost(options, processions, profiler)
+      ? createWorkerHost({ ...options, itemInspection }, processions, profiler)
       : (() => {
-          const world = new LifeWorld(options.traffic, profiler);
+          const world = new LifeWorld(options.traffic, profiler, itemInspection);
           world.setProcessions(processions);
           return createInlineHost(world, profiler);
         })();
@@ -803,6 +819,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const accepted =
         !lifePause.inspecting &&
         host.request({
+          ...(itemInspection
+            ? {
+                inspection: {
+                  id: inspected?.id ?? null,
+                  revision: inspectionRevision,
+                  time: lifePause.time,
+                },
+              }
+            : {}),
           gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
           step: {
             dt: lifePause.delta,
@@ -824,6 +849,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         });
       if (accepted) lifePause.accept();
       drawnLife = lifeView();
+      if (inspected && drawnLife?.generation !== inspected.generation) lifeHover.clear();
       agents = drawnLife?.agents ?? [];
       reportProcession();
     } else if (!lifeShown) {
@@ -847,7 +873,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
-      lifePause.inspecting ? drawnLife : undefined,
+      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -1030,6 +1056,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** Whether the light texture holds headlight beams (so they are cleared once they go). */
   let beamsShown = false;
+  /** Last candle clock upload, including frames that need no lighting pass. */
+  let clockUpload: { generation: number; revision: number } | undefined;
   /**
    * Put the lamps on the grid when it moves or they come on, and the moving vehicles' headlight
    * beams every frame they are out; clear them once they go. Tells the legend when the lamps
@@ -1045,7 +1073,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const key = on ? litNow().key : '';
     const shopsChanged = key !== shopsKey;
     shopsKey = key;
-    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    const raster = lifeRaster(targets);
+    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) {
+      const clocks = raster?.clocksActive ? raster.clocks : undefined;
+      if (
+        clocks &&
+        (clockUpload?.generation !== targetsGeneration || clockUpload.revision !== raster!.revision)
+      ) {
+        uploadEffectClocks(gl, targets, clocks);
+        clockUpload = { generation: targetsGeneration, revision: raster!.revision };
+      } else if (!clocks && targets.effectClockTex) {
+        uploadEffectClocks(gl, targets, undefined);
+        clockUpload = undefined;
+      }
+      return;
+    }
     lightPass(
       gl,
       targets,
@@ -1055,6 +1097,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       beams ? lifeAgents : [],
       changed || shopsChanged || cellsDrawn,
     );
+    clockUpload = raster?.clocksActive
+      ? { generation: targetsGeneration, revision: raster.revision }
+      : undefined;
     lampsShown = on;
     beamsShown = beams;
     if (changed) emit('lightschange', on);
@@ -1103,7 +1148,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         lifePause.pausedSeconds(at),
       );
     else livePause.reset();
-    host.setLive(live?.id, live?.progress);
+    host.setLive(live?.id, live?.progress, occurrence);
     // The moment the map shows: now, or today at the fixed time in the city.
     const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
@@ -1368,6 +1413,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
         ? {
             targets,
+            generation: drawnLife?.generation,
             grid: {
               shiftX: grid.shiftX,
               shiftY: grid.shiftY,

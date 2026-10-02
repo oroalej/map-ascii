@@ -279,6 +279,30 @@ describe('packCandles', () => {
     ]);
     expect(cell(out, 15, 5)).toEqual([0, 0, 0, 0]);
   });
+
+  it('pairs clock tokens with the winning candle pool and preserves lamp heads', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const clocks = new Float32Array(grid.cols * grid.rows * 2).fill(-1);
+    const candles: VisibleAgent[] = [
+      {
+        kind: 'person',
+        lng: 5.5,
+        lat: 5.5,
+        candle: true,
+        candleSeed: 17,
+        effectClock: -12,
+        flap: 0,
+      },
+      { kind: 'person', lng: 15.5, lat: 5.5, candle: true, effectClock: 3, flap: 0 },
+    ];
+    out[(5 * grid.cols + 6) * 4 + 2] = 255;
+    packCandles(out, grid, candles, 1, clocks);
+    expect(cell(out, 5, 5)[1]).toBe(lightByte(LampState.candle, 17));
+    expect(clocks[(5 * grid.cols + 5) * 2 + 1]).toBe(-12);
+    expect(clocks[(5 * grid.cols + 15) * 2 + 1]).toBe(3);
+    expect(clocks[(5 * grid.cols + 6) * 2 + 1]).toBe(-1);
+    expect(clocks[0]).toBe(-1); // Pool metadata never changes the Life-ink channel.
+  });
 });
 
 describe('packBeams', () => {
