@@ -13,6 +13,7 @@ import {
   type PersonLook,
 } from './people';
 import type { VisibleAgent } from './simulate';
+import { SEASONAL_GLYPHS } from './seasonal-glyphs';
 
 const glyphs = ['', ...mapGlyphs(themes.dark)];
 const index = (glyph: string) => glyphs.indexOf(glyph);
@@ -118,8 +119,9 @@ function draw(
   return { out, agent, drawn, cells: cells(out) };
 }
 it('packs attentive and gesturing adults and children at one-cell, big and stamp sizes', () => {
-  expect(mapGlyphs(themes.dark)).toHaveLength(383);
-  expect(mapGlyphs(themes.light)).toHaveLength(383);
+  // The human-moment atlas also includes the appended seasonal symbols.
+  expect(mapGlyphs(themes.dark)).toHaveLength(383 + SEASONAL_GLYPHS.length);
+  expect(mapGlyphs(themes.light)).toHaveLength(383 + SEASONAL_GLYPHS.length);
   for (const figure of ['adult', 'child'] as const)
     for (const pose of ['attentive', 'gesture'] as const)
       for (const scale of [0.5, 3, 8])

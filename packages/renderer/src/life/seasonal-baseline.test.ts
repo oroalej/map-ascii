@@ -6,6 +6,7 @@ import { mapGlyphs, themes } from '../theme';
 import { packFixtures, updateFixtureFlags } from './fixtures';
 import { LampState, packLights } from './lights';
 import { simulationSeasons } from './seasonal-simulation';
+import { SEASONAL_GLYPHS } from './seasonal-glyphs';
 import type { SeasonConfig } from '@atlas/shared';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const inactive: SeasonConfig = {
@@ -90,6 +91,7 @@ it('preserves legacy glyph indices, fixtures, animated flags and light bytes', (
     expect(hash(glyphs.slice(0, 303))).toBe(
       'ba5964e923cd6355deff42effe5ecdac79e81b148241d4ab53ee82466dd34eb0',
     );
+    expect(glyphs.slice(303, 303 + SEASONAL_GLYPHS.length)).toEqual(SEASONAL_GLYPHS);
     const packed = packFixtures(
       new Uint8Array(40000),
       grid,
