@@ -1,4 +1,5 @@
 import type { VehicleType } from '@atlas/shared';
+import { CellBit } from './config';
 import type { CraftType } from './vehicles';
 
 export const SIGNAL_VEHICLES = [
@@ -16,7 +17,8 @@ export const hasTurnSignals = (vehicle: CraftType | undefined): vehicle is Motor
 
 /** B uses agent permissions only; focus (32) and indicators (128) are independent flags. */
 export const TURN_SIGNAL_BIT = 128;
-export const LIFE_AGENT_MASK = 1 | 2 | 4 | 8 | 64;
+export const LIFE_AGENT_MASK =
+  CellBit.vehicle | CellBit.person | CellBit.boat | CellBit.bird | CellBit.train;
 export const TURN_SIGNAL_COLOR = [1, 0.55, 0.08] as const;
 export const TURN_SIGNAL = {
   leadMeters: 20,

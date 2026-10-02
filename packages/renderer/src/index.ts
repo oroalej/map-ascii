@@ -1,3 +1,4 @@
+import { spawnMargin } from './life/births';
 import {
   bandVisibility,
   CLASS_ZOOM,
@@ -747,13 +748,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let agentsDrawn = 0;
 
   const syncLife = (tiles: readonly TileId[]) => {
+    if (!lifeActive()) {
+      host.clearTiles();
+      return;
+    }
     const lifeTiles: LifeTile[] = [];
-    if (lifeActive()) {
-      for (const tile of tiles) {
-        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
-        const loaded = tileCache.get(tile);
-        if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
-      }
+    for (const tile of tiles) {
+      if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+      const loaded = tileCache.get(tile);
+      if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
     }
     if (
       lifeTiles.length !== lifeInputs.length ||
@@ -763,7 +766,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     )
       lifeHover.pointer(null);
     lifeInputs = lifeTiles;
-    host.sync(lifeTiles);
+    const cell = stepCell(schedule, step ?? 0);
+    host.sync(lifeTiles, [camera.lng, camera.lat], {
+      bounds: viewBounds(),
+      spawnMarginM: spawnMargin(metersPerCssPx(camera) * cell.width, cell.height / cell.width),
+    });
   };
 
   /** The view's ground bounds, [west, south, east, north], kept while the camera and size stay. */
@@ -840,6 +847,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
+      lifePause.inspecting ? drawnLife : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -1357,7 +1365,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     readClasses(now);
     const raster = lifeRaster(targets);
     lifeHover.update(
-      lifeShown && lifeActive() && !flight && watch.watched() && raster
+      lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
         ? {
             targets,
             grid: {
@@ -1512,6 +1520,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       reducedMotion = enabled;
       lifeHover.pointer(null);
       lifePause.tick(performance.now(), lifeRunning());
+      if (enabled) host.clearTiles();
       lastSun = -Infinity;
       cellDirty = true;
       cellsFor = null;
@@ -1553,6 +1562,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       life = { ...life, ...settings };
       lifePause.tick(performance.now(), lifeRunning());
+      if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;
@@ -1562,14 +1572,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     playProcession(id) {
       if (!lifeActive() || !host.play(id)) return false;
       lifeHover.pointer(null);
-      livePause.reset();
       lastSun = -Infinity;
       drawDirty = true;
       return true;
     },
     stopProcession() {
       lifeHover.pointer(null);
-      livePause.reset();
       lastSun = -Infinity;
       host.stop();
       drawDirty = true;

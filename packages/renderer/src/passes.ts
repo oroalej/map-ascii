@@ -457,6 +457,7 @@ function sunUniforms(view: View, sun: Sun | null) {
  * so they are the grid's size and never shared between two maps.
  */
 type Texels = {
+  held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
   owners: Uint32Array;
   revision: number;
@@ -499,9 +500,34 @@ export function lifePass(
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
   focus?: ReadonlySet<LifeFocus>,
+  /** Immutable paired agent/terrain frame, supplied only during inspection. */
+  heldFrame?: object,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
+  // Target identity owns this cache. Placement and the paired frame own the ground
+  // guard, whose wrapper may be newly allocated even when its terrain is unchanged.
+  const inputs = heldFrame
+    ? [
+        themeRes,
+        theme,
+        placement,
+        view.camera,
+        view.dpr,
+        view.cellDev.w,
+        view.cellDev.h,
+        agents,
+        sun,
+        focus,
+      ]
+    : undefined;
+  if (
+    heldFrame &&
+    buffers.held?.frame === heldFrame &&
+    inputs!.every((value, i) => value === buffers.held!.inputs[i])
+  )
+    return buffers.held.drawn;
+  buffers.held = undefined;
   const lifeTexels = buffers.life;
   const packStart = profiler?.time();
   const drawn = packLife(
@@ -526,6 +552,7 @@ export function lifePass(
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
+  if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
 }
@@ -744,6 +771,7 @@ export function glyphPass(
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
     u_focus: focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0,
+    u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
     u_fish: !!weather.fish && !reducedMotion,

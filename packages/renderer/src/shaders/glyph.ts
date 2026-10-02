@@ -83,6 +83,7 @@ uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
 uniform bool u_focus;
+uniform bool u_focusLife;
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
@@ -414,23 +415,41 @@ bool focusedClass(int cls) {
 float focusPulse() { return u_shimmer ? 0.75 + 0.25 * sin(u_time * 3.0) : 1.0; }
 
 // Shared by agent compositing and halo sampling, including canopy edge surfaces.
-bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
+bool lifeAllowedAt(vec4 life, int cls, int sampled, float coarseHeight, float sampledHeight) {
   int bits = int(life.b * 255.0 + 0.5) & ${LIFE_AGENT_MASK};
   if (bits == 0) return false;
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   bool nonBird = lifeClass != u_bird;
   bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
-  int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
+  int surface = sampleSurface ? sampled : cls;
   if (nonBird && (surface == u_vehicleOccluders.x || surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z)) return false;
   bool grounds = bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0 &&
-    (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r == 0.0;
+    (sampleSurface ? sampledHeight : coarseHeight) == 0.0;
   return (u_cellBits[surface] & bits) != 0 || grounds;
+}
+
+bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
+  int bits = int(life.b * 255.0 + 0.5) & ${LIFE_AGENT_MASK};
+  if (bits == 0) return false;
+  bool sampleSurface = (int(life.g * 255.0 + 0.5) & 63) != u_bird && cls != u_vehicleOccluders.x;
+  int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
+  float height = 0.0;
+  if (bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0)
+    height = (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r;
+  return lifeAllowedAt(life, cls, surface, height, height);
 }
 
 vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   if (!u_focus) return vec3(0.0);
   float halo = 0.0;
   ivec2 size = textureSize(u_glyphs, 0);
+  int receivingSurface = 0;
+  float receivingHeight = 0.0, receivingSubHeight = 0.0;
+  if (u_focusLife) {
+    receivingSurface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+    receivingHeight = texelFetch(u_attr, cell, 0).r;
+    receivingSubHeight = texelFetch(u_subAttr, subAt, 0).r;
+  }
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     if (x == 0 && y == 0) continue;
     ivec2 neighbor = cell + ivec2(x, y);
@@ -438,12 +457,15 @@ vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
     vec4 g = texelFetch(u_glyphs, neighbor, 0);
     int k = int(g.g * 255.0 + 0.5) & 63;
     bool match = focusedClass(k);
-    vec4 life = texelFetch(u_life, neighbor, 0);
-    if ((int(life.b * 255.0 + 0.5) & ${LIFE_FOCUS_BIT}) != 0) {
-      vec2 local = clamp(grid - vec2(neighbor) * u_cell, vec2(0.0), u_cell - 0.001);
-      ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
-      ivec2 sampleAt = neighbor * sub + clamp(ivec2(local / u_cell * vec2(sub)), ivec2(0), sub - 1);
-      match = match || (lifeAllowed(life, k, neighbor, sampleAt) && lifeAllowed(life, cls, cell, subAt));
+    if (u_focusLife) {
+      vec4 life = texelFetch(u_life, neighbor, 0);
+      if ((int(life.b * 255.0 + 0.5) & ${LIFE_FOCUS_BIT}) != 0) {
+        vec2 local = clamp(grid - vec2(neighbor) * u_cell, vec2(0.0), u_cell - 0.001);
+        ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
+        ivec2 sampleAt = neighbor * sub + clamp(ivec2(local / u_cell * vec2(sub)), ivec2(0), sub - 1);
+        match = match || (lifeAllowed(life, k, neighbor, sampleAt) &&
+          lifeAllowedAt(life, cls, receivingSurface, receivingHeight, receivingSubHeight));
+      }
     }
     if (!match) continue;
     vec2 delta = max(max(vec2(neighbor) * u_cell - grid, grid - vec2(neighbor + 1) * u_cell), vec2(0.0));

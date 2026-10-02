@@ -58,6 +58,8 @@ export class LifeHoverController {
   private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
   private held: { agent: VisibleAgent; geometry: string; at: number } | undefined;
   private inspecting = false;
+  private lastUpdate: number | undefined;
+  private intervals: number[] = [];
 
   constructor(
     private readonly readback: Pick<Readback, 'size' | 'request'>,
@@ -71,7 +73,13 @@ export class LifeHoverController {
     if (!point) this.clear();
   }
 
+  get hasPointer() {
+    return this.point !== null;
+  }
+
   clear() {
+    this.lastUpdate = undefined;
+    this.intervals.length = 0;
     this.serial++;
     this.pending = undefined;
     this.confirmed = undefined;
@@ -132,23 +140,28 @@ export class LifeHoverController {
   }
 
   update(frame: HoverFrame | null, now: number) {
+    if (this.lastUpdate !== undefined && now > this.lastUpdate) {
+      this.intervals.push(now - this.lastUpdate);
+      if (this.intervals.length > 4) this.intervals.shift();
+    }
+    this.lastUpdate = now;
+    // Evidence is dated at request time: allow both the original two-frame read and
+    // its two-frame renewal, but never keep a stalled result for more than a second.
+    const validity = Math.min(
+      1000,
+      Math.max(HOVER_VALIDITY_MS, 4 * Math.max(0, ...this.intervals)),
+    );
     this.frame = frame;
     const c = this.candidate();
     if (!c || !frame) {
       this.clear();
       return;
     }
-    if (
-      this.pending &&
-      (this.pending.key !== c.key || now - this.pending.at >= HOVER_VALIDITY_MS)
-    ) {
+    if (this.pending && (this.pending.key !== c.key || now - this.pending.at >= validity)) {
       this.serial++;
       this.pending = undefined;
     }
-    if (
-      this.confirmed &&
-      (this.confirmed.key !== c.key || now - this.confirmed.at >= HOVER_VALIDITY_MS)
-    ) {
+    if (this.confirmed && (this.confirmed.key !== c.key || now - this.confirmed.at >= validity)) {
       this.confirmed = undefined;
     }
     if (this.confirmed?.key === c.key) {
@@ -163,7 +176,7 @@ export class LifeHoverController {
       !!held &&
         held.agent === c.agent &&
         held.geometry === frame.geometry &&
-        now - held.at < HOVER_VALIDITY_MS,
+        now - held.at < validity,
     );
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
     else this.publish(null);

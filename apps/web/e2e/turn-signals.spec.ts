@@ -211,6 +211,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
             u_overlay: overlayTex,
             u_daylight: daylight,
             u_focus: focused ? 1 : 0,
+            u_focusLife: focused && !mapFocus ? 1 : 0,
             u_focusClasses: mapFocus ? [(1 << input.roof) >>> 0, 0] : [0, 0],
           });
           gl.drawArrays(gl.TRIANGLES, 0, 3);

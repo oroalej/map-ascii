@@ -285,6 +285,7 @@ describe('live motion preference', () => {
     const request = vi.fn(() => true);
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       sync() {},
+      clearTiles() {},
       request,
       latest: () => latest,
       setLive() {},
@@ -315,6 +316,75 @@ describe('live motion preference', () => {
     draw(270);
     expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
     expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(2);
+  });
+
+  it('preserves live occurrence hover delay across replay start and stop', () => {
+    atlas.destroy();
+    const setLive = vi.fn<(id: string | undefined, progress?: number) => void>();
+    const visible: Hosts.FrameView = {
+      agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
+      procession: undefined,
+      signalClock: 0,
+      cellGuard: () => undefined,
+    };
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      clearTiles() {},
+      request: () => true,
+      latest: () => visible,
+      setLive,
+      play: () => true,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+      life: { time: 'live' },
+      now: () => new Date('2026-09-19T08:00:00Z'),
+      processions: [
+        {
+          id: 'test',
+          title: { en: 'Test' },
+          status: 'draft',
+          kind: 'fluvial',
+          route: [
+            [0, 0],
+            [0.01, 0],
+          ],
+          length_m: 1000,
+          schedule: {
+            month: 9,
+            weekday: 0,
+            nth: 3,
+            offset_days: -1,
+            start: '15:00',
+            duration_min: 180,
+            timezone: 'Asia/Manila',
+          },
+        },
+      ],
+    });
+    hoverAgent();
+    const initial = setLive.mock.calls.at(-1)![1] as number;
+    for (let at = 250; at <= 1200; at += 50) draw(at);
+    const delayed = setLive.mock.calls.at(-1)![1] as number;
+    expect(delayed).toBeLessThan(initial);
+    atlas.playProcession('test');
+    draw(1220);
+    expect(setLive.mock.calls.at(-1)![1]).toBeLessThanOrEqual(delayed);
+    const resumed = setLive.mock.calls.at(-1)![1];
+    atlas.stopProcession();
+    draw(1240);
+    expect(setLive.mock.calls.at(-1)![1]).toBe(resumed);
+    atlas.setLife({ time: 720 });
+    draw(1260);
+    atlas.setLife({ time: 'live' });
+    draw(1280);
+    expect(setLive.mock.calls.at(-1)![1]).toBe(initial);
   });
 
   it('emits validated simulated hover and clears it on exit, Life off, reduced motion and context loss', () => {
@@ -547,6 +617,7 @@ describe('live motion preference', () => {
   });
 
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
@@ -554,6 +625,7 @@ describe('live motion preference', () => {
     draw(100);
     const saved = atlas.getLife();
     atlas.setReducedMotion(true);
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(atlas.getLife()).toEqual(saved);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![9]).toBe(true);
@@ -586,6 +658,7 @@ describe('live motion preference', () => {
   });
 
   it('disables animals and fish with Life while keeping the selected weather', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'cat', lng: 0, lat: 0, flap: 2 },
@@ -593,6 +666,7 @@ describe('live motion preference', () => {
     draw(100);
     const frames = step.mock.calls.length;
     atlas.setLife({ enabled: false });
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(step.mock.calls.length).toBe(frames);
     expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toEqual([]);

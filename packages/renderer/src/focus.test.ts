@@ -1,7 +1,16 @@
 import { expect, it } from 'vitest';
-import { classMask, lifeFocusOf, normalizeFocus } from './focus';
+import { classMask, lifeFocusOf, normalizeFocus, LIFE_FOCUS_BIT } from './focus';
+import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT } from './life/turn-signals';
+import { CellBit } from './life/config';
 import { legendEntries } from './legend';
 import type { VisibleAgent } from './life/simulate';
+
+it('keeps Life permissions separate from focus, indicators and static fixture bits', () => {
+  expect(LIFE_AGENT_MASK).toBe(79);
+  expect(LIFE_AGENT_MASK & LIFE_FOCUS_BIT).toBe(0);
+  expect(LIFE_AGENT_MASK & TURN_SIGNAL_BIT).toBe(0);
+  expect(LIFE_AGENT_MASK & CellBit.streetlight).toBe(0);
+});
 
 it('packs ids 31, 32 and 63 in unsigned words and excludes invalid/empty ids', () => {
   expect([...classMask([0, -1, 31, 32, 63, 64, 1.5])]).toEqual([0x80000000, 0x80000001]);

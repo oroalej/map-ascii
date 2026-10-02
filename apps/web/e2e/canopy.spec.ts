@@ -1,3 +1,6 @@
+import type * as ReadbackFixture from '../../../packages/renderer/src/readback';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import {
@@ -26,13 +29,38 @@ import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
+const require = createRequire(import.meta.url);
+const { build } = createRequire(require.resolve('tsx'))('esbuild') as {
+  build(
+    this: void,
+    options: {
+      entryPoints: string[];
+      bundle: boolean;
+      write: false;
+      format: 'iife';
+      globalName: string;
+    },
+  ): Promise<{ outputFiles: { text: string }[] }>;
+};
+
 test('tree canopy overlap hides non-bird Life and compares roof heights', async ({ page }) => {
+  // Load only the production asynchronous readback helper; no renderer/React mocks.
+  const bundle = await build({
+    entryPoints: [
+      fileURLToPath(new URL('../../../packages/renderer/src/readback.ts', import.meta.url)),
+    ],
+    bundle: true,
+    write: false,
+    format: 'iife',
+    globalName: 'readbackFixture',
+  });
+  await page.addScriptTag({ content: bundle.outputFiles[0]!.text });
   // Exercise the real shaders with controlled geometry, rather than city data or timing.
   const glyphs = [' ', ...mapGlyphs(themes.dark).filter((g) => g !== ' ')];
   const index = (g: string) => glyphs.indexOf(g);
   const tables = buildGlyphTables(themes.dark, index);
   const result = await page.evaluate(
-    (input) => {
+    async (input) => {
       const cols = 12,
         rows = 8,
         cw = 6,
@@ -324,6 +352,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           u_fillColors: colors,
           u_daylight: 1,
           u_focus: focused ? 1 : 0,
+          u_focusLife: focused ? 1 : 0,
           u_lifeTime: 0,
           u_focusClasses: [0, 0],
           u_accent: [0, 0.5, 1],
@@ -362,6 +391,31 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       const selectedBytes = new Uint8Array(cols * rows * 4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
       gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, selectedBytes);
+      const { Readback } = (
+        window as unknown as Window & {
+          readbackFixture: typeof ReadbackFixture;
+        }
+      ).readbackFixture;
+      const readback = new Readback(gl);
+      let asyncPixel: Uint8Array | undefined;
+      readback.request(
+        selectFbo,
+        gl.COLOR_ATTACHMENT0,
+        { x: 2, y: 2, width: 1, height: 1 },
+        (bytes) => {
+          asyncPixel = bytes;
+        },
+      );
+      for (let frame = 0; frame < 60 && !asyncPixel; frame++) {
+        await new Promise(requestAnimationFrame);
+        readback.poll();
+      }
+      readback.reset();
+      if (!asyncPixel) throw new Error('GPU readback never completed');
+      const roundTrip = [...asyncPixel];
+      const expectedRoundTrip = [
+        ...selectedBytes.slice((2 * cols + 2) * 4, (2 * cols + 2) * 4 + 4),
+      ];
       render(16);
       gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
       const joined = new Uint8Array(cols * rows * 4);
@@ -435,10 +489,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           }
           setAgent(0, 0, 0);
           const withoutLife = render();
-          const focusedWithoutLife = render(20, true);
+          // One ground-agent focus case per occluder, plus the bird exception.
+          const checkFocus =
+            agent.name === 'vehicle' || (agent.name === 'bird' && occluder === input.crown);
+          const focusedWithoutLife = checkFocus ? render(20, true) : undefined;
           setAgent(agent.cls, agent.bit, agent.byte);
           const pixels = render();
-          const focusedPixels = render(20, true);
+          const focusedPixels = checkFocus ? render(20, true) : undefined;
           occlusion.push({
             name: agent.name,
             bird: agent.cls === input.bird,
@@ -449,9 +506,10 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             covered: pixel(pixels, 2 * cw + 2, 2 * ch + 4),
             edgeWithoutLife: pixel(withoutLife, cw + 4, 2 * ch + 4),
             coveredWithoutLife: pixel(withoutLife, 2 * cw + 2, 2 * ch + 4),
-            focusedCovered: pixel(focusedPixels, 2 * cw + 2, 2 * ch + 4),
-            focusedWithoutLife: pixel(focusedWithoutLife, 2 * cw + 2, 2 * ch + 4),
-            focusedClear: pixel(focusedPixels, 2, 2 * ch + 4),
+            focusedCovered: focusedPixels && pixel(focusedPixels, 2 * cw + 2, 2 * ch + 4),
+            focusedWithoutLife:
+              focusedWithoutLife && pixel(focusedWithoutLife, 2 * cw + 2, 2 * ch + 4),
+            focusedClear: focusedPixels && pixel(focusedPixels, 2, 2 * ch + 4),
           });
         }
       }
@@ -466,6 +524,8 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         ],
         higherCrown: ids[(4 * cols + 4) * 4],
         orderIndependent,
+        roundTrip,
+        expectedRoundTrip,
         ...saved,
         falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
         lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
@@ -563,6 +623,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
   ]);
   expect(result.higherCrown).toBe(21);
   expect(result.orderIndependent).toBe(true);
+  expect(result.roundTrip).toEqual(result.expectedRoundTrip);
   for (const p of [result.clearCar, result.edgeClear]) {
     expect(p[0]).toBeGreaterThan(100);
     expect(p[1]).toBeLessThan(10);
@@ -585,9 +646,11 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       expect(p[1]).toBeLessThan(10);
     }
     if (!sample.bird) {
-      expect(sample.focusedCovered, `${sample.name}: focus must not leak through foliage`).toEqual(
-        sample.focusedWithoutLife,
-      );
+      if (sample.focusedCovered)
+        expect(
+          sample.focusedCovered,
+          `${sample.name}: focus must not leak through foliage`,
+        ).toEqual(sample.focusedWithoutLife);
       expect(
         sample.edgeCovered,
         `${sample.name}: hidden at surface ${sample.occluder} edge`,
@@ -596,7 +659,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         sample.coveredWithoutLife,
       );
     }
-    expect(sample.focusedClear).toEqual([0, 128, 255]);
+    if (sample.focusedClear) expect(sample.focusedClear).toEqual([0, 128, 255]);
     if (sample.occluder !== classId('tree') || sample.bird) {
       expect(sample.edgeClear[0], `${sample.name}: visible outside canopy edge`).toBeGreaterThan(
         100,

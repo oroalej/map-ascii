@@ -105,6 +105,7 @@ it('holds same-owner subcell verification but releases on occlusion or expired e
   finish();
   hover.update(frame, 21);
   reads.size = 6;
+  for (let at = 40; at < 269; at += 25) hover.update(frame, at);
   hover.update(frame, 269);
   expect(inspect).toHaveBeenLastCalledWith(true);
   hover.update(frame, 270);
@@ -181,6 +182,7 @@ it('expires confirmed visibility at 250 ms even with an unchanged revision and a
   finish();
   hover.update(frame, 1);
   reads.size = 6;
+  for (let at = 25; at < 249; at += 25) hover.update(frame, at);
   hover.update(frame, 249);
   expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
   hover.update(frame, 250);
@@ -198,12 +200,14 @@ it('ages results from their request frame and refreshes cached rejection', () =>
   const { hover, frame, emit, requests, finish } = fixture();
   hover.pointer([2, 3]);
   hover.update(frame, 0);
+  for (let at = 25; at < 250; at += 25) hover.update(frame, at);
   finish();
   hover.update(frame, 250);
   expect(emit).not.toHaveBeenCalled();
   expect(requests).toHaveLength(3);
   finish('tree');
   hover.update(frame, 251);
+  for (let at = 275; at < 499; at += 25) hover.update(frame, at);
   hover.update(frame, 499);
   expect(requests).toHaveLength(0);
   hover.update(frame, 500);
@@ -249,9 +253,48 @@ it('abandons changed candidates immediately and never revives expired batches', 
   hover.update({ ...frame, revision: 2 }, 3);
   const expired = requests.splice(0);
   reads.size = 6;
+  for (let at = 25; at < 253; at += 25) hover.update(frame, at);
   hover.update(frame, 253);
   expired.forEach(({ done }) => done(new Uint8Array([0, classId('road_mid'), 0, 0])));
   hover.update(frame, 254);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(requests).toHaveLength(0);
+});
+
+it.each([60, 30, 12, 8])('renews two-frame readbacks without flicker at %i fps', (fps) => {
+  const { hover, frame, requests, finish, inspect, emit } = fixture();
+  hover.pointer([2, 3]);
+  let due = -1,
+    batches = 0;
+  for (let tick = 0; tick <= fps * 2; tick++) {
+    if (tick === due) {
+      finish();
+      due = -1;
+    }
+    hover.update(frame, (tick * 1000) / fps);
+    if (requests.length && due === -1) {
+      due = tick + 2;
+      batches++;
+    }
+  }
+  expect(inspect.mock.calls).toEqual([[true]]);
+  expect(emit).toHaveBeenCalledTimes(1);
+  expect(batches).toBeLessThanOrEqual(17);
+});
+
+it('bounds evidence under uneven frames and rejects callbacks after a stalled second', () => {
+  const { hover, frame, requests, finish, inspect, emit, reads } = fixture();
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 100);
+  hover.update(frame, 180);
+  const late = requests.splice(0);
+  reads.size = 8;
+  for (const at of [280, 400, 550, 700, 850, 1000]) hover.update(frame, at);
+  expect(inspect).toHaveBeenLastCalledWith(false);
+  late.forEach(({ done }) => done(new Uint8Array([0, classId('road_mid'), 0, 0])));
+  hover.update(frame, 1010);
   expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
   expect(requests).toHaveLength(0);
 });

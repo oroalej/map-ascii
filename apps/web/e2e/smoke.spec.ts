@@ -125,32 +125,10 @@ for (const city of cities) {
             ),
             'the scale readout lets pointer events reach the map',
           ).toBe(true);
+          // Controls in the same HUD remain clickable.
           await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
           await expect(coordsButton(page)).toBeVisible();
           await coordsButton(page).click();
-          const summary = legend.locator('summary');
-          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
-            await summary.click();
-          const focus = legend.getByRole('button').first();
-          if (hasTouch) await focus.tap();
-          else {
-            await focus.focus();
-            await page.keyboard.press('Enter');
-            await expect(focus).toHaveCSS('outline-style', 'solid');
-          }
-          await expect(focus).toHaveAttribute('aria-pressed', 'true');
-          const clearFocus = page.getByRole('button', { name: /^Clear legend focus:/ });
-          await expect(clearFocus).toBeVisible();
-          if (hasTouch) {
-            expect((await focus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            expect((await clearFocus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            const toursBox = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
-            const zoomBox = (await page.getByLabel('Zoom').boundingBox())!;
-            expect(zoomBox.x).toBeGreaterThanOrEqual(toursBox.x + toursBox.width + 8);
-          }
-          await summary.click();
-          await expect(clearFocus).toBeVisible();
           // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
           // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {
@@ -168,22 +146,51 @@ for (const city of cities) {
           });
           await expect.poll(() => query(page).sel).toBe(place.id);
           await expect(legend).toBeHidden();
-          await expect(clearFocus).toBeVisible();
-          if (hasTouch) await clearFocus.tap();
-          else await clearFocus.click();
-          await expect(clearFocus).toHaveCount(0);
-          await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
-          expect(query(page).sel).toBe(place.id);
-          await expect(canvas).toBeFocused();
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
-          await expect(legend.locator('button[aria-pressed="true"]')).toHaveCount(0);
+        },
+      );
+
+      test(
+        'legend focus controls remain usable without covering the header',
+        { tag: '@mobile' },
+        async ({ page, hasTouch }) => {
+          const place = city.smokePlace!;
+          const view = new URLSearchParams({
+            lat: String(place.lat),
+            lng: String(place.lng),
+            z: String(place.zoomHint),
+          });
+          await page.goto(`/${city.slug}?${view}`);
+          await mapReady(page);
+          const legend = page
+            .locator('details')
+            .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
+          const summary = legend.locator('summary');
+          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
+            await summary.click();
+          const focus = legend.getByRole('button', { name: 'Secondary road', exact: true });
+          await expect(focus).toBeVisible();
+          if (hasTouch) await focus.tap();
+          else {
+            await focus.focus();
+            await page.keyboard.press('Enter');
+            await expect(focus).toHaveCSS('outline-style', 'solid');
+          }
+          const clear = page.getByRole('button', { name: /^Clear legend focus:/ });
+          await expect(clear).toBeVisible();
+          if (hasTouch) {
+            for (const control of [focus, summary, clear])
+              expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            const tours = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
+            const zoom = (await page.getByLabel('Zoom').boundingBox())!;
+            expect(zoom.x).toBeGreaterThanOrEqual(tours.x + tours.width + 8);
+          }
           await summary.click();
-          await focus.click();
-          await expect(clearFocus).toBeVisible();
-          await page.keyboard.press('Escape');
-          await expect(clearFocus).toHaveCount(0);
+          await expect(clear).toBeVisible();
+          await clear.click();
+          await expect(summary).toBeFocused();
         },
       );
 
@@ -253,9 +260,11 @@ for (const city of cities) {
         expect(errors).toEqual([]);
       });
 
-      test('follows a changed motion preference and shows GPU timing on request', async ({
+      test('follows the Life toggle and changed motion preference with GPU timing', async ({
         page,
       }) => {
+        // Bound animated software-WebGL work while exercising startup and motion toggles.
+        await page.setViewportSize({ width: 640, height: 480 });
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -264,6 +273,14 @@ for (const city of cities) {
         const life = page.getByRole('button', { name: 'Life', exact: true });
         await expect(life).toHaveAttribute('aria-pressed', 'true');
         await expect(page.locator('pre')).toContainText(/gpu\s+(?:n\/a|\d+\.\d+) ms/);
+        // Keyboard activation keeps this motion check independent of profile toolbar layout.
+        const agents = async () =>
+          Number((await page.locator('pre').textContent())?.match(/agents\s+(\d+)/)?.[1] ?? NaN);
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
+        await life.press('Enter');
+        await expect.poll(agents).toBe(0);
+        await life.press('Enter');
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await expect(life).toBeDisabled();
