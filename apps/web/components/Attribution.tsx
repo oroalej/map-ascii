@@ -35,7 +35,7 @@ export function Attribution() {
   }, []);
 
   return (
-    <footer ref={ref} className={styles.attribution}>
+    <footer ref={ref} className={styles.attribution} data-speech-obstacle>
       ©{' '}
       <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
         OpenStreetMap contributors

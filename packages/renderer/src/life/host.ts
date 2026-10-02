@@ -1,10 +1,13 @@
 import * as Comlink from 'comlink';
 import type { ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
+import { spawnMargin, type LifeViewContext } from './births';
+import { LifePreparation } from './preparation';
 
 export type FrameView = {
   agents: VisibleAgent[];
@@ -13,7 +16,8 @@ export type FrameView = {
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
-  sync(tiles: readonly LifeTile[]): void;
+  sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext): void;
+  clearTiles(): void;
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
@@ -23,38 +27,82 @@ export interface LifeHost {
   dispose(): void;
 }
 
-export function createInlineHost(world: LifeWorld, profiler?: FrameProfiler): LifeHost {
-  let agents: VisibleAgent[] = [];
+export function createInlineHost(
+  world: LifeWorld,
+  profiler?: FrameProfiler,
+  preparationClock?: () => number,
+): LifeHost {
+  let view: FrameView | undefined;
+  const preparation = new LifePreparation(world, profiler, preparationClock);
+  let disposed = false;
+  let acceptedPost: number | undefined;
   return {
-    sync: (tiles) => {
-      world.sync(tiles);
-      if (!tiles.length) agents = [];
+    sync: (tiles, focus, context) => {
+      if (disposed) return;
+      preparation.sync(tiles, focus, context);
+      if (!tiles.length) view = undefined;
+    },
+    clearTiles() {
+      world.clearTiles();
+      preparation.clear();
+      view = undefined;
+      acceptedPost = undefined;
     },
     request(input) {
-      agents = runLifeFrame(world, input, profiler).agents;
+      if (disposed) return false;
+      acceptedPost = profiler?.time();
+      preparation.camera(
+        input.step.bounds,
+        spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
+      );
+      preparation.commit();
+      const result = runLifeFrame(world, input, profiler);
+      const terrain = world.cellTerrain();
+      view = {
+        ...result,
+        cellGuard: (toCell) =>
+          terrain &&
+          makeCellGuard(
+            terrain.ref,
+            { roads: terrain.roads, forbidden: terrain.forbidden },
+            terrain.trees,
+            toCell,
+          ),
+      };
+      preparation.schedule();
       return true;
     },
-    latest: () => ({
-      agents,
-      procession: world.procession(),
-      signalClock: world.signalClock,
-      cellGuard: (toCell) => world.groundCellGuard(toCell),
-    }),
+    latest: () => {
+      if (acceptedPost !== undefined)
+        profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
+      return {
+        agents: [],
+        signalClock: world.signalClock,
+        cellGuard: () => undefined,
+        ...view,
+        procession: world.procession(),
+      };
+    },
     setLive: (id, progress) => world.setLive(id, progress),
     play: (id) => world.play(id),
     stop: () => world.stop(),
-    dispose: () => world.sync([]),
+    dispose: () => {
+      disposed = true;
+      world.clearTiles();
+      preparation.clear();
+      view = undefined;
+    },
   };
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix },
+  options: { traffic?: TrafficMix; moments?: MomentOptions },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler);
+    const world = new LifeWorld(options.traffic, profiler, options.moments);
     world.setProcessions(processions);
     return createInlineHost(world, profiler);
   };
@@ -71,9 +119,12 @@ export function createWorkerHost(
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
+  let acceptedPost: number | undefined;
   let terrain: ReturnType<typeof cellTerrainFrom> | undefined;
   let fallback: LifeHost | undefined;
   let tiles: readonly LifeTile[] = [];
+  let focus: readonly [number, number] | undefined;
+  let viewContext: LifeViewContext | undefined;
   let live: { id: string | undefined; progress?: number } = { id: undefined };
   let played: string | undefined;
   const sent = new Set<string>();
@@ -87,30 +138,44 @@ export function createWorkerHost(
     ready = false;
     release();
     fallback = inline();
-    fallback.sync(tiles);
+    fallback.sync(tiles, focus, viewContext);
     fallback.setLive(live.id, live.progress);
     if (played) fallback.play(played);
   };
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
   // Comlink posts messages in order; init and all synchronous sync/command calls precede frames.
-  void remote.init({ traffic: options.traffic, processions, profiling: !!profiler }).then(() => {
-    if (!disposed && !fallback) ready = true;
-  }, fail);
+  void remote
+    .init({
+      traffic: options.traffic,
+      processions,
+      profiling: !!profiler,
+      dialogue: options.moments?.dialogue,
+      periods: options.moments?.periods,
+    })
+    .then(() => {
+      if (!disposed && !fallback) ready = true;
+    }, fail);
   return {
-    sync(next) {
+    sync(next, nextFocus, nextView) {
       if (disposed) return;
       tiles = next;
+      focus = nextFocus;
+      viewContext = nextView;
       if (fallback) {
-        fallback.sync(next);
+        fallback.sync(next, nextFocus, nextView);
         return;
       }
-      if (!next.length) {
-        generation++;
-        terrain = undefined;
-        if (view) view = { ...view, agents: [], cellGuard: () => undefined };
-      }
       const keep = new Set(next.map((tile) => tile.key));
+      if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
+        if (!nextView || !keep.size) {
+          generation++;
+          terrain = undefined;
+        }
+        // Keep the last complete frame while nonempty geometry loads. It is never combined
+        // with a different generation; the next valid reply replaces agents and guard together.
+        if (!keep.size && view) view = { ...view, agents: [], cellGuard: () => undefined };
+      }
       const payload = next.map(({ key, tile, life }) => {
         const entry = sent.has(key) ? { key, tile } : { key, tile, life };
         sent.add(key);
@@ -119,8 +184,22 @@ export function createWorkerHost(
       for (const key of sent) if (!keep.has(key)) sent.delete(key);
       // Structured clone: lamps and fixtures still own these buffers on the main thread.
       const postStart = profiler?.time();
-      void remote.sync(payload).catch(fail);
+      void remote.sync(payload, nextFocus, nextView).catch(fail);
       if (postStart !== undefined) profiler!.record('syncPost', profiler!.time() - postStart);
+    },
+    clearTiles() {
+      if (disposed) return;
+      tiles = [];
+      focus = undefined;
+      viewContext = undefined;
+      generation++;
+      acceptedPost = undefined;
+      profiler?.clearContinuity();
+      terrain = undefined;
+      sent.clear();
+      if (view) view = { ...view, agents: [], cellGuard: () => undefined };
+      if (fallback) fallback.clearTiles();
+      else void remote.clearTiles().catch(fail);
     },
     request(input) {
       if (disposed) return false;
@@ -134,6 +213,7 @@ export function createWorkerHost(
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
+          acceptedPost = posted;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
           // Only frames posted after play() can show that its time-lapse has ended.
           const run = result.procession;
@@ -161,7 +241,12 @@ export function createWorkerHost(
         });
       return true;
     },
-    latest: () => (fallback ? fallback.latest() : view),
+    latest: () => {
+      if (fallback) return fallback.latest();
+      if (acceptedPost !== undefined)
+        profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
+      return view;
+    },
     setLive(id, progress) {
       if (disposed) return;
       live = { id, progress };

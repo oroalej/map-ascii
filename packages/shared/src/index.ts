@@ -1,4 +1,6 @@
 export * from './climate';
+export * from './dialogue';
+export * from './dialogue-options';
 export * from './constants';
 export * from './detail-selection';
 export * from './life-sites';

@@ -436,6 +436,17 @@ Adding a city needs no renderer or web app changes. If it seems to, the engine h
 7. Add any extra attribution the city's sources need (§6).
 8. Publish the tiles with `pnpm data:publish -- --city <slug>` and commit the `tiles.lock.json` it writes (§9), so CI and deploys have them.
 
+### Optional ambient dialogue
+
+Catalogs may override greeting periods with `periods: { morningStart, afternoonStart, eveningStart }`, using city-local integer minutes from 0 through 1439 in strictly increasing order. Defaults are 300, 720 and 1080 (05:00, 12:00, 18:00). Each period starts inclusively; evening continues across midnight until morning. Omitted periods preserve the defaults.
+
+
+Add `packages/content/cities/<slug>/dialogue.json` to opt into human speech. `native` names the primary language (`code`, `label`); `translations` lists available secondary languages. `exchanges` contains unique scene IDs, a kind (`greet`, `talk`, `ball`, `look`), localized `lines`, and at least one `sources` record. Greetings require `period: morning | afternoon | evening`. Delivery determines line counts: an `utterance` has one line; an `exchange` has two greeting or ball lines, or two to three conversation lines. Look reactions are utterances. Legacy entries infer exchange delivery except for look reactions. Every line must contain the native language and every offered translation, use declared city languages (English is implicit), and stay within 96 characters without line breaks. All language labels and text belong to the pack.
+
+The content validator loads the optional catalog and fails on malformed or incomplete entries. Static page generation projects validated catalogs to `RuntimeDialogueCatalog`, stripping each exchange's editorial sources before passing speech text and metadata to client components. Full sources remain required in city packs. Dialogue changes need no tile regeneration or publishing. Cite linguistic references, and explain composed phrases in source notes. Ambient scripts describe illustrative encounters; they do not establish historical events or quote real residents.
+
+Scenes may add a `profile` (scene category), `delivery`, `speakers` (one zero-based participant slot per turn), and `conditions`. Conditions match nearby anchor kinds, simulated weather, participant age mix and service/ball events. Metadata is optional for existing packs. Profiled scripts require explicit speaker roles and a compatible mechanism; vendor orders have two short exchange turns, while thanks may be a one-line utterance by the vendor. An utterance may use slot 1 without inventing a reply. Worker choices carry metadata, never localized strings. Naga's checks require exactly 100 scenes (40 utterances and 60 exchanges) with the documented category allocation, complete Bikol/English/Tagalog and no duplicate complete native scripts. Other cities retain the optional 1–100 catalog size. For dialogue JSON edits, run both `pnpm --filter @atlas/content exec vitest run src/validate.test.ts` (content invariants) and `pnpm --filter @atlas/renderer exec vitest run src/life/dialogue-catalog.test.ts` (all-city reachability), alongside pack validation as listed in `AGENTS.md`; dynamic JSON reads are not covered by Vitest's changed-file graph. Naga's `dialogue-review.md` documents composed wording, provenance and the outstanding native-speaker review.
+
 ## 9. Publishing tiles
 
 Generated files are gitignored (never commit tiles), so builds get them from GitHub releases instead:

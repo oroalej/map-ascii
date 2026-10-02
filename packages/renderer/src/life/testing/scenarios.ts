@@ -7,8 +7,45 @@ import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
 import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
+import type { MomentOptions } from '../moments-host';
+import type { DialogueChoice } from '@atlas/shared';
 
-export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
+/** Text-free fixtures explicitly enable speech in CPU runs; ordinary scenarios stay unchanged. */
+export const SCENARIO_DIALOGUE: readonly DialogueChoice[] = [
+  { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2, speakers: [0, 1] },
+  { id: 'talk', kind: 'talk', turns: 2, speakers: [0, 1] },
+  { id: 'look', kind: 'look', turns: 1, speakers: [0] },
+  { id: 'play', kind: 'ball', turns: 2, speakers: [0, 1] },
+  {
+    id: 'ambient',
+    kind: 'talk',
+    profile: 'daily-plans',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+  },
+  { id: 'order', kind: 'talk', profile: 'vendor-order', turns: 2, speakers: [0, 1] },
+  { id: 'wait', kind: 'talk', profile: 'transit', turns: 2, speakers: [0, 1] },
+  {
+    id: 'rain',
+    kind: 'talk',
+    profile: 'weather',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+    conditions: { weather: 'rain' },
+  },
+  { id: 'companion', kind: 'talk', profile: 'companion', turns: 2, speakers: [0, 1] },
+];
+
+export const SCENARIOS = [
+  'sparse',
+  'junction',
+  'crossroads',
+  'transit',
+  'rain',
+  'moments',
+] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 const base = { z: 16, x: 55192, y: 30266 };
 // Explicit mapped sidewalk outside the 14 m carriageway, wide enough for waiting groups.
@@ -105,6 +142,15 @@ export function scenarioLife(kind: Scenario) {
       b.market({ x: 1300, y: 1800 });
     }
   }
+  if (kind === 'moments') {
+    // Bounded legal gathering rings, away from roads and buildings. Benchmark real holds,
+    // not an empty controller running over a geography with no places.
+    const pm = 1 / metersPerUnit(base);
+    b.place({ x: 1500, y: 1500 }, 'monument', 2 * pm);
+    b.place({ x: 2500, y: 1500 }, 'school', 8 * pm);
+    b.place({ x: 1500, y: 2600 }, 'pitch', 14 * pm);
+    b.place({ x: 3000, y: 2700 }, 'worship', 6 * pm);
+  }
   return b.finish();
 }
 export function scenarioTilesAt(
@@ -132,6 +178,11 @@ export function scenarioTiles(kind: Scenario, count: number, seed = 1): LifeTile
 export function worldTiles(world: LifeWorld): ReadonlyMap<string, TileLife> {
   // Test/benchmark inspection only; no production API or mutable global state.
   return (world as unknown as { tiles: Map<string, TileLife> }).tiles;
+}
+export function retiredTiles(
+  world: LifeWorld,
+): ReadonlyMap<string, { life: TileLife; at: number }> {
+  return (world as unknown as { retired: Map<string, { life: TileLife; at: number }> }).retired;
 }
 /** Baseline revisions can predate stats(); inspect their bins only in tests/benchmarks. */
 export function polygonStats(index: PolygonIndex): ReturnType<PolygonIndex['stats']> {
@@ -181,11 +232,12 @@ export function makeScenario(
   seed = 1,
   Simulation: typeof LifeWorld = LifeWorld,
   profiler?: FrameProfiler,
+  moments?: MomentOptions,
 ) {
   const tiles = scenarioTiles(kind, count, seed);
   const traffic =
     kind === 'transit' || kind === 'rain' ? { road_major: { jeepney: 1 } } : undefined;
-  const world = new Simulation(traffic, profiler);
+  const world = new Simulation(traffic, profiler, moments);
   world.sync(tiles);
   const center = tileToLngLat(tiles[0]!.tile, { x: 2048, y: 2048 });
   const size = mobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 };
@@ -229,7 +281,10 @@ export function makeScenario(
   };
 }
 export function scenarioState(world: LifeWorld) {
-  return [...worldTiles(world)].map(([key, tile]) => ({
+  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile));
+}
+function tileState(key: string, tile: TileLife) {
+  return {
     key,
     elapsed: tile.elapsed,
     flocks: tile.flocks,
@@ -240,7 +295,7 @@ export function scenarioState(world: LifeWorld) {
     visits: [...tile.scenes.visits].map(([m, v]) => ({ owner: tile.movers.indexOf(m), ...v })),
     services: [...tile.scenes.services].map(([m, s]) => ({ owner: tile.movers.indexOf(m), ...s })),
     queues: tile.scenes.sites.map((s) => s.queue.map((m) => tile.movers.indexOf(m))),
-  }));
+  };
 }
 
 /** Includes global clocks for equivalence checks; respawn checks intentionally compare tiles only. */
@@ -249,11 +304,81 @@ export function completeScenarioState(world: LifeWorld) {
     clock: number;
     junctions?: { snapshot(): unknown };
     arrivals: Map<string, { left: number; occupied: boolean }>;
+    history: WeakMap<TileLife, { ceded: unknown }>;
+    viewContext?: unknown;
+    bootstrapped: boolean;
+    birthCursor: number;
+    birthCredit: number;
   };
-  return {
+  const scenes = (tile: TileLife) => {
+    const scene = tile.scenes as unknown as {
+      cooldown: Map<object, number>;
+      stopCooldown: Map<object, object>;
+      wet: boolean;
+      scan: number;
+      cursor: number;
+      minutes: number;
+      hoursDirty: boolean;
+      cityLife: unknown;
+    };
+    return {
+      cooldown: [...scene.cooldown].map(([m, time]) => [
+        tile.movers.indexOf(m as (typeof tile.movers)[number]),
+        time,
+      ]),
+      stopCooldown: [...scene.stopCooldown].map(([m, site]) => [
+        tile.movers.indexOf(m as (typeof tile.movers)[number]),
+        tile.scenes.sites.indexOf(site as (typeof tile.scenes.sites)[number]),
+      ]),
+      sites: tile.scenes.sites,
+      wet: scene.wet,
+      scan: scene.scan,
+      cursor: scene.cursor,
+      minutes: scene.minutes,
+      hoursDirty: scene.hoursDirty,
+      cityLife: scene.cityLife,
+    };
+  };
+  return structuredClone({
     clock: internal.clock,
     junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
     tiles: scenarioState(world),
-  };
+    moments: [...worldTiles(world)].map(([key, tile]) => ({
+      key,
+      state: tile.momentHost.moments.snapshot(),
+    })),
+    retired: [...retiredTiles(world)].map(([key, { life, at }]) => ({
+      at,
+      ...tileState(key, life),
+      scene: scenes(life),
+      ceded: internal.history.get(life)?.ceded,
+      pending: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
+    })),
+    ownership: [...worldTiles(world)].map(([key, life]) => ({
+      key,
+      ceded: internal.history.get(life)?.ceded,
+    })),
+    scenes: [...worldTiles(world)].map(([key, life]) => ({ key, ...scenes(life) })),
+    pending: [...worldTiles(world)].map(([key, life]) => ({
+      key,
+      seeds: life.pending.map((p) => ({
+        mover: p.mover,
+        age: life.elapsed - p.at,
+        failures: p.failures,
+        retryIn: p.retryAt === undefined ? undefined : p.retryAt - life.elapsed,
+      })),
+      birthCredit: life.birthCredit,
+    })),
+    viewContext: internal.viewContext,
+    bootstrapped: internal.bootstrapped,
+    birthCursor: internal.birthCursor,
+    birthCredit: internal.birthCredit,
+  });
 }

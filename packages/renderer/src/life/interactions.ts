@@ -14,6 +14,7 @@ import { isWalker, usableLines, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { approach, type MotionLimit } from './motion';
+import { complete } from './cooperate';
 
 export const INTERACTIONS = {
   stopQueue: 6,
@@ -65,6 +66,20 @@ const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.h
 
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
+  /** Bounded, frame-local entry notifications; observers cannot mutate service ownership. */
+  readonly speechEvents: {
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival';
+    mover: Mover;
+    visit: Visit;
+    key: object;
+  }[] = [];
+  private speechEvent(
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival',
+    mover: Mover,
+    visit: Visit,
+  ) {
+    if (this.speechEvents.length < 8) this.speechEvents.push({ kind, mover, visit, key: {} });
+  }
   readonly visits = new Map<Mover, Visit>();
   readonly sites: Site[] = [];
   readonly services = new Map<Mover, Service>();
@@ -76,6 +91,7 @@ export class LocalScenes {
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
+  private hoursDirty = false;
   private cityLife: CityLifeConfig | undefined;
 
   constructor(
@@ -84,10 +100,17 @@ export class LocalScenes {
     seed: number,
     stalls: readonly Stall[],
     private readonly idleGuard?: (mover: Mover) => boolean,
+    private readonly busy?: (mover: Mover) => boolean,
+    deferred = false,
   ) {
-    this.graph = new WalkingGraph(geo, perMeter);
+    this.graph = new WalkingGraph(geo, perMeter, true);
     this.rng = random(seed ^ 0xb5297a4d);
+    if (!deferred) complete(this.prepare(geo, stalls));
+  }
+  *prepare(geo: LifeGeometry, stalls: readonly Stall[]): Generator<void, void, void> {
+    yield* this.graph.prepare(geo);
     for (let i = 0; i < geo.sites.length; i += SITE_STRIDE) {
+      yield;
       const kind = LIFE_SITE_KINDS[geo.sites[i + 2]!];
       if (!kind) continue;
       const site: Site = {
@@ -108,10 +131,13 @@ export class LocalScenes {
       if (!entrance || !inTile(entrance)) continue;
       site.x = entrance.x;
       site.y = entrance.y;
-      this.attachRoad(site, geo);
+      yield* this.attachRoad(site, geo);
       this.sites.push(site);
     }
-    for (const stall of stalls) this.addStall(stall);
+    for (const stall of stalls) {
+      this.addStall(stall);
+      yield;
+    }
   }
 
   addStall(stall: Stall) {
@@ -154,11 +180,34 @@ export class LocalScenes {
       }
   }
 
-  private attachRoad(site: Site, geo: LifeGeometry) {
+  /** Service/passenger relationships cannot be separated by a tile transfer. */
+  transferable(m: Mover): boolean {
+    if (this.busy?.(m) || this.services.has(m) || this.visits.has(m)) return false;
+    for (const service of this.services.values()) if (service.passenger === m) return false;
+    return true;
+  }
+
+  /** Release all references, including private cooldowns, without advancing any random stream. */
+  release(m: Mover): void {
+    const service = this.services.get(m);
+    if (service?.passenger) {
+      const visit = this.visits.get(service.passenger);
+      if (visit?.state === 'board') this.returning(service.passenger, visit);
+    }
+    for (const s of this.services.values()) if (s.passenger === m) s.passenger = undefined;
+    for (const site of this.sites) site.queue = site.queue.filter((p) => p !== m);
+    this.services.delete(m);
+    this.visits.delete(m);
+    this.cooldown.delete(m);
+    this.stopCooldown.delete(m);
+  }
+
+  private *attachRoad(site: Site, geo: LifeGeometry): Generator<void, void, void> {
     let best = 25 * this.perMeter;
     for (let line = 0; line < geo.kinds.length; line++) {
       if (!usableLines.vehicle.includes(geo.kinds[line]! as LifeLine)) continue;
       for (let v = geo.starts[line]!; v < geo.starts[line + 1]! - 1; v++) {
+        if ((v & 63) === 0) yield;
         const ax = geo.coords[v * 2]!;
         const ay = geo.coords[v * 2 + 1]!;
         const dx = geo.coords[v * 2 + 2]! - ax;
@@ -191,7 +240,8 @@ export class LocalScenes {
   /** Explicit entry point also used by deterministic scene tests. */
   reserve(m: Mover, index: number): boolean {
     const site = this.sites[index];
-    if (!site || this.visits.has(m) || (isWalker(m.kind) && !this.canIdle(m))) return false;
+    if (!site || this.visits.has(m) || this.busy?.(m) || (isWalker(m.kind) && !this.canIdle(m)))
+      return false;
     const size = m.group?.length ?? 1;
     const occupied = new Set(
       site.queue.flatMap((p) => {
@@ -325,15 +375,23 @@ export class LocalScenes {
     guard?: MoveGuard,
     vehicleOffset?: (mover: Mover) => number,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
+    owns?: (p: { x: number; y: number }) => boolean,
   ) {
     const rain = env.rain ?? 0;
+    this.speechEvents.length = 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
-    const hoursChanged = minutes !== this.minutes || env.cityLife !== this.cityLife;
+    const hoursChanged =
+      minutes !== this.minutes || env.cityLife !== this.cityLife || this.hoursDirty;
+    this.hoursDirty = false;
     this.minutes = minutes;
     this.cityLife = env.cityLife;
     for (const site of this.sites)
       if (site.stall && site.kind === 'vendor') {
+        if (owns && !owns(site)) {
+          this.hoursDirty = true;
+          continue;
+        }
         site.stall.covered = this.wet;
         if (hoursChanged || site.stall.open === undefined)
           site.stall.open =
@@ -344,10 +402,12 @@ export class LocalScenes {
             );
       }
     for (const [m, seconds] of this.cooldown) {
+      if (owns && !owns(m)) continue;
       if (seconds <= dt) this.cooldown.delete(m);
       else this.cooldown.set(m, seconds - dt);
     }
     for (const [m, visit] of this.visits) {
+      if (owns && (!owns(m) || !owns(visit.site))) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
       const { kind } = visit.site;
       if (
@@ -384,19 +444,27 @@ export class LocalScenes {
             Object.assign(m, before);
             this.returning(m, visit);
           }
+          if (visit.state === 'wait' || visit.state === 'shelter')
+            this.speechEvent(visit.state, m, visit);
         }
         continue;
       }
       visit.time -= dt;
-      if (visit.state === 'wait' && visit.site.kind === 'vendor' && visit.site.queue[0] === m) {
+      if (
+        visit.state === 'wait' &&
+        visit.site.kind === 'vendor' &&
+        (owns ? visit.site.queue.find(owns) : visit.site.queue[0]) === m
+      ) {
         visit.state = 'purchase';
         visit.time = between(this.rng, INTERACTIONS.purchase);
+        this.speechEvent('purchase', m, visit);
       } else if (visit.time <= 0 && visit.state !== 'shelter') {
         // Shelter lasts until the rain stops; everything else has its time.
         this.returning(m, visit);
       }
     }
     for (const [m, service] of this.services) {
+      if (owns && (!owns(m) || !owns(service.site))) continue;
       if ((shows && !shows('vehicle')) || (near && !near(m.x, m.y))) continue;
       if (service.arriving) {
         // A stop left behind (past a bend, or on another line) can no longer be reached.
@@ -406,20 +474,26 @@ export class LocalScenes {
           continue;
         }
         if (
-          [...this.services.values()].some(
-            (s) => s !== service && s.site === service.site && !s.arriving,
+          [...this.services].some(
+            ([owner, s]) =>
+              s !== service && s.site === service.site && !s.arriving && (!owns || owns(owner)),
           )
         )
           continue;
         if (Math.abs(ahead(service.site, m)) > 0.8 * this.perMeter) continue;
         service.arriving = false;
+        for (const person of service.site.queue) {
+          const visit = this.visits.get(person);
+          if (visit?.state === 'wait') this.speechEvent('arrival', person, visit);
+        }
         m.pause = service.time;
       }
       service.time -= dt;
       if (service.passenger && this.visits.get(service.passenger)?.state !== 'board')
         service.passenger = undefined;
       const person =
-        !service.passenger && service.site.queue.find((p) => this.visits.get(p)?.state === 'wait');
+        !service.passenger &&
+        service.site.queue.find((p) => (!owns || owns(p)) && this.visits.get(p)?.state === 'wait');
       if (person && service.time < 12 - service.boarded * 2) {
         const visit = this.visits.get(person)!;
         const width = VEHICLES[m.vehicle!].width;
@@ -455,9 +529,10 @@ export class LocalScenes {
     this.scan += dt * movers.length;
     const batch = Math.min(12, Math.floor(this.scan));
     this.scan = Math.min(12, this.scan - batch);
-    for (let i = 0; i < batch; i++) {
+    for (let i = 0; i < batch && movers.length; i++) {
       const m = movers[this.cursor++ % movers.length]!;
       if (
+        (owns && !owns(m)) ||
         (shows && !shows(m.kind)) ||
         (near && !near(m.x, m.y)) ||
         (env.levels && m.rank >= env.levels[m.kind])
@@ -470,6 +545,7 @@ export class LocalScenes {
         if (previous && dist(m, previous) > 40 * this.perMeter) this.stopCooldown.delete(m);
         for (const site of this.sites) {
           if (
+            (owns && !owns(site)) ||
             site === previous ||
             !(site.modes & modes) ||
             site.road !== m.line ||
@@ -478,7 +554,9 @@ export class LocalScenes {
             ahead(site, m) < 0
           )
             continue;
-          const services = [...this.services.values()].filter((s) => s.site === site);
+          const services = [...this.services].filter(
+            ([owner, s]) => s.site === site && (!owns || owns(owner)),
+          );
           if (services.length >= (site.kind === 'terminal' ? INTERACTIONS.terminalQueue : 1))
             continue;
           this.services.set(m, {
@@ -498,6 +576,7 @@ export class LocalScenes {
           .map((site, index) => ({ site, index, d: dist(m, site) }))
           .filter(
             ({ site, d }) =>
+              (!owns || owns(site)) &&
               d < 35 * this.perMeter &&
               (this.wet
                 ? site.covered

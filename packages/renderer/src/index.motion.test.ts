@@ -8,6 +8,8 @@ import type * as PacingModule from './pacing';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { LifeBuilder } from './life/geometry';
 import type { TileMesh } from './gpu';
+import { Readback } from './readback';
+import { SpeechController } from './life/speech';
 
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
@@ -121,6 +123,81 @@ describe('live motion preference', () => {
     vi.unstubAllGlobals();
   });
 
+  it('packs speech ownership only at the speech zoom threshold', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 17 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    draw(100);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeUndefined();
+    atlas.setCamera({ lng: 0, lat: 0, zoom: 18 });
+    draw(200);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeInstanceOf(Uint32Array);
+    atlas.setCamera({ lng: 0, lat: 0, zoom: 17 });
+    draw(300);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeUndefined();
+  });
+
+  it('delivers GPU visibility replies after a slow drawing frame', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    const delivered: [string, number][] = [];
+    vi.spyOn(Readback.prototype, 'poll').mockImplementation(() => {
+      delivered.push(['poll', performance.now()]);
+    });
+    vi.spyOn(SpeechController.prototype, 'update').mockImplementation(() => {
+      delivered.push(['speech', performance.now()]);
+    });
+    vi.mocked(glyphPass).mockImplementationOnce(() => {
+      time += 300;
+    });
+    draw(20);
+    expect(delivered).toEqual([
+      ['poll', 320],
+      ['speech', 320],
+    ]);
+  });
+  it('waits for camera input to settle before scheduling speech visibility work', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    const update = vi.spyOn(SpeechController.prototype, 'update').mockImplementation(() => {});
+    draw(100);
+    update.mockClear();
+    for (let at = 120; at <= 400; at += 20) {
+      time = at;
+      atlas.setCamera({ lng: at / 10000, lat: 0, zoom: 18 });
+      draw(at);
+    }
+    draw(540);
+    expect(update).not.toHaveBeenCalled();
+    draw(560);
+    expect(update).toHaveBeenCalledOnce();
+  });
   it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', () => {
     atlas.destroy();
     const a = { z: 16, x: 32768, y: 32768 },
@@ -278,6 +355,7 @@ describe('live motion preference', () => {
   });
 
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
@@ -285,6 +363,7 @@ describe('live motion preference', () => {
     draw(100);
     const saved = atlas.getLife();
     atlas.setReducedMotion(true);
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(atlas.getLife()).toEqual(saved);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![9]).toBe(true);
@@ -317,6 +396,7 @@ describe('live motion preference', () => {
   });
 
   it('disables animals and fish with Life while keeping the selected weather', () => {
+    const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'cat', lng: 0, lat: 0, flap: 2 },
@@ -324,6 +404,7 @@ describe('live motion preference', () => {
     draw(100);
     const frames = step.mock.calls.length;
     atlas.setLife({ enabled: false });
+    expect(clear).toHaveBeenCalled();
     draw(200);
     expect(step.mock.calls.length).toBe(frames);
     expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toEqual([]);
@@ -331,6 +412,10 @@ describe('live motion preference', () => {
     expect(weather.fish).toBe(false);
     expect(weather.rain).toBeGreaterThan(0);
     expect(atlas.getLife().wind).toBe('storm');
+    atlas.setLife({ enabled: true });
+    draw(300);
+    expect(step.mock.calls.length).toBeGreaterThan(frames);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toHaveLength(1);
   });
 
   it('clears moving headlight beams when motion is reduced', () => {

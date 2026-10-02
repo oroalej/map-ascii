@@ -11,7 +11,17 @@ export async function snapshotRevision(root: string, revision: string, destinati
     cwd: root,
     encoding: 'utf8',
   }).replace(/\r\n/g, '\n');
-  if (oldLock !== (await readFile(join(root, 'pnpm-lock.yaml'), 'utf8')).replace(/\r\n/g, '\n'))
+  // The catalog test's local content link changes no benchmark runtime dependency.
+  // Keep every registry version/integrity and every other workspace dependency in the gate.
+  const benchmarkLock = (lock: string) =>
+    lock.replace(
+      /( {2}packages\/renderer:\n[\s\S]*?) {4}devDependencies:\n {6}'@atlas\/content':\n {8}specifier: workspace:\^\n {8}version: link:\.\.\/content\n(?=\n {2}packages\/shared:)/,
+      '$1',
+    );
+  if (
+    benchmarkLock(oldLock) !==
+    benchmarkLock((await readFile(join(root, 'pnpm-lock.yaml'), 'utf8')).replace(/\r\n/g, '\n'))
+  )
     throw new Error(
       'Baseline dependencies differ: compare revisions using the same pnpm-lock.yaml',
     );

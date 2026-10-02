@@ -1,14 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { makeScenario, scenarioState, worldTiles, SCENE_CURB_Y } from './testing/scenarios';
+import {
+  makeScenario,
+  scenarioState,
+  worldTiles,
+  retiredTiles,
+  SCENE_CURB_Y,
+  SCENARIO_DIALOGUE,
+} from './testing/scenarios';
 import { LifeWorld, type Mover, type TileLife } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
 import { MAX_STEP_S } from './config';
 import { bodiesOverlap, type Body, bodyCorners, Occupancy, PolygonIndex } from './occupancy';
 
+it('exercises scene speech and visible cues when a performance scenario opts into dialogue', () => {
+  const scenario = makeScenario('moments', 1, false, 1, LifeWorld, undefined, {
+    dialogue: SCENARIO_DIALOGUE,
+  });
+  bounded(scenario.world);
+  let cues = 0;
+  for (let frame = 0; frame < 300; frame++)
+    cues += scenario.step(frame).filter((agent) => agent.speech?.id.includes(':scene:')).length;
+  const admissions = [...worldTiles(scenario.world).values()].reduce(
+    (sum, tile) =>
+      sum +
+      Object.values(tile.momentHost.scenes.selector.selected).reduce((n, count) => n + count, 0),
+    0,
+  );
+  expect(admissions).toBeGreaterThan(0);
+  expect(cues).toBeGreaterThan(0);
+});
+
 function valid(world: LifeWorld) {
   const owners = new Set<object>();
-  for (const tile of worldTiles(world).values()) {
+  for (const tile of [
+    ...worldTiles(world).values(),
+    ...[...retiredTiles(world).values()].map((entry) => entry.life),
+  ]) {
     for (const m of [...tile.movers, ...tile.gatherers]) {
       assert.equal(owners.has(m), false, 'duplicate owner');
       owners.add(m);
@@ -116,7 +144,7 @@ describe('combined living-city scenarios', () => {
     }
   }
   for (const seed of [1, 42]) {
-    it(`seed ${seed}: view changes release evicted tiles and respawn deterministically`, () => {
+    it(`seed ${seed}: view changes revive tiles and respawn deterministically after expiry`, () => {
       const s = makeScenario('transit', 4, false, seed);
       bounded(s.world);
       const original = worldTiles(s.world).get(s.tiles[0]!.key)!;
@@ -135,6 +163,8 @@ describe('combined living-city scenarios', () => {
       s.world.sync([]);
       expect(worldTiles(s.world).size).toBe(0);
       expect((s.world as unknown as { groundTerrain?: unknown }).groundTerrain).toBeUndefined();
+      for (let i = 0; i < 90; i++) s.world.step(0.1);
+      expect(retiredTiles(s.world).size).toBe(0);
       s.world.sync(s.tiles);
       bounded(s.world);
       const fresh = makeScenario('transit', 4, false, seed);

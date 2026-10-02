@@ -13,12 +13,16 @@ import {
   worldTiles,
   worldTerrainStats,
   SCENARIOS,
+  SCENARIO_DIALOGUE,
 } from '../src/life/testing/scenarios';
 import { LifeWorld } from '../src/life/simulate';
 import { packLife, buildLifeGlyphs } from '../src/life/draw';
 import { themes } from '../src/theme';
 import { FrameProfiler } from '../src/profile';
 import { tileToLngLat } from '../src/raster/geometry';
+import { spawnMargin } from '../src/life/births';
+import { metersPerCssPx } from '../src/grid';
+import { DEFAULT_CELLS, cellStep, stepCell } from '../src/density';
 import { viewportFor } from '../src/camera';
 import { City } from '@atlas/shared';
 import { activityLevels } from '../src/life/config';
@@ -28,15 +32,24 @@ import { openArchive, decodeLifeTiles, realPanStrip, archiveHash } from './archi
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback = '') =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const matchesCase = (name: string) =>
+  arg('case')
+    .split(',')
+    .some((prefix) => name.startsWith(prefix));
 const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
+const births = process.argv.includes('--births');
+const control = process.argv.includes('--control');
+const dialogue = process.argv.includes('--dialogue');
+const momentOptions = dialogue ? { dialogue: SCENARIO_DIALOGUE } : undefined;
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
+if (births && !real) throw new Error('--births requires --real and --pan');
 if (real && !pan) throw new Error('--real requires --pan');
 const allowDiff = pan || process.argv.includes('--allow-diff');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
-const scratch = join(root, 'test-results');
+const scratch = resolve(root, arg('scratch-dir', arg('scratch', 'test-results')));
 const samples = Number(arg('samples', '160'));
 const runs = Number(arg('runs', '5'));
 if (![samples, runs].every((n) => Number.isInteger(n) && n > 0))
@@ -63,10 +76,16 @@ type Stages = 'step' | 'visible' | 'pack' | 'combined';
 try {
   const currentHash = await currentSourceHash(root);
   const frozen = await snapshotRevision(root, baseline, join(temporary, 'baseline'));
-  const before = (await import(frozen.path('life/simulate.ts'))) as { LifeWorld: typeof LifeWorld };
-  const oldDraw = (await import(frozen.path('life/draw.ts'))) as { packLife: typeof packLife };
+  const before = (control ? { LifeWorld } : await import(frozen.path('life/simulate.ts'))) as {
+    LifeWorld: typeof LifeWorld;
+  };
+  const oldDraw = (control ? { packLife } : await import(frozen.path('life/draw.ts'))) as {
+    packLife: typeof packLife;
+  };
   if (real) {
-    const oldSnapshot = (await import(frozen.path('life/terrain-snapshot.ts'))) as {
+    const oldSnapshot = (
+      control ? { snapshotOf } : await import(frozen.path('life/terrain-snapshot.ts'))
+    ) as {
       snapshotOf: typeof snapshotOf;
     };
     const city = arg('real', 'naga');
@@ -108,6 +127,7 @@ try {
         'terrainRoads',
         'terrainRevalidate',
         'terrainEncode',
+        'clearanceBuild',
       ] as const;
       type RealStage = (typeof realStages)[number];
       const summarize = (values: number[]) => ({
@@ -122,28 +142,47 @@ try {
         const timings = Object.fromEntries(
           realStages.map((stage) => [stage, [] as number[]]),
         ) as Record<RealStage, number[]>;
-        world.sync(windows[0]!);
+        const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, 18));
+        const minimum = births
+          ? metersPerCssPx({ lng: cameras[0]!.center[0], lat: cameras[0]!.center[1], zoom: 18 }) *
+            cell.width
+          : 0.9;
+        const view = (i: number) =>
+          births
+            ? {
+                bounds: cameras[i]!.bounds,
+                spawnMarginM: spawnMargin(minimum, cell.height / cell.width),
+              }
+            : undefined;
+        world.sync(windows[0]!, cameras[0]!.center, view(0));
+        let birthGuardBuilds = 0;
+        const internal = world as unknown as { groundGuard(...args: unknown[]): unknown };
+        const buildGuard = internal.groundGuard.bind(world);
+        internal.groundGuard = (...args) => {
+          if (args[3] === true) birthGuardBuilds++;
+          return buildGuard(...args);
+        };
         const initial = world.cellTerrain();
         if (!initial) throw new Error('Initial sync did not initialize terrain');
         encode(initial);
         let version = initial.version;
         profiler.reset();
         const samples = [];
-        for (let frame = 0; frame < 210; frame++) {
-          const shift = Math.floor(frame / 30);
+        for (let frame = 0; frame < (births ? 630 : 210); frame++) {
+          const shift = births ? (frame < 30 ? 0 : 1) : Math.floor(frame / 30);
           const { center, bounds } = cameras[shift]!;
-          const changed = frame > 0 && frame % 30 === 0;
+          const changed = births ? frame === 30 : frame > 0 && frame % 30 === 0;
           profiler.begin(frame / 30);
           const start = performance.now();
-          if (changed) world.sync(windows[shift]!);
+          if (changed) world.sync(windows[shift]!, center, view(shift));
           world.step(
-            1 / 30,
+            births ? 0.1 : 1 / 30,
             undefined,
             18,
             bounds,
             undefined,
             { rain: 0, minutes: 720, cityLife: config.life },
-            0.9,
+            minimum,
           );
           timings[changed ? 'syncFrame' : 'step'].push(performance.now() - start);
           world.visible(18, levels, center, { rain: 0, sunAltitude: 40 }, bounds);
@@ -155,7 +194,14 @@ try {
             version = terrain.version;
           }
           const sample = profiler.drain()!;
-          samples.push(sample);
+          samples.push({
+            ...sample,
+            pendingBirths: [...worldTiles(world).values()].reduce(
+              (sum, tile) => sum + tile.pending.length,
+              0,
+            ),
+            birthGuardBuilds,
+          });
           for (const stage of realStages) {
             if (stage === 'step' || stage === 'syncFrame') continue;
             const ms = sample.ms[stage];
@@ -167,6 +213,11 @@ try {
             realStages.map((stage) => [stage, summarize(timings[stage])]),
           ) as Record<RealStage, ReturnType<typeof summarize>>,
           stats: worldTerrainStats(world),
+          birthGuardBuilds,
+          pendingBirths: [...worldTiles(world).values()].reduce(
+            (sum, tile) => sum + tile.pending.length,
+            0,
+          ),
           samples,
         };
       };
@@ -228,7 +279,8 @@ try {
             at: new Date().toISOString(),
             baseline,
             allowDiff,
-            baselineHash: frozen.hash,
+            baselineHash: control ? currentHash : frozen.hash,
+            control,
             currentHash,
             archiveHash: local.hash,
             configHash,
@@ -245,8 +297,9 @@ try {
             parameters: {
               city,
               runs,
-              frames: 210,
-              shifts: 6,
+              births,
+              frames: births ? 630 : 210,
+              shifts: births ? 1 : 6,
               shiftEvery: 30,
               window: [4, 4],
               strip: ids,
@@ -258,11 +311,11 @@ try {
               viewport: [1920, 1080],
               camera: 'window centre',
               zoom: 18,
-              dt: 1 / 30,
+              dt: births ? 0.1 : 1 / 30,
               minutes: 720,
               rain: 0,
               activity: 1,
-              clearanceMinimumMeters: 0.9,
+              clearanceMinimumMeters: births ? 'two-dimensional CSS schedule at zoom 18' : 0.9,
               traffic: config.traffic,
               cityLife: config.life,
               aggregation: 'median of per-run medians and p95s; counts summed',
@@ -288,6 +341,17 @@ try {
         })),
       );
       console.table(currentRuns[0]!.stats);
+      if (births)
+        console.table({
+          baseline: {
+            pending: oldRuns[0]!.pendingBirths,
+            birthGuardBuilds: oldRuns[0]!.birthGuardBuilds,
+          },
+          current: {
+            pending: currentRuns[0]!.pendingBirths,
+            birthGuardBuilds: currentRuns[0]!.birthGuardBuilds,
+          },
+        });
       console.log(`Report: ${output}`);
     } finally {
       await local.close();
@@ -296,7 +360,7 @@ try {
     const rows = [];
     for (const kind of SCENARIOS.filter((kind) => kind !== 'sparse')) {
       const name = `${kind}/16/pan`;
-      if (!name.startsWith(arg('case'))) continue;
+      if (!matchesCase(name)) continue;
       const windows = Array.from({ length: 9 }, (_, shift) =>
         scenarioTilesAt(
           kind,
@@ -384,7 +448,8 @@ try {
           at: new Date().toISOString(),
           baseline,
           allowDiff,
-          baselineHash: frozen.hash,
+          baselineHash: control ? currentHash : frozen.hash,
+          control,
           currentHash,
           environment: {
             node: process.version,
@@ -416,9 +481,17 @@ try {
       for (const count of [1, 4, 16])
         for (const mobile of [false, true]) {
           const name = `${kind}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
-          if (!name.startsWith(arg('case'))) continue;
-          const a = makeScenario(kind, count, mobile, 1, before.LifeWorld);
-          const b = makeScenario(kind, count, mobile);
+          if (!matchesCase(name)) continue;
+          const a = makeScenario(
+            kind,
+            count,
+            mobile,
+            1,
+            before.LifeWorld,
+            undefined,
+            momentOptions,
+          );
+          const b = makeScenario(kind, count, mobile, 1, LifeWorld, undefined, momentOptions);
           const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
             nextPixels = new Uint8Array(oldPixels.length);
           for (let frame = 0; frame < 300; frame++) {
@@ -444,7 +517,7 @@ try {
             pack: typeof packLife,
             profiler?: FrameProfiler,
           ) => {
-            const s = makeScenario(kind, count, mobile, 1, Constructor, profiler);
+            const s = makeScenario(kind, count, mobile, 1, Constructor, profiler, momentOptions);
             const out = new Uint8Array(s.grid.cols * s.grid.rows * 4);
             const timings: Record<Stages, number[]> = {
               step: [],
@@ -455,6 +528,12 @@ try {
             let agents = 0,
               maxVisits = 0,
               maxServices = 0;
+            let maxMoments = 0,
+              maxBalls = 0;
+            let speechFrames = 0,
+              speechCues = 0,
+              sceneSpeechCues = 0,
+              maxScenes = 0;
             const visitStates = new Set<string>();
             const heapBefore = process.memoryUsage().heapUsed;
             for (let frame = 0; frame < warmup + samples; frame++) {
@@ -482,7 +561,20 @@ try {
                 profiler.end();
               }
               const completed = profiler?.time();
+              const cues = visible.reduce((count, agent) => count + Number(!!agent.speech), 0);
+              speechCues += cues;
+              sceneSpeechCues += visible.reduce(
+                (count, agent) => count + Number(!!agent.speech?.id.includes(':scene:')),
+                0,
+              );
+              if (cues) speechFrames++;
               for (const tile of worldTiles(s.world).values()) {
+                const moments = tile.momentHost?.moments;
+                if (moments) {
+                  maxMoments = Math.max(maxMoments, moments.size);
+                  maxBalls = Math.max(maxBalls, moments.balls().length);
+                }
+                maxScenes = Math.max(maxScenes, tile.momentHost?.scenes.size ?? 0);
                 maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
                 maxServices = Math.max(maxServices, tile.scenes.services.size);
                 for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
@@ -499,6 +591,19 @@ try {
               }
               if (frame === warmup - 1) profiler?.reset();
             }
+            const sceneStarts = [...worldTiles(s.world).values()].reduce(
+              (total, tile) =>
+                total +
+                Object.values(tile.momentHost?.scenes.selector.selected ?? {}).reduce(
+                  (sum, count) => sum + count,
+                  0,
+                ),
+              0,
+            );
+            if (dialogue && Constructor === LifeWorld && (!sceneStarts || !sceneSpeechCues))
+              throw new Error(
+                `${name}: dialogue benchmark recorded no scene admissions or speech cues`,
+              );
             return {
               stages: Object.fromEntries(
                 Object.entries(timings).map(([k, v]) => [k, summary(v)]),
@@ -506,6 +611,16 @@ try {
               agents,
               maxVisits,
               maxServices,
+              maxMoments,
+              maxBalls,
+              maxScenes,
+              sceneStarts,
+              speechFrames,
+              speechCues,
+              sceneSpeechCues,
+              momentStarts: [...worldTiles(s.world).values()].map(
+                (t) => t.momentHost?.moments.stats.started,
+              ),
               visitStates: [...visitStates],
               simulated: [...worldTiles(s.world).values()].reduce(
                 (n, t) => n + t.movers.length + t.gatherers.length,
@@ -586,20 +701,42 @@ try {
     const denseMedianPass = rows
       .filter((r) => r.dense)
       .every((r) => r.stages.step!.medianGain >= 0.1);
+    const dialogueRegressions = rows.flatMap((row) =>
+      Object.entries(row.stages).flatMap(([stage, result]) =>
+        result.current.median - result.baseline.median >
+          Math.max(0.1, result.baseline.median * 0.1) ||
+        result.current.p95 - result.baseline.p95 > Math.max(0.2, result.baseline.p95 * 0.15)
+          ? [`${row.name}/${stage}`]
+          : [],
+      ),
+    );
     const report = {
       version: 1,
       at: new Date().toISOString(),
       baseline,
       allowDiff,
-      baselineHash: frozen.hash,
+      baselineHash: control ? currentHash : frozen.hash,
+      control,
       currentHash,
-      gate: {
-        denseMedianPass,
-        regressions,
-        pass: denseMedianPass && regressions.length === 0,
-        thresholds: { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
-        requiresRepeat: true,
-      },
+      gate: dialogue
+        ? {
+            pass: dialogueRegressions.length === 0,
+            regressions: dialogueRegressions,
+            thresholds: {
+              medianRegression: 0.1,
+              p95Regression: 0.15,
+              medianAbsoluteMs: 0.1,
+              p95AbsoluteMs: 0.2,
+            },
+            requiresRepeat: true,
+          }
+        : {
+            denseMedianPass,
+            regressions,
+            pass: denseMedianPass && regressions.length === 0,
+            thresholds: { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
+            requiresRepeat: true,
+          },
       lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
         cwd: root,
         encoding: 'utf8',
@@ -622,6 +759,7 @@ try {
         clearanceMinimumMeters: 0.9,
         transitFleet: 'jeepney',
         profiled: false,
+        dialogue,
       },
       rows,
     };

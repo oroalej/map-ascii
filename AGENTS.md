@@ -43,6 +43,7 @@ Run the smallest check that covers what changed. CI runs the full suite (lint, t
 | --- | --- |
 | Docs / `*.md` only | nothing |
 | City pack content | `pnpm --filter @atlas/content validate` |
+| `dialogue.json` content | the above + `pnpm --filter @atlas/content exec vitest run src/validate.test.ts` + `pnpm --filter @atlas/renderer exec vitest run src/life/dialogue-catalog.test.ts` (dynamic pack reads are not tracked by `--changed`) |
 | Package code (`renderer`, `shared`, `data`, `content`) | `pnpm run test --changed` (the Vitest files that depend on uncommitted changes) + `pnpm --filter @atlas/<pkg> typecheck` |
 | `apps/web` code | the above + `pnpm --filter @atlas/web typecheck` + `pnpm lint` |
 | What the browser shows (renderer output, UI flows, URL state) | the above + only the related e2e test, desktop only: `pnpm test:e2e --project=chromium -g "<test name>"` |

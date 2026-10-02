@@ -1,7 +1,13 @@
 import { access, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { City, contentSchemas, TilesLock } from '@atlas/shared';
+import {
+  City,
+  contentSchemas,
+  dialogueCatalog,
+  type DialogueCatalog,
+  TilesLock,
+} from '@atlas/shared';
 import type { z } from 'zod';
 
 /**
@@ -33,7 +39,12 @@ export type ContentBundle = { [K in keyof Collections]: z.infer<Schemas[Collecti
  * A registered city: its validated config and content, and where its published tiles are
  * (`tiles.lock.json`, written by `pnpm data:publish`), if they have been published.
  */
-export type CityPack = { city: City; content: ContentBundle; tilesLock?: TilesLock };
+export type CityPack = {
+  city: City;
+  content: ContentBundle;
+  dialogue?: DialogueCatalog;
+  tilesLock?: TilesLock;
+};
 
 export type ContentError = { file: string; message: string };
 
@@ -166,12 +177,17 @@ export async function loadCityPacks(
       }
     }
 
+    const dialoguePath = join(dir, 'dialogue.json');
+    const dialogue = (await exists(dialoguePath))
+      ? await readValid(dialoguePath, dialogueCatalog(city.languages), toFile(dialoguePath), errors)
+      : undefined;
     const lockPath = join(dir, 'tiles.lock.json');
     const tilesLock = (await exists(lockPath))
       ? await readValid(lockPath, TilesLock, toFile(lockPath), errors)
       : undefined;
 
-    if (errors.length === before) packs.push({ city, content, ...(tilesLock && { tilesLock }) });
+    if (errors.length === before)
+      packs.push({ city, content, ...(dialogue && { dialogue }), ...(tilesLock && { tilesLock }) });
   }
 
   return { packs, errors };

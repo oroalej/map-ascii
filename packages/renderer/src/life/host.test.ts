@@ -4,10 +4,15 @@ import { FrameProfiler } from '../profile';
 import { createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
+import type { LifeTile } from './simulate';
+const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
+  { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
+];
 
 const mock = vi.hoisted(() => ({
   init: vi.fn(),
   sync: vi.fn<(tiles: readonly SyncTile[]) => Promise<void>>(),
+  clearTiles: vi.fn(),
   frame: vi.fn(),
   play: vi.fn(),
   stop: vi.fn(),
@@ -72,9 +77,83 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('accepts an atomic in-flight frame while new geometry queues, but drops it after an empty view', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    const view = { bounds: s.bounds, spawnMarginM: 12 };
+    host.sync(s.tiles, s.center, view);
+    await flush();
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementation(
+      () =>
+        new Promise<FrameResult>((r) => {
+          resolve = r;
+        }),
+    );
+    host.request(s.input);
+    host.sync(scenarioNeighbor(s.tiles[0]!), s.center, view);
+    resolve(result(7));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(7);
+    host.request(s.input);
+    host.sync([], s.center, view);
+    resolve(result(8));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(7);
+    expect(host.latest()?.agents).toEqual([]);
+    host.dispose();
+  });
+  it('measures accepted frame age on the posting clock and ignores stale diagnostics', async () => {
+    let now = 100;
+    const p = new FrameProfiler(() => now),
+      s = fixture(),
+      host = createWorkerHost({}, [], p);
+    host.sync(s.tiles);
+    await flush();
+    const reply = result(1);
+    reply.profile = {
+      at: 999999,
+      drawn: false,
+      agents: 0,
+      checks: 0,
+      ms: {},
+      continuity: { counts: { transfers: 2 }, trace: [] },
+    };
+    mock.frame.mockResolvedValueOnce(reply);
+    host.request(s.input);
+    await flush();
+    now = 150;
+    host.latest();
+    p.begin(1);
+    p.end();
+    expect(p.snapshot().stages.acceptedFrameAge.p95Ms).toBe(50);
+    expect(p.snapshot().continuity.counts.transfers).toBe(2);
+    let finish!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          finish = done;
+        }),
+    );
+    host.request(s.input);
+    host.clearTiles();
+    finish(reply);
+    await flush();
+    p.begin(2);
+    p.end();
+    expect(p.snapshot().continuity.counts.transfers).toBeUndefined();
+    host.dispose();
+  });
   beforeEach(() => {
     vi.resetAllMocks();
-    for (const method of [mock.init, mock.sync, mock.play, mock.stop, mock.setLive])
+    for (const method of [
+      mock.init,
+      mock.sync,
+      mock.clearTiles,
+      mock.play,
+      mock.stop,
+      mock.setLive,
+    ])
       method.mockResolvedValue(undefined);
     vi.stubGlobal(
       'Worker',
@@ -128,6 +207,7 @@ describe('pipelined Life host', () => {
   it('drops results invalidated by clearing tiles or disposal', async () => {
     const s = fixture();
     const host = createWorkerHost({}, []);
+    host.sync(s.tiles);
     await flush();
     let resolve!: (value: FrameResult) => void;
     mock.frame.mockImplementation(
@@ -147,6 +227,52 @@ describe('pipelined Life host', () => {
     await flush();
     expect(host.latest()).toBeUndefined();
     expect(host.request(s.input)).toBe(false);
+  });
+
+  it('invalidates changed residency and hard clears, but accepts frames across identical syncs', async () => {
+    const s = fixture();
+    const host = createWorkerHost({}, []);
+    const focus = [123, 13] as const;
+    host.sync(s.tiles, focus);
+    expect(mock.sync).toHaveBeenLastCalledWith(expect.any(Array), focus, undefined);
+    await flush();
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementation(
+      () =>
+        new Promise<FrameResult>((r) => {
+          resolve = r;
+        }),
+    );
+    host.request(s.input);
+    host.sync(s.tiles, focus);
+    resolve(result(1));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(1);
+    host.request(s.input);
+    const retained = host.latest();
+    const nextTile = s.tiles[0]!;
+    host.sync([
+      { ...nextTile, key: 'neighbor', tile: { ...nextTile.tile, x: nextTile.tile.x + 1 } },
+    ]);
+    expect(host.latest()).toBe(retained);
+    resolve(result(2));
+    await flush();
+    expect(host.latest()).toBe(retained);
+    host.request(s.input);
+    host.sync([]);
+    host.sync(s.tiles);
+    resolve(result(2));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(1);
+    host.request(s.input);
+    host.clearTiles();
+    expect(mock.clearTiles).toHaveBeenCalledOnce();
+    resolve(result(3));
+    await flush();
+    expect(host.latest()?.signalClock).toBe(1);
+    host.sync(s.tiles);
+    expect(mock.sync.mock.calls.at(-1)![0][0]!.life).toBe(s.tiles[0]!.life);
+    host.dispose();
   });
 
   it('answers procession membership synchronously and recovers from startup failure', async () => {
