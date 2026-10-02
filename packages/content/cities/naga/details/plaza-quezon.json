@@ -38,6 +38,117 @@
       "material": "paving",
       "overhead": false,
       "ground_override": true
+    },
+    {
+      "id": "western-garden-approach",
+      "ring": [
+        [123.184930219, 13.623871799],
+        [123.184928928, 13.623872592],
+        [123.184927808, 13.623873601],
+        [123.184879808, 13.623925601],
+        [123.184878848, 13.62392687],
+        [123.18487816, 13.623928296],
+        [123.18487777, 13.623929824],
+        [123.184877691, 13.623931397],
+        [123.184877928, 13.623932955],
+        [123.184889221, 13.623976998],
+        [123.18490522, 13.623972522],
+        [123.184895139, 13.623933206],
+        [123.18493862, 13.623886102],
+        [123.185004263, 13.623867202],
+        [123.185005774, 13.623866605],
+        [123.185007136, 13.623865733],
+        [123.185008296, 13.623864619],
+        [123.185009211, 13.623863307],
+        [123.185009845, 13.623861847],
+        [123.185010173, 13.623860295],
+        [123.185010184, 13.62385871],
+        [123.185009876, 13.623857153],
+        [123.185009262, 13.623855685],
+        [123.185008365, 13.623854362],
+        [123.185007219, 13.623853234],
+        [123.185005869, 13.623852345],
+        [123.185004367, 13.623851729],
+        [123.185002769, 13.623851409],
+        [123.185001138, 13.623851399],
+        [123.184999537, 13.623851698],
+        [123.184931637, 13.623871248],
+        [123.184930219, 13.623871799]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "western-garden-approach-2",
+      "ring": [
+        [123.184924296, 13.624074051],
+        [123.184925057, 13.624075453],
+        [123.184926084, 13.624076684],
+        [123.184927339, 13.624077697],
+        [123.184928773, 13.624078452],
+        [123.184930331, 13.62407892],
+        [123.184931953, 13.624079085],
+        [123.184933576, 13.624078938],
+        [123.18493514, 13.624078487],
+        [123.184936582, 13.624077748],
+        [123.184937849, 13.624076749],
+        [123.18493889, 13.62407553],
+        [123.184939667, 13.624074136],
+        [123.18494015, 13.624072622],
+        [123.184940319, 13.624071046],
+        [123.184940168, 13.624069468],
+        [123.184939704, 13.624067949],
+        [123.184924125, 13.624030799],
+        [123.184908045, 13.624035297],
+        [123.184924296, 13.624074051]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "eastern-garden-approach",
+      "ring": [
+        [123.185391007, 13.6240653],
+        [123.185360177, 13.624123223],
+        [123.185331034, 13.624152365],
+        [123.185330018, 13.624153605],
+        [123.18532927, 13.624155013],
+        [123.185328819, 13.624156536],
+        [123.185328682, 13.624158115],
+        [123.185328865, 13.62415969],
+        [123.185329361, 13.6241612],
+        [123.18533015, 13.624162587],
+        [123.185331202, 13.624163798],
+        [123.185332477, 13.624164786],
+        [123.185333926, 13.624165513],
+        [123.185335494, 13.624165951],
+        [123.185337119, 13.624166084],
+        [123.185338739, 13.624165906],
+        [123.185340293, 13.624165424],
+        [123.18534172, 13.624164657],
+        [123.185342966, 13.624163635],
+        [123.185372966, 13.624133635],
+        [123.185374389, 13.624131715],
+        [123.185407389, 13.624069715],
+        [123.185407998, 13.624068224],
+        [123.185408292, 13.624066645],
+        [123.18540826, 13.624065041],
+        [123.185407903, 13.624063475],
+        [123.185375798, 13.623968556],
+        [123.185356103, 13.623920717],
+        [123.185347311, 13.623912425],
+        [123.185328886, 13.623917579],
+        [123.185346737, 13.623934416],
+        [123.185391007, 13.6240653]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "flagpoles": [],
@@ -71,7 +182,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Plaza Quezon — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "credit": "Plaza Quezon — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed. Owner-supplied overhead supports undated edge planting and side approaches.",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -81,7 +192,7 @@
     {
       "title": "Independent facility reference",
       "url": "https://www2.naga.gov.ph/proposed-ordinance/nb1_2025-0845-renaming-plaza-quezon/",
-      "note": "Post-2024 redevelopment completion and proposed renaming are not verified. Conservative stage-front terrace and perimeter access only; stage footprint comes from OSM. Stage lighting positions are schematic; new fountains and redesigned planting omitted. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+      "note": "Post-2024 redevelopment completion and proposed renaming remain unverified. Existing mapped stage roof, stage-front terrace, crossing and schematic lighting are retained. The separately sourced owner overhead supports bounded edge landscaping and access; it does not date or verify the proposed redevelopment. Positions, counts, dimensions and heights remain draft estimates fitted to standing source geometry."
     },
     {
       "title": "City ordinance: public plaza lighting facilities",
@@ -91,6 +202,10 @@
     {
       "title": "Draft surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
+    },
+    {
+      "title": "Owner-supplied Plaza Quezon overhead reference",
+      "note": "Inspected 2026-10-02; image date unknown. Southern corner foliage and northern edge trees guide bounded planting, small grass islands and connected side approaches. Complete mapped grounds, standing stage roof, roads and existing crossing govern fits where photo orientation differs. Positions, counts, dimensions and heights are visual estimates; species, roof openings, fountain identity and redevelopment completion are not inferred. Reference bitmap remains ignored evidence."
     }
   ]
 }

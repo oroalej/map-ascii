@@ -42,12 +42,22 @@ const additionalSource = JSON.parse(
 const memorialSchoolSource = JSON.parse(
   readFileSync(new URL('../__fixtures__/memorial-school-parents.json', import.meta.url), 'utf8'),
 ) as AtlasFeature[];
+const roadsideCampusSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/roadside-campus-parents.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
+const landscapedGroundsSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/five-landscaped-grounds.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
 const source = [
   ...new Map(
-    [...existingSource, ...campusSource, ...additionalSource, ...memorialSchoolSource].map((f) => [
-      f.properties.id,
-      f,
-    ]),
+    [
+      ...existingSource,
+      ...campusSource,
+      ...additionalSource,
+      ...memorialSchoolSource,
+      ...roadsideCampusSource,
+      ...landscapedGroundsSource,
+    ].map((f) => [f.properties.id, f]),
   ).values(),
 ];
 mergeContent(source, { landmarks } as ContentBundle);
@@ -67,7 +77,7 @@ const newDetails = details.filter(
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
-    expect(newDetails).toHaveLength(27);
+    expect(newDetails).toHaveLength(36);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
