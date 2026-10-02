@@ -1,52 +1,21 @@
-import { classId } from '../classes';
-import type { CellTargets } from '../gpu';
-import { SUB } from '../glyphs/select';
-import { pointerCell, type GridPlacement } from '../picking';
-import { MAX_PENDING_READS, type Readback } from '../readback';
-import { CellBit, cellBits } from './config';
+import { SUB, unpackGlyph } from '../glyphs/select';
+import { pointerCell } from '../picking';
+import type { Readback } from '../readback';
 import { agentAt, describeAgent } from './describe';
 import type { VisibleAgent } from './simulate';
 import { LIFE_AGENT_MASK } from './turn-signals';
+import { canReadLifeSurface, readLifeSurface, type LifeSurfaceFrame } from './surface-visibility';
+export { lifeVisibleOnSurface } from './surface-visibility';
 
 export type LifeHover = { label: string; point: [number, number] } | { label: null; point: null };
-const permissions = cellBits();
-const trunk = classId('tree');
-const occluders = new Set([trunk, classId('tree_crown'), classId('trees')]);
 const HOVER_VALIDITY_MS = 250;
 const HOVER_RENEW_MS = HOVER_VALIDITY_MS / 2;
+const HOVER_MAX_VALIDITY_MS = 1000;
+const HOVER_FRAME_INTERVAL_COUNT = 4;
 
-/** Mirrors the glyph pass: birds fly above surfaces; other agents use the pointed subcell. */
-export function lifeVisibleOnSurface(
-  lifeClass: number,
-  flags: number,
-  coarse: number,
-  sampled: number,
-  height: number,
-): boolean {
-  const bits = flags & LIFE_AGENT_MASK;
-  if (!bits) return false;
-  const nonBird = lifeClass !== classId('life_bird');
-  const surface = nonBird && coarse !== trunk ? sampled : coarse;
-  if (nonBird && occluders.has(surface)) return false;
-  const allowed = permissions[surface] ?? 0;
-  return (
-    (allowed & bits) !== 0 ||
-    (bits === CellBit.person && (allowed & CellBit.grounds) !== 0 && height === 0)
-  );
-}
-
-export type HoverFrame = {
+export type HoverFrame = LifeSurfaceFrame & {
   generation?: number;
-  targets: Pick<CellTargets, 'cols' | 'rows' | 'glyphFbo' | 'sub'>;
-  grid: GridPlacement;
-  dpr: number;
-  /** Changes with target generation, camera or grid placement, never with animation time. */
-  geometry: string;
   revision: number;
-  owners: Uint32Array;
-  life: Uint8Array;
-  agents: readonly VisibleAgent[];
-  labelsCover: (point: readonly [number, number]) => boolean;
 };
 
 /** One bounded asynchronous visibility batch; no reads without a describable owner. */
@@ -57,7 +26,7 @@ export class LifeHoverController {
   private serial = 0;
   private pending: { serial: number; key: string; at: number } | undefined;
   private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
-  private held: { agent: VisibleAgent; geometry: string; at: number } | undefined;
+  private held: { agent: VisibleAgent; identity: string; at: number } | undefined;
   private inspecting = false;
   private inspectedAgent: VisibleAgent | undefined;
   private lastUpdate: number | undefined;
@@ -141,8 +110,9 @@ export class LifeHoverController {
       Math.floor(((p[1] * f.dpr + f.grid.shiftY) / f.grid.cellHeight - row) * SUB.rows),
     );
     const offset = (row * f.targets.cols + col) * 4;
-    const lifeClass = f.life[offset + 1]! & 63;
+    const lifeClass = unpackGlyph(f.life[offset]!, f.life[offset + 1]!).cls;
     const lifeFlags = f.life[offset + 2]! & LIFE_AGENT_MASK;
+    const identity = `${f.generation ?? 0}/${agent.inspectionId ?? ''}/${f.geometry}/${label}/${lifeClass}/${lifeFlags}`;
     return {
       col,
       row,
@@ -152,21 +122,22 @@ export class LifeHoverController {
       lifeClass,
       lifeFlags,
       agent,
-      key: `${f.generation ?? 0}/${agent.inspectionId ?? ''}/${f.geometry}/${col}/${row}/${sx}/${sy}/${label}/${lifeClass}/${lifeFlags}`,
+      identity,
+      key: `${identity}/${col}/${row}/${sx}/${sy}`,
     };
   }
 
   update(frame: HoverFrame | null, now: number) {
     if (this.lastUpdate !== undefined && now > this.lastUpdate) {
       this.intervals.push(now - this.lastUpdate);
-      if (this.intervals.length > 4) this.intervals.shift();
+      if (this.intervals.length > HOVER_FRAME_INTERVAL_COUNT) this.intervals.shift();
     }
     this.lastUpdate = now;
     // Evidence is dated at request time: allow both the original two-frame read and
     // its two-frame renewal, but never keep a stalled result for more than a second.
     const validity = Math.min(
-      1000,
-      Math.max(HOVER_VALIDITY_MS, 4 * Math.max(0, ...this.intervals)),
+      HOVER_MAX_VALIDITY_MS,
+      Math.max(HOVER_VALIDITY_MS, HOVER_FRAME_INTERVAL_COUNT * Math.max(0, ...this.intervals)),
     );
     this.frame = frame;
     const c = this.candidate();
@@ -183,23 +154,21 @@ export class LifeHoverController {
     }
     if (this.confirmed?.key === c.key) {
       this.held = this.confirmed.visible
-        ? { agent: c.agent, geometry: frame.geometry, at: this.confirmed.at }
+        ? { agent: c.agent, identity: c.identity, at: this.confirmed.at }
         : undefined;
     }
-    // Moving within a held figure can need a new subcell check. Keep the simulation still
-    // while the old evidence is valid, without publishing an unverified tooltip there.
+    // Keep the existing item evidence while a new subcell is checked. Movement never
+    // extends its lifetime; a negative result, semantic change or expiry retracts it.
     const held = this.held;
-    this.setInspection(
+    const holding =
       !!held &&
-        (held.agent === c.agent ||
-          (c.agent.inspectionId !== undefined &&
-            held.agent.inspectionId === c.agent.inspectionId)) &&
-        held.geometry === frame.geometry &&
-        now - held.at < validity,
-      c.agent,
-    );
+      (held.agent === c.agent ||
+        (c.agent.inspectionId !== undefined && held.agent.inspectionId === c.agent.inspectionId)) &&
+      held.identity === c.identity &&
+      now - held.at < validity;
+    this.setInspection(holding, c.agent);
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
-    else this.publish(null);
+    else this.publish(holding ? c.label : null);
     if (this.pending) return;
     if (
       this.confirmed?.key === c.key &&
@@ -208,34 +177,28 @@ export class LifeHoverController {
         now - this.confirmed.at < HOVER_RENEW_MS)
     )
       return;
-    if (this.readback.size > MAX_PENDING_READS - 3) return;
+    if (!canReadLifeSurface(this.readback)) return;
     const serial = ++this.serial;
+    const revision = frame.revision;
     this.pending = { serial, key: c.key, at: now };
-    const bytes: (Uint8Array | undefined)[] = [];
-    const at = (index: number) => (data: Uint8Array) => {
-      if (this.pending?.serial !== serial) return;
-      bytes[index] = data;
-      if (!bytes[0] || !bytes[1] || !bytes[2]) return;
-      this.pending = undefined;
-      if (this.candidate()?.key !== c.key) return;
-      const visible = lifeVisibleOnSurface(
-        c.lifeClass,
-        c.lifeFlags,
-        bytes[0][1]! & 63,
-        bytes[1][0]!,
-        bytes[2][0]!,
-      );
-      this.confirmed = { key: c.key, revision: frame.revision, visible, at: now };
-      // Publish from update, once per animation frame, after all current geometry is known.
-    };
-    this.readback.request(
-      frame.targets.glyphFbo,
+    readLifeSurface(
+      this.readback,
       this.attachment,
-      { x: c.col, y: c.row, width: 1, height: 1 },
-      at(0),
+      frame.targets,
+      {
+        col: c.col,
+        row: c.row,
+        sx: c.sx,
+        sy: c.sy,
+        cls: c.lifeClass,
+        flags: c.lifeFlags,
+      },
+      (visible) => {
+        if (this.pending?.serial !== serial) return;
+        this.pending = undefined;
+        this.confirmed = { key: c.key, revision, visible, at: now };
+        // Publish from update, once per animation frame, after all current geometry is known.
+      },
     );
-    const rect = { x: c.col * SUB.cols + c.sx, y: c.row * SUB.rows + c.sy, width: 1, height: 1 };
-    this.readback.request(frame.targets.sub.fbo, this.attachment, rect, at(1));
-    this.readback.request(frame.targets.sub.fbo, this.attachment + 1, rect, at(2));
   }
 }

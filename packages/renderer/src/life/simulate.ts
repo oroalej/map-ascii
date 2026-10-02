@@ -3126,7 +3126,7 @@ export class TileLife {
 }
 
 /** A train's cars to draw, front to back, each on the track behind the head. */
-export function trainCars(life: TileLife, m: Mover, inspected = false): VisibleAgent[] {
+export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
   const { tile, perMeter } = life;
   const trail = [m.x, m.y, ...m.train!.trail];
   const out: VisibleAgent[] = [];
@@ -3137,37 +3137,23 @@ export function trainCars(life: TileLife, m: Mover, inspected = false): VisibleA
     back += length + TRAIN.coupling;
     if (!at) break;
     const [lng, lat] = tileToLngLat(tile, at);
-    out.push(
-      inspected
-        ? {
-            kind: 'train',
-            inspectionId: undefined,
-            lng,
-            lat,
-            ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
-            side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
-            vehicle: car,
-            paint: m.paint,
-            flap: 0,
-          }
-        : {
-            kind: 'train',
-            lng,
-            lat,
-            ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
-            side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
-            vehicle: car,
-            paint: m.paint,
-            flap: 0,
-          },
-    );
+    out.push({
+      kind: 'train',
+      lng,
+      lat,
+      ahead: tileToLngLat(tile, { x: at.x + at.hx * perMeter, y: at.y + at.hy * perMeter }),
+      side: tileToLngLat(tile, { x: at.x - at.hy * perMeter, y: at.y + at.hx * perMeter }),
+      vehicle: car,
+      paint: m.paint,
+      flap: 0,
+    });
   }
   return out;
 }
 
 /** An agent to draw. */
 export type VisibleAgent = {
-  /** Assigned only in item mode; factories reserve its slot to avoid property-array allocation. */
+  /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
   /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
   effectClock?: number;
@@ -4667,8 +4653,7 @@ export class LifeWorld {
           if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
             this.previouslyVisible.add(m);
           // A train is long, and there are few: all its cars, wherever its head is.
-          for (const car of trainCars(life, m, this.inspection !== undefined))
-            push(m, { ...car, consist: m.train });
+          for (const car of trainCars(life, m)) push(m, { ...car, consist: m.train });
           continue;
         }
         if (!inView(m.x, m.y)) continue;
@@ -4681,37 +4666,20 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
-          push(
-            m,
-            this.inspection
-              ? {
-                  kind: m.kind,
-                  inspectionId: undefined,
-                  lng,
-                  lat,
-                  ahead,
-                  side,
-                  vehicle: m.vehicle,
-                  paint: m.paint,
-                  turnSignal:
-                    m.kind === 'vehicle'
-                      ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
-                      : undefined,
-                  flap: 0,
-                }
-              : {
-                  kind: m.kind,
-                  lng,
-                  lat,
-                  ahead,
-                  side,
-                  vehicle: m.vehicle,
-                  paint: m.paint,
-                  turnSignal:
-                    m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
-                  flap: 0,
-                },
-          );
+          push(m, {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            side,
+            vehicle: m.vehicle,
+            paint: m.paint,
+            turnSignal:
+              m.kind === 'vehicle'
+                ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
+                : undefined,
+            flap: 0,
+          });
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
           const people = m.group.map((w, member): PersonLook => ({
@@ -4724,30 +4692,17 @@ export class LifeWorld {
             pose: life.momentHost.pose(m, member),
           }));
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
-          const agent: VisibleAgent = inspection
-            ? {
-                inspectionId: undefined,
-                kind: m.kind,
-                lng,
-                lat,
-                ahead,
-                flap: 0,
-                people,
-                ...(speech && {
-                  speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
-                }),
-              }
-            : {
-                kind: m.kind,
-                lng,
-                lat,
-                ahead,
-                flap: 0,
-                people,
-                ...(speech && {
-                  speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
-                }),
-              };
+          const agent: VisibleAgent = {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            flap: 0,
+            people,
+            ...(speech && {
+              speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
+            }),
+          };
           push(m, agent);
           owners?.set(m, agent);
         } else if (m.kind === 'dog' || m.kind === 'cat') {
@@ -4758,19 +4713,22 @@ export class LifeWorld {
           const stillFlap = cat ? (m.grooming ? 3 : 2) : m.lying ? 2 : 0;
           const stride = cat ? CAT.stride : DOG.stride;
           const flap = still ? stillFlap : Math.floor((m.walked ?? 0) / stride) & 1;
-          push(
-            m,
-            this.inspection
-              ? { kind: m.kind, inspectionId: undefined, lng, lat, ahead, paint: m.paint, flap }
-              : { kind: m.kind, lng, lat, ahead, paint: m.paint, flap },
-          );
+          push(m, {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            paint: m.paint,
+            flap,
+          });
         } else {
-          push(
-            m,
-            this.inspection
-              ? { kind: m.kind, inspectionId: undefined, lng, lat, ahead, flap: 0 }
-              : { kind: m.kind, lng, lat, ahead, flap: 0 },
-          );
+          push(m, {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            flap: 0,
+          });
         }
       }
       if (shows('person')) {
@@ -4807,7 +4765,6 @@ export class LifeWorld {
               speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
             }),
           };
-          if (inspection) agent.inspectionId = undefined;
           push(s, agent);
         }
       }
@@ -4833,48 +4790,29 @@ export class LifeWorld {
             const x = g.x + g.hx * 1.8 * perMeter;
             const y = g.y + g.hy * 1.8 * perMeter;
             const [lng, lat] = at(x, y);
-            push(
-              g,
-              this.inspection
-                ? {
-                    kind: 'person',
-                    inspectionId: undefined,
-                    lng,
-                    lat,
-                    ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
-                    side: at(x - g.hy * perMeter, y + g.hx * perMeter),
-                    vehicle: 'carabao',
-                    paint: g.carabao,
-                    flap: 0,
-                    people: [{ ...look, lateral: 1 }],
-                  }
-                : {
-                    kind: 'person',
-                    lng,
-                    lat,
-                    ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
-                    side: at(x - g.hy * perMeter, y + g.hx * perMeter),
-                    vehicle: 'carabao',
-                    paint: g.carabao,
-                    flap: 0,
-                    people: [{ ...look, lateral: 1 }],
-                  },
-            );
+            push(g, {
+              kind: 'person',
+              lng,
+              lat,
+              ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
+              side: at(x - g.hy * perMeter, y + g.hx * perMeter),
+              vehicle: 'carabao',
+              paint: g.carabao,
+              flap: 0,
+              people: [{ ...look, lateral: 1 }],
+            });
           } else {
             const [lng, lat] = at(g.x, g.y);
             const { hx, hy } = g.momentFacing ?? g;
             const ahead = at(g.x + hx * perMeter, g.y + hy * perMeter);
-            const agent: VisibleAgent = inspection
-              ? {
-                  inspectionId: undefined,
-                  kind: 'person',
-                  lng,
-                  lat,
-                  ahead,
-                  flap: 0,
-                  people: [look],
-                }
-              : { kind: 'person', lng, lat, ahead, flap: 0, people: [look] };
+            const agent: VisibleAgent = {
+              kind: 'person',
+              lng,
+              lat,
+              ahead,
+              flap: 0,
+              people: [look],
+            };
             const speech = life.momentHost.moments.speech(g) ?? life.momentHost.scenes.speech(g);
             if (speech)
               agent.speech = { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` };
@@ -4897,33 +4835,17 @@ export class LifeWorld {
           if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          push(
-            p,
-            this.inspection
-              ? {
-                  kind: 'vehicle',
-                  inspectionId: undefined,
-                  lng,
-                  lat,
-                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-                  vehicle: p.vehicle,
-                  paint: p.paint,
-                  parked: true,
-                  flap: 0,
-                }
-              : {
-                  kind: 'vehicle',
-                  lng,
-                  lat,
-                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-                  vehicle: p.vehicle,
-                  paint: p.paint,
-                  parked: true,
-                  flap: 0,
-                },
-          );
+          push(p, {
+            kind: 'vehicle',
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+            side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+            vehicle: p.vehicle,
+            paint: p.paint,
+            parked: true,
+            flap: 0,
+          });
         }
       }
       // Standby trains: the tile that owns a siding draws its whole train, lamps off.
@@ -4931,33 +4853,17 @@ export class LifeWorld {
         for (const p of life.standby) {
           if (!this.owns(life, p)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          push(
-            p,
-            this.inspection
-              ? {
-                  kind: 'train',
-                  inspectionId: undefined,
-                  lng,
-                  lat,
-                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-                  vehicle: p.vehicle,
-                  paint: p.paint,
-                  parked: true,
-                  flap: 0,
-                }
-              : {
-                  kind: 'train',
-                  lng,
-                  lat,
-                  ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
-                  side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
-                  vehicle: p.vehicle,
-                  paint: p.paint,
-                  parked: true,
-                  flap: 0,
-                },
-          );
+          push(p, {
+            kind: 'train',
+            lng,
+            lat,
+            ahead: tileToLngLat(tile, { x: p.x + p.hx * perMeter, y: p.y + p.hy * perMeter }),
+            side: tileToLngLat(tile, { x: p.x - p.hy * perMeter, y: p.y + p.hx * perMeter }),
+            vehicle: p.vehicle,
+            paint: p.paint,
+            parked: true,
+            flap: 0,
+          });
         }
       }
       if (!shows('bird')) continue;
@@ -4967,7 +4873,8 @@ export class LifeWorld {
         const out_ = spec.nocturnal ? levels.night : levels.bird;
         if (
           flock.rank >= out_ * crowd ||
-          (!inView(flock.x, flock.y) && !flock.birds.some((bird) => inspection?.hasBird(bird)))
+          (!inView(flock.x, flock.y) &&
+            !(inspection?.birds && flock.birds.some((bird) => inspection.hasBird(bird))))
         )
           continue;
         const wobble = life.elapsed * 0.8;
@@ -4988,7 +4895,7 @@ export class LifeWorld {
           const x = flock.x + bird.ox * cos - bird.oy * sin;
           const y = flock.y + bird.ox * sin + bird.oy * cos;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const birdTime = inspection?.clock(bird, life.elapsed) ?? life.elapsed;
+          const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
           const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.

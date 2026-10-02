@@ -8,12 +8,10 @@ import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
-import type { InspectionAck } from './inspection';
 let nextGeneration = 0;
 
 export type FrameView = {
   generation?: number;
-  inspection?: InspectionAck;
   agents: VisibleAgent[];
   procession: ProcessionRun | undefined;
   signalClock: number;
@@ -236,7 +234,6 @@ export function createWorkerHost(
           view = {
             agents: result.agents,
             generation,
-            inspection: result.inspection,
             procession: result.procession,
             signalClock: result.signalClock,
             cellGuard: (toCell) =>

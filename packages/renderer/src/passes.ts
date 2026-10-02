@@ -53,6 +53,7 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
+import { EffectClocks } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
@@ -459,8 +460,10 @@ function sunUniforms(view: View, sun: Sun | null) {
  * so they are the grid's size and never shared between two maps.
  */
 type Texels = {
-  clocks?: Float32Array;
-  clocksActive?: boolean;
+  clocks?: EffectClocks;
+  clockCells?: number[];
+  clockUpload?: number;
+  clockCandidates?: boolean;
   held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
   owners: Uint32Array;
@@ -515,7 +518,6 @@ export function lifePass(
   focus?: ReadonlySet<LifeFocus>,
   /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
   heldFrame?: object,
-  owners?: Uint32Array,
   speakers?: LifeGrid['speakers'],
 ): number {
   const { cols, rows } = targets;
@@ -534,7 +536,6 @@ export function lifePass(
         agents,
         sun,
         focus,
-        owners,
         speakers,
       ]
     : undefined;
@@ -547,6 +548,11 @@ export function lifePass(
   buffers.held = undefined;
   const lifeTexels = buffers.life;
   const packStart = profiler?.time();
+  buffers.clockCandidates = agents.some((agent) => agent.candle && agent.effectClock !== undefined);
+  if (buffers.clockCandidates) {
+    buffers.clocks ??= new EffectClocks(cols * rows);
+    buffers.clockCells ??= [];
+  }
   const drawn = packLife(
     lifeTexels,
     {
@@ -564,18 +570,16 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
-    { owners: buffers.owners, focus },
+    { owners: buffers.owners, focus, clockCells: buffers.clockCells },
   );
-  if (owners && owners !== buffers.owners) owners.set(buffers.owners);
   buffers.revision++;
-  buffers.clocksActive = agents.some((agent) => agent.candle && agent.effectClock !== undefined);
-  if (buffers.clocksActive) {
-    buffers.clocks ??= new Float32Array(cols * rows * 2);
-    buffers.clocks.fill(-1);
-    for (let cell = 0; cell < buffers.owners.length; cell++) {
+  if (buffers.clocks) {
+    buffers.clocks.begin(0);
+    for (const cell of buffers.clockCells!) {
       const agent = agents[buffers.owners[cell]! - 1];
-      if (agent?.candle) buffers.clocks[cell * 2] = agent.effectClock ?? -1;
+      if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? -1);
     }
+    buffers.clocks.finish(0);
   }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
@@ -614,11 +618,31 @@ export function lightPass(
   packBeams(lightTexels, grid, agents);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
-  const clocks = buffers.clocksActive ? buffers.clocks : undefined;
-  if (clocks) for (let cell = 0; cell < cols * rows; cell++) clocks[cell * 2 + 1] = -1;
-  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks);
+  const clocks = buffers.clocks;
+  clocks?.begin(1);
+  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks?.pool);
+  clocks?.finish(1);
   uploadLights(gl, targets, lightTexels);
-  if (clocks || targets.effectClockTex) uploadEffectClocks(gl, targets, clocks);
+  effectClockPass(gl, targets);
+}
+
+/** Also called in daylight when lighting is idle. Raster changes alone cause no upload. */
+export function effectClockPass(gl: GL, targets: CellTargets) {
+  const buffers = texelsOf.get(targets);
+  const clocks = buffers?.clocks;
+  if (clocks?.active) {
+    if (!targets.effectClockTex || buffers!.clockUpload !== clocks.revision) {
+      uploadEffectClocks(gl, targets, clocks.values);
+      buffers!.clockUpload = clocks.revision;
+    }
+  } else {
+    if (targets.effectClockTex) uploadEffectClocks(gl, targets, undefined);
+    if (buffers && !buffers.clockCandidates) {
+      buffers.clocks = undefined;
+      buffers.clockCells = undefined;
+      buffers.clockUpload = undefined;
+    }
+  }
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */

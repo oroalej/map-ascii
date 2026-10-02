@@ -15,6 +15,48 @@ const pose = (a: VisibleAgent) => [a.lng, a.lat, a.ahead, a.flap, a.people, a.tu
 const person = (lng = 0): VisibleAgent => ({ kind: 'person', lng, lat: 0, flap: 0 });
 
 describe('per-item inspection', () => {
+  it('admits reordered capped identities with collisions and releases an evicted selection', () => {
+    const inspection = new LifeInspection(),
+      owners = Array.from({ length: 8 }, () => ({}));
+    const frame = () => owners.map((owner) => inspection.present(owner, person()));
+    inspection.begin(0);
+    let views = frame();
+    inspection.finish(views);
+    const id = views[0]!.inspectionId!;
+    inspection.select({ id, revision: 1, time: 0 }, 0);
+    inspection.begin(1);
+    views = frame();
+    // IDs 1 and 5 collide in the four-slot admission table; copies retain numeric identity.
+    inspection.finish([{ ...views[4]! }, { ...views[0]! }], true);
+    expect(inspection.ack.id).toBe(id);
+    inspection.begin(2);
+    views = frame();
+    inspection.finish([views[4]!], true);
+    expect(inspection.ack.id).toBeNull();
+    inspection.select({ id, revision: 2, time: 2 }, 2);
+    expect(inspection.ack.id).toBeNull();
+  });
+  it('fences owner-local records between registries and clears without changing simulation clones', () => {
+    const owner = { x: 1 },
+      a = new LifeInspection(),
+      b = new LifeInspection();
+    a.begin(0);
+    const first = a.present(owner, person());
+    a.finish([first]);
+    a.select({ id: first.inspectionId!, revision: 1, time: 0 }, 0);
+    b.begin(1);
+    const other = b.present(owner, person());
+    b.finish([other]);
+    expect(a.clock(owner, 10)).toBe(0);
+    expect(b.clock(owner, 10)).toBe(10);
+    a.begin(10);
+    expect(a.present(owner, person()).inspectionId).toBe(first.inspectionId);
+    expect(structuredClone(owner)).toEqual({ x: 1 });
+    a.clear();
+    a.begin(11);
+    expect(a.present(owner, person()).inspectionId).not.toBe(first.inspectionId);
+    expect(b.present(owner, person()).inspectionId).toBe(other.inspectionId);
+  });
   it('keeps an actor identity across output copies and rejects deleted identities', () => {
     const inspection = new LifeInspection(),
       owner = {};
@@ -44,6 +86,7 @@ describe('per-item inspection', () => {
     const bb = inspection.present(b, person(1));
     inspection.finish([aa, bb]);
     inspection.select({ id: aa.inspectionId!, revision: 1, time: 10 }, 2);
+    expect(inspection.birds).toBe(false);
     inspection.select({ id: aa.inspectionId!, revision: 2, time: 15 }, 7);
     expect(inspection.clock(a, 7)).toBe(2);
     expect(inspection.clock(b, 7)).toBe(7);
@@ -74,6 +117,7 @@ describe('per-item inspection', () => {
     inspection.present(other, bird());
     inspection.finish([first]);
     inspection.select({ id: first.inspectionId!, revision: 1, time: 0 }, 0);
+    expect(inspection.birds).toBe(true);
     inspection.begin(10);
     const held = inspection.present(owner, { ...bird(), lng: 0.001, flap: 0 }, 5);
     expect(pose(held)).toEqual(pose(first));
@@ -127,14 +171,14 @@ describe('per-item inspection', () => {
       item = makeScenario('rain', 1, false, 1, ItemWorld);
     for (let frame = 0; frame < 90; frame++) {
       const strip = (agents: VisibleAgent[]) =>
-        agents.map(({ inspectionId: _id, candleSeed: _seed, ...agent }) => agent);
+        structuredClone(agents).map(({ inspectionId: _id, candleSeed: _seed, ...agent }) => agent);
       const baseline = ordinary.step(frame);
       expect(baseline.some((agent) => Object.hasOwn(agent, 'inspectionId'))).toBe(false);
       expect(strip(item.step(frame))).toEqual(strip(baseline));
     }
   });
 
-  it('uses the same commands and acknowledgements in the inline and worker APIs', async () => {
+  it('applies the same commands and poses in the inline and worker APIs', async () => {
     const s = makeScenario('crossroads', 1);
     const world = new ItemWorld();
     const inline = createInlineHost(world, undefined, () => 0);
@@ -174,8 +218,9 @@ describe('per-item inspection', () => {
       input.inspection = { id: frame < 8 ? id : null, revision: frame, time: frame / 30 };
       inline.request(input);
       reply = worker.frame(input);
-      expect(reply.agents).toEqual(inline.latest()!.agents);
-      expect(reply.inspection).toEqual(inline.latest()!.inspection);
+      // Model the real worker boundary: owner-local symbol records are not serialized.
+      expect(structuredClone(reply.agents)).toEqual(structuredClone(inline.latest()!.agents));
+      expect(reply).not.toHaveProperty('inspection');
     }
     inline.dispose();
   });

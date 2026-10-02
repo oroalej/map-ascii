@@ -130,7 +130,7 @@ function pool(
   ry: number,
   strength: number,
   g: number,
-  clocks?: Float32Array,
+  clocks?: Float32Array | ((cell: number, token: number) => void),
   clock = -1,
 ) {
   const { cols, rows } = grid;
@@ -147,7 +147,8 @@ function pool(
       if (d >= 1) {
         if (!head && out[at + 3] === 0) {
           out[at + 1] = g;
-          if (clocks) clocks[(at / 4) * 2 + 1] = clock;
+          if (typeof clocks === 'function') clocks(at / 4, clock);
+          else if (clocks) clocks[(at / 4) * 2 + 1] = clock;
           out[at + 3] = 255;
         }
         continue;
@@ -158,7 +159,8 @@ function pool(
       out[at] = value;
       if (head) continue;
       out[at + 1] = g;
-      if (clocks) clocks[(at / 4) * 2 + 1] = clock;
+      if (typeof clocks === 'function') clocks(at / 4, clock);
+      else if (clocks) clocks[(at / 4) * 2 + 1] = clock;
       out[at + 3] = 255;
     }
   }
@@ -300,7 +302,7 @@ export function packCandles(
   grid: LightGrid,
   agents: readonly VisibleAgent[],
   cellsPerMeter: number,
-  clocks?: Float32Array,
+  clocks?: Float32Array | ((cell: number, token: number) => void),
 ): number {
   // At least a cell and a half, so a crowd's candles still read zoomed out.
   const radius = Math.max(1.5, CANDLE.radius * cellsPerMeter);

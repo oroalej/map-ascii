@@ -38,55 +38,72 @@ const route: ProcessionRoute = {
 /** Meters east of the route's start. */
 const east = (lng: number) => lng * 111_320;
 
-it('holds one procession boat with its crew while other boats and the schedule advance', () => {
-  const scene = new ProcessionScene(route),
-    inspection = new LifeInspection();
-  const agents = (progress: number, clock: number) => {
-    inspection.begin(clock);
-    const result = scene.agents(progress, clock, { inspection, crews: true });
-    inspection.finish(result);
-    return result;
-  };
-  const before = agents(0.4, 10);
-  const selected = before.find((a) => a.vehicle === 'voyador')!;
-  inspection.select({ id: selected.inspectionId!, revision: 1, time: 10 }, 10);
-  const after = agents(0.45, 12);
-  expect(after.filter((a) => a.inspectionId === selected.inspectionId)).toEqual(
-    before.filter((a) => a.inspectionId === selected.inspectionId),
-  );
-  const old = new Map(before.filter((a) => a.vehicle).map((a) => [a.inspectionId, a]));
-  expect(
-    after.some(
-      (a) =>
-        a.vehicle &&
-        a.inspectionId !== selected.inspectionId &&
-        old.has(a.inspectionId) &&
-        a.lng !== old.get(a.inspectionId)!.lng,
-    ),
-  ).toBe(true);
-  inspection.select({ id: null, revision: 2, time: 12 }, 12);
-  const resumed = agents(0.4501, 12.02).find(
-    (a) => a.vehicle && a.inspectionId === selected.inspectionId,
-  )!;
-  expect(Math.abs(east(resumed.lng) - east(selected.lng))).toBeLessThan(1);
-});
+it.each(['voyador', 'pagoda', 'crew'] as const)(
+  'holds the connected towing formation through its %s',
+  (craft) => {
+    const scene = new ProcessionScene(route),
+      inspection = new LifeInspection();
+    const agents = (progress: number, clock: number) => {
+      inspection.begin(clock);
+      const result = scene.agents(progress, clock, { inspection, crews: true });
+      inspection.finish(result);
+      return result;
+    };
+    const before = agents(0.4, 10);
+    const selected = before.find((a) =>
+      craft === 'crew' ? a.aboard && a.kind === 'person' : a.vehicle === craft,
+    )!;
+    expect(
+      new Set(
+        before
+          .filter((a) => a.vehicle === 'voyador' || a.vehicle === 'pagoda')
+          .map((a) => a.inspectionId),
+      ).size,
+    ).toBe(1);
+    inspection.select({ id: selected.inspectionId!, revision: 1, time: 10 }, 10);
+    const after = agents(0.45, 40);
+    expect(after.filter((a) => a.inspectionId === selected.inspectionId)).toEqual(
+      before.filter((a) => a.inspectionId === selected.inspectionId),
+    );
+    expect(after.filter((a) => a.line)).toEqual(before.filter((a) => a.line));
+    const old = new Map(before.filter((a) => a.vehicle).map((a) => [a.inspectionId, a]));
+    expect(
+      after.some(
+        (a) =>
+          a.vehicle &&
+          a.inspectionId !== selected.inspectionId &&
+          old.has(a.inspectionId) &&
+          a.lng !== old.get(a.inspectionId)!.lng,
+      ),
+    ).toBe(true);
+    inspection.select({ id: null, revision: 2, time: 40 }, 40);
+    const resumed = agents(0.4501, 40.02).find(
+      (a) => a.vehicle === selected.vehicle && a.inspectionId === selected.inspectionId,
+    )!;
+    expect(Math.abs(east(resumed.lng) - east(selected.lng))).toBeLessThan(1);
+  },
+);
 
-it('preserves an individual live occurrence delay across replay without delaying other boats', () => {
+it('preserves connected formation delay across replay without delaying independent boats', () => {
   const world = new LifeWorld(undefined, undefined, undefined, true);
   world.setProcessions([route]);
   const agents = () => world.visible(18, 1, [0, 0]);
   world.setLive(route.id, 0.4, 'test/2026');
-  const selected = agents().find((a) => a.vehicle === 'voyador')!;
+  const selected = agents().find((a) => a.vehicle === 'pagoda')!;
   world.inspection!.select({ id: selected.inspectionId!, revision: 1, time: 0 }, 0);
   world.setLive(route.id, 0.5, 'test/2026');
   agents();
   world.inspection!.select({ id: null, revision: 2, time: 10 }, 0);
-  const delayed = agents().find((a) => a.inspectionId === selected.inspectionId)!;
+  const delayed = agents().find(
+    (a) => a.vehicle === 'pagoda' && a.inspectionId === selected.inspectionId,
+  )!;
   expect(delayed.lng).toBe(selected.lng);
   world.play(route.id);
   agents();
   world.stop();
-  expect(agents().find((a) => a.inspectionId === selected.inspectionId)).toEqual(delayed);
+  expect(
+    agents().find((a) => a.vehicle === 'pagoda' && a.inspectionId === selected.inspectionId),
+  ).toEqual(delayed);
   world.setLive(route.id, 0.5, 'test/2027');
   expect(agents().some((a) => a.inspectionId === selected.inspectionId)).toBe(false);
 });

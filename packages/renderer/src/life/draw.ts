@@ -99,8 +99,15 @@ let journal:
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
 let drawingFocus = 0;
+let drawingClockCells: number[] | undefined;
+let clockCells: number[] | undefined;
 
-export type LifePackMetadata = { owners?: Uint32Array; focus?: ReadonlySet<LifeFocus> };
+export type LifePackMetadata = {
+  owners?: Uint32Array;
+  focus?: ReadonlySet<LifeFocus>;
+  /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
+  clockCells?: number[];
+};
 
 /** Every complete texel write also replaces its frame-local owner. */
 function writeCell(
@@ -115,6 +122,7 @@ function writeCell(
   out[at + 2] = bits | drawingFocus;
   out[at + 3] = byte;
   if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
+  drawingClockCells?.push(at / 4);
 }
 /** Cells (texel offset / 4) held by ground agents already drawn this frame. */
 let groundCells = new Uint8Array(0);
@@ -177,6 +185,9 @@ export function packLife(
   drawingOwners?.fill(0);
   drawingOwner = 0;
   drawingFocus = 0;
+  clockCells = metadata.clockCells;
+  if (clockCells) clockCells.length = 0;
+  drawingClockCells = undefined;
   journal = undefined;
   drawingSpeakers = grid.speakers;
   if (drawingSpeakers && (!drawingOwners || drawingSpeakers.members.length !== cells))
@@ -194,6 +205,8 @@ export function packLife(
         const agent = agents[index]!;
         if (!!agent.parked !== parked) continue;
         drawingOwner = index + 1;
+        drawingClockCells =
+          agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
         drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
         drawingMember = 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
@@ -224,6 +237,7 @@ export function packLife(
   } finally {
     journal = undefined;
     drawingOwners = undefined;
+    drawingClockCells = clockCells = undefined;
     drawingOwner = 0;
     drawingFocus = 0;
     drawingSpeakers = undefined;

@@ -543,7 +543,9 @@ export class ProcessionScene {
     if (boats) {
       const { columns } = this.formation;
       for (const b of this.boats) {
-        const owner = inspection && this.owner(scope, b);
+        // Every column is roped to the same pagoda, so the whole connected tow is one item.
+        const group = b.vehicle === 'pagoda' || b.column !== undefined ? this.boats[0]! : b;
+        const owner = inspection && this.owner(scope, group);
         const actorTime = owner ? inspection.clock(owner, time) : time;
         const actorProgress = owner ? inspection.progress(owner, progress) : progress;
         const { sway } = b;
@@ -592,8 +594,6 @@ export class ProcessionScene {
     if (crowds) {
       const landing = this.length;
       for (const p of this.people) {
-        const owner = inspection && this.owner(scope, p);
-        const actorTime = owner ? inspection.clock(owner, time) : time;
         const near =
           Math.abs(p.s - pagoda) < PROCESSION.crowdNear ||
           p.s < PROCESSION.crowdNear ||
@@ -601,6 +601,8 @@ export class ProcessionScene {
         if (!near && p.rank >= PROCESSION.crowdShare) continue;
         const { x, y, tx, ty, off } = p;
         if (!inView(x + ty * off, y - tx * off)) continue;
+        const owner = inspection && this.owner(scope, p);
+        const actorTime = owner ? inspection.clock(owner, time) : time;
         const sway = Math.sin(actorTime * 1.3 + p.phase) * 0.3;
         const [lng, lat] = this.lngLat(x + ty * off + tx * sway, y - tx * off + ty * sway);
         // Facing the river, a meter nearer it.

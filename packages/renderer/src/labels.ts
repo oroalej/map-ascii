@@ -4,6 +4,7 @@
  * cities, subdivisions, smaller places), landmarks, and monuments.
  */
 import { bandVisibility, type ZoomBand } from '@atlas/shared';
+const ROTATED_HALO_HEIGHT = 1.4;
 
 /** Label priority: lower ranks are placed first. */
 export const LabelRank = {
@@ -235,7 +236,7 @@ export function overlayCoversPoint(
       s = Math.sin(label.angle);
     const localX = c * dx + s * dy,
       localY = -s * dx + c * dy;
-    if (Math.abs(localY) >= cellHeight * 0.7) continue;
+    if (Math.abs(localY) >= (cellHeight * ROTATED_HALO_HEIGHT) / 2) continue;
     const index = Math.floor(localX / cellWidth + label.codes.length / 2);
     if (
       index >= -1 &&
@@ -261,8 +262,8 @@ export function rotatedLabelBox(
 ): Box {
   const c = Math.abs(Math.cos(angle)),
     s = Math.abs(Math.sin(angle));
-  const w = c * (width + 2) + s * aspect * 1.4;
-  const h = (s * (width + 2)) / aspect + c * 1.4;
+  const w = c * (width + 2) + s * aspect * ROTATED_HALO_HEIGHT;
+  const h = (s * (width + 2)) / aspect + c * ROTATED_HALO_HEIGHT;
   const left = Math.floor(col + 0.5 - w / 2),
     top = Math.floor(row + 0.5 - h / 2);
   return {
@@ -304,7 +305,7 @@ export function rotatedLabelVertices(
     for (let i = -1; i <= label.codes.length; i++) {
       if (!labelCellShows(label.id, i + 1, label.vis)) continue;
       const x0 = (i - label.codes.length / 2) * cellWidth;
-      quad(x0, cellHeight * 1.4, 0);
+      quad(x0, cellHeight * ROTATED_HALO_HEIGHT, 0);
       if (label.codes[i]) quad(x0, cellHeight, label.codes[i]!);
     }
   }

@@ -10,7 +10,7 @@ import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
-import type { InspectionCommand, InspectionAck } from './inspection';
+import type { InspectionCommand } from './inspection';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -33,7 +33,6 @@ export type FrameInput = {
   visible: Parameters<LifeWorld['visible']>;
 };
 export type FrameResult = {
-  inspection?: InspectionAck;
   agents: VisibleAgent[];
   procession: ProcessionRun | undefined;
   signalClock: number;
@@ -84,7 +83,6 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     agents,
     procession: world.procession(),
     signalClock: world.signalClock,
-    ...(world.inspection ? { inspection: world.inspection.ack } : {}),
   };
 }
 

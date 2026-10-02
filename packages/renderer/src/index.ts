@@ -32,7 +32,7 @@ import {
 } from './camera';
 import { classesIn, type RenderClass } from './classes';
 import { DEFAULT_FONT } from './glyphs/atlas';
-import { createCellTargets, deleteCellTargets, uploadEffectClocks, type CellTargets } from './gpu';
+import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
   cellStep,
   DEFAULT_CELLS,
@@ -58,6 +58,7 @@ import { attachInput } from './input';
 import {
   cellPass,
   crownPass,
+  effectClockPass,
   glyphPass,
   fixturePass,
   hasCrowns,
@@ -139,6 +140,7 @@ export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } 
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
+export type { LifeHover } from './life/hover';
 export type { RenderClass } from './classes';
 export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
@@ -526,7 +528,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const speech = new SpeechController(readback, gl.COLOR_ATTACHMENT0, (cues) =>
     emit('speechchange', cues),
   );
-  let speechOwners = new Uint32Array(0);
   const speechSpeakers = {
     members: new Uint8Array(0),
     points: new Map<number, [number, number]>(),
@@ -890,10 +891,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
     const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
-    if (trackSpeech && speechOwners.length !== targets.cols * targets.rows)
-      speechOwners = new Uint32Array(targets.cols * targets.rows);
-    if (trackSpeech && speechSpeakers.members.length !== speechOwners.length)
-      speechSpeakers.members = new Uint8Array(speechOwners.length);
+    if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
+      speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -907,7 +906,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
       itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
-      trackSpeech ? speechOwners : undefined,
       trackSpeech ? speechSpeakers : undefined,
     );
     lifeShown = agents.length > 0;
@@ -926,7 +924,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !targets ||
       !placement ||
       !lifeAgents.length ||
-      speechOwners.length !== targets.cols * targets.rows
+      speechSpeakers.members.length !== raster.owners.length
     ) {
       speech.clear();
       return;
@@ -938,7 +936,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         targets,
         dpr,
         agents: lifeAgents,
-        owners: speechOwners,
+        owners: raster.owners,
         speakers: speechSpeakers,
         life: raster.life,
         geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
@@ -1133,8 +1131,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** Whether the light texture holds headlight beams (so they are cleared once they go). */
   let beamsShown = false;
-  /** Last candle clock upload, including frames that need no lighting pass. */
-  let clockUpload: { generation: number; revision: number } | undefined;
   /**
    * Put the lamps on the grid when it moves or they come on, and the moving vehicles' headlight
    * beams every frame they are out; clear them once they go. Tells the legend when the lamps
@@ -1150,19 +1146,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const key = on ? litNow().key : '';
     const shopsChanged = key !== shopsKey;
     shopsKey = key;
-    const raster = lifeRaster(targets);
     if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) {
-      const clocks = raster?.clocksActive ? raster.clocks : undefined;
-      if (
-        clocks &&
-        (clockUpload?.generation !== targetsGeneration || clockUpload.revision !== raster!.revision)
-      ) {
-        uploadEffectClocks(gl, targets, clocks);
-        clockUpload = { generation: targetsGeneration, revision: raster!.revision };
-      } else if (!clocks && targets.effectClockTex) {
-        uploadEffectClocks(gl, targets, undefined);
-        clockUpload = undefined;
-      }
+      effectClockPass(gl, targets);
       return;
     }
     lightPass(
@@ -1174,9 +1159,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       beams ? lifeAgents : [],
       changed || shopsChanged || cellsDrawn,
     );
-    clockUpload = raster?.clocksActive
-      ? { generation: targetsGeneration, revision: raster.revision }
-      : undefined;
     lampsShown = on;
     beamsShown = beams;
     if (changed) emit('lightschange', on);

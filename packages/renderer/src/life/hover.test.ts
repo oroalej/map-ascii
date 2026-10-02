@@ -225,12 +225,62 @@ it('expires confirmed visibility at 250 ms even with an unchanged revision and a
   hover.update(frame, 250);
   expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
   expect(requests).toHaveLength(0);
-  reads.size = 5;
+  reads.size = 3;
   hover.update(frame, 251);
   expect(requests).toHaveLength(3);
   finish();
   hover.update(frame, 252);
   expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+});
+
+it.each([true, false])(
+  'validates captured evidence after reused buffers reorder owners (visible=%s)',
+  (visible) => {
+    const { hover, frame, finish, emit, inspectItem, requests } = fixture();
+    const original = { ...frame.agents[0]!, inspectionId: 10 };
+    frame.agents = [original];
+    hover.pointer([2, 3]);
+    hover.update(frame, 0);
+    // Production packs N+1 before polling N: owners are shared, the N agent list is not.
+    frame.owners[0] = 2;
+    const next = {
+      ...frame,
+      revision: 2,
+      agents: [{ ...original, inspectionId: 11 }, { ...original }],
+    };
+    finish(visible ? 'road_mid' : 'tree');
+    hover.update(next, 16);
+    expect(requests).toHaveLength(0);
+    if (visible) {
+      expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+      expect(inspectItem).toHaveBeenLastCalledWith(next.agents[1]);
+    } else {
+      expect(emit).not.toHaveBeenCalled();
+      expect(inspectItem).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it('keeps a held tooltip across subcells until rejection and reserves two read slots', () => {
+  const { hover, frame, finish, emit, inspectItem, reads, requests } = fixture();
+  frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  reads.size = 4;
+  hover.pointer([6, 3]);
+  hover.update(frame, 10);
+  expect(requests).toHaveLength(0);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [6, 3] });
+  expect(inspectItem).toHaveBeenCalledTimes(1);
+  reads.size = 3;
+  hover.update(frame, 11);
+  expect(requests).toHaveLength(3);
+  finish('tree');
+  hover.update(frame, 12);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(inspectItem).toHaveBeenLastCalledWith(null);
 });
 
 it('ages results from their request frame and refreshes cached rejection', () => {
