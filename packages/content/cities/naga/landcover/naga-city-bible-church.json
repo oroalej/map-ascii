@@ -1,0 +1,81 @@
+{
+  "id": "landcover/naga-city-bible-church",
+  "title": "Naga City Bible Church landscaping",
+  "trees": [
+    {
+      "at": [123.197024951, 13.631272906],
+      "crown_m": 3,
+      "height_m": 2
+    },
+    {
+      "at": [123.197020553, 13.631305011],
+      "crown_m": 3,
+      "height_m": 2
+    },
+    {
+      "at": [123.19693164, 13.631444315],
+      "crown_m": 3,
+      "height_m": 2
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "ring": [
+        [123.197115414, 13.631254449],
+        [123.197080678, 13.63122482],
+        [123.197037996, 13.63127208],
+        [123.197072732, 13.631301709],
+        [123.197115414, 13.631254449]
+      ],
+      "cover": "parking"
+    },
+    {
+      "ring": [
+        [123.196952481, 13.631462092],
+        [123.196970774, 13.631441838],
+        [123.196936038, 13.631412209],
+        [123.196917745, 13.631432463],
+        [123.196952481, 13.631462092]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.196990066, 13.631338769],
+        [123.197032748, 13.631291509],
+        [123.197011907, 13.631273731],
+        [123.196969224, 13.631320991],
+        [123.196990066, 13.631338769]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.196915197, 13.631394432],
+        [123.196936038, 13.631412209],
+        [123.196960428, 13.631385203],
+        [123.196939586, 13.631367426],
+        [123.196915197, 13.631394432]
+      ],
+      "cover": "planting"
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Naga City Bible Church",
+      "url": "https://www.openstreetmap.org/way/23674686",
+      "note": "ODbL. Original source identity, standing roof footprints, access routes and mapped parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied LCC, Queborac Terminal and Bible Church references",
+      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated draft estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Tightly cropped church reference",
+      "note": "The reference supports the standing roof and immediate forecourt only. Add small estimated frontage plants, a narrow lawn strip and short approaches; no expanded rear garden or new roof geometry is inferred."
+    }
+  ]
+}

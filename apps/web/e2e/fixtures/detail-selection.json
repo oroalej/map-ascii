@@ -71,6 +71,18 @@
     {
       "slug": "sabang-elementary-school",
       "at": [123.181661725, 13.62064702]
+    },
+    {
+      "slug": "lcc-mall-sabang",
+      "at": [123.179254755, 13.618059708]
+    },
+    {
+      "slug": "queborac-terminal",
+      "at": [123.184773225, 13.63492658]
+    },
+    {
+      "slug": "naga-city-bible-church",
+      "at": [123.197092723, 13.631306809]
     }
   ]
 }

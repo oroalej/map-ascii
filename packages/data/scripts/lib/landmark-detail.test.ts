@@ -60,6 +60,12 @@ const shrineConcepcionSabangSource = JSON.parse(
     'utf8',
   ),
 ) as AtlasFeature[];
+const lccTerminalChurchSource = JSON.parse(
+  readFileSync(
+    new URL('../__fixtures__/lcc-terminal-church-parents.json', import.meta.url),
+    'utf8',
+  ),
+) as AtlasFeature[];
 const source = [
   ...new Map(
     [
@@ -72,6 +78,7 @@ const source = [
       ...civicGroundsSource,
       ...concepcionScienceSource,
       ...shrineConcepcionSabangSource,
+      ...lccTerminalChurchSource,
     ].map((f) => [f.properties.id, f]),
   ).values(),
 ];
@@ -92,7 +99,7 @@ const newDetails = details.filter(
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
-    expect(newDetails).toHaveLength(48);
+    expect(newDetails).toHaveLength(51);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
