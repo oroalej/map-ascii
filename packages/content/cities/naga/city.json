@@ -246,6 +246,10 @@
             "title": "Brigada News: Kamundagan displays varied in December 2022",
             "url": "https://www.brigadanews.ph/dating-sigla-ng-kamundagan-festival-sa-naga-city-hindi-pa-naibalik/",
             "note": "December 3, 2022: giant Plaza Quezon tree absent; Plaza Rizal and Quince Martires illuminated. Supports multi-year interpretation rather than claiming a current exact layout."
+          },
+          {
+            "title": "Project owner: circled Magsaysay Avenue Christmas enhancement (2026-10-02)",
+            "note": "Requested dense Christmas lights and designs on the southeast side after Magsaysay Bridge, beside Avenue Convention Plaza. The mapped Balatas stop is an illustrative frontage endpoint; this is an owner-requested atlas design, not a surveyed installation."
           }
         ],
         "installations": [
@@ -390,6 +394,23 @@
             ],
             "layout": "perimeter",
             "spacing_m": 5
+          },
+          {
+            "id": "magsaysay-after-bridge-lights",
+            "anchor": "osm:way/1060925382",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "layout": "street",
+            "ways": ["osm:way/1060925382", "osm:way/252223483"],
+            "from": "osm:way/30518281",
+            "to": "osm:node/13710579643",
+            "spacing_m": 3,
+            "sources": [
+              {
+                "title": "Project owner: circled Magsaysay Avenue Christmas enhancement (2026-10-02)",
+                "note": "Requested dense Christmas lights and designs on the southeast side after Magsaysay Bridge, beside Avenue Convention Plaza. The mapped Balatas stop is an illustrative frontage endpoint; this is an owner-requested atlas design, not a surveyed installation."
+              }
+            ]
           }
         ]
       },

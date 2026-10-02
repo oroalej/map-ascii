@@ -45,7 +45,10 @@ export type SeasonInstallation = {
   sources: Source[];
 } & (
   | { kind: 'christmas-tree'; radius_m: number }
-  | { kind: 'light-string'; layout: 'paths' | 'perimeter'; spacing_m: number }
+  | ({ kind: 'light-string'; spacing_m: number } & (
+      | { layout: 'paths' | 'perimeter' }
+      | { layout: 'street'; ways: string[]; from?: string; to?: string }
+    ))
   | { kind: 'decorated-canopy' }
 );
 

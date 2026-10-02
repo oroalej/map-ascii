@@ -11,6 +11,46 @@ const season = {
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('bounds street light targets and keeps road-only fields out of public-area layouts', () => {
+    const street = {
+      id: 'road-lights',
+      anchor: 'osm:way/1',
+      label: 'Lights',
+      sources: season.sources,
+      kind: 'light-string',
+      layout: 'street',
+      spacing_m: 3,
+      ways: ['osm:way/1', 'osm:way/2'],
+      from: 'osm:way/3',
+      to: 'osm:node/4',
+    };
+    const accepts = (installation: object) =>
+      Season.safeParse({ ...season, lanterns: undefined, installations: [installation] }).success;
+    expect(accepts(street)).toBe(true);
+    expect(accepts({ ...street, from: undefined, to: undefined })).toBe(true);
+    for (const change of [
+      { ways: undefined },
+      { ways: [] },
+      { ways: ['osm:way/2'] },
+      { ways: ['osm:way/1', 'osm:way/1'] },
+      { ways: ['osm:way/1', 'osm:node/2'] },
+      { ways: Array.from({ length: 101 }, (_, i) => `osm:way/${i + 1}`) },
+      { from: 'unmapped' },
+      { to: street.from },
+      { spacing_m: 2.99 },
+      { spacing_m: 12.01 },
+      { sources: [] },
+      { layout: 'paths' },
+      { layout: 'perimeter' },
+    ])
+      expect(accepts({ ...street, ...change })).toBe(false);
+    const { ways: _ways, from: _from, to: _to, ...area } = street;
+    for (const layout of ['paths', 'perimeter']) {
+      expect(accepts({ ...area, layout })).toBe(true);
+      expect(accepts({ ...area, layout, from: street.from })).toBe(false);
+      expect(accepts({ ...area, layout, to: street.to })).toBe(false);
+    }
+  });
   it('requires sourced, bounded and unique installation definitions and admits installation-only seasons', () => {
     const tree = {
       id: 'tree',

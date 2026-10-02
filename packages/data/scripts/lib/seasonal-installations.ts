@@ -9,6 +9,7 @@ import {
 import type { AtlasFeature } from '../03-normalize';
 import type { Geometry } from 'geojson';
 import { lines } from './road-geometry';
+import { bakeSeasonalCorridor } from './seasonal';
 
 type Point = SeasonalPoint;
 const distance = (p: Point, a: Point, b: Point) => {
@@ -53,6 +54,33 @@ export function generateSeasonalInstallations(
   const stats: { season: string; installation: string; kind: string; records: number }[] = [];
   for (const season of seasons ?? [])
     for (const config of season.installations ?? []) {
+      if (config.kind === 'light-string' && config.layout === 'street') {
+        if (!config.ways.includes(config.anchor))
+          throw new Error(`Season installation ${config.id}: street anchor is not selected`);
+        const baked = bakeSeasonalCorridor(features, season.id, config);
+        if (baked.records.length > 1000)
+          throw new Error(`Season installation ${config.id}: too many records`);
+        records.push(
+          ...baked.records.map((r) => ({
+            version: 1 as const,
+            kind: 'light-string' as const,
+            id: r.id,
+            season: season.id,
+            installation: config.id,
+            anchor: config.anchor,
+            from: r.from,
+            to: r.to,
+            seed: r.seed,
+          })),
+        );
+        stats.push({
+          season: season.id,
+          installation: config.id,
+          kind: config.kind,
+          records: baked.records.length,
+        });
+        continue;
+      }
       const anchor = byId.get(config.anchor);
       if (!anchor || !['park', 'paving'].includes(anchor.properties.class) || !rings(anchor).length)
         throw new Error(

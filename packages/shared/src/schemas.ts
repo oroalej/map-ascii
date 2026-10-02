@@ -935,15 +935,46 @@ export const Season = z
             kind: z.literal('christmas-tree'),
             radius_m: z.number().min(1).max(12),
           }),
-          z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            kind: z.literal('light-string'),
-            layout: z.enum(['paths', 'perimeter']),
-            spacing_m: z.number().min(3).max(12),
-          }),
+          z.discriminatedUnion('layout', [
+            z.strictObject({
+              id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+              anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+              label: z.string().trim().min(1),
+              sources: Sources,
+              kind: z.literal('light-string'),
+              layout: z.enum(['paths', 'perimeter']),
+              spacing_m: z.number().min(3).max(12),
+            }),
+            z
+              .strictObject({
+                id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+                anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+                label: z.string().trim().min(1),
+                sources: Sources,
+                kind: z.literal('light-string'),
+                layout: z.literal('street'),
+                spacing_m: z.number().min(3).max(12),
+                ways: z
+                  .array(z.string().regex(/^osm:way\/\d+$/))
+                  .min(1)
+                  .max(100)
+                  .refine((ways) => new Set(ways).size === ways.length, 'duplicate ways'),
+                from: z
+                  .string()
+                  .regex(/^osm:(node|way|relation)\/\d+$/)
+                  .optional(),
+                to: z
+                  .string()
+                  .regex(/^osm:(node|way|relation)\/\d+$/)
+                  .optional(),
+              })
+              .superRefine((installation, ctx) => {
+                if (!installation.ways.includes(installation.anchor))
+                  ctx.addIssue({ code: 'custom', message: 'street anchor must be a selected way' });
+                if (installation.from && installation.from === installation.to)
+                  ctx.addIssue({ code: 'custom', message: 'street endpoints must differ' });
+              }),
+          ]),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
             anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
