@@ -13,81 +13,6 @@
       "height_m": 6
     },
     {
-      "at": [123.200956386, 13.622065451],
-      "crown_m": 17,
-      "height_m": 6
-    },
-    {
-      "at": [123.201093394, 13.622353713],
-      "crown_m": 20,
-      "height_m": 6
-    },
-    {
-      "at": [123.201091792, 13.622641168],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.201090189, 13.622928623],
-      "crown_m": 19,
-      "height_m": 6
-    },
-    {
-      "at": [123.201088587, 13.623216079],
-      "crown_m": 17,
-      "height_m": 6
-    },
-    {
-      "at": [123.201086984, 13.623503534],
-      "crown_m": 20,
-      "height_m": 6
-    },
-    {
-      "at": [123.201085381, 13.62379099],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.201083779, 13.624078445],
-      "crown_m": 19,
-      "height_m": 6
-    },
-    {
-      "at": [123.201080515, 13.624366521],
-      "crown_m": 17,
-      "height_m": 6
-    },
-    {
-      "at": [123.201076117, 13.624653949],
-      "crown_m": 20,
-      "height_m": 6
-    },
-    {
-      "at": [123.201071718, 13.624941376],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.201067415, 13.625228726],
-      "crown_m": 19,
-      "height_m": 6
-    },
-    {
-      "at": [123.201063364, 13.625516159],
-      "crown_m": 17,
-      "height_m": 6
-    },
-    {
-      "at": [123.201055386, 13.625805834],
-      "crown_m": 20,
-      "height_m": 6
-    },
-    {
-      "at": [123.201017662, 13.626101782],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
       "at": [123.200814574, 13.62665422],
       "crown_m": 19,
       "height_m": 6
@@ -218,66 +143,6 @@
       "height_m": 6
     },
     {
-      "at": [123.200954446, 13.622406881],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200952843, 13.622694336],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.20095124, 13.622981791],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200949638, 13.623269247],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200948035, 13.623556702],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200946433, 13.623844157],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.20094483, 13.624131613],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200941056, 13.62441841],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200936657, 13.624705837],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200932258, 13.624993265],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200928018, 13.625280774],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
-      "at": [123.200923967, 13.625568207],
-      "crown_m": 18,
-      "height_m": 6
-    },
-    {
       "at": [123.200783681, 13.626386716],
       "crown_m": 18,
       "height_m": 6
@@ -381,11 +246,15 @@
     {
       "title": "OpenStreetMap: Magsaysay Avenue carriageways",
       "url": "https://www.openstreetmap.org/way/252223483",
-      "note": "ODbL. Existing carriageway geometries and all original authored trunks retained. Owner ground reference supports larger 17-20 metre canopy estimates on both sides, with leaf overhang across carriageways explicitly allowed. Trunks stay outside full-width roads and standing roofs; narrow frontage and junction gaps remain. New opposite-side trunks follow 32-metre samples with source-clear 7.5-12.5 metre offsets; no exact inventory, species, image date or construction history claimed."
+      "note": "ODbL. Existing carriageways retained. Mature 17–20 metre canopy estimates remain on both sides north of the Leon Sa Aureus Street junction. The owner removes the authored avenue trees between that junction and the Panganiban crossing rotonda. Retained trunk positions, heights and crowns are unchanged; no mapped source trees or adjacent site landscaping are removed. North-side trunks clear full-width roads and standing roofs; estimated leaf overhang is intentional."
     },
     {
       "title": "Owner-supplied Magsaysay Avenue ground reference",
       "note": "Inspected 2026-10-02. Mature broad canopy is visible on both street sides and reaches above the road. Estimated crown dimensions remain draft; all mapped trunks/heights and road geometry are preserved. No reference bitmap ships."
+    },
+    {
+      "title": "Owner-requested southern Magsaysay tree removal",
+      "note": "2026-10-02 follow-up: remove avenue planting from the Leon SA Aureus Street intersection to the rotonda. Anchored to the shared source vertex [123.2008687, 13.6263647] of ways 23519204 and 252223483; the two southern split carriageways 252223486 and 721779873 connect toward rotonda 252223489. This supersedes southern planting from the earlier owner canopy request. The northern avenue, Balatas corridor and neighboring church/school planting remain. No historical tree-removal date is inferred."
     }
   ],
   "tree_overrides": []

@@ -114,16 +114,29 @@ describe('additional roadside and campus references', () => {
     expect(arts.trees.length).toBeGreaterThan(reference.arts_before.trees.length);
   }, 10000);
 
-  it('retains existing Magsaysay trunks, with larger overhanging crowns on both sides throughout the road', () => {
+  it('keeps the southern Magsaysay segment clear while preserving northern canopies on both sides', () => {
     const cover = Landcover.parse(pack('landcover', 'magsaysay-avenue'));
-    for (const [i, old] of reference.magsaysay_before.trees.entries()) {
-      expect(cover.trees[i]!.at).toEqual(old.at);
-      expect(cover.trees[i]!.height_m).toBe(old.height_m);
-      expect(cover.trees[i]!.crown_m).toBeGreaterThan(old.crown_m!);
-    }
     const road = source.find((f) => f.properties.id === 'osm:way/252223483')!
       .geometry as LineString;
-    const points = road.coordinates.map(xy);
+    const aureus = source.find((f) => f.properties.id === 'osm:way/23519204')!
+      .geometry as LineString;
+    const junction = road.coordinates.findIndex((p) =>
+      aureus.coordinates.some((q) => p[0] === q[0] && p[1] === q[1]),
+    );
+    expect(junction).toBeGreaterThan(0);
+    const atJunction = road.coordinates[junction]!;
+    // This monotonic avenue section runs north from the shared Aureus vertex.
+    // The owner removed the southern roadside planting; old northern trunks stay.
+    for (const old of reference.magsaysay_before.trees.filter(
+      (tree) => tree.at[1] > atJunction[1]!,
+    )) {
+      const retained = cover.trees.find((tree) => tree.at.every((v, i) => v === old.at[i]));
+      expect(retained).toBeDefined();
+      expect(retained!.height_m).toBe(old.height_m);
+      expect(retained!.crown_m).toBeGreaterThan(old.crown_m!);
+    }
+    expect(cover.trees.every((tree) => tree.at[1] > atJunction[1]!)).toBe(true);
+    const points = road.coordinates.slice(junction).map(xy);
     const lengths = points
       .slice(1)
       .map((p, i) => Math.hypot(p[0] - points[i]![0], p[1] - points[i]![1]));
@@ -153,7 +166,7 @@ describe('additional roadside and campus references', () => {
       .filter((t) => t.distance < 15);
     for (const side of [-1, 1]) {
       const row = located.filter((t) => t.side === side);
-      expect(row.length).toBeGreaterThan(20);
+      expect(row.length).toBeGreaterThan(15);
       for (let section = 0; section < 3; section++)
         expect(
           row.filter(
