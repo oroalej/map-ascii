@@ -151,24 +151,8 @@ for (const city of cities) {
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
-        },
-      );
-
-      test(
-        'legend focus controls remain usable without covering the header',
-        { tag: '@mobile' },
-        async ({ page, hasTouch }) => {
-          const place = city.smokePlace!;
-          const view = new URLSearchParams({
-            lat: String(place.lat),
-            lng: String(place.lng),
-            z: String(place.zoomHint),
-          });
-          await page.goto(`/${city.slug}?${view}`);
-          await mapReady(page);
-          const legend = page
-            .locator('details')
-            .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
+          // Reuse the loaded map for browser-only keyboard and layout checks. Focus
+          // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
           const summary = legend.locator('summary');
           if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
             await summary.click();
@@ -189,10 +173,7 @@ for (const city of cities) {
             const zoom = (await page.getByLabel('Zoom').boundingBox())!;
             expect(zoom.x).toBeGreaterThanOrEqual(tours.x + tours.width + 8);
           }
-          await summary.click();
-          await expect(clear).toBeVisible();
           await clear.click();
-          await expect(summary).toBeFocused();
         },
       );
 

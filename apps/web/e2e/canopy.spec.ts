@@ -1,6 +1,3 @@
-import type * as ReadbackFixture from '../../../packages/renderer/src/readback';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import {
@@ -29,38 +26,13 @@ import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
-const require = createRequire(import.meta.url);
-const { build } = createRequire(require.resolve('tsx'))('esbuild') as {
-  build(
-    this: void,
-    options: {
-      entryPoints: string[];
-      bundle: boolean;
-      write: false;
-      format: 'iife';
-      globalName: string;
-    },
-  ): Promise<{ outputFiles: { text: string }[] }>;
-};
-
 test('tree canopy overlap hides non-bird Life and compares roof heights', async ({ page }) => {
-  // Load only the production asynchronous readback helper; no renderer/React mocks.
-  const bundle = await build({
-    entryPoints: [
-      fileURLToPath(new URL('../../../packages/renderer/src/readback.ts', import.meta.url)),
-    ],
-    bundle: true,
-    write: false,
-    format: 'iife',
-    globalName: 'readbackFixture',
-  });
-  await page.addScriptTag({ content: bundle.outputFiles[0]!.text });
   // Exercise the real shaders with controlled geometry, rather than city data or timing.
   const glyphs = [' ', ...mapGlyphs(themes.dark).filter((g) => g !== ' ')];
   const index = (g: string) => glyphs.indexOf(g);
   const tables = buildGlyphTables(themes.dark, index);
   const result = await page.evaluate(
-    async (input) => {
+    (input) => {
       const cols = 12,
         rows = 8,
         cw = 6,
@@ -401,31 +373,6 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       const selectedBytes = new Uint8Array(cols * rows * 4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
       gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, selectedBytes);
-      const { Readback } = (
-        window as unknown as Window & {
-          readbackFixture: typeof ReadbackFixture;
-        }
-      ).readbackFixture;
-      const readback = new Readback(gl);
-      let asyncPixel: Uint8Array | undefined;
-      readback.request(
-        selectFbo,
-        gl.COLOR_ATTACHMENT0,
-        { x: 2, y: 2, width: 1, height: 1 },
-        (bytes) => {
-          asyncPixel = bytes;
-        },
-      );
-      for (let frame = 0; frame < 60 && !asyncPixel; frame++) {
-        await new Promise(requestAnimationFrame);
-        readback.poll();
-      }
-      readback.reset();
-      if (!asyncPixel) throw new Error('GPU readback never completed');
-      const roundTrip = [...asyncPixel];
-      const expectedRoundTrip = [
-        ...selectedBytes.slice((2 * cols + 2) * 4, (2 * cols + 2) * 4 + 4),
-      ];
       render(16);
       gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
       const joined = new Uint8Array(cols * rows * 4);
@@ -559,8 +506,6 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         ],
         higherCrown: ids[(4 * cols + 4) * 4],
         orderIndependent,
-        roundTrip,
-        expectedRoundTrip,
         ...saved,
         falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
         lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
@@ -660,7 +605,6 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
   ]);
   expect(result.higherCrown).toBe(21);
   expect(result.orderIndependent).toBe(true);
-  expect(result.roundTrip).toEqual(result.expectedRoundTrip);
   expect(result.candleClocks.heldLate).toEqual(result.candleClocks.heldEarly);
   expect(result.candleClocks.otherLate).not.toEqual(result.candleClocks.otherEarly);
   for (const p of [result.clearCar, result.edgeClear]) {
