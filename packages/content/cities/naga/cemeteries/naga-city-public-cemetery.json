@@ -1,0 +1,1544 @@
+{
+  "id": "cemetery/naga-city-public-cemetery",
+  "osm_id": "osm:way/179078354",
+  "title": "Naga City Public Cemetery",
+  "rows": [
+    {
+      "id": "burial-block-1-1",
+      "line": [
+        [123.205064511, 13.61960557],
+        [123.20509224, 13.61960557]
+      ],
+      "count": 3,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-2-1",
+      "line": [
+        [123.2047203, 13.619631621],
+        [123.205177831, 13.619631621]
+      ],
+      "count": 34,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-3-1",
+      "line": [
+        [123.204625651, 13.619657672],
+        [123.205013859, 13.619657672]
+      ],
+      "count": 29,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-3-2",
+      "line": [
+        [123.205083182, 13.619657672],
+        [123.205263422, 13.619657672]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-4-1",
+      "line": [
+        [123.204523793, 13.619683723],
+        [123.204565386, 13.619683723]
+      ],
+      "count": 4,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-4-2",
+      "line": [
+        [123.205175428, 13.619683723],
+        [123.205341803, 13.619683723]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-5-1",
+      "line": [
+        [123.204886675, 13.619709774],
+        [123.205080779, 13.619709774]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-5-2",
+      "line": [
+        [123.205261018, 13.619709774],
+        [123.205427393, 13.619709774]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-6-1",
+      "line": [
+        [123.204431547, 13.619735825],
+        [123.20516637, 13.619735825]
+      ],
+      "count": 54,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-6-2",
+      "line": [
+        [123.205346609, 13.619735825],
+        [123.205457526, 13.619735825]
+      ],
+      "count": 9,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-6-3",
+      "line": [
+        [123.205499119, 13.619735825],
+        [123.205512984, 13.619735825]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-7-1",
+      "line": [
+        [123.20427423, 13.619761876],
+        [123.205258615, 13.619761876]
+      ],
+      "count": 72,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-7-2",
+      "line": [
+        [123.20542499, 13.619761876],
+        [123.205438855, 13.619761876]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-7-3",
+      "line": [
+        [123.205508177, 13.619761876],
+        [123.205549771, 13.619761876]
+      ],
+      "count": 4,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-8-1",
+      "line": [
+        [123.204248904, 13.619787927],
+        [123.204512331, 13.619787927]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-8-2",
+      "line": [
+        [123.20456779, 13.619787927],
+        [123.205344206, 13.619787927]
+      ],
+      "count": 57,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-8-3",
+      "line": [
+        [123.205510581, 13.619787927],
+        [123.205607633, 13.619787927]
+      ],
+      "count": 8,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-9-1",
+      "line": [
+        [123.204237443, 13.619813978],
+        [123.204514734, 13.619813978]
+      ],
+      "count": 21,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-9-2",
+      "line": [
+        [123.204570193, 13.619813978],
+        [123.205429796, 13.619813978]
+      ],
+      "count": 63,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-9-3",
+      "line": [
+        [123.205596171, 13.619813978],
+        [123.20565163, 13.619813978]
+      ],
+      "count": 5,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-10-1",
+      "line": [
+        [123.204246501, 13.619840029],
+        [123.205522042, 13.619840029]
+      ],
+      "count": 93,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-10-2",
+      "line": [
+        [123.205688417, 13.619840029],
+        [123.205688602, 13.619840029]
+      ],
+      "count": 1,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-11-1",
+      "line": [
+        [123.204193446, 13.61986608],
+        [123.204193631, 13.61986608]
+      ],
+      "count": 1,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-11-2",
+      "line": [
+        [123.204276634, 13.61986608],
+        [123.205607633, 13.61986608]
+      ],
+      "count": 97,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-12-1",
+      "line": [
+        [123.20416812, 13.619892131],
+        [123.204223578, 13.619892131]
+      ],
+      "count": 5,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-12-2",
+      "line": [
+        [123.204306766, 13.619892131],
+        [123.205693223, 13.619892131]
+      ],
+      "count": 101,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-12-3",
+      "line": [
+        [123.205859598, 13.619892131],
+        [123.205873463, 13.619892131]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-13-1",
+      "line": [
+        [123.204149449, 13.619918182],
+        [123.204246501, 13.619918182]
+      ],
+      "count": 8,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-13-2",
+      "line": [
+        [123.204329689, 13.619918182],
+        [123.205771604, 13.619918182]
+      ],
+      "count": 105,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-13-3",
+      "line": [
+        [123.205854792, 13.619918182],
+        [123.205882521, 13.619918182]
+      ],
+      "count": 3,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-14-1",
+      "line": [
+        [123.204124123, 13.619944233],
+        [123.204276634, 13.619944233]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-14-2",
+      "line": [
+        [123.204359821, 13.619944233],
+        [123.205884924, 13.619944233]
+      ],
+      "count": 111,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-15-1",
+      "line": [
+        [123.204112662, 13.619970284],
+        [123.204306766, 13.619970284]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-15-2",
+      "line": [
+        [123.204389953, 13.619970284],
+        [123.205873463, 13.619970284]
+      ],
+      "count": 108,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-16-1",
+      "line": [
+        [123.204080126, 13.619996335],
+        [123.204163314, 13.619996335]
+      ],
+      "count": 7,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-16-2",
+      "line": [
+        [123.204204907, 13.619996335],
+        [123.204329689, 13.619996335]
+      ],
+      "count": 10,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-16-3",
+      "line": [
+        [123.204412876, 13.619996335],
+        [123.205868656, 13.619996335]
+      ],
+      "count": 106,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-17-1",
+      "line": [
+        [123.204068665, 13.620022386],
+        [123.204151852, 13.620022386]
+      ],
+      "count": 7,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-17-2",
+      "line": [
+        [123.204221175, 13.620022386],
+        [123.204359821, 13.620022386]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-17-3",
+      "line": [
+        [123.204443008, 13.620022386],
+        [123.20587106, 13.620022386]
+      ],
+      "count": 104,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-18-1",
+      "line": [
+        [123.204071068, 13.620048437],
+        [123.204154256, 13.620048437]
+      ],
+      "count": 7,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-18-2",
+      "line": [
+        [123.204223578, 13.620048437],
+        [123.204389953, 13.620048437]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-18-3",
+      "line": [
+        [123.204473141, 13.620048437],
+        [123.205859598, 13.620048437]
+      ],
+      "count": 101,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-19-1",
+      "line": [
+        [123.204066262, 13.620074488],
+        [123.204412876, 13.620074488]
+      ],
+      "count": 26,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-19-2",
+      "line": [
+        [123.204496064, 13.620074488],
+        [123.205854792, 13.620074488]
+      ],
+      "count": 99,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-20-1",
+      "line": [
+        [123.2040548, 13.620100539],
+        [123.204443008, 13.620100539]
+      ],
+      "count": 29,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-20-2",
+      "line": [
+        [123.204526196, 13.620100539],
+        [123.204969862, 13.620100539]
+      ],
+      "count": 33,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-20-3",
+      "line": [
+        [123.205025321, 13.620100539],
+        [123.205857195, 13.620100539]
+      ],
+      "count": 61,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-21-1",
+      "line": [
+        [123.204057204, 13.62012659],
+        [123.204473141, 13.62012659]
+      ],
+      "count": 31,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-21-2",
+      "line": [
+        [123.204556328, 13.62012659],
+        [123.204972265, 13.62012659]
+      ],
+      "count": 31,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-21-3",
+      "line": [
+        [123.205027724, 13.62012659],
+        [123.205845734, 13.62012659]
+      ],
+      "count": 60,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-22-1",
+      "line": [
+        [123.204052397, 13.620152641],
+        [123.204496064, 13.620152641]
+      ],
+      "count": 33,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-22-2",
+      "line": [
+        [123.204579251, 13.620152641],
+        [123.205840927, 13.620152641]
+      ],
+      "count": 92,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-23-1",
+      "line": [
+        [123.204040936, 13.620178692],
+        [123.204526196, 13.620178692]
+      ],
+      "count": 36,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-23-2",
+      "line": [
+        [123.204609383, 13.620178692],
+        [123.20584333, 13.620178692]
+      ],
+      "count": 90,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-24-1",
+      "line": [
+        [123.204043339, 13.620204743],
+        [123.204556328, 13.620204743]
+      ],
+      "count": 38,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-24-2",
+      "line": [
+        [123.204639516, 13.620204743],
+        [123.205845734, 13.620204743]
+      ],
+      "count": 88,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-25-1",
+      "line": [
+        [123.204038533, 13.620230794],
+        [123.204593116, 13.620230794]
+      ],
+      "count": 41,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-25-2",
+      "line": [
+        [123.204662438, 13.620230794],
+        [123.205591365, 13.620230794]
+      ],
+      "count": 68,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-25-3",
+      "line": [
+        [123.205646823, 13.620230794],
+        [123.205840927, 13.620230794]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-26-1",
+      "line": [
+        [123.204027071, 13.620256845],
+        [123.204609383, 13.620256845]
+      ],
+      "count": 43,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-26-2",
+      "line": [
+        [123.204692571, 13.620256845],
+        [123.205593768, 13.620256845]
+      ],
+      "count": 66,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-26-3",
+      "line": [
+        [123.205649226, 13.620256845],
+        [123.205829466, 13.620256845]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-27-1",
+      "line": [
+        [123.204029474, 13.620282896],
+        [123.204639516, 13.620282896]
+      ],
+      "count": 45,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-27-2",
+      "line": [
+        [123.204722703, 13.620282896],
+        [123.205831869, 13.620282896]
+      ],
+      "count": 81,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-28-1",
+      "line": [
+        [123.204024668, 13.620308947],
+        [123.204676303, 13.620308947]
+      ],
+      "count": 48,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-28-2",
+      "line": [
+        [123.20475949, 13.620308947],
+        [123.205827063, 13.620308947]
+      ],
+      "count": 78,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-29-1",
+      "line": [
+        [123.204013207, 13.620334998],
+        [123.204706435, 13.620334998]
+      ],
+      "count": 51,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-29-2",
+      "line": [
+        [123.204803487, 13.620334998],
+        [123.205981976, 13.620334998]
+      ],
+      "count": 86,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-30-1",
+      "line": [
+        [123.20401561, 13.620361049],
+        [123.204750432, 13.620361049]
+      ],
+      "count": 54,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-30-2",
+      "line": [
+        [123.204847484, 13.620361049],
+        [123.205984379, 13.620361049]
+      ],
+      "count": 83,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-31-1",
+      "line": [
+        [123.204010803, 13.6203871],
+        [123.20478722, 13.6203871]
+      ],
+      "count": 57,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-31-2",
+      "line": [
+        [123.204898136, 13.6203871],
+        [123.205979573, 13.6203871]
+      ],
+      "count": 79,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-32-1",
+      "line": [
+        [123.204013207, 13.620413151],
+        [123.204096394, 13.620413151]
+      ],
+      "count": 7,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-32-2",
+      "line": [
+        [123.204151852, 13.620413151],
+        [123.204831217, 13.620413151]
+      ],
+      "count": 50,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-32-3",
+      "line": [
+        [123.204942133, 13.620413151],
+        [123.205981976, 13.620413151]
+      ],
+      "count": 76,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-33-1",
+      "line": [
+        [123.204001745, 13.620439202],
+        [123.204084933, 13.620439202]
+      ],
+      "count": 7,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-33-2",
+      "line": [
+        [123.204154256, 13.620439202],
+        [123.204875213, 13.620439202]
+      ],
+      "count": 53,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-33-3",
+      "line": [
+        [123.204972265, 13.620439202],
+        [123.205984379, 13.620439202]
+      ],
+      "count": 74,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-34-1",
+      "line": [
+        [123.203996939, 13.620465253],
+        [123.204107855, 13.620465253]
+      ],
+      "count": 9,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-34-2",
+      "line": [
+        [123.204149449, 13.620465253],
+        [123.204912001, 13.620465253]
+      ],
+      "count": 56,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-34-3",
+      "line": [
+        [123.205022917, 13.620465253],
+        [123.205979573, 13.620465253]
+      ],
+      "count": 70,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-35-1",
+      "line": [
+        [123.203999342, 13.620491304],
+        [123.204955998, 13.620491304]
+      ],
+      "count": 70,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-35-2",
+      "line": [
+        [123.205066914, 13.620491304],
+        [123.205981976, 13.620491304]
+      ],
+      "count": 67,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-36-1",
+      "line": [
+        [123.203987881, 13.620517355],
+        [123.204999995, 13.620517355]
+      ],
+      "count": 74,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-36-2",
+      "line": [
+        [123.205110911, 13.620517355],
+        [123.205970515, 13.620517355]
+      ],
+      "count": 63,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-37-1",
+      "line": [
+        [123.203983074, 13.620543406],
+        [123.205050647, 13.620543406]
+      ],
+      "count": 78,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-37-2",
+      "line": [
+        [123.205147699, 13.620543406],
+        [123.205979573, 13.620543406]
+      ],
+      "count": 61,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-38-1",
+      "line": [
+        [123.203985477, 13.620569457],
+        [123.205094643, 13.620569457]
+      ],
+      "count": 81,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-38-2",
+      "line": [
+        [123.205191695, 13.620569457],
+        [123.205968112, 13.620569457]
+      ],
+      "count": 57,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-39-1",
+      "line": [
+        [123.203974016, 13.620595509],
+        [123.205124776, 13.620595509]
+      ],
+      "count": 84,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-39-2",
+      "line": [
+        [123.205235692, 13.620595509],
+        [123.205512984, 13.620595509]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-39-3",
+      "line": [
+        [123.205568442, 13.620595509],
+        [123.205970515, 13.620595509]
+      ],
+      "count": 30,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-40-1",
+      "line": [
+        [123.20396921, 13.62062156],
+        [123.205175428, 13.62062156]
+      ],
+      "count": 88,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-40-2",
+      "line": [
+        [123.205244751, 13.62062156],
+        [123.205508177, 13.62062156]
+      ],
+      "count": 20,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-40-3",
+      "line": [
+        [123.2055775, 13.62062156],
+        [123.205965708, 13.62062156]
+      ],
+      "count": 29,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-41-1",
+      "line": [
+        [123.203971613, 13.620647611],
+        [123.205191695, 13.620647611]
+      ],
+      "count": 89,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-41-2",
+      "line": [
+        [123.205261018, 13.620647611],
+        [123.205968112, 13.620647611]
+      ],
+      "count": 52,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-42-1",
+      "line": [
+        [123.203960152, 13.620673662],
+        [123.205207963, 13.620673662]
+      ],
+      "count": 91,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-42-2",
+      "line": [
+        [123.205263422, 13.620673662],
+        [123.205970515, 13.620673662]
+      ],
+      "count": 52,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-43-1",
+      "line": [
+        [123.203955345, 13.620699713],
+        [123.205217021, 13.620699713]
+      ],
+      "count": 92,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-43-2",
+      "line": [
+        [123.205286344, 13.620699713],
+        [123.205965708, 13.620699713]
+      ],
+      "count": 50,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-44-1",
+      "line": [
+        [123.203957748, 13.620725764],
+        [123.203957933, 13.620725764]
+      ],
+      "count": 1,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-44-2",
+      "line": [
+        [123.204761894, 13.620725764],
+        [123.205233289, 13.620725764]
+      ],
+      "count": 35,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-44-3",
+      "line": [
+        [123.205288747, 13.620725764],
+        [123.205968112, 13.620725764]
+      ],
+      "count": 50,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-45-1",
+      "line": [
+        [123.203946287, 13.620751815],
+        [123.203946472, 13.620751815]
+      ],
+      "count": 1,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-45-2",
+      "line": [
+        [123.205970515, 13.620751815],
+        [123.2059707, 13.620751815]
+      ],
+      "count": 1,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-46-1",
+      "line": [
+        [123.203941481, 13.620777866],
+        [123.205258615, 13.620777866]
+      ],
+      "count": 96,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-46-2",
+      "line": [
+        [123.205327938, 13.620777866],
+        [123.205466584, 13.620777866]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-46-3",
+      "line": [
+        [123.205965708, 13.620777866],
+        [123.205965893, 13.620777866]
+      ],
+      "count": 1,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-47-1",
+      "line": [
+        [123.203943884, 13.620803917],
+        [123.205274883, 13.620803917]
+      ],
+      "count": 97,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-47-2",
+      "line": [
+        [123.205330341, 13.620803917],
+        [123.205968112, 13.620803917]
+      ],
+      "count": 47,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-48-1",
+      "line": [
+        [123.203932422, 13.620829968],
+        [123.205291151, 13.620829968]
+      ],
+      "count": 99,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-48-2",
+      "line": [
+        [123.205346609, 13.620829968],
+        [123.20595665, 13.620829968]
+      ],
+      "count": 45,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-49-1",
+      "line": [
+        [123.203941481, 13.620856019],
+        [123.205300209, 13.620856019]
+      ],
+      "count": 99,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-49-2",
+      "line": [
+        [123.205355667, 13.620856019],
+        [123.205965708, 13.620856019]
+      ],
+      "count": 45,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-50-1",
+      "line": [
+        [123.204221175, 13.62088207],
+        [123.205316477, 13.62088207]
+      ],
+      "count": 80,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-50-2",
+      "line": [
+        [123.205371935, 13.62088207],
+        [123.205954247, 13.62088207]
+      ],
+      "count": 43,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-51-1",
+      "line": [
+        [123.204514734, 13.620908121],
+        [123.204681109, 13.620908121]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-51-2",
+      "line": [
+        [123.204750432, 13.620908121],
+        [123.20531888, 13.620908121]
+      ],
+      "count": 42,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-51-3",
+      "line": [
+        [123.205388203, 13.620908121],
+        [123.20595665, 13.620908121]
+      ],
+      "count": 42,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-52-1",
+      "line": [
+        [123.204801084, 13.620934172],
+        [123.205341803, 13.620934172]
+      ],
+      "count": 40,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-52-2",
+      "line": [
+        [123.205397261, 13.620934172],
+        [123.205951844, 13.620934172]
+      ],
+      "count": 41,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-53-1",
+      "line": [
+        [123.205108508, 13.620960223],
+        [123.205344206, 13.620960223]
+      ],
+      "count": 18,
+      "kind": "slab",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 0.3
+    },
+    {
+      "id": "burial-block-53-2",
+      "line": [
+        [123.205413529, 13.620960223],
+        [123.205954247, 13.620960223]
+      ],
+      "count": 40,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-54-1",
+      "line": [
+        [123.205429796, 13.620986274],
+        [123.20595665, 13.620986274]
+      ],
+      "count": 39,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    },
+    {
+      "id": "burial-block-55-1",
+      "line": [
+        [123.205688417, 13.621012325],
+        [123.205951844, 13.621012325]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 1.05,
+      "length_m": 2.0,
+      "height_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga City Public Cemetery — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/179078354",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "Undated owner reference, inspected 2026-10-02. Draft plan-view translation; positions, sizes and heights are estimates. Preserve mapped identities and standing footprints. Temporary vehicles, wires, signage and other background clutter omitted; no species or historical dates inferred. Representative burial blocks and access aisles, not individual grave records or a measured burial inventory. The northern named area and the southern unnamed OSM relation remain distinct; no shared ownership is asserted."
+    }
+  ]
+}

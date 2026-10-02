@@ -48,6 +48,9 @@ const roadsideCampusSource = JSON.parse(
 const landscapedGroundsSource = JSON.parse(
   readFileSync(new URL('../__fixtures__/five-landscaped-grounds.json', import.meta.url), 'utf8'),
 ) as AtlasFeature[];
+const civicGroundsSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/civic-ground-parents.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
 const source = [
   ...new Map(
     [
@@ -57,6 +60,7 @@ const source = [
       ...memorialSchoolSource,
       ...roadsideCampusSource,
       ...landscapedGroundsSource,
+      ...civicGroundsSource,
     ].map((f) => [f.properties.id, f]),
   ).values(),
 ];
@@ -77,7 +81,7 @@ const newDetails = details.filter(
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
-    expect(newDetails).toHaveLength(36);
+    expect(newDetails).toHaveLength(43);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
@@ -160,7 +164,35 @@ describe('new landmark detail geometry (offline)', () => {
     it(`${detail.id}: contains full footprints and clears standing structures`, () => {
       const area = areaFor(detail);
       const siteBounds = bbox(area) as [number, number, number, number];
-      const result = mergeSiteDetails(input, [detail]);
+      const meters = 111320;
+      const mx = meters * Math.cos(((siteBounds[1] + siteBounds[3]) * Math.PI) / 360);
+      // Local meters avoid slow robust clipping of tiny details near longitude 123°.
+      const local = (shape: Polygon | MultiPolygon): LngLat[][][] =>
+        (shape.type === 'Polygon' ? [shape.coordinates] : shape.coordinates).map((p) =>
+          p.map((r) =>
+            r.map(([x, y]): LngLat => [
+              Math.round((x! - siteBounds[0]) * mx * 1e6) / 1e6,
+              Math.round((y! - siteBounds[1]) * meters * 1e6) / 1e6,
+            ]),
+          ),
+        );
+      const areaClip = local(area);
+      // Keep complete nearby features, including adjacent selection targets and crowns.
+      // Growing city fixtures should not make each site merge unrelated distant content.
+      const margin = 15 / 111320;
+      const longitudeMargin = margin / Math.cos(((siteBounds[1] + siteBounds[3]) * Math.PI) / 360);
+      const neighborhood: [number, number, number, number] = [
+        siteBounds[0] - longitudeMargin,
+        siteBounds[1] - margin,
+        siteBounds[2] + longitudeMargin,
+        siteBounds[3] + margin,
+      ];
+      const result = mergeSiteDetails(
+        input.filter((f) =>
+          bboxesOverlap(neighborhood, bbox(f) as [number, number, number, number]),
+        ),
+        [detail],
+      );
       expect(result.warnings, detail.id).toEqual([]);
       const obstacles = result.features.filter(
         (f) =>
@@ -172,15 +204,12 @@ describe('new landmark detail geometry (offline)', () => {
           bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]),
       );
       const check = (shape: MultiPolygon, id: string, ownSeat = false) => {
-        expect(difference(coordinates(shape), coordinates(area)), id).toEqual([]);
+        expect(difference(local(shape), areaClip), id).toEqual([]);
         for (const obstacle of obstacles) {
           if (ownSeat && obstacle.properties.id.startsWith(`detail:${detail.id.slice(7)}/seating-`))
             continue;
           expect(
-            intersection(
-              coordinates(shape),
-              coordinates(obstacle.geometry as Polygon | MultiPolygon),
-            ),
+            intersection(local(shape), local(obstacle.geometry as Polygon | MultiPolygon)),
             `${id} / ${obstacle.properties.id}`,
           ).toEqual([]);
         }
@@ -206,7 +235,7 @@ describe('new landmark detail geometry (offline)', () => {
                 : undefined;
           if (obstacle)
             expect(
-              intersection(coordinates(shape), coordinates(obstacle)),
+              intersection(local(shape), local(obstacle)),
               `${part.id} / ${f.properties.id}`,
             ).toEqual([]);
         }
@@ -219,7 +248,10 @@ describe('new landmark detail geometry (offline)', () => {
         for (const row of cover.rows)
           for (const p of row.line) expect(inside(p, area), cover.id).toBe(true);
         for (const patch of cover.areas)
-          expect(difference([patch.ring], coordinates(area)), cover.id).toEqual([]);
+          expect(
+            difference(local({ type: 'Polygon', coordinates: [patch.ring] }), areaClip),
+            cover.id,
+          ).toEqual([]);
       }
       const target = detail.selection_osm_id ?? detail.osm_id;
       for (const f of result.features.filter(

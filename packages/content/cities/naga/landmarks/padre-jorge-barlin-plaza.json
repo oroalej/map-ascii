@@ -1,0 +1,20 @@
+{
+  "id": "landmark/padre-jorge-barlin-plaza",
+  "osm_id": "osm:node/2502669548",
+  "name": {
+    "en": "Padre Jorge Barlin Plaza"
+  },
+  "type": "plaza",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/602763181",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "Undated owner reference. Draft landscaping and important built forms; dimensions and layout are estimated, with no construction date inferred."
+    }
+  ]
+}
