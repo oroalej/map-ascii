@@ -55,12 +55,7 @@ const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
   )
     return [g as Polygon | MultiPolygon];
   if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path'))
-    return [
-      seatingFootprint(
-        g.coordinates as LngLat[],
-        p.width ?? (p.class === 'path' ? 2 : 6),
-      ),
-    ];
+    return [seatingFootprint(g.coordinates as LngLat[], p.width ?? (p.class === 'path' ? 2 : 6))];
   return [];
 });
 
