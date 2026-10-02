@@ -106,7 +106,22 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { BRAKE, brakeHold, visibleLamps, type VehicleLamps } from './lamps';
 import { ensureVehicleEffects, vehicleEffects, type VehicleEffects } from './vehicle-effects';
-import { emitter, exhaustKind, PUFF, PuffStore, stepEmitter, type PuffKind } from './exhaust';
+import {
+  emitter,
+  exhaustKind,
+  PUFF,
+  PuffStore,
+  stepEmitter,
+  burstDue,
+  idleTick,
+  spawnPuff,
+  EMPTY_PUFFS,
+  PUFF_STRIDE,
+  PUFF_CRAFT,
+  type Puff,
+  type PuffKind,
+} from './exhaust';
+import { STAMP_MIN_CELLS } from './vehicles';
 import {
   hasTurnSignals,
   TURN_SIGNAL,
@@ -242,6 +257,9 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
+  effectCellMeters?: number;
+  nextSourceId?: () => number;
   clock?: number;
   minutes?: number;
   cityLife?: CityLifeConfig;
@@ -448,9 +466,23 @@ export type Flock = {
 /** The agents of one tile. */
 export class TileLife {
   readonly puffs = new PuffStore();
+  private effectSerial = 0;
+  private readonly effectStates: (
+    | {
+        mover: Mover;
+        vehicle: CraftType;
+        state: VehicleEffects;
+        length: number;
+        accel: number;
+        kind: PuffKind | undefined;
+      }
+    | undefined
+  )[] = [];
+  private eligible = new Uint8Array(0);
   private readonly effectSteps: {
     m?: Mover;
     state?: VehicleEffects;
+    kind?: PuffKind;
     v: number;
     x: number;
     y: number;
@@ -469,46 +501,65 @@ export class TileLife {
   ) {
     this.effectCount = 0;
     this.puffs.advance(clock, dt, env?.wind, this.perMeter);
-    for (let i = 0; i < this.movers.length; i++) {
-      const m = this.movers[i]!;
-      if (
-        m.kind !== 'vehicle' ||
-        !hasTurnSignals(m.vehicle) ||
-        (pass?.owns && !pass.owns(m)) ||
-        (shows && !shows(m.kind)) ||
-        (near && !near(m.x, m.y)) ||
-        (env?.levels && m.rank >= env.levels[m.kind]) ||
-        this.scenes.visits.has(m)
-      )
-        continue;
-      const state = ensureVehicleEffects(m);
-      const v = (m.v ?? m.speed) / this.perMeter;
+    const minLength = STAMP_MIN_CELLS * (env?.effectCellMeters ?? 0);
+    const visits = this.scenes.visits.size > 0;
+    const services = this.scenes.services.size > 0;
+    if (this.eligible.length < this.movers.length)
+      this.eligible = new Uint8Array(this.movers.length);
+    const movers = this.movers,
+      eligible = this.eligible,
+      states = this.effectStates;
+    const perMeter = this.perMeter;
+    const unfiltered = !pass?.owns && !shows && !near && !env?.levels && !visits;
+    if (unfiltered) eligible.fill(1, 0, movers.length);
+    for (let i = 0; i < movers.length; i++) {
+      const m = movers[i]!;
+      if (!unfiltered)
+        eligible[i] = Number(
+          (!pass?.owns || pass.owns(m)) &&
+            (!shows || shows(m.kind)) &&
+            (!near || m.train || near(m.x, m.y)) &&
+            (!env?.levels || m.train || m.rank < env.levels[m.kind]) &&
+            (!visits || !this.scenes.visits.has(m)),
+        );
+      let cached = states[i];
+      if (cached && (cached.mover !== m || cached.vehicle !== m.vehicle))
+        states[i] = cached = undefined;
+      if (m.kind !== 'vehicle' || !eligible[i]) continue;
+      if (!cached) {
+        if (!hasTurnSignals(m.vehicle) || VEHICLES[m.vehicle].length < minLength) continue;
+        const vehicle = m.vehicle;
+        const state = ensureVehicleEffects(m);
+        // World-local ids remain unique across adoption and do not consume movement RNG.
+        state.sourceId ??=
+          env?.nextSourceId?.() ?? (this.routingSeed >>> 0) * 1048576 + ++this.effectSerial;
+        states[i] = cached = {
+          mover: m,
+          vehicle,
+          state,
+          length: VEHICLES[vehicle].length,
+          accel: kinematicsOf(vehicle).accel,
+          kind: exhaustKind(vehicle),
+        };
+      }
+      const state = cached.state;
+      if (minLength > 0 && cached.length < minLength) continue;
+      const v = (m.v ?? m.speed) / perMeter;
       const e = state.exhaust;
-      const gap = e ? Math.max(0, clock - dt - e.clock) : 0;
       // Accepted speed cannot exceed the acceleration bound; clearance can only lower it.
       // Thus these stationary updates have identical effects even if a seam trial rolls back.
       // Between idle deadlines they need neither a pose nor a deferred movement record.
       if (
-        v + kinematicsOf(m.vehicle).accel * dt < BRAKE.stopped &&
-        (!exhaustKind(m.vehicle) ||
-          (e &&
-            e.burstNext >= e.burstCount &&
-            e.nextIdle !== Infinity &&
-            e.nextIdle + gap > clock + 1e-9))
+        v + cached.accel * dt < BRAKE.stopped &&
+        (!cached.kind || (e && idleTick(e, clock, dt)))
       ) {
-        state.brake = this.scenes.held(m) ? 0 : BRAKE.hold;
-        if (e) {
-          if (gap > 1e-8) {
-            e.nextIdle += gap;
-            e.burstAt += gap;
-          }
-          e.clock = clock;
-          e.stopped += dt;
-        }
+        const brake = services && this.scenes.held(m) ? 0 : BRAKE.hold;
+        if (state.brake !== brake) state.brake = brake;
         continue;
       }
-      this.recordEffects(m, i, clock, dt, state, v);
+      this.recordEffects(m, i, clock, dt, state, v, cached.accel, cached.kind);
     }
+    if (states.length > movers.length) states.length = movers.length;
   }
 
   private recordEffects(
@@ -518,10 +569,13 @@ export class TileLife {
     dt: number,
     state: VehicleEffects,
     v: number,
+    accel: number,
+    kind: PuffKind | undefined,
   ) {
     const r = (this.effectSteps[this.effectCount] ??= {
       m: undefined,
       state: undefined,
+      kind: undefined,
       v: 0,
       x: 0,
       y: 0,
@@ -531,16 +585,16 @@ export class TileLife {
     this.effectCount++;
     r.m = m;
     r.state = state;
+    r.kind = kind;
     r.v = v;
     const e = r.state.exhaust;
     const pose =
       e &&
-      ((e.stopped >= PUFF.pullAway.minStop - 0.1 &&
+      ((e.stopped >= PUFF.pullAway.minStop - dt &&
         r.v < PUFF.pullAway.v &&
-        r.v + kinematicsOf(m.vehicle).accel * dt >= PUFF.pullAway.v &&
+        r.v + accel * dt >= PUFF.pullAway.v &&
         Math.min(this.speeds[index]!, this.caps[index]!) >= PUFF.pullAway.v * this.perMeter) ||
-        (e.burstNext < e.burstCount &&
-          e.burstAt + (e.burstNext * PUFF.pullAway.window) / (e.burstCount - 1) <= clock + 1e-9) ||
+        burstDue(e, clock) ||
         e.nextIdle <= clock + 1e-9)
         ? this.pose(m)
         : m;
@@ -563,8 +617,9 @@ export class TileLife {
       const owner = owners?.get(m) ?? this;
       const state = r.state!;
       const v = (m.v ?? m.speed) / owner.perMeter;
-      state.brake = brakeHold(state.brake, r.v, v, dt, owner.scenes.held(m));
-      const kind = exhaustKind(m.vehicle);
+      const brake = brakeHold(state.brake, r.v, v, dt, owner.scenes.held(m));
+      if (state.brake !== brake) state.brake = brake;
+      const kind = r.kind;
       if (
         kind &&
         (r.v < PUFF.pullAway.v ||
@@ -578,9 +633,7 @@ export class TileLife {
         ));
         const due =
           e.nextIdle <= clock + 1e-9 ||
-          (e.burstNext < e.burstCount &&
-            e.burstAt + (e.burstNext * PUFF.pullAway.window) / (e.burstCount - 1) <=
-              clock + 1e-9) ||
+          burstDue(e, clock) ||
           (r.v < PUFF.pullAway.v &&
             v >= PUFF.pullAway.v &&
             e.stopped + dt >= PUFF.pullAway.minStop - 1e-9) ||
@@ -596,41 +649,22 @@ export class TileLife {
             ? (at, life, spread) => {
                 const end = owner.pose(m);
                 const f = frameBetween(this.tile, owner.tile);
-                const fraction = Math.max(0, Math.min(1, (at - (clock - dt)) / dt));
-                const x = f.x + r.x * f.scale,
-                  y = f.y + r.y * f.scale;
-                const hx = r.hx + (end.hx - r.hx) * fraction;
-                const hy = r.hy + (end.hy - r.hy) * fraction;
-                const length = Math.hypot(hx, hy) || 1;
-                const dx = hx / length,
-                  dy = hy / length;
-                const spec = VEHICLES[m.vehicle!],
-                  pm = owner.perMeter;
-                const vx = -dy * spread,
-                  vy = dx * spread;
-                const age = Math.max(0, clock - at);
-                owner.puffs.add({
-                  x:
-                    x +
-                    (end.x - x) * fraction -
-                    ((dx * spec.length) / 2) * pm -
-                    dy * 0.3 * spec.width * pm +
-                    ((wind?.dir[0] ?? 0) * (wind?.strength ?? 0) * PUFF.drift + vx) * age * pm,
-                  y:
-                    y +
-                    (end.y - y) * fraction -
-                    ((dy * spec.length) / 2) * pm +
-                    dx * 0.3 * spec.width * pm +
-                    ((wind?.dir[1] ?? 0) * (wind?.strength ?? 0) * PUFF.drift + vy) * age * pm,
-                  t0: at,
-                  life,
-                  kind,
-                  vehicle: m.vehicle!,
-                  vx,
-                  vy,
-                  hx: dx,
-                  hy: dy,
-                });
+                owner.puffs.add(
+                  spawnPuff(
+                    state.sourceId!,
+                    m.vehicle!,
+                    kind,
+                    { x: f.x + r.x * f.scale, y: f.y + r.y * f.scale, hx: r.hx, hy: r.hy },
+                    end,
+                    at,
+                    life,
+                    spread,
+                    clock,
+                    dt,
+                    owner.perMeter,
+                    wind,
+                  ),
+                );
               }
             : NO_PUFF,
         );
@@ -2830,24 +2864,20 @@ export class TileLife {
       table.resolve(clock);
     }
     const speeds = this.followLimits(dt, table);
+    // Scenes can begin/end visits in this step. Share the main loop's eligibility after that.
     this.captureEffects(clock, dt, env, shows, near, pass);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
-    const order = this.movers
-      .map((m, i) => ({ m, i }))
-      .sort(
-        (a, b) =>
-          Number(isWalker(b.m.kind)) - Number(isWalker(a.m.kind)) ||
-          (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
-          a.i - b.i,
-      );
+    const order = this.movers.map((m, i) => ({ m, i }));
+    order.sort(
+      (a, b) =>
+        Number(isWalker(b.m.kind)) - Number(isWalker(a.m.kind)) ||
+        (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
+        a.i - b.i,
+    );
     for (const { i, m } of order) {
-      if (pass?.owns && !pass.owns(m)) continue;
-      if (shows && !shows(m.kind)) continue;
-      if (near && !m.train && !near(m.x, m.y)) continue;
-      if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
-      if (this.scenes.visits.has(m)) continue;
+      if (!this.eligible[i]) continue;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
@@ -3319,9 +3349,8 @@ export type VisibleAgent = {
   /** Detailed motor vehicles only: local side and simulation-clock blink phase. */
   turnSignal?: TurnSignal;
   lamps?: VehicleLamps;
-  /** Decorative exhaust shares the clone-safe prop dispatch with other transient objects. */
-  prop?: 'puff';
-  puff?: { age: number; kind: PuffKind; vehicle: CraftType };
+  /** Decorative emitter identity; puff packets never enter the actor list. */
+  sourceId?: number;
   /** People: holding a candle (lit at dusk and night). */
   candle?: boolean;
   /**
@@ -3376,8 +3405,21 @@ type GroundTerrain = {
   origins: Map<TileLife, { x: number; y: number; scale: number }>;
   ref?: TileLife;
 };
+// Keep only a particle and projection inputs; pooled entries must not retain retired TileLife graphs.
+type PuffCandidate = { p: Puff; tile: TileId; perMeter: number; d: number };
 
 export class LifeWorld {
+  private sourceSerial = 0;
+  private readonly nextSourceId = () => ++this.sourceSerial;
+  private puffPacket = EMPTY_PUFFS;
+  private effectCellMeters = 0;
+  private readonly puffSources = new Set<number>();
+  private readonly nearestPuffs: PuffCandidate[] = [];
+  private readonly puffPool: PuffCandidate[] = [];
+  /** Reply-owned storage: transferring a frame cannot detach simulation state. */
+  get visiblePuffs() {
+    return this.puffPacket;
+  }
   preparationEpoch = 0;
   hasBootstrapped() {
     return this.bootstrapped;
@@ -3494,6 +3536,10 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.puffPacket = EMPTY_PUFFS;
+    this.puffSources.clear();
+    this.nearestPuffs.length = 0;
+    this.puffPool.length = 0;
     this.preparationEpoch++;
     this.preparedTerrain = new WeakMap();
     this.preparedSettled = new WeakSet();
@@ -4295,8 +4341,10 @@ export class LifeWorld {
     wind?: LifeEnv['wind'],
     weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig },
     cellMeters = 0,
+    effectCellMeters = cellMeters,
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
+    this.effectCellMeters = effectCellMeters;
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
@@ -4314,6 +4362,8 @@ export class LifeWorld {
       levels: this.lastLevels,
       rain: this.lastRain,
       wind,
+      effectCellMeters,
+      nextSourceId: this.nextSourceId,
       ...weather,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
@@ -4777,16 +4827,11 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
-          const lamps =
-            m.kind === 'vehicle'
-              ? visibleLamps(
-                  m.vehicle,
-                  vehicleEffects(m)?.brake,
-                  life.scenes.held(m),
-                  m.routing,
-                  this.clock,
-                )
-              : undefined;
+          const motor = m.kind === 'vehicle' && hasTurnSignals(m.vehicle);
+          const effects = motor ? vehicleEffects(m) : undefined;
+          const lamps = motor
+            ? visibleLamps(m.vehicle, effects?.brake, life.scenes.held(m), m.routing, this.clock)
+            : undefined;
           out.push({
             kind: m.kind,
             lng,
@@ -4796,6 +4841,7 @@ export class LifeWorld {
             vehicle: m.vehicle,
             paint: m.paint,
             lamps,
+            sourceId: effects?.sourceId,
             turnSignal:
               m.kind === 'vehicle' && lamps?.kind !== 'hazard'
                 ? visibleTurnSignal(m.routing, this.clock)
@@ -4996,36 +5042,87 @@ export class LifeWorld {
     bounds: LngLatBounds | undefined,
     activity: number,
   ) {
-    if (bandVisibility(LIFE_ZOOM.vehicle, zoom) < 1 || activity <= 0) return agents;
-    const candidates: { agent: VisibleAgent; d: number }[] = [];
+    this.puffPacket = EMPTY_PUFFS;
+    const sources = this.puffSources;
+    sources.clear();
+    for (const a of agents) if (a.sourceId !== undefined) sources.add(a.sourceId);
+    const heap = this.nearestPuffs;
+    heap.length = 0;
+    if (!sources.size || bandVisibility(LIFE_ZOOM.vehicle, zoom) < 1 || activity <= 0)
+      return agents;
+    const ref = this.tiles.values().next().value!;
+    const origin = lngLatToTile(ref.tile, ...center);
+    const down = (i: number) => {
+      for (;;) {
+        let child = i * 2 + 1;
+        if (child >= heap.length) return;
+        if (child + 1 < heap.length && heap[child + 1]!.d > heap[child]!.d) child++;
+        if (heap[i]!.d >= heap[child]!.d) return;
+        [heap[i], heap[child]] = [heap[child]!, heap[i]!];
+        i = child;
+      }
+    };
     for (const life of this.tiles.values()) {
       const inside = viewIn(life.tile, bounds, 0);
+      const f = frameBetween(life.tile, ref.tile);
       for (const p of life.puffs.active(this.clock)) {
-        if (!inside(p.x, p.y)) continue;
-        const [lng, lat] = tileToLngLat(life.tile, p);
-        candidates.push({
-          d: (lng - center[0]) ** 2 + (lat - center[1]) ** 2,
-          agent: {
-            kind: 'vehicle',
-            prop: 'puff',
-            lng,
-            lat,
-            flap: 0,
-            ahead: tileToLngLat(life.tile, {
-              x: p.x + p.hx * life.perMeter,
-              y: p.y + p.hy * life.perMeter,
-            }),
-            puff: {
-              age: Math.max(0, Math.min(1, (this.clock - p.t0) / p.life)),
-              kind: p.kind,
-              vehicle: p.vehicle,
-            },
-          },
-        });
+        if (
+          !sources.has(p.sourceId) ||
+          !inside(p.x, p.y) ||
+          VEHICLES[p.vehicle].length < STAMP_MIN_CELLS * this.effectCellMeters
+        )
+          continue;
+        const d = (f.x + p.x * f.scale - origin.x) ** 2 + (f.y + p.y * f.scale - origin.y) ** 2;
+        if (heap.length < PUFF.visible) {
+          const entry = (this.puffPool[heap.length] ??= {
+            p,
+            tile: { ...life.tile },
+            perMeter: life.perMeter,
+            d,
+          });
+          entry.p = p;
+          Object.assign(entry.tile, life.tile);
+          entry.perMeter = life.perMeter;
+          entry.d = d;
+          let i = heap.length;
+          heap.push(entry);
+          while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (heap[parent]!.d >= entry.d) break;
+            heap[i] = heap[parent]!;
+            heap[parent] = entry;
+            i = parent;
+          }
+        } else if (d < heap[0]!.d) {
+          const entry = heap[0]!;
+          entry.p = p;
+          Object.assign(entry.tile, life.tile);
+          entry.perMeter = life.perMeter;
+          entry.d = d;
+          down(0);
+        }
       }
     }
-    candidates.sort((a, b) => a.d - b.d);
-    for (const p of candidates.slice(0, PUFF.visible)) agents.push(p.agent);
+    heap.sort((a, b) => a.d - b.d);
+    const packet = new Float64Array(heap.length * PUFF_STRIDE);
+    for (let i = 0; i < heap.length; i++) {
+      const { p, tile, perMeter } = heap[i]!;
+      const at = i * PUFF_STRIDE;
+      const [lng, lat] = tileToLngLat(tile, p);
+      const [aheadLng, aheadLat] = tileToLngLat(tile, {
+        x: p.x + p.hx * perMeter,
+        y: p.y + p.hy * perMeter,
+      });
+      packet[at] = p.sourceId;
+      packet[at + 1] = lng;
+      packet[at + 2] = lat;
+      packet[at + 3] = aheadLng;
+      packet[at + 4] = aheadLat;
+      packet[at + 5] = Math.max(0, Math.min(1, (this.clock - p.t0) / p.life));
+      packet[at + 6] = p.kind === 'twoStroke' ? 1 : 0;
+      packet[at + 7] = PUFF_CRAFT.indexOf(p.vehicle as (typeof PUFF_CRAFT)[number]);
+    }
+    this.puffPacket = packet;
     return agents;
   }
 }

@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, join, dirname, basename } from 'node:path';
-import { currentSourceHash, snapshotRevision } from './snapshot';
+import { currentSourceHash, snapshotRevision, snapshotCurrent } from './snapshot';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn((_command: string, args: string[]) => {
@@ -59,6 +59,12 @@ it('hashes the current sources when a tracked file is deleted from the working t
     await writeFile(join(temporary, path), `export const source = '${path}';\n`);
   }
   const before = await currentSourceHash(temporary);
+  for (const name of ['renderer', 'shared'])
+    await mkdir(join(temporary, 'packages', name, 'node_modules'), { recursive: true });
+  const frozen = await snapshotCurrent(temporary, join(temporary, 'current'));
+  expect(frozen.hash).toBe(before);
+  await writeFile(join(temporary, paths[0]!), 'export const source = "changed";');
+  expect(await readFile(join(temporary, 'current', paths[0]!), 'utf8')).not.toContain('changed');
   await rm(join(temporary, paths[1]!));
   const after = await currentSourceHash(temporary);
   expect(after).toMatch(/^[a-f0-9]{64}$/);

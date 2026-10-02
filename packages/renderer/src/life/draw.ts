@@ -33,7 +33,14 @@ import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
 import { BRAKE_LAMP } from './lamps';
-import { puffGlyph } from './exhaust';
+import {
+  puffGlyph,
+  EMPTY_PUFFS,
+  PUFF_STRIDE,
+  PUFF_CRAFT,
+  PUFF_AGE_MASK,
+  PUFF_KIND_BIT,
+} from './exhaust';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -97,6 +104,8 @@ export type LifeGlyphs = { parts: Uint16Array };
 let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
 /** Cells (texel offset / 4) held by ground agents already drawn this frame. */
 let groundCells = new Uint8Array(0);
+const stampedSources = new Set<number>();
+let detailedStamp = false;
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (!journal || journal.before.has(at)) return;
   if (groundCells[at / 4]) journal.denied = true;
@@ -128,10 +137,11 @@ export function packLife(
   glyphIndex: (glyph: string) => number,
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
+  puffs: Float64Array = EMPTY_PUFFS,
 ): number {
   out.fill(0);
   if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
-  drawPuffs(out, grid, agents, glyphIndex);
+  stampedSources.clear();
   const cells = grid.cols * grid.rows;
   if (groundCells.length < cells) groundCells = new Uint8Array(cells);
   else groundCells.fill(0, 0, cells);
@@ -139,10 +149,10 @@ export function packLife(
   // Parked cars reserve their cells before passing traffic or walkers.
   for (const parked of [true, false])
     for (const agent of agents) {
-      if (agent.prop === 'puff') continue;
       if (!!agent.parked !== parked) continue;
       const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
       journal = ground ? { before: new Map(), denied: false } : undefined;
+      detailedStamp = false;
       const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
       if (journal && grid.allowsGroundCell)
         for (const at of journal.before.keys())
@@ -155,37 +165,41 @@ export function packLife(
       else {
         drawn += n;
         for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+        if (n && detailedStamp && agent.sourceId !== undefined) stampedSources.add(agent.sourceId);
       }
     }
   journal = undefined;
+  drawPuffs(out, grid, puffs, glyphIndex);
   return drawn;
 }
 
-/** Decorative ink owns no ground cells: every subsequently admitted actor can overwrite it. */
+/** Decorative ink fills empty cells only after its detailed source was successfully admitted. */
 function drawPuffs(
   out: Uint8Array,
   grid: LifeGrid,
-  agents: readonly VisibleAgent[],
+  puffs: Float64Array,
   glyphIndex: (g: string) => number,
 ) {
-  for (const agent of agents) {
-    if (agent.prop !== 'puff' || !agent.puff || !agent.ahead) continue;
-    const [x, y] = grid.toCell(agent.lng, agent.lat);
-    const [ax, ay] = grid.toCell(...agent.ahead);
-    if (Math.hypot(ax - x, ay - y) * VEHICLES[agent.puff.vehicle].length < STAMP_MIN_CELLS)
-      continue;
+  for (let i = 0; i + PUFF_STRIDE <= puffs.length; i += PUFF_STRIDE) {
+    if (!stampedSources.has(puffs[i]!)) continue;
+    const vehicle = PUFF_CRAFT[puffs[i + 7]!];
+    if (!vehicle) continue;
+    const [x, y] = grid.toCell(puffs[i + 1]!, puffs[i + 2]!);
+    const [ax, ay] = grid.toCell(puffs[i + 3]!, puffs[i + 4]!);
+    if (Math.hypot(ax - x, ay - y) * VEHICLES[vehicle].length < STAMP_MIN_CELLS) continue;
     const col = Math.floor(x),
       row = Math.floor(y);
     if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) continue;
     const at = (row * grid.cols + col) * 4;
     if (out[at + 2] !== 0) continue;
-    const age = Math.max(0, Math.min(1, agent.puff.age));
+    const age = Math.max(0, Math.min(1, puffs[i + 5]!));
     const glyph = glyphIndex(puffGlyph(age));
     if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
     [out[at], out[at + 1]] = packGlyph(glyph, classId('life_person'));
     out[at + 2] = CellBit.vehicle | CellBit.person;
     out[at + 3] = personByte(
-      Math.min(7, Math.floor(age * 8)) | (agent.puff.kind === 'twoStroke' ? 8 : 0),
+      Math.min(PUFF_AGE_MASK, Math.floor(age * (PUFF_AGE_MASK + 1))) |
+        (puffs[i + 6] === 1 ? PUFF_KIND_BIT : 0),
       PersonPart.puff,
     );
   }
@@ -254,6 +268,7 @@ function drawAgent(
         ],
         indicator,
       );
+      detailedStamp = stamped;
       // The vendor stands clear of the cart's side.
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)

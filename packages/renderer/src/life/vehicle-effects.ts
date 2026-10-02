@@ -1,6 +1,6 @@
 import type { ExhaustEmitter } from './exhaust';
 
-export type VehicleEffects = { brake: number; exhaust?: ExhaustEmitter };
+export type VehicleEffects = { brake: number; sourceId?: number; exhaust?: ExhaustEmitter };
 // Movement snapshots copy movers frequently. Keep decorative state off their hot shapes.
 // Identity-preserving transfers retain it; detached continuity previews copy it explicitly.
 const states = new WeakMap<object, VehicleEffects>();
@@ -12,5 +12,5 @@ export function ensureVehicleEffects(mover: object) {
 }
 export function copyVehicleEffects(source: object, preview: object) {
   const state = states.get(source);
-  if (state) states.set(preview, { ...state });
+  if (state) states.set(preview, { ...state, exhaust: state.exhaust && { ...state.exhaust } });
 }

@@ -230,16 +230,33 @@ describe('life worker protocol', () => {
       input.gust.time = frame / 10;
       const expected = runLifeFrame(direct, input);
       for (const agent of expected.agents) delete agent.consist;
-      const actual = structuredClone(api.frame(input));
+      const actual = api.frame(input);
       expect(actual.agents).toEqual(expected.agents);
+      expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
+        true,
+      );
+      if (actual.puffs.length) {
+        const delivered = structuredClone(actual, {
+          transfer: [actual.puffs.buffer as ArrayBuffer],
+        });
+        expect(actual.puffs.byteLength).toBe(0);
+        expect(delivered.puffs.length).toBe(expected.puffs.length);
+        seen.puff = true;
+      }
       expect(actual.signalClock).toBe(expected.signalClock);
       for (const agent of actual.agents) {
         seen.brake ||= agent.lamps?.kind === 'brake';
         seen.hazard ||= agent.lamps?.kind === 'hazard';
-        seen.puff ||= agent.prop === 'puff';
       }
+      if (seen.brake && seen.hazard && seen.puff) break;
     }
     expect(seen).toEqual({ brake: true, hazard: true, puff: true });
+    const nextExpected = runLifeFrame(direct, input),
+      nextActual = api.frame(input);
+    expect(nextActual.agents).toEqual(nextExpected.agents);
+    expect(
+      Buffer.from(nextActual.puffs.buffer).equals(Buffer.from(nextExpected.puffs.buffer)),
+    ).toBe(true);
   }, 10000);
 
   it('matches inline zoom ownership, cloned revival and hard clearing', () => {
@@ -276,6 +293,9 @@ describe('life worker protocol', () => {
         for (const agent of expected.agents) delete agent.consist;
         const actual = api.frame(input);
         expect(actual.agents).toEqual(expected.agents);
+        expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
+          true,
+        );
         expect(actual.signalClock).toBe(expected.signalClock);
       }
     }

@@ -7,9 +7,11 @@ import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
+import { EMPTY_PUFFS } from './exhaust';
 
 export type FrameView = {
   agents: VisibleAgent[];
+  puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
   cellGuard: LifeWorld['groundCellGuard'];
@@ -76,6 +78,7 @@ export function createInlineHost(
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return {
         agents: [],
+        puffs: EMPTY_PUFFS,
         signalClock: world.signalClock,
         cellGuard: () => undefined,
         ...view,
@@ -165,7 +168,8 @@ export function createWorkerHost(
         }
         // Keep the last complete frame while nonempty geometry loads. It is never combined
         // with a different generation; the next valid reply replaces agents and guard together.
-        if (!keep.size && view) view = { ...view, agents: [], cellGuard: () => undefined };
+        if (!keep.size && view)
+          view = { ...view, agents: [], puffs: EMPTY_PUFFS, cellGuard: () => undefined };
       }
       const payload = next.map(({ key, tile, life }) => {
         const entry = sent.has(key) ? { key, tile } : { key, tile, life };
@@ -188,7 +192,7 @@ export function createWorkerHost(
       profiler?.clearContinuity();
       terrain = undefined;
       sent.clear();
-      if (view) view = { ...view, agents: [], cellGuard: () => undefined };
+      if (view) view = { ...view, agents: [], puffs: EMPTY_PUFFS, cellGuard: () => undefined };
       if (fallback) fallback.clearTiles();
       else void remote.clearTiles().catch(fail);
     },
@@ -218,6 +222,7 @@ export function createWorkerHost(
           const cellTerrain = terrain;
           view = {
             agents: result.agents,
+            puffs: result.puffs,
             procession: result.procession,
             signalClock: result.signalClock,
             cellGuard: (toCell) =>

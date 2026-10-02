@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAKE, brakeHold, visibleLamps } from './lamps';
+import { visibleTurnSignal } from './turn-signals';
 
 describe('vehicle lamps', () => {
   it('lights on accepted deceleration, holds, and stays lit in a queue', () => {
@@ -29,5 +30,19 @@ describe('vehicle lamps', () => {
       }
       expect(on).toBe(hz);
     }
+  });
+  it('shares blink phase with indicators for signed clocks and every supported cadence', () => {
+    for (const seed of [0, 123456789, 0xffffffff])
+      for (const hz of [30, 60, 120])
+        for (let frame = -hz * 2; frame < hz * 2; frame++) {
+          const routing = { seed, turns: 0, signal: { side: 'left' as const, remaining: 1 } };
+          const hazard = visibleLamps('bus', 0, true, routing, frame / hz);
+          expect(hazard?.kind === 'hazard' && hazard.on).toBe(
+            visibleTurnSignal(routing, frame / hz)?.on,
+          );
+        }
+    expect(visibleLamps('bus', 0.3, false, undefined, 0)).toBe(
+      visibleLamps('car', 0.3, false, undefined, 1),
+    );
   });
 });

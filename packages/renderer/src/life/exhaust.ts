@@ -1,4 +1,4 @@
-import type { CraftType } from './vehicles';
+import { VEHICLES, type CraftType } from './vehicles';
 
 export const PUFF = {
   cap: 96,
@@ -8,11 +8,19 @@ export const PUFF = {
   idle: [3, 6],
   drift: 0.6,
   spread: 0.4,
+  tailpipeOffset: 0.3,
 } as const;
+export const PUFF_AGE_MASK = 7;
+export const PUFF_KIND_BIT = 8;
+/** Reply-owned packet: source id, position, heading point, age, kind, craft. */
+export const PUFF_STRIDE = 8;
+export const PUFF_CRAFT = ['motorcycle', 'tricycle', 'jeepney', 'bus', 'truck'] as const;
+export const EMPTY_PUFFS = new Float64Array(0);
 export const PUFF_COLOR = { diesel: [0.45, 0.45, 0.45], twoStroke: [0.55, 0.6, 0.64] } as const;
 export const PUFF_GLYPHS = ['°', '∘', '·'] as const;
 export type PuffKind = keyof typeof PUFF_COLOR;
 export type Puff = {
+  sourceId: number;
   x: number;
   y: number;
   t0: number;
@@ -66,6 +74,89 @@ export function emitter(seed: number, clock: number): ExhaustEmitter {
   };
 }
 
+const burstDeadline = (s: ExhaustEmitter) =>
+  s.burstAt + (s.burstNext * PUFF.pullAway.window) / (s.burstCount - 1);
+export const burstDue = (s: ExhaustEmitter, clock: number) =>
+  s.burstNext < s.burstCount && burstDeadline(s) <= clock + 1e-9;
+export function rebaseEmitter(s: ExhaustEmitter, clock: number, dt: number) {
+  const gap = Math.max(0, clock - dt - s.clock);
+  applyRebase(s, clock, gap);
+}
+function applyRebase(s: ExhaustEmitter, clock: number, gap: number) {
+  if (gap > 1e-8) {
+    s.nextIdle += gap;
+    s.burstAt += gap;
+  }
+  s.clock = clock;
+}
+/** Fast path only when accepted motion is guaranteed to remain stopped. */
+export function idleTick(s: ExhaustEmitter, clock: number, dt: number) {
+  const gap = Math.max(0, clock - dt - s.clock);
+  if (s.burstNext < s.burstCount || s.nextIdle === Infinity || s.nextIdle + gap <= clock + 1e-9)
+    return false;
+  applyRebase(s, clock, gap);
+  s.stopped += dt;
+  return true;
+}
+const windComponent = (wind: Wind, axis: 0 | 1) =>
+  (wind?.dir[axis] ?? 0) * (wind?.strength ?? 0) * PUFF.drift;
+function drift(
+  p: Pick<Puff, 'x' | 'y' | 'vx' | 'vy'>,
+  seconds: number,
+  wx: number,
+  wy: number,
+  perMeter: number,
+) {
+  p.x += (wx + p.vx) * seconds * perMeter;
+  p.y += (wy + p.vy) * seconds * perMeter;
+}
+/** Birth at the interpolated accepted tailpipe, then advect the remainder of this step. */
+export function spawnPuff(
+  sourceId: number,
+  vehicle: CraftType,
+  kind: PuffKind,
+  start: { x: number; y: number; hx: number; hy: number },
+  end: { x: number; y: number; hx: number; hy: number },
+  at: number,
+  life: number,
+  spread: number,
+  clock: number,
+  dt: number,
+  perMeter: number,
+  wind: Wind,
+): Puff {
+  const fraction = Math.max(0, Math.min(1, (at - (clock - dt)) / dt));
+  const hx = start.hx + (end.hx - start.hx) * fraction;
+  const hy = start.hy + (end.hy - start.hy) * fraction;
+  const length = Math.hypot(hx, hy) || 1;
+  const dx = hx / length,
+    dy = hy / length,
+    spec = VEHICLES[vehicle];
+  const p: Puff = {
+    sourceId,
+    vehicle,
+    kind,
+    t0: at,
+    life,
+    hx: dx,
+    hy: dy,
+    vx: -dy * spread,
+    vy: dx * spread,
+    x:
+      start.x +
+      (end.x - start.x) * fraction -
+      ((dx * spec.length) / 2) * perMeter -
+      dy * PUFF.tailpipeOffset * spec.width * perMeter,
+    y:
+      start.y +
+      (end.y - start.y) * fraction -
+      ((dy * spec.length) / 2) * perMeter +
+      dx * PUFF.tailpipeOffset * spec.width * perMeter,
+  };
+  drift(p, Math.max(0, clock - at), windComponent(wind, 0), windComponent(wind, 1), perMeter);
+  return p;
+}
+
 /** Consume exact deadlines, including deadlines between updates. Speeds are m/s. */
 export function stepEmitter(
   state: ExhaustEmitter,
@@ -77,19 +168,11 @@ export function stepEmitter(
   emit: (at: number, life: number, spread: number) => void,
 ) {
   const start = clock - dt;
-  const gap = Math.max(0, start - state.clock);
-  if (gap > 1e-8) {
-    state.nextIdle += gap;
-    state.burstAt += gap;
-  }
-  state.clock = clock;
+  rebaseEmitter(state, clock, dt);
   const low = before < PUFF.pullAway.v;
   const stopped = after < PUFF.pullAway.v;
   // Most emitters idle for many updates between deadlines. Avoid closures and hashing there.
-  if (low && stopped && state.nextIdle !== Infinity && state.nextIdle > clock + 1e-9) {
-    state.stopped += dt;
-    return;
-  }
+  if (low && stopped && idleTick(state, clock, dt)) return;
   const fraction =
     low === stopped ? 0 : Math.max(0, Math.min(1, (PUFF.pullAway.v - before) / (after - before)));
   const crossing = start + fraction * dt;
@@ -119,14 +202,18 @@ export function stepEmitter(
     if (low && state.stopped + fraction * dt >= PUFF.pullAway.minStop - 1e-9) {
       state.burstAt = crossing;
       state.burstCount =
-        PUFF.pullAway.count[0] + Math.floor(sample(state.seed, state.burst++, 61) * 3);
+        PUFF.pullAway.count[0] +
+        Math.floor(
+          sample(state.seed, state.burst++, 61) *
+            (PUFF.pullAway.count[1] - PUFF.pullAway.count[0] + 1),
+        );
       state.burstNext = 0;
     }
     state.stopped = 0;
     state.nextIdle = Infinity;
     while (state.burstNext < state.burstCount) {
       const i = state.burstNext;
-      const at = state.burstAt + (i * PUFF.pullAway.window) / (state.burstCount - 1);
+      const at = burstDeadline(state);
       if (at > clock + 1e-9) break;
       state.burstNext++;
       if (kind === 'diesel' || i % 2 === 0) puff(at);
@@ -149,8 +236,8 @@ export class PuffStore {
     const gap = Math.max(0, clock - dt - (this.clock ?? clock - dt));
     this.clock = clock;
     if (!this.count) return;
-    const wx = (wind?.dir[0] ?? 0) * (wind?.strength ?? 0) * PUFF.drift;
-    const wy = (wind?.dir[1] ?? 0) * (wind?.strength ?? 0) * PUFF.drift;
+    const wx = windComponent(wind, 0),
+      wy = windComponent(wind, 1);
     for (let i = 0; i < this.slots.length; i++) {
       const p = this.slots[i];
       if (!p) continue;
@@ -161,8 +248,7 @@ export class PuffStore {
         this.count--;
       } else {
         const elapsed = Math.max(0, clock - Math.max(clock - dt, p.t0));
-        p.x += (wx + p.vx) * elapsed * perMeter;
-        p.y += (wy + p.vy) * elapsed * perMeter;
+        drift(p, elapsed, wx, wy, perMeter);
       }
     }
   }

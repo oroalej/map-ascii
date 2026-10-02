@@ -807,6 +807,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       knobs.shadows ? sun : null,
       profiler,
       host.latest()?.cellGuard(placement.toCell),
+      host.latest()?.puffs,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;

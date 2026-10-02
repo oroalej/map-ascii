@@ -2,20 +2,19 @@ import { deepStrictEqual } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { cpus, platform, release } from 'node:os';
+import { cpus, platform, release, getPriority } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { snapshotRevision, currentSourceHash } from './snapshot';
+import { snapshotRevision, snapshotCurrent, currentSourceHash } from './snapshot';
 import {
-  makeScenario,
-  scenarioState,
   scenarioTilesAt,
   worldTiles,
   worldTerrainStats,
   SCENARIOS,
 } from '../src/life/testing/scenarios';
-import { LifeWorld } from '../src/life/simulate';
-import { packLife, buildLifeGlyphs } from '../src/life/draw';
+import type * as Simulation from '../src/life/simulate';
+import type * as Draw from '../src/life/draw';
+import type * as Scenarios from '../src/life/testing/scenarios';
 import { themes } from '../src/theme';
 import { FrameProfiler } from '../src/profile';
 import { tileToLngLat } from '../src/raster/geometry';
@@ -23,28 +22,40 @@ import { spawnMargin } from '../src/life/births';
 import { metersPerCssPx } from '../src/grid';
 import { DEFAULT_CELLS, cellStep, stepCell } from '../src/density';
 import { viewportFor } from '../src/camera';
+import { withoutDecorations } from './decorations';
+import { classId } from '../src/classes';
+import { PersonPart } from '../src/life/people';
 import { City } from '@atlas/shared';
 import { activityLevels } from '../src/life/config';
-import { snapshotOf } from '../src/life/terrain-snapshot';
+import type * as Snapshot from '../src/life/terrain-snapshot';
 import { openArchive, decodeLifeTiles, realPanStrip, archiveHash } from './archive';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback = '') =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const matchesCase = (name: string) =>
+  arg('case')
+    .split(',')
+    .some((prefix) => name.startsWith(prefix));
 const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
 const births = process.argv.includes('--births');
 const control = process.argv.includes('--control');
+const vehicleEffects = process.argv.includes('--vehicle-effects');
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
 if (births && !real) throw new Error('--births requires --real and --pan');
 if (real && !pan) throw new Error('--real requires --pan');
 const allowDiff = pan || process.argv.includes('--allow-diff');
+const allowDecorativeDiff = process.argv.includes('--allow-decorative-diff');
+if (allowDiff && allowDecorativeDiff)
+  throw new Error('Decoration-only and broad differences are mutually exclusive');
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
 const scratch = resolve(root, arg('scratch', 'test-results'));
 const samples = Number(arg('samples', '160'));
-const runs = Number(arg('runs', '5'));
+const runs = Number(arg('runs', '6'));
+if (runs % 2) throw new Error('Use an even run count for balanced paired order');
 if (![samples, runs].every((n) => Number.isInteger(n) && n > 0))
   throw new Error('Invalid sample/run count');
 await mkdir(scratch, { recursive: true });
@@ -59,7 +70,7 @@ async function cleanup() {
 }
 const warmup = 90;
 const glyph = (s: string) => ((s.codePointAt(0) ?? 0) % 254) + 1;
-const glyphs = buildLifeGlyphs(glyph);
+
 const quantile = (vs: number[], q: number) => {
   const s = vs.slice().sort((a, b) => a - b);
   return s[Math.min(s.length - 1, Math.floor(s.length * q))]!;
@@ -68,17 +79,26 @@ const summary = (vs: number[]) => ({ median: quantile(vs, 0.5), p95: quantile(vs
 type Stages = 'step' | 'visible' | 'pack' | 'combined';
 try {
   const currentHash = await currentSourceHash(root);
-  const frozen = await snapshotRevision(root, baseline, join(temporary, 'baseline'));
-  const before = (control ? { LifeWorld } : await import(frozen.path('life/simulate.ts'))) as {
-    LifeWorld: typeof LifeWorld;
-  };
-  const oldDraw = (control ? { packLife } : await import(frozen.path('life/draw.ts'))) as {
-    packLife: typeof packLife;
-  };
+  const changedGraph = await snapshotCurrent(root, join(temporary, 'current'));
+  const frozen = control
+    ? await snapshotCurrent(root, join(temporary, 'baseline'))
+    : await snapshotRevision(root, baseline, join(temporary, 'baseline'));
+  const before = (await import(frozen.path('life/simulate.ts'))) as typeof Simulation;
+  const { LifeWorld } = (await import(changedGraph.path('life/simulate.ts'))) as typeof Simulation;
+  const oldDraw = (await import(frozen.path('life/draw.ts'))) as typeof Draw;
+  const { packLife, buildLifeGlyphs } = (await import(
+    changedGraph.path('life/draw.ts')
+  )) as typeof Draw;
+  const oldScenarios = (await import(frozen.path('life/testing/scenarios.ts'))) as typeof Scenarios;
+  const { makeScenario, completeScenarioState } = (await import(
+    changedGraph.path('life/testing/scenarios.ts')
+  )) as typeof Scenarios;
+  const glyphs = buildLifeGlyphs(glyph);
+  const { snapshotOf } = (await import(
+    changedGraph.path('life/terrain-snapshot.ts')
+  )) as typeof Snapshot;
   if (real) {
-    const oldSnapshot = (
-      control ? { snapshotOf } : await import(frozen.path('life/terrain-snapshot.ts'))
-    ) as {
+    const oldSnapshot = (await import(frozen.path('life/terrain-snapshot.ts'))) as {
       snapshotOf: typeof snapshotOf;
     };
     const city = arg('real', 'naga');
@@ -284,6 +304,7 @@ try {
             environment: {
               node: process.version,
               platform: platform(),
+              processPriority: getPriority(),
               os: release(),
               cpu: cpus()[0]?.model,
             },
@@ -353,7 +374,7 @@ try {
     const rows = [];
     for (const kind of SCENARIOS.filter((kind) => kind !== 'sparse')) {
       const name = `${kind}/16/pan`;
-      if (!name.startsWith(arg('case'))) continue;
+      if (!matchesCase(name)) continue;
       const windows = Array.from({ length: 9 }, (_, shift) =>
         scenarioTilesAt(
           kind,
@@ -470,93 +491,170 @@ try {
     console.log(`Report: ${output}`);
   } else {
     const rows = [];
-    for (const kind of SCENARIOS)
-      for (const count of [1, 4, 16])
-        for (const mobile of [false, true]) {
-          const name = `${kind}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
-          if (!name.startsWith(arg('case'))) continue;
-          const a = makeScenario(kind, count, mobile, 1, before.LifeWorld);
-          const b = makeScenario(kind, count, mobile);
-          const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
-            nextPixels = new Uint8Array(oldPixels.length);
-          for (let frame = 0; frame < 300; frame++) {
-            const minimum = [0, 0.9, 3][Math.floor(frame / 100)]!;
-            const av = a.step(frame, 1 / 30, minimum),
-              bv = b.step(frame, 1 / 30, minimum);
-            if (!allowDiff) deepStrictEqual(bv, av, `${name}: visible frame ${frame}`);
-            if (frame % 30 === 0) {
-              if (!allowDiff)
-                deepStrictEqual(
-                  scenarioState(b.world),
-                  scenarioState(a.world),
-                  `${name}: state frame ${frame}`,
-                );
-              oldDraw.packLife(oldPixels, a.grid, av, themes.dark, glyph, undefined, glyphs);
-              packLife(nextPixels, b.grid, bv, themes.dark, glyph, undefined, glyphs);
-              if (!allowDiff)
-                deepStrictEqual(nextPixels, oldPixels, `${name}: packed frame ${frame}`);
-            }
+    const fixtures = SCENARIOS.flatMap((kind) =>
+      [1, 4, 16].flatMap((count) =>
+        [false, true].map((mobile) => ({ kind, count, mobile, zoom: 18 })),
+      ),
+    );
+    if (vehicleEffects) fixtures.push({ kind: 'transit', count: 1, mobile: false, zoom: 20.5 });
+    for (const { kind, count, mobile, zoom } of fixtures) {
+      const name = `${kind}${zoom === 18 ? '' : '-detailed'}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
+      if (!matchesCase(name)) continue;
+      const a = (zoom === 18 ? oldScenarios.makeScenario : makeScenario)(
+        kind,
+        count,
+        mobile,
+        1,
+        before.LifeWorld,
+        undefined,
+        zoom,
+      );
+      const b = makeScenario(kind, count, mobile, 1, LifeWorld, undefined, zoom);
+      const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
+        nextPixels = new Uint8Array(oldPixels.length);
+      const observedCues = { brake: false, hazard: false, puff: false };
+      for (let frame = 0; frame < 300; frame++) {
+        const minimum = [0, 0.9, 3][Math.floor(frame / 100)]!;
+        const av = a.step(frame, 1 / 30, minimum),
+          bv = b.step(frame, 1 / 30, minimum);
+        if (vehicleEffects)
+          for (const actor of bv) {
+            observedCues.brake ||= actor.lamps?.kind === 'brake';
+            observedCues.hazard ||= actor.lamps?.kind === 'hazard';
           }
-          const measure = (
-            Constructor: typeof LifeWorld,
-            pack: typeof packLife,
-            profiler?: FrameProfiler,
-          ) => {
-            const s = makeScenario(kind, count, mobile, 1, Constructor, profiler);
-            const out = new Uint8Array(s.grid.cols * s.grid.rows * 4);
-            const timings: Record<Stages, number[]> = {
-              step: [],
-              visible: [],
-              pack: [],
-              combined: [],
-            };
-            let agents = 0,
-              maxVisits = 0,
-              maxServices = 0;
-            const visitStates = new Set<string>();
-            const heapBefore = process.memoryUsage().heapUsed;
-            for (let frame = 0; frame < warmup + samples; frame++) {
-              const callbackStart = profiler?.time();
-              profiler?.begin(frame);
-              const env = s.environment(frame);
-              const start = performance.now();
-              s.world.step(1 / 30, undefined, 18, s.bounds, undefined, env, 0.9);
-              const moved = performance.now();
-              const visible = s.world.visible(
-                18,
-                s.levels,
-                s.center,
-                { rain: env.rain, sunAltitude: 40 },
-                s.bounds,
-              );
-              const selected = performance.now();
-              agents = pack(out, s.grid, visible, themes.dark, glyph, undefined, glyphs);
-              const packed = performance.now();
-              if (profiler) {
-                profiler.add('step', moved - start);
-                profiler.add('visible', selected - moved);
-                profiler.add('pack', packed - selected);
-                profiler.draw(packed - start, agents);
-                profiler.end();
+        if (!allowDiff && !allowDecorativeDiff)
+          deepStrictEqual(bv, av, `${name}: visible frame ${frame}`);
+        if (frame % 30 === 0) {
+          if (!allowDiff)
+            deepStrictEqual(
+              allowDecorativeDiff
+                ? withoutDecorations(completeScenarioState(b.world))
+                : completeScenarioState(b.world),
+              allowDecorativeDiff
+                ? withoutDecorations(oldScenarios.completeScenarioState(a.world))
+                : oldScenarios.completeScenarioState(a.world),
+              `${name}: state frame ${frame}`,
+            );
+          oldDraw.packLife(
+            oldPixels,
+            a.grid,
+            av,
+            themes.dark,
+            glyph,
+            undefined,
+            glyphs,
+            a.world.visiblePuffs,
+          );
+          packLife(
+            nextPixels,
+            b.grid,
+            bv,
+            themes.dark,
+            glyph,
+            undefined,
+            glyphs,
+            b.world.visiblePuffs,
+          );
+          if (vehicleEffects && !observedCues.puff)
+            for (let at = 0; at < nextPixels.length; at += 4)
+              if (
+                (nextPixels[at + 1]! & 63) === classId('life_person') &&
+                ((nextPixels[at + 3]! >> 4) & 7) === PersonPart.puff &&
+                nextPixels[at + 2]
+              ) {
+                observedCues.puff = true;
+                break;
               }
-              const completed = profiler?.time();
-              for (const tile of worldTiles(s.world).values()) {
-                maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
-                maxServices = Math.max(maxServices, tile.scenes.services.size);
-                for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
-              }
-              if (frame >= warmup) {
-                timings.step.push(moved - start);
-                timings.visible.push(selected - moved);
-                timings.pack.push(packed - selected);
-                timings.combined.push(
-                  callbackStart === undefined || completed === undefined
-                    ? packed - start
-                    : completed - callbackStart,
-                );
-              }
-              if (frame === warmup - 1) profiler?.reset();
+          if (!allowDiff && !allowDecorativeDiff)
+            deepStrictEqual(nextPixels, oldPixels, `${name}: packed frame ${frame}`);
+        }
+      }
+      if (vehicleEffects && zoom > 18 && !Object.values(observedCues).every(Boolean))
+        throw new Error(`${name}: detailed fixture must exercise brakes, hazards and packed puffs`);
+      const prepareMeasure = (
+        Constructor: typeof LifeWorld,
+        pack: typeof packLife,
+        profiler?: FrameProfiler,
+      ) => {
+        const scenarioFactory =
+          Constructor === before.LifeWorld && zoom === 18
+            ? oldScenarios.makeScenario
+            : makeScenario;
+        const s = scenarioFactory(kind, count, mobile, 1, Constructor, profiler, zoom);
+        const out = new Uint8Array(s.grid.cols * s.grid.rows * 4);
+        const timings: Record<Stages, number[]> = {
+          step: [],
+          visible: [],
+          pack: [],
+          combined: [],
+        };
+        let agents = 0,
+          maxVisits = 0,
+          maxServices = 0;
+        const visitStates = new Set<string>();
+        const heapBefore = process.memoryUsage().heapUsed;
+        return {
+          sample(frame: number) {
+            const callbackStart = profiler?.time();
+            profiler?.begin(frame);
+            const env = s.environment(frame);
+            const start = performance.now();
+            s.world.step(
+              1 / 30,
+              undefined,
+              zoom,
+              s.bounds,
+              undefined,
+              env,
+              0.9,
+              metersPerCssPx({ lng: s.center[0], lat: s.center[1], zoom }) * 10,
+            );
+            const moved = performance.now();
+            const visible = s.world.visible(
+              zoom,
+              s.levels,
+              s.center,
+              { rain: env.rain, sunAltitude: 40 },
+              s.bounds,
+            );
+            const selected = performance.now();
+            agents = pack(
+              out,
+              s.grid,
+              visible,
+              themes.dark,
+              glyph,
+              undefined,
+              glyphs,
+              s.world.visiblePuffs,
+            );
+            const packed = performance.now();
+            if (profiler) {
+              profiler.add('step', moved - start);
+              profiler.add('visible', selected - moved);
+              profiler.add('pack', packed - selected);
+              profiler.draw(packed - start, agents);
+              profiler.end();
             }
+            const completed = profiler?.time();
+            for (const tile of worldTiles(s.world).values()) {
+              maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
+              maxServices = Math.max(maxServices, tile.scenes.services.size);
+              for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
+            }
+            if (frame >= warmup) {
+              timings.step.push(moved - start);
+              timings.visible.push(selected - moved);
+              timings.pack.push(packed - selected);
+              timings.combined.push(
+                callbackStart === undefined || completed === undefined
+                  ? packed - start
+                  : completed - callbackStart,
+              );
+            }
+            if (frame === warmup - 1) profiler?.reset();
+          },
+          result() {
             return {
               stages: Object.fromEntries(
                 Object.entries(timings).map(([k, v]) => [k, summary(v)]),
@@ -571,75 +669,105 @@ try {
               ),
               heapDelta: process.memoryUsage().heapUsed - heapBefore,
               profile: profiler?.snapshot(),
+              timings,
             };
-          };
-          const oldRuns: ReturnType<typeof measure>[] = [],
-            currentRuns: ReturnType<typeof measure>[] = [];
-          for (let run = 0; run < runs; run++) {
-            if (run % 2) {
-              currentRuns.push(measure(LifeWorld, packLife));
-              oldRuns.push(measure(before.LifeWorld, oldDraw.packLife));
-            } else {
-              oldRuns.push(measure(before.LifeWorld, oldDraw.packLife));
-              currentRuns.push(measure(LifeWorld, packLife));
-            }
-          }
-          const aggregate = (rs: typeof oldRuns, stage: Stages) => ({
-            median: quantile(
-              rs.map((r) => r.stages[stage].median),
-              0.5,
-            ),
-            p95: quantile(
-              rs.map((r) => r.stages[stage].p95),
-              0.5,
-            ),
-          });
-          const stages = Object.fromEntries(
-            (['step', 'visible', 'pack', 'combined'] as const).map((stage) => {
-              const old = aggregate(oldRuns, stage),
-                next = aggregate(currentRuns, stage);
-              return [
-                stage,
-                {
-                  baseline: old,
-                  current: next,
-                  medianGain: 1 - next.median / old.median,
-                  p95Change: next.p95 / old.p95 - 1,
-                },
-              ];
-            }),
-          );
-          const instrumentation = process.argv.includes('--overhead')
-            ? { plain: [] as typeof currentRuns, profiled: [] as typeof currentRuns }
-            : undefined;
-          if (instrumentation)
-            for (let run = 0; run < runs; run++) {
-              if (run % 2) {
-                instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
-                instrumentation.plain.push(measure(LifeWorld, packLife));
-              } else {
-                instrumentation.plain.push(measure(LifeWorld, packLife));
-                instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
-              }
-            }
-          rows.push({
-            name,
-            dense: kind !== 'sparse',
-            stages,
-            oldRuns,
-            currentRuns,
-            instrumentation,
-          });
-          const step = stages.step!;
-          console.log(
-            `${name}: step median ${(step.medianGain * 100).toFixed(1)}% reduction; p95 ${(step.p95Change * 100).toFixed(1)}% change; ${currentRuns[0]!.simulated} simulated / ${currentRuns[0]!.agents} packed`,
-          );
+          },
+        };
+      };
+      const measure = (
+        Constructor: typeof LifeWorld,
+        pack: typeof packLife,
+        profiler?: FrameProfiler,
+      ) => {
+        const arm = prepareMeasure(Constructor, pack, profiler);
+        for (let frame = 0; frame < warmup + samples; frame++) arm.sample(frame);
+        return arm.result();
+      };
+      // Warm both graphs and the shared caller before retaining any paired observations.
+      const calibrationA = prepareMeasure(before.LifeWorld, oldDraw.packLife),
+        calibrationB = prepareMeasure(LifeWorld, packLife);
+      for (let frame = 0; frame < warmup + samples; frame++) {
+        if (frame % 2) {
+          calibrationB.sample(frame);
+          calibrationA.sample(frame);
+        } else {
+          calibrationA.sample(frame);
+          calibrationB.sample(frame);
         }
+      }
+      const oldRuns: ReturnType<typeof measure>[] = [],
+        currentRuns: ReturnType<typeof measure>[] = [];
+      for (let run = 0; run < runs; run++) {
+        const a = prepareMeasure(before.LifeWorld, oldDraw.packLife),
+          b = prepareMeasure(LifeWorld, packLife);
+        for (let frame = 0; frame < warmup + samples; frame++) {
+          if (run % 2) {
+            b.sample(frame);
+            a.sample(frame);
+          } else {
+            a.sample(frame);
+            b.sample(frame);
+          }
+        }
+        oldRuns.push(a.result());
+        currentRuns.push(b.result());
+      }
+      // Pool retained samples; individual runs have relatively few tail observations.
+      const aggregate = (rs: typeof oldRuns, stage: Stages) =>
+        summary(rs.flatMap((r) => r.timings[stage]));
+      const stages = Object.fromEntries(
+        (['step', 'visible', 'pack', 'combined'] as const).map((stage) => {
+          const old = aggregate(oldRuns, stage),
+            next = aggregate(currentRuns, stage);
+          return [
+            stage,
+            {
+              baseline: old,
+              current: next,
+              medianGain: 1 - next.median / old.median,
+              p95Change: next.p95 / old.p95 - 1,
+            },
+          ];
+        }),
+      );
+      const instrumentation = process.argv.includes('--overhead')
+        ? { plain: [] as typeof currentRuns, profiled: [] as typeof currentRuns }
+        : undefined;
+      if (instrumentation)
+        for (let run = 0; run < runs; run++) {
+          if (run % 2) {
+            instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
+            instrumentation.plain.push(measure(LifeWorld, packLife));
+          } else {
+            instrumentation.plain.push(measure(LifeWorld, packLife));
+            instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
+          }
+        }
+      rows.push({
+        name,
+        dense: kind !== 'sparse',
+        stages,
+        oldRuns,
+        currentRuns,
+        instrumentation,
+        observedCues,
+      });
+      const step = stages.step!;
+      console.log(
+        `${name}: step median ${(step.medianGain * 100).toFixed(1)}% reduction; p95 ${(step.p95Change * 100).toFixed(1)}% change; ${currentRuns[0]!.simulated} simulated / ${currentRuns[0]!.agents} packed`,
+      );
+    }
     if (!rows.length) throw new Error('No fixtures matched --case');
     if ((await currentSourceHash(root)) !== currentHash)
       throw new Error('Runtime source changed during the benchmark; rerun for a stable comparison');
     const regressions = rows
-      .filter((r) => r.stages.step!.p95Change > 0.05 || r.stages.combined!.p95Change > 0.05)
+      .filter((r) =>
+        vehicleEffects
+          ? (['step', 'combined'] as const).some(
+              (stage) => r.stages[stage]!.medianGain < -0.15 || r.stages[stage]!.p95Change > 0.2,
+            )
+          : r.stages.step!.p95Change > 0.05 || r.stages.combined!.p95Change > 0.05,
+      )
       .map((r) => r.name);
     const denseMedianPass = rows
       .filter((r) => r.dense)
@@ -649,14 +777,27 @@ try {
       at: new Date().toISOString(),
       baseline,
       allowDiff,
+      allowDecorativeDiff,
       baselineHash: control ? currentHash : frozen.hash,
       control,
+      vehicleEffects,
       currentHash,
+      currentGraphHash: changedGraph.hash,
+      controlPass: control
+        ? rows.every((r) =>
+            ['step', 'combined'].every((stage) => {
+              const v = r.stages[stage as Stages]!;
+              return Math.abs(v.medianGain) <= 0.05 && Math.abs(v.p95Change) <= 0.05;
+            }),
+          )
+        : undefined,
       gate: {
         denseMedianPass,
         regressions,
-        pass: denseMedianPass && regressions.length === 0,
-        thresholds: { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
+        pass: (vehicleEffects || denseMedianPass) && regressions.length === 0,
+        thresholds: vehicleEffects
+          ? { stepAndCombinedMedianRegression: 0.15, stepAndCombinedP95Regression: 0.2 }
+          : { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
         requiresRepeat: true,
       },
       lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
@@ -665,6 +806,7 @@ try {
       }).trim(),
       environment: {
         node: process.version,
+        processPriority: getPriority(),
         platform: platform(),
         os: release(),
         cpu: cpus()[0]?.model,
@@ -679,6 +821,9 @@ try {
         casePrefix: arg('case'),
         cells: [10, 18],
         clearanceMinimumMeters: 0.9,
+        pairing: `interleaved frames; ${runs / 2} A-first and ${runs / 2} B-first runs`,
+        calibrationFramesPerArm: warmup + samples,
+        aggregation: 'median and p95 of all retained samples; raw runs preserved',
         transitFleet: 'jeepney',
         profiled: false,
       },

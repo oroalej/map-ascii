@@ -29,6 +29,7 @@ const flush = async () => {
 };
 const result = (clock: number): FrameResult => ({
   agents: [],
+  puffs: new Float64Array(0),
   procession: undefined,
   signalClock: clock,
 });
@@ -218,7 +219,7 @@ describe('pipelined Life host', () => {
     );
     host.request(s.input);
     host.sync([]);
-    resolve(result(1));
+    resolve({ ...result(1), puffs: new Float64Array([1, 2, 3, 4, 5, 6, 7, 8]) });
     await flush();
     expect(host.latest()).toBeUndefined();
     expect(host.request(s.input)).toBe(true);
@@ -227,6 +228,31 @@ describe('pipelined Life host', () => {
     await flush();
     expect(host.latest()).toBeUndefined();
     expect(host.request(s.input)).toBe(false);
+  });
+  it('clears puff packets with actors and never restores a stale generation', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    const packet = new Float64Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    mock.frame.mockResolvedValueOnce({ ...result(1), puffs: packet });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.puffs).toBe(packet);
+    let finish!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((r) => {
+          finish = r;
+        }),
+    );
+    host.request(s.input);
+    host.clearTiles();
+    expect(host.latest()?.puffs.length).toBe(0);
+    finish({ ...result(2), puffs: packet });
+    await flush();
+    expect(host.latest()?.puffs.length).toBe(0);
+    host.dispose();
   });
 
   it('invalidates changed residency and hard clears, but accepts frames across identical syncs', async () => {

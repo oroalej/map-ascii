@@ -34,8 +34,6 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
 
 /** At most this many agents are drawn, those nearest the view's center first. */
 export const MAX_VISIBLE_AGENTS = 1200;
-export { BRAKE } from './lamps';
-export { PUFF } from './exhaust';
 /** At most this many agents live in one tile. */
 export const MAX_TILE_AGENTS = 600;
 /** A longer frame (a background tab) is simulated as this long, so agents don't jump. */

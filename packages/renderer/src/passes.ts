@@ -461,6 +461,7 @@ export function lifePass(
   sun?: Sun | null,
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
+  puffs?: Float64Array,
 ): number {
   const { cols, rows } = targets;
   const lifeTexels = texels(targets).life;
@@ -481,6 +482,7 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
+    puffs,
   );
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();

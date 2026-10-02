@@ -25,6 +25,12 @@ export const TURN_SIGNAL = {
   duty: 0.5,
   gap: 1,
 } as const;
+/** Shared phase for indicators and hazards, including negative simulation clocks. */
+export function blinkOn(seed: number, clock: number) {
+  const offset = ((seed >>> 0) / 0x1_0000_0000) * TURN_SIGNAL.period;
+  const phase = (((clock + offset) % TURN_SIGNAL.period) + TURN_SIGNAL.period) % TURN_SIGNAL.period;
+  return phase < TURN_SIGNAL.period * TURN_SIGNAL.duty;
+}
 export type TurnSide = 'left' | 'right';
 export type TurnSignal = Readonly<{ side: TurnSide; on: boolean }>;
 
@@ -69,7 +75,5 @@ export function visibleTurnSignal(
 ): TurnSignal | undefined {
   const side = routing?.signal?.side ?? (routing?.indicating ? routing.plan?.side : undefined);
   if (!side || !routing) return;
-  const offset = ((routing.seed >>> 0) / 0x1_0000_0000) * TURN_SIGNAL.period;
-  const phase = (((clock + offset) % TURN_SIGNAL.period) + TURN_SIGNAL.period) % TURN_SIGNAL.period;
-  return { side, on: phase < TURN_SIGNAL.period * TURN_SIGNAL.duty };
+  return { side, on: blinkOn(routing.seed, clock) };
 }

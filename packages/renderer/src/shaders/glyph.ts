@@ -27,7 +27,7 @@ import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BRAKE_COLOR, BRAKE_LAMP } from '../life/lamps';
-import { PUFF_COLOR } from '../life/exhaust';
+import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/exhaust';
 import {
   CROWN_LIGHT,
   EDGE_INK,
@@ -286,7 +286,7 @@ vec3 personColor(int byte, float coverage) {
   int part = (byte >> 4) & 7;
   // A stamped figure's cells say which ink they show (life/draw.ts stampFigure).
   if (part == ${PersonPart.puff}) {
-    vec3 smoke = (index & 8) == 0 ? vec3(${PUFF_COLOR.diesel.map(float).join(', ')}) : vec3(${PUFF_COLOR.twoStroke.map(float).join(', ')});
+    vec3 smoke = (index & ${PUFF_KIND_BIT}) == 0 ? vec3(${PUFF_COLOR.diesel.map(float).join(', ')}) : vec3(${PUFF_COLOR.twoStroke.map(float).join(', ')});
     return mix(daylit(smoke), smoke * 0.65, lamps() * 0.7);
   }
   if (part == ${PersonPart.skin}) return daylit(u_colors[u_person]);
@@ -538,7 +538,7 @@ void main() {
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
-    if (puff) color = mix(back, color, 1.0 - float(lifeByte & 7) / 7.0);
+    if (puff) color = mix(back, color, 1.0 - float(lifeByte & ${PUFF_AGE_MASK}) / ${float(PUFF_AGE_MASK)});
     o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }

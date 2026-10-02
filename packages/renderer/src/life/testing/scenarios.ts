@@ -187,6 +187,7 @@ export function makeScenario(
   seed = 1,
   Simulation: typeof LifeWorld = LifeWorld,
   profiler?: FrameProfiler,
+  zoom = 18,
 ) {
   const tiles = scenarioTiles(kind, count, seed);
   const traffic =
@@ -195,7 +196,7 @@ export function makeScenario(
   world.sync(tiles);
   const center = tileToLngLat(tiles[0]!.tile, { x: 2048, y: 2048 });
   const size = mobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 };
-  const camera = { lng: center[0], lat: center[1], zoom: 18 };
+  const camera = { lng: center[0], lat: center[1], zoom };
   const [[west, south], [east, north]] = viewportFor(camera, size).getBounds() as [
     number[],
     number[],
@@ -213,7 +214,7 @@ export function makeScenario(
     cellHeight: 18,
     toCell,
   };
-  world.visible(18, levels, center, undefined, bounds);
+  world.visible(zoom, levels, center, undefined, bounds);
   return {
     world,
     tiles,
@@ -229,8 +230,8 @@ export function makeScenario(
     },
     step(frame: number, dt = 1 / 30, minimum = 0.9) {
       const env = this.environment(frame);
-      world.step(dt, undefined, 18, bounds, undefined, env, minimum);
-      return world.visible(18, levels, center, { rain: env.rain, sunAltitude: 40 }, bounds);
+      world.step(dt, undefined, zoom, bounds, undefined, env, minimum);
+      return world.visible(zoom, levels, center, { rain: env.rain, sunAltitude: 40 }, bounds);
     },
   };
 }
@@ -242,12 +243,12 @@ function tileState(key: string, tile: TileLife, clock = tile.elapsed) {
     key,
     elapsed: tile.elapsed,
     // Benchmark fixtures also inspect frozen pre-exhaust revisions.
-    puffs: tile.puffs?.snapshot(clock) ?? [],
+    decorations: {
+      puffs: tile.puffs?.snapshot(clock) ?? [],
+      effects: tile.movers.map((m) => vehicleEffects(m)),
+    },
     flocks: tile.flocks,
-    movers: tile.movers.map((m) => {
-      const state = vehicleEffects(m);
-      return state ? { ...m, ...state } : m;
-    }),
+    movers: tile.movers,
     gatherers: tile.gatherers,
     parked: tile.parked,
     stalls: tile.stalls,

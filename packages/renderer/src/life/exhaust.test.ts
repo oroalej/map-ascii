@@ -28,6 +28,7 @@ function replay(hz: number, kind: PuffKind = 'diesel', idle = false) {
         events.push({ at, life, spread });
         // Identical accepted pose histories: exact birth position and partial-frame advection.
         store.add({
+          sourceId: 1,
           x: (PUFF.drift + spread) * (clock - at),
           y: 0,
           t0: at,
@@ -113,6 +114,7 @@ describe('puff ring', () => {
     const store = new PuffStore();
     for (let i = 0; i < PUFF.cap + 10; i++)
       store.add({
+        sourceId: 1,
         x: i,
         y: 0,
         t0: 0,
@@ -139,6 +141,7 @@ describe('puff ring', () => {
     const store = new PuffStore();
     store.advance(1, 0.1, undefined, 1);
     store.add({
+      sourceId: 1,
       x: 0,
       y: 0,
       t0: 1,

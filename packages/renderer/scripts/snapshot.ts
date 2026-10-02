@@ -31,14 +31,24 @@ export async function snapshotRevision(root: string, revision: string, destinati
     .trim()
     .split('\n')
     .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'));
+  return freezeSources(root, destination, paths, (path) =>
+    execFileSync('git', ['show', `${revision}:${path}`], {
+      cwd: root,
+      encoding: 'utf8',
+    }).replace(/\r\n/g, '\n'),
+  );
+}
+async function freezeSources(
+  root: string,
+  destination: string,
+  paths: string[],
+  sourceOf: (path: string) => Promise<string> | string,
+) {
   const hash = createHash('sha256');
   await mkdir(destination, { recursive: true });
   await writeFile(join(destination, 'package.json'), '{"type":"module"}');
   for (const path of paths) {
-    const source = execFileSync('git', ['show', `${revision}:${path}`], {
-      cwd: root,
-      encoding: 'utf8',
-    }).replace(/\r\n/g, '\n');
+    const source = await sourceOf(path);
     hash.update(path).update('\0').update(source);
     const target = join(destination, path);
     await mkdir(dirname(target), { recursive: true });
@@ -65,6 +75,29 @@ export async function snapshotRevision(root: string, revision: string, destinati
     hash: hash.digest('hex'),
     path: (file: string) => pathToFileURL(resolve(destination, 'packages/renderer/src', file)).href,
   };
+}
+/** Freeze the working tree exactly like a revision, avoiding static-import/load-order bias. */
+export async function snapshotCurrent(root: string, destination: string) {
+  const paths = execFileSync(
+    'git',
+    [
+      'ls-files',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      '--',
+      'packages/renderer/src',
+      'packages/shared/src',
+    ],
+    { cwd: root, encoding: 'utf8' },
+  )
+    .trim()
+    .split('\n')
+    .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && existsSync(join(root, p)))
+    .sort();
+  return freezeSources(root, destination, paths, async (p) =>
+    (await readFile(join(root, p), 'utf8')).replace(/\r\n/g, '\n'),
+  );
 }
 export async function currentSourceHash(root: string) {
   const paths = execFileSync(
