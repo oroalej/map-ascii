@@ -6,10 +6,22 @@ import {
   resetOverlay,
   type LabelCandidate,
 } from './labels';
-import { labelFitsArea, labelIntersectsArea, labelTouchesArea, layoutLabels } from './label-layout';
+import {
+  labelFitsArea,
+  labelIntersectsArea,
+  labelTouchesArea,
+  layoutLabels,
+  rotatedLabelBox,
+  TAKEN_PAD,
+  ROTATED_HALO_HEIGHT,
+} from './label-layout';
+import { screenArea, type View } from './grid';
+import { labelScreenArea } from './label-candidates';
 import {
   KEEP_OVERHANG,
   STREET_REPEAT,
+  retentionArea,
+  type LabelSlot,
   type LabelMemory,
   type PlaceStability,
 } from './label-stability';
@@ -24,11 +36,114 @@ const label = (over: Partial<LabelCandidate> = {}): LabelCandidate => ({
   ...over,
 });
 const repeat = repeatDistance;
+const remember = (id: number, slot: LabelSlot): LabelMemory =>
+  new Map([[id, { slot, visible: true }]]);
 const ids = (labels: readonly { label: LabelCandidate }[]) => labels.map(({ label }) => label.id);
 const place = (candidates: LabelCandidate[], stability: PlaceStability = {}, at = area) =>
   layoutLabels(createOverlay(at.right, at.bottom), candidates, at, 1.8, stability, repeat);
 
 describe('stable placement layouts', () => {
+  it.each([
+    { edge: 'left', col: -5, row: 0, outsideCol: -6, outsideRow: 0, bottom: 1, slot: 2 },
+    { edge: 'right', col: 24, row: 0, outsideCol: 25, outsideRow: 0, bottom: 1, slot: 3 },
+    { edge: 'top', col: 10, row: -4, outsideCol: 10, outsideRow: -5, bottom: 20, slot: 0 },
+    { edge: 'bottom', col: 10, row: 23, outsideCol: 10, outsideRow: 24, bottom: 20, slot: 1 },
+  ] as const)('retains exactly three cells and rejects four at the $edge edge', (fixture) => {
+    const at = { ...area, bottom: fixture.bottom };
+    const kept = place([label(fixture)], { memory: remember(1, fixture.slot) }, at);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.slot).toBe(fixture.slot);
+    const box = kept[0]!.textBounds;
+    const overhang =
+      fixture.edge === 'left'
+        ? -box.left
+        : fixture.edge === 'top'
+          ? -box.top
+          : fixture.edge === 'right'
+            ? box.left + box.width - 20
+            : box.top + box.height - fixture.bottom;
+    expect(overhang).toBe(3);
+    expect(
+      place(
+        [label({ col: fixture.outsideCol, row: fixture.outsideRow })],
+        {
+          memory: remember(1, fixture.slot),
+        },
+        at,
+      ),
+    ).toEqual([]);
+    expect(place([label(fixture)], {}, at)).toEqual([]);
+  });
+  it('measures the retained margin from fully visible cells during a fractional shift', () => {
+    const view: View = {
+      camera: { lng: 0, lat: 0, zoom: 18 },
+      width: 200,
+      height: 18,
+      dpr: 1,
+      cellDev: { w: 5, h: 9 },
+      labelDev: { w: 10, h: 18 },
+      detailZoom: 19,
+    };
+    const grid = { originCol: 0, originRow: 0, shiftX: 5, shiftY: 0 };
+    const admission = screenArea(view, grid, view.labelDev);
+    const screen = labelScreenArea(view, grid);
+    const kept = place([label({ col: -4 })], { memory: remember(1, 2), screen }, admission);
+    expect(admission.left).toBe(1);
+    expect(screen.left).toBe(0.5);
+    expect(kept[0]?.textBounds.left).toBe(-2);
+    expect(screen.left - kept[0]!.textBounds.left).toBe(2.5);
+    expect(place([label({ col: -5 })], { memory: remember(1, 2), screen }, admission)).toEqual([]);
+    expect(TAKEN_PAD).toBe(KEEP_OVERHANG + 1);
+  });
+  it.each([false, true])(
+    'keeps the visible street during repeated small pans (reversed=%s)',
+    (reversed) => {
+      const at = { left: 0, top: 0, right: 80, bottom: 30 };
+      const memory: LabelMemory = new Map([
+        [10, { slot: 0, visible: true }],
+        [20, { slot: 0, visible: true }],
+      ]);
+      for (const shift of [-5, -3, -5, -3, -5, -3]) {
+        const candidates = [10, 20].map((id, i) =>
+          label({
+            id,
+            text: 'Elias St',
+            rank: LabelRank.street,
+            col: 30,
+            row: 2 + i * 16 + shift,
+          }),
+        );
+        if (reversed) candidates.reverse();
+        const layouts = place(candidates, { memory, screen: at }, at);
+        expect(
+          ids(layouts.filter(({ textBounds }) => labelIntersectsArea(textBounds, at))),
+        ).toEqual([20]);
+        expect(memory.get(20)).toEqual({ slot: 0, visible: true });
+        if (memory.has(10)) expect(memory.get(10)?.visible).toBe(false);
+      }
+    },
+  );
+  it('keeps the original rotated rounding at negative and near-integer edges', () => {
+    for (const angle of [-Math.PI / 2, -1.1, 0, 0.3, Math.PI / 2])
+      for (const aspect of [0.6, 1, 1.8, 2.5, 5])
+        for (const width of [1, 5, 7, 18]) {
+          const c = Math.abs(Math.cos(angle)),
+            s = Math.abs(Math.sin(angle));
+          const w = c * (width + 2) + s * aspect * ROTATED_HALO_HEIGHT;
+          const h = (s * (width + 2)) / aspect + c * ROTATED_HALO_HEIGHT;
+          for (const col of [-100, -1, 0, 100, w / 2 - 0.5, w / 2 - 0.5 + Number.EPSILON]) {
+            const row = -3;
+            const left = Math.floor(col + 0.5 - w / 2),
+              top = Math.floor(row + 0.5 - h / 2);
+            expect(rotatedLabelBox(col, row, width, angle, aspect)).toEqual({
+              left,
+              top,
+              width: Math.ceil(col + 0.5 + w / 2) - left,
+              height: Math.ceil(row + 0.5 + h / 2) - top,
+            });
+          }
+        }
+  });
   it('keeps the existing winner ahead of a new equal-rank duplicate', () => {
     const memory: LabelMemory = new Map();
     place([label({ id: 5 })], { memory });
@@ -36,14 +151,14 @@ describe('stable placement layouts', () => {
     expect(ids(place([label(), label({ id: 5 })]))).toEqual([1]);
   });
   it('places a new higher rank before a retained lower rank', () => {
-    const memory: LabelMemory = new Map([[5, 2]]);
+    const memory: LabelMemory = remember(5, 2);
     const placed = place(
       [label({ id: 5, text: 'FGHIJ', rank: LabelRank.street }), label({ rank: LabelRank.city })],
       { memory },
     );
     expect(placed[0]?.label.id).toBe(1);
     expect(placed[0]?.slot).toBe(2);
-    expect(memory.get(5)).not.toBe(2);
+    expect(memory.get(5)?.slot).not.toBe(2);
   });
   it('keeps its above slot after the below blocker is removed', () => {
     const memory: LabelMemory = new Map();
@@ -63,16 +178,16 @@ describe('stable placement layouts', () => {
     expect(place([panned], { memory })[0]?.slot).toBe(2);
     expect(place([panned])).toEqual([]);
     const target = label({ col: 15, text: 'ABCDE' });
-    expect(place([target], { memory: new Map([[1, 2]]) })[0]?.slot).toBe(2);
+    expect(place([target], { memory: remember(1, 2) })[0]?.slot).toBe(2);
     expect(place([target]).some(({ slot }) => slot === 2)).toBe(false);
     // Put every slot beyond the right edge, including the left fallback.
     const outside = label({ col: area.right + KEEP_OVERHANG + 1 + 6 });
-    expect(place([outside], { memory: new Map([[1, 2]]) })).toEqual([]);
+    expect(place([outside], { memory: remember(1, 2) })).toEqual([]);
   });
   it('uses strict admission for new text and expanded admission for retained text', () => {
     const onlyRight = label({ col: -4 });
     expect(labelFitsArea(onlyRight, area)).toBe(false);
-    expect(labelFitsArea(onlyRight, area, 1.8, true)).toBe(true);
+    expect(labelFitsArea(onlyRight, retentionArea(area, true), 1.8)).toBe(true);
   });
   it('puts a focused landmark ahead of a city, and selection ahead of hover', () => {
     const landmark = label({ id: 5 }),
@@ -87,7 +202,7 @@ describe('stable placement layouts', () => {
     expect(ids(place([a, b], {}, roomy))).toEqual([1]);
     expect(ids(place([a, { ...b, col: a.col + STREET_REPEAT }], {}, roomy))).toEqual([1, 2]);
     expect(ids(place([a, { ...b, col: a.col, row: 29 }], {}, roomy))).toEqual([1, 2]);
-    expect(ids(place([a, b], { memory: new Map([[2, 0]]) }, roomy))).toEqual([2]);
+    expect(ids(place([a, b], { memory: remember(2, 0) }, roomy))).toEqual([2]);
     expect(
       ids(
         place(
@@ -102,7 +217,7 @@ describe('stable placement layouts', () => {
     ).toEqual([1]);
   });
   it('refills exactly the accepted ids and slots and clears stale memory', () => {
-    const memory: LabelMemory = new Map([[99, 1]]);
+    const memory: LabelMemory = remember(99, 1);
     const street = label({
       mode: 'rotated',
       col: 10,
@@ -111,7 +226,7 @@ describe('stable placement layouts', () => {
       runCells: 20,
     });
     place([street], { memory }, { ...area, bottom: 10 });
-    expect([...memory]).toEqual([[1, -1]]);
+    expect([...memory]).toEqual([[1, { slot: -1, visible: true }]]);
     place([], { memory });
     expect(memory.size).toBe(0);
   });
@@ -137,7 +252,7 @@ describe('stable placement layouts', () => {
     );
   });
   it('reserves complete halos while reporting text that intersects the physical screen', () => {
-    const kept = place([label({ col: 0, row: -2 })], { memory: new Map([[1, 0]]) })[0]!;
+    const kept = place([label({ col: 0, row: -2 })], { memory: remember(1, 0) })[0]!;
     expect(kept).toBeDefined();
     expect(labelIntersectsArea(kept.textBounds, area)).toBe(false);
     expect(labelIntersectsArea({ ...kept.textBounds, top: -0.5 }, area)).toBe(true);
@@ -181,7 +296,7 @@ describe('stable placement layouts', () => {
       for (const mode of ['beside', 'rotated'] as const) {
         const ghost = label({ col: 10, row: -2, rank, mode, runCells: 20 });
         const visible = { ...ghost, id: 2, col: 30, row: 5 };
-        const memory: LabelMemory = new Map([[1, mode === 'rotated' ? -1 : 0]]);
+        const memory: LabelMemory = remember(1, mode === 'rotated' ? -1 : 0);
         const placed = place([ghost, visible], { memory }, roomy);
         expect(ids(placed)).toEqual([1, 2]);
         expect(
@@ -196,10 +311,8 @@ describe('stable placement layouts', () => {
     const screen = { ...admission, top: 0.5 };
     const first = label({ col: 10, row: -1 });
     const second = { ...first, id: 2, col: 30, row: 5 };
-    expect(ids(place([first, second], { memory: new Map([[1, 0]]), screen }, admission))).toEqual([
-      1,
-    ]);
-    expect(ids(place([first, second], { memory: new Map([[1, 0]]) }, admission))).toEqual([1, 2]);
+    expect(ids(place([first, second], { memory: remember(1, 0), screen }, admission))).toEqual([1]);
+    expect(ids(place([first, second], { memory: remember(1, 0) }, admission))).toEqual([1, 2]);
   });
   it('checks fallback visibility when a remembered rotated slot no longer fits its run', () => {
     const street = label({ col: 10, mode: 'rotated', runCells: 2 });
@@ -217,7 +330,9 @@ describe('stable placement layouts', () => {
         runCells: 20,
       }),
     );
-    const memory: LabelMemory = new Map(candidates.map(({ id }) => [id, 0]));
+    const memory: LabelMemory = new Map(
+      candidates.map(({ id }) => [id, { slot: 0, visible: true }]),
+    );
     const padded = createOverlay(20, 6),
       byBoxes = { ...createOverlay(20, 6), takenCells: undefined };
     const at = { ...area, bottom: 6 };

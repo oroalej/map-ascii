@@ -77,7 +77,7 @@ describe('overlay placement memory', () => {
     for (const lat of [-2, -4]) {
       const placed = draw([label({ lat })]);
       expect(placed).toHaveLength(1);
-      expect(labelMemory(targets)?.get(1)).toBe(0);
+      expect(labelMemory(targets)?.get(1)).toEqual({ slot: 0, visible: false });
       expect(labelsInView(targets, view, placement.grid, placed)).toEqual([]);
       expect(uploaded.at(-1)?.every((byte) => byte === 0)).toBe(true);
     }

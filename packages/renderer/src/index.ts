@@ -1438,9 +1438,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           hoverIndex,
           labelGrid,
         );
-        if (relabeled) {
-          labelGrid = relabeled.grid;
-          labelsForReport = relabeled.labels;
+        if (relabeled !== undefined) {
+          labelsForReport = relabeled;
           speechGeometry++;
         }
       }

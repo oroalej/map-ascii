@@ -2,7 +2,8 @@ import type { LabelArea, LabelCandidate, LabelMode } from './labels';
 
 /** Below, above, right, left, or a whole word rotated along its street. */
 export type LabelSlot = 0 | 1 | 2 | 3 | -1;
-export type LabelMemory = Map<number, LabelSlot>;
+export type LabelMemoryEntry = { slot: LabelSlot; visible: boolean };
+export type LabelMemory = Map<number, LabelMemoryEntry>;
 export type PlaceStability = {
   memory?: LabelMemory;
   focus?: readonly number[];
@@ -12,7 +13,7 @@ export type PlaceStability = {
   screen?: LabelArea;
 };
 
-/** Retained text may extend this many label cells beyond the screen. */
+/** Retained layouts may extend this many cells beyond the fully visible cell bounds. */
 export const KEEP_OVERHANG = 3;
 /** Street repeat spacing, in horizontal label-cell widths (450 px with the default cells). */
 export const STREET_REPEAT = 45;
@@ -35,11 +36,15 @@ export function orderLabels(
     if (!focus.has(id)) focus.set(id, i);
   });
   const priority = (id: number) => focus.get(id) ?? Infinity;
+  const retained = (id: number) => {
+    const previous = stability.memory?.get(id);
+    return previous ? (previous.visible ? 0 : 1) : 2;
+  };
   return [...candidates].sort(
     (a, b) =>
       priority(a.id) - priority(b.id) ||
       a.rank - b.rank ||
-      Number(stability.memory?.has(b.id) ?? false) - Number(stability.memory?.has(a.id) ?? false) ||
+      retained(a.id) - retained(b.id) ||
       a.id - b.id,
   );
 }

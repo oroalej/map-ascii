@@ -9,20 +9,26 @@ import type { LabelCandidate } from './labels';
 import { forgetLabelPlacement, labelMemory, labelsInView, overlayPass } from './passes';
 import type { TileLabel } from './raster/geometry';
 
+const noFocus: readonly number[] = [];
+
 /** The labels from the last tile draw, so focus can replace only the overlay. */
 export class AtlasLabels {
   private labels = new Map<number, TileLabel>();
-  private placed: LabelCandidate[] = [];
+  private visible: LabelCandidate[] = [];
   private targets: CellTargets | undefined;
   private candidates = new Map<number, LabelCandidate>();
   private prepared: LabelCandidate[] = [];
   private placement: GridPlacement | undefined;
   private focused: readonly number[] = [];
+  private observed = false;
   private inputs:
     | {
         selected: number;
         hover: number;
-        grid: Grid;
+        originCol: number;
+        originRow: number;
+        shiftX: number;
+        shiftY: number;
         zoom: number;
         width: number;
         height: number;
@@ -41,11 +47,13 @@ export class AtlasLabels {
     if (this.targets !== targets) this.clear();
     this.targets = targets;
     this.placement = placement;
-    this.inputs = undefined;
+    this.observed = false;
     const memory = labelMemory(targets);
-    const previous = new Map([...this.labels].filter(([id]) => memory?.has(id)));
+    const previous = new Map<number, TileLabel>();
+    for (const [id, label] of this.labels) if (memory?.has(id)) previous.set(id, label);
     const area = screenArea(view, placement.grid, view.labelDev),
-      screen = labelScreenArea(view, placement.grid);
+      screen = labelScreenArea(view, placement.grid),
+      retained = retentionArea(area, true);
     const aspect = view.labelDev.h / view.labelDev.w;
     const candidates = new Map<TileLabel, LabelCandidate | undefined>();
     const candidate = (label: TileLabel) => {
@@ -61,7 +69,7 @@ export class AtlasLabels {
         const prepared = candidate(label);
         return (
           prepared !== undefined &&
-          labelFitsArea(prepared, area, aspect, memory?.has(label.id) ?? false)
+          labelFitsArea(prepared, memory?.has(label.id) ? retained : area, aspect)
         );
       },
       (label) => {
@@ -73,9 +81,9 @@ export class AtlasLabels {
           labelTouchesArea(
             prepared,
             screen,
-            retentionArea(area, memory?.has(label.id) ?? false),
+            memory?.has(label.id) ? retained : area,
             aspect,
-            memory?.get(label.id),
+            memory?.get(label.id)?.slot,
           );
         visible.set(label, onScreen);
         return onScreen;
@@ -90,6 +98,8 @@ export class AtlasLabels {
         this.prepared.push(prepared);
       }
     }
+    // Layout applies its own priorities. Reporting keeps the ordinary rank/id order.
+    this.prepared.sort((a, b) => a.rank - b.rank || a.id - b.id);
   }
 
   private focus(
@@ -98,14 +108,20 @@ export class AtlasLabels {
     grid: Grid,
     selected: number,
     hover: number,
-  ): number[] {
+  ): readonly number[] {
+    if (selected <= 0 && hover <= 0) return noFocus;
     const memory = labelMemory(targets),
-      area = screenArea(view, grid, view.labelDev);
+      area = screenArea(view, grid, view.labelDev),
+      retained = retentionArea(area, true);
     return labelFocus(selected, hover, (id) => {
       const candidate = this.candidates.get(id);
       return (
         candidate !== undefined &&
-        labelFitsArea(candidate, area, view.labelDev.h / view.labelDev.w, memory?.has(id) ?? false)
+        labelFitsArea(
+          candidate,
+          memory?.has(id) ? retained : area,
+          view.labelDev.h / view.labelDev.w,
+        )
       );
     });
   }
@@ -114,13 +130,14 @@ export class AtlasLabels {
   private observe(view: View, grid: Grid, selected: number, hover: number): boolean {
     const old = this.inputs;
     if (
+      this.observed &&
       old &&
       old.selected === selected &&
       old.hover === hover &&
-      old.grid.originCol === grid.originCol &&
-      old.grid.originRow === grid.originRow &&
-      old.grid.shiftX === grid.shiftX &&
-      old.grid.shiftY === grid.shiftY &&
+      old.originCol === grid.originCol &&
+      old.originRow === grid.originRow &&
+      old.shiftX === grid.shiftX &&
+      old.shiftY === grid.shiftY &&
       old.zoom === view.camera.zoom &&
       old.width === view.width &&
       old.height === view.height &&
@@ -129,17 +146,33 @@ export class AtlasLabels {
       old.h === view.labelDev.h
     )
       return false;
-    this.inputs = {
-      selected,
-      hover,
-      grid: { ...grid },
-      zoom: view.camera.zoom,
-      width: view.width,
-      height: view.height,
-      dpr: view.dpr,
-      w: view.labelDev.w,
-      h: view.labelDev.h,
-    };
+    const inputs = (this.inputs ??= {
+      selected: 0,
+      hover: 0,
+      originCol: 0,
+      originRow: 0,
+      shiftX: 0,
+      shiftY: 0,
+      zoom: 0,
+      width: 0,
+      height: 0,
+      dpr: 0,
+      w: 0,
+      h: 0,
+    });
+    inputs.selected = selected;
+    inputs.hover = hover;
+    inputs.originCol = grid.originCol;
+    inputs.originRow = grid.originRow;
+    inputs.shiftX = grid.shiftX;
+    inputs.shiftY = grid.shiftY;
+    inputs.zoom = view.camera.zoom;
+    inputs.width = view.width;
+    inputs.height = view.height;
+    inputs.dpr = view.dpr;
+    inputs.w = view.labelDev.w;
+    inputs.h = view.labelDev.h;
+    this.observed = true;
     return true;
   }
 
@@ -156,17 +189,7 @@ export class AtlasLabels {
     focus = this.focus(targets, view, placement.grid, selected, hover),
   ): TileLabel[] {
     this.observe(view, placement.grid, selected, hover);
-    this.placed = overlayPass(
-      gl,
-      targets,
-      theme,
-      view,
-      placement,
-      this.prepared,
-      programs,
-      focus,
-      commitMemory,
-    );
+    overlayPass(gl, targets, theme, view, placement, this.prepared, programs, focus, commitMemory);
     this.focused = focus;
     return this.inView(targets, view, placement.grid);
   }
@@ -180,44 +203,34 @@ export class AtlasLabels {
     selected: number,
     hover: number,
     grid: Grid,
-  ): { labels: TileLabel[]; grid: Grid } | undefined {
+  ): TileLabel[] | undefined {
     if (!this.placement || !this.observe(view, grid, selected, hover)) return;
     const focus = this.focus(targets, view, grid, selected, hover);
     if (focus.length === this.focused.length && focus.every((id, i) => id === this.focused[i]))
       return;
     const placement = { ...this.placement, grid };
-    return {
-      labels: this.draw(
-        gl,
-        targets,
-        theme,
-        view,
-        placement,
-        programs,
-        selected,
-        hover,
-        false,
-        focus,
-      ),
-      grid: placement.grid,
-    };
+    return this.draw(gl, targets, theme, view, placement, programs, selected, hover, false, focus);
   }
 
   inView(targets: CellTargets, view: View, grid: Grid): TileLabel[] {
-    return labelsInView(targets, view, grid, this.placed).flatMap(
-      ({ id }) => this.labels.get(id) ?? [],
-    );
+    const labels: TileLabel[] = [];
+    for (const { id } of labelsInView(targets, view, grid, this.prepared, this.visible)) {
+      const label = this.labels.get(id);
+      if (label) labels.push(label);
+    }
+    return labels;
   }
 
   clear(): void {
     if (this.targets) forgetLabelPlacement(this.targets);
     this.targets = undefined;
     this.labels.clear();
-    this.placed = [];
+    this.visible.length = 0;
     this.candidates.clear();
     this.prepared = [];
     this.placement = undefined;
     this.inputs = undefined;
+    this.observed = false;
     this.focused = [];
   }
 }

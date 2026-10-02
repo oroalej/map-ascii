@@ -18,11 +18,22 @@ const label = (id: number, rank = 3): LabelCandidate => ({
 });
 
 describe('placement ordering', () => {
+  it('keeps visible remembered names ahead of ghosts, with focus and rank still first', () => {
+    const candidates = [label(1), label(2), label(3), label(4, 1)];
+    const memory: LabelMemory = new Map([
+      [1, { slot: 0, visible: false }],
+      [2, { slot: 0, visible: true }],
+    ]);
+    expect(orderLabels(candidates, { memory }).map(({ id }) => id)).toEqual([4, 2, 1, 3]);
+    expect(orderLabels(candidates, { memory, focus: [1] }).map(({ id }) => id)).toEqual([
+      1, 4, 2, 3,
+    ]);
+  });
   it('orders focus, rank, kept status and feature id without changing the input', () => {
     const candidates = [label(9, 8), label(5, 3), label(1, 3), label(4, 1), label(7, 7)];
     const memory: LabelMemory = new Map([
-      [5, 0],
-      [7, 1],
+      [5, { slot: 0, visible: true }],
+      [7, { slot: 1, visible: true }],
     ]);
     expect(orderLabels(candidates, { memory, focus: [9, 7] }).map((l) => l.id)).toEqual([
       9, 7, 4, 5, 1,

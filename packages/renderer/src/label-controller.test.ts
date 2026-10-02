@@ -61,6 +61,64 @@ function fixture(atView = view) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('cached atlas labels', () => {
+  it('reports rank/id order independently of selection, hover, memory and fractional shifts', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    const labels = [1, 2, 3].map((id): TileLabel => ({
+      ...street(1 + (id - 1) * 3, 6, 3),
+      id,
+      text: String(id),
+      rank: id === 3 ? LabelRank.city : LabelRank.landmark,
+      angle: undefined,
+      run: undefined,
+    }));
+    const first = draw(labels);
+    expect(first.map(({ id }) => id)).toEqual([3, 1, 2]);
+    const baseline = [...labelMemory(targets)!];
+    const at = placement().grid;
+    for (const [selected, hover] of [
+      [2, 1],
+      [0, 2],
+      [0, 0],
+    ]) {
+      expect(
+        names
+          .relabel(gl, targets, theme, view, programs, selected!, hover!, at)
+          ?.map(({ id }) => id),
+      ).toEqual([3, 1, 2]);
+      expect([...labelMemory(targets)!]).toEqual(baseline);
+    }
+    expect(names.inView(targets, view, { ...at, shiftX: 1 }).map(({ id }) => id)).toEqual([
+      3, 1, 2,
+    ]);
+    expect(draw([...labels].reverse()).map(({ id }) => id)).toEqual([3, 1, 2]);
+    expect(first.map(({ id }) => id)).toEqual([3, 1, 2]);
+  });
+  it('does no focus geometry when both selected and hovered ids are absent, even during shifts', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    draw([street(3, 6)]);
+    const fit = vi.spyOn(layout, 'labelFitsArea');
+    const area = vi.spyOn(grid, 'screenArea');
+    for (let shiftX = 1; shiftX < 10; shiftX++)
+      expect(
+        names.relabel(gl, targets, theme, view, programs, 0, 0, {
+          ...placement().grid,
+          shiftX,
+        }),
+      ).toBeUndefined();
+    expect(fit).not.toHaveBeenCalled();
+    expect(area).not.toHaveBeenCalled();
+  });
+  it('returns an empty array for a redraw that clears visible text, then skips unchanged frames', () => {
+    const { names, targets, gl, theme, programs } = fixture();
+    const at = placement();
+    names.collect(targets, view, at, [street(3, 6)]);
+    names.draw(gl, targets, theme, view, at, programs, 1, 0);
+    const baseline = [...labelMemory(targets)!];
+    const shifted = { ...at.grid, shiftX: 100 };
+    expect(names.relabel(gl, targets, theme, view, programs, 1, 0, shifted)).toEqual([]);
+    expect([...labelMemory(targets)!]).toEqual(baseline);
+    expect(names.relabel(gl, targets, theme, view, programs, 1, 0, shifted)).toBeUndefined();
+  });
   it('prepares each tile copy once and reuses its projection for drawing and focus', () => {
     const { names, targets, gl, theme, programs } = fixture();
     const at = placement();
@@ -97,11 +155,11 @@ describe('cached atlas labels', () => {
     const baseline = [...labelMemory(targets)!];
     const at = placement();
     expect(
-      names.relabel(gl, targets, theme, view, programs, 0, 5, at.grid)?.labels.map(({ id }) => id),
+      names.relabel(gl, targets, theme, view, programs, 0, 5, at.grid)?.map(({ id }) => id),
     ).toEqual([5]);
     expect([...labelMemory(targets)!]).toEqual(baseline);
     expect(
-      names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid)?.labels.map(({ id }) => id),
+      names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid)?.map(({ id }) => id),
     ).toEqual([1]);
     names.collect(targets, view, at, candidates);
     names.draw(gl, targets, theme, view, at, programs, 5, 0);
@@ -120,7 +178,7 @@ describe('cached atlas labels', () => {
       reloaded = { ...old };
     expect(draw([old])[0]).toBe(old);
     expect(draw([longer, reloaded])[0]).toBe(reloaded);
-    expect(labelMemory(targets)?.get(1)).toBe(-1);
+    expect(labelMemory(targets)?.get(1)?.slot).toBe(-1);
     names.clear();
     expect(labelMemory(targets)).toBeUndefined();
     expect(draw([old, longer])[0]).toBe(longer);
@@ -137,8 +195,8 @@ describe('cached atlas labels', () => {
     const old = { ...street(-2, 6, 0), text: 'ABCDE', angle: undefined, run: undefined };
     const incoming = { ...old, lng: -10 };
     expect(draw([old])[0]).toBe(old);
-    expect(labelMemory(targets)?.get(1)).toBe(2);
+    expect(labelMemory(targets)?.get(1)?.slot).toBe(2);
     expect(draw([incoming, old], 0, 13)[0]).toBe(old);
-    expect(labelMemory(targets)?.get(1)).toBe(3);
+    expect(labelMemory(targets)?.get(1)?.slot).toBe(3);
   });
 });

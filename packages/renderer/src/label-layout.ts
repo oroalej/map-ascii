@@ -1,5 +1,6 @@
 import type { LabelArea, LabelCandidate, Overlay } from './labels';
 import {
+  KEEP_OVERHANG,
   labelSlots,
   orderLabels,
   retentionArea,
@@ -15,7 +16,7 @@ function copyBox(out: Box, box: Box) {
   out.height = box.height;
 }
 /** Collision cells reach past the grid by at least the retained overhang plus its halo. */
-export const TAKEN_PAD = 4;
+export const TAKEN_PAD = KEEP_OVERHANG + 1;
 export const LABEL_WIDTH = 18;
 /** Shared by rotated collision geometry and pointer coverage. */
 export const ROTATED_HALO_HEIGHT = 1.4;
@@ -150,16 +151,14 @@ export function rotatedLabelBox(
   aspect = 1.8,
   out: Box = { left: 0, top: 0, width: 0, height: 0 },
 ): Box {
-  const c = Math.abs(Math.cos(angle)),
-    s = Math.abs(Math.sin(angle));
-  const w = c * (width + 2) + s * aspect * ROTATED_HALO_HEIGHT;
-  const h = (s * (width + 2)) / aspect + c * ROTATED_HALO_HEIGHT;
-  const left = Math.floor(col + 0.5 - w / 2),
-    top = Math.floor(row + 0.5 - h / 2);
-  out.left = left;
-  out.top = top;
-  out.width = Math.ceil(col + 0.5 + w / 2) - left;
-  out.height = Math.ceil(row + 0.5 + h / 2) - top;
+  rotatedBounds(col, row, width + 2, ROTATED_HALO_HEIGHT, angle, aspect, out);
+  // Use the original center and extent: left + width can round differently at an integer edge.
+  const right = Math.ceil(col + 0.5 + out.width / 2),
+    bottom = Math.ceil(row + 0.5 + out.height / 2);
+  out.left = Math.floor(out.left);
+  out.top = Math.floor(out.top);
+  out.width = right - out.left;
+  out.height = bottom - out.top;
   return out;
 }
 
@@ -220,15 +219,9 @@ const fitBox: Box = { left: 0, top: 0, width: 0, height: 0 };
 const fitText: Box = { ...fitBox };
 
 /** Eligibility excludes collisions: a competing label must not decide which tile copy wins. */
-export function labelFitsArea(
-  label: LabelCandidate,
-  area: LabelArea,
-  aspect = 1.8,
-  kept = false,
-): boolean {
-  const allowed = retentionArea(area, kept);
+export function labelFitsArea(label: LabelCandidate, area: LabelArea, aspect = 1.8): boolean {
   return labelSlots(label.mode).some((slot) => {
-    return measureSlot(label, slot, aspect, fitBox) && inside(fitBox, allowed);
+    return measureSlot(label, slot, aspect, fitBox) && inside(fitBox, area);
   });
 }
 
@@ -261,6 +254,8 @@ export function layoutLabels(
   const textBounds = { ...box },
     collision = { ...box };
   const names = new Map<string, { col: number; row: number }[]>();
+  const retained = retentionArea(area, true);
+  const screen = stability.screen ?? area;
   for (const label of orderLabels(candidates, stability)) {
     const nearby = names.get(label.text) ?? [];
     if (
@@ -270,8 +265,9 @@ export function layoutLabels(
       )
     )
       continue;
-    const allowed = retentionArea(area, stability.memory?.has(label.id) ?? false);
-    for (const slot of labelSlots(label.mode, stability.memory?.get(label.id))) {
+    const previous = stability.memory?.get(label.id);
+    const allowed = previous ? retained : area;
+    for (const slot of labelSlots(label.mode, previous?.slot)) {
       if (!measureSlot(label, slot, aspect, box, textBounds) || !inside(box, allowed)) continue;
       copyBox(collision, box);
       if (slot !== -1) {
@@ -302,7 +298,7 @@ export function layoutLabels(
               width: metrics.width,
             };
       take(overlay, layout.collision);
-      if (labelIntersectsArea(layout.textBounds, stability.screen ?? area)) {
+      if (labelIntersectsArea(layout.textBounds, screen)) {
         if (!nearby.length) names.set(label.text, nearby);
         nearby.push({ col: label.col, row: label.row });
       }
@@ -312,7 +308,8 @@ export function layoutLabels(
   }
   if (stability.memory && stability.commitMemory !== false) {
     stability.memory.clear();
-    for (const { label, slot } of accepted) stability.memory.set(label.id, slot);
+    for (const { label, slot, textBounds } of accepted)
+      stability.memory.set(label.id, { slot, visible: labelIntersectsArea(textBounds, screen) });
   }
   return accepted;
 }

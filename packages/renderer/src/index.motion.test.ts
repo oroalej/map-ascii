@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAtlas, type Atlas } from './index';
+import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
 import { LifeInspection } from './life/inspection';
 import {
   cellPass,
+  crownPass,
+  labelsInView,
+  overlayPass,
   effectClockPass,
   fixturePass,
   glyphPass,
@@ -25,6 +28,10 @@ import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 import type * as PickingModule from './picking';
+import type { PickResult } from './picking';
+import type * as GpuModule from './gpu';
+import type { TileLabel } from './raster/geometry';
+import { LabelRank } from './labels';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { LifeBuilder } from './life/geometry';
 import type { TileMesh } from './gpu';
@@ -33,16 +40,27 @@ import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
 
+/** Label cases opt into the real CPU overlay; motion cases keep their original empty map. */
+const labelFixture = vi.hoisted(() => ({
+  enabled: false,
+  known: true,
+  loaded: undefined as LoadedTile | undefined,
+  reply: undefined as ((result: PickResult) => void) | undefined,
+  arrive: undefined as (() => void) | undefined,
+  requests: vi.fn(),
+}));
+
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
   deletePrograms: vi.fn(),
   prewarmGlyphPrograms: vi.fn(),
   createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
-  createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 } }),
+  createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 2 } }),
   deleteMapGlyphs: vi.fn(),
   deleteLabelGlyphs: vi.fn(),
 }));
-vi.mock('./gpu', () => ({
+vi.mock('./gpu', async (load) => ({
+  ...(await load<typeof GpuModule>()),
   createCellTargets: (
     _gl: unknown,
     cols: number,
@@ -53,30 +71,49 @@ vi.mock('./gpu', () => ({
   deleteCellTargets: vi.fn(),
   uploadEffectClocks: vi.fn(),
 }));
-vi.mock('./passes', async (load) => ({
-  ...(await load<typeof PassesModule>()),
-  cellPass: vi.fn(),
-  crownPass: vi.fn(),
-  selectPass: vi.fn(),
-  glyphPass: vi.fn(),
-  overlayPass: () => [],
-  lifePass: vi.fn(() => 0),
-  effectClockPass: vi.fn(),
-  lifeRaster: vi.fn(() => null),
-  lightPass: vi.fn(),
-  fixturePass: vi.fn(() => ({ streetlights: false, trafficSignals: false, utilities: false })),
-}));
+vi.mock('./passes', async (load) => {
+  const actual = await load<typeof PassesModule>();
+  return {
+    ...actual,
+    cellPass: vi.fn(),
+    crownPass: vi.fn(),
+    selectPass: vi.fn(),
+    glyphPass: vi.fn(),
+    overlayPass: vi.fn(() => []),
+    labelsInView: vi.fn(actual.labelsInView),
+    lifePass: vi.fn(() => 0),
+    effectClockPass: vi.fn(),
+    lifeRaster: vi.fn(() => null),
+    lightPass: vi.fn(),
+    fixturePass: vi.fn(() => ({ streetlights: false, trafficSignals: false, utilities: false })),
+  };
+});
 vi.mock('./tile-cache', () => ({
   TileCache: class {
-    source = { indexOf: () => 0, feature: () => undefined, pendingCount: 0, decodeMsAverage: 0 };
-    size = 0;
+    source = {
+      indexOf: (id: string) =>
+        labelFixture.enabled && labelFixture.known ? Number(id.split('/')[1]) || 0 : 0,
+      feature: (id: number) =>
+        labelFixture.enabled
+          ? { id: `feature/${id}`, class: 'landmark', name: `Feature ${id}` }
+          : undefined,
+      featureById: (id: string) => (labelFixture.enabled ? { id, class: 'landmark' } : undefined),
+      pendingCount: 0,
+      decodeMsAverage: 0,
+    };
+    size = labelFixture.enabled ? 1 : 0;
+    constructor(_gl: unknown, _url: string, arrive: () => void) {
+      if (labelFixture.enabled) labelFixture.arrive = arrive;
+    }
     tilesToDraw() {
-      return [];
+      return labelFixture.enabled && labelFixture.loaded ? [{ z: 16, x: 32768, y: 32768 }] : [];
     }
     regionTilesFor() {
       return [];
     }
-    get() {}
+    get() {
+      return labelFixture.enabled ? labelFixture.loaded : undefined;
+    }
     suspend() {}
     resume() {}
     destroy() {}
@@ -101,6 +138,10 @@ vi.mock('./readback', () => ({
       _rect: unknown,
       done: (bytes: Uint8Array) => void,
     ) {
+      if (labelFixture.enabled) {
+        labelFixture.requests(fbo, attachment, _rect, done);
+        return;
+      }
       this.pending.push(() =>
         done(
           new Uint8Array(
@@ -117,6 +158,9 @@ vi.mock('./picking', async (load) => ({
   ...(await load<typeof PickingModule>()),
   MAX_HIGHLIGHT: 64,
   Picker: class {
+    constructor(_readback: unknown, _generation: unknown, reply: (result: PickResult) => void) {
+      if (labelFixture.enabled) labelFixture.reply = reply;
+    }
     issue() {}
     hover() {}
     cancelHover() {}
@@ -162,6 +206,8 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    labelFixture.enabled = false;
+    vi.mocked(overlayPass).mockReset().mockReturnValue([]);
     visibility.watched = true;
     vi.mocked(lifeRaster).mockReturnValue(null);
     vi.mocked(lifePass).mockReset().mockReturnValue(0);
@@ -1046,5 +1092,314 @@ describe('live motion preference', () => {
     draw(100);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![9]).toBe(true);
     expect(atlas.getStats().gpuFrameMs).toBeNull();
+  });
+});
+
+describe('label focus in the renderer frame', () => {
+  let atlas: Atlas, canvas: HTMLCanvasElement, next: FrameRequestCallback, time: number;
+  const draw = (at: number) => {
+    time = at;
+    next(at);
+  };
+  const focus = () => vi.mocked(overlayPass).mock.calls.at(-1)?.[7];
+  const hover = (id: number) => {
+    input.intents!.hover([20, 20]);
+    labelFixture.reply!({
+      index: id,
+      click: false,
+      point: [20, 20],
+      camera: atlas.getCamera(),
+      size: { width: 400, height: 300 },
+    });
+  };
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    labelFixture.enabled = true;
+    visibility.watched = true;
+    const actual = await vi.importActual<typeof PassesModule>('./passes');
+    vi.mocked(overlayPass).mockReset().mockImplementation(actual.overlayPass);
+    vi.mocked(labelsInView).mockReset().mockImplementation(actual.labelsInView);
+    vi.mocked(lifePass).mockReset().mockReturnValue(0);
+    vi.mocked(lifeRaster).mockReturnValue(null);
+    labelFixture.known = true;
+    const labels: TileLabel[] = [1, 7, 9].map((id) => ({
+      id,
+      text: `Name ${id}`,
+      lng: 0,
+      lat: 0,
+      rank: LabelRank.landmark,
+      band: { min: 17 },
+    }));
+    // Rasterization is mocked; only crown presence, labels and the empty Life payload are read.
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 1 } },
+      labels,
+      life: new LifeBuilder().finish(),
+    } as LoadedTile;
+    time = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      next = callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    canvas = document.createElement('canvas');
+    Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
+    const gl = {
+      getExtension: () => null,
+      bindTexture: vi.fn(),
+      pixelStorei: vi.fn(),
+      texSubImage2D: vi.fn(),
+      bindBuffer: vi.fn(),
+      bufferData: vi.fn(),
+    } as unknown as WebGL2RenderingContext;
+    vi.spyOn(canvas, 'getContext').mockReturnValue(gl);
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      reducedMotion: true,
+      life: { enabled: false, time: 720, wind: 'storm' },
+    });
+  });
+  afterEach(() => {
+    atlas.destroy();
+    labelFixture.enabled = false;
+    vi.mocked(overlayPass).mockReset().mockReturnValue([]);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the accessible list unchanged through focus and pans while layout priorities change', () => {
+    const reports = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', reports);
+    draw(10);
+    expect(reports.mock.calls[0]?.[0].map(({ featureId }) => featureId)).toEqual([
+      'feature/1',
+      'feature/7',
+      'feature/9',
+    ]);
+    reports.mockClear();
+    atlas.setSelected('feature/7');
+    hover(9);
+    draw(11);
+    expect(focus()).toEqual([7, 9]);
+    atlas.setCamera({ lng: 0.00000001 });
+    draw(12);
+    atlas.setSelected(null);
+    input.intents!.hover(null);
+    draw(13);
+    expect(focus()).toEqual([]);
+    expect(reports).not.toHaveBeenCalled();
+  });
+  it('relabels once for selected/hovered priority without a cell pass or class readback', () => {
+    draw(10);
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    vi.mocked(cellPass).mockClear();
+    vi.mocked(crownPass).mockClear();
+    labelFixture.requests.mockClear();
+    atlas.setSelected('feature/7');
+    hover(9);
+    draw(11);
+    expect(focus()).toEqual([7, 9]);
+    const placed = vi.mocked(overlayPass).mock.results.at(-1)?.value as
+      ReturnType<typeof overlayPass> | undefined;
+    expect(placed?.[0]?.id).toBe(7);
+    expect(labels).not.toHaveBeenCalled();
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(crownPass).not.toHaveBeenCalled();
+    expect(labelFixture.requests).not.toHaveBeenCalled();
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setSelected('feature/7');
+    draw(12);
+    expect(overlayPass).toHaveBeenCalledTimes(passes);
+    atlas.setSelected('feature/9');
+    hover(7);
+    draw(13);
+    expect(focus()).toEqual([9, 7]);
+  });
+  it('does not relabel when focus has no eligible label, including the blackout', () => {
+    draw(10);
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setSelected('feature/20');
+    hover(21);
+    draw(11);
+    expect(overlayPass).toHaveBeenCalledTimes(passes);
+    atlas.setCamera({ zoom: 16 });
+    draw(12);
+    const hiddenPasses = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setSelected('feature/9');
+    draw(13);
+    expect(overlayPass).toHaveBeenCalledTimes(hiddenPasses);
+    expect(focus()).toEqual([]);
+  });
+  it('invalidates hover and speech visibility when focus redraws only labels', () => {
+    const hoverFrames = vi
+      .spyOn(LifeHoverController.prototype, 'update')
+      .mockImplementation(() => {});
+    const speechFrames = vi
+      .spyOn(SpeechController.prototype, 'update')
+      .mockImplementation(() => {});
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    vi.mocked(lifePass).mockImplementation((...args) => {
+      const targets = args[1],
+        speakers = args[12],
+        count = targets.cols * targets.rows;
+      vi.mocked(lifeRaster).mockReturnValue({
+        life: new Uint8Array(count * 4),
+        owners: new Uint32Array(count),
+        revision: 1,
+        light: new Uint8Array(count * 4),
+        lamps: null,
+      });
+      if (speakers) speakers.members = new Uint8Array(count);
+      return args[6].length;
+    });
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    input.intents!.hover([20, 20]);
+    draw(1000);
+    const previousHover = hoverFrames.mock.calls.at(-1)?.[0],
+      previousSpeech = speechFrames.mock.calls.at(-1)?.[0];
+    expect(previousHover).toBeTruthy();
+    expect(previousSpeech).toBeTruthy();
+    vi.mocked(cellPass).mockClear();
+    atlas.setSelected('feature/7');
+    draw(1001);
+    expect(focus()).toEqual([7]);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(hoverFrames.mock.calls.at(-1)?.[0]?.geometry).not.toBe(previousHover?.geometry);
+    expect(speechFrames.mock.calls.at(-1)?.[0]?.geometry).not.toBe(previousSpeech?.geometry);
+  });
+  it('relabels after mouse leave and coalesces focus with a cell redraw', () => {
+    draw(10);
+    hover(7);
+    draw(11);
+    expect(focus()).toEqual([7]);
+    input.intents!.hover(null);
+    draw(12);
+    expect(focus()).toEqual([]);
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setSelected('feature/9');
+    labelFixture.arrive!();
+    draw(13);
+    expect(overlayPass).toHaveBeenCalledTimes(passes + 1);
+    expect(focus()).toEqual([9]);
+  });
+  it('resolves a selection set before its feature and tile arrive', () => {
+    labelFixture.known = false;
+    labelFixture.loaded = undefined;
+    atlas.setSelected('feature/9');
+    draw(10);
+    expect(focus()).toEqual([]);
+    labelFixture.known = true;
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 0 } },
+      labels: [
+        { id: 9, text: 'Later', lng: 0, lat: 0, rank: LabelRank.landmark, band: { min: 17 } },
+      ],
+      life: new LifeBuilder().finish(),
+    } as LoadedTile;
+    labelFixture.arrive!();
+    draw(11);
+    expect(focus()).toEqual([9]);
+  });
+  it('reports changed text and anchors even when the visible feature ids stay the same', () => {
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    draw(10);
+    labels.mockClear();
+    labelFixture.loaded = {
+      ...labelFixture.loaded!,
+      labels: labelFixture.loaded!.labels.map((label) =>
+        label.id === 1 ? { ...label, text: 'New name', lng: 0.00000001 } : label,
+      ),
+    };
+    labelFixture.arrive!();
+    draw(11);
+    expect(labels).toHaveBeenCalledOnce();
+    expect(labels.mock.calls[0]?.[0]).toContainEqual({
+      featureId: 'feature/1',
+      name: 'New name',
+      kind: 'landmark',
+      lngLat: [0.00000001, 0],
+    });
+  });
+  it('publishes only the final payload when a subcell pan and focus change share a frame', () => {
+    draw(10);
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    const visible = vi.mocked(labelsInView).getMockImplementation()!;
+    // Model the old overlay crossing the screen edge during the shift. Once focus is
+    // placed, model a changed final membership containing only name 7. Never publish the interim gap.
+    vi.mocked(labelsInView).mockImplementation((...args) =>
+      focus()?.includes(7) ? visible(...args).filter(({ id }) => id === 7) : [],
+    );
+    vi.mocked(cellPass).mockClear();
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setCamera({ lng: 0.00000001 });
+    hover(7);
+    draw(11);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(overlayPass).toHaveBeenCalledTimes(passes + 1);
+    expect(labels).toHaveBeenCalledOnce();
+    expect(labels.mock.calls[0]?.[0]?.[0]?.featureId).toBe('feature/7');
+    vi.mocked(labelsInView).mockImplementation(visible);
+  });
+  it('does not report unchanged pan payloads or share its comparison snapshot with consumers', () => {
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    draw(10);
+    const initial = labels.mock.calls[0]?.[0] as { name: string; lngLat: number[] }[];
+    initial[0]!.name = 'consumer mutation';
+    initial[0]!.lngLat[0] = 999;
+    labels.mockClear();
+    atlas.setCamera({ lng: 0.00000001 });
+    draw(11);
+    expect(labels).not.toHaveBeenCalled();
+  });
+  it('keeps ordinary due crown animation but adds none for an intervening focus frame', () => {
+    draw(10);
+    atlas.setReducedMotion(false);
+    draw(100);
+    vi.mocked(crownPass).mockClear();
+    vi.mocked(cellPass).mockClear();
+    atlas.setSelected('feature/9');
+    draw(101);
+    expect(crownPass).not.toHaveBeenCalled();
+    expect(cellPass).not.toHaveBeenCalled();
+    draw(150);
+    expect(crownPass).toHaveBeenCalledOnce();
+  });
+  it('shifts subcell pans without placement and restores selection after context recreation', () => {
+    draw(10);
+    atlas.setSelected('feature/9');
+    draw(11);
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setCamera({ lng: 0.00000001 });
+    draw(12);
+    expect(overlayPass).toHaveBeenCalledTimes(passes);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(100);
+    expect(focus()).toEqual([9]);
+    expect(overlayPass).toHaveBeenCalledTimes(passes + 1);
   });
 });

@@ -47,7 +47,7 @@ import {
 } from './labels';
 import { labelScreenArea } from './label-candidates';
 import { labelIntersectsArea } from './label-layout';
-import type { LabelMemory, LabelSlot } from './label-stability';
+import type { LabelMemory, LabelMemoryEntry } from './label-stability';
 import { cellBits } from './life/config';
 import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
@@ -139,8 +139,9 @@ function overlayBuffers(targets: CellTargets) {
 }
 
 /** Read the previous acceptance without resetting its glyphs, collision boxes or slots. */
-export const labelMemory = (targets: CellTargets): ReadonlyMap<number, LabelSlot> | undefined =>
-  overlays.get(targets)?.memory;
+export const labelMemory = (
+  targets: CellTargets,
+): ReadonlyMap<number, LabelMemoryEntry> | undefined => overlays.get(targets)?.memory;
 
 export const forgetLabelPlacement = (targets: CellTargets): void => {
   overlays.delete(targets);
@@ -152,13 +153,16 @@ export function labelsInView(
   view: View,
   grid: Grid,
   placed: readonly LabelCandidate[],
+  out: LabelCandidate[] = [],
 ): LabelCandidate[] {
+  out.length = 0;
   const bounds = overlays.get(targets)?.overlay.placements;
   const area = labelScreenArea(view, grid);
-  return placed.filter(({ id }) => {
-    const box = bounds?.get(id);
-    return box !== undefined && labelIntersectsArea(box, area);
-  });
+  for (const label of placed) {
+    const box = bounds?.get(label.id);
+    if (box !== undefined && labelIntersectsArea(box, area)) out.push(label);
+  }
+  return out;
 }
 
 export function labelsCoverPoint(
