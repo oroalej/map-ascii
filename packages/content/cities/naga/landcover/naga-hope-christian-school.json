@@ -3,74 +3,6 @@
   "title": "Naga Hope Christian School grounds",
   "trees": [
     {
-      "at": [123.198241506, 13.620511235],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198309637, 13.620495436],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198365053, 13.620478943],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198420468, 13.620462449],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198230623, 13.62047918],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198267552, 13.620462686],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198322967, 13.620446193],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198378382, 13.620429699],
-      "crown_m": 11
-    },
-    {
-      "at": [123.19822089, 13.62044643],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198280882, 13.620413443],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198336297, 13.620396949],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198391712, 13.620380456],
-      "crown_m": 11
-    },
-    {
-      "at": [123.198090598, 13.620459687],
-      "crown_m": 14
-    },
-    {
-      "at": [123.198212365, 13.620418069],
-      "crown_m": 14
-    },
-    {
-      "at": [123.198195775, 13.620376388],
-      "crown_m": 14
-    },
-    {
-      "at": [123.19805827, 13.620353613],
-      "crown_m": 14
-    },
-    {
-      "at": [123.198175767, 13.620313714],
-      "crown_m": 14
-    },
-    {
       "at": [123.197805418, 13.619457544],
       "crown_m": 11
     },
@@ -160,19 +92,23 @@
     },
     {
       "at": [123.198656352, 13.620853508],
-      "crown_m": 13
+      "crown_m": 7,
+      "height_m": 5
     },
     {
       "at": [123.198330761, 13.621000966],
-      "crown_m": 10
+      "crown_m": 7,
+      "height_m": 5
     },
     {
       "at": [123.198369703, 13.620925637],
-      "crown_m": 7
+      "crown_m": 7,
+      "height_m": 5
     },
     {
       "at": [123.198423521, 13.62056235],
-      "crown_m": 9
+      "crown_m": 7,
+      "height_m": 5
     },
     {
       "at": [123.198042475, 13.61992185],
@@ -192,23 +128,28 @@
     },
     {
       "at": [123.198569209, 13.620410193],
-      "crown_m": 3
+      "crown_m": 3,
+      "height_m": 5
     },
     {
       "at": [123.198576175, 13.620370755],
-      "crown_m": 3
+      "crown_m": 3,
+      "height_m": 5
     },
     {
       "at": [123.19858314, 13.620331318],
-      "crown_m": 3
+      "crown_m": 3,
+      "height_m": 5
     },
     {
       "at": [123.198568756, 13.620300474],
-      "crown_m": 3
+      "crown_m": 3,
+      "height_m": 5
     },
     {
       "at": [123.198597071, 13.620238968],
-      "crown_m": 3
+      "crown_m": 3,
+      "height_m": 5
     },
     {
       "at": [123.198067646, 13.619964113],
@@ -249,6 +190,41 @@
     {
       "at": [123.198580029, 13.619763563],
       "crown_m": 3.2
+    },
+    {
+      "at": [123.198240224, 13.620499241],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.198311384, 13.620437812],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.19839899, 13.620405238],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.198068518, 13.620390467],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.198497066, 13.62072914],
+      "crown_m": 5,
+      "height_m": 5
+    },
+    {
+      "at": [123.198478193, 13.620680267],
+      "crown_m": 5,
+      "height_m": 5
+    },
+    {
+      "at": [123.198466581, 13.620634728],
+      "crown_m": 5,
+      "height_m": 5
     }
   ],
   "rows": [],
@@ -401,6 +377,10 @@
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",
       "note": "Inspected supplied image; registered to cached OSM roof/pool outlines. Capture and imagery dates unknown. Positions, sizes and counts are estimates; no construction dates inferred. Reference bitmap remains ignored evidence and is not distributed. Mapped footprints are preserved, including alignment uncertainty."
+    },
+    {
+      "title": "Owner correction: sparse classroom planting",
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Seventeen overlapping northern crowns replaced by four dispersed five-metre-high crowns; three small crowns occupy the marked strip between courts. Southern oval planting retained."
     }
   ]
 }

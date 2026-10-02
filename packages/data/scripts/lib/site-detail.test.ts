@@ -42,6 +42,45 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('applies sourced building height without mutating input and rejects missing or exterior targets', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)]],
+      },
+      properties: { id: 'osm:way/2', class: 'building_school', height: 6, variant: 'gabled' },
+    };
+    const pack = {
+      ...detail,
+      walks: [],
+      seating: [],
+      lamps: [],
+      building_overrides: [{ osm_id: building.properties.id, height_m: 9 }],
+    };
+    const original = structuredClone(building);
+    const changed = mergeSiteDetails([parent, building], [pack]).features.find(
+      (f) => f.properties.id === building.properties.id,
+    )!;
+    expect(changed).toEqual({ ...building, properties: { ...building.properties, height: 9 } });
+    expect(building).toEqual(original);
+    for (const input of [
+      [parent],
+      [parent, { ...building, properties: { ...building.properties, height: 0 } }],
+      [parent, { ...building, properties: { ...building.properties, class: 'grass' as const } }],
+      [
+        parent,
+        {
+          ...building,
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [[p(60, 60), p(70, 60), p(70, 70), p(60, 70), p(60, 60)]],
+          },
+        },
+      ],
+    ])
+      expect(() => mergeSiteDetails(input, [pack])).toThrow('standing building inside the site');
+  });
   it('preserves a track infield and rejects exterior or intersecting holes', () => {
     const ring = [p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)];
     const hole = [p(20, 20), p(30, 20), p(30, 30), p(20, 30), p(20, 20)];

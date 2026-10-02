@@ -184,6 +184,12 @@ describe('five owner-referenced landmark adjustments', () => {
     ) as { site: string; id: string; ring: LngLat[] }[];
     const trees = input.filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point');
     for (const mask of masks) {
+      // The latest annotation explicitly replaces these oversized northern groves.
+      if (
+        mask.site === 'naga-hope-christian-school' &&
+        ['west-court-trees', 'west-courtyard-grove'].includes(mask.id)
+      )
+        continue;
       const polygon: Polygon = { type: 'Polygon', coordinates: [[...mask.ring, mask.ring[0]!]] };
       const west = Math.min(...mask.ring.map((p) => p[0])),
         east = Math.max(...mask.ring.map((p) => p[0]));

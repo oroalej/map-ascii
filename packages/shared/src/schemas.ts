@@ -395,6 +395,10 @@ export const SiteDetail = z
     /** Curated landmark selected by this site, when different from its geometry anchor. */
     selection_osm_id: OsmId.optional(),
     structures: z.array(SiteStructure).default([]),
+    /** Sourced height corrections retain the mapped building identity and footprint. */
+    building_overrides: z
+      .array(z.strictObject({ osm_id: OsmId, height_m: z.number().positive().max(255) }))
+      .default([]),
     /** Replace an inaccurate generic roof inference, without changing the OSM footprint. */
     roof_overrides: z
       .array(
@@ -489,6 +493,15 @@ export const SiteDetail = z
     sources: Sources,
   })
   .superRefine((v, ctx) => {
+    if (
+      new Set(v.building_overrides.map((building) => building.osm_id)).size !==
+      v.building_overrides.length
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['building_overrides'],
+        message: 'duplicate building target',
+      });
     if (new Set(v.roof_overrides.map((roof) => roof.osm_id)).size !== v.roof_overrides.length)
       ctx.addIssue({ code: 'custom', path: ['roof_overrides'], message: 'duplicate roof target' });
     if (new Set(v.flagpoles.map((pole) => pole.osm_id)).size !== v.flagpoles.length)

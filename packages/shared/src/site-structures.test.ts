@@ -25,6 +25,19 @@ const detail = {
 };
 
 describe('site structure content', () => {
+  it('validates sourced building heights and rejects duplicate mapped targets', () => {
+    expect(SiteDetail.parse(detail).building_overrides).toEqual([]);
+    const override = { osm_id: 'osm:way/2', height_m: 9 };
+    expect(SiteDetail.safeParse({ ...detail, building_overrides: [override] }).success).toBe(true);
+    for (const height_m of [0, -1, 256, Infinity])
+      expect(
+        SiteDetail.safeParse({ ...detail, building_overrides: [{ ...override, height_m }] })
+          .success,
+      ).toBe(false);
+    expect(
+      SiteDetail.safeParse({ ...detail, building_overrides: [override, override] }).success,
+    ).toBe(false);
+  });
   it('accepts courts, holed tracks and explicit mapped roof wings without ambiguous roof fields', () => {
     expect(SiteStructure.safeParse({ ...part, material: 'pitch', overhead: false }).success).toBe(
       true,

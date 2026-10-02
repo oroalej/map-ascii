@@ -304,6 +304,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
     ground_override?: boolean; // paving only; omitted/false retains ordinary terrace priority
   }[]; // default []; simple closed footprints wholly inside the parent area
   roof_overrides?: { osm_id: string; shape: 'flat' | 'gabled' | 'hipped' | 'pyramidal' }[]; // standing mapped buildings inside the site
+  building_overrides?: { osm_id: string; height_m: number }[]; // sourced height, same standing footprint/id
   flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
   seating: {
@@ -340,6 +341,11 @@ height; it uses ordinary building roof shading and the source site's canonical s
 Roof pieces create no additional school/market activity anchors.
 Optional `roof_overrides` replace a building's generic inferred shape, commonly flattening
 the base under separately traced roof wings, while preserving its footprint and height.
+Optional `building_overrides` correct sourced heights (positive and at most 255 metres)
+without changing mapped footprints or identities. Targets must be standing buildings fully
+inside the site; duplicate, missing and exterior targets fail the build. Omitted/empty
+overrides preserve older layout fingerprints; height changes invalidate them. Storey-based
+estimates must document floor height and uncertain wing assignment in the pack's sources.
 Missing, non-building, exterior and duplicate targets fail. These visual estimates do not
 establish construction history or cadastral ownership.
 

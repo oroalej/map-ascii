@@ -151,6 +151,7 @@ export function mergeSiteDetails(
   const parents = new Set<string>();
   const relocated = new Set<string>();
   const roofTargets = new Set<string>();
+  const buildingTargets = new Set<string>();
   // Validate every anchor before mutation; overlap decisions must not depend on pack order.
   const sites = packs.map((pack) => {
     const parent = features.find((f) => f.properties.id === pack.osm_id);
@@ -234,6 +235,23 @@ export function mergeSiteDetails(
       detail_parent: selectionId,
       ...(metadata && { detail_selection: metadata }),
     };
+    for (const building of pack.building_overrides) {
+      const target = features.find((f) => f.properties.id === building.osm_id);
+      if (buildingTargets.has(building.osm_id))
+        throw new Error(`${pack.id}: duplicate building override ${building.osm_id}`);
+      if (
+        !target ||
+        !isRoofBuilding(target.properties.class) ||
+        !target.properties.height ||
+        !isArea(target.geometry) ||
+        !contained(target.geometry, area)
+      )
+        throw new Error(
+          `${pack.id}: building override ${building.osm_id} must be a standing building inside the site`,
+        );
+      buildingTargets.add(building.osm_id);
+      target.properties.height = building.height_m;
+    }
     for (const roof of pack.roof_overrides) {
       const target = features.find((f) => f.properties.id === roof.osm_id);
       if (roofTargets.has(roof.osm_id))
