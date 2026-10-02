@@ -59,6 +59,18 @@
     {
       "slug": "naga-city-science-high-school",
       "at": [123.20499070349999, 13.6282226585]
+    },
+    {
+      "slug": "penafrancia-shrine",
+      "at": [123.194972191, 13.634302041]
+    },
+    {
+      "slug": "concepcion-pequena-national-high-school",
+      "at": [123.203347611, 13.614412459]
+    },
+    {
+      "slug": "sabang-elementary-school",
+      "at": [123.181661725, 13.62064702]
     }
   ]
 }

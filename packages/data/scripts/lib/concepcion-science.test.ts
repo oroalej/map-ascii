@@ -39,7 +39,7 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
     }
   });
 
-  it('places broad crowns on both Balatas verges only from Magsaysay to the Basilica', () => {
+  it('leaves spaced smaller crowns on both Balatas verges from Magsaysay to the Basilica', () => {
     const cover = Landcover.parse(read('landcover/balatas-road.json'));
     const road = source.find((f) => f.properties.id === 'osm:way/23521696')!;
     const line = (road.geometry as LineString).coordinates as LngLat[];
@@ -50,7 +50,9 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
     const local = (p: LngLat): LngLat => [(p[0] - origin[0]) * scale, (p[1] - origin[1]) * 111320];
     const segments = section.slice(1).map((p, i) => [local(section[i]!), local(p)] as const);
     const sides = new Set<number>();
-    expect(cover.trees).toHaveLength(34);
+    const rows = new Map<number, LngLat[]>();
+    expect(cover.trees.length).toBeLessThanOrEqual(20);
+    expect(cover.trees.length).toBeGreaterThanOrEqual(16);
     for (const tree of cover.trees) {
       const p = local(tree.at);
       const nearest = segments
@@ -66,12 +68,21 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
         })
         .sort((a, b) => a.distance - b.distance)[0]!;
       sides.add(nearest.side);
+      const row = rows.get(nearest.side) ?? [];
+      row.push(p);
+      rows.set(nearest.side, row);
       expect(nearest.distance).toBeGreaterThan((road.properties.width ?? 6) / 2);
       expect(nearest.distance).toBeLessThanOrEqual(8.6);
-      // Every chosen canopy reaches the centreline; intentional leaf overhang is allowed.
-      expect(tree.crown_m! / 2).toBeGreaterThan(nearest.distance);
+      expect(tree.crown_m).toBeGreaterThanOrEqual(11);
+      expect(tree.crown_m).toBeLessThanOrEqual(14);
       expect(tree.height_m).toBe(8);
     }
     expect([...sides].sort()).toEqual([-1, 1]);
+    for (const row of rows.values()) {
+      expect(row.length).toBeGreaterThanOrEqual(7);
+      for (const [i, tree] of row.entries())
+        for (const other of row.slice(i + 1))
+          expect(Math.hypot(tree[0] - other[0], tree[1] - other[1])).toBeGreaterThan(36);
+    }
   });
 });

@@ -8,11 +8,6 @@
       "height_m": 6
     },
     {
-      "at": [123.194736944, 13.633190353],
-      "crown_m": 19,
-      "height_m": 6
-    },
-    {
       "at": [123.200814574, 13.62665422],
       "crown_m": 19,
       "height_m": 6
@@ -255,6 +250,10 @@
     {
       "title": "Owner-requested southern Magsaysay tree removal",
       "note": "2026-10-02 follow-up: remove avenue planting from the Leon SA Aureus Street intersection to the rotonda. Anchored to the shared source vertex [123.2008687, 13.6263647] of ways 23519204 and 252223483; the two southern split carriageways 252223486 and 721779873 connect toward rotonda 252223489. This supersedes southern planting from the earlier owner canopy request. The northern avenue, Balatas corridor and neighboring church/school planting remain. No historical tree-removal date is inferred."
+    },
+    {
+      "title": "Owner-marked Magsaysay bridge junction tree removal",
+      "note": "2026-10-02 follow-up atlas screenshot: remove the single authored west-side crown at [123.194736944, 13.633190353], beside the Peñafrancia/M. T. Villanueva intersection on the northwest approach to the Magsaysay bridge. Roof grouping and live atlas registration identify this tree. Other avenue trees, mapped roads and standing roofs remain; no historical removal date is inferred."
     }
   ],
   "tree_overrides": []

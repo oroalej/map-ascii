@@ -126,9 +126,13 @@ describe('additional roadside and campus references', () => {
     expect(junction).toBeGreaterThan(0);
     const atJunction = road.coordinates[junction]!;
     // This monotonic avenue section runs north from the shared Aureus vertex.
-    // The owner removed the southern roadside planting; old northern trunks stay.
+    // The owner removed southern planting and the marked northwest bridge-junction tree.
+    const removedBridgeTree = [123.194736944, 13.633190353];
+    expect(cover.trees.some((tree) => tree.at.every((v, i) => v === removedBridgeTree[i]))).toBe(
+      false,
+    );
     for (const old of reference.magsaysay_before.trees.filter(
-      (tree) => tree.at[1] > atJunction[1]!,
+      (tree) => tree.at[1] > atJunction[1]! && !tree.at.every((v, i) => v === removedBridgeTree[i]),
     )) {
       const retained = cover.trees.find((tree) => tree.at.every((v, i) => v === old.at[i]));
       expect(retained).toBeDefined();

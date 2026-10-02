@@ -1,0 +1,161 @@
+{
+  "id": "detail/concepcion-pequena-national-high-school",
+  "osm_id": "osm:way/795854470",
+  "title": "Concepcion Pequeña National High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.203240475, 13.613886807],
+        [123.203269724, 13.613830443],
+        [123.203248267, 13.613819925],
+        [123.203219018, 13.61387629],
+        [123.203240475, 13.613886807]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.20295147, 13.614443735],
+        [123.203015917, 13.614319543],
+        [123.20299446, 13.614309025],
+        [123.202930013, 13.614433218],
+        [123.20295147, 13.614443735]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.203285263, 13.614558542],
+        [123.2034157, 13.614307183],
+        [123.203394243, 13.614296665],
+        [123.203263806, 13.614548024],
+        [123.203285263, 13.614558542]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-2-1",
+      "ring": [
+        [123.203103298, 13.614909198],
+        [123.203212135, 13.614699462],
+        [123.203190678, 13.614688945],
+        [123.203081841, 13.614898681],
+        [123.203103298, 13.614909198]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4-1-1",
+      "ring": [
+        [123.203047944, 13.61433637],
+        [123.203004722, 13.614315183],
+        [123.2029939, 13.614336037],
+        [123.203037123, 13.614357224],
+        [123.203047944, 13.61433637]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4-2-1",
+      "ring": [
+        [123.203293564, 13.614456766],
+        [123.203173349, 13.61439784],
+        [123.203162528, 13.614418694],
+        [123.203282742, 13.61447762],
+        [123.203293564, 13.614456766]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.203258996, 13.613825184],
+        [123.203229746, 13.613881549]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.203005188, 13.614314284],
+        [123.202940742, 13.614438477]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.203404971, 13.614301924],
+        [123.203274534, 13.614553283]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-2",
+      "line": [
+        [123.203201407, 13.614694203],
+        [123.203092569, 13.614903939]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-4-1",
+      "line": [
+        [123.202999311, 13.61432561],
+        [123.203042534, 13.614346797]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-4-2",
+      "line": [
+        [123.203167939, 13.614408267],
+        [123.203288153, 13.614467193]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap school/plaza grounds",
+      "url": "https://www.openstreetmap.org/way/795854470",
+      "note": "ODbL. Complete mapped parent, standing roofs, roads, neighboring identities and source geometries retained."
+    },
+    {
+      "title": "Owner-supplied Shrine, Concepcion and Sabang references",
+      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated draft estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Mapped school identity versus reference layout",
+      "note": "Use the complete named school grounds way 795854470. The distinct older named building way 293501497 lies outside this parcel and is untouched. The supplied image and current mapped roofs differ; no roof relocation, new building footprint or construction date is inferred."
+    }
+  ]
+}

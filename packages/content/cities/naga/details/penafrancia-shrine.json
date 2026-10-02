@@ -1,0 +1,95 @@
+{
+  "id": "detail/penafrancia-shrine",
+  "osm_id": "osm:way/724187419",
+  "title": "Our Lady of Peñafrancia Shrine",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.19505708, 13.634360857],
+        [123.195067828, 13.634339966],
+        [123.195024394, 13.634318861],
+        [123.194932354, 13.634265193],
+        [123.194919989, 13.634285221],
+        [123.19501282, 13.63433935],
+        [123.19505708, 13.634360857]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.195190366, 13.634399509],
+        [123.195113061, 13.634361945],
+        [123.195102313, 13.634382836],
+        [123.195179618, 13.634420399],
+        [123.195190366, 13.634399509]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.195342133, 13.634119799],
+        [123.195282613, 13.634119799],
+        [123.195282613, 13.634143155],
+        [123.195342133, 13.634143155],
+        [123.195342133, 13.634119799]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.194926171, 13.634275207],
+        [123.195018607, 13.634329106],
+        [123.195062454, 13.634350411]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.195107687, 13.63437239],
+        [123.195184992, 13.634409954]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.195282613, 13.634131477],
+        [123.195342133, 13.634131477]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap school/plaza grounds",
+      "url": "https://www.openstreetmap.org/way/724187419",
+      "note": "ODbL. Complete mapped parent, standing roofs, roads, neighboring identities and source geometries retained."
+    },
+    {
+      "title": "Owner-supplied Shrine, Concepcion and Sabang references",
+      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated draft estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
+    }
+  ],
+  "selection_osm_id": "osm:way/606888524"
+}
