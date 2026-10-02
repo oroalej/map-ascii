@@ -89,6 +89,11 @@
   pointer-events: auto;
 }
 
+/* Disabled controls are passive readouts: map gestures still reach the canvas below them. */
+.bottomLeft .button:disabled {
+  pointer-events: none;
+}
+
 .scale {
   display: flex;
   align-items: flex-end;
