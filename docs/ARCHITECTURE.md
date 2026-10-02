@@ -101,6 +101,8 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
 
 ## 3. Rendering pipeline (per frame)
 
+Pack-defined `life.seasons[].fireworks` supplies a label and a validated subset of `peony`, `chrysanthemum`, `ring` and `willow`. A lazy instanced pass after glyph drawing and before street text uses the existing map atlas, nine world-lattice shell anchors and 1,548 fixed particle quads (24,768 bytes). Smoke draws before spark tails and tips. Motion, lifetime, spread and wind drift run in the vertex shader; only bounded uniforms change, with no per-frame vertex or texture uploads, new glyphs, tile records or Life-worker data. Place-label overlay cells retain their halos. The effect works from z14, independently of Life, wind strength and selected hour; reduced motion selects fixed poses. Resources are deleted with the normal program lifecycle and recreated after context recovery. Inactive/legacy packs skip the pass and allocate nothing. Resize/zoom selects a new illustrative lattice; fractional panning retains world anchors and seeds. The atmospheric marks are schematic, not geographic launch-site data.
+
 1. **Camera → visible tiles.**
    - Compute the view frustum in mercator space.
    - Select tiles at `floor(zoom)` for the view, plus a 1-tile margin.

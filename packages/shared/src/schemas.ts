@@ -7,7 +7,14 @@ import * as z from 'zod';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
-import { validMonthDay, type SeasonConfig, type SeasonGrounds, type SeasonWindow } from './seasons';
+import {
+  FIREWORK_VARIANTS,
+  validMonthDay,
+  type FireworksConfig,
+  type SeasonConfig,
+  type SeasonGrounds,
+  type SeasonWindow,
+} from './seasons';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
@@ -921,6 +928,14 @@ export const SeasonGroundsSchema = z.strictObject({
   ring: SiteStructure.shape.ring.max(64),
   sources: Sources,
 }) satisfies z.ZodType<SeasonGrounds>;
+export const FireworksSchema = z.strictObject({
+  label: z.string().trim().min(1),
+  variants: z
+    .array(z.enum(FIREWORK_VARIANTS))
+    .min(1)
+    .max(FIREWORK_VARIANTS.length)
+    .refine((v) => new Set(v).size === v.length, 'duplicate firework variants'),
+}) satisfies z.ZodType<FireworksConfig>;
 export const Season = z
   .strictObject({
     id: z
@@ -931,6 +946,7 @@ export const Season = z
     status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
     note: z.string().trim().min(1).optional(),
+    fireworks: FireworksSchema.optional(),
     grounds: z
       .array(SeasonGroundsSchema)
       .min(1)
@@ -1076,7 +1092,13 @@ export const Season = z
           message: 'grounds must exist and share the installation anchor',
         });
     }
-    if (!season.lanterns && !season.bunting && !season.stalls && !season.installations?.length)
+    if (
+      !season.lanterns &&
+      !season.bunting &&
+      !season.stalls &&
+      !season.installations?.length &&
+      !season.fireworks
+    )
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
     const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
       v.includes(TODO_VERIFY),

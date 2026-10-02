@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { City, CityLife, Season } from './schemas';
+import { FIREWORK_VARIANTS } from './seasons';
 
 const season = {
   id: 'winter',
@@ -11,6 +12,25 @@ const season = {
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('accepts fireworks-only calendars and rejects unknown, empty or duplicate variants', () => {
+    const only = {
+      ...season,
+      lanterns: undefined,
+      fireworks: { label: 'Fireworks and smoke', variants: [...FIREWORK_VARIANTS] },
+    };
+    expect(Season.safeParse(only).success).toBe(true);
+    for (const fireworks of [
+      { ...only.fireworks, variants: [] },
+      { ...only.fireworks, variants: ['peony', 'peony'] },
+      { ...only.fireworks, variants: ['unknown'] },
+      { ...only.fireworks, label: ' ' },
+      { ...only.fireworks, density: 100000 },
+    ])
+      expect(Season.safeParse({ ...only, fireworks }).success).toBe(false);
+    expect(
+      Season.safeParse({ ...only, fireworks: { label: 'Ring', variants: ['ring'] } }).success,
+    ).toBe(true);
+  });
   it('requires simple sourced property grounds and matching installation references', () => {
     const grounds = {
       id: 'forecourt',

@@ -97,6 +97,10 @@ for (const city of cities) {
         if (first.status === 'draft') await expect(preview).toHaveAttribute('title', /Draft/);
         if (first.lanterns)
           await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
+        if (first.fireworks)
+          await expect(
+            page.getByText(`${first.fireworks.label} (illustrative)`, { exact: true }),
+          ).toBeVisible();
         expect(query(page)).toEqual(before);
         expect(errors).toEqual([]);
       });

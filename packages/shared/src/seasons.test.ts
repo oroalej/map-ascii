@@ -13,6 +13,24 @@ const winter: SeasonWindow = { from: { month: 12, day: 1 }, to: { month: 1, day:
 const contains = (window: SeasonWindow, year: number, month: number, day: number) =>
   seasonContains(window, year, epochDay(year, month, day));
 describe('annual season calendars', () => {
+  it('prioritizes New Year across the year boundary and keeps Christmas outside its window', () => {
+    const seasons = [
+      { id: 'new-year', window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } } },
+      { id: 'christmas', window: winter },
+    ];
+    for (const year of [2024, 2026, 2027]) {
+      for (const [month, date, expected] of [
+        [12, 30, 'christmas'],
+        [12, 31, 'new-year'],
+        [1, 1, 'new-year'],
+        [1, 2, 'christmas'],
+        [1, 7, undefined],
+      ] as const)
+        expect(activeSeason(seasons, year, epochDay(year, month, date))?.id).toBe(expected);
+      expect(resolveSeason(seasons, 'new-year', year, epochDay(year, 7, 10))?.id).toBe('new-year');
+      expect(resolveSeason(seasons, 'christmas', year, epochDay(year, 1, 1))?.id).toBe('christmas');
+    }
+  });
   it('includes both edges of a New Year window', () => {
     for (const [month, day] of [
       [12, 1],

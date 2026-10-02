@@ -18,6 +18,7 @@ import { labelCharacters, mapGlyphs, type Theme } from './theme';
 import { buildLifeGlyphs, type LifeGlyphs } from './life/draw';
 import { waterGlyphs } from './life/water';
 import type { ThemeUniforms } from './theme-uniforms';
+import { deleteFireworks, type FireworksResources } from './fireworks-pass';
 
 /** The rotated street names' quads (labels.ts `rotatedLabelVertices`), rebuilt with placement. */
 export type StreetTextMesh = {
@@ -28,6 +29,8 @@ export type StreetTextMesh = {
 };
 
 export type Programs = {
+  /** Lazy seasonal effect; recreated normally after context loss. */
+  fireworks?: FireworksResources;
   labels: twgl.ProgramInfo;
   streetText: StreetTextMesh;
   cell: twgl.ProgramInfo;
@@ -63,6 +66,7 @@ export function createPrograms(gl: GL): Programs {
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
+  if (p.fireworks) deleteFireworks(gl, p.fireworks);
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);

@@ -23,6 +23,7 @@ import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
 import type { FixtureVisibility } from './life/fixtures';
 import type { SeasonState } from './index';
+import { FIREWORKS } from './fireworks-layout';
 import { Paint, VEHICLES } from './life/vehicles';
 import {
   CLASS_LABELS,
@@ -35,7 +36,7 @@ import {
 
 export type LegendEntry = {
   /** Informational decorations have stable ids and no selectable focus category. */
-  id?: `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations'}`;
+  id?: `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`;
   /** The classes the entry covers (a marker and its building class share one). */
   classes: RenderClass[];
   label: string;
@@ -337,6 +338,14 @@ export function legendEntries(
       label: season.labels.lanterns,
       glyphs: '★',
       color: css(theme.fixturePaints[9]!),
+    });
+  if (season?.labels.fireworks && zoom >= FIREWORKS.minZoom)
+    entries.push({
+      id: 'info:season-fireworks',
+      classes: [],
+      label: `${season.labels.fireworks} (illustrative)`,
+      glyphs: '* + ·',
+      color: '#ffca46',
     });
   if (season?.labels.installations && fixtures?.seasonal?.installations)
     entries.push({

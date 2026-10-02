@@ -405,11 +405,13 @@ const ATLAS_COLUMNS = 16;
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 function context2d(width: number, height: number): Context2D {
-  const canvas =
+  // Call the literal 2D overload before joining HTML/Offscreen canvas types.
+  const ctx: Context2D | null =
     typeof OffscreenCanvas === 'undefined'
-      ? Object.assign(document.createElement('canvas'), { width, height })
-      : new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as Context2D | null;
+      ? Object.assign(document.createElement('canvas'), { width, height }).getContext('2d', {
+          willReadFrequently: true,
+        })
+      : new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('ASCII Atlas could not create a 2D canvas for its glyph atlas.');
   return ctx;
 }

@@ -4,6 +4,26 @@ import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('labels atmospheric fireworks independently of Life and removes them below their zoom or in another season', () => {
+  const season = {
+    id: 'new-year',
+    title: 'New Year',
+    status: 'draft' as const,
+    labels: { fireworks: 'Fireworks and smoke' },
+  };
+  for (const theme of ['dark', 'light'] as const) {
+    const entry = legendEntries(theme, 14, [], { life: false, season }).find(
+      (e) => e.id === 'info:season-fireworks',
+    );
+    expect(entry).toMatchObject({ classes: [], label: 'Fireworks and smoke (illustrative)' });
+    expect(
+      legendEntries(theme, 13, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+    ).toBe(false);
+    expect(
+      legendEntries(theme, 19, [], { season: null }).some((e) => e.id === 'info:season-fireworks'),
+    ).toBe(false);
+  }
+});
 it('names visible installations with Life off and drops the entry after leaving the site or season', () => {
   const season = {
     id: 'winter',

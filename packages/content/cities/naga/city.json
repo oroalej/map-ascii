@@ -184,6 +184,33 @@
     ],
     "seasons": [
       {
+        "id": "new-year",
+        "title": { "en": "New Year" },
+        "status": "draft",
+        "window": { "from": { "month": 12, "day": 31 }, "to": { "month": 1, "day": 1 } },
+        "note": "TODO(verify): owner-requested illustrative New Year display, December 31–January 1. Peony, chrysanthemum, ring and golden willow bursts, drifting smoke and timing are schematic atmospheric effects seen from above, not surveyed launch locations, a confirmed Naga event, or air-quality data. It takes precedence over the overlapping Christmas calendar. Preview remains visible at any chosen hour and with Life off; reduced motion holds a still burst.",
+        "fireworks": {
+          "label": "Fireworks and smoke",
+          "variants": ["peony", "chrysanthemum", "ring", "willow"]
+        },
+        "sources": [
+          {
+            "title": "Project owner: animated New Year season (2026-10-03)",
+            "note": "Requests fireworks with several variants and smoke. Display and two-day calendar are illustrative, not a verified local event schedule."
+          },
+          {
+            "title": "PBS A Capitol Fourth: Names of Fireworks",
+            "url": "https://www.pbs.org/a-capitol-fourth/fireworks-fun/firework-names/",
+            "note": "Visual terminology for spherical peony breaks, spark-tailed chrysanthemums, rings and long gold/silver willow trails. Top-down interpretation here is schematic."
+          },
+          {
+            "title": "Manila Observatory: New Year 2024 Particle Pollution Measurements",
+            "url": "https://www.observatory.ph/wp-content/uploads/2024/02/MO-AQ-NY2024.pdf",
+            "note": "Documents Philippine New Year fireworks and particles affected by wind and dispersion. Provides general seasonal context, not a Naga launch location or a physical smoke/air-quality model."
+          }
+        ]
+      },
+      {
         "id": "christmas",
         "title": {
           "en": "Christmas"

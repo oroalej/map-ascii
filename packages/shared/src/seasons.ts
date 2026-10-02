@@ -26,12 +26,17 @@ export type SeasonGrounds = {
   ring: SeasonalPoint[];
   sources: Source[];
 };
+/** Illustrative overhead fireworks, not surveyed launch sites or an event schedule. */
+export const FIREWORK_VARIANTS = ['peony', 'chrysanthemum', 'ring', 'willow'] as const;
+export type FireworkVariant = (typeof FIREWORK_VARIANTS)[number];
+export type FireworksConfig = { label: string; variants: FireworkVariant[] };
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
   status: 'draft' | 'verified';
   window: SeasonWindow;
   note?: string;
+  fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
   lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };

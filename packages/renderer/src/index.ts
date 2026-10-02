@@ -109,6 +109,7 @@ import { installationLamps, type InstallationFixture } from './life/seasonal-ins
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { simulationSeasons } from './life/seasonal-simulation';
+import { fireworksPass } from './fireworks-pass';
 import { createInlineHost, createWorkerHost } from './life/host';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
@@ -161,6 +162,7 @@ export type SeasonState = Readonly<{
     bunting?: string;
     stalls?: string;
     installations?: string;
+    fireworks?: string;
   }>;
 }>;
 
@@ -465,6 +467,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           status: season.status,
           ...(season.note ? { note: season.note } : {}),
           labels: Object.freeze({
+            ...(season.fireworks ? { fireworks: season.fireworks.label } : {}),
             ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
             ...(season.bunting ? { bunting: season.bunting.label } : {}),
             ...(season.stalls ? { stalls: season.stalls.label } : {}),
@@ -1462,6 +1465,20 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         sun,
       );
       drawDirty = false;
+      fireworksPass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        grid,
+        labelGrid,
+        season?.fireworks,
+        time,
+        reducedMotion,
+        wind,
+        daylight,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
