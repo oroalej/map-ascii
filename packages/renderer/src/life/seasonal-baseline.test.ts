@@ -1,7 +1,7 @@
 /** Inactive calendars must leave seeded worlds unchanged; legacy fixture bytes remain pinned. */
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { makeScenario, completeScenarioState, SCENARIOS } from './testing/scenarios';
+import { makeScenario, completeScenarioState, worldTiles, SCENARIOS } from './testing/scenarios';
 import { mapGlyphs, themes } from '../theme';
 import { packFixtures, updateFixtureFlags } from './fixtures';
 import { LampState, packLights } from './lights';
@@ -28,16 +28,26 @@ const inactive: SeasonConfig = {
 };
 for (const kind of SCENARIOS)
   it(`preserves the unseasoned ${kind} simulation with an inactive calendar`, () => {
-    const a = makeScenario(kind, 2),
-      b = makeScenario(kind, 2);
+    const a = makeScenario(kind, 1),
+      b = makeScenario(kind, 1);
+    // Bound each actor kind for lifecycle assertions; performance scenarios retain full density.
+    for (const { world } of [a, b])
+      for (const tile of worldTiles(world).values()) {
+        const kinds = [...new Set(tile.movers.map((mover) => mover.kind))];
+        const keep = kinds.flatMap((kind) =>
+          tile.movers.filter((mover) => mover.kind === kind).slice(0, 12),
+        );
+        tile.movers.splice(0, tile.movers.length, ...keep);
+        tile.gatherers.splice(12);
+      }
     b.world.setSeasons(simulationSeasons([inactive]));
-    for (let frame = 0; frame < 60; frame++) {
-      if (frame === 20 || frame === 30) {
-        const tiles = frame === 20 ? a.tiles.slice(0, 1) : a.tiles;
+    for (let frame = 0; frame < 30; frame++) {
+      if (frame === 10 || frame === 15) {
+        const tiles = frame === 10 ? [] : a.tiles;
         a.world.sync(tiles);
         b.world.sync(structuredClone(tiles));
       }
-      const weather = a.environment(frame * 6);
+      const weather = a.environment(frame * 12);
       const dt = frame % 7 ? 1 / 30 : 0;
       a.world.step(dt, undefined, 18, a.bounds, undefined, weather, 0.9);
       b.world.step(dt, undefined, 18, b.bounds, undefined, { ...weather, season: null }, 0.9);

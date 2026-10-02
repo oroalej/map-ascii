@@ -110,7 +110,9 @@ for (const city of cities) {
         const box = page.getByRole('combobox', { name: 'Search places' });
         await expect(box).toBeFocused();
         await box.fill(city.smokeLandmark);
-        await expect(page.getByRole('option').first()).toContainText(city.smokeLandmark);
+        await expect(page.getByRole('listbox').getByRole('option').first()).toContainText(
+          city.smokeLandmark,
+        );
         await box.press('Enter');
         const panel = page.getByRole('complementary', { name: 'Selected place' });
         await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
@@ -268,21 +270,24 @@ for (const city of cities) {
         const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await expect(life).toBeDisabled();
+        await expect.poll(agents).toBe(0);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
         await expect(life).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         expect(errors).toEqual([]);
       });
 
       test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
-        // Bound cold software-WebGL work so drawing cannot starve the capture timer in CI.
+        // Bound software-WebGL work; this checks capture/download, not desktop GPU speed.
         await page.setViewportSize({ width: 640, height: 480 });
         await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
         await mapReady(page);
-        await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
+        await page.getByRole('button', { name: 'Capture 1 seconds', exact: true }).click();
         const button = page.getByRole('button', { name: 'Download profile', exact: true });
-        await expect(button).toBeEnabled({ timeout: 5_000 });
+        // A one-second timer can be delayed by software-GPU readbacks on the CI runner.
+        await expect(button).toBeEnabled({ timeout: 20_000 });
         const downloading = page.waitForEvent('download');
         await button.click();
         const download = await downloading;

@@ -2,7 +2,7 @@ import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
-import { personGlyphs } from './life/people';
+import { figureOf, personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 import { SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
@@ -551,7 +551,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...doubleWall,
     ...sextantGlyphs,
     ...vehicleGlyphs(),
-    ...personGlyphs(),
+    ...personGlyphs().filter((glyph) => !figureOf(glyph)?.pose),
     ...birdGlyphs(),
     ...dogGlyphs(),
     ...catGlyphs(),
@@ -560,6 +560,8 @@ export function mapGlyphs(theme: Theme): string[] {
     ...fixtureGlyphs,
     ...arrowGlyphs,
     ...SEASONAL_GLYPHS,
+    // New social poses follow all existing map glyphs, preserving hardware and season indices.
+    ...personGlyphs().filter((glyph) => figureOf(glyph)?.pose),
   ];
   for (const g of extras) set.add(g);
   return [...set];

@@ -1,6 +1,7 @@
 import * as Comlink from 'comlink';
 import { simulationSeasons } from './seasonal-simulation';
 import type { CityLifeConfig, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
@@ -102,14 +103,14 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix; cityLife?: CityLifeConfig },
+  options: { traffic?: TrafficMix; cityLife?: CityLifeConfig; moments?: MomentOptions },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler);
+    const world = new LifeWorld(options.traffic, profiler, options.moments);
     world.setProcessions(processions);
     world.setSeasons(seasons);
     world.setShopSchedule(options.cityLife?.schedules?.shops);
@@ -162,6 +163,8 @@ export function createWorkerHost(
       profiling: !!profiler,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      dialogue: options.moments?.dialogue,
+      periods: options.moments?.periods,
     })
     .then(() => {
       if (!disposed && !fallback) ready = true;

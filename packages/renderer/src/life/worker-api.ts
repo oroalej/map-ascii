@@ -1,6 +1,7 @@
 import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
 import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
+import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
@@ -40,6 +41,8 @@ export type FrameResult = {
 export type LifeInit = {
   seasons?: readonly SimulationSeason[];
   shopSchedule?: ShopSchedule;
+  dialogue?: readonly DialogueChoice[];
+  periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
   processions: readonly ProcessionRoute[];
   profiling?: boolean;
@@ -69,6 +72,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.wind,
     step.weather,
     step.cellMeters,
+    gust.cssCell.h / gust.cssCell.w,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
@@ -89,7 +93,10 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
     init(options: LifeInit) {
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
-      world = new LifeWorld(options.traffic, profiler);
+      world = new LifeWorld(options.traffic, profiler, {
+        dialogue: options.dialogue,
+        periods: options.periods,
+      });
       preparation = new LifePreparation(world, profiler, preparationClock);
       world.setProcessions(options.processions);
       world.setSeasons(options.seasons ?? []);
