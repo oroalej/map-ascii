@@ -57,6 +57,8 @@ export type LifeGrid = {
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
+  /** Successful detailed vehicle stamps, indexed by this frame's final agent array. */
+  stampedVehicles?: Uint8Array;
 };
 /** Per-person packing, independent of cart and group owner identity. */
 export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
@@ -149,6 +151,10 @@ export function packLife(
   puffs: Float64Array = EMPTY_PUFFS,
 ): number {
   out.fill(0);
+  const stampedVehicles = grid.stampedVehicles;
+  if (stampedVehicles && stampedVehicles.length < agents.length)
+    throw new RangeError('Wrong stamped vehicle mask size');
+  stampedVehicles?.fill(0);
   if (grid.owners && grid.owners.length !== grid.cols * grid.rows)
     throw new RangeError('Wrong owner grid size');
   drawingOwners = grid.owners;
@@ -198,7 +204,10 @@ export function packLife(
         else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
-          if (n && detailedStamp) stampedSources.add(index);
+          if (n && detailedStamp) {
+            stampedSources.add(index);
+            if (stampedVehicles && agent.kind === 'vehicle') stampedVehicles[index] = 1;
+          }
         }
       }
     journal = undefined;

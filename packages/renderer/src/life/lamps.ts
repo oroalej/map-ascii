@@ -5,6 +5,8 @@ import type { CraftType } from './vehicles';
 export const BRAKE = { on: 0.8, hold: 0.3, stopped: 0.3 } as const;
 export const BRAKE_LAMP = 1;
 export const BRAKE_COLOR = { day: [1, 0.2, 0.12], night: [1, 0.32, 0.2], glow: 1.4 } as const;
+/** Rear road spill in metres; seed 1 distinguishes it from ordinary headlight beams. */
+export const BRAKE_POOL = { length: 4, spread: 0.5, strength: 0.3, minCells: 1, seed: 1 } as const;
 export type VehicleLamps = Readonly<{ kind: 'brake' } | { kind: 'hazard'; on: boolean }>;
 const BRAKING: VehicleLamps = Object.freeze({ kind: 'brake' });
 const HAZARD_ON: VehicleLamps = Object.freeze({ kind: 'hazard', on: true });

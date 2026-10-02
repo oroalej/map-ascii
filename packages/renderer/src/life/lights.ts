@@ -14,7 +14,9 @@ import type { TilePoint } from '../raster/geometry';
 import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import { random } from './random';
 import type { VisibleAgent } from './simulate';
-import { VEHICLES } from './vehicles';
+import { VEHICLES, type CraftType } from './vehicles';
+import { BRAKE_POOL } from './lamps';
+import { hasTurnSignals } from './turn-signals';
 
 /**
  * What lights a cell: a streetlight lit, out, or flickering; a vehicle's headlight `beam`, a
@@ -217,6 +219,122 @@ export function packLights(
 /** A beam shorter than this many cells (zoomed out) isn't cast. */
 const MIN_BEAM_CELLS = 2;
 
+type CachedCone = {
+  revision: number;
+  vehicle?: CraftType;
+  lng: number;
+  lat: number;
+  aheadLng: number;
+  aheadLat: number;
+  sideLng: number;
+  sideLat: number;
+  cast: boolean;
+  offsets: number[];
+  values: number[];
+};
+/** Bounded by the current actor array; retains only numbers, never workers or mover graphs. */
+export type ConePackingScratch = {
+  revision: number;
+  toCell?: LightGrid['toCell'];
+  cols: number;
+  rows: number;
+  direction?: 1 | -1;
+  cone?: Readonly<{ length: number; spread: number; strength: number }>;
+  entries: (CachedCone | undefined)[];
+};
+export const createConePackingScratch = (): ConePackingScratch => ({
+  revision: 0,
+  cols: 0,
+  rows: 0,
+  entries: [],
+});
+
+function prepareCones(
+  scratch: ConePackingScratch | undefined,
+  grid: LightGrid,
+  count: number,
+  direction: 1 | -1,
+  cone: Readonly<{ length: number; spread: number; strength: number }>,
+) {
+  if (!scratch) return;
+  if (
+    scratch.toCell !== grid.toCell ||
+    scratch.cols !== grid.cols ||
+    scratch.rows !== grid.rows ||
+    scratch.direction !== direction ||
+    scratch.cone !== cone
+  ) {
+    scratch.revision++;
+    scratch.toCell = grid.toCell;
+    scratch.cols = grid.cols;
+    scratch.rows = grid.rows;
+    scratch.direction = direction;
+    scratch.cone = cone;
+  }
+  if (scratch.entries.length > count) scratch.entries.length = count;
+}
+
+function cachedCone(
+  out: Uint8Array,
+  grid: LightGrid,
+  agent: VisibleAgent,
+  direction: 1 | -1,
+  cone: Readonly<{ length: number; spread: number; strength: number }>,
+  minCells: number,
+  g: number,
+  scratch: ConePackingScratch | undefined,
+  index: number,
+): boolean {
+  if (!scratch || !agent.ahead || !agent.side)
+    return packCone(out, grid, agent, direction, cone, minCells, g);
+  let cached = scratch.entries[index];
+  if (
+    cached &&
+    cached.revision === scratch.revision &&
+    cached.vehicle === agent.vehicle &&
+    cached.lng === agent.lng &&
+    cached.lat === agent.lat &&
+    cached.aheadLng === agent.ahead[0] &&
+    cached.aheadLat === agent.ahead[1] &&
+    cached.sideLng === agent.side[0] &&
+    cached.sideLat === agent.side[1]
+  ) {
+    for (let i = 0; i < cached.offsets.length; i++) {
+      const at = cached.offsets[i]!,
+        value = cached.values[i]!;
+      if (out[at + 2] !== 0 || value <= out[at]!) continue;
+      out[at] = value;
+      out[at + 1] = g;
+      out[at + 3] = 255;
+    }
+    return cached.cast;
+  }
+  if (!cached)
+    scratch.entries[index] = cached = {
+      revision: -1,
+      lng: 0,
+      lat: 0,
+      aheadLng: 0,
+      aheadLat: 0,
+      sideLng: 0,
+      sideLat: 0,
+      cast: false,
+      offsets: [],
+      values: [],
+    };
+  cached.revision = scratch.revision;
+  cached.vehicle = agent.vehicle;
+  cached.lng = agent.lng;
+  cached.lat = agent.lat;
+  cached.aheadLng = agent.ahead[0];
+  cached.aheadLat = agent.ahead[1];
+  cached.sideLng = agent.side[0];
+  cached.sideLat = agent.side[1];
+  cached.offsets.length = cached.values.length = 0;
+  cached.cast = packCone(out, grid, agent, direction, cone, minCells, g, cached);
+  return cached.cast;
+}
+
 /**
  * Headlight beams (config.ts `BEAM`) over the light texels `packLights` wrote: from the front of
  * each moving vehicle, a cone `BEAM.length` m ahead that widens from the vehicle's width, fading
@@ -228,61 +346,154 @@ export function packBeams(
   out: Uint8Array,
   grid: LightGrid,
   agents: readonly VisibleAgent[],
+  scratch?: ConePackingScratch,
 ): number {
-  const { cols, rows, toCell } = grid;
+  prepareCones(scratch, grid, agents.length, 1, BEAM);
   const g = lightByte(LampState.beam, 0);
   let cast = 0;
-  for (const agent of agents) {
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i]!;
     if (agent.kind !== 'vehicle' || agent.parked || !agent.vehicle) continue;
-    if (!agent.ahead || !agent.side) continue;
-    const spec = VEHICLES[agent.vehicle];
-    const [px, py] = toCell(agent.lng, agent.lat);
-    const [qx, qy] = toCell(...agent.ahead);
-    const [rx, ry] = toCell(...agent.side);
-    // A meter forward and a meter to the right, in cells.
-    const ax = qx - px;
-    const ay = qy - py;
-    const sx = rx - px;
-    const sy = ry - py;
-    const det = ax * sy - ay * sx;
-    if (Math.abs(det) < 1e-9 || Math.hypot(ax, ay) * BEAM.length < MIN_BEAM_CELLS) continue;
-    const half = spec.width / 2;
-    const wide = half + BEAM.length * BEAM.spread;
-    // The vehicle's front, where the beam starts.
-    const fx = px + (ax * spec.length) / 2;
-    const fy = py + (ay * spec.length) / 2;
-    const ex = fx + ax * BEAM.length;
-    const ey = fy + ay * BEAM.length;
-    const xs = [fx + sx * half, fx - sx * half, ex + sx * wide, ex - sx * wide];
-    const ys = [fy + sy * half, fy - sy * half, ey + sy * wide, ey - sy * wide];
-    const c0 = Math.max(0, Math.floor(Math.min(...xs)));
-    const c1 = Math.min(cols - 1, Math.floor(Math.max(...xs)));
-    const r0 = Math.max(0, Math.floor(Math.min(...ys)));
-    const r1 = Math.min(rows - 1, Math.floor(Math.max(...ys)));
-    if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_POOL_CELLS) continue;
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        // The cell's center in meters ahead of the front and to the right of the center line.
-        const dx = c + 0.5 - fx;
-        const dy = r + 0.5 - fy;
-        const forward = (dx * sy - dy * sx) / det;
-        const right = (ax * dy - ay * dx) / det;
-        if (forward <= 0 || forward >= BEAM.length) continue;
-        const limit = half + forward * BEAM.spread;
-        if (Math.abs(right) >= limit) continue;
-        const strength =
-          BEAM.strength * (1 - forward / BEAM.length) ** 1.2 * (1 - (right / limit) ** 2);
-        const at = (r * cols + c) * 4;
-        const value = Math.round(255 * strength);
-        if (out[at + 2] !== 0 || value <= out[at]!) continue;
-        out[at] = value;
-        out[at + 1] = g;
-        out[at + 3] = 255;
-      }
-    }
-    cast++;
+    if (cachedCone(out, grid, agent, 1, BEAM, MIN_BEAM_CELLS, g, scratch, i)) cast++;
   }
   return cast;
+}
+
+/** Rear light only from braking vehicles admitted as detailed stamps in this same frame. */
+export function packBrakePools(
+  out: Uint8Array,
+  grid: LightGrid,
+  agents: readonly VisibleAgent[],
+  stampedVehicles: Uint8Array,
+  scratch?: ConePackingScratch,
+): number {
+  prepareCones(scratch, grid, agents.length, -1, BRAKE_POOL);
+  const g = lightByte(LampState.beam, BRAKE_POOL.seed);
+  let cast = 0;
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i]!;
+    if (
+      !stampedVehicles[i] ||
+      agent.kind !== 'vehicle' ||
+      agent.parked ||
+      !hasTurnSignals(agent.vehicle) ||
+      agent.lamps?.kind !== 'brake'
+    )
+      continue;
+    if (cachedCone(out, grid, agent, -1, BRAKE_POOL, BRAKE_POOL.minCells, g, scratch, i)) cast++;
+  }
+  return cast;
+}
+
+/** The same bounded, world-metre cone geometry for headlights and rear brake spill. */
+function packCone(
+  out: Uint8Array,
+  grid: LightGrid,
+  agent: VisibleAgent,
+  direction: 1 | -1,
+  cone: Readonly<{ length: number; spread: number; strength: number }>,
+  minCells: number,
+  g: number,
+  cached?: CachedCone,
+): boolean {
+  const { cols, rows, toCell } = grid;
+  if (!agent.vehicle || !agent.ahead || !agent.side) return false;
+  const spec = VEHICLES[agent.vehicle];
+  const [px, py] = toCell(agent.lng, agent.lat);
+  const [qx, qy] = toCell(...agent.ahead);
+  const [rx, ry] = toCell(...agent.side);
+  // A meter forward and a meter to the right, in cells.
+  const ax = direction * (qx - px);
+  const ay = direction * (qy - py);
+  const sx = rx - px;
+  const sy = ry - py;
+  const det = ax * sy - ay * sx;
+  if (Math.abs(det) < 1e-9 || Math.hypot(ax, ay) * cone.length < minCells) return false;
+  const half = spec.width / 2;
+  const wide = half + cone.length * cone.spread;
+  // The front (direction 1) or rear (-1), where the cone starts.
+  const fx = px + (ax * spec.length) / 2;
+  const fy = py + (ay * spec.length) / 2;
+  const ex = fx + ax * cone.length;
+  const ey = fy + ay * cone.length;
+  const xs = [fx + sx * half, fx - sx * half, ex + sx * wide, ex - sx * wide];
+  const ys = [fy + sy * half, fy - sy * half, ey + sy * wide, ey - sy * wide];
+  const c0 = Math.max(0, Math.floor(Math.min(...xs)));
+  const c1 = Math.min(cols - 1, Math.floor(Math.max(...xs)));
+  const r0 = Math.max(0, Math.floor(Math.min(...ys)));
+  const r1 = Math.min(rows - 1, Math.floor(Math.max(...ys)));
+  if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_POOL_CELLS) return false;
+  const peakValue = Math.round(255 * cone.strength);
+  // Walk perpendicular to the axis along which depth changes. Cardinal cones reuse their
+  // exact depth/width/falloff; diagonal cones still evaluate the original metre arithmetic.
+  const columnsFirst = sx === 0;
+  const outer0 = columnsFirst ? c0 : r0,
+    outer1 = columnsFirst ? c1 : r1;
+  const inner0 = columnsFirst ? r0 : c0,
+    inner1 = columnsFirst ? r1 : c1;
+  const outerPoints = columnsFirst ? xs : ys,
+    innerPoints = columnsFirst ? ys : xs;
+  let previousForward = NaN,
+    limit = 0,
+    intensity = 0;
+  const length = cone.length,
+    spread = cone.spread,
+    peak = cone.strength;
+  for (let outer = outer0; outer <= outer1; outer++) {
+    // Clip each scanline to the convex cone, with a one-cell safety margin. The original
+    // inverse-metre checks below remain authoritative, including at boundaries and clips.
+    const scan = outer + 0.5;
+    let low = Infinity,
+      high = -Infinity;
+    for (let edge = 0; edge < 4; edge++) {
+      const end = edge === 0 ? 1 : edge === 1 ? 3 : edge === 2 ? 0 : 2;
+      const a = outerPoints[edge]!,
+        b = outerPoints[end]!;
+      if (scan < Math.min(a, b) - 1e-7 || scan > Math.max(a, b) + 1e-7) continue;
+      if (a === b) {
+        low = Math.min(low, innerPoints[edge]!, innerPoints[end]!);
+        high = Math.max(high, innerPoints[edge]!, innerPoints[end]!);
+      } else {
+        const crossing =
+          innerPoints[edge]! + ((scan - a) * (innerPoints[end]! - innerPoints[edge]!)) / (b - a);
+        low = Math.min(low, crossing);
+        high = Math.max(high, crossing);
+      }
+    }
+    const first = Math.max(inner0, Math.floor(low) - 1);
+    const last = Math.min(inner1, Math.ceil(high) + 1);
+    for (let inner = first; inner <= last; inner++) {
+      const c = columnsFirst ? outer : inner,
+        r = columnsFirst ? inner : outer;
+      const at = (r * cols + c) * 4;
+      // A brighter pool cannot lose to this cone, even at its peak. Avoid its geometry/falloff.
+      if (!cached && (out[at + 2] !== 0 || out[at]! >= peakValue)) continue;
+      // The cell's center in meters ahead of the front and to the right of the center line.
+      const dx = c + 0.5 - fx;
+      const dy = r + 0.5 - fy;
+      const forward = (dx * sy - dy * sx) / det;
+      const right = (ax * dy - ay * dx) / det;
+      if (forward <= 0 || forward >= length) continue;
+      if (forward !== previousForward) {
+        previousForward = forward;
+        limit = half + forward * spread;
+        const fade = 1 - forward / length;
+        intensity = peak * (direction === 1 ? fade ** 1.2 : fade * fade);
+      }
+      if (Math.abs(right) >= limit) continue;
+      const strength = intensity * (1 - (right / limit) ** 2);
+      const value = Math.round(255 * strength);
+      if (cached && value > 0) {
+        cached.offsets.push(at);
+        cached.values.push(value);
+      }
+      if (out[at + 2] !== 0 || value <= out[at]!) continue;
+      out[at] = value;
+      out[at + 1] = g;
+      out[at + 3] = 255;
+    }
+  }
+  return true;
 }
 
 /**

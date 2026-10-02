@@ -6,12 +6,14 @@ import {
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
-import { BRAKE_COLOR, BRAKE_LAMP } from '../../../packages/renderer/src/life/lamps';
+import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_POOL } from '../../../packages/renderer/src/life/lamps';
+import { LampState, lightByte } from '../../../packages/renderer/src/life/lights';
 import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
+import { cellHash } from '../../../packages/renderer/src/glyphs/select';
 
 test('vehicle lamps and exhaust render by day and night with terrain, canopy and label masks', async ({
   page,
@@ -22,6 +24,9 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
     const block = glyphs.indexOf('█');
     const cw = 6,
       ch = 9;
+    // Guarantee a moon glint in the water receiver: red spill must preserve it.
+    let glintOrigin = 0;
+    while ((cellHash(glintOrigin + 23, 0) & 1023) >= 40) glintOrigin++;
     const result = await page.evaluate(
       (input) => {
         const canvas = document.createElement('canvas');
@@ -124,8 +129,13 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           u_train: input.train,
           u_person: input.person,
           u_bird: input.bird,
+          u_lampShow: 1,
+          u_origin: [input.glintOrigin, 0],
+          u_moon: 1,
+          u_shimmer: 0,
         };
-        const n = 21;
+        const n = 31;
+        let activeLight: WebGLTexture | null = null;
         canvas.width = n * input.cw;
         canvas.height = input.ch;
         const selected = new Uint8Array(n * 4),
@@ -134,13 +144,15 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           overlay = new Uint8Array(n * 4);
         for (let x = 0; x < n; x++) {
           const cls =
-            x === 3 || x === 19
+            x === 3 || x === 19 || x === 22
               ? input.roof
-              : x === 4 || x === 9
-                ? input.grounds
-                : x === 5 || x === 6 || x === 18
-                  ? input.crown
-                  : input.road;
+              : x === 23
+                ? input.water
+                : x === 4 || x === 9
+                  ? input.grounds
+                  : x === 5 || x === 6 || x === 18 || x === 24 || x === 29
+                    ? input.crown
+                    : input.road;
           selected.set([input.block & 255, cls | ((input.block >> 8) << 6), 0, 0], x * 4);
           const part =
             x >= 15
@@ -174,9 +186,33 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           for (let y = 0; y < 3; y++)
             for (let sx = 0; sx < 2; sx++)
               sub[(y * n * 2 + x * 2 + sx) * 4] = x === 6 && sx === 0 ? input.road : cls;
+          if (x >= 21) {
+            selected[x * 4] = 0;
+            selected[x * 4 + 1] = cls;
+            // Real filled roads reconstruct their background after foreground lighting.
+            selected[x * 4 + 3] = cls;
+            life.fill(0, x * 4, x * 4 + 4);
+            if (x >= 26 && x <= 28) {
+              const lamp = x === 26 ? input.head : x === 27 ? input.tail : input.body;
+              life.set(
+                [
+                  input.block & 255,
+                  input.vehicle | ((input.block >> 8) << 6),
+                  input.vehicleBit | (x === 28 ? input.indicator : 0),
+                  (lamp << 4) | (x === 27 ? input.brake : 0),
+                ],
+                x * 4,
+              );
+            }
+            for (let y = 0; y < 3; y++)
+              for (let sx = 0; sx < 2; sx++)
+                sub[(y * n * 2 + x * 2 + sx) * 4] =
+                  x === 30 ? input.roof : x === 29 && sx === 0 ? input.road : cls;
+          }
         }
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 7 * 4);
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 20 * 4);
+        overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 25 * 4);
         const selectedTex = texture(n, 1, selected),
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
@@ -191,6 +227,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
             u_subClass: subTex,
             u_overlay: overlayTex,
             u_daylight: daylight,
+            u_light: activeLight ?? blank,
           });
           gl.drawArrays(gl.TRIANGLES, 0, 3);
           const pixels = new Uint8Array(canvas.width * canvas.height * 4);
@@ -200,6 +237,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           return {
             cells: Array.from({ length: n }, (_, x) => pixel(x)),
             crownEdge: pixel(6, input.cw - 1),
+            brakeEdge: [pixel(29), pixel(29, input.cw - 1)],
           };
         };
         const day = render(1),
@@ -208,8 +246,13 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         gl.bindTexture(gl.TEXTURE_2D, lifeTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
         const off = render(1).cells[0];
+        const light = new Uint8Array(n * 4);
+        for (let x = 21; x < n; x++) light.set([77, input.brakePool, 0, 255], x * 4);
+        activeLight = texture(n, 1, light);
+        const brakeNight = render(0),
+          brakeDay = render(1);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off };
+        return { day, night, off, brakeNight, brakeDay };
       },
       {
         vertex: fullscreenVertex,
@@ -219,11 +262,13 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         block,
         cw,
         ch,
+        glintOrigin,
         paints: themeUniforms(theme).paints,
         background: theme.background.slice(0, 3),
         bits: Array.from(cellBits()),
         road: classId('road_major'),
         roof: classId('building'),
+        water: classId('water_river'),
         grounds: classId('building_religious'),
         crown: classId('tree_crown'),
         vehicle: classId('life_vehicle'),
@@ -239,6 +284,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         tail: VehiclePart.taillight,
         puff: PersonPart.puff,
         brake: BRAKE_LAMP,
+        brakePool: lightByte(LampState.beam, BRAKE_POOL.seed),
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
@@ -262,6 +308,18 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
       ).toBeLessThanOrEqual(1),
     );
     expect(result.off).toEqual(result.day.cells[1]);
+    const redness = (pixel: number[]) => pixel[0]! - (pixel[1]! + pixel[2]!) / 2;
+    expect(redness(result.brakeNight.cells[21]!)).toBeGreaterThan(
+      redness(result.night.cells[21]!) + 10,
+    );
+    for (const x of [22, 23, 24, 25, 26, 27, 28, 30])
+      expect(result.brakeNight.cells[x]).toEqual(result.night.cells[x]);
+    if (name === 'dark') expect(result.night.cells[23]).not.toEqual(result.day.cells[23]);
+    for (let x = 21; x < 31; x++) expect(result.brakeDay.cells[x]).toEqual(result.day.cells[x]);
+    expect(redness(result.brakeNight.brakeEdge[0]!)).toBeGreaterThan(
+      redness(result.night.brakeEdge[0]!) + 10,
+    );
+    expect(result.brakeNight.brakeEdge[1]).toEqual(result.night.brakeEdge[1]);
     await page
       .locator('canvas')
       .screenshot({ path: testInfo.outputPath(`vehicle-effects-${name}.png`) });

@@ -50,7 +50,15 @@ import {
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
 import type { FrameProfiler } from './profile';
-import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
+import {
+  packBeams,
+  packBrakePools,
+  packCandles,
+  packLights,
+  createConePackingScratch,
+  type ConePackingScratch,
+  type VisibleLamp,
+} from './life/lights';
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
@@ -435,13 +443,28 @@ function sunUniforms(view: View, sun: Sun | null) {
  * alone, kept while the grid stands still (beams go over a copy each frame). Kept per targets,
  * so they are the grid's size and never shared between two maps.
  */
-type Texels = { life: Uint8Array; light: Uint8Array; lamps: Uint8Array | null };
+type Texels = {
+  life: Uint8Array;
+  light: Uint8Array;
+  lamps: Uint8Array | null;
+  stampedVehicles: Uint8Array;
+  stampedAgents?: readonly VisibleAgent[];
+  beamCones: ConePackingScratch;
+  brakeCones: ConePackingScratch;
+};
 const texelsOf = new WeakMap<CellTargets, Texels>();
 const texels = (targets: CellTargets): Texels => {
   let found = texelsOf.get(targets);
   if (!found) {
     const size = targets.cols * targets.rows * 4;
-    found = { life: new Uint8Array(size), light: new Uint8Array(size), lamps: null };
+    found = {
+      life: new Uint8Array(size),
+      light: new Uint8Array(size),
+      lamps: null,
+      stampedVehicles: new Uint8Array(0),
+      beamCones: createConePackingScratch(),
+      brakeCones: createConePackingScratch(),
+    };
     texelsOf.set(targets, found);
   }
   return found;
@@ -479,7 +502,10 @@ export function lifePass(
   puffs?: Float64Array,
 ): number {
   const { cols, rows } = targets;
-  const lifeTexels = texels(targets).life;
+  const buffers = texels(targets);
+  const lifeTexels = buffers.life;
+  if (buffers.stampedVehicles.length < agents.length)
+    buffers.stampedVehicles = new Uint8Array(agents.length);
   const packStart = profiler?.time();
   const drawn = packLife(
     lifeTexels,
@@ -492,6 +518,7 @@ export function lifePass(
       allowsGroundCell,
       owners,
       speakers,
+      stampedVehicles: buffers.stampedVehicles,
     },
     agents,
     theme,
@@ -501,6 +528,7 @@ export function lifePass(
     themeRes.map.lifeGlyphs,
     puffs,
   );
+  buffers.stampedAgents = agents;
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
@@ -534,7 +562,9 @@ export function lightPass(
   const lampTexels = buffers.lamps;
   if (repack) packLights(lampTexels, grid, lamps);
   lightTexels.set(lampTexels);
-  packBeams(lightTexels, grid, agents);
+  packBeams(lightTexels, grid, agents, buffers.beamCones);
+  if (buffers.stampedAgents === agents)
+    packBrakePools(lightTexels, grid, agents, buffers.stampedVehicles, buffers.brakeCones);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
   packCandles(lightTexels, grid, agents, 1 / cellMeters!);
