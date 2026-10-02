@@ -20,6 +20,7 @@ import {
 } from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { CellSize, Programs, ThemeResources } from './gpu-context';
+import { glyphProgram } from './gpu-context';
 import {
   copyRaster,
   drawCrowns,
@@ -800,10 +801,13 @@ export function glyphPass(
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
   const { cellDev } = view;
+  const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
+  const hasEffectClocks = targets.effectClockTex !== undefined;
+  const program = glyphProgram(gl, programs, focused, hasEffectClocks);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
-  gl.useProgram(programs.glyph.program);
-  twgl.setUniforms(programs.glyph, {
+  gl.useProgram(program.program);
+  twgl.setUniforms(program, {
     u_glyphs: targets.glyphTex,
     u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
@@ -825,7 +829,7 @@ export function glyphPass(
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
-    u_focus: focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0,
+    u_focus: focused,
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
@@ -834,7 +838,7 @@ export function glyphPass(
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
     u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
-    u_hasEffectClocks: targets.effectClockTex !== undefined,
+    u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,

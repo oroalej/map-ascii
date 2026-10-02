@@ -56,7 +56,9 @@ const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
  * bank lamps, excluding vehicle beams. Wet roads strengthen their pools; roofs and water take
  * a fainter wash than open ground.
  */
-export const glyphFragment = /* glsl */ `#version 300 es
+/** Compile inactive features away instead of branching through them at every pixel. */
+export function glyphFragmentFor({ focus = true, effectClocks = true } = {}) {
+  return /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -82,12 +84,11 @@ uniform int u_labelColumns;
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
-uniform bool u_focus;
-uniform bool u_focusLife;
+${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
 uniform sampler2D u_effectClocks;
-uniform bool u_hasEffectClocks;
+${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectClocks = false;'}
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
@@ -686,3 +687,7 @@ void main() {
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;
+}
+
+/** Full-feature source for external consumers and shader fixtures. */
+export const glyphFragment = glyphFragmentFor();

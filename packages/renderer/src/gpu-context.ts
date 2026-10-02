@@ -11,7 +11,7 @@ import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './
 import { createProgram, createTexture, type GL } from './gpu';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
-import { glyphFragment } from './shaders/glyph';
+import { glyphFragmentFor } from './shaders/glyph';
 import { selectFragment } from './shaders/select';
 import { labelVertex, labelFragment } from './shaders/labels';
 import { labelCharacters, mapGlyphs, type Theme } from './theme';
@@ -33,6 +33,8 @@ export type Programs = {
   cell: twgl.ProgramInfo;
   select: twgl.ProgramInfo;
   glyph: twgl.ProgramInfo;
+  /** At most four variants, compiled once when their features are first needed. */
+  glyphVariants?: Map<number, twgl.ProgramInfo>;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
 };
@@ -52,21 +54,42 @@ export function createPrograms(gl: GL): Programs {
     gl.vertexAttribPointer(slot!, size!, gl.FLOAT, false, 20, offset!);
   }
   gl.bindVertexArray(null);
+  const glyph = createProgram(
+    gl,
+    fullscreenVertex,
+    glyphFragmentFor({ focus: false, effectClocks: false }),
+  );
   return {
     labels: createProgram(gl, labelVertex, labelFragment),
     streetText: { vao, buffer, count: 0 },
     cell: createProgram(gl, cellVertex, cellFragment),
     select: createProgram(gl, fullscreenVertex, selectFragment),
-    glyph: createProgram(gl, fullscreenVertex, glyphFragment),
+    glyph,
+    glyphVariants: new Map([[0, glyph]]),
     emptyVao: gl.createVertexArray(),
   };
+}
+
+export function glyphProgram(gl: GL, programs: Programs, focus: boolean, effectClocks: boolean) {
+  // Manually supplied program sets may already contain the full-feature shader.
+  const variants = programs.glyphVariants;
+  if (!variants) return programs.glyph;
+  const key = Number(focus) | (Number(effectClocks) << 1);
+  let program = variants.get(key);
+  if (!program) {
+    program = createProgram(gl, fullscreenVertex, glyphFragmentFor({ focus, effectClocks }));
+    variants.set(key, program);
+  }
+  return program;
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);
-  for (const info of [p.cell, p.select, p.glyph]) gl.deleteProgram(info.program);
+  for (const info of [p.cell, p.select, ...(p.glyphVariants?.values() ?? [p.glyph])])
+    gl.deleteProgram(info.program);
+  p.glyphVariants?.clear();
   gl.deleteVertexArray(p.emptyVao);
 }
 
