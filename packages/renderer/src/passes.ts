@@ -54,7 +54,7 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
-import { EffectClocks } from './life/effect-clocks';
+import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
@@ -578,7 +578,7 @@ export function lifePass(
     buffers.clocks.begin(0);
     for (const cell of buffers.clockCells!) {
       const agent = agents[buffers.owners[cell]! - 1];
-      if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? -1);
+      if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? ORDINARY_CLOCK);
     }
     buffers.clocks.finish(0);
   }

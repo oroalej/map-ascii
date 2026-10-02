@@ -296,7 +296,9 @@ describe('packCandles', () => {
       { kind: 'person', lng: 15.5, lat: 5.5, candle: true, effectClock: 3, flap: 0 },
     ];
     out[(5 * grid.cols + 6) * 4 + 2] = 255;
-    packCandles(out, grid, candles, 1, clocks);
+    packCandles(out, grid, candles, 1, (cell, token) => {
+      clocks[cell * 2 + 1] = token;
+    });
     expect(cell(out, 5, 5)[1]).toBe(lightByte(LampState.candle, 17));
     expect(clocks[(5 * grid.cols + 5) * 2 + 1]).toBe(-12);
     expect(clocks[(5 * grid.cols + 15) * 2 + 1]).toBe(3);

@@ -5,6 +5,7 @@ import { LifeWorld, type VisibleAgent } from './simulate';
 import { makeScenario, worldTiles } from './testing/scenarios';
 import { createInlineHost } from './host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
+import { RETIRE } from './config';
 
 class ItemWorld extends LifeWorld {
   constructor(traffic?: TrafficMix) {
@@ -127,6 +128,76 @@ describe('per-item inspection', () => {
     inspection.begin(10.1);
     const released = inspection.present(owner, { ...bird(), lng: 0.001 }, 5);
     expect(released.lng * 111_320).toBeCloseTo(0.5);
+    expect(inspection.recoveringBirds).toBe(true);
+    // Recover to a reachable pose while preserving the ten-second gait offset.
+    inspection.begin(11);
+    inspection.present(owner, bird(), 5);
+    expect(inspection.recoveringBirds).toBe(false);
+    expect(inspection.birds).toBe(true);
+    expect(inspection.clock(owner, 11)).toBe(1);
+    inspection.forgetBird(owner);
+    inspection.forgetBird(owner);
+    expect(inspection.birds).toBe(false);
+    expect(inspection.recoveringBirds).toBe(false);
+  });
+
+  it('counts bird renewals once and clears held/recovering identities on retirement or reset', () => {
+    const inspection = new LifeInspection(),
+      owner = {};
+    inspection.begin(0);
+    const bird = inspection.present(owner, { kind: 'bird', lng: 0, lat: 0, flap: 0 });
+    inspection.finish([bird]);
+    inspection.select({ id: bird.inspectionId!, revision: 1, time: 0 }, 0);
+    inspection.select({ id: bird.inspectionId!, revision: 2, time: 1 }, 1);
+    inspection.forgetBird(owner);
+    expect(inspection.ack.id).toBeNull();
+    expect(inspection.birds).toBe(false);
+    expect(inspection.recoveringBirds).toBe(false);
+    inspection.begin(2);
+    inspection.finish([inspection.present(owner, bird)]);
+    inspection.select({ id: bird.inspectionId!, revision: 3, time: 2 }, 2);
+    inspection.clear();
+    inspection.forgetBird(owner);
+    expect(inspection.birds).toBe(false);
+    expect(inspection.recoveringBirds).toBe(false);
+  });
+
+  it('preserves bird history during tile revival and removes it on permanent tile retirement', () => {
+    const s = makeScenario('rain', 1, false, 1, ItemWorld);
+    const owner = { ox: 0, oy: 0, phase: 0 };
+    [...worldTiles(s.world).values()][0]!.flocks.push({
+      species: 'maya',
+      x: 0,
+      y: 0,
+      hx: 1,
+      hy: 0,
+      roost: 0,
+      perch: -1,
+      perched: false,
+      landing: false,
+      landed: false,
+      scatter: 0,
+      angle: 0,
+      radius: 1,
+      stay: 1,
+      rank: 0,
+      birds: [owner],
+    });
+    const inspection = s.world.inspection!;
+    inspection.begin(0);
+    const view = inspection.present(owner, { kind: 'bird', lng: 0, lat: 0, flap: 0 });
+    inspection.finish([view]);
+    inspection.select({ id: view.inspectionId!, revision: 1, time: 0 }, 0);
+    inspection.select({ id: null, revision: 2, time: 1 }, 1);
+    s.world.sync([]);
+    expect(inspection.birds).toBe(true);
+    expect(inspection.recoveringBirds).toBe(true);
+    s.world.sync(s.tiles);
+    expect(inspection.clock(owner, 2)).toBe(1);
+    s.world.sync([]);
+    for (let frame = 0; frame <= RETIRE.seconds * 30; frame++) s.world.step(1 / 30);
+    expect(inspection.birds).toBe(false);
+    expect(inspection.recoveringBirds).toBe(false);
   });
 
   it('holds the actual mover state while other actors and traffic clocks continue', () => {

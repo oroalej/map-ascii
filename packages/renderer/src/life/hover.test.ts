@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { classId } from '../classes';
 import type { HoverFrame } from './hover';
-import { LifeHoverController, lifeVisibleOnSurface } from './hover';
+import { LifeHoverController } from './hover';
+import { lifeVisibleOnSurface } from './surface-visibility';
 import { CellBit } from './config';
 import type { ReadRect } from '../readback';
 
@@ -70,6 +71,80 @@ it('renews negative evidence at 125 ms for stable identities without holding the
   finish();
   hover.update(frame, 126);
   expect(inspectItem).toHaveBeenLastCalledWith(frame.agents[0]);
+});
+
+it('keeps a connected pagoda, towing boat and paddler held while verifying each new label', () => {
+  const { hover, frame, finish, emit, inspectItem, inspect } = fixture();
+  const parts = [
+    { kind: 'boat', vehicle: 'pagoda' },
+    { kind: 'boat', vehicle: 'voyador' },
+    { kind: 'person', aboard: true },
+  ] as const;
+  frame.generation = 7;
+  frame.owners.set([1, 2, 0, 3]);
+  frame.agents = parts.map((part) => ({ ...part, lng: 0, lat: 0, flap: 0, inspectionId: 10 }));
+  for (const [cell, part] of [
+    [0, 0],
+    [1, 1],
+    [3, 2],
+  ] as const) {
+    frame.life[cell * 4 + 1] = classId(part === 2 ? 'life_person' : 'life_boat');
+    frame.life[cell * 4 + 2] = CellBit.boat;
+  }
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish('water_area');
+  hover.update(frame, 1);
+  hover.pointer([10, 3]);
+  hover.update(frame, 10);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Pagoda (simulated)', point: [10, 3] });
+  finish('water_area');
+  hover.update(frame, 11);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Voyador (simulated)', point: [10, 3] });
+  hover.pointer([10, 17]);
+  hover.update(frame, 20);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Voyador (simulated)', point: [10, 17] });
+  finish('water_area');
+  hover.update(frame, 21);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Paddler (simulated)', point: [10, 17] });
+  expect(inspect.mock.calls).toEqual([[true]]);
+  expect(inspectItem.mock.calls).toEqual([[frame.agents[0]]]);
+  hover.pointer([10, 3]);
+  hover.update(frame, 30);
+  finish('tree');
+  hover.update(frame, 31);
+  expect(inspectItem).toHaveBeenLastCalledWith(null);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+});
+
+it.each([{ generation: 8 }, { geometry: 'changed' }])(
+  'releases an identified actor after its frame changes to %j',
+  (change) => {
+    const { hover, frame, finish, inspectItem } = fixture();
+    frame.generation = 7;
+    frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+    hover.pointer([2, 3]);
+    hover.update(frame, 0);
+    finish();
+    hover.update(frame, 1);
+    hover.update({ ...frame, ...change }, 10);
+    expect(inspectItem).toHaveBeenLastCalledWith(null);
+  },
+);
+
+it('does not prolong a connected hold by crossing unconfirmed parts', () => {
+  const { hover, frame, finish, inspectItem, reads } = fixture();
+  frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  reads.size = 6;
+  for (let at = 25; at <= 250; at += 25) {
+    frame.agents = [{ ...frame.agents[0]!, vehicle: at % 50 === 0 ? 'car' : 'bus' }];
+    hover.update(frame, at);
+  }
+  expect(inspectItem.mock.calls).toEqual([[expect.objectContaining({ inspectionId: 10 })], [null]]);
 });
 
 it('renews stable identities at 125 ms while unrelated raster revisions and array objects change', () => {

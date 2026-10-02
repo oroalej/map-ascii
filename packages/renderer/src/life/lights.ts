@@ -15,6 +15,7 @@ import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import { random } from './random';
 import type { VisibleAgent } from './simulate';
 import { VEHICLES } from './vehicles';
+import { ORDINARY_CLOCK } from './effect-clocks';
 
 /**
  * What lights a cell: a streetlight lit, out, or flickering; a vehicle's headlight `beam`, a
@@ -130,8 +131,8 @@ function pool(
   ry: number,
   strength: number,
   g: number,
-  clocks?: Float32Array | ((cell: number, token: number) => void),
-  clock = -1,
+  clocks?: (cell: number, token: number) => void,
+  clock = ORDINARY_CLOCK,
 ) {
   const { cols, rows } = grid;
   const c0 = Math.max(0, Math.floor(cx - rx) - 1);
@@ -147,8 +148,7 @@ function pool(
       if (d >= 1) {
         if (!head && out[at + 3] === 0) {
           out[at + 1] = g;
-          if (typeof clocks === 'function') clocks(at / 4, clock);
-          else if (clocks) clocks[(at / 4) * 2 + 1] = clock;
+          clocks?.(at / 4, clock);
           out[at + 3] = 255;
         }
         continue;
@@ -159,8 +159,7 @@ function pool(
       out[at] = value;
       if (head) continue;
       out[at + 1] = g;
-      if (typeof clocks === 'function') clocks(at / 4, clock);
-      else if (clocks) clocks[(at / 4) * 2 + 1] = clock;
+      clocks?.(at / 4, clock);
       out[at + 3] = 255;
     }
   }
@@ -302,7 +301,7 @@ export function packCandles(
   grid: LightGrid,
   agents: readonly VisibleAgent[],
   cellsPerMeter: number,
-  clocks?: Float32Array | ((cell: number, token: number) => void),
+  clocks?: (cell: number, token: number) => void,
 ): number {
   // At least a cell and a half, so a crowd's candles still read zoomed out.
   const radius = Math.max(1.5, CANDLE.radius * cellsPerMeter);
@@ -325,7 +324,7 @@ export function packCandles(
         CANDLE.strength,
         lightByte(LampState.candle, agent.candleSeed ?? i),
         clocks,
-        agent.effectClock ?? -1,
+        agent.effectClock ?? ORDINARY_CLOCK,
       );
     } else {
       pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i), clocks);

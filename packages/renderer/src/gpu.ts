@@ -11,6 +11,78 @@ export function createProgram(gl: GL, vertex: string, fragment: string): twgl.Pr
   });
 }
 
+export type PendingProgram = {
+  ready(): boolean;
+  finish(): twgl.ProgramInfo;
+  cancel(): void;
+};
+
+/** Link without querying status until parallel compilation completes (or input needs it). */
+export function prepareProgram(gl: GL, vertex: string, fragment: string): PendingProgram {
+  const extension = gl.getExtension('KHR_parallel_shader_compile');
+  const program = gl.createProgram();
+  if (!program) throw new Error('ASCII Atlas: cannot allocate shader program');
+  const shaders: WebGLShader[] = [];
+  let info: twgl.ProgramInfo | undefined;
+  let cancelled = false;
+  const deleteShaders = () => {
+    for (const shader of shaders) gl.deleteShader(shader);
+    shaders.length = 0;
+  };
+  const cancel = () => {
+    if (cancelled || info) return;
+    cancelled = true;
+    if (!gl.isContextLost()) {
+      deleteShaders();
+      gl.deleteProgram(program);
+    }
+  };
+  try {
+    for (const [type, source] of [
+      [gl.VERTEX_SHADER, vertex],
+      [gl.FRAGMENT_SHADER, fragment],
+    ] as const) {
+      const shader = gl.createShader(type);
+      if (!shader) throw new Error('ASCII Atlas: cannot allocate shader');
+      shaders.push(shader);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      gl.attachShader(program, shader);
+    }
+    gl.linkProgram(program);
+  } catch (error) {
+    cancel();
+    throw error;
+  }
+  return {
+    ready: () =>
+      !cancelled &&
+      !gl.isContextLost() &&
+      (!extension || Boolean(gl.getProgramParameter(program, extension.COMPLETION_STATUS_KHR))),
+    finish: () => {
+      if (cancelled || gl.isContextLost())
+        throw new Error('ASCII Atlas: shader compilation cancelled');
+      if (info) return info;
+      try {
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const details = [
+            gl.getProgramInfoLog(program),
+            ...shaders.map((s) => gl.getShaderInfoLog(s)),
+          ];
+          throw new Error(`ASCII Atlas shader error: ${details.filter(Boolean).join('\n')}`);
+        }
+        info = twgl.createProgramInfoFromProgram(gl, program);
+        deleteShaders();
+        return info;
+      } catch (error) {
+        cancel();
+        throw error;
+      }
+    },
+    cancel,
+  };
+}
+
 /** A nearest-filtered, edge-clamped 2D texture. */
 export function createTexture(
   gl: GL,

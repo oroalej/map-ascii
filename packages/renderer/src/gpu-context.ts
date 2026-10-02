@@ -8,7 +8,7 @@ import type * as twgl from 'twgl.js';
 import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
-import { createProgram, createTexture, type GL } from './gpu';
+import { createProgram, createTexture, prepareProgram, type GL, type PendingProgram } from './gpu';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragmentFor } from './shaders/glyph';
@@ -35,6 +35,8 @@ export type Programs = {
   glyph: twgl.ProgramInfo;
   /** At most four variants, compiled once when their features are first needed. */
   glyphVariants?: Map<number, twgl.ProgramInfo>;
+  glyphWarmup?: { pending?: { key: number; program: PendingProgram }; cancel(): void };
+  glyphWarmupFailed?: boolean;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
 };
@@ -77,13 +79,92 @@ export function glyphProgram(gl: GL, programs: Programs, focus: boolean, effectC
   const key = Number(focus) | (Number(effectClocks) << 1);
   let program = variants.get(key);
   if (!program) {
-    program = createProgram(gl, fullscreenVertex, glyphFragmentFor({ focus, effectClocks }));
+    const pending = programs.glyphWarmup?.pending;
+    if (pending?.key === key) {
+      program = pending.program.finish();
+      programs.glyphWarmup!.pending = undefined;
+    } else program = createProgram(gl, fullscreenVertex, glyphFragmentFor({ focus, effectClocks }));
     variants.set(key, program);
   }
   return program;
 }
 
+/** One owned idle task and at most one pending link; startup retains the minimal shader. */
+export function prewarmGlyphPrograms(gl: GL, programs: Programs, canWarm: () => boolean) {
+  const variants = programs.glyphVariants;
+  if (!variants || variants.size === 4 || programs.glyphWarmup || programs.glyphWarmupFailed)
+    return;
+  let cancelled = false;
+  let cancelTask: (() => void) | undefined;
+  const warmup: NonNullable<Programs['glyphWarmup']> = {
+    cancel: () => {
+      if (cancelled) return;
+      cancelled = true;
+      cancelTask?.();
+      warmup.pending?.program.cancel();
+      warmup.pending = undefined;
+      programs.glyphWarmup = undefined;
+    },
+  };
+  const queue = () => {
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(step);
+      cancelTask = () => cancelIdleCallback(id);
+    } else {
+      const id = setTimeout(step, 100);
+      cancelTask = () => clearTimeout(id);
+    }
+  };
+  const step = () => {
+    cancelTask = undefined;
+    if (cancelled) return;
+    if (gl.isContextLost()) {
+      warmup.cancel();
+      return;
+    }
+    if (!canWarm()) {
+      queue();
+      return;
+    }
+    try {
+      const pending = warmup.pending;
+      if (pending) {
+        if (pending.program.ready()) {
+          variants.set(pending.key, pending.program.finish());
+          warmup.pending = undefined;
+        }
+      } else {
+        const key = [1, 2, 3].find((key) => !variants.has(key));
+        if (key === undefined) {
+          programs.glyphWarmup = undefined;
+          return;
+        }
+        const focus = (key & 1) !== 0,
+          effectClocks = (key & 2) !== 0;
+        if (gl.getExtension('KHR_parallel_shader_compile'))
+          warmup.pending = {
+            key,
+            program: prepareProgram(
+              gl,
+              fullscreenVertex,
+              glyphFragmentFor({ focus, effectClocks }),
+            ),
+          };
+        else glyphProgram(gl, programs, focus, effectClocks);
+      }
+      queue();
+    } catch {
+      // A failed optional warmup leaves the existing demand path and its error reporting intact.
+      warmup.cancel();
+      programs.glyphWarmupFailed = true;
+    }
+  };
+  programs.glyphWarmup = warmup;
+  queue();
+}
+
 export function deletePrograms(gl: GL, p: Programs) {
+  p.glyphWarmup?.cancel();
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);

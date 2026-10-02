@@ -5,7 +5,6 @@ import { agentAt, describeAgent } from './describe';
 import type { VisibleAgent } from './simulate';
 import { LIFE_AGENT_MASK } from './turn-signals';
 import { canReadLifeSurface, readLifeSurface, type LifeSurfaceFrame } from './surface-visibility';
-export { lifeVisibleOnSurface } from './surface-visibility';
 
 export type LifeHover = { label: string; point: [number, number] } | { label: null; point: null };
 const HOVER_VALIDITY_MS = 250;
@@ -26,7 +25,7 @@ export class LifeHoverController {
   private serial = 0;
   private pending: { serial: number; key: string; at: number } | undefined;
   private confirmed: { key: string; revision: number; visible: boolean; at: number } | undefined;
-  private held: { agent: VisibleAgent; identity: string; at: number } | undefined;
+  private held: { agent: VisibleAgent; identity: string; label: string; at: number } | undefined;
   private inspecting = false;
   private inspectedAgent: VisibleAgent | undefined;
   private lastUpdate: number | undefined;
@@ -112,7 +111,10 @@ export class LifeHoverController {
     const offset = (row * f.targets.cols + col) * 4;
     const lifeClass = unpackGlyph(f.life[offset]!, f.life[offset + 1]!).cls;
     const lifeFlags = f.life[offset + 2]! & LIFE_AGENT_MASK;
-    const identity = `${f.generation ?? 0}/${agent.inspectionId ?? ''}/${f.geometry}/${label}/${lifeClass}/${lifeFlags}`;
+    const semantics = `${label}/${lifeClass}/${lifeFlags}`;
+    const identity =
+      `${f.generation ?? 0}/${agent.inspectionId ?? ''}/${f.geometry}` +
+      (agent.inspectionId === undefined ? `/${semantics}` : '');
     return {
       col,
       row,
@@ -123,7 +125,7 @@ export class LifeHoverController {
       lifeFlags,
       agent,
       identity,
-      key: `${identity}/${col}/${row}/${sx}/${sy}`,
+      key: `${identity}/${semantics}/${col}/${row}/${sx}/${sy}`,
     };
   }
 
@@ -154,11 +156,11 @@ export class LifeHoverController {
     }
     if (this.confirmed?.key === c.key) {
       this.held = this.confirmed.visible
-        ? { agent: c.agent, identity: c.identity, at: this.confirmed.at }
+        ? { agent: c.agent, identity: c.identity, label: c.label, at: this.confirmed.at }
         : undefined;
     }
     // Keep the existing item evidence while a new subcell is checked. Movement never
-    // extends its lifetime; a negative result, semantic change or expiry retracts it.
+    // extends its lifetime; a negative result, identity change or expiry retracts it.
     const held = this.held;
     const holding =
       !!held &&
@@ -168,7 +170,7 @@ export class LifeHoverController {
       now - held.at < validity;
     this.setInspection(holding, c.agent);
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
-    else this.publish(holding ? c.label : null);
+    else this.publish(holding ? held.label : null);
     if (this.pending) return;
     if (
       this.confirmed?.key === c.key &&

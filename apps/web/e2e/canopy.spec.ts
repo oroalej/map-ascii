@@ -18,11 +18,12 @@ import {
   subcellAreas,
 } from '../../../packages/renderer/src/glyphs/select';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
+import { ORDINARY_CLOCK, heldClock } from '../../../packages/renderer/src/life/effect-clocks';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
 import { PersonPart, personByte } from '../../../packages/renderer/src/life/people';
 import { cellFragment, cellVertex } from '../../../packages/renderer/src/shaders/cell';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
-import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
+import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
@@ -84,7 +85,15 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       };
       const cell = program(input.cellVertex, input.cellFragment);
       const select = program(input.fullscreenVertex, input.selectFragment);
-      const glyph = program(input.fullscreenVertex, input.glyphFragment);
+      const glyphPrograms = new Map<number, WebGLProgram>();
+      const glyphFor = (key: number) => {
+        let glyph = glyphPrograms.get(key);
+        if (!glyph) {
+          glyph = program(input.fullscreenVertex, input.glyphFragments[key]!);
+          glyphPrograms.set(key, glyph);
+        }
+        return glyph;
+      };
       type UniformValue = number | number[] | WebGLTexture;
       const uniforms = (p: WebGLProgram, values: Record<string, UniformValue>) => {
         gl.useProgram(p);
@@ -320,7 +329,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, canvas.width, canvas.height);
-        uniforms(glyph, {
+        uniforms(glyphFor(Number(focused) | (Number(!!clocks) << 1)), {
           u_glyphs: selected,
           u_atlas: atlasTex,
           u_cell: [cw, ch],
@@ -478,9 +487,10 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         upload(target.textures[1]!, target.w, target.h, new Uint8Array(surfaces.length));
       }
       setAgent(input.person, input.personBit, input.candleByte);
-      const clockTokens = new Float32Array(cols * rows * 2).fill(-1);
+      const clockTokens = new Float32Array(cols * rows * 2).fill(input.ordinaryClock);
       for (let row = 0; row < rows; row++)
-        for (let col = 0; col < 2; col++) clockTokens[(row * cols + col) * 2] = -2.4;
+        for (let col = 0; col < 2; col++)
+          clockTokens[(row * cols + col) * 2] = col === 0 ? input.heldFraction : input.heldZero;
       const clocks = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, clocks);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, cols, rows, 0, gl.RG, gl.FLOAT, clockTokens);
@@ -488,12 +498,26 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       const early = render(20, false, 0, clocks, 0);
       const late = render(20, false, 0.2, clocks, 0);
+      const focusedEarly = render(20, true, 0, clocks, 0);
+      const focusedLate = render(20, true, 0.2, clocks, 0);
       const candleClocks = {
         heldEarly: pixel(early, 2, 2 * ch + 4),
         heldLate: pixel(late, 2, 2 * ch + 4),
+        zeroEarly: pixel(early, cw + 2, 2 * ch + 4),
+        zeroLate: pixel(late, cw + 2, 2 * ch + 4),
+        focusedEarly: pixel(focusedEarly, 2, 2 * ch + 4),
+        focusedLate: pixel(focusedLate, 2, 2 * ch + 4),
         otherEarly: pixel(early, 3 * cw + 2, 2 * ch + 4),
         otherLate: pixel(late, 3 * cw + 2, 2 * ch + 4),
       };
+      const releasePixels = (token: number, time: number) => {
+        for (let row = 0; row < rows; row++) clockTokens[row * cols * 2] = token;
+        gl.bindTexture(gl.TEXTURE_2D, clocks);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RG, gl.FLOAT, clockTokens);
+        return pixel(render(20, false, time, clocks, 0), 2, 2 * ch + 4);
+      };
+      const released = releasePixels(0.125, 0.375);
+      const heldReference = releasePixels(input.heldReference, 1);
       gl.deleteTexture(clocks);
       if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
       return {
@@ -515,6 +539,8 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         revealedPerson,
         occlusion,
         candleClocks,
+        released,
+        heldReference,
       };
     },
     {
@@ -522,7 +548,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       cellFragment,
       fullscreenVertex,
       selectFragment,
-      glyphFragment,
+      glyphFragments: [0, 1, 2, 3].map((key) =>
+        glyphFragmentFor({ focus: !!(key & 1), effectClocks: !!(key & 2) }),
+      ),
+      ordinaryClock: ORDINARY_CLOCK,
+      heldFraction: heldClock(0.4),
+      heldZero: heldClock(0),
+      heldReference: heldClock(0.25),
       glyphs,
       sextants: [...sextantGlyphs],
       depths: Array.from(classDepths()),
@@ -606,6 +638,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
   expect(result.higherCrown).toBe(21);
   expect(result.orderIndependent).toBe(true);
   expect(result.candleClocks.heldLate).toEqual(result.candleClocks.heldEarly);
+  expect(result.candleClocks.zeroLate).toEqual(result.candleClocks.zeroEarly);
+  expect(result.candleClocks.focusedLate).toEqual(result.candleClocks.focusedEarly);
+  expect(result.released).toEqual(result.heldReference);
   expect(result.candleClocks.otherLate).not.toEqual(result.candleClocks.otherEarly);
   for (const p of [result.clearCar, result.edgeClear]) {
     expect(p[0]).toBeGreaterThan(100);

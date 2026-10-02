@@ -1,4 +1,5 @@
 import type { VisibleAgent } from './simulate';
+import { heldClock } from './effect-clocks';
 
 export type InspectionCommand = { id: number | null; revision: number; time: number };
 export type InspectionAck = { id: number | null; revision: number };
@@ -20,6 +21,7 @@ type Actor = {
   heldProgress?: number;
   bird?: VisibleAgent;
   birdAt?: number;
+  birdClock?: boolean;
 };
 
 /** Production identities are independent of raster order and optional profiling identities. */
@@ -37,7 +39,8 @@ export class LifeInspection {
   private time = 0;
   private effectTime = 0;
   private clockHistory = false;
-  private birdHistory = false;
+  private birdSnapshots = 0;
+  private birdClockOwners = 0;
   private capKeys?: Float64Array;
   private capStamps?: Uint32Array;
   private capStamp = 0;
@@ -53,7 +56,8 @@ export class LifeInspection {
     // IDs never repeat in this world, including after a tile reset.
     this.revision = 0;
     this.clockHistory = false;
-    this.birdHistory = false;
+    this.birdSnapshots = 0;
+    this.birdClockOwners = 0;
     this.sharedOwners = undefined;
   }
 
@@ -72,7 +76,11 @@ export class LifeInspection {
     this.clockHistory = true;
     if (actor.progress !== undefined) actor.heldProgress = actor.progress - actor.progressOffset;
     if (view?.kind === 'bird') {
-      this.birdHistory = true;
+      if (!actor.bird) this.birdSnapshots++;
+      if (!actor.birdClock) {
+        actor.birdClock = true;
+        this.birdClockOwners++;
+      }
       actor.bird = { ...view, ahead: view.ahead && [...view.ahead] };
       actor.birdAt = clock;
     }
@@ -89,6 +97,10 @@ export class LifeInspection {
     }
     actor.birdAt = clock;
     this.selected = undefined;
+    if (actor.birdClock && actor.offset === 0) {
+      actor.birdClock = false;
+      this.birdClockOwners--;
+    }
   }
 
   /** Whether this identity is currently inspected. */
@@ -99,12 +111,28 @@ export class LifeInspection {
     return this.selected?.owner;
   }
 
-  get active() {
-    return this.selected !== undefined;
+  /** Bird gait offsets survive pose recovery for the owner's remaining lifetime. */
+  get birds() {
+    return this.birdClockOwners > 0;
   }
 
-  get birds() {
-    return this.birdHistory;
+  get recoveringBirds() {
+    return this.birdSnapshots > 0;
+  }
+
+  /** Only permanent retirement forgets a bird; frozen tiles may still revive it. */
+  forgetBird(owner: object) {
+    const actor = this.cached(owner);
+    if (!actor) return;
+    if (this.held(owner)) this.release(this.time);
+    if (actor.bird) {
+      actor.bird = undefined;
+      this.birdSnapshots--;
+    }
+    if (actor.birdClock) {
+      actor.birdClock = false;
+      this.birdClockOwners--;
+    }
   }
 
   private cached(owner: object) {
@@ -146,6 +174,7 @@ export class LifeInspection {
         offset: 0,
         effects: 0,
         progressOffset: 0,
+        birdClock: false,
       };
       if (primary && primary.registry !== this.registry) {
         this.sharedOwners ??= new WeakMap();
@@ -168,7 +197,7 @@ export class LifeInspection {
   }
 
   hasBird(owner: object) {
-    if (!this.birdHistory) return false;
+    if (!this.recoveringBirds) return false;
     return this.cached(owner)?.bird !== undefined;
   }
 
@@ -185,8 +214,10 @@ export class LifeInspection {
       const dy = (view.lat - bird.lat) * 110_540;
       const distance = Math.hypot(dx, dy);
       const reach = birdSpeed * dt;
-      if (distance <= reach) actor.bird = undefined;
-      else {
+      if (distance <= reach) {
+        actor.bird = undefined;
+        this.birdSnapshots--;
+      } else {
         const lng = bird.lng + ((dx / distance) * reach) / kx;
         const lat = bird.lat + ((dy / distance) * reach) / 110_540;
         view = {
@@ -202,7 +233,7 @@ export class LifeInspection {
     if (view.candle) view.candleSeed = actor.id & 31;
     if (view.candle && (this.held(owner) || actor.effects > 0))
       view.effectClock = this.held(owner)
-        ? -(this.selected!.effects - actor.effects) - 2
+        ? heldClock(this.selected!.effects - actor.effects)
         : actor.effects;
     // Only birds need a pose snapshot. Ground actors retain their own simulation
     // state; keeping their copied groups here adds avoidable GC roots/barriers.

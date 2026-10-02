@@ -35,6 +35,7 @@ import { LifeHoverController } from './life/hover';
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
   deletePrograms: vi.fn(),
+  prewarmGlyphPrograms: vi.fn(),
   createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
   createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 } }),
   deleteMapGlyphs: vi.fn(),
@@ -141,6 +142,7 @@ describe('live motion preference', () => {
     atlas: Atlas,
     time: number,
     next: FrameRequestCallback;
+  let resized: ResizeObserverCallback;
   const draw = (at: number) => {
     time = at;
     next(at);
@@ -172,6 +174,9 @@ describe('live motion preference', () => {
     vi.stubGlobal(
       'ResizeObserver',
       class {
+        constructor(callback: ResizeObserverCallback) {
+          resized = callback;
+        }
         observe() {}
         disconnect() {}
       },
@@ -345,6 +350,36 @@ describe('live motion preference', () => {
     expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
     expect(atlas.getLife().enabled).toBe(true);
   });
+
+  it.each(['item', 'all'] as const)(
+    'reacquires %s inspection at a stationary pointer after internal resize and tile arrival',
+    (mode) => {
+      usePauseMode(mode);
+      const hovered = vi.fn();
+      atlas.on('lifehover', hovered);
+      hoverAgent();
+      resized([], {} as ResizeObserver);
+      draw(250);
+      draw(300);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+      // A quality-driven DPR rebuild keeps the same CSS point and requests fresh evidence.
+      atlas.setQuality('low');
+      draw(310);
+      draw(330);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+      const tile = { z: 16, x: 32768, y: 32768 };
+      const loaded = {
+        mesh: { crowns: { count: 0 } } as TileMesh,
+        labels: [],
+        life: new LifeBuilder().finish(),
+      } as LoadedTile;
+      vi.spyOn(TileCache.prototype, 'tilesToDraw').mockReturnValue([tile]);
+      vi.spyOn(TileCache.prototype, 'get').mockReturnValue(loaded);
+      draw(350);
+      draw(400);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+    },
+  );
 
   it.each(
     (['item', 'all'] as const).flatMap((mode) =>

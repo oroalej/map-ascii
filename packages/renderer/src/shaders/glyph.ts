@@ -22,6 +22,7 @@ import { Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
+import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
@@ -164,7 +165,8 @@ const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 float effectTime(ivec2 cell, int channel) {
   if (!u_hasEffectClocks) return u_lifeTime;
   float token = texelFetch(u_effectClocks, cell, 0)[channel];
-  return token <= -2.0 ? -token - 2.0 : u_lifeTime - max(0.0, token);
+  if (token == ${float(ORDINARY_CLOCK)}) return u_lifeTime;
+  return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
 }
 
 float lampOn(int g, float time) {

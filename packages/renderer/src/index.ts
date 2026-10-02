@@ -48,6 +48,7 @@ import {
   deleteLabelGlyphs,
   deleteMapGlyphs,
   deletePrograms,
+  prewarmGlyphPrograms,
   type LabelGlyphs,
   type MapGlyphs,
   type Programs,
@@ -470,6 +471,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
+  let lastPointerInput = start;
   const lifePause = new LifePause<FrameView>(start, life.enabled && !reducedMotion);
   const itemInspection = options.lifeHoverPause !== 'all';
   let inspected: { id: number; generation: number | undefined } | undefined;
@@ -575,7 +577,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const resize = () => {
-    lifeHover.pointer(null);
+    lifeHover.clear();
     resetQualitySamples();
     const nextDpr = Math.min(window.devicePixelRatio || 1, knobs.maxDpr);
     const width = Math.max(1, Math.round(canvas.clientWidth * nextDpr));
@@ -612,6 +614,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     limits.minZoom = Math.min(limits.maxZoom, Math.max(baseMinZoom, fitZoom(limits.bounds, size)));
     const clamped = clampCamera(camera, limits, size);
     if (!sameCamera(clamped, camera)) {
+      lifeHover.pointer(null);
       camera = clamped;
       emit('camerachange', { ...camera });
     }
@@ -809,7 +812,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         (tile) => !lifeInputs.some((old) => old.key === tile.key && old.life === tile.life),
       )
     )
-      lifeHover.pointer(null);
+      lifeHover.clear();
     lifeInputs = lifeTiles;
     const cell = stepCell(schedule, step ?? 0);
     host.sync(lifeTiles, [camera.lng, camera.lat], {
@@ -1320,6 +1323,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
 
   let raf = 0;
+  const canWarmGlyphs = () =>
+    !destroyed &&
+    !lost &&
+    watch.watched() &&
+    !flight &&
+    performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
   const frame = (now: number) => {
     if (destroyed || lost) return;
     lifePause.tick(now, lifeRunning());
@@ -1441,6 +1450,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
+      prewarmGlyphPrograms(gl, programs, canWarmGlyphs);
       frameMs = smooth(frameMs, performance.now() - frameStart);
       if (!qualityWarmupDraw) previousDraw = { at: now, cpuMs: performance.now() - frameStart };
       qualityWarmupDraw = false;
@@ -1516,6 +1526,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
     cancelAnimationFrame(raf);
+    programs?.glyphWarmup?.cancel();
     programs = undefined;
     dropGlyphs(false);
     targets = undefined;
@@ -1588,6 +1599,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
     hover: (point) => {
+      lastPointerInput = performance.now();
       lifeHover.pointer(flight ? null : point);
       pointerOver = point !== null;
       if (!point) canvas.style.cursor = '';

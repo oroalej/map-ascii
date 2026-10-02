@@ -3389,15 +3389,24 @@ export class LifeWorld {
   private pruneRetired(cap = true) {
     for (const [key, entry] of this.retired)
       if (this.clock - entry.at >= RETIRE.seconds) {
+        this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
         this.retired.delete(key);
       }
     if (cap)
       while (this.retired.size > RETIRE.max) {
         const key = this.retired.keys().next().value!;
-        this.retired.get(key)!.life.momentHost.clear();
+        const life = this.retired.get(key)!.life;
+        this.forgetBirds(life);
+        life.momentHost.clear();
         this.retired.delete(key);
       }
+  }
+
+  private forgetBirds(life: TileLife) {
+    if (!this.inspection?.birds && !this.inspection?.recoveringBirds) return;
+    for (const flock of life.flocks)
+      for (const bird of flock.birds) this.inspection.forgetBird(bird);
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
@@ -4874,7 +4883,7 @@ export class LifeWorld {
         if (
           flock.rank >= out_ * crowd ||
           (!inView(flock.x, flock.y) &&
-            !(inspection?.birds && flock.birds.some((bird) => inspection.hasBird(bird))))
+            !(inspection?.recoveringBirds && flock.birds.some((bird) => inspection.hasBird(bird))))
         )
           continue;
         const wobble = life.elapsed * 0.8;

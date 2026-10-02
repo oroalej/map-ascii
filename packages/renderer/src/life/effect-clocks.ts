@@ -1,3 +1,8 @@
+/** Ordinary time, released-time offsets, and held time share one float token. */
+export const ORDINARY_CLOCK = -1;
+export const HELD_CLOCK_BASE = -2;
+export const heldClock = (time: number) => HELD_CLOCK_BASE - time;
+
 /** Sparse clock tokens: Life owns ink/R and lighting owns winning pools/G. */
 export class EffectClocks {
   readonly values: Float32Array;
@@ -11,7 +16,7 @@ export class EffectClocks {
   }[];
 
   constructor(cells: number) {
-    this.values = new Float32Array(cells * 2).fill(-1);
+    this.values = new Float32Array(cells * 2).fill(ORDINARY_CLOCK);
     this.channels = [0, 1].map(() => ({
       epoch: 0,
       stamps: new Uint32Array(cells),
@@ -39,7 +44,7 @@ export class EffectClocks {
     const state = this.channels[channel]!;
     if (state.stamps[cell] !== state.epoch) {
       // An ordinary winner needs no token unless it replaces a token this pass.
-      if (token === -1) return;
+      if (token === ORDINARY_CLOCK) return;
       state.stamps[cell] = state.epoch;
       state.next.push(cell);
     }
@@ -51,7 +56,7 @@ export class EffectClocks {
     let changed = false;
     for (const cell of state.current) {
       if (state.stamps[cell] === state.epoch) continue;
-      this.values[cell * 2 + channel] = -1;
+      this.values[cell * 2 + channel] = ORDINARY_CLOCK;
       changed = true;
     }
     let count = 0;
@@ -62,7 +67,7 @@ export class EffectClocks {
         this.values[at] = token;
         changed = true;
       }
-      if (token !== -1) state.next[count++] = cell;
+      if (token !== ORDINARY_CLOCK) state.next[count++] = cell;
     }
     state.next.length = count;
     [state.current, state.next] = [state.next, state.current];
