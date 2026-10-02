@@ -6,6 +6,12 @@ import { intersection } from 'polyclip-ts';
 import type { AtlasFeature } from '../03-normalize';
 import { seatingFootprint } from './site-detail';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover}/{immaculate-conception-parish,naga-city-science-high-school}.json',
+);
+import.meta.glob('../../../content/cities/naga/landcover/balatas-road.json');
+
 const root = new URL('../../../content/cities/naga/', import.meta.url);
 const read = (path: string): unknown => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
 const source = JSON.parse(

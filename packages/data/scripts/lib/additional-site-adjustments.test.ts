@@ -10,6 +10,13 @@ import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { parkedVehicleParts } from './parked-vehicles';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{naga-college-foundation,csnhs-liboton-annex,holy-rosary-minor-seminary,tinago-central-school,naga-central-school-i,naga-central-school-ii,bicol-central-station}.json',
+);
+import.meta.glob('../../../content/cities/naga/details/bicol-state-campus.json');
+import.meta.glob('../../../content/cities/naga/landcover/saint-joseph-school.json');
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const pack = (folder: string, slug: string) =>

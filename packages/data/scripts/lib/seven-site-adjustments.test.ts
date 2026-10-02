@@ -10,6 +10,17 @@ import { mergeContent } from '../04-merge-content';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{landcover,landmarks}/{university-of-nueva-caceres,saint-joseph-school,camarines-sur-national-high-school,bicol-state-campus}.json',
+);
+import.meta.glob(
+  '../../../content/cities/naga/landcover/{naga-city-hall,naga-city-civic-center,magsaysay-avenue}.json',
+);
+import.meta.glob(
+  '../../../content/cities/naga/details/{saint-joseph-school,camarines-sur-national-high-school,bicol-state-campus,universidad-de-santa-isabel}.json',
+);
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const pack = (folder: string, slug: string) =>

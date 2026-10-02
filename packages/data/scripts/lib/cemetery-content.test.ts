@@ -13,6 +13,12 @@ import { seatingFootprint } from './site-detail';
 import { bboxesOverlap } from './geo';
 import { mergeContent } from '../04-merge-content';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{cemeteries,landmarks}/{santo-nino-memorial-park,eternal-gardens}.json',
+);
+import.meta.glob('../../../content/cities/naga/landcover/basilica-cemeteries.json');
+
 const read = (p: string): unknown =>
   JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8')) as unknown;
 const packs = ['santo-nino-memorial-park', 'eternal-gardens'].map((s) =>

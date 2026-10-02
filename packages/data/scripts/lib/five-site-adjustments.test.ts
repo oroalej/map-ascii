@@ -9,6 +9,14 @@ import type { ContentBundle } from '@atlas/content';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 import { mergeSiteDetails } from './site-detail';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{naga-city-civic-center,naga-hope-christian-school,naga-city-peoples-mall,universidad-de-santa-isabel,naga-parochial-school}.json',
+);
+import.meta.glob(
+  '../../../content/cities/naga/landcover/universidad-de-santa-isabel-frontage.json',
+);
+
 const root = new URL('../../../content/cities/naga/', import.meta.url);
 const read = (folder: string, slug: string): unknown =>
   JSON.parse(readFileSync(new URL(`${folder}/${slug}.json`, root), 'utf8')) as unknown;

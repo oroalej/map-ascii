@@ -10,6 +10,11 @@ import { landcoverFeatures, SAME_TREE_M } from './landcover';
 import { seatingFootprint } from './site-detail';
 import { bboxesOverlap } from './geo';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/landcover/{ateneo-de-naga-university,ateneo-frontage}.json',
+);
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const packs = ['ateneo-de-naga-university', 'ateneo-frontage'].map((slug) =>

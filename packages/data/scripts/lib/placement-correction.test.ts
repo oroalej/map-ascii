@@ -17,6 +17,14 @@ import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{naga-hope-christian-school,penafrancia-basilica}.json',
+);
+import.meta.glob(
+  '../../../content/cities/naga/{cemeteries,landmarks}/penafrancia-catholic-cemetery.json',
+);
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const source = read('../__fixtures__/placement-correction-parents.json') as Record<
@@ -136,45 +144,52 @@ describe('owner placement corrections', () => {
     });
   });
 
+  // Build the same deterministic cemetery once; bound each exhaustive burial check.
+  const landmark = Landmark.parse(pack('landmarks', 'penafrancia-catholic-cemetery'));
+  const input = structuredClone(source.cemetery);
+  mergeContent(input, { landmarks: [landmark] } as ContentBundle);
+  const result = mergeCemeteries(input, [cemetery]);
+  const parts = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
+  const parent = input.find((f) => f.properties.id === cemetery.osm_id)!;
+  const obstacles = input.flatMap((f) => {
+    if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
+      return [seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)];
+    if (
+      ['Polygon', 'MultiPolygon'].includes(f.geometry.type) &&
+      f.properties.class.startsWith('building') &&
+      (f.properties.height ?? 0) > 0
+    )
+      return [f.geometry as Polygon | MultiPolygon];
+    return [];
+  });
+
   it('makes the separate Catholic cemetery dense raised burials, leaving source roads/buildings and canonical selection intact', () => {
-    const landmark = Landmark.parse(pack('landmarks', 'penafrancia-catholic-cemetery'));
-    const input = structuredClone(source.cemetery);
-    mergeContent(input, { landmarks: [landmark] } as ContentBundle);
-    const result = mergeCemeteries(input, [cemetery]);
-    const parts = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
     expect(parts.length).toBeGreaterThan(1800);
     expect(
       parts.filter((f) => f.properties.kind === 'burial=vault').length / parts.length,
     ).toBeGreaterThan(0.8);
-    const parent = input.find((f) => f.properties.id === cemetery.osm_id)!;
-    const obstacles = input.flatMap((f) => {
-      if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
-        return [seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)];
-      if (
-        ['Polygon', 'MultiPolygon'].includes(f.geometry.type) &&
-        f.properties.class.startsWith('building') &&
-        (f.properties.height ?? 0) > 0
-      )
-        return [f.geometry as Polygon | MultiPolygon];
-      return [];
-    });
-    for (const part of parts) {
-      const ring = (part.geometry as Polygon).coordinates[0]!;
-      expect(ring.every((p) => inside(p, parent.geometry as Polygon))).toBe(true);
-      for (const obstacle of obstacles)
-        expect(
-          intersection(
-            (part.geometry as Polygon).coordinates as LngLat[][],
-            obstacle.coordinates as LngLat[][] | LngLat[][][],
-          ),
-        ).toEqual([]);
-      expect(
-        DetailSelectionSchema.parse(JSON.parse(part.properties.detail_selection!) as unknown),
-      ).toMatchObject({ id: cemetery.osm_id, landmarkId: landmark.id });
-    }
     for (const original of source.cemetery)
       expect(
         result.features.find((f) => f.properties.id === original.properties.id)!.geometry,
       ).toEqual(original.geometry);
   });
+
+  for (let start = 0; start < parts.length; start += 250) {
+    it(`keeps Catholic cemetery burials ${start + 1}-${Math.min(start + 250, parts.length)} clear and selectable`, () => {
+      for (const part of parts.slice(start, start + 250)) {
+        const ring = (part.geometry as Polygon).coordinates[0]!;
+        expect(ring.every((p) => inside(p, parent.geometry as Polygon))).toBe(true);
+        for (const obstacle of obstacles)
+          expect(
+            intersection(
+              (part.geometry as Polygon).coordinates as LngLat[][],
+              obstacle.coordinates as LngLat[][] | LngLat[][][],
+            ),
+          ).toEqual([]);
+        expect(
+          DetailSelectionSchema.parse(JSON.parse(part.properties.detail_selection!) as unknown),
+        ).toMatchObject({ id: cemetery.osm_id, landmarkId: landmark.id });
+      }
+    });
+  }
 });

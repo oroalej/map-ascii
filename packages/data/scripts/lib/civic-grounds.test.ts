@@ -21,6 +21,15 @@ import { planParts } from './plan';
 import { mergeSiteDetails } from './site-detail';
 import { bboxesOverlap } from './geo';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{people-power-monument,padre-jorge-barlin-plaza,vincentian-heritage-park,panganiban-rotonda,naga-city-public-cemetery,naga-cemetery-southern-section,holy-rosary-major-seminary}.json',
+);
+import.meta.glob('../../../content/cities/naga/plans/holy-rosary-major-seminary.json');
+import.meta.glob(
+  '../../../content/cities/naga/cemeteries/{naga-city-public-cemetery,naga-cemetery-southern-section}.json',
+);
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const source = read('../__fixtures__/civic-ground-parents.json') as AtlasFeature[];

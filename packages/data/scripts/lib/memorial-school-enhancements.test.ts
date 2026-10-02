@@ -20,6 +20,16 @@ import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 import { bboxesOverlap } from './geo';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{abcede-elementary-school,sta-cruz-elementary-school,naga-city-school-of-arts-and-trades,eternal-gardens}.json',
+);
+import.meta.glob(
+  '../../../content/cities/naga/landcover/{naga-city-civic-center,naga-central-school-ii,bicol-state-campus,basilica-cemeteries}.json',
+);
+import.meta.glob('../../../content/cities/naga/details/bicol-state-campus.json');
+import.meta.glob('../../../content/cities/naga/cemeteries/eternal-gardens.json');
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const pack = (folder: string, slug: string) =>

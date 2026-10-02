@@ -12,6 +12,11 @@ import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { landcoverFeatures } from './landcover';
 import { bboxesOverlap } from './geo';
 
+// Declare disk-read content dependencies so targeted runs include this test on pack edits.
+import.meta.glob(
+  '../../../content/cities/naga/{details,landcover,landmarks}/{julian-b-meliton-elementary-school,our-lady-of-mount-carmel-monastery,mac-mariano-elementary-school,sta-cruz-national-high-school,mabolo-elementary-school}.json',
+);
+
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const slugs = [

@@ -1,121 +1,20 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import {
-  CLASS_ZOOM,
-  SiteDetail,
-  Landcover,
-  LandmarkPlan,
-  Landmark,
-  type AtlasClass,
-  type LngLat,
-} from '@atlas/shared';
+import { CLASS_ZOOM, type AtlasClass, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import { difference, intersection } from 'polyclip-ts';
-import type { Polygon, MultiPolygon } from 'geojson';
+import type { Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import type { AtlasFeature } from '../03-normalize';
-import { mergeContent } from '../04-merge-content';
-import type { ContentBundle } from '@atlas/content';
 import { bboxesOverlap } from './geo';
-import { planParts } from './plan';
-import { landcoverFeatures } from './landcover';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
-
-const root = new URL('../../../content/cities/naga/', import.meta.url);
-const readCollection = (folder: string): unknown[] =>
-  readdirSync(new URL(folder, root))
-    .filter((name) => name.endsWith('.json'))
-    .map((name) => JSON.parse(readFileSync(new URL(`${folder}/${name}`, root), 'utf8')) as unknown);
-const details = readCollection('details').map((data) => SiteDetail.parse(data));
-const covers = readCollection('landcover').map((data) => Landcover.parse(data));
-const plans = readCollection('plans').map((data) => LandmarkPlan.parse(data));
-const landmarks = readCollection('landmarks').map((data) => Landmark.parse(data));
-const existingSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/landmark-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const campusSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/seven-site-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const additionalSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/additional-site-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const memorialSchoolSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/memorial-school-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const roadsideCampusSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/roadside-campus-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const landscapedGroundsSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/five-landscaped-grounds.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const civicGroundsSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/civic-ground-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const concepcionScienceSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/concepcion-science-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const shrineConcepcionSabangSource = JSON.parse(
-  readFileSync(
-    new URL('../__fixtures__/shrine-concepcion-sabang-parents.json', import.meta.url),
-    'utf8',
-  ),
-) as AtlasFeature[];
-const lccTerminalChurchSource = JSON.parse(
-  readFileSync(
-    new URL('../__fixtures__/lcc-terminal-church-parents.json', import.meta.url),
-    'utf8',
-  ),
-) as AtlasFeature[];
-const bridgeFloodworksSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/bridge-floodworks-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const schoolHospitalSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/school-hospital-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const sanRoqueMaboloSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/san-roque-mabolo-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const tarosananSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/tarosanan-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const balatasSchoolSource = JSON.parse(
-  readFileSync(new URL('../__fixtures__/balatas-school-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
-const source = [
-  ...new Map(
-    [
-      ...existingSource,
-      ...campusSource,
-      ...additionalSource,
-      ...memorialSchoolSource,
-      ...roadsideCampusSource,
-      ...landscapedGroundsSource,
-      ...civicGroundsSource,
-      ...concepcionScienceSource,
-      ...shrineConcepcionSabangSource,
-      ...lccTerminalChurchSource,
-      ...bridgeFloodworksSource,
-      ...schoolHospitalSource,
-      ...sanRoqueMaboloSource,
-      ...tarosananSource,
-      ...balatasSchoolSource,
-    ].map((f) => [f.properties.id, f]),
-  ).values(),
-];
-mergeContent(source, { landmarks } as ContentBundle);
-const areaFor = (detail: SiteDetail): Polygon | MultiPolygon => {
-  if (detail.extent || detail.grounds)
-    return { type: 'Polygon', coordinates: [detail.extent ?? detail.grounds!] };
-  const geometry = source.find((f) => f.properties.id === detail.osm_id)?.geometry;
-  if (geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon')
-    throw Error(`missing area fixture: ${detail.id}`);
-  return geometry;
-};
-const coordinates = (geometry: Polygon | MultiPolygon) =>
-  geometry.coordinates as LngLat[][] | LngLat[][][];
-const newDetails = details.filter(
-  (d) => !['detail/plaza-rizal', 'detail/plaza-quince-martires'].includes(d.id),
-);
+import {
+  details,
+  covers,
+  plans,
+  source,
+  areaFor,
+  coordinates,
+  newDetails,
+} from './landmark-detail.fixtures';
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
@@ -190,115 +89,6 @@ describe('landmark detail tier coverage (fast)', () => {
       ).toBe(true);
     }
   });
-});
-
-describe('new landmark detail geometry (offline)', () => {
-  const input = [
-    ...source,
-    ...planParts(source, plans).parts,
-    ...landcoverFeatures(source, covers).features,
-  ];
-  for (const detail of newDetails) {
-    it(`${detail.id}: contains full footprints and clears standing structures`, () => {
-      const area = areaFor(detail);
-      const siteBounds = bbox(area) as [number, number, number, number];
-      const meters = 111320;
-      const mx = meters * Math.cos(((siteBounds[1] + siteBounds[3]) * Math.PI) / 360);
-      // Local meters avoid slow robust clipping of tiny details near longitude 123°.
-      const local = (shape: Polygon | MultiPolygon): LngLat[][][] =>
-        (shape.type === 'Polygon' ? [shape.coordinates] : shape.coordinates).map((p) =>
-          p.map((r) =>
-            r.map(([x, y]): LngLat => [
-              Math.round((x! - siteBounds[0]) * mx * 1e6) / 1e6,
-              Math.round((y! - siteBounds[1]) * meters * 1e6) / 1e6,
-            ]),
-          ),
-        );
-      const areaClip = local(area);
-      // Keep complete nearby features, including adjacent selection targets and crowns.
-      // Growing city fixtures should not make each site merge unrelated distant content.
-      const margin = 15 / 111320;
-      const longitudeMargin = margin / Math.cos(((siteBounds[1] + siteBounds[3]) * Math.PI) / 360);
-      const neighborhood: [number, number, number, number] = [
-        siteBounds[0] - longitudeMargin,
-        siteBounds[1] - margin,
-        siteBounds[2] + longitudeMargin,
-        siteBounds[3] + margin,
-      ];
-      const result = mergeSiteDetails(
-        input.filter((f) =>
-          bboxesOverlap(neighborhood, bbox(f) as [number, number, number, number]),
-        ),
-        [detail],
-      );
-      expect(result.warnings, detail.id).toEqual([]);
-      const obstacles = result.features.filter(
-        (f) =>
-          (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
-          !f.properties.detail_overhead &&
-          (f.properties.detail_blocked ||
-            f.properties.class === 'building_part' ||
-            (f.properties.class.startsWith('building') && (f.properties.height ?? 0) > 0)) &&
-          bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]),
-      );
-      const check = (shape: MultiPolygon, id: string, ownSeat = false) => {
-        expect(difference(local(shape), areaClip), id).toEqual([]);
-        for (const obstacle of obstacles) {
-          if (ownSeat && obstacle.properties.id.startsWith(`detail:${detail.id.slice(7)}/seating-`))
-            continue;
-          expect(
-            intersection(local(shape), local(obstacle.geometry as Polygon | MultiPolygon)),
-            `${id} / ${obstacle.properties.id}`,
-          ).toEqual([]);
-        }
-      };
-      for (const walk of detail.walks) check(seatingFootprint(walk.line, walk.width_m), walk.id);
-      for (const seat of detail.seating)
-        check(seatingFootprint(seat.line, seat.width_m, seat.bench_spans), seat.id, true);
-      for (const part of detail.structures.filter((part) => part.ground_override)) {
-        const shape: MultiPolygon = {
-          type: 'MultiPolygon',
-          coordinates: [[part.ring, ...(part.holes ?? [])]],
-        };
-        // Benches can stand on paving; standing footprints and carriageways cannot be erased.
-        for (const f of source) {
-          if (!bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number])) continue;
-          const obstacle =
-            f.geometry.type === 'Polygon' &&
-            f.properties.class.startsWith('building') &&
-            (f.properties.height ?? 0) > 0
-              ? f.geometry
-              : f.geometry.type === 'LineString' && f.properties.class.startsWith('road')
-                ? seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)
-                : undefined;
-          if (obstacle)
-            expect(
-              intersection(local(shape), local(obstacle)),
-              `${part.id} / ${f.properties.id}`,
-            ).toEqual([]);
-        }
-      }
-      const cover = covers.find((c) => c.id === `landcover/${detail.id.slice(7)}`);
-      // Existing Cathedral landcover includes unchanged frontage beyond its OSM grounds.
-      // USI's new content must fit its explicit visual envelope; adjoining crowns are separate.
-      if (cover && cover.id !== 'landcover/cathedral-grounds') {
-        for (const tree of cover.trees) expect(inside(tree.at, area), cover.id).toBe(true);
-        for (const row of cover.rows)
-          for (const p of row.line) expect(inside(p, area), cover.id).toBe(true);
-        for (const patch of cover.areas)
-          expect(
-            difference(local({ type: 'Polygon', coordinates: [patch.ring] }), areaClip),
-            cover.id,
-          ).toEqual([]);
-      }
-      const target = detail.selection_osm_id ?? detail.osm_id;
-      for (const f of result.features.filter(
-        (f) =>
-          f.properties.detail_parent && f.properties.id.startsWith(`detail:${detail.id.slice(7)}/`),
-      ))
-        expect(f.properties.detail_parent).toBe(target);
-    }, 10000);
-  }
 });
 
 describe('source-backed landmark facilities', () => {
