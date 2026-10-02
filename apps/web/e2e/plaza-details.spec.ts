@@ -31,7 +31,9 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(() => {
-        localStorage.setItem('atlas.quality', JSON.stringify('high'));
+        // Selection needs live agents, not maximum drawing effects on CI's software GPU.
+        // Low quality leaves the simulation and detail picking unchanged.
+        localStorage.setItem('atlas.quality', JSON.stringify('low'));
         localStorage.setItem(
           'atlas.life',
           JSON.stringify({ enabled: false, time: 'noon', wind: 'calm' }),
