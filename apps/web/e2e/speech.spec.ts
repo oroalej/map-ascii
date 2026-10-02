@@ -19,50 +19,30 @@ test('naga: natural moment speech appears at the reported monument view', async 
       JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
     );
     localStorage.setItem('atlas.quality', JSON.stringify('high'));
+    localStorage.setItem('atlas.speech.naga', JSON.stringify({ enabled: true, translation: 'en' }));
   });
   // The reported camera is deliberately fixed: relocating to a discovered speaker hid this bug.
   await page.goto('/naga?lat=13.623407&lng=123.184867&z=21');
   await mapReady(page);
   const bubbles = page.locator('[data-speech-bubble]:visible');
-  const native = bubbles.first().locator(`[lang="${catalog.native.code}"]`);
-  await expect(native).toBeVisible({ timeout: 30_000 });
-  const text = await native.textContent();
-  const line = catalog.exchanges
-    .flatMap((exchange) => exchange.lines)
-    .find((entry) => entry[catalog.native.code] === text);
-  expect(line).toBeDefined();
-  const translation = page.getByRole('combobox', { name: 'Speech translation' });
-  for (const code of ['en', 'fil']) {
-    await translation.selectOption(code);
-    // Natural scenes expire and speakers change while software WebGL processes the input.
-    // Read each currently visible native/translated pair in one browser evaluation.
-    await expect
-      .poll(() =>
+  // Capture a real scene's native/translated pair atomically before it naturally expires.
+  await expect
+    .poll(
+      () =>
         bubbles.evaluateAll(
-          (elements, { nativeCode, code, lines }) =>
-            elements.length > 0 &&
-            elements.every((element) => {
+          (elements, { nativeCode, lines }) =>
+            elements.some((element) => {
               const nativeText = element.querySelector(`[lang="${nativeCode}"]`)?.textContent;
-              const translatedText = element.querySelector(`[lang="${code}"]`)?.textContent;
+              const translatedText = element.querySelector('[lang="en"]')?.textContent;
               return lines.some(
-                (entry) => entry[nativeCode] === nativeText && entry[code] === translatedText,
+                (entry) => entry[nativeCode] === nativeText && entry.en === translatedText,
               );
             }),
-          {
-            nativeCode: catalog.native.code,
-            code,
-            lines: catalog.exchanges.flatMap((e) => e.lines),
-          },
+          { nativeCode: catalog.native.code, lines: catalog.exchanges.flatMap((e) => e.lines) },
         ),
-      )
-      .toBe(true);
-  }
-  await page.getByRole('button', { name: 'Speech (simulated)', exact: true }).click();
-  await expect(page.locator('[data-speech-bubble]')).toHaveCount(0);
-  await expect
-    .poll(() =>
-      page.evaluate(() => JSON.parse(localStorage.getItem('atlas.speech.naga') ?? '{}') as unknown),
+      { timeout: 30_000 },
     )
-    .toEqual({ enabled: false, translation: 'fil' });
-  // Loading the saved per-city preference is covered in state/speech.test.ts.
+    .toBe(true);
+  // Toggle/reply/EN-FIL behavior is covered in components/SpeechBubbles.test.tsx;
+  // per-city preference loading is covered in state/speech.test.ts.
 });
