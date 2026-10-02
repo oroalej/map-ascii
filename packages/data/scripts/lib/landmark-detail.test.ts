@@ -36,14 +36,18 @@ const existingSource = JSON.parse(
 const campusSource = JSON.parse(
   readFileSync(new URL('../__fixtures__/seven-site-parents.json', import.meta.url), 'utf8'),
 ) as AtlasFeature[];
-const existingIds = new Set(existingSource.map((f) => f.properties.id));
+const additionalSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/additional-site-parents.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
 const source = [
-  ...existingSource,
-  ...campusSource.filter((f) => !existingIds.has(f.properties.id)),
+  ...new Map(
+    [...existingSource, ...campusSource, ...additionalSource].map((f) => [f.properties.id, f]),
+  ).values(),
 ];
 mergeContent(source, { landmarks } as ContentBundle);
 const areaFor = (detail: SiteDetail): Polygon | MultiPolygon => {
-  if (detail.grounds) return { type: 'Polygon', coordinates: [detail.grounds] };
+  if (detail.extent || detail.grounds)
+    return { type: 'Polygon', coordinates: [detail.extent ?? detail.grounds!] };
   const geometry = source.find((f) => f.properties.id === detail.osm_id)?.geometry;
   if (geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon')
     throw Error(`missing area fixture: ${detail.id}`);
@@ -57,7 +61,7 @@ const newDetails = details.filter(
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
-    expect(newDetails).toHaveLength(17);
+    expect(newDetails).toHaveLength(23);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
@@ -97,6 +101,15 @@ describe('landmark detail tier coverage (fast)', () => {
       const site = areaFor(detail);
       const siteBounds = bbox(site) as [number, number, number, number];
       for (const f of source) {
+        // Existing standing roofs gain ridges/texture at z19 without invented roof parts.
+        if (
+          f.properties.class.startsWith('building') &&
+          (f.properties.height ?? 0) > 0 &&
+          (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
+          bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]) &&
+          intersection(coordinates(site), coordinates(f.geometry)).length
+        )
+          tiers.add(19);
         if (f.geometry.type === 'Point' && inside(f.geometry.coordinates, site))
           add(f.properties.class);
         // Kept sites can retain mapped lawns or parking instead of inventing a new surface.
@@ -110,7 +123,7 @@ describe('landmark detail tier coverage (fast)', () => {
       }
       const covered = [...tiers].filter((tier) => [12.5, 16, 17, 18, 19].includes(tier));
       expect(covered.length, detail.id).toBeGreaterThanOrEqual(3);
-      expect(tiers.has(18), detail.id).toBe(true);
+      expect(tiers.has(18) || tiers.has(19), detail.id).toBe(true);
       expect(detail.status, detail.id).toBe('draft');
       expect(detail.credit, detail.id).not.toBe('');
       expect(

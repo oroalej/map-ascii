@@ -392,9 +392,23 @@ export const SiteDetail = z
     surface: z.enum(['paving', 'keep']),
     /** Optional site outline containing an area parent or a point parent. */
     grounds: SimpleRing.optional(),
+    /** Detail confined to part of an existing area parent; preserves the complete parent. */
+    extent: SimpleRing.optional(),
     /** Curated landmark selected by this site, when different from its geometry anchor. */
     selection_osm_id: OsmId.optional(),
     structures: z.array(SiteStructure).default([]),
+    /** Fixed, illustrative parking inventory, visible independently of simulated Life. */
+    parked_vehicles: z
+      .array(
+        z.strictObject({
+          id: DetailKey,
+          at: LngLat,
+          bearing: z.number().min(0).lt(360),
+          kind: z.enum(['car', 'bus']),
+        }),
+      )
+      .max(200)
+      .default([]),
     /** Sourced height corrections retain the mapped building identity and footprint. */
     building_overrides: z
       .array(z.strictObject({ osm_id: OsmId, height_m: z.number().positive().max(255) }))
@@ -493,6 +507,12 @@ export const SiteDetail = z
     sources: Sources,
   })
   .superRefine((v, ctx) => {
+    if (v.grounds && v.extent)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['extent'],
+        message: 'choose grounds or a contained extent',
+      });
     if (
       new Set(v.building_overrides.map((building) => building.osm_id)).size !==
       v.building_overrides.length
@@ -506,7 +526,7 @@ export const SiteDetail = z
       ctx.addIssue({ code: 'custom', path: ['roof_overrides'], message: 'duplicate roof target' });
     if (new Set(v.flagpoles.map((pole) => pole.osm_id)).size !== v.flagpoles.length)
       ctx.addIssue({ code: 'custom', path: ['flagpoles'], message: 'duplicate flagpole target' });
-    for (const key of ['walks', 'seating', 'lamps', 'structures'] as const) {
+    for (const key of ['walks', 'seating', 'lamps', 'structures', 'parked_vehicles'] as const) {
       if (new Set(v[key].map((item) => item.id)).size !== v[key].length)
         ctx.addIssue({ code: 'custom', path: [key], message: 'duplicate detail id' });
     }

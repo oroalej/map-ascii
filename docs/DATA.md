@@ -294,6 +294,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   id: string;                    // "detail/<slug>"
   osm_id: string; title: string; surface: 'paving' | 'keep';
   grounds?: [lng, lat][];         // simple closed ring containing the full area or point parent
+  extent?: [lng, lat][];          // alternatively, confine detail wholly inside an area parent
   selection_osm_id?: string;      // optional canonical curated landmark for these grounds
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
@@ -305,6 +306,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   }[]; // default []; simple closed footprints wholly inside the parent area
   roof_overrides?: { osm_id: string; shape: 'flat' | 'gabled' | 'hipped' | 'pyramidal' }[]; // standing mapped buildings inside the site
   building_overrides?: { osm_id: string; height_m: number }[]; // sourced height, same standing footprint/id
+  parked_vehicles?: { id: string; at: [lng, lat]; bearing: number; kind: 'car' | 'bus' }[]; // at most 200 fixed illustrative vehicles
   flagpoles?: { osm_id: string; at: [lng, lat]; flag?: 'PH' }[]; // existing mapped flagpoles; defaults to []
   walks: { id: string; line: [lng, lat][]; width_m: number }[];
   seating: {
@@ -316,6 +318,8 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   status: 'draft' | 'verified'; credit: string; sources: Source[];
 }
 // CuratedArea also accepts raised?: boolean for planting beds ground agents cannot enter.
+
+`extent` and `grounds` are mutually exclusive. An extent preserves the complete source parent and canonical selection while limiting additions to a contained part of it. Explicit extents and grounds must not overlap other detail sites. Fixed `parked_vehicles` emit neutral plan-view body, glazing, roof and wheel silhouettes through existing geometry classes, visible with Life off. They create blocked footprints, not simulated traffic or new building/activity identities. Whole parts must clear site edges, mapped roofs/water/carriageways/paths and authored roofs; inventories cannot overlap. Dimensions are illustrative (4.4 × 1.8 m cars; 10 × 2.5 m buses), and the pack's draft status and credit apply. Vehicle/extent changes invalidate the detail layout fingerprint; omitted/empty parking retains legacy fingerprints.
 
 `selection_osm_id` resolves kept grounds and paving terraces to an existing curated landmark. It must overlap the site or have a facade within 5 m of its boundary (OSM grounds can stop at an approximate building frontage); remote targets and alias chains are rejected. Structures on kept or explicitly outlined grounds also select that site's canonical landmark, including a canopy above an OSM lawn. A bounded `detail_selection` descriptor carries canonical id, class, name and landmark metadata through tiles, so selection works before the target's own tile loads. It creates no geometry or additional picking ink. Malformed or mismatched descriptors are ignored by the worker.
 

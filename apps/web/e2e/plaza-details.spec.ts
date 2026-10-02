@@ -17,8 +17,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
     `../../../packages/content/cities/${city.slug}/details/`,
     import.meta.url,
   );
-  // Five reviewed exposed surfaces cover the two legacy plazas, a kept campus canopy,
-  // a standing building's apron, and a separate canonical landmark target. Fixtures
+  // Reviewed surfaces cover plazas, campus planting, an apron, an aliased landmark,
+  // a school pool and fixed terminal parking. Fixtures
   // keep smoke coverage bounded as packs are added; geometry rules live in Vitest.
   const cases = samples[city.slug] ?? [];
   for (const sample of cases) {

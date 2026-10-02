@@ -10,6 +10,7 @@ export function detailLayoutKey(input: unknown): string {
     selection_osm_id: detail.selection_osm_id,
     surface: detail.surface,
     grounds: detail.grounds,
+    ...(detail.extent && { extent: detail.extent }),
     structures: detail.structures.map((part) => ({
       ...part,
       ground_override: part.ground_override ?? false,
@@ -20,6 +21,7 @@ export function detailLayoutKey(input: unknown): string {
     walks: detail.walks,
     seating: detail.seating,
     lamps: detail.lamps,
+    ...(detail.parked_vehicles.length && { parked_vehicles: detail.parked_vehicles }),
   };
   return createHash('sha256').update(JSON.stringify(layout)).digest('hex');
 }

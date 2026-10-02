@@ -14,6 +14,7 @@ import type { Polygon, MultiPolygon, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
 import { bboxesOverlap } from './geo';
+import { parkedVehicleParts } from './parked-vehicles';
 
 const METERS = 111_320;
 type MultiPoly = ReturnType<typeof union>;
@@ -165,9 +166,12 @@ export function mergeSiteDetails(
     parents.add(pack.osm_id);
     if (parent.properties.height && !pack.grounds)
       throw new Error(`${pack.id}: a building parent needs curated grounds`);
-    const area = pack.grounds
-      ? { type: 'Polygon' as const, coordinates: [pack.grounds] }
-      : (parent.geometry as Polygon | MultiPolygon);
+    const area =
+      pack.extent || pack.grounds
+        ? { type: 'Polygon' as const, coordinates: [pack.extent ?? pack.grounds!] }
+        : (parent.geometry as Polygon | MultiPolygon);
+    if (pack.extent && (!isArea(parent.geometry) || !contained(area, parent.geometry)))
+      throw new Error(`${pack.id}: extent must fit inside parent ${pack.osm_id}`);
     if (pack.grounds && !contained(parent.geometry, area))
       throw new Error(`${pack.id}: grounds must contain parent ${pack.osm_id}`);
     const selectionId = pack.selection_osm_id ?? pack.osm_id;
@@ -189,7 +193,7 @@ export function mergeSiteDetails(
       throw new Error(`${pack.id}: selection targets cannot form alias chains`);
     const p = target.properties;
     const metadata =
-      pack.surface === 'keep' || pack.grounds || pack.selection_osm_id
+      pack.surface === 'keep' || pack.grounds || pack.extent || pack.selection_osm_id
         ? JSON.stringify(
             DetailSelectionSchema.parse({
               id: selectionId,
@@ -210,7 +214,10 @@ export function mergeSiteDetails(
   for (let i = 0; i < sites.length; i++) {
     const a = sites[i]!;
     for (const b of sites.slice(i + 1))
-      if ((a.pack.grounds || b.pack.grounds) && intersection(clip(a.area), clip(b.area)).length)
+      if (
+        (a.pack.grounds || b.pack.grounds || a.pack.extent || b.pack.extent) &&
+        intersection(clip(a.area), clip(b.area)).length
+      )
         throw new Error(`${a.pack.id}: grounds overlap ${b.pack.id}`);
   }
   const blocked = input
@@ -270,7 +277,7 @@ export function mergeSiteDetails(
       target.properties.variant = roof.shape;
     }
     if (pack.surface === 'paving') {
-      if (pack.grounds)
+      if (pack.grounds || pack.extent)
         features.push(feature(`${prefix}/grounds`, area, { class: 'paving', ...link }));
       else {
         parent.properties.class = 'paving';
@@ -285,7 +292,51 @@ export function mergeSiteDetails(
       seat,
       shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
     }));
-    const structures = pack.structures.map((part) => {
+    const vehicleParts = pack.parked_vehicles.flatMap(parkedVehicleParts);
+    const vehicleIds = new Set(vehicleParts.map((part) => part.id));
+    const vehicleKinds = new Map(
+      pack.parked_vehicles.flatMap((vehicle) =>
+        parkedVehicleParts(vehicle).map((part) => [part.id, vehicle.kind] as const),
+      ),
+    );
+    if (pack.structures.some((part) => vehicleIds.has(part.id)))
+      throw new Error(`${pack.id}: duplicate parked vehicle structure id`);
+    const vehicleFootprints = pack.parked_vehicles.map((vehicle) => {
+      const [body, ...parts] = parkedVehicleParts(vehicle);
+      return union([body!.ring], ...parts.map((part) => [part.ring]));
+    });
+    const parkingObstacles = (vehicleParts.length ? input : []).flatMap((f) => {
+      if (!bboxesOverlap(bbox(f) as [number, number, number, number], siteBounds)) return [];
+      if (f.properties.class.startsWith('water') && isArea(f.geometry))
+        return [{ id: f.properties.id, geometry: f.geometry }];
+      if (
+        f.geometry.type !== 'LineString' ||
+        (!f.properties.class.startsWith('road') && f.properties.class !== 'path')
+      )
+        return [];
+      return [
+        {
+          id: f.properties.id,
+          geometry: seatingFootprint(
+            f.geometry.coordinates as LngLat[],
+            f.properties.width ?? (f.properties.class === 'path' ? 2 : 6),
+          ),
+        },
+      ];
+    });
+    for (const part of vehicleParts) {
+      for (const obstacle of parkingObstacles)
+        if (intersection([part.ring], clip(obstacle.geometry)).length)
+          throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
+      for (const roof of pack.structures.filter((part) => part.material === 'roof'))
+        if (intersection([part.ring], [roof.ring, ...(roof.holes ?? [])]).length)
+          throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
+    }
+    for (const [i, footprint] of vehicleFootprints.entries()) {
+      if (vehicleFootprints.slice(0, i).some((other) => intersection(footprint, other).length))
+        throw new Error(`${pack.id}: overlapping parked vehicles`);
+    }
+    const structures = [...pack.structures, ...vehicleParts].map((part) => {
       const rings = [part.ring, ...(part.holes ?? [])];
       const shape: Polygon = { type: 'Polygon', coordinates: rings };
       for (const [i, hole] of (part.holes ?? []).entries()) {
@@ -316,7 +367,11 @@ export function mergeSiteDetails(
       }
       // Opt-in ground replacements must not paint a court through a standing footprint.
       // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
-      if (part.ground_override || ['pitch', 'water'].includes(part.material))
+      if (
+        vehicleIds.has(part.id) ||
+        part.ground_override ||
+        ['pitch', 'water'].includes(part.material)
+      )
         for (const obstacle of blocked)
           if (
             bboxesOverlap(bbox(shape) as [number, number, number, number], obstacle.bounds) &&
@@ -345,6 +400,9 @@ export function mergeSiteDetails(
                   ? 'building_woodwork'
                   : 'building_part',
         height: part.height_m,
+        ...(vehicleIds.has(part.id) && {
+          kind: `parked_vehicle=${vehicleKinds.get(part.id)!}`,
+        }),
         ...(part.material === 'water' && { kind: 'leisure=swimming_pool' }),
         variant:
           part.roof_shape ??

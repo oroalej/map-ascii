@@ -1,0 +1,105 @@
+{
+  "id": "landcover/naga-central-school-ii",
+  "title": "Naga Central School II planting",
+  "trees": [
+    {
+      "at": [123.18938274, 13.631792583],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189393541, 13.63173832],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189764581, 13.631645783],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189868785, 13.63173987],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.190097312, 13.631645204],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.1900805, 13.63159432],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189930376, 13.631527306],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189681746, 13.631624198],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.18970647, 13.631790188],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189567545, 13.63184464],
+      "crown_m": 7,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "grass",
+      "ring": [
+        [123.189824435, 13.631764864],
+        [123.189824732, 13.631764098],
+        [123.189825409, 13.631763584],
+        [123.189877159, 13.631743681],
+        [123.189865339, 13.631722686],
+        [123.189553818, 13.63184713],
+        [123.18954665, 13.631862772],
+        [123.189549183, 13.631868791],
+        [123.189824579, 13.63176566],
+        [123.189824435, 13.631764864]
+      ]
+    },
+    {
+      "cover": "grass",
+      "ring": [
+        [123.189824435, 13.631764864],
+        [123.189824732, 13.631764098],
+        [123.189825409, 13.631763584],
+        [123.189877601, 13.631743523],
+        [123.189878622, 13.631743597],
+        [123.1898794, 13.631744306],
+        [123.189883744, 13.631754875],
+        [123.189907749, 13.631744711],
+        [123.189842422, 13.631731838],
+        [123.189547956, 13.631849472],
+        [123.189571551, 13.631887032],
+        [123.189829564, 13.631777809],
+        [123.189824435, 13.631764864]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga Central School II - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/795855561",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ]
+}
