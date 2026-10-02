@@ -43,6 +43,9 @@ it('uploads only changed final tokens and preserves idle pools until lighting cl
   };
   const pack = (agents: VisibleAgent[]) =>
     lifePass(gl, targets, resources, themes.dark, view, placement, agents);
+  pack([{ ...candle, effectClock: undefined }]);
+  expect(lifeRaster(targets)!.candles).toBe(true);
+  expect(lifeRaster(targets)!.clocks).toBeUndefined();
   pack([candle]);
   effectClockPass(gl, targets);
   const clocks = lifeRaster(targets)!.clocks!;
@@ -69,6 +72,7 @@ it('uploads only changed final tokens and preserves idle pools until lighting cl
   );
   expect(clocks.active).toBe(true); // Ink still owns R.
   pack([]);
+  expect(lifeRaster(targets)!.candles).toBe(false);
   effectClockPass(gl, targets);
   expect(targets.effectClockTex).toBeUndefined();
   expect(lifeRaster(targets)!.clocks).toBeUndefined();

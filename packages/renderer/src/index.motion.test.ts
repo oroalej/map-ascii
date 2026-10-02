@@ -31,6 +31,7 @@ import type { TileMesh } from './gpu';
 import { Readback } from './readback';
 import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
+import { prewarmGlyphPrograms } from './gpu-context';
 
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
@@ -227,11 +228,18 @@ describe('live motion preference', () => {
         revision: 1,
         light: life,
         lamps: null,
+        candles: true,
       });
       return 1;
     });
     draw(100);
     draw(150);
+    expect(prewarmGlyphPrograms).toHaveBeenLastCalledWith(
+      gl,
+      expect.anything(),
+      expect.any(Function),
+      true,
+    );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
   });

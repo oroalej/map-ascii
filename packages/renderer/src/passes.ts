@@ -465,6 +465,7 @@ type Texels = {
   clockCells?: number[];
   clockUpload?: number;
   clockCandidates?: boolean;
+  candles?: boolean;
   held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
   owners: Uint32Array;
@@ -549,7 +550,15 @@ export function lifePass(
   buffers.held = undefined;
   const lifeTexels = buffers.life;
   const packStart = profiler?.time();
-  buffers.clockCandidates = agents.some((agent) => agent.candle && agent.effectClock !== undefined);
+  buffers.candles = buffers.clockCandidates = false;
+  for (const agent of agents) {
+    if (!agent.candle) continue;
+    buffers.candles = true;
+    if (agent.effectClock !== undefined) {
+      buffers.clockCandidates = true;
+      break;
+    }
+  }
   if (buffers.clockCandidates) {
     buffers.clocks ??= new EffectClocks(cols * rows);
     buffers.clockCells ??= [];

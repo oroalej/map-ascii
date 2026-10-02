@@ -1450,7 +1450,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
-      prewarmGlyphPrograms(gl, programs, canWarmGlyphs);
       frameMs = smooth(frameMs, performance.now() - frameStart);
       if (!qualityWarmupDraw) previousDraw = { at: now, cpuMs: performance.now() - frameStart };
       qualityWarmupDraw = false;
@@ -1480,6 +1479,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // frame cannot consume freshly confirmed speech before it is published.
     readback.poll();
     const raster = lifeRaster(targets);
+    if (lastDraw !== -Infinity)
+      prewarmGlyphPrograms(gl, programs, canWarmGlyphs, Boolean(raster?.candles));
     lifeHover.update(
       lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
         ? {

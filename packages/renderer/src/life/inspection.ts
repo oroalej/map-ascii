@@ -203,7 +203,7 @@ export class LifeInspection {
 
   /** Bird-only steering uses normal species speed, never fast-forwards a shared flock. */
   present(owner: object, view: VisibleAgent, birdSpeed?: number): VisibleAgent {
-    const actor = this.actor(owner);
+    const actor = this.cached(owner) ?? this.actor(owner);
     const bird = actor.bird;
     if (bird && this.held(owner)) view = { ...bird };
     else if (bird && birdSpeed !== undefined) {

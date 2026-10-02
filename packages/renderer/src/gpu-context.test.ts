@@ -60,6 +60,26 @@ describe('glyph program variants', () => {
     deletePrograms(context, programs);
   });
 
+  it('warms only focus until candles appear, including an upgrade during a pending warmup', () => {
+    const programs = createPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, false);
+    vi.advanceTimersByTime(200);
+    expect(programs.glyphVariants?.size).toBe(2);
+    expect(createProgram).toHaveBeenCalledTimes(5);
+    prewarmGlyphPrograms(context, programs, () => true, false);
+    expect(vi.getTimerCount()).toBe(0);
+    prewarmGlyphPrograms(context, programs, () => true, true);
+    vi.advanceTimersByTime(300);
+    expect(programs.glyphVariants?.size).toBe(4);
+    deletePrograms(context, programs);
+    const upgraded = createPrograms(context);
+    prewarmGlyphPrograms(context, upgraded, () => true, false);
+    prewarmGlyphPrograms(context, upgraded, () => true, true);
+    vi.advanceTimersByTime(400);
+    expect(upgraded.glyphVariants?.size).toBe(4);
+    deletePrograms(context, upgraded);
+  });
+
   it('reuses an unfinished parallel link when input arrives and cancels the next link on disposal', () => {
     gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const pending = {

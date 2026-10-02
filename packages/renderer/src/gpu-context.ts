@@ -35,7 +35,11 @@ export type Programs = {
   glyph: twgl.ProgramInfo;
   /** At most four variants, compiled once when their features are first needed. */
   glyphVariants?: Map<number, twgl.ProgramInfo>;
-  glyphWarmup?: { pending?: { key: number; program: PendingProgram }; cancel(): void };
+  glyphWarmup?: {
+    clocks: boolean;
+    pending?: { key: number; program: PendingProgram };
+    cancel(): void;
+  };
   glyphWarmupFailed?: boolean;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
@@ -90,13 +94,23 @@ export function glyphProgram(gl: GL, programs: Programs, focus: boolean, effectC
 }
 
 /** One owned idle task and at most one pending link; startup retains the minimal shader. */
-export function prewarmGlyphPrograms(gl: GL, programs: Programs, canWarm: () => boolean) {
+export function prewarmGlyphPrograms(
+  gl: GL,
+  programs: Programs,
+  canWarm: () => boolean,
+  effectClocks = true,
+) {
   const variants = programs.glyphVariants;
-  if (!variants || variants.size === 4 || programs.glyphWarmup || programs.glyphWarmupFailed)
+  if (!variants || variants.size === 4 || programs.glyphWarmupFailed) return;
+  if (programs.glyphWarmup) {
+    programs.glyphWarmup.clocks ||= effectClocks;
     return;
+  }
+  if (!effectClocks && variants.has(1)) return;
   let cancelled = false;
   let cancelTask: (() => void) | undefined;
   const warmup: NonNullable<Programs['glyphWarmup']> = {
+    clocks: effectClocks,
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
@@ -134,7 +148,7 @@ export function prewarmGlyphPrograms(gl: GL, programs: Programs, canWarm: () => 
           warmup.pending = undefined;
         }
       } else {
-        const key = [1, 2, 3].find((key) => !variants.has(key));
+        const key = (warmup.clocks ? [1, 2, 3] : [1]).find((key) => !variants.has(key));
         if (key === undefined) {
           programs.glyphWarmup = undefined;
           return;
