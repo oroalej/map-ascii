@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Review PR'
+  short_description: "Claude reviews this branch's PR; Codex verifies it and fixes valid findings."
+  default_prompt: "Use $review-pr to have Claude review this branch's PR, verify its findings, and fix the valid ones."
