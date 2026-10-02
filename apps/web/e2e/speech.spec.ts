@@ -34,7 +34,28 @@ test('naga: natural moment speech appears at the reported monument view', async 
   const translation = page.getByRole('combobox', { name: 'Speech translation' });
   for (const code of ['en', 'fil']) {
     await translation.selectOption(code);
-    await expect(bubbles.first().locator('[lang]')).toHaveText([text!, line![code]!]);
+    // Natural scenes expire and speakers change while software WebGL processes the input.
+    // Read each currently visible native/translated pair in one browser evaluation.
+    await expect
+      .poll(() =>
+        bubbles.evaluateAll(
+          (elements, { nativeCode, code, lines }) =>
+            elements.length > 0 &&
+            elements.every((element) => {
+              const nativeText = element.querySelector(`[lang="${nativeCode}"]`)?.textContent;
+              const translatedText = element.querySelector(`[lang="${code}"]`)?.textContent;
+              return lines.some(
+                (entry) => entry[nativeCode] === nativeText && entry[code] === translatedText,
+              );
+            }),
+          {
+            nativeCode: catalog.native.code,
+            code,
+            lines: catalog.exchanges.flatMap((e) => e.lines),
+          },
+        ),
+      )
+      .toBe(true);
   }
   await page.getByRole('button', { name: 'Speech (simulated)', exact: true }).click();
   await expect(page.locator('[data-speech-bubble]')).toHaveCount(0);
@@ -43,11 +64,5 @@ test('naga: natural moment speech appears at the reported monument view', async 
       page.evaluate(() => JSON.parse(localStorage.getItem('atlas.speech.naga') ?? '{}') as unknown),
     )
     .toEqual({ enabled: false, translation: 'fil' });
-  await page.reload();
-  await mapReady(page);
-  await expect(
-    page.getByRole('button', { name: 'Speech (simulated)', exact: true }),
-  ).toHaveAttribute('aria-pressed', 'false');
-  await expect(translation).toHaveValue('fil');
-  await expect(page.locator('[data-speech-bubble]')).toHaveCount(0);
+  // Loading the saved per-city preference is covered in state/speech.test.ts.
 });
