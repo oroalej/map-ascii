@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { makeScenario, completeScenarioState } from './testing/scenarios';
+// eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
 it('keeps complete simulation state identical across every draw tier', () => {
   const full = makeScenario('transit', 1);
   const low = makeScenario('transit', 1);
