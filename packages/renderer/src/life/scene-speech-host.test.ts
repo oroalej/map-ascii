@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DialogueChoice } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, type Mover, type Stall, type Walker } from './simulate';
@@ -83,6 +83,33 @@ describe('real local-scene adapters', () => {
     turns: 1,
     speakers: [0],
   };
+  it.each([30, 60, 120])('keeps 80 background scans over eight seconds at %i Hz', (hz) => {
+    const f = fixture(happy);
+    f.tile.scenes.visits.clear();
+    const attempt = vi
+      .spyOn(f.host.speech.selector.memory, 'ambientAttempt')
+      .mockReturnValue(false);
+    for (let tick = 0; tick < 8 * hz; tick++)
+      f.host.step(1 / hz, 21, { rain: 0, clock: (tick + 1) / hz }, undefined, []);
+    expect(attempt).toHaveBeenCalledTimes(80);
+  });
+  it('does not bank adapter credits between scan deadlines', () => {
+    const f = fixture(order);
+    const admit = vi.spyOn(f.host.speech, 'admit');
+    for (let i = 0; i < 10; i++)
+      f.tile.scenes.speechEvents.push({
+        kind: 'purchase',
+        mover: f.person,
+        visit: f.visit,
+        key: {},
+      });
+    f.host.step(0.01, 21, { rain: 0 }, undefined, []);
+    expect(admit).toHaveBeenCalledTimes(2);
+    f.host.step(0.01, 21, { rain: 0 }, undefined, []);
+    expect(admit).toHaveBeenCalledTimes(2);
+    f.host.step(0.08, 21, { rain: 0 }, undefined, []);
+    expect(admit).toHaveBeenCalledTimes(4);
+  });
   it('lets one walker express themselves without holding or changing navigation', () => {
     const f = fixture(happy);
     f.tile.scenes.visits.clear();
@@ -174,6 +201,7 @@ describe('real local-scene adapters', () => {
     expect(f.host.speech.size).toBe(1);
     expect(f.host.speech.selector.selected.arrival).toBe(1);
     f.visit.state = 'board';
+    f.host.step(0, 21, { rain: 0 }, undefined, []);
     expect(f.host.speech.speech(f.person)).toBeUndefined();
     f.host.step(0.02, 21, { rain: 0 }, undefined, []);
     expect(f.host.speech.size).toBe(0);
@@ -200,6 +228,7 @@ describe('real local-scene adapters', () => {
     expect(f.host.speech.speech(f.vendor)?.line).toBe(1);
     expect({ person: f.person, visit: f.visit, vendor: f.vendor }).toEqual(before);
     f.visit.state = 'return';
+    f.host.step(0, 21, { rain: 0 }, undefined, []);
     expect(f.host.speech.speech(f.vendor)).toBeUndefined();
   });
   it('speaks from an actual waiting companion, with arrival required and boarding taking precedence', () => {
@@ -223,6 +252,7 @@ describe('real local-scene adapters', () => {
     f.host.step(3, 21, { rain: 0 }, undefined, []);
     expect(f.host.speech.speech(f.person)).toMatchObject({ line: 1, member: 1 });
     f.visit.state = 'board';
+    f.host.step(0, 21, { rain: 0 }, undefined, []);
     expect(f.host.speech.speech(f.person)).toBeUndefined();
   });
   it('admits sheltered weather dialogue and clears it when the shelter visit ends', () => {

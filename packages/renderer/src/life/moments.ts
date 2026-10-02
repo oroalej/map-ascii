@@ -1,6 +1,8 @@
 /** Tile-local social holds. Navigation and terrain admission stay with the simulation. */
 import {
   SPEECH_ZOOM,
+  DIALOGUE_WEATHER,
+  LOOK_ANCHORS,
   type DialogueAnchor,
   type DialogueChoice,
   type GreetingPeriods,
@@ -13,7 +15,7 @@ import { DialogueSelector, type DialogueMemory } from './dialogue';
 export type MomentKind = DialogueChoice['kind'];
 export const MOMENTS = {
   zoom: SPEECH_ZOOM,
-  rain: 0.5,
+  rain: DIALOGUE_WEATHER.rain,
   interval: 0.1,
   checks: 8,
   binMeters: 12,
@@ -23,6 +25,7 @@ export const MOMENTS = {
   retry: 1,
   clearanceExtra: 2,
   gesture: 1,
+  scene: { capacity: 4, ambientCapacity: 2, checks: 2, turn: 3, vendorTurn: 1.5 },
   greet: { chance: 0.3, duration: [1.5, 3], speechTurn: 2.5, reach: 3, rearm: 1, opposition: -0.5 },
   talk: { chance: 0.25, third: 0.35, duration: [10, 40], turn: [2, 5], speechTurn: 3, reach: 8 },
   ball: {
@@ -120,10 +123,11 @@ export class Moments<Owner extends object = object> {
   private priority = 0;
   private readonly cursor = [0, 0, 0, 0];
   private readonly neighbors = [0, 0, 0, 0];
-  private readonly neighborCursor = new Map<object, number[]>();
-  private readonly ids = new Map<object, number>();
+  private neighborCursor = new WeakMap<object, number[]>();
+  private ids = new WeakMap<object, number>();
+  private ownerSerial = 0;
   private readonly cooldown = new Map<object, number>();
-  private readonly episodes = new Map<
+  private episodes = new WeakMap<
     object,
     { idle: boolean; talk: boolean; ball: boolean; look: boolean }
   >();
@@ -131,6 +135,13 @@ export class Moments<Owner extends object = object> {
   private readonly pending = new Map<string, Pending<Owner>>();
   private readonly membership = new Map<object, Moment<Owner>>();
   private readonly active: Moment<Owner>[] = [];
+  private lastActors: readonly MomentActor<Owner>[] = [];
+  private readonly present = new Set<object>();
+  private readonly bins = new Map<number, MomentActor<Owner>[]>();
+  private readonly binPool: MomentActor<Owner>[][] = [];
+  private readonly lists: MomentActor<Owner>[][] = [[], [], [], []];
+  private readonly localBins: MomentActor<Owner>[][] = [];
+  private readonly children = new Map<number, number>();
   readonly stats = {
     checks: 0,
     started: { greet: 0, talk: 0, ball: 0, look: 0 },
@@ -187,11 +198,17 @@ export class Moments<Owner extends object = object> {
     this.active.length = 0;
     this.membership.clear();
     this.cooldown.clear();
-    this.episodes.clear();
+    this.episodes = new WeakMap();
     this.approaches.clear();
     this.pending.clear();
-    this.ids.clear();
-    this.neighborCursor.clear();
+    this.ids = new WeakMap();
+    this.ownerSerial = 0;
+    this.neighborCursor = new WeakMap();
+    this.lastActors = [];
+    this.present.clear();
+    this.bins.clear();
+    this.children.clear();
+    for (const list of [...this.binPool, ...this.lists, this.localBins]) list.length = 0;
     this.selector.clear();
   }
   pose(owner: object): PersonPose | undefined {
@@ -252,13 +269,16 @@ export class Moments<Owner extends object = object> {
       cursor: [...this.cursor],
       neighbors: [...this.neighbors],
       stats: structuredClone(this.stats),
-      neighborCursor: [...this.neighborCursor].map(([owner, counters]) => [
-        id(owner),
-        [...counters],
-      ]),
+      neighborCursor: this.lastActors.flatMap(({ owner }) => {
+        const counters = this.neighborCursor.get(owner);
+        return counters ? [[id(owner), [...counters]]] : [];
+      }),
       active: this.active.map((m) => ({ ...m, members: m.members.map((a) => id(a.owner)) })),
       cooldown: [...this.cooldown].map(([owner, end]) => [id(owner), end]),
-      episodes: [...this.episodes].map(([owner, state]) => [id(owner), { ...state }]),
+      episodes: this.lastActors.flatMap(({ owner }) => {
+        const state = this.episodes.get(owner);
+        return state ? [[id(owner), { ...state }]] : [];
+      }),
       approaches: [...this.approaches.keys()],
       pending: [...this.pending].map(([key, p]) => [
         key,
@@ -403,10 +423,13 @@ export class Moments<Owner extends object = object> {
   private scan(c: MomentContext<Owner>) {
     const budget = Math.max(0, MOMENTS.checks - (c.sceneChecks ?? 0));
     const actors = c.actors();
-    const present = new Set(actors.map((a) => a.owner));
+    this.lastActors = actors;
+    const { present } = this;
+    present.clear();
+    for (const actor of actors) present.add(actor.owner);
     const alive = (a: MomentActor<Owner>) => (c.alive ? c.alive(a) : present.has(a.owner));
     for (const a of actors) {
-      if (!this.ids.has(a.owner)) this.ids.set(a.owner, this.ids.size);
+      if (!this.ids.has(a.owner)) this.ids.set(a.owner, this.ownerSerial++);
       const episode = this.episodes.get(a.owner);
       if (!episode || (!episode.idle && a.idle))
         this.episodes.set(a.owner, { idle: a.idle, talk: false, ball: false, look: false });
@@ -438,37 +461,49 @@ export class Moments<Owner extends object = object> {
       this.attempt(key, p, c);
     }
     const width = MOMENTS.binMeters * c.perMeter;
-    const bins = new Map<string, MomentActor<Owner>[]>();
-    const key = (x: number, y: number) => `${x},${y}`;
+    const { bins, binPool, lists, children } = this;
+    bins.clear();
+    for (const list of binPool) list.length = 0;
+    for (const list of lists) list.length = 0;
+    children.clear();
+    let usedBins = 0;
+    // Signed integer coordinates mapped to a unique, numeric Cantor pair.
+    const key = (x: number, y: number) => {
+      const a = x >= 0 ? 2 * x : -2 * x - 1;
+      const b = y >= 0 ? 2 * y : -2 * y - 1;
+      return ((a + b) * (a + b + 1)) / 2 + b;
+    };
     for (const a of actors) {
       const k = key(Math.floor(a.x / width), Math.floor(a.y / width));
       const list = bins.get(k);
       if (list) list.push(a);
-      else bins.set(k, [a]);
+      else {
+        const bucket = binPool[usedBins] ?? (binPool[usedBins] = []);
+        usedBins++;
+        bucket.push(a);
+        bins.set(k, bucket);
+      }
     }
     const visitorReactions = this.dialogue.some((entry) => entry.kind === 'look');
-    const walkers = actors.filter((a) => a.type === 'walker');
     // Visitors already looking at their monument should not wait behind a tile's walkers
     // for their first reaction. The shared cursor still visits every candidate afterward.
-    const visitors = visitorReactions
-      ? actors.filter(
-          (a) =>
-            a.type === 'gatherer' && (a.place === 'monument' || a.place === 'fountain') && a.idle,
-        )
-      : [];
-    const lists = [
-      walkers,
-      actors.filter((a) => a.type === 'gatherer' && social.has(a.place!)),
-      actors.filter((a) => a.type === 'gatherer' && (a.place === 'school' || a.place === 'pitch')),
-      [...visitors, ...walkers],
-    ];
-    const children = new Map<number, number>();
+    for (const a of actors) {
+      if (a.type === 'walker') lists[0]!.push(a);
+      else {
+        if (social.has(a.place!)) lists[1]!.push(a);
+        if (a.place === 'school' || a.place === 'pitch') lists[2]!.push(a);
+        if (visitorReactions && (a.place === 'monument' || a.place === 'fountain') && a.idle)
+          lists[3]!.push(a);
+      }
+    }
+    for (const walker of lists[0]!) lists[3]!.push(walker);
     for (const a of lists[2]!)
       if (a.figure === 'child') children.set(a.source!, (children.get(a.source!) ?? 0) + 1);
     const neighbor = (a: MomentActor<Owner>, k: number) => {
       const bx = Math.floor(a.x / width),
         by = Math.floor(a.y / width);
-      const local: MomentActor<Owner>[][] = [];
+      const local = this.localBins;
+      local.length = 0;
       let total = 0;
       for (let y = by - 1; y <= by + 1; y++)
         for (let x = bx - 1; x <= bx + 1; x++) {
@@ -501,9 +536,7 @@ export class Moments<Owner extends object = object> {
       const a = list[this.cursor[k]!++ % list.length]!;
       if (!this.free(a)) continue;
       if (kind === 'look') {
-        const lookAnchors = c.anchors.filter(
-          (a) => !a.kind || ['monument', 'fountain', 'plaza'].includes(a.kind),
-        );
+        const lookAnchors = c.anchors.filter((a) => !a.kind || LOOK_ANCHORS.includes(a.kind));
         if (!lookAnchors.length) continue;
         const visitor = a.type === 'gatherer';
         const anchor = visitor

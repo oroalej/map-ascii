@@ -7,6 +7,36 @@ import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
 import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
+import type { MomentOptions } from '../moments-host';
+import type { DialogueChoice } from '@atlas/shared';
+
+/** Text-free fixtures explicitly enable speech in CPU runs; ordinary scenarios stay unchanged. */
+export const SCENARIO_DIALOGUE: readonly DialogueChoice[] = [
+  { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2, speakers: [0, 1] },
+  { id: 'talk', kind: 'talk', turns: 2, speakers: [0, 1] },
+  { id: 'look', kind: 'look', turns: 1, speakers: [0] },
+  { id: 'play', kind: 'ball', turns: 2, speakers: [0, 1] },
+  {
+    id: 'ambient',
+    kind: 'talk',
+    profile: 'daily-plans',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+  },
+  { id: 'order', kind: 'talk', profile: 'vendor-order', turns: 2, speakers: [0, 1] },
+  { id: 'wait', kind: 'talk', profile: 'transit', turns: 2, speakers: [0, 1] },
+  {
+    id: 'rain',
+    kind: 'talk',
+    profile: 'weather',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+    conditions: { weather: 'rain' },
+  },
+  { id: 'companion', kind: 'talk', profile: 'companion', turns: 2, speakers: [0, 1] },
+];
 
 export const SCENARIOS = [
   'sparse',
@@ -202,11 +232,12 @@ export function makeScenario(
   seed = 1,
   Simulation: typeof LifeWorld = LifeWorld,
   profiler?: FrameProfiler,
+  moments?: MomentOptions,
 ) {
   const tiles = scenarioTiles(kind, count, seed);
   const traffic =
     kind === 'transit' || kind === 'rain' ? { road_major: { jeepney: 1 } } : undefined;
-  const world = new Simulation(traffic, profiler);
+  const world = new Simulation(traffic, profiler, moments);
   world.sync(tiles);
   const center = tileToLngLat(tiles[0]!.tile, { x: 2048, y: 2048 });
   const size = mobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 };

@@ -4,14 +4,15 @@ import { MOMENTS, type MomentAnchor } from './moments';
 import { inTile } from './geometry';
 import { SceneSpeech, type SceneSpeaker } from './scene-speech';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
+import { DIALOGUE_WEATHER } from '@atlas/shared';
 
 export class SceneSpeechHost {
   readonly speech: SceneSpeech;
   private readonly enabled: boolean;
   private sceneCursor = 0;
   private sceneTime = 0;
-  private sceneScan = 0;
-  private sceneBudget = 2;
+  private sceneScan = MOMENTS.interval as number;
+  private sceneBudget = MOMENTS.scene.checks as number;
   private previousRain = 0;
   private sceneEnv: LifeEnv | undefined;
   private sceneNear?: (x: number, y: number) => boolean;
@@ -88,7 +89,7 @@ export class SceneSpeechHost {
         if (!eligible()) return;
         const now = env?.clock ?? this.sceneTime;
         const memory = this.speech.selector.memory;
-        if (!memory.ready([owner], now) || !memory.ambientAttempt(owner, now)) return;
+        if (!memory.ambientReady([owner], now) || !memory.ambientAttempt(owner, now)) return;
         const walker = 'kind' in owner ? owner.group![0]! : owner.walker;
         this.speech.admit(
           {
@@ -167,7 +168,7 @@ export class SceneSpeechHost {
                   (tile.scenes.visits.get(pair)?.state === state &&
                     tile.scenes.visits.get(pair)?.site === visit.site)) &&
                 (sheltered
-                  ? (this.sceneEnv?.rain ?? 0) > 0.2
+                  ? (this.sceneEnv?.rain ?? 0) > DIALOGUE_WEATHER.easing
                   : (this.sceneEnv?.rain ?? 0) < MOMENTS.rain),
             },
             MOMENTS.capacity - tile.momentHost.moments.size,
@@ -190,12 +191,14 @@ export class SceneSpeechHost {
           );
         } else if (!visit && m.group.length === 1) tryAmbient(m);
       };
-      const scan = this.sceneTime >= this.sceneScan;
-      if (scan) {
-        this.sceneScan = this.sceneTime + MOMENTS.interval;
-        this.sceneBudget = 2;
+      let scan = false;
+      while (this.sceneTime + 1e-9 >= this.sceneScan) {
+        this.sceneScan += MOMENTS.interval;
+        scan = true;
       }
-      for (const event of tile.scenes.speechEvents.slice(0, this.sceneBudget)) {
+      if (scan) this.sceneBudget = MOMENTS.scene.checks;
+      for (const event of tile.scenes.speechEvents) {
+        if (!this.sceneBudget) break;
         sceneChecks++;
         this.sceneBudget--;
         tryScene(event.mover, event.kind === 'arrival');
@@ -215,6 +218,6 @@ export class SceneSpeechHost {
     }
     this.previousRain = env?.rain ?? 0;
     // Reserve two of the shared eight checks, even on frames between free-moment scans.
-    return this.enabled && zoom >= MOMENTS.zoom ? 2 : sceneChecks;
+    return this.enabled && zoom >= MOMENTS.zoom ? MOMENTS.scene.checks : sceneChecks;
   }
 }

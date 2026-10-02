@@ -65,6 +65,29 @@ function fixture() {
   return { frame, queue, events, readback, controller, finish, clock };
 }
 describe('speech visibility', () => {
+  it('keeps the last positive confirmation while a speaker walks across cells', () => {
+    const f = fixture();
+    f.controller.update(f.frame, 0);
+    f.finish();
+    f.controller.update(f.frame, 10);
+    for (let cell = 11; cell <= 15; cell++) {
+      const at = 200 + cell;
+      f.frame.owners.fill(0);
+      f.frame.life.fill(0);
+      f.frame.owners[at] = 1;
+      f.frame.life[at * 4 + 1] = classId('life_person');
+      f.frame.life[at * 4 + 2] = CellBit.person;
+      f.frame.agents[0]!.lng = cell + 0.5;
+      f.clock.now = (cell - 10) * 130;
+      f.controller.update(f.frame, f.clock.now);
+      expect(f.events.at(-1)).toHaveLength(1);
+      expect(f.events.at(-1)![0]!.point[0]).toBe((cell + 0.5) * 10);
+    }
+    // A delayed negative still hides this same speaker immediately.
+    f.finish('tree_crown');
+    f.controller.update(f.frame, 660);
+    expect(f.events.at(-1)).toEqual([]);
+  });
   it('rejects a visible cart or wrong group member and confirms only the speaking person cells', () => {
     const f = fixture();
     const agent = f.frame.agents[0]!;

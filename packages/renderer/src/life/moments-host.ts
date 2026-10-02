@@ -1,8 +1,14 @@
 /** Admission adapter: the social controller never writes route cursors or meeting paths. */
 import { inTile, PLACE_CODES, PLACE_STRIDE, SITE_STRIDE, LifeLine } from './geometry';
-import { Moments, type MomentActor, type MomentAnchor, type MomentContext } from './moments';
+import {
+  MOMENTS,
+  Moments,
+  type MomentActor,
+  type MomentAnchor,
+  type MomentContext,
+} from './moments';
 import { FIGURE_SIZE_M, figureFit } from './people';
-import type { Gatherer, LifeEnv, Mover, TileLife } from './simulate';
+import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import type { DialogueMemory } from './dialogue';
 import { SceneSpeechHost } from './scene-speech-host';
@@ -22,8 +28,13 @@ export class MomentHost {
   get scenes() {
     return this.sceneHost.speech;
   }
-  private readonly actors = new Map<Owner, MomentActor<Owner>>();
+  private actors = new WeakMap<Owner, MomentActor<Owner>>();
+  private readonly candidates: MomentActor<Owner>[] = [];
+  private readonly living = new Set<Owner>();
+  private readonly pose = { x: 0, y: 0, hx: 0, hy: 0 };
   private readonly anchors: MomentAnchor[] = [];
+  private readonly sceneAnchors: MomentAnchor[] = [];
+  private readonly stallAnchors = new WeakMap<Stall, MomentAnchor>();
   constructor(
     private readonly tile: TileLife,
     seed: number,
@@ -69,7 +80,8 @@ export class MomentHost {
       }
   }
   private refresh(near?: (x: number, y: number) => boolean) {
-    const out: MomentActor<Owner>[] = [];
+    const out = this.candidates;
+    out.length = 0;
     const update = (owner: Mover | Gatherer) => {
       if (near && !near(owner.x, owner.y)) return;
       const walker = 'kind' in owner ? owner.group?.[0] : owner.walker;
@@ -88,17 +100,17 @@ export class MomentHost {
         };
         this.actors.set(owner, actor);
       }
-      const pose = 'kind' in owner ? this.tile.pose(owner) : owner;
-      Object.assign(actor, {
-        x: pose.x,
-        y: pose.y,
-        hx: owner.hx,
-        hy: owner.hy,
-        idle: owner.pause > 0,
-        figure: walker.figure,
-      });
-      if (!('kind' in owner))
-        Object.assign(actor, { place: owner.place, source: this.source(owner) });
+      const pose = 'kind' in owner ? this.tile.pose(owner, this.pose) : owner;
+      actor.x = pose.x;
+      actor.y = pose.y;
+      actor.hx = owner.hx;
+      actor.hy = owner.hy;
+      actor.idle = owner.pause > 0;
+      actor.figure = walker.figure;
+      if (!('kind' in owner)) {
+        actor.place = owner.place;
+        actor.source = this.source(owner);
+      }
       out.push(actor);
     };
     for (const m of this.tile.movers)
@@ -115,16 +127,28 @@ export class MomentHost {
     this.moments.clear((actor) => {
       delete actor.owner.momentFacing;
     });
-    for (const owner of this.actors.keys()) delete owner.momentFacing;
-    this.actors.clear();
+    for (const owner of this.tile.movers) delete owner.momentFacing;
+    for (const owner of this.tile.gatherers) delete owner.momentFacing;
+    this.actors = new WeakMap();
+    this.candidates.length = 0;
+    this.living.clear();
+    this.sceneAnchors.length = 0;
   }
   /** A pending release is retried by guarded movement, never an unguarded orientation snap. */
   release(owner: Owner, guard?: Guard) {
     if (!owner.momentFacing) return;
+    this.tryFacing(owner, undefined, guard);
+  }
+  private tryFacing(owner: Owner, next: Owner['momentFacing'], guard?: Guard) {
     const before = { ...owner };
-    delete owner.momentFacing;
-    if (!this.tile.canIdle(owner) || (guard && !guard(owner, before)))
-      owner.momentFacing = before.momentFacing;
+    if (next) owner.momentFacing = next;
+    else delete owner.momentFacing;
+    if (!this.tile.canIdle(owner) || (guard && !guard(owner, before))) {
+      if (before.momentFacing) owner.momentFacing = before.momentFacing;
+      else delete owner.momentFacing;
+      return false;
+    }
+    return true;
   }
   step(
     dt: number,
@@ -136,12 +160,21 @@ export class MomentHost {
     cellAspect: number,
   ) {
     const { tile } = this;
-    const anchors = [
-      ...this.anchors,
-      ...tile.stalls
-        .filter((s) => s.open !== false)
-        .map((s, i) => ({ x: s.x, y: s.y, source: -20000 - i, kind: 'stall' as const })),
-    ];
+    const anchors = this.sceneAnchors;
+    anchors.length = 0;
+    for (const anchor of this.anchors) anchors.push(anchor);
+    for (let i = 0; i < tile.stalls.length; i++) {
+      const stall = tile.stalls[i]!;
+      if (stall.open === false) continue;
+      let anchor = this.stallAnchors.get(stall);
+      if (!anchor) {
+        anchor = { x: stall.x, y: stall.y, source: -20000 - i, kind: 'stall' };
+        this.stallAnchors.set(stall, anchor);
+      }
+      anchor.x = stall.x;
+      anchor.y = stall.y;
+      anchors.push(anchor);
+    }
     const sceneChecks = this.sceneHost.step(dt, zoom, env, near, anchors);
     const eligible = (actor: MomentActor<Owner>) => {
       const owner = actor.owner;
@@ -162,19 +195,21 @@ export class MomentHost {
         return false;
       return tile.canIdle(owner);
     };
-    let living: Set<Owner>;
+    const living = this.living;
     const c: MomentContext<Owner> = {
       zoom,
       rain: env?.rain ?? 0,
       minutes: env?.minutes,
       wind: env?.wind?.strength,
       clock: env?.clock,
-      reserved: this.scenes.size,
+      reserved: this.scenes.foregroundSize,
       sceneChecks,
       perMeter: tile.perMeter,
       anchors,
       actors: () => {
-        living = new Set<Owner>([...tile.movers, ...tile.gatherers]);
+        living.clear();
+        for (const owner of tile.movers) living.add(owner);
+        for (const owner of tile.gatherers) living.add(owner);
         return this.refresh(near);
       },
       alive: (actor) => living.has(actor.owner),
@@ -197,20 +232,13 @@ export class MomentHost {
               : diagonal) + 0.05
         );
       },
-      face: (actor, hx, hy) => {
-        const owner = actor.owner,
-          before = { ...owner };
-        owner.momentFacing = { hx, hy };
-        if (!tile.canIdle(owner) || (guard && !guard(owner, before))) {
-          if (before.momentFacing) owner.momentFacing = before.momentFacing;
-          else delete owner.momentFacing;
-          return false;
-        }
-        return true;
-      },
+      face: (actor, hx, hy) => this.tryFacing(actor.owner, { hx, hy }, guard),
       release: (actor) => this.release(actor.owner, guard),
     };
     this.moments.step(dt, c);
+    this.scenes.reconcile(MOMENTS.capacity - this.moments.size, (owner) =>
+      this.moments.busy(owner),
+    );
   }
   /** Paused monument visitors face the monument without enrolling in a timed hold. */
   attend(owner: Gatherer, guard?: Guard) {
@@ -223,12 +251,6 @@ export class MomentHost {
       return;
     const d = Math.hypot(owner.cx - owner.x, owner.cy - owner.y);
     if (d <= 1e-9) return;
-    const actor = owner,
-      before = { ...actor };
-    actor.momentFacing = { hx: (owner.cx - owner.x) / d, hy: (owner.cy - owner.y) / d };
-    if (!this.tile.canIdle(actor) || (guard && !guard(actor, before))) {
-      if (before.momentFacing) actor.momentFacing = before.momentFacing;
-      else delete actor.momentFacing;
-    }
+    this.tryFacing(owner, { hx: (owner.cx - owner.x) / d, hy: (owner.cy - owner.y) / d }, guard);
   }
 }

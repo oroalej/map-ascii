@@ -41,6 +41,48 @@ function walkers(t: TileLife, separation = 2.5) {
 }
 
 describe('moment admission adapter', () => {
+  it('lets a physical greeting replace a same-owner background remark and speak', () => {
+    const t = tile(),
+      [a, b] = walkers(t);
+    const host = new MomentHost(t, 5, {
+      rng: () => 0,
+      dialogue: [
+        { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2, speakers: [0, 1] },
+        {
+          id: 'happy',
+          kind: 'talk',
+          profile: 'daily-plans',
+          delivery: 'utterance',
+          turns: 1,
+          speakers: [0],
+        },
+      ],
+    });
+    expect(
+      host.scenes.admit(
+        {
+          key: {},
+          speakers: [{ owner: a, member: 0, figure: 'adult' }],
+          profiles: ['daily-plans'],
+          context: { minutes: 720, rain: 0, wind: 0, figures: [] },
+          ambient: true,
+          valid: () => true,
+        },
+        12,
+      ),
+    ).toBe(true);
+    const before = structuredClone([a, b]);
+    host.step(0.1, 21, { rain: 0, minutes: 720, clock: 20 }, undefined, undefined, 0.2, 1.8);
+    expect(host.scenes.size).toBe(0);
+    expect(host.moments.speech(a)).toMatchObject({ exchangeId: 'hello', line: 0 });
+    expect(
+      [a, b].map((owner) => {
+        const copy = { ...owner };
+        delete copy.momentFacing;
+        return copy;
+      }),
+    ).toEqual(before);
+  });
   it('admits safely spaced greetings across actual desktop and phone cell schedules', () => {
     for (const phone of [false, true])
       for (const zoom of [18, 19, 19.5, 20, 20.5, 21]) {

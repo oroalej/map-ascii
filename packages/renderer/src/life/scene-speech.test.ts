@@ -28,6 +28,89 @@ function fixture(choice = vendor) {
   return { a, b, state, scenes, scene };
 }
 describe('scene-owned dialogue', () => {
+  it.each([
+    [true, 0.2],
+    [false, 0.2],
+    [true, 20],
+    [false, 20],
+  ] as const)(
+    'keeps service speech available after voiced=%s background at %s seconds',
+    (voiced, at) => {
+      const ambient: DialogueChoice = {
+        id: 'happy',
+        kind: 'talk',
+        profile: 'daily-plans',
+        delivery: 'utterance',
+        turns: 1,
+        speakers: [0],
+      };
+      const f = fixture(ambient);
+      let matched: SceneSpeech | undefined;
+      for (let seed = 1; seed <= 20; seed++) {
+        const candidate = new SceneSpeech(seed, [ambient, vendor]);
+        expect(
+          candidate.admit(
+            { ...f.scene, ambient: true, speakers: f.scene.speakers.slice(0, 1) },
+            12,
+          ),
+        ).toBe(true);
+        if (!!candidate.speech(f.a) === voiced) {
+          matched = candidate;
+          break;
+        }
+      }
+      expect(matched).toBeDefined();
+      const host = matched!;
+      expect(host.selector.memory.ready([f.a], 20)).toBe(true);
+      expect(host.selector.memory.ambientReady([f.a], 20)).toBe(false);
+      host.step(at, true);
+      expect(host.admit({ ...f.scene, key: {}, profiles: ['vendor-order'] }, 12)).toBe(true);
+      expect(host.speech(f.a)).toMatchObject({ exchangeId: 'order', line: 0 });
+      host.step(1.5, true);
+      expect(host.speech(f.b)).toMatchObject({ exchangeId: 'order', line: 1 });
+    },
+  );
+  it('validates each scene once per step and never while drawing people', () => {
+    const f = fixture();
+    let calls = 0;
+    f.scene.valid = () => {
+      calls++;
+      return f.state.valid;
+    };
+    f.scenes.admit(f.scene, 12);
+    f.scenes.step(0.1, true);
+    const checked = calls;
+    for (let i = 0; i < 500; i++) {
+      f.scenes.speech(f.a);
+      f.scenes.pose(f.a, 0);
+      f.scenes.busy(f.a);
+      f.scenes.pose({}, 0);
+    }
+    expect(calls).toBe(checked);
+    f.state.valid = false;
+    f.scenes.step(0, true);
+    expect(calls).toBe(checked + 1);
+    expect(f.scenes.speech(f.a)).toBeUndefined();
+  });
+  it('yields background owners and capacity to physical encounters', () => {
+    const ambient: DialogueChoice = {
+      id: 'happy',
+      kind: 'talk',
+      profile: 'daily-plans',
+      delivery: 'utterance',
+      turns: 1,
+      speakers: [0],
+    };
+    const f = fixture(ambient);
+    f.scenes.admit({ ...f.scene, ambient: true }, 12);
+    expect(f.scenes.foregroundSize).toBe(0);
+    f.scenes.reconcile(12, (owner) => owner === f.a);
+    expect(f.scenes.size).toBe(0);
+    const g = fixture(ambient);
+    f.scenes.admit({ ...g.scene, ambient: true }, 12);
+    f.scenes.reconcile(0, () => false);
+    expect(f.scenes.size).toBe(0);
+  });
   it('limits background expressions to two and makes space for service activity', () => {
     const utterance: DialogueChoice = {
       ...vendor,
@@ -103,6 +186,7 @@ describe('scene-owned dialogue', () => {
     const f = fixture();
     f.scenes.admit(f.scene, 12);
     f.state.valid = false;
+    f.scenes.step(0, true);
     expect(f.scenes.speech(f.a)).toBeUndefined();
     f.scenes.step(0.1, true);
     expect(f.scenes.size).toBe(0);

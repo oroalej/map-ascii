@@ -849,6 +849,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const reportSpeech = (now: number) => {
     if (
       !speechEnabled ||
+      now - lastInput < 150 ||
       !options.dialogue ||
       !lifeActive() ||
       !watch.watched() ||

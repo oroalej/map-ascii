@@ -1,5 +1,28 @@
 /** Browser-safe dialogue metadata: validation schemas stay out of runtime bundles. */
-import type { DialogueCatalog, DialogueChoice, GreetingPeriods } from './dialogue';
+import type {
+  DialogueAnchor,
+  DialogueCatalog,
+  DialogueChoice,
+  DialogueProfile,
+  GreetingPeriods,
+} from './dialogue';
+
+export const SCENE_PROFILES: readonly DialogueProfile[] = [
+  'vendor-order',
+  'vendor-thanks',
+  'transit',
+  'companion',
+];
+export const LOOK_ANCHORS: readonly DialogueAnchor[] = ['monument', 'fountain', 'plaza'];
+export const DIALOGUE_WEATHER = {
+  rain: 0.5,
+  heavyRain: 0.8,
+  easing: 0.2,
+  breeze: 0.4,
+  gust: 0.9,
+  daylightStart: 360,
+  daylightEnd: 1080,
+} as const;
 
 export const DEFAULT_GREETING_PERIODS: Readonly<GreetingPeriods> = {
   morningStart: 300,

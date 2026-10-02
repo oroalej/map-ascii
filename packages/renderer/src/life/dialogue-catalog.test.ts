@@ -1,26 +1,31 @@
-import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { DialogueCatalog, dialogueChoices } from '@atlas/shared';
+import { loadCityPacks } from '@atlas/content';
+import { dialogueChoices, SCENE_PROFILES } from '@atlas/shared';
 import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
 
-const catalog = DialogueCatalog.parse(
-  JSON.parse(
-    readFileSync(new URL('../../../content/cities/naga/dialogue.json', import.meta.url), 'utf8'),
-  ),
+const { packs, errors } = await loadCityPacks();
+if (errors.length) throw new Error(JSON.stringify(errors));
+const entries = packs.flatMap(({ city, dialogue }) =>
+  dialogue
+    ? dialogueChoices(dialogue).map((entry) => ({
+        city: city.slug,
+        periods: dialogue.periods,
+        entry,
+      }))
+    : [],
 );
-const choices = dialogueChoices(catalog);
+const choices = entries.map(({ entry }) => entry);
 
-it.each(choices)(
-  '$id can emit every intended turn with its declared roles and legal context',
-  (entry) => {
+it.each(entries)(
+  '$city/$entry.id can emit every intended turn with its declared roles and legal context',
+  ({ entry, periods }) => {
     const weather = entry.conditions?.weather;
     const rainScene = ['rain', 'heavy-rain', 'easing'].includes(weather ?? '');
-    const sceneOwned =
-      rainScene ||
-      ['vendor-order', 'vendor-thanks', 'transit', 'companion'].includes(entry.profile!);
-    const owners = [{}, {}];
+    const sceneOwned = rainScene || SCENE_PROFILES.includes(entry.profile!);
+    const slots = Math.max(2, ...(entry.speakers ?? []).map((slot) => slot + 1));
+    const owners = Array.from({ length: slots }, () => ({}));
     const context: DialogueContext = {
       minutes:
         entry.period === 'morning'
@@ -39,10 +44,17 @@ it.each(choices)(
         entry.conditions?.audience === 'adult-child' ? ['adult', 'child'] : ['adult', 'adult'],
       ...(sceneOwned && { profiles: [entry.profile!] }),
     };
-    expect(dialogueEligible(entry, context)).toBe(true);
+    context.figures = Array.from({ length: slots }, (_, i) => context.figures[i] ?? 'adult');
+    // Search the pack's legal clock window rather than assuming Naga's period boundaries.
+    const minutes = Array.from({ length: 1440 }, (_, minute) => minute).find((minute) =>
+      dialogueEligible(entry, { ...context, minutes: minute }, periods),
+    );
+    expect(minutes).toBeDefined();
+    context.minutes = minutes!;
+    expect(dialogueEligible(entry, context, periods)).toBe(true);
     const seen = new Map<number, number>();
     if (sceneOwned) {
-      const host = new SceneSpeech(42, [entry]);
+      const host = new SceneSpeech(42, [entry], periods);
       const scene = {
         key: {},
         speakers: owners.map((owner, i) => ({ owner, member: 0, figure: context.figures[i]! })),
@@ -78,7 +90,10 @@ it.each(choices)(
         source: 0,
       };
       const b: MomentActor = { ...a, owner: owners[1]!, x: entry.kind === 'greet' ? 2 : 6, hx: -1 };
-      const actors = entry.kind === 'look' ? [a] : [a, b];
+      const actors =
+        entry.kind === 'look'
+          ? [a]
+          : [a, b, ...(slots > 2 ? [{ ...a, owner: owners[2]!, x: 3, y: 5 }] : [])];
       const c: MomentContext = {
         zoom: 21,
         rain: context.rain,
@@ -92,7 +107,7 @@ it.each(choices)(
         face: () => true,
         release: () => {},
       };
-      const host = new Moments(42, true, () => 0, [entry]);
+      const host = new Moments(42, true, () => 0, [entry], periods);
       for (let tick = 0; tick < 2200; tick++) {
         host.step(0.1, c);
         actors.forEach((actor, slot) => {

@@ -50,6 +50,17 @@ describe('contextual dialogue', () => {
     memory.clear();
     expect(memory.ready([owner], 0)).toBe(true);
   });
+  it('keeps ambient cooldown independent while respecting foreground speech and reset', () => {
+    const memory = new DialogueMemory(1),
+      owner = {};
+    memory.reserveAmbient([owner], 63);
+    expect(memory.ready([owner], 20)).toBe(true);
+    expect(memory.ambientReady([owner], 20)).toBe(false);
+    memory.reserve([owner], 100);
+    expect(memory.ambientReady([owner], 64)).toBe(false);
+    memory.clear();
+    expect(memory.ambientReady([owner], 0)).toBe(true);
+  });
   it('records only admitted choices and relaxes older history before newer history', () => {
     const selector = new DialogueSelector(1, entries);
     const owners = [{}];

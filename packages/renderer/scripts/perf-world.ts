@@ -13,6 +13,7 @@ import {
   worldTiles,
   worldTerrainStats,
   SCENARIOS,
+  SCENARIO_DIALOGUE,
 } from '../src/life/testing/scenarios';
 import { LifeWorld } from '../src/life/simulate';
 import { packLife, buildLifeGlyphs } from '../src/life/draw';
@@ -39,6 +40,8 @@ const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
 const births = process.argv.includes('--births');
 const control = process.argv.includes('--control');
+const dialogue = process.argv.includes('--dialogue');
+const momentOptions = dialogue ? { dialogue: SCENARIO_DIALOGUE } : undefined;
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
 if (births && !real) throw new Error('--births requires --real and --pan');
 if (real && !pan) throw new Error('--real requires --pan');
@@ -479,8 +482,16 @@ try {
         for (const mobile of [false, true]) {
           const name = `${kind}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
           if (!matchesCase(name)) continue;
-          const a = makeScenario(kind, count, mobile, 1, before.LifeWorld);
-          const b = makeScenario(kind, count, mobile);
+          const a = makeScenario(
+            kind,
+            count,
+            mobile,
+            1,
+            before.LifeWorld,
+            undefined,
+            momentOptions,
+          );
+          const b = makeScenario(kind, count, mobile, 1, LifeWorld, undefined, momentOptions);
           const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
             nextPixels = new Uint8Array(oldPixels.length);
           for (let frame = 0; frame < 300; frame++) {
@@ -506,7 +517,7 @@ try {
             pack: typeof packLife,
             profiler?: FrameProfiler,
           ) => {
-            const s = makeScenario(kind, count, mobile, 1, Constructor, profiler);
+            const s = makeScenario(kind, count, mobile, 1, Constructor, profiler, momentOptions);
             const out = new Uint8Array(s.grid.cols * s.grid.rows * 4);
             const timings: Record<Stages, number[]> = {
               step: [],
@@ -519,6 +530,10 @@ try {
               maxServices = 0;
             let maxMoments = 0,
               maxBalls = 0;
+            let speechFrames = 0,
+              speechCues = 0,
+              sceneSpeechCues = 0,
+              maxScenes = 0;
             const visitStates = new Set<string>();
             const heapBefore = process.memoryUsage().heapUsed;
             for (let frame = 0; frame < warmup + samples; frame++) {
@@ -546,12 +561,20 @@ try {
                 profiler.end();
               }
               const completed = profiler?.time();
+              const cues = visible.reduce((count, agent) => count + Number(!!agent.speech), 0);
+              speechCues += cues;
+              sceneSpeechCues += visible.reduce(
+                (count, agent) => count + Number(!!agent.speech?.id.includes(':scene:')),
+                0,
+              );
+              if (cues) speechFrames++;
               for (const tile of worldTiles(s.world).values()) {
                 const moments = tile.momentHost?.moments;
                 if (moments) {
                   maxMoments = Math.max(maxMoments, moments.size);
                   maxBalls = Math.max(maxBalls, moments.balls().length);
                 }
+                maxScenes = Math.max(maxScenes, tile.momentHost?.scenes.size ?? 0);
                 maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
                 maxServices = Math.max(maxServices, tile.scenes.services.size);
                 for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
@@ -568,6 +591,19 @@ try {
               }
               if (frame === warmup - 1) profiler?.reset();
             }
+            const sceneStarts = [...worldTiles(s.world).values()].reduce(
+              (total, tile) =>
+                total +
+                Object.values(tile.momentHost?.scenes.selector.selected ?? {}).reduce(
+                  (sum, count) => sum + count,
+                  0,
+                ),
+              0,
+            );
+            if (dialogue && Constructor === LifeWorld && (!sceneStarts || !sceneSpeechCues))
+              throw new Error(
+                `${name}: dialogue benchmark recorded no scene admissions or speech cues`,
+              );
             return {
               stages: Object.fromEntries(
                 Object.entries(timings).map(([k, v]) => [k, summary(v)]),
@@ -577,6 +613,11 @@ try {
               maxServices,
               maxMoments,
               maxBalls,
+              maxScenes,
+              sceneStarts,
+              speechFrames,
+              speechCues,
+              sceneSpeechCues,
               momentStarts: [...worldTiles(s.world).values()].map(
                 (t) => t.momentHost?.moments.stats.started,
               ),
@@ -660,6 +701,15 @@ try {
     const denseMedianPass = rows
       .filter((r) => r.dense)
       .every((r) => r.stages.step!.medianGain >= 0.1);
+    const dialogueRegressions = rows.flatMap((row) =>
+      Object.entries(row.stages).flatMap(([stage, result]) =>
+        result.current.median - result.baseline.median >
+          Math.max(0.1, result.baseline.median * 0.1) ||
+        result.current.p95 - result.baseline.p95 > Math.max(0.2, result.baseline.p95 * 0.15)
+          ? [`${row.name}/${stage}`]
+          : [],
+      ),
+    );
     const report = {
       version: 1,
       at: new Date().toISOString(),
@@ -668,13 +718,25 @@ try {
       baselineHash: control ? currentHash : frozen.hash,
       control,
       currentHash,
-      gate: {
-        denseMedianPass,
-        regressions,
-        pass: denseMedianPass && regressions.length === 0,
-        thresholds: { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
-        requiresRepeat: true,
-      },
+      gate: dialogue
+        ? {
+            pass: dialogueRegressions.length === 0,
+            regressions: dialogueRegressions,
+            thresholds: {
+              medianRegression: 0.1,
+              p95Regression: 0.15,
+              medianAbsoluteMs: 0.1,
+              p95AbsoluteMs: 0.2,
+            },
+            requiresRepeat: true,
+          }
+        : {
+            denseMedianPass,
+            regressions,
+            pass: denseMedianPass && regressions.length === 0,
+            thresholds: { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
+            requiresRepeat: true,
+          },
       lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
         cwd: root,
         encoding: 'utf8',
@@ -697,6 +759,7 @@ try {
         clearanceMinimumMeters: 0.9,
         transitFleet: 'jeepney',
         profiled: false,
+        dialogue,
       },
       rows,
     };

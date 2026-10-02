@@ -4591,7 +4591,7 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
-    const owners = new Map<object, VisibleAgent>();
+    const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
     // A procession closes the river to other boats, and always shows.
@@ -4666,7 +4666,7 @@ export class LifeWorld {
             }),
           };
           out.push(agent);
-          owners.set(m, agent);
+          owners?.set(m, agent);
         } else if (m.kind === 'dog' || m.kind === 'cat') {
           // Standing, sniffing, or lying down, it keeps still.
           const still = m.pause > 0 || life.scenes.still(m);
@@ -4768,7 +4768,7 @@ export class LifeWorld {
             if (speech)
               agent.speech = { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` };
             out.push(agent);
-            owners.set(g, agent);
+            owners?.set(g, agent);
           }
         }
       }
@@ -4854,14 +4854,15 @@ export class LifeWorld {
       }
     }
     const withBalls = (admitted: VisibleAgent[]) => {
+      if (!balls.length) return admitted;
       const kept = new Set(admitted);
       const weight = (a: VisibleAgent) =>
         a.vehicle ? 1 + (a.people?.length ?? 0) : Math.max(1, a.people?.length ?? 0);
       let spare = Math.max(0, maxAgents - admitted.reduce((n, a) => n + weight(a), 0));
       for (const ball of balls) {
         if (spare <= 0) break;
-        const a = owners.get(ball.a),
-          b = owners.get(ball.b);
+        const a = owners?.get(ball.a),
+          b = owners?.get(ball.b);
         if (a && b && kept.has(a) && kept.has(b)) {
           admitted.push(ball.agent);
           spare--;

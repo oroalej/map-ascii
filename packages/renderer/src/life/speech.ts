@@ -107,7 +107,7 @@ export class SpeechController {
       const { col, row } = nearest,
         at = (row * targets.cols + col) * 4;
       out.push({
-        key: `${frame.geometry}/${agent.speech.id}/${agent.speech.exchangeId}/${agent.speech.line}/${col}/${row}`,
+        key: `${frame.geometry}/${agent.speech.id}/${agent.speech.exchangeId}/${agent.speech.line}/${agent.speech.member ?? 0}`,
         cue: { ...agent.speech, point },
         col,
         row,

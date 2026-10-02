@@ -80,7 +80,10 @@ jobs:
       # Azure mirror downloads can exhaust the job budget before any browser test starts.
       # Keep the runner's Ubuntu archive/security fallbacks for browser dependencies.
       - name: Use Ubuntu mirrors for browser dependencies
-        run: sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
 
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 

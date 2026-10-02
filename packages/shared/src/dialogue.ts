@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dialogueDelivery, SCENE_PROFILES } from './dialogue-options';
 import { LanguageCode, localizedText, Source } from './schemas';
 
 export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look']);
@@ -113,14 +114,12 @@ export function dialogueCatalog(languages?: readonly string[]) {
           });
         ids.add(exchange.id);
         const count = exchange.lines.length;
-        const delivery = exchange.delivery ?? (exchange.kind === 'look' ? 'utterance' : 'exchange');
+        const delivery = dialogueDelivery(exchange);
         const slots =
           exchange.kind === 'look'
             ? 1
             : exchange.kind === 'talk' &&
-                !['vendor-order', 'vendor-thanks', 'transit', 'companion'].includes(
-                  exchange.profile ?? '',
-                )
+                !(exchange.profile && SCENE_PROFILES.includes(exchange.profile))
               ? 3
               : 2;
         if (exchange.profile && (!exchange.speakers || exchange.speakers.length !== count))

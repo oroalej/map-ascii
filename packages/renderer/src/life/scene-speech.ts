@@ -5,8 +5,8 @@ import { MOMENTS, type SpeechCue } from './moments';
 import type { PersonPose } from './people';
 
 /** Leave room for physical encounters instead of filling every slot with passing groups. */
-export const SCENE_SPEECH_CAPACITY = 4;
-export const AMBIENT_SPEECH_CAPACITY = 2;
+export const SCENE_SPEECH_CAPACITY = MOMENTS.scene.capacity;
+export const AMBIENT_SPEECH_CAPACITY = MOMENTS.scene.ambientCapacity;
 export type SceneSpeaker = { owner: object; member: number; figure: string };
 export type SceneExchange = {
   key: object;
@@ -34,6 +34,7 @@ export class SceneSpeech {
   private now = 0;
   private serial = 0;
   private readonly active: Active[] = [];
+  private readonly owners = new Map<object, Active>();
   private seen = new WeakSet<object>();
   constructor(
     seed: number,
@@ -47,9 +48,30 @@ export class SceneSpeech {
     return this.active.length;
   }
   busy(owner: object) {
-    return this.active.some(
-      (a) => !a.scene.ambient && a.scene.speakers.some((s) => s.owner === owner),
-    );
+    const active = this.owners.get(owner);
+    return !!active && !active.scene.ambient;
+  }
+  get foregroundSize() {
+    return this.active.reduce((count, a) => count + Number(!a.scene.ambient), 0);
+  }
+  private remove(index: number) {
+    const [a] = this.active.splice(index, 1);
+    for (const { owner } of a!.scene.speakers)
+      if (this.owners.get(owner) === a) this.owners.delete(owner);
+  }
+  /** Newly admitted physical encounters take priority over background expressions. */
+  reconcile(freeCapacity: number, busy: (owner: object) => boolean) {
+    for (let i = this.active.length - 1; i >= 0; i--)
+      if (
+        this.active[i]!.scene.ambient &&
+        this.active[i]!.scene.speakers.some((s) => busy(s.owner))
+      )
+        this.remove(i);
+    while (this.active.length > freeCapacity) {
+      const oldest = this.active.findIndex((a) => a.scene.ambient);
+      if (oldest < 0) break;
+      this.remove(oldest);
+    }
   }
   step(dt: number, allowed: boolean, clock?: number) {
     this.time += dt;
@@ -57,7 +79,7 @@ export class SceneSpeech {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const a = this.active[i]!;
       if (!allowed || !a.scene.valid() || this.time >= a.start + a.dialogue.turns * a.turn)
-        this.active.splice(i, 1);
+        this.remove(i);
     }
   }
   admit(scene: SceneExchange, freeCapacity: number) {
@@ -71,7 +93,7 @@ export class SceneSpeech {
             scene.speakers.some((other) => other.owner === s.owner),
           )
         )
-          this.active.splice(i, 1);
+          this.remove(i);
     }
     const owners = scene.speakers.map((s) => s.owner);
     const capacity = Math.min(freeCapacity, SCENE_SPEECH_CAPACITY);
@@ -83,10 +105,10 @@ export class SceneSpeech {
       (this.active.length >= capacity && (spare < 0 || this.active.length - 1 >= capacity)) ||
       (scene.ambient &&
         this.active.filter((a) => a.scene.ambient).length >= AMBIENT_SPEECH_CAPACITY) ||
-      !this.selector.memory.ready(owners, this.now) ||
-      scene.speakers.some((s) =>
-        this.active.some((a) => a.scene.speakers.some((other) => other.owner === s.owner)),
-      )
+      !(scene.ambient
+        ? this.selector.memory.ambientReady(owners, this.now)
+        : this.selector.memory.ready(owners, this.now)) ||
+      scene.speakers.some((s) => this.owners.has(s.owner))
     )
       return false;
     this.seen.add(scene.key);
@@ -98,11 +120,11 @@ export class SceneSpeech {
     );
     if (!dialogue) return false;
     const vendor = dialogue.profile?.startsWith('vendor-');
-    const turn = vendor ? 1.5 : 3;
+    const turn = vendor ? MOMENTS.scene.vendorTurn : MOMENTS.scene.turn;
     if (scene.remaining !== undefined && scene.remaining + 1e-9 < turn * dialogue.turns)
       return false;
     // An unrelated expression yields only once the service can actually speak.
-    if (spare >= 0) this.active.splice(spare, 1);
+    if (spare >= 0) this.remove(spare);
     this.selector.admit(
       dialogue,
       scene.speakers.map((s) => s.owner),
@@ -112,25 +134,26 @@ export class SceneSpeech {
       dialogue.profile === 'vendor-thanks' && scene.remaining !== undefined
         ? Math.max(0, scene.remaining - turn * dialogue.turns)
         : 0;
-    this.active.push({
+    const active: Active = {
       scene,
       dialogue,
       start: this.time + delay,
       turn,
       id: ++this.serial,
       voiced: this.selector.memory.voiced(dialogue),
-    });
-    this.selector.memory.reserve(
-      owners,
-      this.now + delay + turn * dialogue.turns + MOMENTS.cooldown,
-    );
+    };
+    this.active.push(active);
+    for (const owner of owners) this.owners.set(owner, active);
+    const until = this.now + delay + turn * dialogue.turns + MOMENTS.cooldown;
+    if (scene.ambient) this.selector.memory.reserveAmbient(owners, until);
+    else this.selector.memory.reserve(owners, until);
     return true;
   }
   private current(owner: object) {
-    for (const a of this.active) {
-      if (!a.scene.valid()) continue;
+    const a = this.owners.get(owner);
+    if (a) {
       const line = Math.floor((this.time - a.start) / a.turn + 1e-9);
-      if (line < 0) continue;
+      if (line < 0) return;
       const speaker = a.scene.speakers[a.dialogue.speakers?.[line] ?? line];
       if (line < a.dialogue.turns && speaker?.owner === owner) return { a, line, speaker };
     }
@@ -157,6 +180,7 @@ export class SceneSpeech {
   }
   clear() {
     this.active.length = 0;
+    this.owners.clear();
     this.seen = new WeakSet();
     this.selector.clear();
   }

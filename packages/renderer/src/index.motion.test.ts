@@ -173,6 +173,31 @@ describe('live motion preference', () => {
       ['speech', 320],
     ]);
   });
+  it('waits for camera input to settle before scheduling speech visibility work', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    const update = vi.spyOn(SpeechController.prototype, 'update').mockImplementation(() => {});
+    draw(100);
+    update.mockClear();
+    for (let at = 120; at <= 400; at += 20) {
+      time = at;
+      atlas.setCamera({ lng: at / 10000, lat: 0, zoom: 18 });
+      draw(at);
+    }
+    draw(540);
+    expect(update).not.toHaveBeenCalled();
+    draw(560);
+    expect(update).toHaveBeenCalledOnce();
+  });
   it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', () => {
     atlas.destroy();
     const a = { z: 16, x: 32768, y: 32768 },

@@ -2,6 +2,9 @@
 import {
   greetingPeriod,
   dialogueDelivery,
+  SCENE_PROFILES,
+  LOOK_ANCHORS,
+  DIALOGUE_WEATHER as WEATHER,
   type DialogueAnchor,
   type DialogueChoice,
   type DialogueProfile,
@@ -26,6 +29,7 @@ export class DialogueMemory {
   readonly recent: string[] = [];
   private actors = new WeakMap<object, string[]>();
   private speechCooldown = new WeakMap<object, number>();
+  private ambientCooldown = new WeakMap<object, number>();
   private attempts = new WeakMap<object, number>();
   private outcomes: boolean[] = [];
   private expressionRng: () => number;
@@ -39,6 +43,15 @@ export class DialogueMemory {
   }
   reserve(owners: readonly object[], until: number) {
     for (const owner of owners) this.speechCooldown.set(owner, until);
+  }
+  ambientReady(owners: readonly object[], at: number) {
+    return (
+      this.ready(owners, at) &&
+      owners.every((owner) => (this.ambientCooldown.get(owner) ?? 0) <= at)
+    );
+  }
+  reserveAmbient(owners: readonly object[], until: number) {
+    for (const owner of owners) this.ambientCooldown.set(owner, until);
   }
   /** One attempt per simulation minute, including failed rolls and camera re-entry. */
   ambientAttempt(owner: object, at: number) {
@@ -83,6 +96,7 @@ export class DialogueMemory {
     this.recent.length = 0;
     this.actors = new WeakMap();
     this.speechCooldown = new WeakMap();
+    this.ambientCooldown = new WeakMap();
     this.attempts = new WeakMap();
     this.outcomes = [];
     this.expressionRng = random(this.seed ^ 0x31f253ab);
@@ -90,7 +104,6 @@ export class DialogueMemory {
   }
 }
 
-const owned: readonly DialogueProfile[] = ['vendor-order', 'vendor-thanks', 'transit', 'companion'];
 export function dialogueEligible(
   entry: DialogueChoice,
   c: DialogueContext,
@@ -101,14 +114,10 @@ export function dialogueEligible(
   if (entry.kind === 'greet' && entry.period !== greetingPeriod(c.minutes, periods)) return false;
   if (entry.speakers?.some((slot) => slot >= c.figures.length)) return false;
   const p = entry.profile;
-  if (c.profiles ? !p || !c.profiles.includes(p) : p && owned.includes(p)) return false;
+  if (c.profiles ? !p || !c.profiles.includes(p) : p && SCENE_PROFILES.includes(p)) return false;
   if (p === 'school' && c.place !== 'school') return false;
   if (p === 'daily-plans' && c.figures.some((f) => f === 'child')) return false;
-  if (
-    p === 'place-reaction' &&
-    !c.anchors?.some((a) => ['monument', 'fountain', 'plaza'].includes(a))
-  )
-    return false;
+  if (p === 'place-reaction' && !c.anchors?.some((a) => LOOK_ANCHORS.includes(a))) return false;
   const q = entry.conditions;
   if (!q) return true;
   if (q.anchor && !c.anchors?.includes(q.anchor)) return false;
@@ -121,21 +130,29 @@ export function dialogueEligible(
   if (q.event === 'arrival' && !c.arrival) return false;
   switch (q.weather) {
     case 'daylight':
-      return c.minutes >= 360 && c.minutes < 1080 && c.rain < 0.5;
+      return (
+        c.minutes >= WEATHER.daylightStart &&
+        c.minutes < WEATHER.daylightEnd &&
+        c.rain < WEATHER.rain
+      );
     case 'calm':
-      return c.wind < 0.4 && c.rain < 0.5;
+      return c.wind < WEATHER.breeze && c.rain < WEATHER.rain;
     case 'breeze':
-      return c.wind >= 0.4 && c.wind < 0.9 && c.rain < 0.5;
+      return c.wind >= WEATHER.breeze && c.wind < WEATHER.gust && c.rain < WEATHER.rain;
     case 'gust':
-      return c.wind >= 0.9 && c.rain < 0.5;
+      return c.wind >= WEATHER.gust && c.rain < WEATHER.rain;
     case 'rain':
-      return !!c.sheltered && c.rain >= 0.5;
+      return !!c.sheltered && c.rain >= WEATHER.rain;
     case 'heavy-rain':
-      return !!c.sheltered && c.rain >= 0.8;
+      return !!c.sheltered && c.rain >= WEATHER.heavyRain;
     case 'easing':
-      return !!c.sheltered && c.rain > 0.2 && !!c.easing;
+      return !!c.sheltered && c.rain > WEATHER.easing && !!c.easing;
     case 'evening-calm':
-      return greetingPeriod(c.minutes, periods) === 'evening' && c.wind < 0.4 && c.rain < 0.5;
+      return (
+        greetingPeriod(c.minutes, periods) === 'evening' &&
+        c.wind < WEATHER.breeze &&
+        c.rain < WEATHER.rain
+      );
     default:
       return true;
   }

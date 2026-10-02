@@ -50,8 +50,13 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
-  it('shares the scene speech cooldown without preventing a physical encounter', () => {
-    const reaction: DialogueChoice = { id: 'look', kind: 'look', turns: 1 };
+  it.each(['look', 'greet'] as const)('lets a %s speak after a background remark', (kind) => {
+    const reaction: DialogueChoice = {
+      id: kind,
+      kind,
+      turns: kind === 'look' ? 1 : 2,
+      ...(kind === 'greet' && { period: 'afternoon' }),
+    };
     const happy: DialogueChoice = {
       id: 'happy',
       kind: 'talk',
@@ -60,7 +65,9 @@ describe('small human moments', () => {
       turns: 1,
       speakers: [0],
     };
-    const f = fixture('look', () => 0, [reaction]);
+    const f = fixture(kind, () => 0, [reaction]);
+    f.c.clock = 20;
+    f.c.minutes = 720;
     const scene = new SceneSpeech(1, [happy], undefined, f.m.selector.memory);
     expect(
       scene.admit(
@@ -75,9 +82,9 @@ describe('small human moments', () => {
         12,
       ),
     ).toBe(true);
-    start(f, 'look');
+    start(f, kind);
     expect(f.m.busy(f.a.owner)).toBe(true);
-    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    expect(f.m.speech(f.a.owner)).toMatchObject({ exchangeId: kind, line: 0 });
   });
   it('shows a one-line catch celebration only after the actual receiver catches', () => {
     const choice: DialogueChoice = {
