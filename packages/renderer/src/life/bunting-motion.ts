@@ -5,8 +5,10 @@ import { WIND_PRESETS, WIND_VARIATION } from './wind';
 export const BUNTING_MOTION = {
   anchor: 0.25,
   freeEdge: 0.87,
-  maxX: 0.14,
-  maxY: 0.07,
+  // At 5×9 CSS pixels, a full flutter moves the free edge about 1.5 pixels. The atlas
+  // guards keep it in its owned cell; smaller offsets looked like brightness changes.
+  maxX: 0.3,
+  maxY: 0.16,
   minHz: 0.7,
   frequencyRange: 0.6,
   fold: 0.12,
@@ -26,8 +28,7 @@ export function buntingWindResponse(strength: number, reducedMotion = false): nu
       WIND_PRESETS.calm * (1 + WIND_VARIATION.breathe),
       WIND_PRESETS.breeze * (1 - WIND_VARIATION.breathe),
       bounded,
-    ) *
-    (bounded / WIND_PRESETS.storm)
+    ) * Math.sqrt(bounded / WIND_PRESETS.storm)
   );
 }
 

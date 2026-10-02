@@ -4,7 +4,60 @@ import { WIND_PRESETS, windAt, type WindNow } from './wind';
 import { drawProcedural } from '../glyphs/atlas';
 import { SEASONAL_GLYPHS } from './seasonal-glyphs';
 
+/** Coverage only: changing fold brightness cannot satisfy a visible silhouette check. */
+function clothFrame(
+  glyph: string,
+  time: number,
+  response: number,
+  direction: WindNow['dir'],
+): number[] {
+  const w = 5,
+    h = 9;
+  const data = new Uint8Array(w * h);
+  expect(drawProcedural({ data, stride: w, x0: 0, y0: 0, w, h }, glyph)).toBe(true);
+  const texel = (x: number, y: number) =>
+    x < 0 || x >= w || y < 0 || y >= h ? 0 : data[y * w + x]! / 255;
+  return Array.from(data, (_, i) => {
+    const uv = [((i % w) + 0.5) / w, (Math.floor(i / w) + 0.5) / h] as const;
+    const { source } = buntingMotion([1050, 2030], 7, uv, time, response, direction);
+    const px = source[0] * w - 0.5,
+      py = source[1] * h - 0.5;
+    const bx = Math.floor(px),
+      by = Math.floor(py),
+      fx = px - bx,
+      fy = py - by;
+    return (
+      (texel(bx, by) * (1 - fx) + texel(bx + 1, by) * fx) * (1 - fy) +
+      (texel(bx, by + 1) * (1 - fx) + texel(bx + 1, by + 1) * fx) * fy
+    );
+  });
+}
+
 describe('bunting motion', () => {
+  it('moves visible cloth pixels even at the weakest Gusty strength, rather than only shading them', () => {
+    const response = buntingWindResponse(WIND_PRESETS.gusty * 0.7);
+    for (const glyph of SEASONAL_GLYPHS.slice(1))
+      for (const direction of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as WindNow['dir'][]) {
+        const frames = Array.from({ length: 80 }, (_, i) =>
+          clothFrame(glyph, i / 30, response, direction),
+        );
+        const visible = frames[0]!.filter((_, pixel) => {
+          const coverage = frames.map((frame) => frame[pixel]!);
+          // Thin antialiased pennant tips need not become fully opaque. Require a
+          // substantial silhouette change, including a half-covered pixel.
+          return (
+            Math.max(...coverage) - Math.min(...coverage) >= 0.4 && Math.max(...coverage) >= 0.5
+          );
+        }).length;
+        expect(visible, `${glyph} in wind ${direction.join(',')}`).toBeGreaterThanOrEqual(2);
+      }
+  });
+
   it('holds the entire Calm range still and smoothly increases through stronger winds', () => {
     for (let time = 0; time <= 600; time += 0.7)
       expect(buntingWindResponse(windAt(time, { from: 225, strength: 'calm' }).strength)).toBe(0);
@@ -12,7 +65,7 @@ describe('bunting motion', () => {
     const values = [0.325, 0.33, 0.4, 0.49, 0.7, 1, 1.5, 1.95].map((s) => buntingWindResponse(s));
     expect(values[0]).toBe(0);
     expect(values[1]).toBeGreaterThan(0);
-    expect(values[1]).toBeLessThan(0.001);
+    expect(values[1]).toBeLessThan(0.002);
     expect(values).toEqual([...values].sort((a, b) => a - b));
     expect(values.at(-1)).toBe(1);
     for (const strength of Object.values(WIND_PRESETS))
@@ -67,31 +120,12 @@ describe('bunting motion', () => {
     for (const glyph of SEASONAL_GLYPHS.slice(1)) {
       const data = new Uint8Array(w * h);
       expect(drawProcedural({ data, stride: w, x0: 0, y0: 0, w, h }, glyph)).toBe(true);
-      const texel = (x: number, y: number) =>
-        x < 0 || x >= w || y < 0 || y >= h ? 0 : data[y * w + x]!;
-      const frame = (time: number) =>
-        Array.from(data, (_, i) => {
-          const x = i % w,
-            y = Math.floor(i / w);
-          const uv = [(x + 0.5) / w, (y + 0.5) / h] as const;
-          const { source } = buntingMotion([1050, 2030], 7, uv, time, 1, [1, 0]);
-          const px = source[0] * w - 0.5,
-            py = source[1] * h - 0.5;
-          const bx = Math.floor(px),
-            by = Math.floor(py),
-            fx = px - bx,
-            fy = py - by;
-          return (
-            (texel(bx, by) * (1 - fx) + texel(bx + 1, by) * fx) * (1 - fy) +
-            (texel(bx, by + 1) * (1 - fx) + texel(bx + 1, by + 1) * fx) * fy
-          );
-        });
-      const a = frame(0),
-        b = frame(0.3);
+      const a = clothFrame(glyph, 0, 1, [1, 0]),
+        b = clothFrame(glyph, 0.3, 1, [1, 0]);
       expect(a, glyph).not.toEqual(b);
       for (let i = 0; i < w * Math.floor(h * BUNTING_MOTION.anchor); i++) {
-        expect(a[i], glyph).toBe(data[i]);
-        expect(b[i], glyph).toBe(data[i]);
+        expect(a[i], glyph).toBe(data[i]! / 255);
+        expect(b[i], glyph).toBe(data[i]! / 255);
       }
     }
   });
