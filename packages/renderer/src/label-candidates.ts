@@ -1,19 +1,8 @@
 import { labelVisibility, type LabelCandidate } from './labels';
 import { KEEP_OVERHANG } from './label-stability';
-import type { GridPlacement, View } from './grid';
+import { screenArea, type GridPlacement, type View } from './grid';
+import type { LabelArea } from './labels';
 import type { TileLabel } from './raster/geometry';
-
-/** The conservative whole-cell area used to admit new text. */
-export function labelArea(view: View, placement: GridPlacement) {
-  const { shiftX, shiftY } = placement.grid;
-  const { w, h } = view.labelDev;
-  return {
-    left: Math.ceil(shiftX / w),
-    top: Math.ceil(shiftY / h),
-    right: Math.floor((shiftX + view.width) / w),
-    bottom: Math.floor((shiftY + view.height) / h),
-  };
-}
 
 /** Includes partially visible cells when reporting text actually on screen. */
 export function labelScreenArea(view: View, grid: GridPlacement['grid']) {
@@ -31,11 +20,13 @@ export function labelCandidate(
   label: TileLabel,
   view: View,
   placement: GridPlacement,
+  area: LabelArea = screenArea(view, placement.grid, view.labelDev),
 ): LabelCandidate | undefined {
   const vis = labelVisibility(label.band, view.camera.zoom);
   if (vis <= 0) return;
   const [col, row] = placement.toCell(label.lng, label.lat);
-  const area = labelArea(view, placement);
+  // No slot extends farther than the text's length plus its anchor offset and retention
+  // margin. Keep near-edge anchors for exact slot checks; reject only impossible reaches.
   const reach = label.text.length + 3 + KEEP_OVERHANG;
   if (
     col < area.left - reach ||

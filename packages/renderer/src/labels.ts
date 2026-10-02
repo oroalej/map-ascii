@@ -6,21 +6,6 @@
 import { bandVisibility, type ZoomBand } from '@atlas/shared';
 import { layoutLabels, TAKEN_PAD, type Box } from './label-layout';
 import { STREET_REPEAT, type PlaceStability } from './label-stability';
-export {
-  LABEL_WIDTH,
-  labelFitsArea,
-  rotatedLabelBox,
-  uprightStreetAngle,
-  wrapText,
-} from './label-layout';
-export {
-  KEEP_OVERHANG,
-  STREET_REPEAT,
-  labelFocus,
-  type LabelMemory,
-  type LabelSlot,
-  type PlaceStability,
-} from './label-stability';
 
 /** Label priority: lower ranks are placed first. */
 export const LabelRank = {
@@ -256,7 +241,7 @@ export function rotatedLabelVertices(
   return Float32Array.from(data);
 }
 
-/** Streets repeat by screen distance; other names appear once per placement. */
+/** Visible streets repeat by screen distance; other names appear once on screen. */
 export const repeatDistance = (rank: number): number =>
   rank === LabelRank.roadMajor || rank === LabelRank.street || rank === LabelRank.streetMinor
     ? STREET_REPEAT

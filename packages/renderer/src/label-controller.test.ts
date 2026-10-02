@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as layout from './label-layout';
+import * as grid from './grid';
 import { AtlasLabels } from './label-controller';
 import { LabelRank } from './labels';
 import { labelMemory } from './passes';
@@ -53,10 +55,58 @@ function fixture(atView = view) {
     names.collect(targets, atView, at, labels);
     return names.draw(gl, targets, theme, atView, at, programs, 0, 0);
   };
-  return { names, targets, draw };
+  return { names, targets, draw, gl, theme, programs };
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('cached atlas labels', () => {
+  it('prepares each tile copy once and reuses its projection for drawing and focus', () => {
+    const { names, targets, gl, theme, programs } = fixture();
+    const at = placement();
+    const project = vi.spyOn(at, 'toCell');
+    names.collect(targets, view, at, [street(3, 6), street(7, 6)]);
+    expect(project).toHaveBeenCalledTimes(6);
+    names.draw(gl, targets, theme, view, at, programs, 1, 0);
+    names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid);
+    expect(project).toHaveBeenCalledTimes(6);
+  });
+  it('skips geometry on unchanged frames and remembers ineligible focus inputs', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    draw([street(3, 6)]);
+    const fit = vi.spyOn(layout, 'labelFitsArea');
+    const area = vi.spyOn(grid, 'screenArea');
+    const at = placement().grid;
+    names.relabel(gl, targets, theme, view, programs, 1, 0, at);
+    fit.mockClear();
+    area.mockClear();
+    for (let i = 0; i < 20; i++) names.relabel(gl, targets, theme, view, programs, 1, 0, at);
+    expect(fit).not.toHaveBeenCalled();
+    expect(area).not.toHaveBeenCalled();
+    names.relabel(gl, targets, theme, view, programs, 99, 0, at);
+    area.mockClear();
+    names.relabel(gl, targets, theme, view, programs, 99, 0, at);
+    expect(area).not.toHaveBeenCalled();
+    names.relabel(gl, targets, theme, view, programs, 99, 0, { ...at, shiftX: 1 });
+    expect(area).toHaveBeenCalled();
+  });
+  it('restores the baseline after focus and commits only when cells are redrawn', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    const candidates = [street(3, 6), { ...street(3, 6), id: 5 }];
+    expect(draw(candidates).map(({ id }) => id)).toEqual([1]);
+    const baseline = [...labelMemory(targets)!];
+    const at = placement();
+    expect(
+      names.relabel(gl, targets, theme, view, programs, 0, 5, at.grid)?.labels.map(({ id }) => id),
+    ).toEqual([5]);
+    expect([...labelMemory(targets)!]).toEqual(baseline);
+    expect(
+      names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid)?.labels.map(({ id }) => id),
+    ).toEqual([1]);
+    names.collect(targets, view, at, candidates);
+    names.draw(gl, targets, theme, view, at, programs, 5, 0);
+    expect([...labelMemory(targets)!.keys()]).toEqual([5]);
+  });
   it('rejects offscreen long copies before choosing a visible run in either tile order', () => {
     const visible = street(3, 6),
       outside = street(100, 30);

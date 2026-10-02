@@ -3,7 +3,14 @@ import type { LabelArea, LabelCandidate, LabelMode } from './labels';
 /** Below, above, right, left, or a whole word rotated along its street. */
 export type LabelSlot = 0 | 1 | 2 | 3 | -1;
 export type LabelMemory = Map<number, LabelSlot>;
-export type PlaceStability = { memory?: LabelMemory; focus?: readonly number[] };
+export type PlaceStability = {
+  memory?: LabelMemory;
+  focus?: readonly number[];
+  /** Focus-only overlays read the last cell draw's memory without replacing it. */
+  commitMemory?: boolean;
+  /** Physical viewport, including partial cells; defaults to the admission area. */
+  screen?: LabelArea;
+};
 
 /** Retained text may extend this many label cells beyond the screen. */
 export const KEEP_OVERHANG = 3;
@@ -37,11 +44,21 @@ export function orderLabels(
   );
 }
 
-export function labelSlots(mode: LabelMode | undefined, remembered?: LabelSlot): LabelSlot[] {
-  const defaults: LabelSlot[] = mode === 'rotated' ? [-1, 0, 1, 2, 3] : [0, 1, 2, 3];
-  return remembered !== undefined && defaults.includes(remembered)
-    ? [remembered, ...defaults.filter((slot) => slot !== remembered)]
-    : defaults;
+const besideSlots: readonly (readonly LabelSlot[])[] = [
+  [0, 1, 2, 3],
+  [1, 0, 2, 3],
+  [2, 0, 1, 3],
+  [3, 0, 1, 2],
+];
+const rotatedSlots = besideSlots.map((slots): readonly LabelSlot[] => [-1, ...slots]);
+
+/** Reuse the four possible orders: eligibility and placement call this for every candidate. */
+export function labelSlots(
+  mode: LabelMode | undefined,
+  remembered?: LabelSlot,
+): readonly LabelSlot[] {
+  const beside = remembered === undefined || remembered === -1 ? 0 : remembered;
+  return (mode === 'rotated' ? rotatedSlots : besideSlots)[beside]!;
 }
 
 export function retentionArea(area: LabelArea, kept: boolean): LabelArea {

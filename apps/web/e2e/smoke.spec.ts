@@ -255,7 +255,8 @@ for (const city of cities) {
         page,
       }) => {
         // Bound animated software-WebGL work while exercising startup and motion toggles.
-        await page.setViewportSize({ width: 640, height: 480 });
+        await page.setViewportSize({ width: 800, height: 480 });
+        expect(await page.evaluate(() => matchMedia('(max-width: 640px)').matches)).toBe(false);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });

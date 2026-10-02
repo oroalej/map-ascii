@@ -1,3 +1,4 @@
+import { labelCandidate } from './label-candidates';
 import { expect, it, vi } from 'vitest';
 import { overlayPass, placeGrid, prepareCrowns, type TileDraw, type View } from './passes';
 import type { CellTargets, GL } from './gpu';
@@ -89,22 +90,68 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
     rank: LabelRank.landmark,
     band: { min: 16 },
   };
-  const first = overlayPass(gl, targets, resources, view, placement, [label], programs);
+  const first = overlayPass(
+    gl,
+    targets,
+    resources,
+    view,
+    placement,
+    [labelCandidate(label, view, placement)!],
+    programs,
+  );
   expect(first).toHaveLength(1);
   const buffer = uploaded[0]!,
     snapshot = buffer.slice();
   overlayPass(gl, targets, resources, view, placement, [], programs);
   expect(uploaded[1]).toBe(buffer);
   expect(buffer.every((byte) => byte === 0)).toBe(true);
-  expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [labelCandidate(label, view, placement)!],
+      programs,
+    ),
+  ).toEqual(first);
   expect(buffer).toEqual(snapshot);
   programs.streetText.count = 6;
   const hidden = { ...view, camera: { ...view.camera, zoom: 16 } };
-  expect(overlayPass(gl, targets, resources, hidden, placement, [label], programs)).toEqual([]);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      hidden,
+      placement,
+      [label].flatMap((label) => labelCandidate(label, hidden, placement) ?? []),
+      programs,
+    ),
+  ).toEqual([]);
   expect(buffer.every((byte) => byte === 0)).toBe(true);
   expect(programs.streetText.count).toBe(0);
-  expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
-  overlayPass(gl, { ...targets }, resources, view, placement, [label], programs);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [labelCandidate(label, view, placement)!],
+      programs,
+    ),
+  ).toEqual(first);
+  overlayPass(
+    gl,
+    { ...targets },
+    resources,
+    view,
+    placement,
+    [labelCandidate(label, view, placement)!],
+    programs,
+  );
   expect(uploaded[5]).not.toBe(buffer);
   expect(uploaded[5]).toEqual(snapshot);
   const resized = { ...targets, labelCols: 10, labelRows: 10 };

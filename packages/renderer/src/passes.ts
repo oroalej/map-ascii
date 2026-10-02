@@ -4,7 +4,7 @@
  * the glyph pass draws the glyphs at full resolution. The life pass puts the life layer's agents
  * on the grid every frame.
  */
-import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+import { screenArea, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
@@ -19,7 +19,7 @@ import {
   TIER_STEP,
 } from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
-import type { CellSize, Programs, ThemeResources } from './gpu-context';
+import type { Programs, ThemeResources } from './gpu-context';
 import {
   copyRaster,
   drawCrowns,
@@ -43,7 +43,7 @@ import {
   type LabelCandidate,
   type Overlay,
 } from './labels';
-import { labelArea, labelCandidate, labelScreenArea } from './label-candidates';
+import { labelScreenArea } from './label-candidates';
 import { labelIntersectsArea } from './label-layout';
 import type { LabelMemory, LabelSlot } from './label-stability';
 import { cellBits } from './life/config';
@@ -58,7 +58,6 @@ import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lig
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
-import { type TileLabel } from './raster/geometry';
 import { rainGlyphs, type Theme } from './theme';
 import {
   packFixtures,
@@ -84,18 +83,6 @@ const seeThrough = seeThroughMask();
 const roads = roadMask();
 const areas = subcellAreas();
 const lifeCellBits = cellBits();
-/**
- * The grid cells actually on screen (the grid has a margin, and a sub-cell pan shift):
- * [left, top] inclusive to [right, bottom] exclusive.
- */
-export function screenArea(view: View, grid: Grid, cellDev: CellSize = view.cellDev) {
-  return {
-    left: Math.ceil(grid.shiftX / cellDev.w),
-    top: Math.ceil(grid.shiftY / cellDev.h),
-    right: Math.floor((grid.shiftX + view.width) / cellDev.w),
-    bottom: Math.floor((grid.shiftY + view.height) / cellDev.h),
-  };
-}
 
 /** A tile to draw and its mesh. */
 export type TileDraw = { tile: TileId; mesh: TileMesh };
@@ -338,27 +325,25 @@ export function overlayPass(
   themeRes: ThemeResources,
   view: View,
   placement: GridPlacement,
-  labels: Iterable<TileLabel>,
+  candidates: readonly LabelCandidate[],
   { streetText }: Programs,
   focus: readonly number[] = [],
+  commitMemory = true,
 ): LabelCandidate[] {
   const { labelDev } = view;
   const { overlay, packed, memory } = overlayBuffers(targets);
-  const area = labelArea(view, placement);
+  const area = screenArea(view, placement.grid, view.labelDev);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
     const index = glyphs.index(char);
     return index === 0 ? undefined : index;
   };
 
-  const candidates: LabelCandidate[] = [];
-  for (const label of labels) {
-    const candidate = labelCandidate(label, view, placement);
-    if (candidate) candidates.push(candidate);
-  }
   const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w, {
     memory,
     focus,
+    commitMemory,
+    screen: labelScreenArea(view, placement.grid),
   });
   uploadOverlay(gl, targets, packOverlay(overlay, packed));
   // Most views have no rotated names, before or after: nothing to upload.

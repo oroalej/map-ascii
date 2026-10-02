@@ -64,7 +64,6 @@ import {
   metersPerCssPx,
   streetTextPass,
   placeGrid,
-  screenArea,
   selectPass,
   type Grid,
   type GridPlacement,
@@ -72,6 +71,7 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { screenArea } from './grid';
 import { AtlasLabels } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { normalizeFocus, type LegendFocus } from './focus';
@@ -582,6 +582,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const { source } = tileCache;
 
   const names = new AtlasLabels();
+  let labelsForReport: TileLabel[] | undefined;
+  let labelVisibilityDirty = false;
 
   const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
     const a = screenArea(v, map.grid);
@@ -612,7 +614,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     placement = next;
     grid = next.grid;
     labelGrid = nextLabels.grid;
-    reportLabels(names.inView(targets, v, labelGrid));
+    labelVisibilityDirty = true;
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -647,16 +649,24 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
     names.collect(targets, v, labelPlacement, labels);
-    reportLabels(
-      names.draw(gl, targets, themeRes, v, labelPlacement, programs, selectedIndex(), hoverIndex),
+    labelsForReport = names.draw(
+      gl,
+      targets,
+      themeRes,
+      v,
+      labelPlacement,
+      programs,
+      selectedIndex(),
+      hoverIndex,
     );
     classesStale = true;
   };
 
   /** Compare the whole visible-label payload, including changed names and source anchors. */
-  let labelsKey = '';
+  let reportedLabels: LabelInView[] | undefined;
   const reportLabels = (placed: readonly TileLabel[]) => {
-    const inView: LabelInView[] = [];
+    let changed: LabelInView[] | undefined;
+    let count = 0;
     for (const label of placed) {
       const kind =
         label.rank === LabelRank.landmark
@@ -668,14 +678,32 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
                 label.rank === LabelRank.roadMajor
               ? null
               : 'place';
+      if (!kind) continue;
       const featureId = source.feature(label.id)?.id;
-      if (!kind || !featureId) continue;
-      inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      if (!featureId) continue;
+      const old = reportedLabels?.[count];
+      if (
+        !changed &&
+        (!old ||
+          old.featureId !== featureId ||
+          old.name !== label.text ||
+          old.kind !== kind ||
+          old.lngLat[0] !== label.lng ||
+          old.lngLat[1] !== label.lat)
+      ) {
+        changed = reportedLabels?.slice(0, count) ?? [];
+      }
+      if (changed)
+        changed.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      count++;
     }
-    const key = JSON.stringify(inView);
-    if (key === labelsKey) return;
-    labelsKey = key;
-    emit('labelschange', inView);
+    if (!changed && reportedLabels && count === reportedLabels.length) return;
+    reportedLabels = changed ?? reportedLabels?.slice(0, count) ?? [];
+    // Event consumers may mutate the public payload; retain an independent comparison snapshot.
+    emit(
+      'labelschange',
+      reportedLabels.map((label) => ({ ...label, lngLat: [...label.lngLat] })),
+    );
   };
 
   // Which classes are on screen (the `classeschange` event): the on-screen part of the class
@@ -1247,11 +1275,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           programs,
           selectedIndex(),
           hoverIndex,
+          labelGrid,
         );
         if (relabeled) {
           labelGrid = relabeled.grid;
-          reportLabels(relabeled.labels);
+          labelsForReport = relabeled.labels;
         }
+      }
+      // Publish only the final overlay for this frame, including sub-cell visibility changes.
+      if (labelsForReport || labelVisibilityDirty) {
+        reportLabels(labelsForReport ?? names.inView(targets, v, labelGrid));
+        labelsForReport = undefined;
+        labelVisibilityDirty = false;
       }
       const wind = worldWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.

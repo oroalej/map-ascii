@@ -49,6 +49,26 @@ describe('street copy collection', () => {
     expect(collect([fresh, longer], previous)).toBe(fresh);
     expect(collect([longer, fresh], previous)).toBe(fresh);
   });
+  it('recognizes reversed endpoints and an equivalent upright angle as the accepted copy', () => {
+    const old = street(0, 1);
+    const fresh = { ...old, angle: Math.PI, run: [old.run![1], old.run![0]] as const };
+    const longer = street(0, 3);
+    const previous = new Map([[1, old]]);
+    expect(collect([fresh, longer], previous)).toBe(fresh);
+    expect(collect([longer, fresh], previous)).toBe(fresh);
+  });
+  it('orders equal-length runs with the same anchor by their canonical endpoints', () => {
+    const a = street(0, 1);
+    const b = {
+      ...a,
+      run: [
+        [0, 13],
+        [1, 13],
+      ] as const,
+    };
+    expect(collect([a, b])).toBe(a);
+    expect(collect([b, a])).toBe(a);
+  });
   it('chooses a new run after the old one disappears', () => {
     const old = street(0, 1),
       a = street(2, 1),

@@ -1,3 +1,4 @@
+import { labelCandidate } from './label-candidates';
 import { describe, expect, it, vi } from 'vitest';
 import { labelMemory, labelsInView, overlayPass } from './passes';
 import { LabelRank } from './labels';
@@ -45,7 +46,16 @@ function fixture() {
   } as unknown as ThemeResources;
   const programs = { streetText: { buffer: null, count: 0 } } as unknown as Programs;
   const draw = (labels: TileLabel[], focus: number[] = [], at = view, target = targets) =>
-    overlayPass(gl, target, resources, at, placement, labels, programs, focus);
+    overlayPass(
+      gl,
+      target,
+      resources,
+      at,
+      placement,
+      labels.flatMap((label) => labelCandidate(label, at, placement) ?? []),
+      programs,
+      focus,
+    );
   return { targets, draw, uploaded, programs };
 }
 

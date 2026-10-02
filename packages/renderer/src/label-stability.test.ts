@@ -45,8 +45,8 @@ it('drops zero, unknown and duplicate focus while preserving selected precedence
   expect(labelFocus(3, 0, known)).toEqual([]);
 });
 
-it('tries a remembered slot once, falling back in the original order', () => {
-  expect(labelSlots('rotated', 1)).toEqual([1, -1, 0, 2, 3]);
+it('tries rotation first and remembers only the horizontal fallback order', () => {
+  expect(labelSlots('rotated', 1)).toEqual([-1, 1, 0, 2, 3]);
   expect(labelSlots('rotated', -1)).toEqual([-1, 0, 1, 2, 3]);
   expect(labelSlots('beside', -1)).toEqual([0, 1, 2, 3]);
   expect(labelSlots(undefined, 0)).toEqual([0, 1, 2, 3]);

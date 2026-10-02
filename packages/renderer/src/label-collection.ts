@@ -1,4 +1,4 @@
-import { uprightStreetAngle } from './labels';
+import { uprightStreetAngle } from './label-layout';
 import type { TileLabel } from './raster/geometry';
 
 const runLength = (label: TileLabel) =>
@@ -16,6 +16,30 @@ function coordinates(label: TileLabel): number[] {
 }
 
 function compareCoordinates(a: TileLabel, b: TileLabel): number {
+  if (a === b) return 0;
+  const anchor = a.lng - b.lng || a.lat - b.lat;
+  if (anchor) return anchor;
+  const ar = a.run,
+    br = b.run;
+  if (ar && br) {
+    // Compare the same canonical endpoint order without sorting/flattening arrays for
+    // every duplicate or retained copy. Endpoints are immutable during collection.
+    const ai = ar[0][0] - ar[1][0] || ar[0][1] - ar[1][1];
+    const bi = br[0][0] - br[1][0] || br[0][1] - br[1][1];
+    const a0 = ar[ai > 0 ? 1 : 0],
+      a1 = ar[ai > 0 ? 0 : 1];
+    const b0 = br[bi > 0 ? 1 : 0],
+      b1 = br[bi > 0 ? 0 : 1];
+    return (
+      a0[0] - b0[0] ||
+      a0[1] - b0[1] ||
+      a1[0] - b1[0] ||
+      a1[1] - b1[1] ||
+      uprightStreetAngle(a.angle ?? 0) - uprightStreetAngle(b.angle ?? 0)
+    );
+  }
+  if (!ar && !br) return uprightStreetAngle(a.angle ?? 0) - uprightStreetAngle(b.angle ?? 0);
+  // Mixed run/no-run keys have different lengths; retain their original total ordering.
   const aa = coordinates(a),
     bb = coordinates(b);
   for (let i = 0; i < Math.min(aa.length, bb.length); i++) {

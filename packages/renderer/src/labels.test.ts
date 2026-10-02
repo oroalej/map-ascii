@@ -1,3 +1,4 @@
+import { wrapText } from './label-layout';
 import { describe, expect, it } from 'vitest';
 import {
   packOverlay,
@@ -10,7 +11,6 @@ import {
   labelText,
   labelVisibility,
   placeLabels,
-  wrapText,
   overlayCoversPoint,
 } from './labels';
 

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { labelArea, labelCandidate } from './label-candidates';
+import { labelCandidate, labelScreenArea } from './label-candidates';
 import { LabelRank } from './labels';
-import type { GridPlacement, View } from './grid';
+import { screenArea, type GridPlacement, type View } from './grid';
 import type { TileLabel } from './raster/geometry';
 
 const view: View = {
@@ -32,8 +32,31 @@ const label: TileLabel = {
   band: { min: 18 },
 };
 
+it.each([
+  [19.5, 1, 40],
+  [20, 1, 41],
+  [20.5, 2, 41],
+  [-0.5, -0, 39],
+])(
+  'shares whole-cell admission while retaining fractional visibility at shift %s',
+  (shiftX, left, right) => {
+    const grid = { ...placement.grid, shiftX };
+    expect(screenArea(view, grid, view.labelDev)).toMatchObject({ left, right });
+    expect(labelScreenArea(view, grid)).toMatchObject({
+      left: shiftX / 20,
+      right: (shiftX + 800) / 20,
+    });
+    expect(screenArea(view, grid)).toEqual(screenArea(view, grid, view.cellDev));
+  },
+);
+
 it('prepares fractional anchors and run lengths in horizontal cell widths', () => {
-  expect(labelArea(view, placement)).toEqual({ left: 1, top: 1, right: 41, bottom: 17 });
+  expect(screenArea(view, placement.grid, view.labelDev)).toEqual({
+    left: 1,
+    top: 1,
+    right: 41,
+    bottom: 17,
+  });
   expect(labelCandidate(label, view, placement)).toMatchObject({
     col: 4,
     row: 4,

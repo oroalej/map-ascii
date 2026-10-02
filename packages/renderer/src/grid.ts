@@ -31,6 +31,16 @@ export type View = {
  */
 export type Grid = { originCol: number; originRow: number; shiftX: number; shiftY: number };
 
+/** Whole cells inside the viewport: inclusive left/top, exclusive right/bottom. */
+export function screenArea(view: View, grid: Grid, cellDev = view.cellDev) {
+  return {
+    left: Math.ceil(grid.shiftX / cellDev.w),
+    top: Math.ceil(grid.shiftY / cellDev.h),
+    right: Math.floor((grid.shiftX + view.width) / cellDev.w),
+    bottom: Math.floor((grid.shiftY + view.height) / cellDev.h),
+  };
+}
+
 /** The grid for a view, and how tiles and points map onto it. */
 export type GridPlacement = {
   grid: Grid;

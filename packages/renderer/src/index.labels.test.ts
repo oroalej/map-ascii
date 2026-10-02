@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAtlas, type Atlas } from './index';
-import { cellPass, crownPass, overlayPass } from './passes';
+import { createAtlas, type Atlas, type LabelInView } from './index';
+import { cellPass, crownPass, labelsInView, overlayPass } from './passes';
 import type * as Passes from './passes';
 import type * as Pacing from './pacing';
 import type * as Gpu from './gpu';
@@ -48,6 +48,7 @@ vi.mock('./passes', async (load) => {
     selectPass: vi.fn(),
     glyphPass: vi.fn(),
     overlayPass: vi.fn(actual.overlayPass),
+    labelsInView: vi.fn(actual.labelsInView),
     lifePass: vi.fn(() => 0),
     lifeRaster: () => null,
     lightPass: vi.fn(),
@@ -188,7 +189,7 @@ describe('label focus in the renderer frame', () => {
 
   it('relabels once for selected/hovered priority without a cell pass or class readback', () => {
     draw(10);
-    const labels = vi.fn();
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
     atlas.on('labelschange', labels);
     vi.mocked(cellPass).mockClear();
     vi.mocked(crownPass).mockClear();
@@ -262,7 +263,7 @@ describe('label focus in the renderer frame', () => {
     expect(focus()).toEqual([9]);
   });
   it('reports changed text and anchors even when the visible feature ids stay the same', () => {
-    const labels = vi.fn();
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
     atlas.on('labelschange', labels);
     draw(10);
     labels.mockClear();
@@ -281,6 +282,39 @@ describe('label focus in the renderer frame', () => {
       kind: 'landmark',
       lngLat: [0.00000001, 0],
     });
+  });
+  it('publishes only the final payload when a subcell pan and focus change share a frame', () => {
+    draw(10);
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    const visible = vi.mocked(labelsInView).getMockImplementation()!;
+    // Model the old overlay crossing the screen edge during the shift. Once focus is
+    // placed, the real bounds determine the new payload. Never publish the interim gap.
+    vi.mocked(labelsInView).mockImplementation((...args) =>
+      focus()?.includes(7) ? visible(...args) : [],
+    );
+    vi.mocked(cellPass).mockClear();
+    const passes = vi.mocked(overlayPass).mock.calls.length;
+    atlas.setCamera({ lng: 0.00000001 });
+    hover(7);
+    draw(11);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(overlayPass).toHaveBeenCalledTimes(passes + 1);
+    expect(labels).toHaveBeenCalledOnce();
+    expect(labels.mock.calls[0]?.[0]?.[0]?.featureId).toBe('feature/7');
+    vi.mocked(labelsInView).mockImplementation(visible);
+  });
+  it('does not report unchanged pan payloads or share its comparison snapshot with consumers', () => {
+    const labels = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', labels);
+    draw(10);
+    const initial = labels.mock.calls[0]?.[0] as { name: string; lngLat: number[] }[];
+    initial[0]!.name = 'consumer mutation';
+    initial[0]!.lngLat[0] = 999;
+    labels.mockClear();
+    atlas.setCamera({ lng: 0.00000001 });
+    draw(11);
+    expect(labels).not.toHaveBeenCalled();
   });
   it('keeps ordinary due crown animation but adds none for an intervening focus frame', () => {
     draw(10);

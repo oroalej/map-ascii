@@ -8,6 +8,13 @@ import {
 } from './label-stability';
 
 export type Box = { left: number; top: number; width: number; height: number };
+function copyBox(out: Box, box: Box) {
+  out.left = box.left;
+  out.top = box.top;
+  out.width = box.width;
+  out.height = box.height;
+}
+/** Collision cells reach past the grid by at least the retained overhang plus its halo. */
 export const TAKEN_PAD = 4;
 export const LABEL_WIDTH = 18;
 
@@ -22,12 +29,10 @@ const inside = (box: Box, area: LabelArea) =>
   box.left + box.width <= area.right &&
   box.top + box.height <= area.bottom;
 export const labelIntersectsArea = (box: Box, area: LabelArea) =>
-  overlaps(box, {
-    left: area.left,
-    top: area.top,
-    width: area.right - area.left,
-    height: area.bottom - area.top,
-  });
+  box.left < area.right &&
+  area.left < box.left + box.width &&
+  box.top < area.bottom &&
+  area.top < box.top + box.height;
 
 const inTakenCells = (o: Overlay, b: Box) =>
   b.left >= -TAKEN_PAD &&
@@ -44,6 +49,7 @@ function isTaken(o: Overlay, box: Box): boolean {
   return false;
 }
 function take(o: Overlay, box: Box) {
+  // Keep the full box in the list even beyond the pad: out-of-grid queries use that list.
   o.taken.push(box);
   if (!o.takenCells) return;
   const stride = o.cols + 2 * TAKEN_PAD;
@@ -77,13 +83,33 @@ export function wrapText(text: string, width = LABEL_WIDTH): string[] {
   return lines;
 }
 
-const wrapped = new Map<string, { lines: string[]; width: number }>();
+type TextMetrics = {
+  lines: string[];
+  width: number;
+  trimmed: string;
+  length: number;
+  chars?: string[];
+};
+const wrapped = new Map<string, TextMetrics>();
 const WRAPPED_MAX = 20_000;
+function characterCount(text: string): number {
+  let count = 0;
+  for (let offset = 0; offset < text.length; count++) {
+    offset += (text.codePointAt(offset) ?? 0) > 0xffff ? 2 : 1;
+  }
+  return count;
+}
 function wrapOnce(text: string) {
   let found = wrapped.get(text);
   if (!found) {
     const lines = wrapText(text);
-    found = { lines, width: Math.max(0, ...lines.map((line) => [...line].length)) };
+    const trimmed = text.trim();
+    found = {
+      lines,
+      width: Math.max(0, ...lines.map(characterCount)),
+      trimmed,
+      length: characterCount(trimmed),
+    };
     if (wrapped.size >= WRAPPED_MAX) wrapped.clear();
     wrapped.set(text, found);
   }
@@ -101,12 +127,17 @@ function rotatedBounds(
   height: number,
   angle: number,
   aspect: number,
+  out: Box,
 ): Box {
   const c = Math.abs(Math.cos(angle)),
     s = Math.abs(Math.sin(angle));
   const w = c * width + s * aspect * height,
     h = (s * width) / aspect + c * height;
-  return { left: col + 0.5 - w / 2, top: row + 0.5 - h / 2, width: w, height: h };
+  out.left = col + 0.5 - w / 2;
+  out.top = row + 0.5 - h / 2;
+  out.width = w;
+  out.height = h;
+  return out;
 }
 
 export function rotatedLabelBox(
@@ -115,6 +146,7 @@ export function rotatedLabelBox(
   width: number,
   angle: number,
   aspect = 1.8,
+  out: Box = { left: 0, top: 0, width: 0, height: 0 },
 ): Box {
   const c = Math.abs(Math.cos(angle)),
     s = Math.abs(Math.sin(angle));
@@ -122,12 +154,11 @@ export function rotatedLabelBox(
   const h = (s * (width + 2)) / aspect + c * 1.4;
   const left = Math.floor(col + 0.5 - w / 2),
     top = Math.floor(row + 0.5 - h / 2);
-  return {
-    left,
-    top,
-    width: Math.ceil(col + 0.5 + w / 2) - left,
-    height: Math.ceil(row + 0.5 + h / 2) - top,
-  };
+  out.left = left;
+  out.top = top;
+  out.width = Math.ceil(col + 0.5 + w / 2) - left;
+  out.height = Math.ceil(row + 0.5 + h / 2) - top;
+  return out;
 }
 
 type BesideLayout = {
@@ -148,51 +179,43 @@ type RotatedLayout = {
 };
 export type LabelLayout = (BesideLayout | RotatedLayout) & { label: LabelCandidate };
 
-function slotLayout(
+/** Shared numeric geometry; fit checks never construct glyph arrays or full layouts. */
+function measureSlot(
   label: LabelCandidate,
   slot: LabelSlot,
   aspect: number,
-): LabelLayout | undefined {
+  box: Box,
+  textBounds?: Box,
+): boolean {
   const { col, row } = label;
+  const metrics = wrapOnce(label.text);
   if (slot === -1) {
-    if (label.mode !== 'rotated') return;
-    const chars = [...label.text.trim()],
-      angle = uprightStreetAngle(label.angle ?? 0);
-    if (!chars.length || (label.runCells !== undefined && chars.length + 2 > label.runCells))
-      return;
-    const box = rotatedLabelBox(col, row, chars.length, angle, aspect);
-    return {
-      label,
-      slot,
-      box,
-      collision: box,
-      chars,
-      angle,
-      textBounds: rotatedBounds(col, row, chars.length, 1, angle, aspect),
-    };
+    if (
+      label.mode !== 'rotated' ||
+      !metrics.length ||
+      (label.runCells !== undefined && metrics.length + 2 > label.runCells)
+    )
+      return false;
+    const angle = uprightStreetAngle(label.angle ?? 0);
+    rotatedLabelBox(col, row, metrics.length, angle, aspect, box);
+    if (textBounds) rotatedBounds(col, row, metrics.length, 1, angle, aspect, textBounds);
+    return true;
   }
-  const { lines, width } = wrapOnce(label.text);
-  if (!lines.length || !lines[0]) return;
+  const { lines, width } = metrics;
+  if (!lines.length || !lines[0]) return false;
   const height = lines.length,
     centered = col - Math.floor(width / 2);
-  const positions = [
-    [centered, row + 1],
-    [centered, row - height],
-    [col + 2, row - Math.floor(height / 2)],
-    [col - 1 - width, row - Math.floor(height / 2)],
-  ] as const;
-  const [left, top] = positions[slot];
-  const box = { left, top, width, height };
-  return {
-    label,
-    slot,
-    box,
-    textBounds: box,
-    lines,
-    width,
-    collision: { ...box, left: left - 1, width: width + 2 },
-  };
+  box.left = slot < 2 ? centered : slot === 2 ? col + 2 : col - 1 - width;
+  box.top = slot === 0 ? row + 1 : slot === 1 ? row - height : row - Math.floor(height / 2);
+  box.width = width;
+  box.height = height;
+  if (textBounds) copyBox(textBounds, box);
+  return true;
 }
+
+// Eligibility is synchronous. These boxes never escape into accepted layouts or collisions.
+const fitBox: Box = { left: 0, top: 0, width: 0, height: 0 };
+const fitText: Box = { ...fitBox };
 
 /** Eligibility excludes collisions: a competing label must not decide which tile copy wins. */
 export function labelFitsArea(
@@ -203,8 +226,7 @@ export function labelFitsArea(
 ): boolean {
   const allowed = retentionArea(area, kept);
   return labelSlots(label.mode).some((slot) => {
-    const layout = slotLayout(label, slot, aspect);
-    return layout !== undefined && inside(layout.box, allowed);
+    return measureSlot(label, slot, aspect, fitBox) && inside(fitBox, allowed);
   });
 }
 
@@ -217,9 +239,8 @@ export function labelTouchesArea(
   slot?: LabelSlot,
 ): boolean {
   for (const choice of labelSlots(label.mode, slot)) {
-    const layout = slotLayout(label, choice, aspect);
-    if (layout && inside(layout.box, allowed))
-      return labelIntersectsArea(layout.textBounds, screen);
+    if (measureSlot(label, choice, aspect, fitBox, fitText) && inside(fitBox, allowed))
+      return labelIntersectsArea(fitText, screen);
   }
   return false;
 }
@@ -234,6 +255,9 @@ export function layoutLabels(
   repeatDistance: (rank: number) => number,
 ): LabelLayout[] {
   const accepted: LabelLayout[] = [];
+  const box: Box = { left: 0, top: 0, width: 0, height: 0 };
+  const textBounds = { ...box },
+    collision = { ...box };
   const names = new Map<string, { col: number; row: number }[]>();
   for (const label of orderLabels(candidates, stability)) {
     const nearby = names.get(label.text) ?? [];
@@ -246,16 +270,45 @@ export function layoutLabels(
       continue;
     const allowed = retentionArea(area, stability.memory?.has(label.id) ?? false);
     for (const slot of labelSlots(label.mode, stability.memory?.get(label.id))) {
-      const layout = slotLayout(label, slot, aspect);
-      if (!layout || !inside(layout.box, allowed) || isTaken(overlay, layout.collision)) continue;
+      if (!measureSlot(label, slot, aspect, box, textBounds) || !inside(box, allowed)) continue;
+      copyBox(collision, box);
+      if (slot !== -1) {
+        collision.left--;
+        collision.width += 2;
+      }
+      if (isTaken(overlay, collision)) continue;
+      const metrics = wrapOnce(label.text);
+      const ownedBox = { ...box };
+      const layout: LabelLayout =
+        slot === -1
+          ? {
+              label,
+              slot,
+              box: ownedBox,
+              collision: ownedBox,
+              textBounds: { ...textBounds },
+              chars: (metrics.chars ??= [...metrics.trimmed]),
+              angle: uprightStreetAngle(label.angle ?? 0),
+            }
+          : {
+              label,
+              slot,
+              box: ownedBox,
+              collision: { ...collision },
+              textBounds: ownedBox,
+              lines: metrics.lines,
+              width: metrics.width,
+            };
       take(overlay, layout.collision);
-      if (!nearby.length) names.set(label.text, nearby);
-      nearby.push({ col: label.col, row: label.row });
+      if (labelIntersectsArea(layout.textBounds, stability.screen ?? area)) {
+        if (!nearby.length) names.set(label.text, nearby);
+        nearby.push({ col: label.col, row: label.row });
+      }
       accepted.push(layout);
       break;
     }
   }
-  if (stability.memory) {
+  if (stability.memory && stability.commitMemory !== false) {
     stability.memory.clear();
     for (const { label, slot } of accepted) stability.memory.set(label.id, slot);
   }
