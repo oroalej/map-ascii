@@ -3,6 +3,9 @@ import type { AtlasClass } from './schemas';
 /** Zoom units over which a class fades in or out (SPEC.md §2: ~0.5, no popping). */
 export const ZOOM_FADE = 0.5;
 
+/** Human moments and their optional speech appear at this detail level. */
+export const SPEECH_ZOOM = 18;
+
 /**
  * When a class is shown. It fades in over `[min − ZOOM_FADE, min]` and, with a `max`, fades out
  * over `[max, max + ZOOM_FADE]`.

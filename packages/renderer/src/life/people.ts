@@ -10,11 +10,12 @@
  * and `FIGURE_TONE` for its skin (the theme's person color) or a canopy's ribs, which the glyph
  * shader tells apart (shaders/glyph.ts `personColor`).
  */
-import { doubled, turnedPixels, type Heading } from './masters';
+import { doubled, inkAt, turnedPixels, type Heading } from './masters';
 import { Paint } from './vehicles';
 
 /** Walking or seated people, a child, an umbrella, or a paddler with their paddle. */
 export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated';
+export type PersonPose = 'attentive' | 'gesture';
 
 /**
  * One person as drawn (life/draw.ts `drawPeople`): their figure and its paint (`PAINT_NONE` for
@@ -27,6 +28,8 @@ export type PersonLook = {
   lateral: number;
   back: number;
   flap: number;
+  /** Stationary social pose; age, clothing and physical size remain the same. */
+  pose?: PersonPose;
 };
 
 /**
@@ -174,6 +177,46 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
   ],
 };
 
+/** Stationary shoulders and an off-center head make all four headings readable from above. */
+// prettier-ignore
+const ATTENTIVE_ADULT_10 = [
+  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
+  '..##oo##..', '.########.', '.########.', '..######..', '..........',
+];
+// prettier-ignore
+const GESTURE_ADULT_10 = [
+  '.oo.......', '.##.......', '.##.oo....', '.##oooo...', '.##oooo...',
+  '.###oo##..', '.########.', '..#######.', '..######..', '..........',
+];
+// prettier-ignore
+const ATTENTIVE_CHILD_10 = [
+  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
+  '...#oo#...', '..######..', '..######..', '...####...', '..........',
+];
+// prettier-ignore
+const GESTURE_CHILD_10 = [
+  '..oo......', '..##......', '..##oo....', '..#oooo...', '..#oooo...',
+  '..##oo#...', '..######..', '...#####..', '...####...', '..........',
+];
+const stationaryMasters = (small: readonly string[], medium: readonly string[]) => ({
+  5: small,
+  10: medium,
+  20: doubled(medium),
+});
+export const POSE_MASTERS = {
+  adult: {
+    attentive: stationaryMasters(['.....', '..o..', '.#o#.', '.###.', '.###.'], ATTENTIVE_ADULT_10),
+    gesture: stationaryMasters(['o....', '#.o..', '##o#.', '.###.', '.###.'], GESTURE_ADULT_10),
+  },
+  child: {
+    attentive: stationaryMasters(['.....', '..o..', '..o..', '.###.', '..#..'], ATTENTIVE_CHILD_10),
+    gesture: stationaryMasters(['.o...', '.#o..', '.#o..', '.###.', '..#..'], GESTURE_CHILD_10),
+  },
+} as const;
+
+const poseMasters = (figure: PersonFigure, pose?: PersonPose) =>
+  pose && (figure === 'adult' || figure === 'child') ? POSE_MASTERS[figure][pose] : undefined;
+
 /** An umbrella's canopy: an octagon, its ribs crossing to the tip (just the tip when small). */
 function canopy(n: number): string[] {
   const cut = Math.max(1, Math.round(n / 5));
@@ -278,6 +321,7 @@ export type FigureGlyph = {
   stroke?: 0 | 1;
   /** Seated figures are directional, unlike the symmetric walking silhouettes. */
   heading?: Heading;
+  pose?: PersonPose;
 };
 
 /** Where a figure glyph goes: one cell at a scale, or one cell of a 2×2 figure. */
@@ -323,8 +367,20 @@ for (const heading of [0, 1, 2, 3] as const) {
     glyphTable.push({ figure: 'seated', across: false, frame: 0, heading, slice });
 }
 
-const keyOf = ({ figure, across, frame, scale, slice, stroke, heading }: FigureGlyph) => {
+// Append poses: legacy glyph characters, including seated figures, keep their meanings.
+for (const figure of ['adult', 'child'] as const)
+  for (const pose of ['attentive', 'gesture'] as const)
+    for (const heading of [0, 1, 2, 3] as const) {
+      for (const scale of [0, 1, 2] as const)
+        glyphTable.push({ figure, pose, heading, across: false, frame: 0, scale });
+      if (figure === 'adult')
+        for (const slice of [0, 1, 2, 3] as const)
+          glyphTable.push({ figure, pose, heading, across: false, frame: 0, slice });
+    }
+
+const keyOf = ({ figure, across, frame, scale, slice, stroke, heading, pose }: FigureGlyph) => {
   const at = slice === undefined ? `s${scale}` : `c${slice}`;
+  if (poseMasters(figure, pose)) return `${figure}:${pose}:${heading ?? (across ? 1 : 0)}:${at}`;
   if (figure === 'umbrella') return `umbrella:${at}`;
   if (figure === 'seated') return `seated:${heading ?? (across ? 1 : 0)}:${at}`;
   return `${figure}:${+across}:${frame}:${at}:${stroke ?? 0}`;
@@ -343,8 +399,9 @@ export function figureGlyph(
   at: FigureAt = { scale: 2 },
   stroke: 0 | 1 = 0,
   heading?: Heading,
+  pose?: PersonPose,
 ): string {
-  return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading }))!;
+  return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading, pose }))!;
 }
 
 /** Which figure a glyph draws, if it is one. */
@@ -361,6 +418,8 @@ export function personGlyphs(): string[] {
  * mirrored for its heading and step.
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
+  const posed = poseMasters(g.figure, g.pose);
+  if (posed) return turnedPixels(posed, box, g.heading ?? (g.across ? 1 : 0));
   if (g.figure === 'seated') return turnedPixels(SEATED, box, g.heading ?? (g.across ? 1 : 0));
   const masters = FIGURE_MASTERS[g.figure];
   const sizes = MASTER_SIZES[g.figure];
@@ -389,7 +448,10 @@ export function figureInk(
   v: number,
   detail: number,
   stroke: 0 | 1 = 0,
+  pose?: PersonPose,
 ): string {
+  const posed = poseMasters(figure, pose);
+  if (posed) return inkAt(posed, u, v, detail);
   const masters = FIGURE_MASTERS[figure];
   const sizes = MASTER_SIZES[figure];
   let size = sizes[0]!;

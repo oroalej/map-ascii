@@ -72,7 +72,7 @@ it('holds one procession boat with its crew while other boats and the schedule a
 });
 
 it('preserves an individual live occurrence delay across replay without delaying other boats', () => {
-  const world = new LifeWorld(undefined, undefined, true);
+  const world = new LifeWorld(undefined, undefined, undefined, true);
   world.setProcessions([route]);
   const agents = () => world.visible(18, 1, [0, 0]);
   world.setLive(route.id, 0.4, 'test/2026');

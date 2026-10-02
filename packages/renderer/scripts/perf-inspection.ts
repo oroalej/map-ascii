@@ -20,10 +20,11 @@ if (![runs, samples].every((n) => Number.isInteger(n) && n > 0))
   throw new Error('Invalid sample count');
 await mkdir(scratch, { recursive: true });
 const hash = await currentSourceHash(root);
+const baseline = arg('baseline', '6d58760');
 console.log(`Benchmark PID: ${process.pid}`);
 const frozen = await snapshotRevision(
   root,
-  '6d58760',
+  baseline,
   await mkdtemp(resolve(scratch, 'inspection-baseline-')),
 );
 const old = (await import(frozen.path('life/simulate.ts'))) as { LifeWorld: typeof LifeWorld };
@@ -88,7 +89,7 @@ if (fallback.LifeWorld === LifeWorld || fallbackDraw.packLife === packLife)
   throw new Error('Benchmark modes must have independent hot functions');
 class ItemWorld extends LifeWorld {
   constructor(...args: ConstructorParameters<typeof LifeWorld>) {
-    super(args[0], args[1], true);
+    super(args[0], args[1], args[2], true);
   }
 }
 const quantile = (values: number[], q: number) =>
@@ -112,6 +113,7 @@ for (const [Constructor, pack] of [
   const s = makeScenario('transit', 4, false, 1, Constructor);
   const pixels = new Uint8Array(s.grid.cols * s.grid.rows * 4);
   const owners = new Uint32Array(s.grid.cols * s.grid.rows);
+  const packedGrid = { ...s.grid, owners };
   let previous: VisibleAgent[] = [],
     target: number | null = null;
   for (let frame = 0; frame < 2000; frame++) {
@@ -128,7 +130,7 @@ for (const [Constructor, pack] of [
     }
     s.world.step(1 / 30, undefined, 18, s.bounds, undefined, { ...env, rain }, 0.9);
     previous = s.world.visible(18, s.levels, s.center, { rain, sunAltitude: 40 }, s.bounds);
-    pack(pixels, s.grid, previous, themes.dark, glyph, undefined, glyphs, { owners });
+    pack(pixels, packedGrid, previous, themes.dark, glyph, undefined, glyphs, { owners });
   }
 }
 console.log('Runtime graphs preconditioned: 2000 calls each');
@@ -172,6 +174,7 @@ for (const kind of ['crossroads', 'transit', 'rain'] as Scenario[])
           const s = makeScenario(kind, count, mobile, 1, Constructor);
           const pixels = new Uint8Array(s.grid.cols * s.grid.rows * 4),
             owners = new Uint32Array(s.grid.cols * s.grid.rows);
+          const packedGrid = { ...s.grid, owners };
           const ms: number[] = [];
           let target: number | null = null,
             agentCount = 0,
@@ -193,7 +196,7 @@ for (const kind of ['crossroads', 'transit', 'rain'] as Scenario[])
               { rain: env.rain, sunAltitude: 40 },
               s.bounds,
             );
-            const drawn = pack(pixels, s.grid, visible, themes.dark, glyph, undefined, glyphs, {
+            const drawn = pack(pixels, packedGrid, visible, themes.dark, glyph, undefined, glyphs, {
               owners,
             });
             const elapsed = performance.now() - start;
@@ -296,7 +299,7 @@ await writeFile(
   output,
   JSON.stringify(
     {
-      baseline: '6d58760',
+      baseline,
       baselineHash: frozen.hash,
       hash,
       node: process.version,

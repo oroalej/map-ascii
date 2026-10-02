@@ -50,7 +50,7 @@ const kinds: Record<AgentKind, string> = {
 
 /** A decorative agent's public name; ropes and poles are not independent subjects. */
 export function describeAgent(agent: VisibleAgent): string | null {
-  if (agent.line) return null;
+  if (agent.line || agent.prop) return null;
   let name = kinds[agent.kind];
   if (agent.vehicle && ['vehicle', 'boat', 'train'].includes(agent.kind)) {
     name = crafts[agent.vehicle];

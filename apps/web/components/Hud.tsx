@@ -14,6 +14,7 @@ import {
   windArrow,
   zoomLevel,
   type ClimateConfig,
+  type RuntimeDialogueCatalog,
   type SubdivisionArea,
 } from '@atlas/shared';
 import {
@@ -33,6 +34,7 @@ import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
+import { SpeechControls } from './SpeechControls';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -512,12 +514,14 @@ function SubdivisionTracker({ city }: { city: string }) {
  */
 export function Hud({
   city,
+  dialogue,
   subdivisionLabel,
   climate,
   timezone,
   sidewalksDerived = true,
 }: {
   city: string;
+  dialogue?: RuntimeDialogueCatalog | undefined;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (its pack's `timezone`). */
@@ -533,14 +537,14 @@ export function Hud({
   return (
     <>
       <SubdivisionTracker city={city} />
-      <div className={styles.topRight}>
+      <div className={styles.topRight} data-speech-obstacle>
         <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
           hidden={panelOpen}
         />
       </div>
-      <div className={styles.bottomLeft} data-touring={touring}>
+      <div className={styles.bottomLeft} data-touring={touring} data-speech-obstacle>
         <ScaleBar />
         {subdivision && (
           <p className={styles.line}>
@@ -560,6 +564,7 @@ export function Hud({
           <QualityControl />
         </div>
         <ProcessionControls />
+        {dialogue && <SpeechControls catalog={dialogue} />}
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import * as Comlink from 'comlink';
 import type { ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
@@ -102,13 +103,13 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix; itemInspection?: boolean },
+  options: { traffic?: TrafficMix; itemInspection?: boolean; moments?: MomentOptions },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler, options.itemInspection);
+    const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
     world.setProcessions(processions);
     return createInlineHost(world, profiler);
   };
@@ -157,6 +158,8 @@ export function createWorkerHost(
       processions,
       profiling: !!profiler,
       itemInspection: options.itemInspection,
+      dialogue: options.moments?.dialogue,
+      periods: options.moments?.periods,
     })
     .then(() => {
       if (!disposed && !fallback) ready = true;

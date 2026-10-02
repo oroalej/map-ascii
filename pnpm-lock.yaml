@@ -181,6 +181,10 @@ importers:
       twgl.js:
         specifier: ^7
         version: 7.0.0
+    devDependencies:
+      '@atlas/content':
+        specifier: workspace:^
+        version: link:../content
 
   packages/shared:
     dependencies:

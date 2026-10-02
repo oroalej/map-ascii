@@ -6,6 +6,8 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 
 ## 1. City config
 
+Ambient dialogue contains 100 illustrative scenes (40 independent utterances and 60 exchanges) in fifteen scene categories, with Bikol first and optional English/Tagalog translations. Catalog text and context metadata live in `packages/content/cities/naga/dialogue.json`; `dialogue-review.md` records linguistic references and the outstanding native-speaker review. The catalog includes greetings, reunions, farewells, directions, courtesy, weather, food, school, daily plans, vendor orders/thanks, transit, companions, ball play and place reactions. It uses existing inhabitants and mapped anchors, and makes no claim about actual residents, businesses, fares or schedules. Changes need a web build for production, not tile regeneration.
+
 | Field | Value |
 |---|---|
 | slug | `naga` |
@@ -85,6 +87,12 @@ Shop research: OSM shop coverage remains uneven; survey and map missing Centro s
 Neighborhood closeout (2026-10-01): retaining previously dropped non-building shop areas raises standalone markers to 58 food, 80 retail and 47 service; the 242 frontage buildings are unchanged. The recovered areas are bank way `269763741`, wholesale shop way `1202549803`, and fast-food way `1202664551`. Shops and markets now have 429 validated geographic light/commerce anchors computed before clipping. The isolated cached rebuild grows the archive from 2,188,067 to 2,244,135 bytes (+56,068); later independent data rebuilds may change its total. Lighting and nearby activity remain illustrative, not business-opening information.
 
 Street detail: the October 1 rebuild with the market-area direction corrections and signal corrections, including the cathedral, both Magsaysay bridge-side junctions, and four Panganiban locations, retains 4.691 km of mapped sidewalk sides over 2.617 km of roads and derives none. It tags 148 one-way ways and adds 186 illustrative arrow anchors plus 29 signalized stop lines at the nine configured junctions. There are 88 mapped crossing anchors and 18 derived crossings. No mapped stop line resolves: the single undirected mid-block stop node is skipped; no configured signal approach is shorter than its setback. These changes are included in the pinned [October 1 combined release](https://github.com/oroalej/map-ascii/releases/tag/tiles-naga-20261001-0931), alongside 318 roof plans, 429 shop anchors, nine terraces, four Rizal back steps and 2,345 illustrative utility records. The utility network connects 116 of 117 supported source-junction groups across the visible region, with no isolated poles. One constrained Almeda Avenue junction and two corridor gaps remain reported. Pipeline-only highway tags are excluded from the tiles.
+
+### Human speech (2026-10-01)
+
+`dialogue.json` contains 100 illustrative Bikol scenes: 40 independent utterances and 60 exchanges across fifteen categories. Greetings, everyday reactions, ball-play calls, monument reactions and existing service encounters use their declared delivery and participant roles. English and Tagalog translations are optional beneath the Bikol line. Phrase references and composition notes are retained on each scene, including the Standard Bikol (Naga dialect) course and Bikol dictionary. These are fictional ambient scripts, not quotations or a survey of residents. The outstanding local speaker review can refine idiom without changing renderer code or rebuilding tiles.
+
+To check in the app, search for Plaza Rizal, enable Life and Speech, choose noon, calm wind and High quality, and start at z19 with the Legend collapsed. This wider view includes nearby paths where lone walkers can greet; closer views cover fewer encounters. Wait for nearby walkers or idle visitors to start a moment. Choose English or Tagalog in the speech selector; Bikol remains above it. Speech off removes bubbles while people keep moving; Life off removes both. Reduced motion also suppresses ambient activity. The Speech controls explain Life-off, reduced-motion and insufficient-zoom states. Encounters are intermittent and only unobscured, packed speakers receive bubbles.
 
 ### Building-plan review (2026-10-01)
 

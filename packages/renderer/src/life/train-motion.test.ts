@@ -51,7 +51,7 @@ function train(x: number, speed = 12, dir: 1 | -1 = 1): Mover {
 }
 describe('train motion', () => {
   it('holds the full inspected consist while another train advances and treats it as stopped', () => {
-    const world = new LifeWorld(undefined, undefined, true);
+    const world = new LifeWorld(undefined, undefined, undefined, true);
     world.sync([{ key: 'rail', tile, life: rail() }]);
     const life = worldTiles(world).get('rail')!;
     const leader = train(400 * pm),

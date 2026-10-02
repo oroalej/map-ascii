@@ -45,6 +45,7 @@ it('reuses held uploads, invalidates packing inputs, and clears the raster when 
     () => true,
     new Set(['people']),
     {},
+    new Uint32Array(4),
   ];
   expect(lifePass(...args)).toBe(1);
   const raster = lifeRaster(targets)!;
@@ -56,6 +57,7 @@ it('reuses held uploads, invalidates packing inputs, and clears the raster when 
   expect(raster.revision).toBe(firstRevision);
   expect(uploadLife).toHaveBeenCalledTimes(1);
   expect(raster.owners[0]).toBe(1);
+  expect(args[12]).toEqual(raster.owners);
   const withArg = <I extends number>(
     index: I,
     value: Parameters<typeof lifePass>[I],
@@ -66,6 +68,7 @@ it('reuses held uploads, invalidates packing inputs, and clears the raster when 
   };
   const changed: Parameters<typeof lifePass>[] = [
     withArg(11, {}),
+    withArg(12, new Uint32Array(4)),
     withArg(2, { ...resources }),
     withArg(3, themes.light),
     withArg(4, { ...view, dpr: 2 }),

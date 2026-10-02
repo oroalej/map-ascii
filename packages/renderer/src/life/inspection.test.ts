@@ -8,7 +8,7 @@ import { createLifeWorkerApi, type FrameInput } from './worker-api';
 
 class ItemWorld extends LifeWorld {
   constructor(traffic?: TrafficMix) {
-    super(traffic, undefined, true);
+    super(traffic, undefined, undefined, true);
   }
 }
 const pose = (a: VisibleAgent) => [a.lng, a.lat, a.ahead, a.flap, a.people, a.turnSignal];

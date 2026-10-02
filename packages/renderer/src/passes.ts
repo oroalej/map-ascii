@@ -46,6 +46,7 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
+import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
   utilityViewportVisibility,
@@ -486,6 +487,15 @@ const texels = (targets: CellTargets): Texels => {
 
 /** The CPU raster belonging to these targets, without allocating or resetting it. */
 export const lifeRaster = (targets: CellTargets) => texelsOf.get(targets) ?? null;
+/** A conservative label/halo guard, including rotated labels' collision bounds. */
+export function labelCovers(targets: CellTargets, col: number, row: number): boolean {
+  const overlay = overlays.get(targets)?.overlay;
+  if (!overlay) return false;
+  return overlay.taken.some(
+    (box) =>
+      col >= box.left && col < box.left + box.width && row >= box.top && row < box.top + box.height,
+  );
+}
 
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
@@ -505,6 +515,8 @@ export function lifePass(
   focus?: ReadonlySet<LifeFocus>,
   /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
   heldFrame?: object,
+  owners?: Uint32Array,
+  speakers?: LifeGrid['speakers'],
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -522,6 +534,8 @@ export function lifePass(
         agents,
         sun,
         focus,
+        owners,
+        speakers,
       ]
     : undefined;
   if (
@@ -542,6 +556,7 @@ export function lifePass(
       cellHeight: view.cellDev.h,
       toCell: placement.toCell,
       allowsGroundCell,
+      speakers,
     },
     agents,
     theme,
@@ -551,6 +566,7 @@ export function lifePass(
     themeRes.map.lifeGlyphs,
     { owners: buffers.owners, focus },
   );
+  if (owners && owners !== buffers.owners) owners.set(buffers.owners);
   buffers.revision++;
   buffers.clocksActive = agents.some((agent) => agent.candle && agent.effectClock !== undefined);
   if (buffers.clocksActive) {
@@ -813,7 +829,7 @@ export function glyphPass(
     u_crownSun:
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),
-    u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
+    u_vehicleOccluders: LIFE_OCCLUDERS,
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),

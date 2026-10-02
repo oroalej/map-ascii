@@ -49,6 +49,9 @@ it('uses vendor, carabao, paddler and candle precedence, and omits lines', () =>
     }),
   ).toBeNull();
 });
+it('omits airborne props from independent inspection', () => {
+  expect(describeAgent({ ...person, prop: 'ball' })).toBeNull();
+});
 it('bounds checks frame-local ownership', () => {
   const owners = new Uint32Array([0, 2, 1, 99]);
   const agents = [person, { ...person, kind: 'cat' as const }];
