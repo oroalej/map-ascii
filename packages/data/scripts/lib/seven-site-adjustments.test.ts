@@ -50,12 +50,16 @@ const roads = source
   );
 
 describe('seven-site planting adjustments', () => {
-  it('reduces Civic Center canopy while preserving every mapped tree and sports facility', () => {
+  it('bounds Civic Center canopy while preserving every mapped tree and sports facility', () => {
     const civic = covers[5]!;
     expect(civic.trees.length).toBeGreaterThan(15);
     expect(civic.trees.length).toBeLessThanOrEqual(30);
     expect(civic.tree_overrides).toHaveLength(24);
-    expect([...civic.trees, ...civic.tree_overrides].every((t) => t.crown_m! <= 12)).toBe(true);
+    // The later red-circle annotation enlarges selected crowns, leaving other reductions.
+    expect([...civic.trees, ...civic.tree_overrides].every((t) => t.crown_m! <= 18)).toBe(true);
+    expect(
+      [...civic.trees, ...civic.tree_overrides].filter((t) => t.crown_m! > 12).length,
+    ).toBeLessThan(16);
     const adjusted = applyLandcoverTreeOverrides(source, [civic]);
     for (const original of source) {
       const result = adjusted.find((f) => f.properties.id === original.properties.id)!;

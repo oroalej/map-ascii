@@ -1,0 +1,130 @@
+{
+  "id": "detail/naga-city-school-of-arts-and-trades",
+  "osm_id": "osm:relation/11525333",
+  "title": "Naga City School of Arts and Trades",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "courtyard-approach-1-1",
+      "ring": [
+        [123.180238906, 13.620126073],
+        [123.180253646, 13.620584477],
+        [123.180276743, 13.620583775],
+        [123.180263038, 13.62015756],
+        [123.180258836, 13.620147558],
+        [123.180259527, 13.620146622],
+        [123.180262644, 13.620145303],
+        [123.180262624, 13.620144673],
+        [123.180265257, 13.620144203],
+        [123.180359437, 13.620104557],
+        [123.180238906, 13.620126073]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-2-1",
+      "ring": [
+        [123.181228521, 13.620211966],
+        [123.181225777, 13.620189667],
+        [123.181003417, 13.620215506],
+        [123.180783703, 13.620284388],
+        [123.180674693, 13.620220549],
+        [123.180659135, 13.620224583],
+        [123.180653811, 13.62020832],
+        [123.180600627, 13.620177175],
+        [123.1805887, 13.62019641],
+        [123.180780787, 13.6203089],
+        [123.181008382, 13.620237546],
+        [123.181228521, 13.620211966]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-3-1",
+      "ring": [
+        [123.181041973, 13.620191925],
+        [123.18091221, 13.620191925],
+        [123.180782614, 13.620189715],
+        [123.180775192, 13.620191835],
+        [123.180774828, 13.620212043],
+        [123.180912007, 13.620214382],
+        [123.181041973, 13.620214382],
+        [123.181041973, 13.620191925]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-4-1",
+      "ring": [
+        [123.18116526, 13.620246439],
+        [123.181173603, 13.620267382],
+        [123.181252825, 13.620237578],
+        [123.181242569, 13.620217354],
+        [123.18116526, 13.620246439]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-4-2",
+      "ring": [
+        [123.18133169, 13.620183826],
+        [123.181341946, 13.620204049],
+        [123.181397257, 13.620183241],
+        [123.181388915, 13.620162297],
+        [123.18133169, 13.620183826]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-5-1",
+      "ring": [
+        [123.180334514, 13.620096105],
+        [123.180335216, 13.620114753],
+        [123.180365314, 13.620102257],
+        [123.180366472, 13.620103064],
+        [123.180372784, 13.620117217],
+        [123.180525102, 13.620111801],
+        [123.180524322, 13.620109353],
+        [123.180524803, 13.620108173],
+        [123.18053234, 13.620105708],
+        [123.180531714, 13.620089093],
+        [123.180334514, 13.620096105]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/relation/11525333",
+      "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+    },
+    {
+      "title": "Owner-supplied memorial and school enhancement references",
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+    }
+  ]
+}

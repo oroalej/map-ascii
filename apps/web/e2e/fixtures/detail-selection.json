@@ -27,6 +27,10 @@
     {
       "slug": "bicol-central-station",
       "at": [123.189481989, 13.619215738]
+    },
+    {
+      "slug": "eternal-gardens",
+      "at": [123.203952, 13.633335]
     }
   ]
 }

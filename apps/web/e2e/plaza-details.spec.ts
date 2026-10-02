@@ -18,7 +18,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
     import.meta.url,
   );
   // Reviewed surfaces cover plazas, campus planting, an apron, an aliased landmark,
-  // a school pool and fixed terminal parking. Fixtures
+  // a school pool, fixed terminal parking and a cemetery memorial. Fixtures
   // keep smoke coverage bounded as packs are added; geometry rules live in Vitest.
   const cases = samples[city.slug] ?? [];
   for (const sample of cases) {

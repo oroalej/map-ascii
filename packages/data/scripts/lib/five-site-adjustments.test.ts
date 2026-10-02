@@ -46,7 +46,7 @@ describe('five owner-referenced landmark adjustments', () => {
       expect(result.geometry).toEqual(original.geometry);
       expect(result.properties).toEqual({ ...original.properties, crown: tree.crown_m });
       expect(tree.crown_m).toBeGreaterThanOrEqual(8);
-      expect(tree.crown_m).toBeLessThanOrEqual(12);
+      expect(tree.crown_m).toBeLessThanOrEqual(18);
     }
     for (const tree of cover.trees)
       for (const f of source.filter(
@@ -185,7 +185,7 @@ describe('five owner-referenced landmark adjustments', () => {
     ) as { site: string; id: string; ring: LngLat[] }[];
     const trees = input.filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point');
     for (const mask of masks) {
-      // Owner's latest comparison explicitly requests less Civic Center canopy.
+      // Later Civic annotations replace these original grove masks with selective crown edits.
       if (mask.site === 'naga-city-civic-center') continue;
       // The latest annotation explicitly replaces these oversized northern groves.
       if (

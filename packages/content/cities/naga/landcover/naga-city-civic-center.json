@@ -14,17 +14,17 @@
     },
     {
       "at": [123.197007363, 13.628217876],
-      "crown_m": 9.9,
+      "crown_m": 17,
       "height_m": 6
     },
     {
       "at": [123.19710213, 13.628284812],
-      "crown_m": 9.9,
+      "crown_m": 17,
       "height_m": 6
     },
     {
       "at": [123.196758448, 13.627879269],
-      "crown_m": 9.9,
+      "crown_m": 17,
       "height_m": 6
     },
     {
@@ -44,7 +44,7 @@
     },
     {
       "at": [123.197272377, 13.628287657],
-      "crown_m": 9.9,
+      "crown_m": 17,
       "height_m": 6
     },
     {
@@ -104,7 +104,22 @@
     },
     {
       "at": [123.196960842, 13.628359364],
-      "crown_m": 10,
+      "crown_m": 17,
+      "height_m": 6
+    },
+    {
+      "at": [123.197239511, 13.629030322],
+      "crown_m": 11,
+      "height_m": 6
+    },
+    {
+      "at": [123.197280909, 13.628974041],
+      "crown_m": 11,
+      "height_m": 6
+    },
+    {
+      "at": [123.197320238, 13.628915819],
+      "crown_m": 11,
       "height_m": 6
     }
   ],
@@ -141,6 +156,10 @@
     {
       "title": "Owner correction: restrained Civic Center canopy",
       "note": "Latest owner ASCII view shows excessive coverage. Crown diameters reduced about 45 percent; redundant estimated trunks thinned with 11-metre spacing. All mapped tree ids/positions/heights, pool, courts, museum and monuments retained. Earlier dense foliage masks are superseded; dimensions remain draft."
+    },
+    {
+      "title": "Owner-supplied Civic red-crown/yellow-frontage annotation",
+      "note": "Inspected 2026-10-02. Only red-circled existing crowns are enlarged to estimated 17–18 m. Trunk positions and mapped heights remain; canopy overhang into the street is explicitly requested. Three spaced crowns supplement the yellow northeast frontage. Other reduced crowns and all sports/standing facilities remain. Draft pool-registered placement; image date unknown."
     }
   ],
   "tree_overrides": [
@@ -174,7 +193,7 @@
     },
     {
       "osm_id": "osm:node/13982141818",
-      "crown_m": 8.8
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13982141868",
@@ -182,15 +201,15 @@
     },
     {
       "osm_id": "osm:node/13982141869",
-      "crown_m": 12
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13982141870",
-      "crown_m": 12
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13982141871",
-      "crown_m": 9.9
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13984847945",
@@ -206,11 +225,11 @@
     },
     {
       "osm_id": "osm:node/13984847948",
-      "crown_m": 9.9
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13984847950",
-      "crown_m": 9.9
+      "crown_m": 18
     },
     {
       "osm_id": "osm:node/13984847954",

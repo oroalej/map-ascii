@@ -123,19 +123,22 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    const cemeteries = mergeCemeteries(
-      [...merged, ...parts, ...landcover.features],
-      content.cemeteries,
-    );
-    if (cemeteries.stats.length) console.log(`  cemeteries: ${JSON.stringify(cemeteries.stats)}`);
     const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
-    const detail = mergeSiteDetails(cemeteries.features, content.details, subdivisions);
+    // Standing detail parts and approaches reserve their ground before representative
+    // burial rows are placed, including memorials added inside a mapped cemetery.
+    const detail = mergeSiteDetails(
+      [...merged, ...parts, ...landcover.features],
+      content.details,
+      subdivisions,
+    );
+    const cemeteries = mergeCemeteries(detail.features, content.cemeteries);
+    if (cemeteries.stats.length) console.log(`  cemeteries: ${JSON.stringify(cemeteries.stats)}`);
     for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }
-    const roofs = enrichRoofs(detail.features);
+    const roofs = enrichRoofs(cemeteries.features);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
-    await writeFeatures(join(buildDir, files.merged), detail.features);
+    await writeFeatures(join(buildDir, files.merged), cemeteries.features);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +
         `${landcover.features.length} curated trees and areas; checked ${content.tours.length} tours`,
