@@ -35,6 +35,22 @@ describe('season content validation', () => {
     };
     const only = { ...season, lanterns: undefined, grounds: [grounds], installations: [tree] };
     expect(Season.safeParse(only).success).toBe(true);
+    const roofLights = {
+      ...tree,
+      kind: 'light-string',
+      radius_m: undefined,
+      layout: 'building-perimeter',
+      spacing_m: 3,
+    };
+    // Strict definitions: tree-only fields and property grounds must not leak into roof lights.
+    const { radius_m: _radius, grounds: _grounds, ...mounted } = roofLights;
+    expect(Season.safeParse({ ...only, installations: [mounted] }).success).toBe(true);
+    expect(
+      Season.safeParse({ ...only, installations: [{ ...mounted, mount: 'canopy' }] }).success,
+    ).toBe(false);
+    expect(
+      Season.safeParse({ ...only, installations: [{ ...mounted, grounds: grounds.id }] }).success,
+    ).toBe(false);
     for (const change of [
       { sources: [] },
       { anchor: 'osm:node/1' },

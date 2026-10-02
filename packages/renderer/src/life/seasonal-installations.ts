@@ -9,7 +9,13 @@ export function admitsInstallation(record: InstallationRecord, season: SeasonCon
   return (
     record.season === season.id &&
     season.installations?.some(
-      (i) => i.id === record.installation && i.anchor === record.anchor && i.kind === record.kind,
+      (i) =>
+        i.id === record.installation &&
+        i.anchor === record.anchor &&
+        i.kind === record.kind &&
+        (i.kind !== 'light-string' ||
+          record.kind !== 'light-string' ||
+          (i.layout === 'building-perimeter' ? 'building' : i.mount) === record.mount),
     ) === true
   );
 }
@@ -91,7 +97,13 @@ export function packInstallation(
       const x = a[0] + (dx * i) / n,
         y = a[1] + (dy * i) / n;
       if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) continue;
-      put(x, y, cable, SeasonalPart.festiveWire, 0);
+      put(
+        x,
+        y,
+        cable,
+        record.mount === 'building' ? SeasonalPart.buildingWire : SeasonalPart.festiveWire,
+        0,
+      );
     }
     const meters = Math.hypot(
       (record.to[0] - record.from[0]) * 111320 * Math.cos((record.from[1] * Math.PI) / 180),
@@ -105,7 +117,11 @@ export function packInstallation(
         a[0] + (dx * i) / count,
         a[1] + (dy * i) / count,
         glyph,
-        SeasonalPart.festiveOrnament,
+        record.mount === 'building'
+          ? SeasonalPart.buildingLight
+          : record.mount === 'canopy'
+            ? SeasonalPart.festiveLight
+            : SeasonalPart.festiveOrnament,
         (((record.seed + i) & 31) << 3) | (i % 3 === 0 ? 5 : 0),
         true,
       );

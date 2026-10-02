@@ -303,3 +303,71 @@ it('fails for missing or mismatched property grounds, distant grounds and unavai
     ]),
   ).toThrow('not near');
 });
+
+const roofSeason: SeasonConfig = {
+  ...season,
+  installations: [
+    {
+      ...shared,
+      anchor: propertyAnchor.properties.id,
+      id: 'roof',
+      kind: 'light-string',
+      layout: 'building-perimeter',
+      spacing_m: 3,
+    },
+  ],
+};
+it('mounts whole strings inside complete building outlines, with stable geometry under winding changes', () => {
+  const building = { ...propertyAnchor, properties: { ...propertyAnchor.properties, height: 6 } };
+  const result = generateSeasonalInstallations([building], [roofSeason]);
+  expect(result.records.length).toBeGreaterThan(10);
+  expect(generateSeasonalInstallations([building], [roofSeason])).toEqual(result);
+  for (const record of result.records) {
+    expect(SeasonalRecordSchema.safeParse(record).success).toBe(true);
+    if (record.kind !== 'light-string') throw new Error('expected strings');
+    expect(record.mount).toBe('building');
+    for (const point of [record.from, record.to]) {
+      expect(point[0] * 111320).toBeGreaterThan(30);
+      expect(point[0] * 111320).toBeLessThan(40);
+      expect(point[1] * 111320).toBeGreaterThan(0);
+      expect(point[1] * 111320).toBeLessThan(40);
+    }
+    expect(seasonalRecordGeometry(record)).toEqual({
+      type: 'LineString',
+      coordinates: [record.from, record.to],
+    });
+  }
+  if (building.geometry.type !== 'Polygon') throw new Error('expected building');
+  const reversed = {
+    ...building,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: building.geometry.coordinates.map((r) => [...r].reverse()),
+    },
+  };
+  // Stable count and full containment, regardless of OSM ring direction.
+  const backward = generateSeasonalInstallations([reversed], [roofSeason]);
+  expect(backward.records).toHaveLength(result.records.length);
+  for (const record of backward.records) {
+    if (record.kind !== 'light-string') throw new Error('expected strings');
+    expect(record.from[0] * 111320).toBeGreaterThan(30);
+    expect(record.to[0] * 111320).toBeLessThan(40);
+  }
+});
+it('rejects roof lights on heightless grounds, missing buildings and authored ground envelopes', () => {
+  for (const anchor of [area, propertyAnchor])
+    expect(() =>
+      generateSeasonalInstallations(
+        [{ ...anchor, properties: { ...anchor.properties, id: propertyAnchor.properties.id } }],
+        [roofSeason],
+      ),
+    ).toThrow('missing public area');
+  const invalid: SeasonConfig = {
+    ...roofSeason,
+    grounds: propertySeason.grounds,
+    installations: [{ ...roofSeason.installations![0]!, grounds: 'forecourt' }],
+  };
+  expect(() => generateSeasonalInstallations([propertyAnchor], [invalid])).toThrow(
+    'cannot use grounds',
+  );
+});

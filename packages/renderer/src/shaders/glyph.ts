@@ -372,7 +372,12 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
-  if (!allowed) {
+  bool roofMounted = part == ${FixturePart.buildingLight} || part == ${FixturePart.buildingWire};
+  if (roofMounted) {
+    // Only explicitly mounted strings may draw above a standing building.
+    int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    if ((u_cellBits[cls] & ${CellBit.window}) == 0 || texelFetch(u_attr, cell, 0).r == 0.0) return under + halo;
+  } else if (!allowed) {
     // Crown-mounted bulbs sit on the foliage; ordinary hardware stays beneath it.
     int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
     bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
@@ -423,8 +428,8 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   if (part == ${FixturePart.festiveTree}) {
     color = lampLit(daylit(vec3(0.08, 0.42, 0.22) * (0.65 + 0.35 * float(info) / 255.0)), rainLight);
   }
-  if (part == ${FixturePart.festiveWire}) color = daylit(u_fixturePaints[7]);
-  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament}) {
+  if (part == ${FixturePart.festiveWire} || part == ${FixturePart.buildingWire}) color = daylit(u_fixturePaints[7]);
+  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight}) {
     int tint = info & 7;
     vec3 paint = tint == 1 ? vec3(1.0, 0.22, 0.17) : tint == 2 ? vec3(0.26, 0.95, 0.42) :
       tint == 3 ? vec3(1.0, 0.28, 0.63) : tint == 4 ? vec3(0.70, 0.38, 1.0) :

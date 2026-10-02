@@ -965,8 +965,9 @@ export const Season = z
               .regex(/^[a-z][a-z0-9-]*$/)
               .optional(),
             kind: z.literal('light-string'),
-            layout: z.enum(['paths', 'perimeter']),
+            layout: z.enum(['paths', 'perimeter', 'building-perimeter']),
             spacing_m: z.number().min(3).max(12),
+            mount: z.literal('canopy').optional(),
           }),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
@@ -1023,6 +1024,16 @@ export const Season = z
   })
   .superRefine((season, ctx) => {
     for (const [index, installation] of (season.installations ?? []).entries()) {
+      if (
+        installation.kind === 'light-string' &&
+        installation.layout === 'building-perimeter' &&
+        (installation.grounds || installation.mount)
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['installations', index, 'grounds'],
+          message: 'building lights use the mapped building without grounds or canopy mounting',
+        });
       if (!installation.grounds) continue;
       const grounds = season.grounds?.find((g) => g.id === installation.grounds);
       if (!grounds || grounds.anchor !== installation.anchor)

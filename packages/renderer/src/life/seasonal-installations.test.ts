@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { SeasonConfig, SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
-import { festivePulse, installationLamps } from './seasonal-installations';
+import { admitsInstallation, festivePulse, installationLamps } from './seasonal-installations';
 import { createSeasonalFixtureCache, seasonalFixtures } from './seasonal';
 import { LifeBuilder, LifeLine } from './geometry';
 import { FixturePart, packFixtures, type FixtureGrid } from './fixtures';
@@ -121,6 +121,72 @@ it('twinkles asynchronously within bounds and remains constant with reduced moti
     expect(festivePulse(t, 19)).toBeLessThanOrEqual(1);
     expect(festivePulse(t, 19, true)).toBe(1);
   }
+});
+it('admits explicit roof mounting only for matching building layouts and packs separate roof parts', () => {
+  const mounted: SeasonalLightStringRecord = { ...string, mount: 'building' };
+  const roofSeason: SeasonConfig = {
+    ...season,
+    installations: [
+      {
+        ...season.installations![1]!,
+        kind: 'light-string',
+        layout: 'building-perimeter',
+        spacing_m: 3,
+      },
+    ],
+  };
+  expect(admitsInstallation(mounted, roofSeason)).toBe(true);
+  expect(admitsInstallation(mounted, season)).toBe(false);
+  expect(admitsInstallation(string, roofSeason)).toBe(false);
+  const groups = [
+    { tile, life: new LifeBuilder().finish(), fixtures: [], seasonal: [mounted, mounted] },
+  ];
+  const fixtures = seasonalFixtures(groups, roofSeason, 13.6);
+  expect(fixtures).toHaveLength(1);
+  const packed = packFixtures(
+    new Uint8Array(grid.cols * grid.rows * 4),
+    grid,
+    fixtures,
+    20,
+    index,
+    0,
+  );
+  const parts = new Set(
+    Array.from({ length: packed.texels.length / 4 }, (_, i) => packed.texels[i * 4 + 1]! & 63),
+  );
+  expect(parts.has(FixturePart.buildingLight)).toBe(true);
+  expect(parts.has(FixturePart.buildingWire)).toBe(true);
+  expect(parts.has(FixturePart.festiveOrnament)).toBe(false);
+  expect(
+    installationLamps(
+      fixtures.filter((f) => f.kind === 'season-installation'),
+      20,
+    ),
+  ).toHaveLength(1);
+  expect(seasonalFixtures(groups, undefined, 13.6)).toEqual([]);
+  const canopy = { ...string, mount: 'canopy' as const };
+  const canopySeason: SeasonConfig = {
+    ...season,
+    installations: [
+      {
+        ...season.installations![1]!,
+        kind: 'light-string',
+        layout: 'perimeter',
+        spacing_m: 3,
+        mount: 'canopy',
+      },
+    ],
+  };
+  expect(admitsInstallation(canopy, canopySeason)).toBe(true);
+  expect(admitsInstallation(canopy, season)).toBe(false);
+  expect(admitsInstallation(canopy, roofSeason)).toBe(false);
+  const hanging = seasonalFixtures([{ ...groups[0]!, seasonal: [canopy] }], canopySeason, 13.6);
+  const hung = packFixtures(new Uint8Array(grid.cols * grid.rows * 4), grid, hanging, 20, index, 0);
+  const hungParts = new Set(
+    Array.from({ length: hung.texels.length / 4 }, (_, i) => hung.texels[i * 4 + 1]! & 63),
+  );
+  expect(hungParts.has(FixturePart.festiveLight)).toBe(true);
+  expect(hungParts.has(FixturePart.buildingLight)).toBe(false);
 });
 it('preserves lamp hardware and the full animated flag reservation under overlapping displays', () => {
   const lamp = {

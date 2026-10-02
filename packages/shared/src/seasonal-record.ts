@@ -31,6 +31,8 @@ export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
   kind: 'light-string';
   from: SeasonalPoint;
   to: SeasonalPoint;
+  /** Explicit mounting; omitted records retain ordinary ground-string occlusion. */
+  mount?: 'building' | 'canopy';
 };
 export type SeasonalRecord =
   SeasonalBuntingRecord | SeasonalDisplayRecord | SeasonalLightStringRecord;
@@ -66,9 +68,21 @@ export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
     const display = v.kind === 'christmas-tree' || v.kind === 'decorated-canopy';
     const keys = display
       ? ['version', 'kind', 'id', 'season', 'installation', 'anchor', 'seed', 'at', 'radius_m']
-      : ['version', 'kind', 'id', 'season', 'installation', 'anchor', 'seed', 'from', 'to'];
+      : [
+          'version',
+          'kind',
+          'id',
+          'season',
+          'installation',
+          'anchor',
+          'seed',
+          'from',
+          'to',
+          ...(Object.hasOwn(v, 'mount') ? ['mount'] : []),
+        ];
     return (
       (display || v.kind === 'light-string') &&
+      (display || !Object.hasOwn(v, 'mount') || v.mount === 'building' || v.mount === 'canopy') &&
       Object.keys(v).length === keys.length &&
       Object.keys(v).every((k) => keys.includes(k)) &&
       v.version === 1 &&

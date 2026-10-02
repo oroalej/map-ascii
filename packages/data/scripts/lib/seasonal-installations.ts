@@ -69,15 +69,27 @@ export function generateSeasonalInstallations(
       const grounds = config.grounds
         ? season.grounds?.find((g) => g.id === config.grounds)
         : undefined;
+      const buildingLights =
+        config.kind === 'light-string' && config.layout === 'building-perimeter';
+      if (buildingLights && (grounds || config.mount))
+        throw new Error(`Season installation ${config.id}: building lights cannot use grounds`);
       if (config.grounds && (!grounds || grounds.anchor !== config.anchor))
         throw new Error(`Season installation ${config.id}: missing or mismatched grounds`);
       if (
         !anchor ||
         !rings(anchor).length ||
-        !(grounds
-          ? anchor.properties.class.startsWith('building') ||
-            ['park', 'paving'].includes(anchor.properties.class)
-          : ['park', 'paving'].includes(anchor.properties.class))
+        !(buildingLights
+          ? [
+              'building',
+              'building_religious',
+              'building_school',
+              'building_market',
+              'building_station',
+            ].includes(anchor.properties.class) && Number(anchor.properties.height) > 0
+          : grounds
+            ? anchor.properties.class.startsWith('building') ||
+              ['park', 'paving'].includes(anchor.properties.class)
+            : ['park', 'paving'].includes(anchor.properties.class))
       )
         throw new Error(
           `Season ${season.id}, installation ${config.id}: missing public area ${config.anchor}`,
@@ -224,7 +236,7 @@ export function generateSeasonalInstallations(
             return;
           // Sampling alone can miss a narrow concave notch in a curated property boundary.
           if (
-            grounds &&
+            (grounds || buildingLights) &&
             polygon.some((r) => r.slice(1).some((d, i) => segmentDistance(a, b, r[i]!, d) < 1e-6))
           )
             return;
@@ -269,9 +281,49 @@ export function generateSeasonalInstallations(
             kind: 'light-string',
             from,
             to,
+            ...(buildingLights
+              ? { mount: 'building' as const }
+              : config.mount
+                ? { mount: config.mount }
+                : {}),
           });
         };
-        if (config.layout === 'perimeter') {
+        if (buildingLights) {
+          // Parallel insets follow every mapped facade, including concave wings and holes.
+          // Trimming corners keeps the entire span inside the standing roof footprint.
+          for (const ring of polygon)
+            for (let i = 1; i < ring.length; i++) {
+              const a = ring[i - 1]!,
+                b = ring[i]!;
+              const dx = b[0] - a[0],
+                dy = b[1] - a[1],
+                length = Math.hypot(dx, dy);
+              if (length < 3.2) continue;
+              const nx = -dy / length,
+                ny = dx / length;
+              const midpoint: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+              const side = inside([midpoint[0] + nx * 0.6, midpoint[1] + ny * 0.6], polygon)
+                ? 1
+                : -1;
+              const from: Point = [
+                a[0] + (dx / length) * 0.6 + nx * side * 0.6,
+                a[1] + (dy / length) * 0.6 + ny * side * 0.6,
+              ];
+              const to: Point = [
+                b[0] - (dx / length) * 0.6 + nx * side * 0.6,
+                b[1] - (dy / length) * 0.6 + ny * side * 0.6,
+              ];
+              const n = Math.ceil((length - 1.2) / (config.spacing_m * 2));
+              for (let j = 0; j < n; j++)
+                add(
+                  [from[0] + ((to[0] - from[0]) * j) / n, from[1] + ((to[1] - from[1]) * j) / n],
+                  [
+                    from[0] + ((to[0] - from[0]) * (j + 1)) / n,
+                    from[1] + ((to[1] - from[1]) * (j + 1)) / n,
+                  ],
+                );
+            }
+        } else if (config.layout === 'perimeter') {
           // A small inset keeps boundary strolls visible beneath the overhead strings.
           const center: Point = [(x0 + x1) / 2, (y0 + y1) / 2];
           for (const ring of polygon)

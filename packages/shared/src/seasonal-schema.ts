@@ -53,6 +53,12 @@ export const SeasonalRecordSchema = z.union([
     radius_m: z.number().min(0.5).max(20),
   }),
   z
-    .strictObject({ ...installation, kind: z.literal('light-string'), from: point, to: point })
+    .strictObject({
+      ...installation,
+      kind: z.literal('light-string'),
+      from: point,
+      to: point,
+      mount: z.enum(['building', 'canopy']).optional(),
+    })
     .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty light string'),
 ]);
