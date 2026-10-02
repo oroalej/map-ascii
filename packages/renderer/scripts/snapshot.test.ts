@@ -25,6 +25,7 @@ afterEach(async () => {
   )
     await rm(temporary, { recursive: true, force: true });
 });
+// eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
 it('copies helper sources and redirects shared aliases into the frozen source graph', async () => {
   await mkdir(workspace, { recursive: true });
   temporary = await mkdtemp(join(workspace, 'snapshot-test-'));

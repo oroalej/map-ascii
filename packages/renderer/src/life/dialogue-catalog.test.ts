@@ -5,6 +5,8 @@ import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
 
+// loadCityPacks reads the packs from disk; this lets targeted runs select the test on dialogue edits.
+import.meta.glob('../../../content/cities/*/dialogue.json');
 const { packs, errors } = await loadCityPacks();
 if (errors.length) throw new Error(JSON.stringify(errors));
 const entries = packs.flatMap(({ city, dialogue }) =>
