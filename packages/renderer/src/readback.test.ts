@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GL } from './gpu';
-import { Picker } from './picking';
+import { Picker, type PickResult } from './picking';
 import { MAX_PENDING_READS, Readback } from './readback';
+import { SpeechController, type SpeechFrame } from './life/speech';
+import { CellBit } from './life/config';
+import { classId } from './classes';
 
 /** A fake WebGL2 context: reads fill the buffer with `value`, fences signal on `signal()`. */
 function fakeGl() {
@@ -117,6 +120,59 @@ describe('Picker', () => {
     camera: { lat: 0, lng: 0, zoom: 14 },
     size: { width: 100, height: 100 },
     generation,
+  });
+
+  it('retains a click while speech and four frames of hover reads await the GPU', () => {
+    const f = fakeGl();
+    const readback = new Readback(f.gl);
+    const result = vi.fn<(pick: PickResult) => void>();
+    const picker = new Picker(readback, () => 1, result);
+    const speech = new SpeechController(
+      readback,
+      10,
+      () => {},
+      () => 0,
+    );
+    const owners = new Uint32Array(100);
+    owners[22] = 1;
+    const life = new Uint8Array(400);
+    life[22 * 4 + 1] = classId('life_person');
+    life[22 * 4 + 2] = CellBit.person;
+    const speechFrame: SpeechFrame = {
+      targets: { cols: 10, rows: 10, glyphFbo: fbo, sub: { fbo } as SpeechFrame['targets']['sub'] },
+      grid: frame(1).grid,
+      dpr: 1,
+      geometry: 'same',
+      owners,
+      life,
+      agents: [
+        {
+          kind: 'person',
+          lng: 2.5,
+          lat: 2.5,
+          flap: 0,
+          speech: { id: 'one', exchangeId: 'hello', line: 0 },
+        },
+      ],
+      toCell: (lng, lat) => [lng, lat],
+      size: { width: 100, height: 100 },
+      labelsCover: () => false,
+    };
+    picker.click([25, 25]);
+    picker.issue(frame(1));
+    speech.update(speechFrame, 0);
+    expect(readback.size).toBe(4);
+    for (let i = 1; i <= 4; i++) {
+      picker.hover([35, 35]);
+      picker.issue(frame(1));
+      speech.update(speechFrame, i * 33);
+      expect(readback.size).toBeLessThanOrEqual(MAX_PENDING_READS);
+    }
+    expect(f.deleted).toHaveLength(0);
+    f.signal();
+    readback.poll();
+    expect(result.mock.calls.filter(([pick]) => pick.click)).toHaveLength(1);
+    expect(readback.size).toBe(0);
   });
 
   it('answers with the feature index under the point, a frame later', () => {

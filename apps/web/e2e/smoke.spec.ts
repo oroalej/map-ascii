@@ -84,7 +84,9 @@ for (const city of cities) {
         const box = page.getByRole('combobox', { name: 'Search places' });
         await expect(box).toBeFocused();
         await box.fill(city.smokeLandmark);
-        await expect(page.getByRole('option').first()).toContainText(city.smokeLandmark);
+        await expect(page.getByRole('listbox').getByRole('option').first()).toContainText(
+          city.smokeLandmark,
+        );
         await box.press('Enter');
         const panel = page.getByRole('complementary', { name: 'Selected place' });
         await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
@@ -115,40 +117,20 @@ for (const city of cities) {
             .locator('details')
             .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
           await expect(legend).toBeVisible();
-          // Passive readouts must pass map input through, even when attribution pushes them up.
+          // Readouts may cover the landmark on a phone when attribution pushes the HUD up.
+          // They must let map gestures through; only HUD controls should intercept input.
           const scaleBox = (await page.getByLabel(/^Scale:/).boundingBox())!;
           expect(
             await canvas.evaluate(
               (map, point) => document.elementFromPoint(point.x, point.y) === map,
               { x: scaleBox.x + scaleBox.width / 2, y: scaleBox.y + scaleBox.height / 2 },
             ),
+            'the scale readout lets pointer events reach the map',
           ).toBe(true);
+          // Controls in the same HUD remain clickable.
           await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
           await expect(coordsButton(page)).toBeVisible();
           await coordsButton(page).click();
-          const summary = legend.locator('summary');
-          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
-            await summary.click();
-          const focus = legend.getByRole('button').first();
-          if (hasTouch) await focus.tap();
-          else {
-            await focus.focus();
-            await page.keyboard.press('Enter');
-            await expect(focus).toHaveCSS('outline-style', 'solid');
-          }
-          await expect(focus).toHaveAttribute('aria-pressed', 'true');
-          const clearFocus = page.getByRole('button', { name: /^Clear legend focus:/ });
-          await expect(clearFocus).toBeVisible();
-          if (hasTouch) {
-            expect((await focus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            expect((await clearFocus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-            const toursBox = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
-            const zoomBox = (await page.getByLabel('Zoom').boundingBox())!;
-            expect(zoomBox.x).toBeGreaterThanOrEqual(toursBox.x + toursBox.width + 8);
-          }
-          await summary.click();
-          await expect(clearFocus).toBeVisible();
           // Probe the actual pick buffer, including on touch devices, before selecting. A drawn
           // screenshot can precede this landmark's tile and is expensive at phone DPRs.
           await expect(async () => {
@@ -166,22 +148,32 @@ for (const city of cities) {
           });
           await expect.poll(() => query(page).sel).toBe(place.id);
           await expect(legend).toBeHidden();
-          await expect(clearFocus).toBeVisible();
-          if (hasTouch) await clearFocus.tap();
-          else await clearFocus.click();
-          await expect(clearFocus).toHaveCount(0);
-          await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
-          expect(query(page).sel).toBe(place.id);
-          await expect(canvas).toBeFocused();
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
-          await expect(legend.locator('button[aria-pressed="true"]')).toHaveCount(0);
-          await summary.click();
-          await focus.click();
-          await expect(clearFocus).toBeVisible();
-          await page.keyboard.press('Escape');
-          await expect(clearFocus).toHaveCount(0);
+          // Reuse the loaded map for browser-only keyboard and layout checks. Focus
+          // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
+          const summary = legend.locator('summary');
+          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
+            await summary.click();
+          const focus = legend.getByRole('button', { name: 'Secondary road', exact: true });
+          await expect(focus).toBeVisible();
+          if (hasTouch) await focus.tap();
+          else {
+            await focus.focus();
+            await page.keyboard.press('Enter');
+            await expect(focus).toHaveCSS('outline-style', 'solid');
+          }
+          const clear = page.getByRole('button', { name: /^Clear legend focus:/ });
+          await expect(clear).toBeVisible();
+          if (hasTouch) {
+            for (const control of [focus, summary, clear])
+              expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            const tours = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
+            const zoom = (await page.getByLabel('Zoom').boundingBox())!;
+            expect(zoom.x).toBeGreaterThanOrEqual(tours.x + tours.width + 8);
+          }
+          await clear.click();
         },
       );
 
@@ -276,19 +268,24 @@ for (const city of cities) {
         const saved = await page.evaluate(() => localStorage.getItem('atlas.life'));
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await expect(life).toBeDisabled();
+        await expect.poll(agents).toBe(0);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
         await expect(life).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         expect(errors).toEqual([]);
       });
 
       test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
+        // Bound software-WebGL work; this checks capture/download, not desktop GPU speed.
+        await page.setViewportSize({ width: 640, height: 480 });
         await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
         await mapReady(page);
-        await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
+        await page.getByRole('button', { name: 'Capture 1 seconds', exact: true }).click();
         const button = page.getByRole('button', { name: 'Download profile', exact: true });
-        await expect(button).toBeEnabled({ timeout: 5_000 });
+        // A one-second timer can be delayed by software-GPU readbacks on the CI runner.
+        await expect(button).toBeEnabled({ timeout: 20_000 });
         const downloading = page.waitForEvent('download');
         await button.click();
         const download = await downloading;

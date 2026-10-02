@@ -53,7 +53,12 @@ export type LifeGrid = {
   toCell: (lng: number, lat: number) => [number, number];
   /** Reject a complete ground agent when any of its ASCII cells crosses forbidden terrain. */
   allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
+  /** Final painted agent index + 1; zero means no owner (including bird shadows). */
+  owners?: Uint32Array;
+  speakers?: SpeakerGrid;
 };
+/** Per-person packing, independent of cart and group owner identity. */
+export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
 
 /**
  * A vehicle's or boat's paint (bits 0–3), part (4–6), and whether it is parked (bit 7: lamps
@@ -89,12 +94,20 @@ export type LifeGlyphs = { parts: Uint16Array };
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
 let journal:
-  { before: Map<number, [number, number, number, number, number]>; denied: boolean } | undefined;
+  | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
+  | undefined;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
 let drawingFocus = 0;
+let drawingClockCells: number[] | undefined;
+let clockCells: number[] | undefined;
 
-export type LifePackMetadata = { owners?: Uint32Array; focus?: ReadonlySet<LifeFocus> };
+export type LifePackMetadata = {
+  owners?: Uint32Array;
+  focus?: ReadonlySet<LifeFocus>;
+  /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
+  clockCells?: number[];
+};
 
 /** Every complete texel write also replaces its frame-local owner. */
 function writeCell(
@@ -109,19 +122,32 @@ function writeCell(
   out[at + 2] = bits | drawingFocus;
   out[at + 3] = byte;
   if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
+  drawingClockCells?.push(at / 4);
 }
 /** Cells (texel offset / 4) held by ground agents already drawn this frame. */
 let groundCells = new Uint8Array(0);
+let drawingSpeakers: SpeakerGrid | undefined;
+let drawingMember = 0;
 function rememberGroundCell(out: Uint8Array, at: number) {
-  if (!journal || journal.before.has(at)) return;
-  if (groundCells[at / 4]) journal.denied = true;
-  journal.before.set(at, [
-    out[at]!,
-    out[at + 1]!,
-    out[at + 2]!,
-    out[at + 3]!,
-    drawingOwners?.[at / 4] ?? 0,
-  ]);
+  if (journal && !journal.before.has(at)) {
+    if (groundCells[at / 4]) journal.denied = true;
+    // Preserve the ordinary five-value owner journal; speech adds its member
+    // only when enabled, avoiding an unused slot in every painted-cell array.
+    journal.before.set(
+      at,
+      drawingSpeakers
+        ? [
+            out[at]!,
+            out[at + 1]!,
+            out[at + 2]!,
+            out[at + 3]!,
+            drawingOwners?.[at / 4] ?? 0,
+            drawingSpeakers.members[at / 4]!,
+          ]
+        : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
+    );
+  }
+  if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
 /** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
 export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
@@ -152,14 +178,22 @@ export function packLife(
   metadata: LifePackMetadata = {},
 ): number {
   const cells = grid.cols * grid.rows;
-  if (metadata.owners && metadata.owners.length !== cells)
+  drawingOwners = metadata.owners ?? grid.owners;
+  if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
-  metadata.owners?.fill(0);
-  drawingOwners = metadata.owners;
+  drawingOwners?.fill(0);
   drawingOwner = 0;
   drawingFocus = 0;
+  clockCells = metadata.clockCells;
+  if (clockCells) clockCells.length = 0;
+  drawingClockCells = undefined;
   journal = undefined;
+  drawingSpeakers = grid.speakers;
+  if (drawingSpeakers && (!drawingOwners || drawingSpeakers.members.length !== cells))
+    throw new RangeError('Speaker packing requires matching owner and member grids');
+  drawingSpeakers?.members.fill(0);
+  drawingSpeakers?.points.clear();
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
@@ -171,7 +205,10 @@ export function packLife(
         const agent = agents[index]!;
         if (!!agent.parked !== parked) continue;
         drawingOwner = index + 1;
+        drawingClockCells =
+          agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
         drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
+        drawingMember = 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
@@ -186,8 +223,10 @@ export function packLife(
         if (!journal) drawn += n;
         else if (journal.denied)
           for (const [at, previous] of journal.before) {
+            // The fifth journal value is CPU ownership, never a fifth texture byte.
             for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
-            if (drawingOwners) drawingOwners[at / 4] = previous[4];
+            if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
+            if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
           }
         else {
           drawn += n;
@@ -198,8 +237,11 @@ export function packLife(
   } finally {
     journal = undefined;
     drawingOwners = undefined;
+    drawingClockCells = clockCells = undefined;
     drawingOwner = 0;
     drawingFocus = 0;
+    drawingSpeakers = undefined;
+    drawingMember = 0;
   }
 }
 
@@ -215,6 +257,23 @@ function drawAgent(
   const { cols, rows, toCell } = grid;
   if (agent.line) return drawLine(out, grid, agent.line, glyphIndex) ? 1 : 0;
   const [col, row] = toCell(agent.lng, agent.lat);
+  if (agent.prop === 'ball') {
+    const c = Math.floor(col),
+      r = Math.floor(row),
+      index = glyphIndex('•');
+    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
+    const at = (r * cols + c) * 4;
+    rememberGroundCell(out, at);
+    writeCell(
+      out,
+      at,
+      index,
+      classId(lifeClassFor.person),
+      CellBit.person,
+      personByte(PAINT_NONE, PersonPart.figure),
+    );
+    return 1;
+  }
   const baseSpec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
   const spec = agent.covered && agent.vehicle === 'cart' && baseSpec ? COVERED_CART : baseSpec;
   if (agent.kind === 'person' && !spec) return drawPeople(out, grid, agent, [col, row], glyphIndex);
@@ -257,12 +316,14 @@ function drawAgent(
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
         : 0;
+      drawingMember = 0;
       return (stamped ? 1 : 0) + vendor;
     }
   }
   if (agent.bird && agent.ahead)
     return drawBird(out, grid, agent, [col, row], theme, glyphIndex) ? 1 : 0;
   const people = agent.people ? drawPeople(out, grid, agent, [col, row], glyphIndex) : 0;
+  drawingMember = 0;
   const c = Math.floor(col);
   const r = Math.floor(row);
   if (c < 0 || r < 0 || c >= cols || r >= rows) return people;
@@ -373,7 +434,15 @@ function drawPeople(
     const pull = (stroke ^ swap) as 0 | 1;
     let any = false;
     for (const slice of [0, 1, 2, 3] as const) {
-      const glyph = figureGlyph(look.figure, across, frame, { slice }, pull, headingOf(fx, fy));
+      const glyph = figureGlyph(
+        look.figure,
+        across,
+        frame,
+        { slice },
+        pull,
+        headingOf(fx, fy),
+        look.pose,
+      );
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
@@ -384,6 +453,7 @@ function drawPeople(
     // Laid out in meters, around the agent's own point.
     const spacing = Math.max(...looks.map((look) => FIGURE_SIZE_M[look.figure]));
     looks.forEach((look, i) => {
+      drawingMember = i + 1;
       const beside =
         clearance > 0 && look.lateral !== 0
           ? Math.sign(look.lateral) * (clearance + FIGURE_SIZE_M[look.figure] / 2 + 0.1)
@@ -391,6 +461,8 @@ function drawPeople(
       const back = look.back * spacing;
       const cx = col + right[0] * beside - along[0] * back;
       const cy = row + right[1] * beside - along[1] * back;
+      if (agent.speech && (agent.speech.member ?? 0) === i)
+        drawingSpeakers?.points.set(drawingOwner, [cx, cy]);
       const fit = fits[i]!;
       const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
@@ -403,7 +475,15 @@ function drawPeople(
       } else if (fit === 'big') {
         any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
       } else {
-        const glyph = figureGlyph(look.figure, across, frame, { scale: fit }, 0, headingOf(fx, fy));
+        const glyph = figureGlyph(
+          look.figure,
+          across,
+          frame,
+          { scale: fit },
+          0,
+          headingOf(fx, fy),
+          look.pose,
+        );
         any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
       }
       if (any) drawn++;
@@ -419,6 +499,7 @@ function drawPeople(
   // The cart's half-width in cells, across its heading.
   const clear = clearance * Math.hypot(...right);
   looks.forEach((look, i) => {
+    drawingMember = i + 1;
     const lateral =
       clearance > 0 && look.lateral !== 0
         ? Math.sign(look.lateral) * Math.max(size, Math.ceil(clear + size / 2))
@@ -426,6 +507,8 @@ function drawPeople(
     const back = look.back * size;
     const c = c0 + rx * lateral - fx * back;
     const r = r0 + ry * lateral - fy * back;
+    if (agent.speech && (agent.speech.member ?? 0) === i)
+      drawingSpeakers?.points.set(drawingOwner, [c + size / 2, r + size / 2]);
     const fit = fits[i]!;
     let any: boolean;
     if (fit === 'big') {
@@ -438,6 +521,7 @@ function drawPeople(
         { scale: fit === 'stamp' ? 2 : fit },
         0,
         headingOf(fx, fy),
+        look.pose,
       );
       // In a 2×2 slot: its cell nearest the first of the group.
       const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
@@ -476,7 +560,7 @@ function stampFigure(
     along,
     right,
     FIGURE_SIZE_M[look.figure],
-    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke),
+    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
     toneShare,
     glyphIndex,
     texel,
@@ -607,6 +691,7 @@ function drawBird(
   const index = glyph ? glyphIndex(glyph) : 0;
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
+  rememberGroundCell(out, at);
   writeCell(out, at, index, cls, bits, birdByte(species, false, fit === 'cell'));
   return true;
 }
@@ -849,6 +934,7 @@ function drawLine(
     const tip = line.tip && k === marks.length - 1 ? line.tip : undefined;
     const index = tip ? glyphIndex(tip.glyph) : glyph;
     if (index <= 0 || index > MAX_GLYPHS) return;
+    rememberGroundCell(out, at);
     writeCell(
       out,
       at,

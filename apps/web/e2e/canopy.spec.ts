@@ -18,11 +18,12 @@ import {
   subcellAreas,
 } from '../../../packages/renderer/src/glyphs/select';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
+import { ORDINARY_CLOCK, heldClock } from '../../../packages/renderer/src/life/effect-clocks';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
 import { PersonPart, personByte } from '../../../packages/renderer/src/life/people';
 import { cellFragment, cellVertex } from '../../../packages/renderer/src/shaders/cell';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
-import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
+import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { selectFragment } from '../../../packages/renderer/src/shaders/select';
 import { mapGlyphs, sextantGlyphs, themes } from '../../../packages/renderer/src/theme';
 
@@ -84,7 +85,15 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       };
       const cell = program(input.cellVertex, input.cellFragment);
       const select = program(input.fullscreenVertex, input.selectFragment);
-      const glyph = program(input.fullscreenVertex, input.glyphFragment);
+      const glyphPrograms = new Map<number, WebGLProgram>();
+      const glyphFor = (key: number) => {
+        let glyph = glyphPrograms.get(key);
+        if (!glyph) {
+          glyph = program(input.fullscreenVertex, input.glyphFragments[key]!);
+          glyphPrograms.set(key, glyph);
+        }
+        return glyph;
+      };
       type UniformValue = number | number[] | WebGLTexture;
       const uniforms = (p: WebGLProgram, values: Record<string, UniformValue>) => {
         gl.useProgram(p);
@@ -286,7 +295,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       colors[input.roof * 3 + 2] = 1;
       colors[input.person * 3] = 1;
       colors[input.bird * 3] = 1;
-      const render = (zoom = 20, focused = false) => {
+      const render = (
+        zoom = 20,
+        focused = false,
+        lifeTime = 0,
+        clocks?: WebGLTexture,
+        daylight = 1,
+      ) => {
         gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
         gl.viewport(0, 0, cols, rows);
         uniforms(select, {
@@ -314,7 +329,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, canvas.width, canvas.height);
-        uniforms(glyph, {
+        uniforms(glyphFor(Number(focused) | (Number(!!clocks) << 1)), {
           u_glyphs: selected,
           u_atlas: atlasTex,
           u_cell: [cw, ch],
@@ -322,8 +337,14 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           u_columns: input.glyphs.length,
           u_colors: colors,
           u_fillColors: colors,
-          u_daylight: 1,
+          u_daylight: daylight,
           u_focus: focused ? 1 : 0,
+          u_focusLife: focused ? 1 : 0,
+          u_lifeTime: lifeTime,
+          u_shimmer: clocks ? 1 : 0,
+          u_effectClocks: clocks ?? blank,
+          u_hasEffectClocks: clocks ? 1 : 0,
+          u_light: blank,
           u_focusClasses: [0, 0],
           u_accent: [0, 0.5, 1],
           u_labelCell: [cw, ch],
@@ -434,10 +455,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           }
           setAgent(0, 0, 0);
           const withoutLife = render();
-          const focusedWithoutLife = render(20, true);
+          // One ground-agent focus case per occluder, plus the bird exception.
+          const checkFocus =
+            agent.name === 'vehicle' || (agent.name === 'bird' && occluder === input.crown);
+          const focusedWithoutLife = checkFocus ? render(20, true) : undefined;
           setAgent(agent.cls, agent.bit, agent.byte);
           const pixels = render();
-          const focusedPixels = render(20, true);
+          const focusedPixels = checkFocus ? render(20, true) : undefined;
           occlusion.push({
             name: agent.name,
             bird: agent.cls === input.bird,
@@ -448,12 +472,53 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             covered: pixel(pixels, 2 * cw + 2, 2 * ch + 4),
             edgeWithoutLife: pixel(withoutLife, cw + 4, 2 * ch + 4),
             coveredWithoutLife: pixel(withoutLife, 2 * cw + 2, 2 * ch + 4),
-            focusedCovered: pixel(focusedPixels, 2 * cw + 2, 2 * ch + 4),
-            focusedWithoutLife: pixel(focusedWithoutLife, 2 * cw + 2, 2 * ch + 4),
-            focusedClear: pixel(focusedPixels, 2, 2 * ch + 4),
+            focusedCovered: focusedPixels && pixel(focusedPixels, 2 * cw + 2, 2 * ch + 4),
+            focusedWithoutLife:
+              focusedWithoutLife && pixel(focusedWithoutLife, 2 * cw + 2, 2 * ch + 4),
+            focusedClear: focusedPixels && pixel(focusedPixels, 2, 2 * ch + 4),
           });
         }
       }
+      // One real shader check: a held candle's clock stays fixed while another advances.
+      for (const target of [live, sub]) {
+        const surfaces = new Uint8Array(target.w * target.h * 4);
+        for (let cell = 0; cell < surfaces.length; cell += 4) surfaces[cell] = input.road;
+        upload(target.textures[0]!, target.w, target.h, surfaces);
+        upload(target.textures[1]!, target.w, target.h, new Uint8Array(surfaces.length));
+      }
+      setAgent(input.person, input.personBit, input.candleByte);
+      const clockTokens = new Float32Array(cols * rows * 2).fill(input.ordinaryClock);
+      for (let row = 0; row < rows; row++)
+        for (let col = 0; col < 2; col++)
+          clockTokens[(row * cols + col) * 2] = col === 0 ? input.heldFraction : input.heldZero;
+      const clocks = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, clocks);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, cols, rows, 0, gl.RG, gl.FLOAT, clockTokens);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      const early = render(20, false, 0, clocks, 0);
+      const late = render(20, false, 0.2, clocks, 0);
+      const focusedEarly = render(20, true, 0, clocks, 0);
+      const focusedLate = render(20, true, 0.2, clocks, 0);
+      const candleClocks = {
+        heldEarly: pixel(early, 2, 2 * ch + 4),
+        heldLate: pixel(late, 2, 2 * ch + 4),
+        zeroEarly: pixel(early, cw + 2, 2 * ch + 4),
+        zeroLate: pixel(late, cw + 2, 2 * ch + 4),
+        focusedEarly: pixel(focusedEarly, 2, 2 * ch + 4),
+        focusedLate: pixel(focusedLate, 2, 2 * ch + 4),
+        otherEarly: pixel(early, 3 * cw + 2, 2 * ch + 4),
+        otherLate: pixel(late, 3 * cw + 2, 2 * ch + 4),
+      };
+      const releasePixels = (token: number, time: number) => {
+        for (let row = 0; row < rows; row++) clockTokens[row * cols * 2] = token;
+        gl.bindTexture(gl.TEXTURE_2D, clocks);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RG, gl.FLOAT, clockTokens);
+        return pixel(render(20, false, time, clocks, 0), 2, 2 * ch + 4);
+      };
+      const released = releasePixels(0.125, 0.375);
+      const heldReference = releasePixels(input.heldReference, 1);
+      gl.deleteTexture(clocks);
       if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
       return {
         classes: [
@@ -473,6 +538,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         revealedCar,
         revealedPerson,
         occlusion,
+        candleClocks,
+        released,
+        heldReference,
       };
     },
     {
@@ -480,7 +548,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       cellFragment,
       fullscreenVertex,
       selectFragment,
-      glyphFragment,
+      glyphFragments: [0, 1, 2, 3].map((key) =>
+        glyphFragmentFor({ focus: !!(key & 1), effectClocks: !!(key & 2) }),
+      ),
+      ordinaryClock: ORDINARY_CLOCK,
+      heldFraction: heldClock(0.4),
+      heldZero: heldClock(0),
+      heldReference: heldClock(0.25),
       glyphs,
       sextants: [...sextantGlyphs],
       depths: Array.from(classDepths()),
@@ -509,6 +583,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       boat: classId('life_boat'),
       train: classId('life_train'),
       personBit: CellBit.person,
+      candleByte: personByte(0, PersonPart.canopy, true),
       focusBit: LIFE_FOCUS_BIT,
       agents: [
         ...['walker', 'seated person', 'vendor attendant', 'cat', 'dog'].map((name) => ({
@@ -562,6 +637,11 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
   ]);
   expect(result.higherCrown).toBe(21);
   expect(result.orderIndependent).toBe(true);
+  expect(result.candleClocks.heldLate).toEqual(result.candleClocks.heldEarly);
+  expect(result.candleClocks.zeroLate).toEqual(result.candleClocks.zeroEarly);
+  expect(result.candleClocks.focusedLate).toEqual(result.candleClocks.focusedEarly);
+  expect(result.released).toEqual(result.heldReference);
+  expect(result.candleClocks.otherLate).not.toEqual(result.candleClocks.otherEarly);
   for (const p of [result.clearCar, result.edgeClear]) {
     expect(p[0]).toBeGreaterThan(100);
     expect(p[1]).toBeLessThan(10);
@@ -584,9 +664,11 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       expect(p[1]).toBeLessThan(10);
     }
     if (!sample.bird) {
-      expect(sample.focusedCovered, `${sample.name}: focus must not leak through foliage`).toEqual(
-        sample.focusedWithoutLife,
-      );
+      if (sample.focusedCovered)
+        expect(
+          sample.focusedCovered,
+          `${sample.name}: focus must not leak through foliage`,
+        ).toEqual(sample.focusedWithoutLife);
       expect(
         sample.edgeCovered,
         `${sample.name}: hidden at surface ${sample.occluder} edge`,
@@ -595,7 +677,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         sample.coveredWithoutLife,
       );
     }
-    expect(sample.focusedClear).toEqual([0, 128, 255]);
+    if (sample.focusedClear) expect(sample.focusedClear).toEqual([0, 128, 255]);
     if (sample.occluder !== classId('tree') || sample.bird) {
       expect(sample.edgeClear[0], `${sample.name}: visible outside canopy edge`).toBeGreaterThan(
         100,

@@ -10,7 +10,7 @@ import {
 } from '../../../packages/renderer/src/life/turn-signals';
 import { Paint, VehiclePart } from '../../../packages/renderer/src/life/vehicles';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
-import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
+import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
 
@@ -64,21 +64,27 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         document.body.style.margin = '0';
         const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true })!;
         if (!gl) throw new Error('WebGL2 unavailable');
-        const program = gl.createProgram();
-        for (const [type, source] of [
-          [gl.VERTEX_SHADER, input.vertex],
-          [gl.FRAGMENT_SHADER, input.fragment],
-        ] as const) {
-          const shader = gl.createShader(type)!;
-          gl.shaderSource(shader, source);
-          gl.compileShader(shader);
-          if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-            throw new Error(gl.getShaderInfoLog(shader)!);
-          gl.attachShader(program, shader);
-        }
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-          throw new Error(gl.getProgramInfoLog(program)!);
+        const buildProgram = (fragment: string) => {
+          const program = gl.createProgram();
+          for (const [type, source] of [
+            [gl.VERTEX_SHADER, input.vertex],
+            [gl.FRAGMENT_SHADER, fragment],
+          ] as const) {
+            const shader = gl.createShader(type)!;
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+              throw new Error(gl.getShaderInfoLog(shader)!);
+            gl.attachShader(program, shader);
+          }
+          gl.linkProgram(program);
+          if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+            throw new Error(gl.getProgramInfoLog(program)!);
+          return program;
+        };
+        const variants = new Map<number, WebGLProgram>();
+        let program = buildProgram(input.fragments[0]!);
+        variants.set(0, program);
         gl.useProgram(program);
         gl.bindVertexArray(gl.createVertexArray());
         const texture = (w: number, h: number, data: Uint8Array, channels = 4) => {
@@ -105,6 +111,10 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         const blank = texture(1, 1, new Uint8Array(4));
         type Value = number | readonly number[] | WebGLTexture;
         const uniforms = (values: Record<string, Value>) => {
+          const key = values.u_focus ? 1 : 0;
+          if (!variants.has(key)) variants.set(key, buildProgram(input.fragments[key]!));
+          program = variants.get(key)!;
+          gl.useProgram(program);
           let unit = 0;
           for (let i = 0; i < gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i++) {
             const info = gl.getActiveUniform(program, i)!;
@@ -211,6 +221,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
             u_overlay: overlayTex,
             u_daylight: daylight,
             u_focus: focused ? 1 : 0,
+            u_focusLife: focused && !mapFocus ? 1 : 0,
             u_focusClasses: mapFocus ? [(1 << input.roof) >>> 0, 0] : [0, 0],
           });
           gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -252,6 +263,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           ...common,
           u_height: canvas.height,
           u_glyphs: fleetSelected,
+          u_lifeTime: 0,
           u_life: fleetLife,
           u_daylight: 1,
           u_overlay: blank,
@@ -262,7 +274,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
       },
       {
         vertex: fullscreenVertex,
-        fragment: glyphFragment,
+        fragments: [false, true].map((focus) => glyphFragmentFor({ focus, effectClocks: false })),
         maxClasses: MAX_CLASSES,
         glyphs,
         block,

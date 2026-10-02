@@ -6,11 +6,30 @@ import {
   worldTiles,
   retiredTiles,
   SCENE_CURB_Y,
+  SCENARIO_DIALOGUE,
 } from './testing/scenarios';
 import { LifeWorld, type Mover, type TileLife } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
 import { MAX_STEP_S } from './config';
 import { bodiesOverlap, type Body, bodyCorners, Occupancy, PolygonIndex } from './occupancy';
+
+it('exercises scene speech and visible cues when a performance scenario opts into dialogue', () => {
+  const scenario = makeScenario('moments', 1, false, 1, LifeWorld, undefined, {
+    dialogue: SCENARIO_DIALOGUE,
+  });
+  bounded(scenario.world);
+  let cues = 0;
+  for (let frame = 0; frame < 300; frame++)
+    cues += scenario.step(frame).filter((agent) => agent.speech?.id.includes(':scene:')).length;
+  const admissions = [...worldTiles(scenario.world).values()].reduce(
+    (sum, tile) =>
+      sum +
+      Object.values(tile.momentHost.scenes.selector.selected).reduce((n, count) => n + count, 0),
+    0,
+  );
+  expect(admissions).toBeGreaterThan(0);
+  expect(cues).toBeGreaterThan(0);
+});
 
 function valid(world: LifeWorld) {
   const owners = new Set<object>();

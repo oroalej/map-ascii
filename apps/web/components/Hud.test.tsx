@@ -41,8 +41,8 @@ const select = (id: string | null) => act(() => useAtlasStore.getState().setSele
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query === '(min-width: 641px)',
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
   }));
@@ -70,6 +70,16 @@ afterEach(() => {
   useLifeStore.setState({ enabled: true });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it.each([640, 640.5, 641])('matches the compact CSS breakpoint at %s CSS pixels', async (width) => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(max-width: 640px)' && width <= 640,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  await mount(renderer());
+  expect(legend().open).toBe(width > 640);
 });
 
 it('keeps a clear control outside the collapsed/hidden legend and preserves selection when cleared', async () => {

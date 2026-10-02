@@ -20,11 +20,13 @@ import {
 } from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
 import type { Programs, ThemeResources } from './gpu-context';
+import { glyphProgram } from './gpu-context';
 import {
   copyRaster,
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
   uploadLights,
@@ -47,12 +49,14 @@ import { labelScreenArea } from './label-candidates';
 import { labelIntersectsArea } from './label-layout';
 import type { LabelMemory, LabelSlot } from './label-stability';
 import { cellBits } from './life/config';
+import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
   utilityViewportVisibility,
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
+import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
@@ -443,6 +447,12 @@ function sunUniforms(view: View, sun: Sun | null) {
  * so they are the grid's size and never shared between two maps.
  */
 type Texels = {
+  clocks?: EffectClocks;
+  clockCells?: number[];
+  clockUpload?: number;
+  clockCandidates?: boolean;
+  candles?: boolean;
+  held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
   owners: Uint32Array;
   revision: number;
@@ -468,6 +478,15 @@ const texels = (targets: CellTargets): Texels => {
 
 /** The CPU raster belonging to these targets, without allocating or resetting it. */
 export const lifeRaster = (targets: CellTargets) => texelsOf.get(targets) ?? null;
+/** A conservative label/halo guard, including rotated labels' collision bounds. */
+export function labelCovers(targets: CellTargets, col: number, row: number): boolean {
+  const overlay = overlays.get(targets)?.overlay;
+  if (!overlay) return false;
+  return overlay.taken.some(
+    (box) =>
+      col >= box.left && col < box.left + box.width && row >= box.top && row < box.top + box.height,
+  );
+}
 
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
@@ -485,11 +504,51 @@ export function lifePass(
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
   focus?: ReadonlySet<LifeFocus>,
+  /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
+  heldFrame?: object,
+  speakers?: LifeGrid['speakers'],
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
+  // Target identity owns this cache. Placement and the paired frame own the ground
+  // guard, whose wrapper may be newly allocated even when its terrain is unchanged.
+  const inputs = heldFrame
+    ? [
+        themeRes,
+        theme,
+        placement,
+        view.camera,
+        view.dpr,
+        view.cellDev.w,
+        view.cellDev.h,
+        agents,
+        sun,
+        focus,
+        speakers,
+      ]
+    : undefined;
+  if (
+    heldFrame &&
+    buffers.held?.frame === heldFrame &&
+    inputs!.every((value, i) => value === buffers.held!.inputs[i])
+  )
+    return buffers.held.drawn;
+  buffers.held = undefined;
   const lifeTexels = buffers.life;
   const packStart = profiler?.time();
+  buffers.candles = buffers.clockCandidates = false;
+  for (const agent of agents) {
+    if (!agent.candle) continue;
+    buffers.candles = true;
+    if (agent.effectClock !== undefined) {
+      buffers.clockCandidates = true;
+      break;
+    }
+  }
+  if (buffers.clockCandidates) {
+    buffers.clocks ??= new EffectClocks(cols * rows);
+    buffers.clockCells ??= [];
+  }
   const drawn = packLife(
     lifeTexels,
     {
@@ -499,6 +558,7 @@ export function lifePass(
       cellHeight: view.cellDev.h,
       toCell: placement.toCell,
       allowsGroundCell,
+      speakers,
     },
     agents,
     theme,
@@ -506,12 +566,21 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
-    { owners: buffers.owners, focus },
+    { owners: buffers.owners, focus, clockCells: buffers.clockCells },
   );
   buffers.revision++;
+  if (buffers.clocks) {
+    buffers.clocks.begin(0);
+    for (const cell of buffers.clockCells!) {
+      const agent = agents[buffers.owners[cell]! - 1];
+      if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? ORDINARY_CLOCK);
+    }
+    buffers.clocks.finish(0);
+  }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
+  if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
 }
@@ -545,8 +614,31 @@ export function lightPass(
   packBeams(lightTexels, grid, agents);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
-  packCandles(lightTexels, grid, agents, 1 / cellMeters!);
+  const clocks = buffers.clocks;
+  clocks?.begin(1);
+  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks?.pool);
+  clocks?.finish(1);
   uploadLights(gl, targets, lightTexels);
+  effectClockPass(gl, targets);
+}
+
+/** Also called in daylight when lighting is idle. Raster changes alone cause no upload. */
+export function effectClockPass(gl: GL, targets: CellTargets) {
+  const buffers = texelsOf.get(targets);
+  const clocks = buffers?.clocks;
+  if (clocks?.active) {
+    if (!targets.effectClockTex || buffers!.clockUpload !== clocks.revision) {
+      uploadEffectClocks(gl, targets, clocks.values);
+      buffers!.clockUpload = clocks.revision;
+    }
+  } else {
+    if (targets.effectClockTex) uploadEffectClocks(gl, targets, undefined);
+    if (buffers && !buffers.clockCandidates) {
+      buffers.clocks = undefined;
+      buffers.clockCells = undefined;
+      buffers.clockUpload = undefined;
+    }
+  }
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
@@ -699,14 +791,18 @@ export function glyphPass(
   moon = 0,
   sun: Sun | null = null,
   focus = normalizeFocus(null),
+  lifeTime = time,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
   const { cellDev } = view;
+  const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
+  const hasEffectClocks = targets.effectClockTex !== undefined;
+  const program = glyphProgram(gl, programs, focused, hasEffectClocks);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
-  gl.useProgram(programs.glyph.program);
-  twgl.setUniforms(programs.glyph, {
+  gl.useProgram(program.program);
+  twgl.setUniforms(program, {
     u_glyphs: targets.glyphTex,
     u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
@@ -723,17 +819,21 @@ export function glyphPass(
     u_background: theme.background.slice(0, 3),
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+    u_lifeTime: lifeTime,
     u_overlay: targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
-    u_focus: focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0,
+    u_focus: focused,
+    u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
+    u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
@@ -752,7 +852,7 @@ export function glyphPass(
     u_crownSun:
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),
-    u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
+    u_vehicleOccluders: LIFE_OCCLUDERS,
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),

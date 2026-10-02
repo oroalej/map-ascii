@@ -14,6 +14,7 @@ import {
   windArrow,
   zoomLevel,
   type ClimateConfig,
+  type RuntimeDialogueCatalog,
   type SubdivisionArea,
 } from '@atlas/shared';
 import {
@@ -33,6 +34,7 @@ import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
+import { SpeechControls } from './SpeechControls';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -62,10 +64,11 @@ function QualityControl() {
   );
 }
 
-const WIDE = '(min-width: 641px)';
-const isWide = () => window.matchMedia(WIDE).matches;
+// Match the CSS compact query, then negate it: fractional widths have no gap.
+const COMPACT = '(max-width: 640px)';
+const isWide = () => !window.matchMedia(COMPACT).matches;
 const subscribeWide = (onChange: () => void) => {
-  const query = window.matchMedia(WIDE);
+  const query = window.matchMedia(COMPACT);
   query.addEventListener('change', onChange);
   return () => query.removeEventListener('change', onChange);
 };
@@ -245,36 +248,36 @@ function LegendControls({
       >
         <summary ref={summary}>Legend</summary>
         <ul aria-label="What the glyphs on screen mean">
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              {entry.focus ? (
-                <button
-                  type="button"
-                  className={styles.legendEntry}
-                  aria-pressed={focused === entry.id}
-                  onClick={() =>
-                    useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
-                  }
-                >
-                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                    {entry.icons
-                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                      : entry.glyphs}
-                  </span>
-                  <span>{displayLabel(entry)}</span>
-                </button>
-              ) : (
-                <>
-                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                    {entry.icons
-                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                      : entry.glyphs}
-                  </span>
-                  <span>{displayLabel(entry)}</span>
-                </>
-              )}
-            </li>
-          ))}
+          {entries.map((entry) => {
+            const content = (
+              <>
+                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                  {entry.icons
+                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                    : entry.glyphs}
+                </span>
+                <span>{displayLabel(entry)}</span>
+              </>
+            );
+            return (
+              <li key={entry.id}>
+                {entry.focus ? (
+                  <button
+                    type="button"
+                    className={styles.legendEntry}
+                    aria-pressed={focused === entry.id}
+                    onClick={() =>
+                      useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
+                    }
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  content
+                )}
+              </li>
+            );
+          })}
         </ul>
       </details>
     </>
@@ -512,12 +515,14 @@ function SubdivisionTracker({ city }: { city: string }) {
  */
 export function Hud({
   city,
+  dialogue,
   subdivisionLabel,
   climate,
   timezone,
   sidewalksDerived = true,
 }: {
   city: string;
+  dialogue?: RuntimeDialogueCatalog | undefined;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (its pack's `timezone`). */
@@ -533,14 +538,14 @@ export function Hud({
   return (
     <>
       <SubdivisionTracker city={city} />
-      <div className={styles.topRight}>
+      <div className={styles.topRight} data-speech-obstacle>
         <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
           hidden={panelOpen}
         />
       </div>
-      <div className={styles.bottomLeft} data-touring={touring}>
+      <div className={styles.bottomLeft} data-touring={touring} data-speech-obstacle>
         <ScaleBar />
         {subdivision && (
           <p className={styles.line}>
@@ -560,6 +565,7 @@ export function Hud({
           <QualityControl />
         </div>
         <ProcessionControls />
+        {dialogue && <SpeechControls catalog={dialogue} />}
       </div>
     </>
   );

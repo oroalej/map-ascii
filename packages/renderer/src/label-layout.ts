@@ -17,6 +17,8 @@ function copyBox(out: Box, box: Box) {
 /** Collision cells reach past the grid by at least the retained overhang plus its halo. */
 export const TAKEN_PAD = 4;
 export const LABEL_WIDTH = 18;
+/** Shared by rotated collision geometry and pointer coverage. */
+export const ROTATED_HALO_HEIGHT = 1.4;
 
 const overlaps = (a: Box, b: Box) =>
   a.left < b.left + b.width &&
@@ -150,8 +152,8 @@ export function rotatedLabelBox(
 ): Box {
   const c = Math.abs(Math.cos(angle)),
     s = Math.abs(Math.sin(angle));
-  const w = c * (width + 2) + s * aspect * 1.4;
-  const h = (s * (width + 2)) / aspect + c * 1.4;
+  const w = c * (width + 2) + s * aspect * ROTATED_HALO_HEIGHT;
+  const h = (s * (width + 2)) / aspect + c * ROTATED_HALO_HEIGHT;
   const left = Math.floor(col + 0.5 - w / 2),
     top = Math.floor(row + 0.5 - h / 2);
   out.left = left;

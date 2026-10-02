@@ -22,6 +22,7 @@ import { Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
+import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
 import { CANDLE_BIT, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
@@ -56,7 +57,9 @@ const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
  * bank lamps, excluding vehicle beams. Wet roads strengthen their pools; roofs and water take
  * a fainter wash than open ground.
  */
-export const glyphFragment = /* glsl */ `#version 300 es
+/** Compile inactive features away instead of branching through them at every pixel. */
+export function glyphFragmentFor({ focus = true, effectClocks = true } = {}) {
+  return /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -72,6 +75,7 @@ uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
+uniform float u_lifeTime;
 uniform int u_pulse;
 uniform sampler2D u_overlay;
 uniform sampler2D u_labelAtlas;
@@ -81,9 +85,11 @@ uniform int u_labelColumns;
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
-uniform bool u_focus;
+${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
+uniform sampler2D u_effectClocks;
+${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectClocks = false;'}
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
@@ -156,12 +162,19 @@ const vec3 LAMP_WHITE = vec3(1.0, 0.9, 0.7);
 // A shop's warm interior light, spilling out of its door.
 const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 
-float lampOn(int g) {
+float effectTime(ivec2 cell, int channel) {
+  if (!u_hasEffectClocks) return u_lifeTime;
+  float token = texelFetch(u_effectClocks, cell, 0)[channel];
+  if (token == ${float(ORDINARY_CLOCK)}) return u_lifeTime;
+  return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
+}
+
+float lampOn(int g, float time) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
   if (state == ${LampState.candle}) {
     float beat = 5.0 + float(g >> 3) * 0.23;
-    return u_shimmer ? 0.8 + 0.2 * sin(u_time * beat + float(g >> 3)) : 1.0;
+    return u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
   }
   if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
   int seed = g >> 3;
@@ -219,7 +232,9 @@ float reflection(vec2 at, ivec2 cell) {
     int g = int(t.g * 255.0 + 0.5);
     // Beams don't reach across the water; lamps, floods, and candles do.
     if ((g & 7) == ${LampState.beam}) continue;
-    float s = texture(u_light, p / vec2(size)).r * lampOn(g) * switchedOn(g);
+    ivec2 candleCell = clamp(ivec2(floor(p)), ivec2(0), size - 1);
+    float clock = (g & 7) == ${LampState.candle} ? effectTime(candleCell, 1) : u_lifeTime;
+    float s = texture(u_light, p / vec2(size)).r * lampOn(g, clock) * switchedOn(g);
     best = max(best, s * (1.0 - float(k) / 12.0));
   }
   float ripple = u_shimmer ? 0.55 + 0.45 * sin(row * 2.1 + u_time * 2.3) : 0.8;
@@ -388,7 +403,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
   if (part == ${FixturePart.flagFoot}) color = daylit(vec3(0.43, 0.39, 0.33));
   if (part == ${FixturePart.casing}) color = daylit(u_fixturePaints[1]);
   if (part == ${FixturePart.lamp}) {
-    float lit = lampOn(info) * switchedOn(info);
+    float lit = lampOn(info, u_lifeTime) * switchedOn(info);
     color = mix(color, u_fixturePaints[2], lit);
   }
   if (part >= ${FixturePart.red} && part <= ${FixturePart.green}) {
@@ -413,23 +428,41 @@ bool focusedClass(int cls) {
 float focusPulse() { return u_shimmer ? 0.75 + 0.25 * sin(u_time * 3.0) : 1.0; }
 
 // Shared by agent compositing and halo sampling, including canopy edge surfaces.
-bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
+bool lifeAllowedAt(vec4 life, int cls, int sampled, float coarseHeight, float sampledHeight) {
   int bits = int(life.b * 255.0 + 0.5) & ${LIFE_AGENT_MASK};
   if (bits == 0) return false;
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   bool nonBird = lifeClass != u_bird;
   bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
-  int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
+  int surface = sampleSurface ? sampled : cls;
   if (nonBird && (surface == u_vehicleOccluders.x || surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z)) return false;
   bool grounds = bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0 &&
-    (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r == 0.0;
+    (sampleSurface ? sampledHeight : coarseHeight) == 0.0;
   return (u_cellBits[surface] & bits) != 0 || grounds;
+}
+
+bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
+  int bits = int(life.b * 255.0 + 0.5) & ${LIFE_AGENT_MASK};
+  if (bits == 0) return false;
+  bool sampleSurface = (int(life.g * 255.0 + 0.5) & 63) != u_bird && cls != u_vehicleOccluders.x;
+  int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
+  float height = 0.0;
+  if (bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0)
+    height = (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r;
+  return lifeAllowedAt(life, cls, surface, height, height);
 }
 
 vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   if (!u_focus) return vec3(0.0);
   float halo = 0.0;
   ivec2 size = textureSize(u_glyphs, 0);
+  int receivingSurface = 0;
+  float receivingHeight = 0.0, receivingSubHeight = 0.0;
+  if (u_focusLife) {
+    receivingSurface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+    receivingHeight = texelFetch(u_attr, cell, 0).r;
+    receivingSubHeight = texelFetch(u_subAttr, subAt, 0).r;
+  }
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     if (x == 0 && y == 0) continue;
     ivec2 neighbor = cell + ivec2(x, y);
@@ -437,12 +470,15 @@ vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
     vec4 g = texelFetch(u_glyphs, neighbor, 0);
     int k = int(g.g * 255.0 + 0.5) & 63;
     bool match = focusedClass(k);
-    vec4 life = texelFetch(u_life, neighbor, 0);
-    if ((int(life.b * 255.0 + 0.5) & ${LIFE_FOCUS_BIT}) != 0) {
-      vec2 local = clamp(grid - vec2(neighbor) * u_cell, vec2(0.0), u_cell - 0.001);
-      ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
-      ivec2 sampleAt = neighbor * sub + clamp(ivec2(local / u_cell * vec2(sub)), ivec2(0), sub - 1);
-      match = match || (lifeAllowed(life, k, neighbor, sampleAt) && lifeAllowed(life, cls, cell, subAt));
+    if (u_focusLife) {
+      vec4 life = texelFetch(u_life, neighbor, 0);
+      if ((int(life.b * 255.0 + 0.5) & ${LIFE_FOCUS_BIT}) != 0) {
+        vec2 local = clamp(grid - vec2(neighbor) * u_cell, vec2(0.0), u_cell - 0.001);
+        ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
+        ivec2 sampleAt = neighbor * sub + clamp(ivec2(local / u_cell * vec2(sub)), ivec2(0), sub - 1);
+        match = match || (lifeAllowed(life, k, neighbor, sampleAt) &&
+          lifeAllowedAt(life, cls, receivingSurface, receivingHeight, receivingSubHeight));
+      }
     }
     if (!match) continue;
     vec2 delta = max(max(vec2(neighbor) * u_cell - grid, grid - vec2(neighbor + 1) * u_cell), vec2(0.0));
@@ -498,7 +534,8 @@ void main() {
   vec4 light = texelFetch(u_light, cell, 0);
   float lampsNow = lamps() * u_lampShow;
   int lampG = int(light.g * 255.0 + 0.5);
-  float lampLight = lampsNow > 0.0 ? lampOn(lampG) * switchedOn(lampG) * u_lampShow : 0.0;
+  float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
+  float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock) * switchedOn(lampG) * u_lampShow : 0.0;
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
   bool flood = (lampG & 7) == ${LampState.flood};
   // Floodlights and candles light wherever they are; streetlights light the ground.
@@ -565,7 +602,7 @@ void main() {
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
       // A candle, from dusk: warm, each flickering on its own beat.
       float beat = float(cellHash(u_origin + cell) & 7u) + 3.0;
-      float flicker = u_shimmer ? 0.85 + 0.15 * sin(u_time * beat) : 1.0;
+      float flicker = u_shimmer ? 0.85 + 0.15 * sin(effectTime(cell, 0) * beat) : 1.0;
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
     color = lampLit(color, pool);
@@ -652,3 +689,7 @@ void main() {
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;
+}
+
+/** Full-feature source for external consumers and shader fixtures. */
+export const glyphFragment = glyphFragmentFor();

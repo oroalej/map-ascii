@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
-import { cellPass, crownPass, labelsInView, overlayPass } from './passes';
+import { cellPass, crownPass, labelsInView, lifePass, lifeRaster, overlayPass } from './passes';
 import type * as Passes from './passes';
 import type * as Pacing from './pacing';
 import type * as Gpu from './gpu';
@@ -11,6 +11,9 @@ import type { LoadedTile } from './tile-cache';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { LifeBuilder } from './life/geometry';
+import { LifeWorld } from './life/simulate';
+import { LifeHoverController } from './life/hover';
+import { SpeechController } from './life/speech';
 
 const state = vi.hoisted(() => ({
   input: undefined as InputIntents | undefined,
@@ -22,6 +25,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
+  prewarmGlyphPrograms: vi.fn(),
   deletePrograms: vi.fn(),
   createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 2 } }),
   createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 2 } }),
@@ -50,7 +54,7 @@ vi.mock('./passes', async (load) => {
     overlayPass: vi.fn(actual.overlayPass),
     labelsInView: vi.fn(actual.labelsInView),
     lifePass: vi.fn(() => 0),
-    lifeRaster: () => null,
+    lifeRaster: vi.fn(() => null),
     lightPass: vi.fn(),
     fixturePass: () => ({ streetlights: false, trafficSignals: false, utilities: false }),
   };
@@ -132,6 +136,8 @@ describe('label focus in the renderer frame', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(lifePass).mockReset().mockReturnValue(0);
+    vi.mocked(lifeRaster).mockReturnValue(null);
     state.known = true;
     const labels: TileLabel[] = [1, 7, 9].map((id) => ({
       id,
@@ -228,6 +234,52 @@ describe('label focus in the renderer frame', () => {
     draw(13);
     expect(overlayPass).toHaveBeenCalledTimes(hiddenPasses);
     expect(focus()).toEqual([]);
+  });
+  it('invalidates hover and speech visibility when focus redraws only labels', () => {
+    const hoverFrames = vi
+      .spyOn(LifeHoverController.prototype, 'update')
+      .mockImplementation(() => {});
+    const speechFrames = vi
+      .spyOn(SpeechController.prototype, 'update')
+      .mockImplementation(() => {});
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+    ]);
+    vi.mocked(lifePass).mockImplementation((...args) => {
+      const targets = args[1],
+        speakers = args[12],
+        count = targets.cols * targets.rows;
+      vi.mocked(lifeRaster).mockReturnValue({
+        life: new Uint8Array(count * 4),
+        owners: new Uint32Array(count),
+        revision: 1,
+        light: new Uint8Array(count * 4),
+        lamps: null,
+      });
+      if (speakers) speakers.members = new Uint8Array(count);
+      return args[6].length;
+    });
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    state.input!.hover([20, 20]);
+    draw(1000);
+    const previousHover = hoverFrames.mock.calls.at(-1)?.[0],
+      previousSpeech = speechFrames.mock.calls.at(-1)?.[0];
+    expect(previousHover).toBeTruthy();
+    expect(previousSpeech).toBeTruthy();
+    vi.mocked(cellPass).mockClear();
+    atlas.setSelected('feature/7');
+    draw(1001);
+    expect(focus()).toEqual([7]);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(hoverFrames.mock.calls.at(-1)?.[0]?.geometry).not.toBe(previousHover?.geometry);
+    expect(speechFrames.mock.calls.at(-1)?.[0]?.geometry).not.toBe(previousSpeech?.geometry);
   });
   it('relabels after mouse leave and coalesces focus with a cell redraw', () => {
     draw(10);

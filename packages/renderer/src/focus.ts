@@ -1,19 +1,11 @@
 import { classId, type RenderClass } from './classes';
 import type { VisibleAgent } from './life/simulate';
 
-export type LifeFocus = 'traffic' | 'people' | 'vendors' | 'pets' | 'boats' | 'trains' | 'birds';
+export type LifeFocus = (typeof groups)[number];
 export type LegendFocus = { classes: readonly RenderClass[]; life: readonly LifeFocus[] };
 export const LIFE_FOCUS_BIT = 32;
 export const FOCUS_DIM = 0.5;
-const groups: readonly LifeFocus[] = [
-  'traffic',
-  'people',
-  'vendors',
-  'pets',
-  'boats',
-  'trains',
-  'birds',
-];
+const groups = ['traffic', 'people', 'vendors', 'pets', 'boats', 'trains', 'birds'] as const;
 
 export function lifeFocusOf(agent: VisibleAgent): LifeFocus {
   if (agent.line || agent.kind === 'boat') return 'boats';
