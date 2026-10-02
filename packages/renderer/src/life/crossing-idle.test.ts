@@ -64,10 +64,11 @@ const clear = (life: TileLife) => {
 const forceIdle = (life: TileLife) => {
   const streams = life as unknown as {
     rng: () => number;
+    walkerRng: () => number;
     dogRng: () => number;
     catRng: () => number;
   };
-  streams.rng = streams.dogRng = streams.catRng = () => 0;
+  streams.rng = streams.walkerRng = streams.dogRng = streams.catRng = () => 0;
 };
 const setup = () => {
   const world = new LifeWorld();
@@ -122,9 +123,13 @@ describe('crossing idle eligibility', () => {
   it('suppresses random reversals independently of pause rolls', () => {
     for (const kind of ['person', 'dog'] as const) {
       const { world, life } = setup();
-      const streams = life as unknown as { rng: () => number; dogRng: () => number };
+      const streams = life as unknown as {
+        rng: () => number;
+        walkerRng: () => number;
+        dogRng: () => number;
+      };
       let calls = 0;
-      streams.rng = streams.dogRng = () => (++calls % 3 === 0 ? 0 : 1);
+      streams.rng = streams.walkerRng = streams.dogRng = () => (++calls % 3 === 0 ? 0 : 1);
       const m = mover(kind);
       life.movers.push(m);
       for (let i = 0; i < 8; i++) world.step(0.1, undefined, 18);

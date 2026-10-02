@@ -9,6 +9,8 @@ export default defineConfig({
   fullyParallel: true,
   // WebGL runs in software in headless Chromium; phone-sized DPRs make that slow.
   timeout: 60_000,
+  // End a stuck shard with a useful report before CI's six-minute job deadline.
+  globalTimeout: process.env.CI ? 240_000 : 0,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   // Each worker is a browser rendering WebGL in software; more than a couple pins the CPU locally.

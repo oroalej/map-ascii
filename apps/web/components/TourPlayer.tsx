@@ -59,7 +59,7 @@ export function TourPlayer() {
   const ended = run.phase === 'ended';
 
   return (
-    <section className={styles.card} aria-label="Tour" data-panel={panelOpen}>
+    <section className={styles.card} aria-label="Tour" data-panel={panelOpen} data-speech-obstacle>
       {run.grabbed && !ended && (
         <button type="button" className={styles.chip} onClick={tourControls.resume}>
           ▶ Resume tour

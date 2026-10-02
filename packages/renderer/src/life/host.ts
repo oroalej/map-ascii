@@ -1,5 +1,6 @@
 import * as Comlink from 'comlink';
 import type { ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
@@ -95,13 +96,13 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix },
+  options: { traffic?: TrafficMix; moments?: MomentOptions },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler);
+    const world = new LifeWorld(options.traffic, profiler, options.moments);
     world.setProcessions(processions);
     return createInlineHost(world, profiler);
   };
@@ -144,9 +145,17 @@ export function createWorkerHost(
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
   // Comlink posts messages in order; init and all synchronous sync/command calls precede frames.
-  void remote.init({ traffic: options.traffic, processions, profiling: !!profiler }).then(() => {
-    if (!disposed && !fallback) ready = true;
-  }, fail);
+  void remote
+    .init({
+      traffic: options.traffic,
+      processions,
+      profiling: !!profiler,
+      dialogue: options.moments?.dialogue,
+      periods: options.moments?.periods,
+    })
+    .then(() => {
+      if (!disposed && !fallback) ready = true;
+    }, fail);
   return {
     sync(next, nextFocus, nextView) {
       if (disposed) return;

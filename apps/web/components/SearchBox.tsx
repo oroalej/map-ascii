@@ -88,7 +88,7 @@ export function SearchBox({ city, subdivisionLabel }: { city: string; subdivisio
   const optionId = (i: number) => `${listId}-option-${i}`;
 
   return (
-    <div className={styles.search}>
+    <div className={styles.search} data-speech-obstacle>
       <input
         ref={inputRef}
         className={styles.input}
