@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { SiteDetail, Landcover, LandmarkPlan } from '@atlas/shared';
 import { intersection, difference } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
@@ -6,12 +5,14 @@ import type { AtlasFeature } from '../03-normalize';
 import { landcoverFeatures } from './landcover';
 import { planParts } from './plan';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import detailJson from '../../../content/cities/naga/details/plaza-rizal.json';
+import coverJson from '../../../content/cities/naga/landcover/plaza-rizal.json';
+import planJson from '../../../content/cities/naga/plans/rizal-monument.json';
 
-const content = new URL('../../../content/cities/naga/', import.meta.url);
-const read = (path: string): unknown => JSON.parse(readFileSync(new URL(path, content), 'utf8'));
-const detail = SiteDetail.parse(read('details/plaza-rizal.json'));
-const cover = Landcover.parse(read('landcover/plaza-rizal.json'));
-const plan = LandmarkPlan.parse(read('plans/rizal-monument.json'));
+// Imported rather than read from disk so targeted runs select this test when the content changes.
+const detail = SiteDetail.parse(detailJson);
+const cover = Landcover.parse(coverJson);
+const plan = LandmarkPlan.parse(planJson);
 // OSM's plaza boundary and two existing point identities, independent of cached downloads.
 const parent: AtlasFeature = {
   type: 'Feature',
@@ -48,6 +49,7 @@ const pole: AtlasFeature = {
 
 describe('Plaza Rizal authored circulation', () => {
   // Full authored geometry needs headroom while the other test files run in parallel.
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('keeps every route connected and clear of stonework and raised planting at its full width', () => {
     const input = [parent, monument, pole];
     const merged = mergeSiteDetails(

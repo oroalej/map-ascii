@@ -48,6 +48,26 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
 
+  // Make slow tests faster or split them; never raise their time limit (AGENTS.md "Verifying
+  // changes"). The CI file budget (scripts/test-budget.ts) catches the rest.
+  {
+    files: ['**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.name=/^(it|test)$/][arguments.length=3]',
+          message: 'Do not raise a test time limit; split the test or make it cheaper.',
+        },
+        {
+          selector:
+            "CallExpression[callee.name=/^(it|test|describe)$/] > ObjectExpression > Property[key.name='timeout']",
+          message: 'Do not raise a test time limit; split the test or make it cheaper.',
+        },
+      ],
+    },
+  },
+
   // Next.js rules, scoped to the web app. Its parser/plugin entries for TypeScript are
   // dropped so the type-aware typescript-eslint setup above stays in charge.
   ...nextCoreWebVitals
