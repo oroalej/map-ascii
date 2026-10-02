@@ -77,12 +77,62 @@ it('packs filled overhead rides and keeps world patterns stable through clipping
     const cells = pack(style);
     expect(cells.size).toBeGreaterThan(100);
     expect(cells).toEqual(pack(style, 9));
-    expect([...cells.values()].some((c) => c.part === SeasonalPart.festiveLight)).toBe(true);
+    expect([...cells.values()].some((c) => c.part === SeasonalPart.carnivalLight)).toBe(true);
   }
   const wheel = [...pack('ferris-wheel').keys()].map((key) => key.split('/').map(Number));
   expect(Math.max(...wheel.map((p) => p[0]!)) - Math.min(...wheel.map((p) => p[0]!))).toBeLessThan(
     Math.max(...wheel.map((p) => p[1]!)) - Math.min(...wheel.map((p) => p[1]!)),
   );
+});
+it('lights the open midway throughout its length while retaining a legible walkable aisle', () => {
+  const collect = (shift: number) => {
+    const cells = new Map<string, { part: number; info: number }>();
+    packCarnival(
+      { ...ride, style: 'midway', size_m: [36, 104], angle_deg: -20 },
+      {
+        cols: 140,
+        rows: 140,
+        cellWidth: 5,
+        cellHeight: 9,
+        toCell: (lng, lat) => [
+          70 + shift + (lng - ride.at[0]) * 111319.49 * Math.cos((ride.at[1] * Math.PI) / 180) * 2,
+          70 - (lat - ride.at[1]) * 111319.49,
+        ],
+      },
+      (x, y, _glyph, part, info) => {
+        cells.set(`${x - shift}/${y}`, { part, info });
+        return true;
+      },
+    );
+    return cells;
+  };
+  const full = collect(0),
+    clipped = collect(60);
+  expect(clipped.size).toBeLessThan(full.size);
+  for (const [key, cell] of clipped) expect(cell).toEqual(full.get(key));
+  const litBands = new Set<number>(),
+    tints = new Set<number>();
+  let path = 0;
+  for (const [key, cell] of full) {
+    const [x, y] = key.split('/').map(Number),
+      e = (x! + 0.5 - 70) / 2,
+      n = 70 - y! - 0.5,
+      angle = (-20 * Math.PI) / 180,
+      u = e * Math.cos(angle) + n * Math.sin(angle),
+      v = -e * Math.sin(angle) + n * Math.cos(angle);
+    expect(Math.abs(u)).toBeLessThanOrEqual(18.01);
+    expect(Math.abs(v)).toBeLessThanOrEqual(52.01);
+    expect(cell.info & 7).toBeLessThanOrEqual(5);
+    if (cell.part === SeasonalPart.carnivalLight && Math.abs(u) < 16 && Math.abs(v) < 50) {
+      litBands.add(Math.floor((v + 52) / 10));
+      tints.add(cell.info & 7);
+    }
+    if (u > 2.5 && u < 5.5 && cell.part === SeasonalPart.carnivalGround && cell.info === 1) path++;
+  }
+  // This rejects perimeter-only lighting and canopy patterns that erase the walkway.
+  expect(litBands.size).toBeGreaterThanOrEqual(10);
+  expect(tints.size).toBeGreaterThanOrEqual(4);
+  expect(path).toBeGreaterThan(100);
 });
 it('orders the midway beneath rides, deduplicates records and only shows the matching season', () => {
   const midway = {

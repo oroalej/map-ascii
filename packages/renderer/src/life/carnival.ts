@@ -2,6 +2,16 @@ import { carnivalRing, offsetUtility, type SeasonalCarnivalRecord } from '@atlas
 import type { FixtureGrid } from './fixtures';
 import { SeasonalGlyph, SeasonalPart } from './seasonal-glyphs';
 
+const BOOTH_TINTS = [1, 2, 3, 4] as const;
+const CANOPY_TINTS = [0, 1, 2, 0, 3, 5] as const;
+const GONDOLA_TINTS = [1, 0, 2, 3] as const;
+const BUMPER_CARS = [
+  [-4, -6, 1],
+  [3, -4, 2],
+  [-2, 3, 3],
+  [4, 6, 0],
+] as const;
+
 type Write = (
   x: number,
   y: number,
@@ -56,63 +66,66 @@ export function packCarnival(r: SeasonalCarnivalRecord, grid: FixtureGrid, write
           glyph = '▒';
           tint = 1;
         }
-        if (
-          edge < 0.6 &&
-          (Math.floor((v + h) / 2) % 3 === 0 || Math.floor((u + w) / 2) % 3 === 0)
-        ) {
+        // Sagging overhead festoons fill the open midway without adding obstacles.
+        // Metric coordinates keep every strand and bulb fixed during camera repacks.
+        const sag = 1.3 * (1 - (u / w) ** 2);
+        const row = Math.round((v + h - 2 - sag) / 4.5);
+        if (Math.abs(v + h - 2 - sag - row * 4.5) < 0.55) {
+          const bulb = Math.round((u + w) / 1.6);
+          if (Math.abs(u + w - bulb * 1.6) < 0.55) {
+            glyph = bulb % 7 === 3 ? SeasonalGlyph.parol : SeasonalGlyph.bulb;
+            part = SeasonalPart.carnivalLight;
+            tint = CANOPY_TINTS[(((bulb + row) % 6) + 6) % 6]!;
+          }
+        }
+        if (edge < 0.75) {
           glyph = SeasonalGlyph.bulb;
-          part = SeasonalPart.festiveLight;
-          tint = 0;
+          part = SeasonalPart.carnivalLight;
+          tint = Math.floor((u + v + w + h) / 2) % 4 === 0 ? 1 : 0;
         }
         if (v < -h + 1 && Math.abs(u - aisle) < Math.min(4.5, w / 3)) {
           glyph = SeasonalGlyph.parol;
-          part = SeasonalPart.festiveLight;
-          tint = 5;
+          part = SeasonalPart.carnivalLight;
+          tint = 0;
         }
       } else if (r.style === 'carousel') {
         const radius = Math.hypot(u, v);
         if (radius > w) continue;
-        tint = Math.floor(((Math.atan2(v, u) + Math.PI) * 6) / Math.PI) % 2 ? 1 : 5;
-        if (radius > w - 0.7) {
+        const spoke = Math.floor(((Math.atan2(v, u) + Math.PI) * 6) / Math.PI);
+        tint = spoke % 2 ? 1 : 0;
+        // An inner rosette and two illuminated rings give the roof more than flat wedges.
+        if (radius < w * 0.3) tint = spoke % 2 ? 2 : 5;
+        if (radius > w - 0.8 || Math.abs(radius - w * 0.55) < 0.3) {
           glyph = SeasonalGlyph.bulb;
-          part = SeasonalPart.festiveLight;
-          tint = 0;
+          part = SeasonalPart.carnivalLight;
+          tint = radius > w - 0.8 ? 0 : 5;
         }
         if (radius < 0.8) {
           glyph = SeasonalGlyph.parol;
-          part = SeasonalPart.festiveLight;
+          part = SeasonalPart.carnivalLight;
           tint = 5;
         }
       } else if (r.style === 'booth') {
-        tint = Math.floor((u + w) / 0.85) % 2 ? [1, 2, 3, 4][r.seed % 4]! : 5;
-        if (v < -h + 0.65) {
+        tint = Math.floor((u + w) / 1.1) % 2 ? BOOTH_TINTS[r.seed % 4]! : 0;
+        if (edge < 0.5 || v < -h + 0.8) {
           glyph = SeasonalGlyph.bulb;
-          part = SeasonalPart.festiveLight;
-          tint = 0;
-        } else if (edge < 0.35) {
-          glyph = '▒';
-          part = SeasonalPart.carnivalFrame;
-          tint = 0;
+          part = SeasonalPart.carnivalLight;
+          tint = v < -h + 0.8 ? 5 : BOOTH_TINTS[r.seed % 4]!;
         }
       } else if (r.style === 'bumper-cars') {
-        glyph = '╬';
+        glyph = '░';
         part = SeasonalPart.carnivalGround;
-        tint = 2;
-        if (edge < 0.6) {
+        tint = (Math.floor((u + w) / 2) + Math.floor((v + h) / 2)) % 2 ? 2 : 3;
+        if (edge < 0.8) {
           glyph = SeasonalGlyph.bulb;
-          part = SeasonalPart.festiveLight;
-          tint = 4;
+          part = SeasonalPart.carnivalLight;
+          tint = Math.floor((u + v + w + h) / 2) % 2 ? 3 : 2;
         } else
-          for (const [i, [cx, cy]] of [
-            [-4, -6],
-            [3, -4],
-            [-2, 3],
-            [4, 6],
-          ].entries()) {
-            if (Math.abs(u - cx!) < 0.85 && Math.abs(v - cy!) < 1.4) {
+          for (const [cx, cy, color] of BUMPER_CARS) {
+            if (Math.abs(u - cx) < 1.1 && Math.abs(v - cy) < 1.65) {
               glyph = '█';
               part = SeasonalPart.carnivalRoof;
-              tint = [1, 2, 3, 5][i]!;
+              tint = color;
               break;
             }
           }
@@ -130,19 +143,20 @@ export function packCarnival(r: SeasonalCarnivalRecord, grid: FixtureGrid, write
           part = SeasonalPart.carnivalFrame;
           tint = 0;
         }
-        if (Math.abs(u) < 0.65) {
+        if (Math.abs(u) < 0.8 || edge < 0.5) {
           glyph = SeasonalGlyph.bulb;
-          part = SeasonalPart.festiveLight;
-          tint = 5;
+          part = SeasonalPart.carnivalLight;
+          tint = Math.floor((v + h) / 2) % 2 ? 5 : 2;
         }
-        if (Math.abs(v) > h - 1.7 && Math.abs(u) < 1.35) {
+        // Gondolas are spaced along the narrow overhead rim, never a face-on wheel.
+        if (Math.abs(v - Math.round(v / 3.2) * 3.2) < 0.65 && Math.abs(u) < 1.5) {
           glyph = '█';
           part = SeasonalPart.carnivalRoof;
-          tint = 3;
+          tint = GONDOLA_TINTS[(Math.round(v / 3.2) + 8) % 4]!;
         }
       }
       const info =
-        part === SeasonalPart.festiveLight
+        part === SeasonalPart.carnivalLight
           ? (((r.seed + Math.floor(v + h)) & 31) << 3) | tint
           : tint;
       visible = write(x, y, glyph, part, info, true) || visible;

@@ -381,7 +381,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     // Crown-mounted bulbs sit on the foliage; ordinary hardware stays beneath it.
     int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
     bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
-    if (part != ${FixturePart.festiveLight} || !foliage) return under + halo;
+    if ((part != ${FixturePart.festiveLight} && part != ${FixturePart.carnivalLight}) || !foliage) return under + halo;
   }
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
@@ -430,19 +430,32 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   }
   if (part == ${FixturePart.carnivalRoof}) {
     int tint = info & 7;
-    vec3 paint = tint == 1 ? vec3(0.85, 0.12, 0.18) : tint == 2 ? vec3(0.10, 0.65, 0.42) :
-      tint == 3 ? vec3(0.95, 0.26, 0.55) : tint == 4 ? vec3(0.45, 0.25, 0.85) : vec3(0.98, 0.87, 0.58);
-    color = lampLit(daylit(paint), rainLight);
+    vec3 paint = tint == 1 ? vec3(1.0, 0.06, 0.16) : tint == 2 ? vec3(0.02, 0.82, 0.58) :
+      tint == 3 ? vec3(1.0, 0.12, 0.50) : tint == 4 ? vec3(0.12, 0.38, 1.0) :
+      tint == 5 ? vec3(0.99, 0.95, 0.76) : vec3(1.0, 0.67, 0.08);
+    // Local ride illumination keeps saturated paint readable at night.
+    color = max(lampLit(daylit(paint), rainLight), paint * 0.84);
   }
-  if (part == ${FixturePart.carnivalGround}) color = lampLit(daylit(info == 1 ? vec3(0.37, 0.32, 0.27) : info == 2 ? vec3(0.19, 0.23, 0.29) : vec3(0.24, 0.22, 0.20)), rainLight);
-  if (part == ${FixturePart.carnivalFrame}) color = lampLit(daylit(vec3(0.61, 0.66, 0.70)), rainLight);
+  if (part == ${FixturePart.carnivalGround}) {
+    vec3 paint = info == 1 ? vec3(0.64, 0.44, 0.24) : info == 2 ? vec3(0.07, 0.38, 0.43) :
+      info == 3 ? vec3(0.26, 0.12, 0.42) : vec3(0.16, 0.23, 0.24);
+    color = max(lampLit(daylit(paint), rainLight), paint * 0.75);
+    // A faint continuous floor connects the ASCII texture and delineates the aisle.
+    under = mix(under, color * 0.34, fixture.a);
+  }
+  if (part == ${FixturePart.carnivalFrame}) color = max(lampLit(daylit(vec3(0.61, 0.76, 0.78)), rainLight), vec3(0.43, 0.54, 0.55));
   if (part == ${FixturePart.festiveWire} || part == ${FixturePart.buildingWire}) color = daylit(u_fixturePaints[7]);
-  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight}) {
+  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight} || part == ${FixturePart.carnivalLight}) {
     int tint = info & 7;
     vec3 paint = tint == 1 ? vec3(1.0, 0.22, 0.17) : tint == 2 ? vec3(0.26, 0.95, 0.42) :
       tint == 3 ? vec3(1.0, 0.28, 0.63) : tint == 4 ? vec3(0.70, 0.38, 1.0) :
       tint == 5 ? vec3(1.0, 0.97, 0.86) : vec3(1.0, 0.77, 0.32);
     color = mix(lampLit(daylit(paint * 0.78), rainLight), paint * festivePulse(info >> 3), darkness());
+    if (part == ${FixturePart.carnivalLight}) {
+      vec2 local = (vec2(inCell) + 0.5) / u_cell - 0.5;
+      float glow = (1.0 - smoothstep(0.0, 0.65, length(local))) * darkness();
+      under = max(under, vec3(0.04, 0.055, 0.06)) + paint * glow * 0.16;
+    }
   }
   return mix(under, color, ink * fixture.a) + halo;
 }
