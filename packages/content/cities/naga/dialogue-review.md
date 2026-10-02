@@ -10,4 +10,27 @@ The weather-warm ID is retained from the plan but describes daylight, because th
 
 The 100-ID editorial inventory and per-turn review sheet are retained with the implementation handoff under `.plans/active/human-moments-100/` during implementation, then `.plans/done/human-moments-100/` at completion.
 
-Following the project owner's feedback that "andam" was unfamiliar in their childhood usage, all six occurrences across five exchanges were replaced with context-specific wording. The companion exchange now says "Madya na?" / "Iyo, madya na!"; translations follow the revised meaning. Dictionary attestation alone does not establish locally familiar everyday usage.
+Following the project owner's feedback that "andam" was unfamiliar in their childhood usage, all six occurrences across five exchanges were replaced with context-specific wording. The companion question became "Madya na?" ("Shall we go?"); translations follow the revised meaning. Dictionary attestation alone does not establish locally familiar everyday usage.
+
+## Conversational edit
+
+A second editorial pass reviewed all 100 exchanges as paired speech and revised 63. The original wording often repeated a prompt without adding a useful reply, switched topics abruptly, or sounded more like a phrasebook than a brief encounter. This pass is an editorial improvement, not native-speaker certification.
+
+The review checks each exchange for:
+
+- A reply that answers, acknowledges or sensibly follows the first turn. Avoid adding an unanswered question to the final turn. A vendor checking a price may explicitly ask the customer to wait; the script does not invent a number to close the exchange.
+- Short spoken wording and useful variation. Greeting reciprocation, quantity confirmation and a simple thank-you remain appropriate; replacing every repetition would make those less natural.
+- English and Tagalog that preserve the same request, answer, tense and tone instead of mechanically copying the Bikol sentence structure.
+- Fit with the actual speaker and scene. The passer offers the ball; the receiver calls for it. A nearby stall does not establish a food menu. Weather remarks use the modeled light, wind or rain rather than claiming a measured temperature or ambient silence.
+- No invented local slang, prices, route details or kinship. Familiarity cannot be established by a dictionary entry alone. The owner's preference to avoid "andam" is retained.
+
+Examples of the revised conversational intent:
+
+| Exchange | Before | After |
+| --- | --- | --- |
+| Morning walk | "You're early today!" / "I'm just taking a walk." | "Out for a walk already?" / "Yes, before breakfast." |
+| Practice | "Let's practice again." / "Okay, let's practice." | "Let's practice again." / "Okay, you first." |
+| Waiting for someone | "I'll wait here." / "Thanks for waiting." | "I'll wait for you here." / "Okay, I'll be back." |
+| Familiar place | "Do you come here often?" / "Yes." | "Do you come here often?" / "Yes, I come here for walks." |
+
+The catalog still has 100 exchanges, 199 turns and the same category allocation. IDs, speaker slots, event conditions and timing remain unchanged. Some legacy IDs (for example, `food-smell` and `farewell-thanks`) now identify revised conversational situations; they are stable identifiers, not literal descriptions of the current lines. See the handoff's `content-review.md` for the complete three-language inventory and per-exchange edit status.

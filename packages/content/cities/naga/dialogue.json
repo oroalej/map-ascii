@@ -71,14 +71,14 @@
       "kind": "greet",
       "lines": [
         {
-          "bcl": "Aga mo ngunyan!",
-          "en": "You're early today!",
-          "fil": "Maaga ka ngayon!"
+          "bcl": "Naglalakaw ka na?",
+          "en": "Out for a walk already?",
+          "fil": "Naglalakad ka na?"
         },
         {
-          "bcl": "Naglalakaw sana ako.",
-          "en": "I'm just taking a walk.",
-          "fil": "Naglalakad lang ako."
+          "bcl": "Iyo, bago mag-almusal.",
+          "en": "Yes, before breakfast.",
+          "fil": "Oo, bago mag-almusal."
         }
       ],
       "sources": [
@@ -98,11 +98,11 @@
       "lines": [
         {
           "bcl": "Marhay na aldaw saimo!",
-          "en": "Have a good day!",
+          "en": "Good day!",
           "fil": "Magandang araw sa iyo!"
         },
         {
-          "bcl": "Sa imo man!",
+          "bcl": "Saimo man!",
           "en": "You too!",
           "fil": "Sa iyo rin!"
         }
@@ -150,13 +150,13 @@
       "lines": [
         {
           "bcl": "Marhay na hapon! Kumusta?",
-          "en": "Good afternoon! How are things?",
+          "en": "Good afternoon! How are you?",
           "fil": "Magandang hapon! Kumusta?"
         },
         {
-          "bcl": "Marhay man an gabos.",
-          "en": "Everything is fine.",
-          "fil": "Mabuti naman ang lahat."
+          "bcl": "Marhay man, salamat!",
+          "en": "I'm doing well, thanks!",
+          "fil": "Mabuti naman, salamat!"
         }
       ],
       "sources": [
@@ -175,14 +175,14 @@
       "kind": "greet",
       "lines": [
         {
-          "bcl": "Naglalakaw ka?",
-          "en": "Out for a walk?",
+          "bcl": "Naglalakaw-lakaw ka?",
+          "en": "Out for a stroll?",
           "fil": "Namamasyal ka ba?"
         },
         {
-          "bcl": "Iyo, kadikit sana.",
-          "en": "Yes, just a little.",
-          "fil": "Oo, sandali lang."
+          "bcl": "Iyo, bago magpuli.",
+          "en": "Yes, before heading home.",
+          "fil": "Oo, bago umuwi."
         }
       ],
       "sources": [
@@ -201,14 +201,14 @@
       "kind": "greet",
       "lines": [
         {
-          "bcl": "Marhay na nahiling taka ngunyan.",
-          "en": "It's nice seeing you today.",
-          "fil": "Mabuting nakita kita ngayon."
+          "bcl": "Ay, ika palan!",
+          "en": "Oh, it's you!",
+          "fil": "Ay, ikaw pala!"
         },
         {
-          "bcl": "Iyo, marhay man.",
-          "en": "Yes, it's nice.",
-          "fil": "Oo, mabuti nga."
+          "bcl": "Iyo! Marhay na hapon!",
+          "en": "Yes! Good afternoon!",
+          "fil": "Oo! Magandang hapon!"
         }
       ],
       "sources": [
@@ -258,9 +258,9 @@
           "fil": "Magandang gabi! Kumusta ang araw mo?"
         },
         {
-          "bcl": "Marhay man.",
-          "en": "It went well.",
-          "fil": "Mabuti naman."
+          "bcl": "Marhay man, pero napagal ako.",
+          "en": "Good, but I got tired.",
+          "fil": "Mabuti naman, pero napagod ako."
         }
       ],
       "sources": [
@@ -305,14 +305,14 @@
       "kind": "greet",
       "lines": [
         {
-          "bcl": "Magpahingalo ka na.",
-          "en": "Get some rest now.",
-          "fil": "Magpahinga ka na."
+          "bcl": "Mapuli ka na?",
+          "en": "Heading home now?",
+          "fil": "Uuwi ka na?"
         },
         {
-          "bcl": "Iyo, ika man.",
-          "en": "Yes, you too.",
-          "fil": "Oo, ikaw rin."
+          "bcl": "Iyo, magpapahingalo na ako.",
+          "en": "Yes, I'm going to get some rest.",
+          "fil": "Oo, magpapahinga na ako."
         }
       ],
       "sources": [
@@ -396,9 +396,9 @@
           "fil": "Ay, nandito ka pala!"
         },
         {
-          "bcl": "Iyo! Kumusta ka?",
-          "en": "Yes! How are you?",
-          "fil": "Oo! Kumusta ka?"
+          "bcl": "Iyo, naglalakaw-lakaw sana.",
+          "en": "Yes, just taking a stroll.",
+          "fil": "Oo, namamasyal lang."
         }
       ],
       "sources": [
@@ -416,14 +416,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Hoy, kumusta ka duman?",
-          "en": "Hello over there! How are you?",
-          "fil": "Kumusta ka diyan?"
+          "bcl": "Madya digdi!",
+          "en": "Come over here!",
+          "fil": "Halika rito!"
         },
         {
-          "bcl": "Marhay man! Madya digdi.",
-          "en": "I'm fine! Come over here.",
-          "fil": "Mabuti naman! Halika rito."
+          "bcl": "Sige, maduman na ako!",
+          "en": "Okay, I'm coming over!",
+          "fil": "Sige, papunta na ako!"
         }
       ],
       "sources": [
@@ -442,13 +442,13 @@
       "lines": [
         {
           "bcl": "Mag-ulay kita nin kadikit?",
-          "en": "Shall we talk for a bit?",
-          "fil": "Mag-usap tayo sandali?"
+          "en": "Got a moment to chat?",
+          "fil": "Kuwentuhan tayo sandali?"
         },
         {
-          "bcl": "Iyo, sige.",
-          "en": "Yes, sure.",
-          "fil": "Oo, sige."
+          "bcl": "Sige, dai man ako nagdadali.",
+          "en": "Sure, I'm not in a hurry.",
+          "fil": "Sige, hindi naman ako nagmamadali."
         }
       ],
       "sources": [
@@ -471,9 +471,9 @@
           "fil": "Masaya akong nakita kita."
         },
         {
-          "bcl": "Ako man, maugma.",
-          "en": "I'm glad too.",
-          "fil": "Ako rin, masaya."
+          "bcl": "Ako man! Haloy na kitang dai nag-ulay.",
+          "en": "Me too! It's been a while since we talked.",
+          "fil": "Ako rin! Ang tagal na nating hindi nag-usap."
         }
       ],
       "sources": [
@@ -516,14 +516,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mahiling kita giraray.",
-          "en": "See you again.",
-          "fil": "Magkikita tayo ulit."
+          "bcl": "Hasta sa sunod!",
+          "en": "See you next time!",
+          "fil": "Hanggang sa susunod!"
         },
         {
-          "bcl": "Hasta sa sunod!",
-          "en": "Until next time!",
-          "fil": "Hanggang sa susunod!"
+          "bcl": "Sige, mag-ingat ka!",
+          "en": "All right, take care!",
+          "fil": "Sige, mag-ingat ka!"
         }
       ],
       "sources": [
@@ -571,9 +571,9 @@
           "fil": "Mag-usap tayo ulit sa susunod."
         },
         {
-          "bcl": "Iyo, hasta sa sunod.",
-          "en": "Yes, until next time.",
-          "fil": "Oo, hanggang sa susunod."
+          "bcl": "Sige, basta may oras ka.",
+          "en": "Sure, whenever you've got time.",
+          "fil": "Sige, basta may oras ka."
         }
       ],
       "sources": [
@@ -591,14 +591,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Salamat sa pag-ulay.",
-          "en": "Thanks for the chat.",
-          "fil": "Salamat sa pag-uusap."
+          "bcl": "Sige, mauna na ako.",
+          "en": "All right, I'll get going.",
+          "fil": "Sige, mauuna na ako."
         },
         {
-          "bcl": "Maugma akong nahiling taka.",
-          "en": "I'm glad I saw you.",
-          "fil": "Masaya akong nakita kita."
+          "bcl": "Sige, mag-ulay kita giraray.",
+          "en": "All right, let's chat again sometime.",
+          "fil": "Sige, magkuwentuhan tayo ulit."
         }
       ],
       "sources": [
@@ -616,9 +616,9 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Paaram muna!",
-          "en": "Goodbye for now!",
-          "fil": "Paalam muna!"
+          "bcl": "Mauna na!",
+          "en": "I'm off!",
+          "fil": "Mauuna na!"
         },
         {
           "bcl": "Sige, mag-ingat!",
@@ -697,14 +697,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Iyan an tindahan nin kakanon?",
-          "en": "Is that the food stall?",
-          "fil": "Iyan ba ang puwesto ng pagkain?"
+          "bcl": "Hain an tindahan?",
+          "en": "Where is the stall?",
+          "fil": "Nasaan ang puwesto?"
         },
         {
-          "bcl": "Iyo, iyan an tindahan.",
-          "en": "Yes, that's the stall.",
-          "fil": "Oo, iyan ang puwesto."
+          "bcl": "Duman, sa harani.",
+          "en": "Over there, nearby.",
+          "fil": "Doon, sa malapit."
         }
       ],
       "sources": [
@@ -725,9 +725,9 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Hain mahulat nin sasakyan?",
-          "en": "Where can we wait for a ride?",
-          "fil": "Saan maghihintay ng masasakyan?"
+          "bcl": "Hain kita mahulat nin sasakyan?",
+          "en": "Where do we wait for a ride?",
+          "fil": "Saan tayo maghihintay ng masasakyan?"
         },
         {
           "bcl": "Duman sa hulatan.",
@@ -865,8 +865,8 @@
       "lines": [
         {
           "bcl": "Puwede akong mag-agi?",
-          "en": "May I pass?",
-          "fil": "Maaari ba akong dumaan?"
+          "en": "Can I get through?",
+          "fil": "Puwede akong dumaan?"
         },
         {
           "bcl": "Iyo, dagos sana.",
@@ -889,14 +889,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mahulat ako digdi.",
-          "en": "I'll wait here.",
-          "fil": "Maghihintay ako rito."
+          "bcl": "Hulaton taka digdi.",
+          "en": "I'll wait for you here.",
+          "fil": "Hihintayin kita rito."
         },
         {
-          "bcl": "Salamat sa paghulat.",
-          "en": "Thanks for waiting.",
-          "fil": "Salamat sa paghihintay."
+          "bcl": "Sige, mabalik ako.",
+          "en": "Okay, I'll be back.",
+          "fil": "Sige, babalik ako."
         }
       ],
       "sources": [
@@ -964,14 +964,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Maliwanag digdi.",
-          "en": "It's bright here.",
-          "fil": "Maliwanag dito."
+          "bcl": "Maliwanag pa.",
+          "en": "It's still light out.",
+          "fil": "Maliwanag pa."
         },
         {
-          "bcl": "Iyo, maliwanag an aldaw.",
-          "en": "Yes, the day is bright.",
-          "fil": "Oo, maliwanag ang araw."
+          "bcl": "Maglakaw-lakaw pa kita.",
+          "en": "Let's walk a little more.",
+          "fil": "Mamasyal pa tayo."
         }
       ],
       "sources": [
@@ -992,14 +992,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Marhay an duros ngunyan.",
-          "en": "The breeze feels nice.",
-          "fil": "Masarap ang simoy ngayon."
+          "bcl": "Presko an duros ngunyan.",
+          "en": "The breeze feels cool today.",
+          "fil": "Presko ang simoy ngayon."
         },
         {
-          "bcl": "Iyo, presko.",
-          "en": "Yes, it's refreshing.",
-          "fil": "Oo, presko."
+          "bcl": "Iyo, marhay maglakaw-lakaw.",
+          "en": "Yes, nice for a stroll.",
+          "fil": "Oo, masarap mamasyal."
         }
       ],
       "sources": [
@@ -1048,14 +1048,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Kalmado digdi.",
-          "en": "It's calm here.",
-          "fil": "Kalmado rito."
+          "bcl": "Dai makusog an duros digdi.",
+          "en": "It isn't windy here.",
+          "fil": "Hindi malakas ang hangin dito."
         },
         {
-          "bcl": "Marhay magpahingalo.",
-          "en": "It's nice to rest.",
-          "fil": "Masarap magpahinga."
+          "bcl": "Digdi muna ako magpapahingalo.",
+          "en": "I'll rest here for a bit.",
+          "fil": "Dito muna ako magpapahinga."
         }
       ],
       "sources": [
@@ -1076,14 +1076,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Hulaton ta muna an uran.",
-          "en": "Let's wait out the rain.",
-          "fil": "Hintayin muna natin ang ulan."
+          "bcl": "Digdi muna kita?",
+          "en": "Shall we stay here for now?",
+          "fil": "Dito muna tayo?"
         },
         {
-          "bcl": "Iyo, digdi muna kita.",
-          "en": "Yes, let's stay here.",
-          "fil": "Oo, dito muna tayo."
+          "bcl": "Sige, dai muna kita magluwas.",
+          "en": "Okay, let's not go out yet.",
+          "fil": "Sige, huwag muna tayong lumabas."
         }
       ],
       "sources": [
@@ -1104,14 +1104,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Dangoga an uran.",
-          "en": "Listen to the rain.",
-          "fil": "Pakinggan ang ulan."
-        },
-        {
           "bcl": "Makusog an uran!",
           "en": "It's raining hard!",
-          "fil": "Malakas ang ulan!"
+          "fil": "Ang lakas ng ulan!"
+        },
+        {
+          "bcl": "Dai muna kita magluwas.",
+          "en": "Let's not go out yet.",
+          "fil": "Huwag muna tayong lumabas."
         }
       ],
       "sources": [
@@ -1160,14 +1160,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Matuninong an banggi.",
-          "en": "The evening is quiet.",
-          "fil": "Tahimik ang gabi."
+          "bcl": "Magayon maglakaw ngunyang banggi.",
+          "en": "It's nice walking tonight.",
+          "fil": "Masarap maglakad ngayong gabi."
         },
         {
-          "bcl": "Magpahingalo kita nin kadikit.",
-          "en": "Let's rest for a bit.",
-          "fil": "Magpahinga tayo sandali."
+          "bcl": "Sige, kadikit pa bago kita magpuli.",
+          "en": "All right, a little longer before we head home.",
+          "fil": "Sige, sandali pa bago tayo umuwi."
         }
       ],
       "sources": [
@@ -1189,13 +1189,13 @@
       "lines": [
         {
           "bcl": "Nagugutom ka na?",
-          "en": "Are you hungry already?",
+          "en": "Getting hungry?",
           "fil": "Gutom ka na ba?"
         },
         {
-          "bcl": "Kadikit pa sana.",
-          "en": "Just a little.",
-          "fil": "Kaunti pa lang."
+          "bcl": "Iyo, makakan na kita.",
+          "en": "Yes, let's eat.",
+          "fil": "Oo, kumain na tayo."
         }
       ],
       "sources": [
@@ -1214,13 +1214,13 @@
       "lines": [
         {
           "bcl": "Magmerienda kita?",
-          "en": "Shall we have a snack?",
+          "en": "Want to get a snack?",
           "fil": "Magmeryenda tayo?"
         },
         {
-          "bcl": "Iyo, marhay iyan.",
-          "en": "Yes, that's a good idea.",
-          "fil": "Oo, magandang ideya iyan."
+          "bcl": "Sige, nagugutom na man ako.",
+          "en": "Sure, I'm getting hungry too.",
+          "fil": "Sige, nagugutom na rin ako."
         }
       ],
       "sources": [
@@ -1243,9 +1243,9 @@
           "fil": "Kumain ka na ba?"
         },
         {
-          "bcl": "Iyo, salamat.",
-          "en": "Yes, thank you.",
-          "fil": "Oo, salamat."
+          "bcl": "Dai pa. Makakan ako pag-uli.",
+          "en": "Not yet. I'll eat when I get home.",
+          "fil": "Hindi pa. Kakain ako pag-uwi."
         }
       ],
       "sources": [
@@ -1265,12 +1265,12 @@
         {
           "bcl": "Makakan kita sa urhi?",
           "en": "Shall we eat later?",
-          "fil": "Kakain tayo mamaya?"
+          "fil": "Kain tayo mamaya?"
         },
         {
-          "bcl": "Tapuson ta muna an paglakaw.",
-          "en": "Let's finish our walk first.",
-          "fil": "Tapusin muna natin ang paglalakad."
+          "bcl": "Sige, tapuson ta muna an paglakaw.",
+          "en": "Sure, let's finish our walk first.",
+          "fil": "Sige, tapusin muna natin ang paglalakad."
         }
       ],
       "sources": [
@@ -1288,14 +1288,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mahamot an kakanon!",
-          "en": "The food smells good!",
-          "fil": "Mabango ang pagkain!"
+          "bcl": "Igwa daw nin kakanon duman?",
+          "en": "I wonder if they have food over there.",
+          "fil": "May pagkain kaya roon?"
         },
         {
-          "bcl": "Gikan duman sa tindahan.",
-          "en": "It's from that stall.",
-          "fil": "Galing doon sa puwesto."
+          "bcl": "Dai ko aram. Hilingon ta.",
+          "en": "I don't know. Let's take a look.",
+          "fil": "Hindi ko alam. Tingnan natin."
         }
       ],
       "sources": [
@@ -1321,9 +1321,9 @@
           "fil": "Ano ang gusto mo?"
         },
         {
-          "bcl": "Mahiling muna kita.",
-          "en": "Let's look first.",
-          "fil": "Tumingin muna tayo."
+          "bcl": "Dai pa ako sigurado. Mahiling muna ako.",
+          "en": "I'm not sure yet. I'll look first.",
+          "fil": "Hindi pa ako sigurado. Titingin muna ako."
         }
       ],
       "sources": [
@@ -1344,14 +1344,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Gusto mong mag-inom?",
-          "en": "Would you like a drink?",
-          "fil": "Gusto mong uminom?"
+          "bcl": "Gusto mo nin tubig?",
+          "en": "Want some water?",
+          "fil": "Gusto mo ng tubig?"
         },
         {
-          "bcl": "Iyo, tubig sana.",
-          "en": "Yes, just water.",
-          "fil": "Oo, tubig lang."
+          "bcl": "Iyo, salamat.",
+          "en": "Yes, thanks.",
+          "fil": "Oo, salamat."
         }
       ],
       "sources": [
@@ -1369,14 +1369,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Magmerienda kita digdi sa sunod?",
-          "en": "Shall we have a snack here next time?",
-          "fil": "Magmeryenda tayo rito sa susunod?"
+          "bcl": "Magmerienda kita sa sunod?",
+          "en": "Want to get a snack together next time?",
+          "fil": "Magmeryenda tayo sa susunod?"
         },
         {
-          "bcl": "Sige, digdi kita.",
-          "en": "All right, let us meet here.",
-          "fil": "Sige, dito tayo."
+          "bcl": "Sige, sabihon mo sana kun nuarin.",
+          "en": "Sure, just tell me when.",
+          "fil": "Sige, sabihin mo lang kung kailan."
         }
       ],
       "sources": [
@@ -1397,14 +1397,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mag-adal kita nin magkaiba?",
+          "bcl": "Mag-adal kita?",
           "en": "Shall we study together?",
-          "fil": "Mag-aral tayo nang magkasama?"
+          "fil": "Mag-aral tayo?"
         },
         {
-          "bcl": "Iyo, mag-adal kita.",
-          "en": "Yes, let's study.",
-          "fil": "Oo, mag-aral tayo."
+          "bcl": "Sige, dara ko an libro ko.",
+          "en": "Sure, I brought my book.",
+          "fil": "Sige, dala ko ang libro ko."
         }
       ],
       "sources": [
@@ -1423,13 +1423,13 @@
       "lines": [
         {
           "bcl": "Nasabutan mo?",
-          "en": "Did you understand?",
-          "fil": "Naunawaan mo ba?"
+          "en": "Did you get that?",
+          "fil": "Naintindihan mo ba?"
         },
         {
-          "bcl": "Pakiulit daw.",
-          "en": "Please say it again.",
-          "fil": "Pakiulit nga."
+          "bcl": "Dai pa. Pakiulit daw.",
+          "en": "Not yet. Say it again, please.",
+          "fil": "Hindi pa. Pakiulit nga."
         }
       ],
       "sources": [
@@ -1477,9 +1477,9 @@
           "fil": "Ano ang binabasa mo?"
         },
         {
-          "bcl": "Sarong istorya.",
-          "en": "A story.",
-          "fil": "Isang kuwento."
+          "bcl": "Istorya. Magayon!",
+          "en": "A story. It's good!",
+          "fil": "Kuwento. Ang ganda!"
         }
       ],
       "sources": [
@@ -1502,9 +1502,9 @@
           "fil": "Magpraktis tayo ulit."
         },
         {
-          "bcl": "Sige, magpraktis kita.",
-          "en": "Okay, let's practice.",
-          "fil": "Sige, magpraktis tayo."
+          "bcl": "Sige, ika muna.",
+          "en": "Okay, you first.",
+          "fil": "Sige, ikaw muna."
         }
       ],
       "sources": [
@@ -1524,12 +1524,12 @@
         {
           "bcl": "Magpahingalo kita muna?",
           "en": "Shall we take a break?",
-          "fil": "Magpahinga muna tayo?"
+          "fil": "Pahinga muna tayo?"
         },
         {
-          "bcl": "Kadikit na sana.",
-          "en": "Just a little longer.",
-          "fil": "Sandali na lang."
+          "bcl": "Sige, napagal na man ako.",
+          "en": "Sure, I'm tired too.",
+          "fil": "Sige, pagod na rin ako."
         }
       ],
       "sources": [
@@ -1547,14 +1547,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Sibot-sibot ka ngunyan?",
-          "en": "Are you busy today?",
-          "fil": "Abala ka ngayon?"
+          "bcl": "Dakul kang gigibohon ngunyan?",
+          "en": "Got a lot to do today?",
+          "fil": "Marami kang gagawin ngayon?"
         },
         {
-          "bcl": "Iyo, kadikit.",
-          "en": "Yes, a little.",
-          "fil": "Oo, kaunti."
+          "bcl": "Iyo, dai pa ako tapos.",
+          "en": "Yes, I'm not done yet.",
+          "fil": "Oo, hindi pa ako tapos."
         }
       ],
       "sources": [
@@ -1580,9 +1580,9 @@
           "fil": "Nagpapahinga ka ba?"
         },
         {
-          "bcl": "Iyo, kadikit sana na oras.",
-          "en": "Yes, just for a little while.",
-          "fil": "Oo, sandali lang."
+          "bcl": "Iyo, bago magtrabaho giraray.",
+          "en": "Yes, before getting back to work.",
+          "fil": "Oo, bago magtrabaho ulit."
         }
       ],
       "sources": [
@@ -1659,14 +1659,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Tapos ka na ngunyan?",
-          "en": "Are you finished for today?",
-          "fil": "Tapos ka na ngayon?"
+          "bcl": "Tapos ka na sa trabaho?",
+          "en": "Done with work?",
+          "fil": "Tapos ka na sa trabaho?"
         },
         {
-          "bcl": "Harani na.",
-          "en": "Almost.",
-          "fil": "Malapit na."
+          "bcl": "Harani na. Kadikit na sana.",
+          "en": "Almost. Just a little left.",
+          "fil": "Malapit na. Kaunti na lang."
         }
       ],
       "sources": [
@@ -1687,14 +1687,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mahiling kita sa aga?",
-          "en": "Shall we meet tomorrow?",
-          "fil": "Magkita tayo bukas?"
+          "bcl": "Mag-ulay kita sa aga?",
+          "en": "Shall we chat tomorrow?",
+          "fil": "Mag-usap tayo bukas?"
         },
         {
-          "bcl": "Mag-ulay kita sa urhi.",
-          "en": "Let's talk about it later.",
-          "fil": "Pag-usapan natin mamaya."
+          "bcl": "Sige, may oras ako sa aga.",
+          "en": "Sure, I've got time tomorrow.",
+          "fil": "Sige, may oras ako bukas."
         }
       ],
       "sources": [
@@ -1720,9 +1720,9 @@
           "fil": "Magkano ito?"
         },
         {
-          "bcl": "Hihilingon ko muna.",
-          "en": "I'll check first.",
-          "fil": "Titingnan ko muna."
+          "bcl": "Hulat tabi, hihilingon ko.",
+          "en": "One moment, I'll check.",
+          "fil": "Sandali po, titingnan ko."
         }
       ],
       "sources": [
@@ -1745,9 +1745,9 @@
           "fil": "Isa po."
         },
         {
-          "bcl": "Sige, saro.",
-          "en": "All right, one.",
-          "fil": "Sige, isa."
+          "bcl": "Sige po, ini na.",
+          "en": "Sure, here you go.",
+          "fil": "Sige po, heto na."
         }
       ],
       "sources": [
@@ -1815,14 +1815,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Puwedeng maghiling?",
-          "en": "May I have a look?",
-          "fil": "Puwedeng tumingin?"
+          "bcl": "Mahiling muna ako, tabi.",
+          "en": "I'll have a look first, if that's okay.",
+          "fil": "Titingin muna ako, ha."
         },
         {
-          "bcl": "Iyo, hiling sana.",
-          "en": "Yes, go ahead and look.",
-          "fil": "Oo, tingin lang."
+          "bcl": "Sige po.",
+          "en": "Of course.",
+          "fil": "Sige po."
         }
       ],
       "sources": [
@@ -1865,14 +1865,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Tapos na?",
-          "en": "Is it done?",
-          "fil": "Tapos na ba?"
+          "bcl": "Puwede ko nang kuanon?",
+          "en": "Can I take it now?",
+          "fil": "Puwede ko nang kunin?"
         },
         {
-          "bcl": "Iyo, ini na.",
-          "en": "Yes, here it is.",
-          "fil": "Oo, heto na."
+          "bcl": "Iyo, ini na po.",
+          "en": "Yes, here you go.",
+          "fil": "Oo, heto na po."
         }
       ],
       "sources": [
@@ -1940,14 +1940,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Magbalik ka giraray.",
-          "en": "Come back again.",
-          "fil": "Bumalik ka ulit."
+          "bcl": "Balik ka giraray!",
+          "en": "Come again!",
+          "fil": "Balik ka ulit!"
         },
         {
-          "bcl": "Iyo, salamat po.",
-          "en": "Yes, thank you.",
-          "fil": "Oo, salamat po."
+          "bcl": "Sige po, salamat!",
+          "en": "Will do, thank you!",
+          "fil": "Sige po, salamat!"
         }
       ],
       "sources": [
@@ -1990,14 +1990,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Mauna na po ako.",
-          "en": "I'll be going now.",
-          "fil": "Mauuna na po ako."
+          "bcl": "Sige po, salamat!",
+          "en": "All right, thank you!",
+          "fil": "Sige po, salamat!"
         },
         {
-          "bcl": "Sige po, mag-ingat.",
-          "en": "All right, take care.",
-          "fil": "Sige po, mag-ingat."
+          "bcl": "Salamat man po. Mag-ingat!",
+          "en": "Thank you too. Take care!",
+          "fil": "Salamat din po. Ingat!"
         }
       ],
       "sources": [
@@ -2015,14 +2015,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Naghuhulat ka nin sasakyan?",
-          "en": "Waiting for a ride?",
-          "fil": "Naghihintay ka ng masasakyan?"
+          "bcl": "Haloy ka nang naghuhulat?",
+          "en": "Been waiting long?",
+          "fil": "Matagal ka nang naghihintay?"
         },
         {
-          "bcl": "Iyo, naghuhulat pa.",
-          "en": "Yes, still waiting.",
-          "fil": "Oo, naghihintay pa."
+          "bcl": "Dai man, kadikit pa sana.",
+          "en": "Not really, just a little while.",
+          "fil": "Hindi naman, sandali pa lang."
         }
       ],
       "sources": [
@@ -2045,9 +2045,9 @@
           "fil": "Dito tayo maghihintay?"
         },
         {
-          "bcl": "Iyo, digdi sa hulatan.",
-          "en": "Yes, here at the stop.",
-          "fil": "Oo, dito sa hintayan."
+          "bcl": "Iyo, ini an hulatan.",
+          "en": "Yes, this is the stop.",
+          "fil": "Oo, ito ang hintayan."
         }
       ],
       "sources": [
@@ -2065,14 +2065,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Puwede akong mahulat digdi?",
-          "en": "May I wait here?",
-          "fil": "Puwede akong maghintay rito?"
+          "bcl": "Igwa pang lugar digdi?",
+          "en": "Is there still room here?",
+          "fil": "May lugar pa ba rito?"
         },
         {
-          "bcl": "Iyo, puwede.",
-          "en": "Yes, of course.",
-          "fil": "Oo, puwede."
+          "bcl": "Igwa, madya.",
+          "en": "Yes, come on over.",
+          "fil": "Mayroon, halika."
         }
       ],
       "sources": [
@@ -2143,14 +2143,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Sabihon mo pag-abot.",
-          "en": "Tell me when it arrives.",
-          "fil": "Sabihin mo pagdating."
+          "bcl": "Sabihon mo kun yaon na an sasakyan, ha?",
+          "en": "Let me know when the ride is here, okay?",
+          "fil": "Sabihin mo kapag nandiyan na ang sasakyan, ha?"
         },
         {
-          "bcl": "Iyo, sasabihon ko.",
-          "en": "Yes, I'll tell you.",
-          "fil": "Oo, sasabihin ko."
+          "bcl": "Sige, babantayan ko.",
+          "en": "Sure, I'll keep an eye out.",
+          "fil": "Sige, babantayan ko."
         }
       ],
       "sources": [
@@ -2169,13 +2169,13 @@
       "lines": [
         {
           "bcl": "Mapuli ka na?",
-          "en": "Are you heading home?",
-          "fil": "Pauwi ka na ba?"
+          "en": "Heading home?",
+          "fil": "Pauwi ka na?"
         },
         {
-          "bcl": "Iyo, mapuli na.",
-          "en": "Yes, I'm heading home.",
-          "fil": "Oo, pauwi na."
+          "bcl": "Iyo, tapos na an lakaw ko.",
+          "en": "Yes, I'm done with my errands.",
+          "fil": "Oo, tapos na ang lakad ko."
         }
       ],
       "sources": [
@@ -2193,14 +2193,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Magkaiba kitang mahulat?",
-          "en": "Shall we wait together?",
-          "fil": "Sabay tayong maghintay?"
+          "bcl": "Hulat kita nin sasakyan digdi?",
+          "en": "Shall we wait for a ride here?",
+          "fil": "Hintay tayo rito ng masasakyan?"
         },
         {
-          "bcl": "Iyo, magkaiba kita.",
-          "en": "Yes, together.",
-          "fil": "Oo, magkasama tayo."
+          "bcl": "Sige, dai man ako nagdadali.",
+          "en": "Sure, I'm not in a hurry.",
+          "fil": "Sige, hindi naman ako nagmamadali."
         }
       ],
       "sources": [
@@ -2218,14 +2218,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Yaon ako digdi!",
+          "bcl": "Digdi ako!",
           "en": "I'm over here!",
           "fil": "Nandito ako!"
         },
         {
-          "bcl": "Nahihiling taka.",
-          "en": "I can see you.",
-          "fil": "Nakikita kita."
+          "bcl": "Ah, yaon ka palan!",
+          "en": "Ah, there you are!",
+          "fil": "Ah, nariyan ka pala!"
         }
       ],
       "sources": [
@@ -2245,12 +2245,12 @@
         {
           "bcl": "Madya na?",
           "en": "Shall we go?",
-          "fil": "Tara na ba?"
+          "fil": "Tara na?"
         },
         {
-          "bcl": "Iyo, madya na!",
-          "en": "Yes, let's go!",
-          "fil": "Oo, tara na!"
+          "bcl": "Sige, madya na!",
+          "en": "Okay, let's go!",
+          "fil": "Sige, tara na!"
         }
       ],
       "sources": [
@@ -2268,14 +2268,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Hilinga duman!",
-          "en": "Look over there!",
-          "fil": "Tingnan mo roon!"
+          "bcl": "Hilinga an monumento!",
+          "en": "Look at the monument!",
+          "fil": "Tingnan mo ang monumento!"
         },
         {
-          "bcl": "Nahihiling ko na.",
-          "en": "I see it now.",
-          "fil": "Nakikita ko na."
+          "bcl": "Ay, magayon!",
+          "en": "Oh, that's lovely!",
+          "fil": "Ay, ang ganda!"
         }
       ],
       "sources": [
@@ -2297,13 +2297,13 @@
       "lines": [
         {
           "bcl": "Gusto mong magpahingalo?",
-          "en": "Would you like to rest?",
+          "en": "Want to rest?",
           "fil": "Gusto mong magpahinga?"
         },
         {
-          "bcl": "Kadikit sana.",
-          "en": "Just for a bit.",
-          "fil": "Sandali lang."
+          "bcl": "Iyo, napagal ako sa paglakaw.",
+          "en": "Yes, I got tired from walking.",
+          "fil": "Oo, napagod ako sa paglalakad."
         }
       ],
       "sources": [
@@ -2354,9 +2354,9 @@
           "fil": "Tuloy na tayo?"
         },
         {
-          "bcl": "Iyo, madya na.",
-          "en": "Yes, let's go.",
-          "fil": "Oo, tara na."
+          "bcl": "Hulat, kadikit pa.",
+          "en": "Wait, just a little longer.",
+          "fil": "Sandali, kaunti pa."
         }
       ],
       "sources": [
@@ -2374,14 +2374,14 @@
       "kind": "ball",
       "lines": [
         {
-          "bcl": "Digdi!",
-          "en": "Over here!",
-          "fil": "Dito!"
+          "bcl": "Saimo an bola!",
+          "en": "The ball's coming your way!",
+          "fil": "Sa iyo ang bola!"
         },
         {
-          "bcl": "Salamat!",
-          "en": "Thanks!",
-          "fil": "Salamat!"
+          "bcl": "Digdi mo ipasa!",
+          "en": "Pass it here!",
+          "fil": "Ipasa mo rito!"
         }
       ],
       "sources": [
@@ -2409,9 +2409,9 @@
           "fil": "Maglaro tayo!"
         },
         {
-          "bcl": "Iyo!",
-          "en": "Yes!",
-          "fil": "Oo!"
+          "bcl": "Sige, ipasa mo!",
+          "en": "Okay, pass it!",
+          "fil": "Sige, ipasa mo!"
         }
       ],
       "sources": [
@@ -2494,12 +2494,12 @@
         {
           "bcl": "Marhay na pasa!",
           "en": "Nice pass!",
-          "fil": "Magandang pasa!"
+          "fil": "Gandang pasa!"
         },
         {
-          "bcl": "Salamat saimo!",
-          "en": "Thank you!",
-          "fil": "Salamat sa iyo!"
+          "bcl": "Salamat!",
+          "en": "Thanks!",
+          "fil": "Salamat!"
         }
       ],
       "sources": [
@@ -2616,9 +2616,9 @@
           "fil": "Madalas ka bang pumunta rito?"
         },
         {
-          "bcl": "Iyo.",
-          "en": "Yes.",
-          "fil": "Oo."
+          "bcl": "Iyo, digdi ako naglalakaw-lakaw.",
+          "en": "Yes, I come here for walks.",
+          "fil": "Oo, dito ako namamasyal."
         }
       ],
       "sources": [
