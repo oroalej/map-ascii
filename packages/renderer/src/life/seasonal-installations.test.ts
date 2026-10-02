@@ -5,6 +5,7 @@ import type {
   SeasonalDisplayRecord,
   SeasonalLightStringRecord,
   SeasonalCarnivalRecord,
+  SeasonalAccessRecord,
 } from '@atlas/shared';
 import {
   admitsInstallation,
@@ -111,6 +112,78 @@ const grid: FixtureGrid = {
   ],
 };
 const index = (glyph: string) => mapGlyphs(themes.dark).indexOf(glyph);
+it('packs walkable paving below decorations, stays anchored when panning, and obeys season admission', () => {
+  const access: SeasonalAccessRecord = {
+    version: 1,
+    id: 'access',
+    installation: 'access',
+    season: tree.season,
+    anchor: tree.anchor,
+    seed: 2,
+    kind: 'access-path',
+    style: 'walkway',
+    from: [tree.at[0] - 0.00012, tree.at[1]],
+    to: [tree.at[0] + 0.00012, tree.at[1]],
+    width_m: 3,
+  };
+  const config: SeasonConfig = {
+    ...season,
+    installations: [
+      ...season.installations!,
+      {
+        id: 'access',
+        kind: 'access-path',
+        anchor: tree.anchor,
+        grounds: 'lot',
+        label: 'Access',
+        sources: source,
+        points: [access.from, access.to],
+        width_m: 3,
+        style: 'walkway',
+      },
+    ],
+  };
+  expect(admitsInstallation(access, config)).toBe(true);
+  expect(admitsInstallation({ ...access, style: 'driveway' }, config)).toBe(false);
+  expect(installationLamps([{ kind: 'season-installation', record: access }], 21)).toEqual([]);
+  const group = {
+    tile,
+    life: new LifeBuilder().finish(),
+    fixtures: [],
+    seasonal: [access, tree, access],
+  };
+  expect(seasonalFixtures([group], undefined, 13.6)).toEqual([]);
+  const fixtures = seasonalFixtures([group], config, 13.6);
+  const pack = (items = fixtures) =>
+    packFixtures(new Uint8Array(grid.cols * grid.rows * 4), grid, items, 20, index, 0).texels;
+  expect(pack([...fixtures].reverse())).toEqual(pack());
+  const packedAccess = pack();
+  const parts = Array.from(
+    { length: grid.cols * grid.rows },
+    (_, i) => packedAccess[i * 4 + 1]! & 63,
+  );
+  expect(parts).toContain(FixturePart.accessSurface);
+  expect(parts).toContain(FixturePart.festiveTree);
+  const cells = (shift: number) => {
+    const output: string[] = [];
+    packInstallation(
+      access,
+      {
+        ...grid,
+        toCell: (lng, lat) => {
+          const [x, y] = grid.toCell(lng, lat);
+          return [x + shift, y];
+        },
+      },
+      (x, y, glyph, part, info) => {
+        output.push(`${x - shift}/${y}/${glyph}/${part}/${info}`);
+        return true;
+      },
+    );
+    return output;
+  };
+  expect(cells(4)).toEqual(cells(0));
+});
 it('packs dense continuous bulbs with bounded Christmas accents and a world-anchored pattern', () => {
   const cells = (record: SeasonalLightStringRecord, shift = 0) => {
     const out = new Map<string, { part: number; info: number; glyph: string }>();

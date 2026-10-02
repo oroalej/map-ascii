@@ -1,7 +1,14 @@
 import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
-import { Season, type SeasonalPoint } from '@atlas/shared';
+import {
+  Season,
+  seasonalAccessRing,
+  localMetricProjection,
+  type SeasonalPoint,
+  type SeasonalDisplayRecord,
+  type SeasonalLightStringRecord,
+} from '@atlas/shared';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';
@@ -11,8 +18,12 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
   const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
   const config = {
     ...season,
-    grounds: season.grounds!.filter((g) => g.id.startsWith('magsaysay-')),
-    installations: season.installations!.filter((i) => i.id.startsWith('magsaysay-')),
+    grounds: season.grounds!.filter((g) => g.id === 'magsaysay-orange-display'),
+    installations: season.installations!.filter((i) =>
+      ['magsaysay-orange-garlands', 'magsaysay-house-lights', 'magsaysay-orange-border'].includes(
+        i.id,
+      ),
+    ),
   };
   expect(config.installations).toHaveLength(3);
   expect(config.grounds).toHaveLength(1);
@@ -78,4 +89,54 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
       [config],
     ),
   ).toEqual(result);
+});
+it('adds two walks and a wider driveway, with Christmas displays clear of full access footprints', () => {
+  const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
+  const config = {
+    ...season,
+    installations: season.installations!.filter((i) => i.id.startsWith('magsaysay-')),
+  };
+  const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
+  const result = generateSeasonalInstallations(features, [config]);
+  const paths = result.records.filter((r) => r.kind === 'access-path');
+  expect(paths).toHaveLength(11);
+  expect(new Set(paths.map((r) => r.installation))).toEqual(
+    new Set(['magsaysay-walk-west', 'magsaysay-walk-east', 'magsaysay-driveway']),
+  );
+  expect(paths.filter((r) => r.style === 'driveway').every((r) => r.width_m === 3.4)).toBe(true);
+  const full = polygon([config.grounds!.find((g) => g.id === 'magsaysay-access-forecourt')!.ring]);
+  for (const path of paths)
+    for (const p of seasonalAccessRing(path)) expect(booleanPointInPolygon(p, full)).toBe(true);
+  const trees = result.records.filter(
+    (r): r is SeasonalDisplayRecord => r.kind === 'christmas-tree',
+  );
+  expect(trees).toHaveLength(2);
+  for (const tree of trees) {
+    const projection = localMetricProjection(tree.at);
+    for (const path of paths) {
+      const a = projection.to(path.from),
+        b = projection.to(path.to),
+        dx = b[0] - a[0],
+        dy = b[1] - a[1],
+        t = Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / (dx * dx + dy * dy)));
+      expect(Math.hypot(a[0] + t * dx, a[1] + t * dy)).toBeGreaterThanOrEqual(
+        tree.radius_m + path.width_m / 2 + 0.99,
+      );
+    }
+  }
+  const lights = result.records.filter(
+    (r): r is SeasonalLightStringRecord =>
+      r.kind === 'light-string' && r.installation.includes('-island-'),
+  );
+  expect(lights.length).toBeGreaterThan(5);
+  for (const light of lights)
+    for (let i = 0; i <= 100; i++) {
+      const p: SeasonalPoint = [
+        light.from[0] + ((light.to[0] - light.from[0]) * i) / 100,
+        light.from[1] + ((light.to[1] - light.from[1]) * i) / 100,
+      ];
+      for (const path of paths)
+        expect(booleanPointInPolygon(p, polygon([seasonalAccessRing(path)]))).toBe(false);
+    }
+  expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
 });

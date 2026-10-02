@@ -462,6 +462,11 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     // A faint continuous floor connects the ASCII texture and delineates the aisle.
     under = mix(under, color * 0.34, fixture.a);
   }
+  if (part == ${FixturePart.accessSurface}) {
+    vec3 paint = info == 1 ? vec3(0.40, 0.44, 0.47) : vec3(0.67, 0.61, 0.49);
+    color = max(lampLit(daylit(paint), rainLight), paint * 0.55);
+    under = mix(under, color * 0.32, fixture.a);
+  }
   if (part == ${FixturePart.carnivalFrame}) color = max(lampLit(daylit(vec3(0.61, 0.76, 0.78)), rainLight), vec3(0.43, 0.54, 0.55));
   if (rideMotion) {
     int local = (glyph << 8) | info;

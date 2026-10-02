@@ -12,6 +12,55 @@ const season = {
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('requires sourced, bounded access routes in matching grounds', () => {
+    const grounds = {
+      id: 'lot',
+      anchor: 'osm:way/1',
+      sources: season.sources,
+      ring: [
+        [0, 0],
+        [0.001, 0],
+        [0.001, 0.001],
+        [0, 0.001],
+        [0, 0],
+      ],
+    };
+    const access = {
+      id: 'walk',
+      kind: 'access-path',
+      anchor: grounds.anchor,
+      grounds: grounds.id,
+      label: 'Access',
+      sources: season.sources,
+      style: 'walkway',
+      width_m: 1.8,
+      points: [
+        [0.0001, 0.0001],
+        [0.0009, 0.0009],
+      ],
+    };
+    const config = { ...season, grounds: [grounds], installations: [access] };
+    expect(Season.safeParse(config).success).toBe(true);
+    for (const change of [
+      { grounds: 'missing' },
+      { sources: [] },
+      { width_m: 0.99 },
+      { width_m: 12.01 },
+      { points: [access.points[0]] },
+      { points: [access.points[0], access.points[0]] },
+      { style: 'road' },
+      {
+        points: [
+          [0, 90],
+          [0.001, 90],
+        ],
+      },
+      { mount: 'canopy' },
+    ])
+      expect(
+        Season.safeParse({ ...config, installations: [{ ...access, ...change }] }).success,
+      ).toBe(false);
+  });
   it('accepts fireworks-only calendars and rejects unknown, empty or duplicate variants', () => {
     const only = {
       ...season,

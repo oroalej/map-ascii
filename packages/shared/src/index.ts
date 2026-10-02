@@ -6,6 +6,7 @@ export * from './life-sites';
 export * from './rhythm';
 export * from './seasons';
 export * from './carnival';
+export * from './seasonal-access';
 export * from './schemas';
 export * from './signal-layout';
 export * from './roof-plan';

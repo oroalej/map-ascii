@@ -185,9 +185,20 @@
     "seasons": [
       {
         "id": "new-year",
-        "title": { "en": "New Year" },
+        "title": {
+          "en": "New Year"
+        },
         "status": "draft",
-        "window": { "from": { "month": 12, "day": 31 }, "to": { "month": 1, "day": 1 } },
+        "window": {
+          "from": {
+            "month": 12,
+            "day": 31
+          },
+          "to": {
+            "month": 1,
+            "day": 1
+          }
+        },
         "note": "TODO(verify): owner-requested illustrative New Year display, December 31–January 1. Peony, chrysanthemum, ring and golden willow bursts, drifting smoke and timing are schematic atmospheric effects seen from above, not surveyed launch locations, a confirmed Naga event, or air-quality data. It takes precedence over the overlapping Christmas calendar. Preview remains visible at any chosen hour and with Life off; reduced motion holds a still burst.",
         "fireworks": {
           "label": "Fireworks and smoke",
@@ -226,7 +237,7 @@
             "day": 6
           }
         },
-        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot.",
+        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot. The 2026-10-03 owner follow-up expands the forecourt display with Christmas-only walking paths, a driveway and lit displays between the access routes; these surfaces do not assert permanent site geography.",
         "lanterns": {
           "label": "Parol lanterns",
           "shape": "star"
@@ -292,6 +303,10 @@
             "title": "Philippine News Agency: Carnival preps (2021-12-03)",
             "url": "https://www.pna.gov.ph/photos/51975",
             "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
+          },
+          {
+            "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+            "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
           }
         ],
         "installations": [
@@ -617,6 +632,171 @@
                 "angle_deg": -20
               }
             ]
+          },
+          {
+            "id": "magsaysay-walk-west",
+            "anchor": "osm:way/23664053",
+            "label": "Christmas forecourt access",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ],
+            "grounds": "magsaysay-access-forecourt",
+            "kind": "access-path",
+            "style": "walkway",
+            "width_m": 1.8,
+            "points": [
+              [123.19579557, 13.63238513],
+              [123.19580923, 13.63239729],
+              [123.19582755, 13.63241654],
+              [123.19584761, 13.6324287],
+              [123.19587086, 13.63244172]
+            ]
+          },
+          {
+            "id": "magsaysay-walk-east",
+            "anchor": "osm:way/23664053",
+            "label": "Christmas forecourt access",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ],
+            "grounds": "magsaysay-access-forecourt",
+            "kind": "access-path",
+            "style": "walkway",
+            "width_m": 1.8,
+            "points": [
+              [123.19583017, 13.63237041],
+              [123.19584993, 13.63238541],
+              [123.19587232, 13.63240182],
+              [123.19588889, 13.6324171]
+            ]
+          },
+          {
+            "id": "magsaysay-driveway",
+            "anchor": "osm:way/23664053",
+            "label": "Christmas forecourt access",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ],
+            "grounds": "magsaysay-access-forecourt",
+            "kind": "access-path",
+            "style": "driveway",
+            "width_m": 3.4,
+            "points": [
+              [123.19587377, 13.6323141],
+              [123.19588482, 13.63232118],
+              [123.19591737, 13.63234127],
+              [123.19594412, 13.63235825],
+              [123.19596883, 13.63238371]
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-island-tree-1",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "christmas-tree",
+            "radius_m": 1,
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-island-tree-2",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "christmas-tree",
+            "radius_m": 1,
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
           }
         ],
         "grounds": [
@@ -661,6 +841,65 @@
                 "title": "Project owner: marked LCC Sabang Christmas carnival lot (2026-10-02)",
                 "url": "https://www.openstreetmap.org/way/1053960480",
                 "note": "Owner-requested illustrative perya west of Felix Plazo Street, northwest of LCC Mall Sabang. Boundary registered against the complete mapped road and mall roof; not a surveyed parcel, current-year inventory or verified annual venue."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-access-forecourt",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19572551, 13.63242899],
+              [123.19582086, 13.63254217],
+              [123.19585197, 13.63248416],
+              [123.19592028, 13.63242899],
+              [123.19600458, 13.63238796],
+              [123.1960104, 13.63236815],
+              [123.19586156, 13.63227619],
+              [123.19579092, 13.63233136],
+              [123.19572551, 13.63242899]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19580894, 13.63238088],
+              [123.19586243, 13.63242389],
+              [123.19587348, 13.63242955],
+              [123.19588162, 13.63241767],
+              [123.19583104, 13.63237862],
+              [123.19581825, 13.63237183],
+              [123.19580894, 13.63238088]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19584673, 13.63235796],
+              [123.19590982, 13.63240975],
+              [123.19596592, 13.63239305],
+              [123.19595807, 13.63237749],
+              [123.19587784, 13.63232769],
+              [123.19586243, 13.63231891],
+              [123.19584673, 13.63235796]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
+                "note": "The three red route marks on the annotated atlas screenshot request two walking paths and a wider driveway, with Christmas decorations between them. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
               }
             ]
           }

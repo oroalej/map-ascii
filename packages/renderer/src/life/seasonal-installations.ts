@@ -1,8 +1,14 @@
-import { offsetUtility as metric, METERS_PER_DEGREE } from '@atlas/shared';
+import {
+  offsetUtility as metric,
+  METERS_PER_DEGREE,
+  seasonalAccessRing,
+  pointInPolygon,
+} from '@atlas/shared';
 import type {
   SeasonalDisplayRecord,
   SeasonalLightStringRecord,
   SeasonalCarnivalRecord,
+  SeasonalAccessRecord,
 } from '@atlas/shared';
 import { packCarnival } from './carnival';
 import type { FixtureGrid } from './fixtures';
@@ -10,7 +16,7 @@ import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 import { LampState, type VisibleLamp } from './lights';
 
 export type InstallationRecord =
-  SeasonalDisplayRecord | SeasonalLightStringRecord | SeasonalCarnivalRecord;
+  SeasonalDisplayRecord | SeasonalLightStringRecord | SeasonalCarnivalRecord | SeasonalAccessRecord;
 export type InstallationFixture = { kind: 'season-installation'; record: InstallationRecord };
 export function admitsInstallation(
   record: InstallationRecord,
@@ -22,6 +28,7 @@ export function admitsInstallation(
       kind: InstallationRecord['kind'];
       layout?: string;
       mount?: string;
+      style?: string;
     }[];
   },
 ) {
@@ -32,6 +39,7 @@ export function admitsInstallation(
         i.id === record.installation &&
         i.anchor === record.anchor &&
         i.kind === record.kind &&
+        (i.kind !== 'access-path' || record.kind !== 'access-path' || i.style === record.style) &&
         (i.kind !== 'light-string' ||
           record.kind !== 'light-string' ||
           (i.layout === 'building-perimeter' ? 'building' : i.mount) === record.mount),
@@ -49,16 +57,23 @@ export function installationLamps(
 ): VisibleLamp[] {
   if (zoom < 18) return [];
   return fixtures
-    .filter(({ record: r }) => r.kind !== 'carnival' || r.style !== 'midway')
+    .filter(
+      ({ record: r }) =>
+        r.kind !== 'access-path' && (r.kind !== 'carnival' || r.style !== 'midway'),
+    )
     .map(({ record: r }) => {
       const at: [number, number] =
-        r.kind === 'light-string' ? [(r.from[0] + r.to[0]) / 2, (r.from[1] + r.to[1]) / 2] : r.at;
+        r.kind === 'light-string' || r.kind === 'access-path'
+          ? [(r.from[0] + r.to[0]) / 2, (r.from[1] + r.to[1]) / 2]
+          : r.at;
       const radius =
         r.kind === 'light-string'
           ? 2
-          : r.kind === 'carnival'
-            ? Math.max(...r.size_m) / 2 + 1
-            : r.radius_m + 1;
+          : r.kind === 'access-path'
+            ? 0
+            : r.kind === 'carnival'
+              ? Math.max(...r.size_m) / 2 + 1
+              : r.radius_m + 1;
       return {
         lng: at[0],
         lat: at[1],
@@ -88,6 +103,28 @@ export function packInstallation(
   write: Write,
 ): boolean {
   if (record.kind === 'carnival') return packCarnival(record, grid, write);
+  if (record.kind === 'access-path') {
+    const ring = seasonalAccessRing(record).map((p) => grid.toCell(...p));
+    const x0 = Math.max(0, Math.floor(Math.min(...ring.map((p) => p[0])))),
+      x1 = Math.min(grid.cols - 1, Math.ceil(Math.max(...ring.map((p) => p[0])))),
+      y0 = Math.max(0, Math.floor(Math.min(...ring.map((p) => p[1])))),
+      y1 = Math.min(grid.rows - 1, Math.ceil(Math.max(...ring.map((p) => p[1]))));
+    if (!Number.isFinite(x0 + x1 + y0 + y1) || (x1 - x0 + 1) * (y1 - y0 + 1) > 200000) return false;
+    let visible = false;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++)
+        if (pointInPolygon([x + 0.5, y + 0.5], [ring]))
+          visible =
+            write(
+              x,
+              y,
+              '░',
+              SeasonalPart.accessSurface,
+              record.style === 'driveway' ? 1 : 0,
+              true,
+            ) || visible;
+    return visible;
+  }
   let visible = false;
   const put = (
     x: number,

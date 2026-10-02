@@ -67,6 +67,16 @@ const installation = {
 export const SeasonalRecordSchema = z.union([
   SeasonalBuntingRecordSchema,
   z
+    .strictObject({
+      ...installation,
+      kind: z.literal('access-path'),
+      style: z.enum(['walkway', 'driveway']),
+      from: point,
+      to: point,
+      width_m: z.number().min(1).max(12),
+    })
+    .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty access segment'),
+  z
     .strictObject({ ...installation, kind: z.literal('carnival'), ...carnival })
     .refine(validCarnival, 'invalid carnival footprint'),
   z.strictObject({

@@ -69,6 +69,13 @@ export type SeasonInstallation = {
       palette?: 'warm' | 'christmas';
     }
   | { kind: 'decorated-canopy' }
+  | {
+      kind: 'access-path';
+      grounds: string;
+      style: 'walkway' | 'driveway';
+      points: SeasonalPoint[];
+      width_m: number;
+    }
   | { kind: 'carnival'; grounds: string; components: CarnivalComponent[] }
 );
 

@@ -2,6 +2,44 @@ import { expect, it } from 'vitest';
 import { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { isSeasonalRecord, parseSeasonalRecord, type SeasonalRecord } from './seasonal-record';
 import { Season } from './schemas';
+import { seasonalAccessRing } from './seasonal-access';
+import { localMetricProjection } from './flat-geometry';
+it('validates seasonal access widths and preserves complete metric envelopes', () => {
+  const record = {
+    version: 1,
+    kind: 'access-path',
+    id: 'path',
+    season: 'winter',
+    installation: 'path',
+    anchor: 'osm:way/1',
+    seed: 2,
+    style: 'driveway',
+    width_m: 4,
+    from: [123, 13],
+    to: [123.0002, 13],
+  };
+  const parsed = SeasonalRecordSchema.parse(record);
+  expect(parseSeasonalRecord(JSON.stringify(record))).toEqual(parsed);
+  if (parsed.kind !== 'access-path') throw new Error('expected access');
+  const projection = localMetricProjection(parsed.from);
+  const ring = seasonalAccessRing(parsed).map(projection.to);
+  expect(Math.max(...ring.map((p) => p[1])) - Math.min(...ring.map((p) => p[1]))).toBeCloseTo(4);
+  expect(ring[0]).toEqual(ring.at(-1));
+  for (const change of [
+    { width_m: 0.99 },
+    { width_m: 12.01 },
+    { width_m: NaN },
+    { style: 'road' },
+    { to: record.from },
+    { mount: 'canopy' },
+    { palette: 'warm' },
+    { version: 2 },
+  ]) {
+    const invalid = { ...record, ...change };
+    expect(isSeasonalRecord(invalid)).toBe(false);
+    expect(SeasonalRecordSchema.safeParse(invalid).success).toBe(false);
+  }
+});
 const row: SeasonalRecord = {
   version: 1,
   kind: 'bunting',

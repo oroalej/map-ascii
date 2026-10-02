@@ -72,6 +72,91 @@ const season: SeasonConfig = {
     { ...shared, id: 'crowns', kind: 'decorated-canopy' },
   ],
 };
+it('keeps full access surfaces on the grounds and reserves them before placing trees', () => {
+  const ground = {
+    id: 'lot',
+    anchor: shared.anchor,
+    sources: shared.sources,
+    ring: (area.geometry.type === 'Polygon'
+      ? area.geometry.coordinates[0]!
+      : []) as SeasonalPoint[],
+  };
+  const path = {
+    ...shared,
+    id: 'access',
+    kind: 'access-path' as const,
+    grounds: ground.id,
+    style: 'driveway' as const,
+    width_m: 6,
+    points: [
+      [0.0001, 0.00035],
+      [0.0009, 0.00035],
+    ] as SeasonalPoint[],
+  };
+  const tree = { ...shared, id: 'tree', kind: 'christmas-tree' as const, radius_m: 3 };
+  const config: SeasonConfig = { ...season, grounds: [ground], installations: [tree, path] };
+  const result = generateSeasonalInstallations([area], [config]);
+  const access = result.records.find((r) => r.kind === 'access-path');
+  expect(access && seasonalRecordGeometry(access).type).toBe('Polygon');
+  const planted = result.records.find((r) => r.kind === 'christmas-tree');
+  if (!planted || planted.kind !== 'christmas-tree') throw new Error('expected tree');
+  expect(Math.abs(planted.at[1] - 0.00035) * 111320).toBeGreaterThanOrEqual(7);
+  expect(
+    generateSeasonalInstallations([area], [{ ...config, installations: [path, tree] }]).records,
+  ).toEqual(result.records);
+  expect(() =>
+    generateSeasonalInstallations(
+      [area],
+      [
+        {
+          ...config,
+          installations: [
+            {
+              ...path,
+              points: [
+                [0.00001, 0.00035],
+                [0.0009, 0.00035],
+              ],
+            },
+          ],
+        },
+      ],
+    ),
+  ).toThrow('access leaves grounds');
+  const building: AtlasFeature = {
+    ...area,
+    properties: { id: 'osm:way/99', class: 'building', height: 6 },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0.0004, 0.0003],
+          [0.0006, 0.0003],
+          [0.0006, 0.0004],
+          [0.0004, 0.0004],
+          [0.0004, 0.0003],
+        ],
+      ],
+    },
+  };
+  expect(() =>
+    generateSeasonalInstallations([area, building], [{ ...config, installations: [path] }]),
+  ).toThrow('access overlaps building or road');
+  const road: AtlasFeature = {
+    ...area,
+    properties: { id: 'osm:way/99', class: 'road_minor', width: 6 },
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [0.0005, 0],
+        [0.0005, 0.001],
+      ],
+    },
+  };
+  expect(() =>
+    generateSeasonalInstallations([area, road], [{ ...config, installations: [path] }]),
+  ).toThrow('access overlaps building or road');
+});
 it('clips dense canopy rows around holes and concave access gaps, and validates bounded overhead density', () => {
   const config: SeasonConfig = {
     ...season,

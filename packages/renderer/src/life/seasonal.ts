@@ -335,6 +335,7 @@ export function createSeasonalFixtureCache() {
   };
 }
 
+const surfaceOrderCache = new WeakMap<readonly SeasonalFixture[], readonly SeasonalFixture[]>();
 /** Add decorations after all existing hardware; reserved flag envelopes remain untouched. */
 export function packSeasonalFixtures(
   out: Uint8Array,
@@ -375,7 +376,18 @@ export function packSeasonalFixtures(
     owners[cell] = -3;
     return !grid.visible || grid.visible(c, r);
   };
-  for (const fixture of fixtures) {
+  // Lay paving below decorations, independently of buffered tile/record ordering.
+  let ordered = surfaceOrderCache.get(fixtures);
+  if (!ordered) {
+    const surfaces = fixtures.filter(
+      (f) => f.kind === 'season-installation' && f.record.kind === 'access-path',
+    );
+    ordered = surfaces.length
+      ? [...surfaces, ...fixtures.filter((f) => !surfaces.includes(f))]
+      : fixtures;
+    surfaceOrderCache.set(fixtures, ordered);
+  }
+  for (const fixture of ordered) {
     const min = fixture.kind === 'season-lantern' ? 17 : 18;
     const alpha = Math.round(bandVisibility({ min }, zoom) * 255);
     if (!alpha) continue;

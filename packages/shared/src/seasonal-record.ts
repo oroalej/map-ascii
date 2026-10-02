@@ -37,6 +37,14 @@ export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
   bulb_spacing_m?: number;
   palette?: 'warm' | 'christmas';
 };
+/** Walkable seasonal paving; each complete segment keeps its real metric width. */
+export type SeasonalAccessRecord = SeasonalInstallationRecord & {
+  kind: 'access-path';
+  style: 'walkway' | 'driveway';
+  from: SeasonalPoint;
+  to: SeasonalPoint;
+  width_m: number;
+};
 export const CARNIVAL_STYLES = [
   'midway',
   'carousel',
@@ -60,6 +68,7 @@ export type SeasonalRecord =
   | SeasonalBuntingRecord
   | SeasonalDisplayRecord
   | SeasonalLightStringRecord
+  | SeasonalAccessRecord
   | SeasonalCarnivalRecord;
 
 const fields = new Set([
@@ -137,6 +146,7 @@ export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
   }
   if (v.kind !== 'bunting') {
     const display = v.kind === 'christmas-tree' || v.kind === 'decorated-canopy';
+    const access = v.kind === 'access-path';
     const keys = display
       ? ['version', 'kind', 'id', 'season', 'installation', 'anchor', 'seed', 'at', 'radius_m']
       : [
@@ -149,12 +159,22 @@ export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
           'seed',
           'from',
           'to',
+          ...(access ? ['style', 'width_m'] : []),
           ...(Object.hasOwn(v, 'mount') ? ['mount'] : []),
           ...(Object.hasOwn(v, 'bulb_spacing_m') ? ['bulb_spacing_m'] : []),
           ...(Object.hasOwn(v, 'palette') ? ['palette'] : []),
         ];
     return (
-      (display || v.kind === 'light-string') &&
+      (display || access || v.kind === 'light-string') &&
+      (!access ||
+        ((v.style === 'walkway' || v.style === 'driveway') &&
+          typeof v.width_m === 'number' &&
+          Number.isFinite(v.width_m) &&
+          v.width_m >= 1 &&
+          v.width_m <= 12 &&
+          !Object.hasOwn(v, 'mount') &&
+          !Object.hasOwn(v, 'bulb_spacing_m') &&
+          !Object.hasOwn(v, 'palette'))) &&
       (display || !Object.hasOwn(v, 'mount') || v.mount === 'building' || v.mount === 'canopy') &&
       (display ||
         !Object.hasOwn(v, 'bulb_spacing_m') ||

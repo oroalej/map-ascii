@@ -7,6 +7,7 @@ import {
   pointInPolygon as inside,
   offsetUtility,
   carnivalRing,
+  seasonalAccessRing,
   type SeasonConfig,
   type SeasonalRecord,
   type SeasonalDisplayRecord,
@@ -121,6 +122,15 @@ export function generateSeasonalInstallations(
         );
       });
       const monuments = local.filter((f) => f.properties.class === 'monument');
+      const access = (season.installations ?? []).flatMap((i) =>
+        i.kind === 'access-path' && i.anchor === config.anchor
+          ? i.points.slice(1).map((p, n) => ({
+              from: project(i.points[n]!),
+              to: project(p),
+              radius: i.width_m / 2,
+            }))
+          : [],
+      );
       const obstacleDistance = (p: Point, f: AtlasFeature) => {
         if (f.geometry.type === 'Point') {
           const q = project(f.geometry.coordinates);
@@ -152,7 +162,69 @@ export function generateSeasonalInstallations(
           seed: utilitySeed(id),
         };
       };
-      if (config.kind === 'carnival') {
+      if (config.kind === 'access-path') {
+        if (!grounds) throw new Error(`Season installation ${config.id}: access requires grounds`);
+        for (let i = 1; i < config.points.length; i++) {
+          const from = config.points[i - 1]!,
+            to = config.points[i]!;
+          const ring = seasonalAccessRing({ from, to, width_m: config.width_m }).map(project);
+          const edges = ring.slice(1).map((b, n) => [ring[n]!, b] as const);
+          if (
+            ring.some((p) => !inside(p, polygon)) ||
+            polygon.some((r) =>
+              r
+                .slice(1)
+                .some((b, n) => edges.some(([c, d]) => segmentDistance(r[n]!, b, c, d) < 1e-6)),
+            )
+          )
+            throw new Error(`Season installation ${config.id}: access leaves grounds`);
+          if (
+            local.some((f) => {
+              if (f.properties.class.startsWith('building')) {
+                const rs = rings(f).map((r) => r.map(project));
+                return (
+                  ring.some((p) => inside(p, rs)) ||
+                  rs.some(
+                    (r) =>
+                      r.some((p) => inside(p, [ring])) ||
+                      r
+                        .slice(1)
+                        .some((b, n) =>
+                          edges.some(([c, d]) => segmentDistance(r[n]!, b, c, d) < 0.1),
+                        ),
+                  )
+                );
+              }
+              return (
+                f.properties.class.startsWith('road_') &&
+                lines(f).some((l) =>
+                  l
+                    .slice(1)
+                    .some(
+                      (b, n) =>
+                        segmentDistance(
+                          project(from),
+                          project(to),
+                          project(l[n] as Point),
+                          project(b),
+                        ) <
+                        (Number(f.properties.width ?? 6) + config.width_m) / 2,
+                    ),
+                )
+              );
+            })
+          )
+            throw new Error(`Season installation ${config.id}: access overlaps building or road`);
+          records.push({
+            ...base(`segment-${i}`),
+            kind: config.kind,
+            style: config.style,
+            from,
+            to,
+            width_m: config.width_m,
+          });
+        }
+      } else if (config.kind === 'carnival') {
         if (!grounds)
           throw new Error(`Season installation ${config.id}: carnival requires grounds`);
         const footprints: Point[][] = [];
@@ -278,6 +350,7 @@ export function generateSeasonalInstallations(
               edgeDistance(p, polygon),
               ...obstacles.map((f) => obstacleDistance(p, f)),
               ...existing,
+              ...access.map((a) => distance(p, a.from, a.to) - a.radius),
             );
             if (clearance < config.radius_m + 1) continue;
             const score = clearance - Math.hypot(x - (x0 + x1) / 2, y - (y0 + y1) / 2) * 0.01;
@@ -308,6 +381,8 @@ export function generateSeasonalInstallations(
         }
       } else {
         const add = (a: Point, b: Point) => {
+          if (grounds && access.some((p) => segmentDistance(a, b, p.from, p.to) < p.radius + 0.35))
+            return;
           if (
             ![0, 0.25, 0.5, 0.75, 1].every((t) =>
               inside([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], polygon),
@@ -512,6 +587,7 @@ export function generateSeasonalInstallations(
 
 /** Full display envelopes retain neighboring tile coverage, while payload coordinates stay exact. */
 export function seasonalRecordGeometry(r: SeasonalRecord): Geometry {
+  if (r.kind === 'access-path') return { type: 'Polygon', coordinates: [seasonalAccessRing(r)] };
   if (r.kind === 'bunting' || r.kind === 'light-string')
     return { type: 'LineString', coordinates: [r.from, r.to] };
   if (r.kind === 'carnival') return { type: 'Polygon', coordinates: [carnivalRing(r)] };
