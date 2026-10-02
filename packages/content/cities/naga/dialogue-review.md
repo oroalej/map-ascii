@@ -36,3 +36,10 @@ Examples of the revised conversational intent:
 | Familiar place | "Do you come here often?" / "Yes." | "Do you come here often?" / "Yes, I come here for walks." |
 
 The catalog still has 100 exchanges, 199 turns and the same category allocation. IDs, speaker slots, event conditions and timing remain unchanged. Some legacy IDs (for example, `food-smell` and `farewell-thanks`) now identify revised conversational situations; they are stable identifiers, not literal descriptions of the current lines. See the handoff's `content-review.md` for the complete three-language inventory and per-exchange edit status.
+
+
+## Local usage follow-up
+
+A further pass reviewed every exchange against identifiable local speech, Naga-authored writing, regional published Bikol and grammar references. It revised 20 exchanges (25 turns), including the remaining halat-family inconsistencies, deliberate-looking wording and shorter hungry/tired replies. The owner's Halaton correction and preference to avoid andam remain in force.
+
+[The local usage audit](dialogue-usage-review.md) records the evidence, its limits and a retain/revise decision for all 100 IDs. Actual local examples support several word families. None of those sources certifies our complete authored exchanges or establishes how frequently people use them. Independent review of the complete catalog by a Naga speaker remains pending. References are used as language evidence; no news claim or factual detail from those sources is incorporated into the simulation.
