@@ -12,6 +12,9 @@ export const SeasonalPart = {
   carnivalGround: 39,
   carnivalFrame: 40,
   carnivalLight: 41,
+  carouselMotion: 42,
+  wheelMotion: 43,
+  bumperMotion: 44,
 } as const;
 /** Appended after every legacy glyph; the existing flag star keeps its raster and index. */
 export const SEASONAL_GLYPHS = [

@@ -22,6 +22,7 @@ import type { FixtureGrid, LegacyStreetFixture } from './fixtures';
 import { lightByte, LampState, placeSeed } from './lights';
 import { clipUtilityLine } from './utilities';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
+import { isCarnivalMotionPart } from './carnival-motion';
 import { buntingWidth, selectBuntingRows, type BuntingPriority } from './bunting-junctions';
 import {
   admitsInstallation,
@@ -359,11 +360,12 @@ export function packSeasonalFixtures(
     if (!Number.isFinite(x + y) || c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) return false;
     const cell = r * grid.cols + c,
       at = cell * 4,
-      index = glyphIndex(glyph);
+      motion = isCarnivalMotionPart(part),
+      index = motion ? info >>> 8 : glyphIndex(glyph);
     if (
       (!replace && (owners[cell] !== -1 || out[at + 3])) ||
       (replace && owners[cell] !== -1 && owners[cell] !== -5) ||
-      index <= 0 ||
+      (index <= 0 && !motion) ||
       index > MAX_GLYPHS
     )
       return false;

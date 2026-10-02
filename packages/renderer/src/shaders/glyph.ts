@@ -45,6 +45,7 @@ import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
 import { festivePulseGlsl } from '../life/seasonal-installations';
+import { carnivalMotionGlsl } from '../life/carnival-motion';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -366,6 +367,7 @@ vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
 
 ${buntingMotionGlsl}
 ${festivePulseGlsl}
+${carnivalMotionGlsl}
 
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
 vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
@@ -386,9 +388,10 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
+  bool rideMotion = part >= ${FixturePart.carouselMotion} && part <= ${FixturePart.bumperMotion};
   float buntingFold = 1.0;
   float ink = part == ${FixturePart.bunting} ? buntingInk(at, inCell, cell, info >> 3, buntingFold) :
-    texelFetch(u_atlas, at + inCell, 0).r;
+    rideMotion ? 1.0 : texelFetch(u_atlas, at + inCell, 0).r;
   vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
   if (part >= ${FixturePart.flagBlue} && part <= ${FixturePart.flagGold}) {
     vec3 paint = part == ${FixturePart.flagBlue} ? vec3(0.04, 0.22, 0.70) :
@@ -430,9 +433,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   }
   if (part == ${FixturePart.carnivalRoof}) {
     int tint = info & 7;
-    vec3 paint = tint == 1 ? vec3(1.0, 0.06, 0.16) : tint == 2 ? vec3(0.02, 0.82, 0.58) :
-      tint == 3 ? vec3(1.0, 0.12, 0.50) : tint == 4 ? vec3(0.12, 0.38, 1.0) :
-      tint == 5 ? vec3(0.99, 0.95, 0.76) : vec3(1.0, 0.67, 0.08);
+    vec3 paint = carnivalPaint(tint);
     // Local ride illumination keeps saturated paint readable at night.
     color = max(lampLit(daylit(paint), rainLight), paint * 0.84);
   }
@@ -444,6 +445,16 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     under = mix(under, color * 0.34, fixture.a);
   }
   if (part == ${FixturePart.carnivalFrame}) color = max(lampLit(daylit(vec3(0.61, 0.76, 0.78)), rainLight), vec3(0.43, 0.54, 0.55));
+  if (rideMotion) {
+    int local = (glyph << 8) | info;
+    vec2 uv = vec2(float(local & 511), float((local >> 9) & 511)) / 255.5 - 1.0;
+    vec4 surface = carnivalSurface(part, uv, u_shimmer ? u_time : 0.0);
+    color = max(lampLit(daylit(surface.rgb), rainLight), surface.rgb * 0.84);
+    if (surface.a < 0.5) {
+      under = mix(under, color * 0.34, fixture.a);
+      ink = (inCell.x + inCell.y) % 4 == 0 ? 1.0 : 0.0;
+    }
+  }
   if (part == ${FixturePart.festiveWire} || part == ${FixturePart.buildingWire}) color = daylit(u_fixturePaints[7]);
   if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight} || part == ${FixturePart.carnivalLight}) {
     int tint = info & 7;
