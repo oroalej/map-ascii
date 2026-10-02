@@ -254,11 +254,14 @@ for (const city of cities) {
       });
 
       test('captures and downloads a bounded CPU stage profile', async ({ page }) => {
+        // Bound software-WebGL work; this checks capture/download, not desktop GPU speed.
+        await page.setViewportSize({ width: 640, height: 480 });
         await page.goto(`/${city.slug}?debug=1&captureMs=1000&z=18`);
         await mapReady(page);
-        await page.getByRole('button', { name: /^Capture \d+ seconds$/ }).click();
+        await page.getByRole('button', { name: 'Capture 1 seconds', exact: true }).click();
         const button = page.getByRole('button', { name: 'Download profile', exact: true });
-        await expect(button).toBeEnabled({ timeout: 5_000 });
+        // A one-second timer can be delayed by software-GPU readbacks on the CI runner.
+        await expect(button).toBeEnabled({ timeout: 20_000 });
         const downloading = page.waitForEvent('download');
         await button.click();
         const download = await downloading;
