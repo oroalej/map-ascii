@@ -12,6 +12,8 @@ The 100-ID editorial inventory and per-turn review sheet are retained with the i
 
 Following the project owner's feedback that "andam" was unfamiliar in their childhood usage, all six occurrences across five exchanges were replaced with context-specific wording. The companion question became "Madya na?" ("Shall we go?"); translations follow the revised meaning. Dictionary attestation alone does not establish locally familiar everyday usage.
 
+The owner corrected "Hulaton" to "Halaton" in "Halaton taka digdi." Preserve this correction in future edits; the English and Tagalog meanings remain unchanged. This feedback covers this wording, not approval of the entire catalog.
+
 ## Conversational edit
 
 A second editorial pass reviewed all 100 exchanges as paired speech and revised 63. The original wording often repeated a prompt without adding a useful reply, switched topics abruptly, or sounded more like a phrasebook than a brief encounter. This pass is an editorial improvement, not native-speaker certification.
