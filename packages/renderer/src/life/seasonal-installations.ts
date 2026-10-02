@@ -1,11 +1,24 @@
-import type { SeasonConfig, SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
+import { offsetUtility as metric, METERS_PER_DEGREE } from '@atlas/shared';
+import type { SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
 import type { FixtureGrid } from './fixtures';
-import { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
+import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 import { LampState, type VisibleLamp } from './lights';
 
 export type InstallationRecord = SeasonalDisplayRecord | SeasonalLightStringRecord;
 export type InstallationFixture = { kind: 'season-installation'; record: InstallationRecord };
-export function admitsInstallation(record: InstallationRecord, season: SeasonConfig) {
+export function admitsInstallation(
+  record: InstallationRecord,
+  season: {
+    id: string;
+    installations?: readonly {
+      id: string;
+      anchor: string;
+      kind: InstallationRecord['kind'];
+      layout?: string;
+      mount?: string;
+    }[];
+  },
+) {
   return (
     record.season === season.id &&
     season.installations?.some(
@@ -19,11 +32,6 @@ export function admitsInstallation(record: InstallationRecord, season: SeasonCon
     ) === true
   );
 }
-const metric = (at: [number, number], east: number, north: number): [number, number] => [
-  at[0] + east / (111320 * Math.cos((at[1] * Math.PI) / 180)),
-  at[1] + north / 111320,
-];
-
 /** Shader-time changes never rebuild geometry or the fixture texture. */
 export const festivePulse = (time: number, seed: number, reducedMotion = false) =>
   reducedMotion ? 1 : 0.88 + 0.12 * Math.sin(time * (1.2 + (seed & 31) * 0.021) + (seed & 31));
@@ -106,13 +114,15 @@ export function packInstallation(
       );
     }
     const meters = Math.hypot(
-      (record.to[0] - record.from[0]) * 111320 * Math.cos((record.from[1] * Math.PI) / 180),
-      (record.to[1] - record.from[1]) * 111320,
+      (record.to[0] - record.from[0]) *
+        METERS_PER_DEGREE *
+        Math.cos((record.from[1] * Math.PI) / 180),
+      (record.to[1] - record.from[1]) * METERS_PER_DEGREE,
     );
     const count = Math.max(1, Math.floor(meters / 1.8));
     for (let i = 0; i <= count; i++) {
       const glyph =
-        i % 3 === 0 ? SEASONAL_GLYPHS[0] : i % 3 === 1 ? SEASONAL_GLYPHS[7] : SEASONAL_GLYPHS[6];
+        i % 3 === 0 ? SeasonalGlyph.parol : i % 3 === 1 ? SeasonalGlyph.bell : SeasonalGlyph.bulb;
       put(
         a[0] + (dx * i) / count,
         a[1] + (dy * i) / count,
@@ -146,7 +156,7 @@ export function packInstallation(
         ) {
           const d = Math.hypot((x + 0.5 - center[0]) / rx, (y + 0.5 - center[1]) / ry);
           if (d <= 1)
-            put(x, y, SEASONAL_GLYPHS[5], SeasonalPart.festiveTree, Math.round((1 - d) * 255));
+            put(x, y, SeasonalGlyph.foliage, SeasonalPart.festiveTree, Math.round((1 - d) * 255));
         }
     }
     const tiers = record.kind === 'christmas-tree' ? [0.35, 0.68, 0.94] : [0.62, 0.94];
@@ -163,8 +173,8 @@ export function packInstallation(
         );
         const glyph =
           record.kind === 'decorated-canopy' && i % 4 === 0
-            ? SEASONAL_GLYPHS[0]
-            : SEASONAL_GLYPHS[6];
+            ? SeasonalGlyph.parol
+            : SeasonalGlyph.bulb;
         put(
           at[0],
           at[1],
@@ -179,7 +189,7 @@ export function packInstallation(
       put(
         center[0],
         center[1],
-        SEASONAL_GLYPHS[0],
+        SeasonalGlyph.parol,
         SeasonalPart.festiveOrnament,
         (record.seed & 31) << 3,
         true,

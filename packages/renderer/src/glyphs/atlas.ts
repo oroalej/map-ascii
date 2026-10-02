@@ -15,7 +15,7 @@ import {
   type FigureGlyph,
 } from '../life/people';
 import { STALL_GLYPH } from '../life/vehicles';
-import { SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
+import { SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
@@ -295,24 +295,21 @@ function drawStall(slot: Slot) {
   }
 }
 
-/**
- * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
- * figure, a bird, a dog, or a vendor's cart.
- */
-function drawSeasonal(slot: Slot, index: number) {
+/** Rasterize seasonal cloth and ornaments into their fixed atlas slots. */
+function drawSeasonal(slot: Slot, glyph: string) {
   const points: [number, number][] =
-    index === 5
+    glyph === SeasonalGlyph.foliage
       ? Array.from({ length: 16 }, (_, i) => {
           const a = (i * Math.PI) / 8,
             r = i % 2 ? 0.32 : 0.49;
           return [0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r];
         })
-      : index === 6
+      : glyph === SeasonalGlyph.bulb
         ? Array.from({ length: 16 }, (_, i) => {
             const a = (i * Math.PI) / 8;
             return [0.5 + Math.cos(a) * 0.29, 0.5 + Math.sin(a) * 0.19];
           })
-        : index === 7
+        : glyph === SeasonalGlyph.bell
           ? [
               [0.42, 0.16],
               [0.58, 0.16],
@@ -327,23 +324,23 @@ function drawSeasonal(slot: Slot, index: number) {
               [0.23, 0.59],
               [0.23, 0.32],
             ]
-          : index === 0
+          : glyph === SeasonalGlyph.parol
             ? Array.from({ length: 10 }, (_, i) => {
                 const angle = (i * Math.PI) / 5 - Math.PI / 2,
                   radius = i % 2 ? 0.21 : 0.48;
                 return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
               })
-            : index >= 3
+            : glyph === SeasonalGlyph.rectangleLeft || glyph === SeasonalGlyph.rectangleRight
               ? [
                   [0.08, 0.22],
                   [0.92, 0.22],
-                  [index === 3 ? 0.82 : 0.92, 0.87],
-                  [index === 3 ? 0.08 : 0.18, 0.87],
+                  [glyph === SeasonalGlyph.rectangleLeft ? 0.82 : 0.92, 0.87],
+                  [glyph === SeasonalGlyph.rectangleLeft ? 0.08 : 0.18, 0.87],
                 ]
               : [
                   [0.05, 0.25],
                   [0.95, 0.25],
-                  [index === 1 ? 0.35 : 0.65, 0.85],
+                  [glyph === SeasonalGlyph.triangleLeft ? 0.35 : 0.65, 0.85],
                 ];
   for (let y = 0; y < slot.h; y++)
     for (let x = 0; x < slot.w; x++) {
@@ -368,6 +365,10 @@ function drawSeasonal(slot: Slot, index: number) {
     }
 }
 
+/**
+ * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
+ * figure, a bird, a dog, or a vendor's cart.
+ */
 export function drawProcedural(slot: Slot, glyph: string): boolean {
   const arms = boxArms[glyph];
   if (arms) drawBox(slot, arms);
@@ -383,8 +384,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === STALL_GLYPH) drawStall(slot);
-  else if ((SEASONAL_GLYPHS as readonly string[]).includes(glyph))
-    drawSeasonal(slot, SEASONAL_GLYPHS.indexOf(glyph as (typeof SEASONAL_GLYPHS)[number]));
+  else if ((SEASONAL_GLYPHS as readonly string[]).includes(glyph)) drawSeasonal(slot, glyph);
   else return false;
   return true;
 }

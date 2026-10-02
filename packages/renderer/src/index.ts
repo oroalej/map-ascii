@@ -102,6 +102,7 @@ import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
+import { simulationSeasons } from './life/seasonal-simulation';
 import { createInlineHost, createWorkerHost } from './life/host';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
@@ -141,10 +142,7 @@ export type { QualityChoice, QualityState } from './quality';
 export type { WindChoice } from './life/wind';
 export { cityTime, type LocalTime } from './life/clock';
 
-/**
- * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
- * the time of day the map is lit for.
- */
+/** Resolved immutable calendar selection for controls and the fixture legend. */
 export type SeasonState = Readonly<{
   id: string;
   title: string;
@@ -158,6 +156,10 @@ export type SeasonState = Readonly<{
   }>;
 }>;
 
+/**
+ * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
+ * the time of day the map is lit for.
+ */
 export type LifeSettings = {
   /** Pack season id for preview; omitted or 'auto' follows the real city date. */
   season?: string;
@@ -758,6 +760,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       : (() => {
           const world = new LifeWorld(options.traffic, profiler);
           world.setProcessions(processions);
+          world.setSeasons(simulationSeasons(options.cityLife?.seasons));
+          world.setShopSchedule(options.cityLife?.schedules?.shops);
           return createInlineHost(world, profiler);
         })();
   /** The procession last reported (`procession` event), as "id live". */
@@ -830,7 +834,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           weather: {
             rain: currentRain(),
             minutes: cityMinutes,
-            cityLife: options.cityLife,
             season: season?.id ?? null,
           },
           cellMeters: metersPerCssPx(camera) * cssCell.width,

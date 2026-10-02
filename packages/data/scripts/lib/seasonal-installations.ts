@@ -1,6 +1,11 @@
 /** Bake small, sourced public-place displays using complete geometry before tile clipping. */
 import {
   utilitySeed,
+  isRoofBuilding,
+  localMetricProjection,
+  LEGACY_LOCAL_METERS_PER_DEGREE,
+  pointInPolygon as inside,
+  offsetUtility,
   type SeasonConfig,
   type SeasonalRecord,
   type SeasonalDisplayRecord,
@@ -37,20 +42,6 @@ function rings(f: AtlasFeature): Point[][] {
   if (f.geometry.type === 'MultiPolygon') return f.geometry.coordinates.flat() as Point[][];
   return [];
 }
-function inside(p: Point, polygon: Point[][]) {
-  let hit = false;
-  for (const ring of polygon)
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const a = ring[i]!,
-        b = ring[j]!;
-      if (
-        a[1] > p[1] !== b[1] > p[1] &&
-        p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
-      )
-        hit = !hit;
-    }
-  return hit;
-}
 const edgeDistance = (p: Point, polygon: Point[][]) =>
   Math.min(...polygon.flatMap((r) => r.slice(1).map((b, i) => distance(p, r[i]!, b))));
 
@@ -79,13 +70,7 @@ export function generateSeasonalInstallations(
         !anchor ||
         !rings(anchor).length ||
         !(buildingLights
-          ? [
-              'building',
-              'building_religious',
-              'building_school',
-              'building_market',
-              'building_station',
-            ].includes(anchor.properties.class) && Number(anchor.properties.height) > 0
+          ? isRoofBuilding(anchor.properties.class) && Number(anchor.properties.height) > 0
           : grounds
             ? anchor.properties.class.startsWith('building') ||
               ['park', 'paving'].includes(anchor.properties.class)
@@ -96,10 +81,12 @@ export function generateSeasonalInstallations(
         );
       const ll = grounds ? [grounds.ring] : rings(anchor),
         lat = ll[0]![0]![1];
-      const mx = 111320 * Math.cos((lat * Math.PI) / 180),
-        my = 111320;
-      const project = (p: Point): Point => [p[0] * mx, p[1] * my];
-      const unproject = (p: Point): Point => [p[0] / mx, p[1] / my];
+      const { to: project, from: unproject } = localMetricProjection([0, 0], {
+        // Keep the world lattice and coordinate-derived identities of existing tile records.
+        latitude: lat,
+        east: LEGACY_LOCAL_METERS_PER_DEGREE,
+        north: LEGACY_LOCAL_METERS_PER_DEGREE,
+      });
       const polygon = ll.map((r) => r.map(project));
       if (grounds) {
         const source = rings(anchor).flat().map(project);
@@ -134,7 +121,7 @@ export function generateSeasonalInstallations(
       const monuments = local.filter((f) => f.properties.class === 'monument');
       const obstacleDistance = (p: Point, f: AtlasFeature) => {
         if (f.geometry.type === 'Point') {
-          const q = project(f.geometry.coordinates as Point);
+          const q = project(f.geometry.coordinates);
           const padding =
             f.properties.class === 'monument'
               ? 5
@@ -257,7 +244,7 @@ export function generateSeasonalInstallations(
                     .slice(1)
                     .some(
                       (d, i) =>
-                        segmentDistance(a, b, project(l[i] as Point), project(d as Point)) <
+                        segmentDistance(a, b, project(l[i] as Point), project(d)) <
                         Number(f.properties.width ?? 6) / 2 + 1,
                     ),
                 );
@@ -387,14 +374,10 @@ export function generateSeasonalInstallations(
 export function seasonalRecordGeometry(r: SeasonalRecord): Geometry {
   if (r.kind === 'bunting' || r.kind === 'light-string')
     return { type: 'LineString', coordinates: [r.from, r.to] };
-  const mx = 111320 * Math.cos((r.at[1] * Math.PI) / 180);
   const ring: Point[] = [];
   for (let i = 0; i < 32; i++) {
     const a = (i * Math.PI) / 16;
-    ring.push([
-      r.at[0] + (Math.cos(a) * r.radius_m) / mx,
-      r.at[1] + (Math.sin(a) * r.radius_m) / 111320,
-    ]);
+    ring.push(offsetUtility(r.at, Math.cos(a) * r.radius_m, Math.sin(a) * r.radius_m));
   }
   ring.push([...ring[0]!]);
   return { type: 'Polygon', coordinates: [ring] };

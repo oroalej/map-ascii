@@ -1,5 +1,6 @@
+import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
-import type { CameraState, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
@@ -37,6 +38,8 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  seasons?: readonly SimulationSeason[];
+  shopSchedule?: ShopSchedule;
   traffic?: TrafficMix;
   processions: readonly ProcessionRoute[];
   profiling?: boolean;
@@ -89,6 +92,8 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
       world = new LifeWorld(options.traffic, profiler);
       preparation = new LifePreparation(world, profiler, preparationClock);
       world.setProcessions(options.processions);
+      world.setSeasons(options.seasons ?? []);
+      world.setShopSchedule(options.shopSchedule);
       geometries.clear();
       lastTerrain = undefined;
       terrainSent = false;

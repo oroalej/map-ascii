@@ -19,3 +19,4 @@ export {
 } from './lamp-placement';
 export * from './tile-space';
 export * from './utilities';
+export * from './flat-geometry';

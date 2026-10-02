@@ -1,9 +1,15 @@
+import { simulationSeasons } from './seasonal-simulation';
 import { expect, it } from 'vitest';
 import type { SeasonConfig, SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
 import { admitsInstallation, festivePulse, installationLamps } from './seasonal-installations';
 import { createSeasonalFixtureCache, seasonalFixtures } from './seasonal';
 import { LifeBuilder, LifeLine } from './geometry';
-import { FixturePart, packFixtures, type FixtureGrid } from './fixtures';
+import {
+  FixturePart,
+  packFixtures,
+  createFixturePackingScratch,
+  type FixtureGrid,
+} from './fixtures';
 import { mapGlyphs, themes } from '../theme';
 import { LifeWorld } from './simulate';
 import { LampState } from './lights';
@@ -73,6 +79,30 @@ const grid: FixtureGrid = {
   ],
 };
 const index = (glyph: string) => mapGlyphs(themes.dark).indexOf(glyph);
+it('reuses seasonal admission scratch, refills ownership and resizes with the target', () => {
+  const scratch = createFixturePackingScratch();
+  const fixtures = [{ kind: 'season-installation' as const, record: tree }];
+  const pack = (target = grid) =>
+    packFixtures(
+      new Uint8Array(target.cols * target.rows * 4),
+      target,
+      fixtures,
+      20,
+      index,
+      0,
+      undefined,
+      undefined,
+      scratch,
+    );
+  const first = pack();
+  const admission = scratch.seasonalAdmission;
+  admission.fill(99);
+  expect(pack().texels).toEqual(first.texels);
+  expect(scratch.seasonalAdmission).toBe(admission);
+  pack({ ...grid, cols: 100 });
+  expect(scratch.seasonalAdmission).not.toBe(admission);
+  expect(scratch.seasonalAdmission.length).toBe(100 * grid.rows);
+});
 it('deduplicates buffered displays, filters unknown definitions and caches tile/config identities', () => {
   const life = new LifeBuilder().finish();
   const groups = [{ tile, life, fixtures: [], seasonal: [tree, string, tree] }];
@@ -230,12 +260,12 @@ it('preserves lamp hardware and the full animated flag reservation under overlap
 it('activates/deactivates deduplicated physical footprints independently of stalls', () => {
   const life = { ...new LifeBuilder().finish(), seasonalTrees: [tree, tree] };
   const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
   world.sync([{ key: 'test', tile, life }]);
   const choose = (id: string | null) =>
     world.step(0.001, undefined, 20, undefined, undefined, {
       rain: 0,
       season: id,
-      cityLife: { source: 'Test', seasons: [season] },
     });
   const bodyAt = lngLatToTile(tile, ...tree.at);
   const body = {
@@ -269,6 +299,7 @@ it('settles existing actors away from a newly activated physical display', () =>
   const physical = { ...tree, at: [...tree.at] as [number, number] };
   const geo = { ...b.finish(), seasonalTrees: [physical] };
   const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
   world.sync([{ key: 'site', tile, life: geo }]);
   const life = worldTiles(world).get('site')!;
   const person = life.movers.find((m) => m.kind === 'person')!;
@@ -276,7 +307,6 @@ it('settles existing actors away from a newly activated physical display', () =>
   world.step(0, undefined, 20, undefined, undefined, {
     rain: 0,
     season: 'winter',
-    cityLife: { source: 'Test', seasons: [season] },
   });
   const trees = world.cellTerrain()!.trees;
   for (const m of life.movers.filter(
@@ -288,16 +318,18 @@ it('keeps direct and worker frames equivalent through installation activation, e
   const geo = { ...new LifeBuilder().finish(), seasonalTrees: [tree] };
   const tiles = [{ key: 'site', tile, life: geo }];
   const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
   world.sync(tiles);
   const api = createLifeWorkerApi();
-  api.init({ processions: [] });
+  api.init(structuredClone({ processions: [], seasons: simulationSeasons([season]) }));
   api.sync(structuredClone(tiles));
-  for (let frame = 0; frame < 12; frame++) {
-    if (frame === 8) {
+  let snapshots = 0;
+  for (let frame = 0; frame < 80; frame++) {
+    if (frame === 40) {
       world.sync([]);
       api.sync([]);
     }
-    if (frame === 9) {
+    if (frame === 41) {
       world.sync(tiles);
       api.sync(structuredClone(tiles));
     }
@@ -316,13 +348,16 @@ it('keeps direct and worker frames equivalent through installation activation, e
         wind: undefined,
         weather: {
           rain: 0,
-          season: frame < 4 || frame > 6 ? 'winter' : null,
-          cityLife: { source: 'Test', seasons: [season] },
+          season: frame < 20 || frame > 30 ? 'winter' : null,
         },
         cellMeters: 0,
       },
       visible: [20, activityLevels(720), tree.at, { rain: 0, sunAltitude: 45 }],
     };
-    expect(api.frame(input).agents).toEqual(runLifeFrame(world, input).agents);
+    const direct = runLifeFrame(world, input);
+    const result = api.frame(structuredClone(input));
+    if (result.terrain !== undefined) snapshots++;
+    expect(result.agents).toEqual(direct.agents);
   }
+  expect(snapshots).toBe(5);
 });

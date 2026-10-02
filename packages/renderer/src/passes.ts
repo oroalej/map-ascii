@@ -1,3 +1,4 @@
+import { project } from './camera';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
@@ -58,6 +59,8 @@ import { type TileLabel } from './raster/geometry';
 import { rainGlyphs, type Theme } from './theme';
 import {
   packFixtures,
+  createFixturePackingScratch,
+  type FixturePackingScratch,
   packSignalLights,
   updateFixtureSignals,
   updateFixtureFlags,
@@ -539,6 +542,7 @@ const fixturesOf = new WeakMap<
     lightTexels: Uint8Array;
     lightScores: Float32Array;
     utilityScratch: UtilityPackingScratch;
+    fixtureScratch: FixturePackingScratch;
     viewport: ReturnType<typeof screenArea>;
   }
 >();
@@ -572,6 +576,7 @@ export function fixturePass(
   ) {
     const area = viewport;
     const utilityScratch = cache?.utilityScratch ?? createUtilityPackingScratch();
+    const fixtureScratch = cache?.fixtureScratch ?? createFixturePackingScratch();
     const packed = packFixtures(
       cache?.packed.texels.length === targets.cols * targets.rows * 4
         ? cache.packed.texels
@@ -582,6 +587,13 @@ export function fixturePass(
         cellWidth: view.cellDev.w,
         cellHeight: view.cellDev.h,
         toCell: placement.toCell,
+        buntingProjection: {
+          scale: `${view.camera.zoom}/${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+          toCell: (lng, lat) => {
+            const [x, y] = project(lng, lat, view.camera.zoom);
+            return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+          },
+        },
         visible: (c, r) => c >= area.left && c <= area.right && r >= area.top && r <= area.bottom,
       },
       fixtures,
@@ -590,6 +602,7 @@ export function fixturePass(
       clock,
       motion,
       utilityScratch,
+      fixtureScratch,
     );
     cache = {
       packed,
@@ -608,6 +621,7 @@ export function fixturePass(
           ? cache.lightScores
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
+      fixtureScratch,
       viewport,
     };
     fixturesOf.set(targets, cache);

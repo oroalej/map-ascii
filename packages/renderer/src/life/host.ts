@@ -1,5 +1,6 @@
 import * as Comlink from 'comlink';
-import type { ProcessionRoute, TrafficMix } from '@atlas/shared';
+import { simulationSeasons } from './seasonal-simulation';
+import type { CityLifeConfig, ProcessionRoute, TrafficMix } from '@atlas/shared';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
 import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
@@ -101,14 +102,17 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix },
+  options: { traffic?: TrafficMix; cityLife?: CityLifeConfig },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
+  const seasons = simulationSeasons(options.cityLife?.seasons);
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(options.traffic, profiler);
     world.setProcessions(processions);
+    world.setSeasons(seasons);
+    world.setShopSchedule(options.cityLife?.schedules?.shops);
     return createInlineHost(world, profiler);
   };
   try {
@@ -121,6 +125,7 @@ export function createWorkerHost(
     inFlight = false,
     disposed = false,
     generation = 0,
+    agentEpoch = 0,
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
@@ -150,12 +155,21 @@ export function createWorkerHost(
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
   // Comlink posts messages in order; init and all synchronous sync/command calls precede frames.
-  void remote.init({ traffic: options.traffic, processions, profiling: !!profiler }).then(() => {
-    if (!disposed && !fallback) ready = true;
-  }, fail);
+  void remote
+    .init({
+      traffic: options.traffic,
+      processions,
+      profiling: !!profiler,
+      seasons,
+      shopSchedule: options.cityLife?.schedules?.shops,
+    })
+    .then(() => {
+      if (!disposed && !fallback) ready = true;
+    }, fail);
   return {
     invalidateFrame() {
-      generation++;
+      agentEpoch++;
+      acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
       if (view) view = { ...view, agents: [] };
     },
@@ -209,23 +223,37 @@ export function createWorkerHost(
       if (!ready || inFlight) return false;
       inFlight = true;
       const requestedGeneration = generation;
+      const requestedAgentEpoch = agentEpoch;
       const frame = ++frames;
       const posted = profiler?.time();
       void remote
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
+          if (result.terrain !== undefined) {
+            const start = profiler?.time();
+            terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
+            if (start !== undefined) profiler!.record('terrainSnapshot', profiler!.time() - start);
+          }
+          if (agentEpoch !== requestedAgentEpoch) {
+            const cellTerrain = terrain;
+            if (view || result.terrain !== undefined)
+              view = {
+                agents: [],
+                procession: view?.procession,
+                signalClock: view?.signalClock ?? 0,
+                cellGuard: (toCell) =>
+                  cellTerrain &&
+                  makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+              };
+            return;
+          }
           acceptedPost = posted;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
           // Only frames posted after play() can show that its time-lapse has ended.
           const run = result.procession;
           if (played && frame > playedFrom && !(run && !run.live && run.id === played))
             played = undefined;
-          if (result.terrain !== undefined) {
-            const start = profiler?.time();
-            terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
-            if (start !== undefined) profiler!.record('terrainSnapshot', profiler!.time() - start);
-          }
           const cellTerrain = terrain;
           view = {
             agents: result.agents,

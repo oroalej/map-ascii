@@ -30,8 +30,8 @@ import {
 } from './seasonal-installations';
 
 type Point = [number, number];
-import { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
-export { SeasonalPart, SEASONAL_GLYPHS } from './seasonal-glyphs';
+import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
+export { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 export type SeasonalFixture =
   | InstallationFixture
   | { kind: 'season-lantern'; lamp: Extract<LegacyStreetFixture, { kind: 'streetlight' }> }
@@ -408,7 +408,7 @@ export function packSeasonalFixtures(
           write(
             x,
             y,
-            SEASONAL_GLYPHS[0],
+            SeasonalGlyph.parol,
             SeasonalPart.lantern,
             lightByte(LampState.candle, lamp.seed),
             alpha,
@@ -438,7 +438,13 @@ export function packSeasonalFixtures(
           write(
             a[0] + (spanX * n) / count,
             a[1] + (spanY * n) / count,
-            SEASONAL_GLYPHS[(dense ? 3 : 1) + ((n + fixture.seed) & 1)]!,
+            dense
+              ? (n + fixture.seed) & 1
+                ? SeasonalGlyph.rectangleRight
+                : SeasonalGlyph.rectangleLeft
+              : (n + fixture.seed) & 1
+                ? SeasonalGlyph.triangleRight
+                : SeasonalGlyph.triangleLeft,
             SeasonalPart.bunting,
             ((fixture.seed & 31) << 3) |
               (dense ? (n + fixture.seed) & 1 : (Math.floor(n / 2) + fixture.seed) % 3),
@@ -448,3 +454,5 @@ export function packSeasonalFixtures(
   }
   return visibility;
 }
+
+export { SEASONAL_GLYPHS } from './seasonal-glyphs';

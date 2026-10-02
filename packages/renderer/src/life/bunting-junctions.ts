@@ -1,3 +1,4 @@
+import { METERS_PER_DEGREE } from '@atlas/shared';
 /** Resolve whole hanging rows before cell ownership can leave two partial directions. */
 type Point = [number, number];
 export type BuntingPriority = { width: number; corridor: number; road: string };
@@ -11,7 +12,9 @@ type Row = {
 };
 type Fixture = Row | { kind: 'season-lantern' | 'season-installation' };
 export type ProjectedBunting = { from: Point; to: Point };
-type Grid = { toCell: (lng: number, lat: number) => Point };
+export type BuntingProjection = { scale: string; toCell: (lng: number, lat: number) => Point };
+type Grid = { toCell: BuntingProjection['toCell']; buntingProjection?: BuntingProjection };
+const admitted = new WeakMap<readonly Fixture[], { scale: string; rows: readonly Row[] }>();
 const ordered = new WeakMap<readonly Fixture[], readonly Row[]>();
 const BUCKET = 16;
 // A one-cell square glyph fits in this circle; two rows need twice this clearance.
@@ -22,7 +25,9 @@ const CLEARANCE2 = 2;
 export function buntingWidth(from: Point, to: Point): number {
   const latitude = ((from[1] + to[1]) / 2) * (Math.PI / 180);
   return (
-    Math.round(Math.hypot((to[0] - from[0]) * Math.cos(latitude), to[1] - from[1]) * 1113200) / 10
+    Math.round(
+      Math.hypot((to[0] - from[0]) * Math.cos(latitude), to[1] - from[1]) * METERS_PER_DEGREE * 10,
+    ) / 10
   );
 }
 
@@ -91,13 +96,27 @@ function buckets(span: ProjectedBunting, visit: (key: string) => void) {
 }
 
 /** Full unclipped spans make admission invariant under panning, including offscreen junctions.
- * Priority order is cached with fixture inputs; only nearby accepted rows are compared per frame.
+ * With a canonical projection, admission is cached at the latest scale per fixture identity.
+ * Panning only projects accepted rows; callers without scale metadata use uncached admission.
  * Calendars without corridor priorities keep their original packing behavior.
  */
 export function selectBuntingRows(
   fixtures: readonly Fixture[],
   grid: Grid,
 ): Map<Row, ProjectedBunting> {
+  const projection = grid.buntingProjection;
+  if (projection) {
+    let cache = admitted.get(fixtures);
+    if (!cache || cache.scale !== projection.scale) {
+      // Canonical coordinates have no grid-origin translation; offscreen rows still compete.
+      cache = {
+        scale: projection.scale,
+        rows: [...selectBuntingRows(fixtures, { toCell: projection.toCell }).keys()],
+      };
+      admitted.set(fixtures, cache);
+    }
+    return new Map(cache.rows.map((row) => [row, projectBunting(row, grid)]));
+  }
   let rows = ordered.get(fixtures);
   if (!rows) {
     const all = fixtures.filter((f): f is Row => f.kind === 'season-bunting');

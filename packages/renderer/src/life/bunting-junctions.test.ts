@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { buntingWidth, selectBuntingRows } from './bunting-junctions';
 import { packSeasonalFixtures, type SeasonalFixture } from './seasonal';
 import type { FixtureGrid } from './fixtures';
@@ -34,6 +34,31 @@ const ids = (rows: readonly Row[], target = grid) =>
   [...selectBuntingRows(rows, target).keys()].map((r) => r.id);
 const horizontal = () => row('horizontal', [10, 40], [70, 40]);
 const vertical = () => row('vertical', [40, 10], [40, 70]);
+
+it('caches admission across pans, invalidates scale/input changes and retains only the latest scale', () => {
+  const rows = [vertical(), horizontal()];
+  const canonical = vi.fn((x: number, y: number): Point => [x, y]);
+  const projected = vi.fn((x: number, y: number): Point => [x - 200, y - 200]);
+  const target = {
+    ...grid,
+    toCell: projected,
+    buntingProjection: { scale: '1', toCell: canonical },
+  };
+  expect(ids(rows, target)).toEqual(['horizontal']);
+  expect(canonical).toHaveBeenCalledTimes(4);
+  expect(projected).toHaveBeenCalledTimes(2);
+  projected.mockImplementation((x, y) => [x - 400, y - 400]);
+  expect(ids(rows, target)).toEqual(['horizontal']);
+  expect(canonical).toHaveBeenCalledTimes(4);
+  expect(projected).toHaveBeenCalledTimes(4);
+  const scaled = { ...target, buntingProjection: { scale: '2', toCell: canonical } };
+  ids(rows, scaled);
+  expect(canonical).toHaveBeenCalledTimes(8);
+  ids(rows, target);
+  expect(canonical).toHaveBeenCalledTimes(12);
+  ids([...rows], target);
+  expect(canonical).toHaveBeenCalledTimes(16);
+});
 
 it('keeps a complete dense direction ahead of a wider sparse crossing, independent of input order', () => {
   const dense = horizontal(),

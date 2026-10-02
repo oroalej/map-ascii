@@ -21,7 +21,7 @@ it('names visible installations with Life off and drops the entry after leaving 
       legendEntries(theme, 20, ['park'], { season, fixtures, life: false }).find(
         (e) => e.id === 'info:season-installations',
       )?.label,
-    ).toBe('Christmas trees and lights');
+    ).toBe('Christmas trees and lights (illustrative)');
   expect(
     legendEntries('dark', 20, ['park'], {
       season,

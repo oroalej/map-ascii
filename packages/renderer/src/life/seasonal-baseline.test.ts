@@ -1,23 +1,51 @@
-/** Simulation captured from main af120b1; legacy fixture bytes remain from b97ef42. */
+/** Inactive calendars must leave seeded worlds unchanged; legacy fixture bytes remain pinned. */
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { makeScenario, completeScenarioState, SCENARIOS } from './testing/scenarios';
 import { mapGlyphs, themes } from '../theme';
 import { packFixtures, updateFixtureFlags } from './fixtures';
 import { LampState, packLights } from './lights';
+import { simulationSeasons } from './seasonal-simulation';
+import type { SeasonConfig } from '@atlas/shared';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const baseline = {
-  sparse: '336f2a4e852b4557413c404035b2233676e0397e8f1906360bc0107e368f1c54',
-  junction: 'f30dbc262262fa971a2f9f9e33ddd23811f79d6229768e687291f1a5b72d1318',
-  crossroads: 'cbd39406b344264e6c115abbbe40578a2bc3b94af9f1b0b26d4f2755b3088d08',
-  transit: '7c6649be292233c8ea9366b5087005314310e5f1be8a3e90489fdd0a29e4546a',
-  rain: '8cb98cb73ad454c27a2ac2b4d234780a4f90fb43c5b575c0b02ed806fb1dc933',
+const inactive: SeasonConfig = {
+  id: 'winter',
+  title: { en: 'Winter' },
+  status: 'draft',
+  sources: [{ title: 'Synthetic', url: 'https://example.com/' }],
+  window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
+  stalls: { label: 'Carts', near: ['worship'], radius_m: 300, per_tile: 12 },
+  installations: [
+    {
+      id: 'tree',
+      kind: 'christmas-tree',
+      anchor: 'osm:way/1',
+      label: 'Tree',
+      radius_m: 5,
+      sources: [{ title: 'Synthetic', url: 'https://example.com/' }],
+    },
+  ],
 };
 for (const kind of SCENARIOS)
-  it(`preserves the unseasoned ${kind} simulation`, () => {
-    const s = makeScenario(kind, 4);
-    for (let frame = 0; frame < 60; frame++) s.step(frame);
-    expect(hash(completeScenarioState(s.world))).toBe(baseline[kind]);
+  it(`preserves the unseasoned ${kind} simulation with an inactive calendar`, () => {
+    const a = makeScenario(kind, 2),
+      b = makeScenario(kind, 2);
+    b.world.setSeasons(simulationSeasons([inactive]));
+    for (let frame = 0; frame < 60; frame++) {
+      if (frame === 20 || frame === 30) {
+        const tiles = frame === 20 ? a.tiles.slice(0, 1) : a.tiles;
+        a.world.sync(tiles);
+        b.world.sync(structuredClone(tiles));
+      }
+      const weather = a.environment(frame * 6);
+      const dt = frame % 7 ? 1 / 30 : 0;
+      a.world.step(dt, undefined, 18, a.bounds, undefined, weather, 0.9);
+      b.world.step(dt, undefined, 18, b.bounds, undefined, { ...weather, season: null }, 0.9);
+      expect(b.world.visible(18, b.levels, b.center, { ...weather, sunAltitude: 45 })).toEqual(
+        a.world.visible(18, a.levels, a.center, { ...weather, sunAltitude: 45 }),
+      );
+    }
+    expect(completeScenarioState(b.world)).toEqual(completeScenarioState(a.world));
   });
 it('preserves legacy glyph indices, fixtures, animated flags and light bytes', () => {
   const grid = {

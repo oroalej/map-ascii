@@ -1,5 +1,6 @@
+import { simulationSeasons } from './seasonal-simulation';
 import { describe, expect, it } from 'vitest';
-import type { CityLifeConfig, SeasonConfig } from '@atlas/shared';
+import type { SeasonConfig } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
 import { MAX_TILE_AGENTS, activityLevels } from './config';
@@ -18,9 +19,8 @@ const season: SeasonConfig = {
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   stalls: { label: 'Food carts', near: ['worship'], radius_m: 300, per_tile: 12 },
 };
-const cityLife: CityLifeConfig = { source: 'Synthetic calendar', seasons: [season] };
 const select = (world: LifeWorld, id: string | null = 'feast') =>
-  world.step(0, undefined, undefined, undefined, undefined, { rain: 0, cityLife, season: id });
+  world.step(0, undefined, undefined, undefined, undefined, { rain: 0, season: id });
 function setup(road = false, places = true, blocked = false) {
   const b = new LifeBuilder();
   for (const y of [800, 1600, 2400, 3200])
@@ -45,10 +45,37 @@ function setup(road = false, places = true, blocked = false) {
     ]);
   const tiles = [{ key: 'seasonal', tile, life: b.finish() }],
     world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
   world.sync(tiles);
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it('keeps a customer at the same cart long enough to purchase across ordinary frames', () => {
+    const { world, life } = setup();
+    select(world);
+    const stall = life.seasonalStalls[0]!;
+    const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+    const customer = life.movers.find((m) => m.kind === 'person' && life.scenes.reserve(m, site))!;
+    expect(customer).toBeDefined();
+    const visit = life.scenes.visits.get(customer)!;
+    visit.state = 'wait';
+    visit.time = 60;
+    world.step(0.1, undefined, 20, undefined, undefined, {
+      rain: 0,
+      minutes: 720,
+      season: 'feast',
+    });
+    expect(visit.state).toBe('purchase');
+    for (let frame = 0; frame < 30; frame++)
+      world.step(1 / 30, undefined, 20, undefined, undefined, {
+        rain: 0,
+        minutes: 720,
+        season: 'feast',
+      });
+    expect(life.seasonalStalls[0]).toBe(stall);
+    expect(life.scenes.visits.get(customer)).toBe(visit);
+    expect(visit.state).toBe('purchase');
+  });
   it('reconciles a changed season on revival and regenerates carts after a hard clear', () => {
     const { world, life, tiles } = setup();
     select(world);
@@ -163,7 +190,7 @@ describe('seasonal stall lifecycle', () => {
   it('matches direct and worker frames through activation, deactivation and reload', () => {
     const { tiles, world } = setup(),
       api = createLifeWorkerApi();
-    api.init({ processions: [] });
+    api.init(structuredClone({ processions: [], seasons: simulationSeasons([season]) }));
     api.sync(structuredClone(tiles));
     const center = tileToLngLat(tile, { x: 2048, y: 2048 });
     for (let frame = 0; frame < 12; frame++) {
@@ -191,14 +218,13 @@ describe('seasonal stall lifecycle', () => {
           weather: {
             rain: 0,
             minutes: 720,
-            cityLife,
             season: frame < 4 || frame > 6 ? 'feast' : null,
           },
           cellMeters: 0,
         },
         visible: [20, activityLevels(720), center, { rain: 0, sunAltitude: 45 }],
       };
-      expect(api.frame(input).agents).toEqual(runLifeFrame(world, input).agents);
+      expect(api.frame(structuredClone(input)).agents).toEqual(runLifeFrame(world, input).agents);
     }
   });
 });

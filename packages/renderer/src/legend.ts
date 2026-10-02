@@ -342,7 +342,7 @@ export function legendEntries(
     entries.push({
       id: 'info:season-installations',
       classes: [],
-      label: season.labels.installations,
+      label: `${season.labels.installations} (illustrative)`,
       glyphs: '\u2736\u2605',
       color: css(theme.fixturePaints[9]!),
     });

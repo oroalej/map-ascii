@@ -1,3 +1,4 @@
+import type { SimulationSeason } from './seasonal-simulation';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -26,7 +27,7 @@ import {
   type ProcessionRoute,
   type TrafficMix,
   type CityLifeConfig,
-  type SeasonConfig,
+  type ShopSchedule,
 } from '@atlas/shared';
 import {
   EXTENT,
@@ -484,7 +485,7 @@ export class TileLife {
   }
 
   admitSeasonalStalls(
-    config: NonNullable<SeasonConfig['stalls']>,
+    config: NonNullable<SimulationSeason['stalls']>,
     anchors: readonly SeasonAnchor[],
     guard: GroundGuard,
   ) {
@@ -3223,21 +3224,33 @@ type GroundTerrain = {
 };
 
 export class LifeWorld {
-  private seasonalConfig: SeasonConfig | undefined;
+  private cityLife: CityLifeConfig | undefined;
+  setShopSchedule(shops: ShopSchedule | undefined) {
+    this.cityLife = shops
+      ? { source: 'Simulation shop schedule', schedules: { shops } }
+      : undefined;
+  }
+  private seasons: readonly SimulationSeason[] = [];
+  private seasonalConfig: SimulationSeason | undefined;
+  setSeasons(seasons: readonly SimulationSeason[]) {
+    if (seasons === this.seasons) return;
+    this.seasons = seasons;
+    this.seasonsDirty = true;
+  }
   private seasonsDirty = false;
 
-  private syncSeason(season: string | null | undefined, cityLife?: CityLifeConfig) {
-    const config = cityLife?.seasons?.find(
+  private syncSeason(season: string | null | undefined) {
+    const config = this.seasons.find(
       (s) => s.id === season && (s.stalls || s.installations?.length),
     );
-    if (config === this.seasonalConfig && !this.seasonsDirty) return;
+    const changed = config?.id !== this.seasonalConfig?.id;
+    if (!changed && !this.seasonsDirty) {
+      this.seasonalConfig = config;
+      return;
+    }
     const installGround =
-      config !== this.seasonalConfig &&
-      config?.installations?.some((i) => i.kind === 'christmas-tree');
-    if (
-      config !== this.seasonalConfig &&
-      (config?.installations?.length || this.seasonalConfig?.installations?.length)
-    )
+      changed && config?.installations?.some((i) => i.kind === 'christmas-tree');
+    if (changed && (config?.installations?.length || this.seasonalConfig?.installations?.length))
       this.groundTerrain = undefined;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
@@ -4217,10 +4230,10 @@ export class LifeWorld {
     zoom?: number,
     bounds?: LngLatBounds,
     wind?: LifeEnv['wind'],
-    weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig; season?: string | null },
+    weather?: { rain: number; minutes?: number; season?: string | null },
     cellMeters = 0,
   ) {
-    this.syncSeason(weather?.season, weather?.cityLife);
+    this.syncSeason(weather?.season);
     if (this.seasonalConfig)
       for (const tile of this.tiles.values())
         tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.movers.length));
@@ -4243,6 +4256,7 @@ export class LifeWorld {
       rain: this.lastRain,
       wind,
       ...weather,
+      cityLife: this.cityLife,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
     this.junctions.begin(new Set(this.tiles.values()));

@@ -2,6 +2,8 @@
 import centroid from '@turf/centroid';
 import {
   utilitySeed,
+  localMetricProjection,
+  LEGACY_LOCAL_METERS_PER_DEGREE,
   type BuntingCorridor,
   type SeasonConfig,
   type SeasonalPoint,
@@ -28,10 +30,12 @@ function bakeCorridor(features: readonly AtlasFeature[], season: string, config:
   });
   const positions = roads.flatMap((f) => lines(f).flat());
   const latitude = positions.reduce((n, p) => n + p[1]!, 0) / positions.length;
-  const mx = 111320 * Math.cos((latitude * Math.PI) / 180),
-    my = 111320;
-  const project = (p: SeasonalPoint): SeasonalPoint => [p[0] * mx, p[1] * my];
-  const unproject = (p: SeasonalPoint): SeasonalPoint => [p[0] / mx, p[1] / my];
+  const { to: project, from: unproject } = localMetricProjection([0, 0], {
+    // Keep the world lattice and coordinate-derived identities of existing tile records.
+    latitude: latitude,
+    east: LEGACY_LOCAL_METERS_PER_DEGREE,
+    north: LEGACY_LOCAL_METERS_PER_DEGREE,
+  });
   const nodes = new Map<string, Node>(),
     edges: Edge[] = [];
   const node = (at: SeasonalPoint) => {
@@ -69,7 +73,7 @@ function bakeCorridor(features: readonly AtlasFeature[], season: string, config:
     if (!id) return undefined;
     const f = byId.get(id);
     if (!f) throw new Error(`Season ${season}, corridor ${config.id}: missing endpoint ${id}`);
-    const xy = project(centroid(f).geometry.coordinates as SeasonalPoint);
+    const xy = project(centroid(f).geometry.coordinates);
     let best: { edge: Edge; u: number; distance: number } | undefined;
     for (const e of edges) {
       const dx = e.b.xy[0] - e.a.xy[0],

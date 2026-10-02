@@ -20,3 +20,14 @@ export const SEASONAL_GLYPHS = [
   '\ue226',
   '\ue227',
 ] as const;
+
+export const SeasonalGlyph = {
+  parol: SEASONAL_GLYPHS[0],
+  triangleLeft: SEASONAL_GLYPHS[1],
+  triangleRight: SEASONAL_GLYPHS[2],
+  rectangleLeft: SEASONAL_GLYPHS[3],
+  rectangleRight: SEASONAL_GLYPHS[4],
+  foliage: SEASONAL_GLYPHS[5],
+  bulb: SEASONAL_GLYPHS[6],
+  bell: SEASONAL_GLYPHS[7],
+} as const;

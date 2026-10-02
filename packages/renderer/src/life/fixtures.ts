@@ -1,3 +1,4 @@
+import type { BuntingProjection } from './bunting-junctions';
 /** Static street hardware, independent of the life population and lighting texture. */
 import {
   packUtilityFixtures,
@@ -59,7 +60,13 @@ export type FixtureVisibility = {
   utilities: boolean;
   seasonal?: SeasonalVisibility;
 };
+export type FixturePackingScratch = { seasonalAdmission: Int32Array };
+export const createFixturePackingScratch = (): FixturePackingScratch => ({
+  seasonalAdmission: new Int32Array(0),
+});
+
 export type FixtureGrid = LightGrid & {
+  buntingProjection?: BuntingProjection;
   cellWidth: number;
   cellHeight: number;
   /** Only the viewport, excluding the render grid's offscreen margin. */
@@ -327,6 +334,7 @@ export function packFixtures(
   clock: number,
   motion: FixtureMotion = { time: 0, strength: 0 },
   utilityScratch?: UtilityPackingScratch,
+  scratch?: FixturePackingScratch,
 ): PackedFixtures {
   out.fill(0);
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
@@ -631,7 +639,10 @@ export function packFixtures(
   if (seasonal.length) {
     // Reserve every possible cloth position for decoration admission, while leaving
     // the real cloth owners free for subsequent animation frames.
-    const admission = owners.slice();
+    if (scratch && scratch.seasonalAdmission.length !== owners.length)
+      scratch.seasonalAdmission = new Int32Array(owners.length);
+    const admission = scratch?.seasonalAdmission ?? new Int32Array(owners.length);
+    admission.set(owners);
     for (const flag of packed.flags) {
       const lift = Math.ceil(flag.rows / 2 + 1);
       for (

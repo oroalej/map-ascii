@@ -1,3 +1,4 @@
+import type { SeasonalRecord } from './seasons';
 import { z } from 'zod';
 
 const point = z.tuple([z.number().min(-180).max(180), z.number().min(-85.051129).max(85.051129)]);
@@ -61,4 +62,4 @@ export const SeasonalRecordSchema = z.union([
       mount: z.enum(['building', 'canopy']).optional(),
     })
     .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty light string'),
-]);
+]) satisfies z.ZodType<SeasonalRecord>;

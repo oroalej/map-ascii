@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
 const samples = JSON.parse(
-  readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('./fixtures/plaza-selection.json', import.meta.url), 'utf8'),
 ) as Record<string, { slug: string; at: [number, number] }[]>;
 
 // A narrow viewport keeps the legend collapsed and leaves room above attribution. Enable
@@ -31,8 +31,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(() => {
-        // Selection needs live agents, not maximum drawing effects on CI's software GPU.
-        // Low quality leaves the simulation and detail picking unchanged.
+        // Low quality reduces drawing density while retaining the full simulation.
+        // This smoke checks detail picking with Life disabled and enabled.
         localStorage.setItem('atlas.quality', JSON.stringify('low'));
         localStorage.setItem(
           'atlas.life',
