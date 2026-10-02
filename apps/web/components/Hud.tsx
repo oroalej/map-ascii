@@ -64,10 +64,11 @@ function QualityControl() {
   );
 }
 
-const WIDE = '(min-width: 641px)';
-const isWide = () => window.matchMedia(WIDE).matches;
+// Match the CSS compact query, then negate it: fractional widths have no gap.
+const COMPACT = '(max-width: 640px)';
+const isWide = () => !window.matchMedia(COMPACT).matches;
 const subscribeWide = (onChange: () => void) => {
-  const query = window.matchMedia(WIDE);
+  const query = window.matchMedia(COMPACT);
   query.addEventListener('change', onChange);
   return () => query.removeEventListener('change', onChange);
 };
@@ -247,36 +248,36 @@ function LegendControls({
       >
         <summary ref={summary}>Legend</summary>
         <ul aria-label="What the glyphs on screen mean">
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              {entry.focus ? (
-                <button
-                  type="button"
-                  className={styles.legendEntry}
-                  aria-pressed={focused === entry.id}
-                  onClick={() =>
-                    useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
-                  }
-                >
-                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                    {entry.icons
-                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                      : entry.glyphs}
-                  </span>
-                  <span>{displayLabel(entry)}</span>
-                </button>
-              ) : (
-                <>
-                  <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-                    {entry.icons
-                      ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                      : entry.glyphs}
-                  </span>
-                  <span>{displayLabel(entry)}</span>
-                </>
-              )}
-            </li>
-          ))}
+          {entries.map((entry) => {
+            const content = (
+              <>
+                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                  {entry.icons
+                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                    : entry.glyphs}
+                </span>
+                <span>{displayLabel(entry)}</span>
+              </>
+            );
+            return (
+              <li key={entry.id}>
+                {entry.focus ? (
+                  <button
+                    type="button"
+                    className={styles.legendEntry}
+                    aria-pressed={focused === entry.id}
+                    onClick={() =>
+                      useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
+                    }
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  content
+                )}
+              </li>
+            );
+          })}
         </ul>
       </details>
     </>

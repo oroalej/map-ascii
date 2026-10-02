@@ -1,26 +1,27 @@
 /** Isolated, interleaved rollback/control/per-item CPU comparisons. Not browser FPS. */
-import { mkdir, mkdtemp, writeFile, readFile, symlink } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
-import { resolve, join, dirname, relative } from 'node:path';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { cpus } from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { LifeWorld, type VisibleAgent } from '../src/life/simulate';
 import { makeScenario, type Scenario } from '../src/life/testing/scenarios';
 import { packLife, buildLifeGlyphs } from '../src/life/draw';
 import { themes } from '../src/theme';
-import { snapshotRevision, currentSourceHash } from './snapshot';
+import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const arg = (name: string, fallback: string) =>
   process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
-const scratch = resolve(arg('scratch', 'test-results'));
+const scratchArg = arg('scratch', '');
+if (!scratchArg) throw new Error('Pass --scratch=<task folder> to keep benchmark artifacts scoped');
+const scratch = resolve(scratchArg);
 const runs = Number(arg('runs', '5')),
   samples = Number(arg('samples', '300'));
 if (![runs, samples].every((n) => Number.isInteger(n) && n > 0))
   throw new Error('Invalid sample count');
 await mkdir(scratch, { recursive: true });
 const hash = await currentSourceHash(root);
-const baseline = arg('baseline', '6d58760');
+const baseline = arg('baseline', 'a427b229e1af9ced1464135120e73a73d6e667b5');
 console.log(`Benchmark PID: ${process.pid}`);
 const frozen = await snapshotRevision(
   root,
@@ -33,56 +34,11 @@ const oldDraw = (await import(frozen.path('life/draw.ts'))) as { packLife: typeo
 // including scene/movement helpers; querying only simulate/draw still shares the
 // helpers' type feedback and measures benchmark-only polymorphism. Item and held
 // keep sharing functions and a heap, as they do when inspection changes at runtime.
-const fallbackRoot = await mkdtemp(resolve(scratch, 'inspection-current-'));
-await writeFile(join(fallbackRoot, 'package.json'), '{"type":"module"}');
-const sources = [
-  ...new Set(
-    execFileSync(
-      'git',
-      [
-        'ls-files',
-        '--cached',
-        '--others',
-        '--exclude-standard',
-        '--',
-        'packages/renderer/src',
-        'packages/shared/src',
-      ],
-      { cwd: root, encoding: 'utf8' },
-    )
-      .trim()
-      .split('\n')
-      .filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts')),
-  ),
-];
-await Promise.all(
-  sources.map(async (path) => {
-    const target = join(fallbackRoot, path);
-    const alias = relative(
-      dirname(target),
-      join(fallbackRoot, 'packages/shared/src/index.ts'),
-    ).replaceAll('\\', '/');
-    const source = await readFile(join(root, path), 'utf8');
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(
-      target,
-      source.replace(
-        /(['"])@atlas\/shared\1/g,
-        (_match, quote: string) =>
-          `${quote}${alias.startsWith('.') ? alias : './' + alias}${quote}`,
-      ),
-    );
-  }),
+const current = await snapshotWorkingTree(
+  root,
+  await mkdtemp(resolve(scratch, 'inspection-current-')),
 );
-for (const name of ['renderer', 'shared'])
-  await symlink(
-    join(root, 'packages', name, 'node_modules'),
-    join(fallbackRoot, 'packages', name, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
-  );
-if (hash !== (await currentSourceHash(root))) throw new Error('Source changed during snapshot');
-const isolated = (file: string) =>
-  pathToFileURL(join(fallbackRoot, 'packages/renderer/src/life', file)).href;
+const isolated = (file: string) => current.path('life/' + file);
 const fallback = (await import(isolated('simulate.ts'))) as { LifeWorld: typeof LifeWorld };
 const fallbackDraw = (await import(isolated('draw.ts'))) as { packLife: typeof packLife };
 if (fallback.LifeWorld === LifeWorld || fallbackDraw.packLife === packLife)
