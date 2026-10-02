@@ -965,9 +965,11 @@ export const Season = z
               .regex(/^[a-z][a-z0-9-]*$/)
               .optional(),
             kind: z.literal('light-string'),
-            layout: z.enum(['paths', 'perimeter', 'building-perimeter']),
-            spacing_m: z.number().min(3).max(12),
+            layout: z.enum(['paths', 'perimeter', 'building-perimeter', 'canopy']),
+            spacing_m: z.number().min(0.75).max(12),
             mount: z.literal('canopy').optional(),
+            bulb_spacing_m: z.number().min(0.3).max(3).optional(),
+            palette: z.enum(['warm', 'christmas']).optional(),
           }),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
@@ -1024,6 +1026,20 @@ export const Season = z
   })
   .superRefine((season, ctx) => {
     for (const [index, installation] of (season.installations ?? []).entries()) {
+      if (installation.kind === 'light-string') {
+        if (installation.layout !== 'canopy' && installation.spacing_m < 3)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['installations', index, 'spacing_m'],
+            message: 'only canopy rows may be closer than 3 m',
+          });
+        if (installation.layout === 'canopy' && installation.mount !== 'canopy')
+          ctx.addIssue({
+            code: 'custom',
+            path: ['installations', index, 'mount'],
+            message: 'canopy rows must be mounted above the ground',
+          });
+      }
       if (
         installation.kind === 'light-string' &&
         installation.layout === 'building-perimeter' &&

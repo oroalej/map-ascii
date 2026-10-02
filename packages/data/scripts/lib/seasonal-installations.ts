@@ -273,9 +273,56 @@ export function generateSeasonalInstallations(
               : config.mount
                 ? { mount: config.mount }
                 : {}),
+            ...(config.bulb_spacing_m === undefined
+              ? {}
+              : { bulb_spacing_m: config.bulb_spacing_m }),
+            ...(config.palette === undefined ? {} : { palette: config.palette }),
           });
         };
-        if (buildingLights) {
+        if (config.layout === 'canopy') {
+          // Parallel strings follow the longest property edge. Intersections clip each row
+          // to the complete polygon, including holes and narrow concave access notches.
+          let direction: Point = [1, 0],
+            longest = 0;
+          for (const ring of polygon)
+            for (let i = 1; i < ring.length; i++) {
+              const dx = ring[i]![0] - ring[i - 1]![0],
+                dy = ring[i]![1] - ring[i - 1]![1];
+              const length = Math.hypot(dx, dy);
+              if (length > longest) {
+                longest = length;
+                direction = [dx / length, dy / length];
+              }
+            }
+          const origin = polygon[0]![0]!;
+          const along = (p: Point) =>
+            (p[0] - origin[0]) * direction[0] + (p[1] - origin[1]) * direction[1];
+          const across = (p: Point) =>
+            -(p[0] - origin[0]) * direction[1] + (p[1] - origin[1]) * direction[0];
+          const at = (s: number, t: number): Point => [
+            origin[0] + direction[0] * s - direction[1] * t,
+            origin[1] + direction[1] * s + direction[0] * t,
+          ];
+          const lo = Math.min(...all.map(across)),
+            hi = Math.max(...all.map(across));
+          if (Math.ceil((hi - lo) / config.spacing_m) > 1000)
+            throw new Error(`Season installation ${config.id}: too many canopy rows`);
+          for (let t = lo + config.spacing_m / 2; t < hi; t += config.spacing_m) {
+            const cuts: number[] = [];
+            for (const ring of polygon)
+              for (let i = 1; i < ring.length; i++) {
+                const a = ring[i - 1]!,
+                  b = ring[i]!,
+                  ta = across(a),
+                  tb = across(b);
+                if (ta > t !== tb > t)
+                  cuts.push(along(a) + ((along(b) - along(a)) * (t - ta)) / (tb - ta));
+              }
+            cuts.sort((a, b) => a - b);
+            for (let i = 1; i < cuts.length; i += 2)
+              add(at(cuts[i - 1]! + 0.35, t), at(cuts[i]! - 0.35, t));
+          }
+        } else if (buildingLights) {
           // Parallel insets follow every mapped facade, including concave wings and holes.
           // Trimming corners keeps the entire span inside the standing roof footprint.
           for (const ring of polygon)

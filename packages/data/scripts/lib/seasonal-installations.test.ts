@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { SeasonalRecordSchema, type SeasonConfig, type SeasonalPoint } from '@atlas/shared';
+import {
+  Season,
+  SeasonalRecordSchema,
+  pointInPolygon,
+  type SeasonConfig,
+  type SeasonalPoint,
+} from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
 import { generateSeasonalInstallations, seasonalRecordGeometry } from './seasonal-installations';
 const area: AtlasFeature = {
@@ -66,6 +72,69 @@ const season: SeasonConfig = {
     { ...shared, id: 'crowns', kind: 'decorated-canopy' },
   ],
 };
+it('clips dense canopy rows around holes and concave access gaps, and validates bounded overhead density', () => {
+  const config: SeasonConfig = {
+    ...season,
+    installations: [
+      {
+        ...shared,
+        id: 'canopy',
+        kind: 'light-string',
+        layout: 'canopy',
+        spacing_m: 0.9,
+        bulb_spacing_m: 0.4,
+        palette: 'warm',
+        mount: 'canopy',
+      },
+    ],
+  };
+  expect(Season.safeParse(config).success).toBe(true);
+  for (const change of [
+    { spacing_m: 0.74 },
+    { mount: undefined },
+    { layout: 'perimeter' },
+    { bulb_spacing_m: 0.29 },
+  ])
+    expect(
+      Season.safeParse({ ...config, installations: [{ ...config.installations![0], ...change }] })
+        .success,
+    ).toBe(false);
+  const boundary = [
+    [0, 0],
+    [0.0005, 0],
+    [0.0005, 0.0002],
+    [0.00025, 0.0002],
+    [0.00025, 0.0003],
+    [0.0005, 0.0003],
+    [0.0005, 0.0005],
+    [0, 0.0005],
+    [0, 0],
+  ] as SeasonalPoint[];
+  const hole = [
+    [0.00005, 0.0001],
+    [0.00015, 0.0001],
+    [0.00015, 0.0004],
+    [0.00005, 0.0004],
+    [0.00005, 0.0001],
+  ] as SeasonalPoint[];
+  const ground = { ...area, geometry: { type: 'Polygon' as const, coordinates: [boundary, hole] } };
+  const result = generateSeasonalInstallations([ground], [config]);
+  expect(result.records.length).toBeGreaterThan(40);
+  for (const r of result.records) {
+    if (r.kind !== 'light-string') throw new Error('expected strings');
+    expect(r).toMatchObject({ mount: 'canopy', bulb_spacing_m: 0.4, palette: 'warm' });
+    for (let i = 0; i <= 100; i++)
+      expect(
+        pointInPolygon(
+          [
+            r.from[0] + ((r.to[0] - r.from[0]) * i) / 100,
+            r.from[1] + ((r.to[1] - r.from[1]) * i) / 100,
+          ],
+          [boundary, hole],
+        ),
+      ).toBe(true);
+  }
+});
 it('keeps deterministic tree footprints away from paths, monuments and each other; retains mapped crowns', () => {
   const a = generateSeasonalInstallations(features, [season]);
   expect(generateSeasonalInstallations([...features].reverse(), [season])).toEqual(a);

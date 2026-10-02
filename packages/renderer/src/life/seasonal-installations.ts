@@ -67,6 +67,7 @@ type Write = (
   info: number,
   replace?: boolean,
 ) => boolean;
+const CHRISTMAS_TINTS = [5, 0, 5, 0, 1, 1, 2, 2] as const;
 /** Bounded metric footprints, viewed from above; cords occupy gaps between ornaments. */
 export function packInstallation(
   record: InstallationRecord,
@@ -119,10 +120,36 @@ export function packInstallation(
         Math.cos((record.from[1] * Math.PI) / 180),
       (record.to[1] - record.from[1]) * METERS_PER_DEGREE,
     );
-    const count = Math.max(1, Math.floor(meters / 1.8));
+    const dense = record.bulb_spacing_m !== undefined;
+    const count = Math.max(
+      1,
+      Math.min(
+        100000,
+        record.bulb_spacing_m === undefined
+          ? Math.floor(meters / 1.8)
+          : Math.ceil(meters / record.bulb_spacing_m),
+      ),
+    );
     for (let i = 0; i <= count; i++) {
-      const glyph =
-        i % 3 === 0 ? SeasonalGlyph.parol : i % 3 === 1 ? SeasonalGlyph.bell : SeasonalGlyph.bulb;
+      const glyph = dense
+        ? i % 12 === 6
+          ? SeasonalGlyph.parol
+          : SeasonalGlyph.bulb
+        : i % 3 === 0
+          ? SeasonalGlyph.parol
+          : i % 3 === 1
+            ? SeasonalGlyph.bell
+            : SeasonalGlyph.bulb;
+      const tint =
+        record.palette === 'christmas'
+          ? CHRISTMAS_TINTS[i % CHRISTMAS_TINTS.length]!
+          : dense
+            ? glyph === SeasonalGlyph.parol
+              ? 5
+              : 0
+            : i % 3 === 0
+              ? 5
+              : 0;
       put(
         a[0] + (dx * i) / count,
         a[1] + (dy * i) / count,
@@ -132,7 +159,7 @@ export function packInstallation(
           : record.mount === 'canopy'
             ? SeasonalPart.festiveLight
             : SeasonalPart.festiveOrnament,
-        (((record.seed + i) & 31) << 3) | (i % 3 === 0 ? 5 : 0),
+        (((record.seed + i) & 31) << 3) | tint,
         true,
       );
     }

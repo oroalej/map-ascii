@@ -407,9 +407,11 @@
             "id": "magsaysay-orange-garlands",
             "grounds": "magsaysay-orange-display",
             "kind": "light-string",
-            "layout": "perimeter",
-            "spacing_m": 3,
-            "mount": "canopy"
+            "layout": "canopy",
+            "spacing_m": 0.9,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm"
           },
           {
             "anchor": "osm:way/23664053",
@@ -423,7 +425,9 @@
             "id": "magsaysay-house-lights",
             "kind": "light-string",
             "layout": "building-perimeter",
-            "spacing_m": 3
+            "spacing_m": 3,
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas"
           },
           {
             "anchor": "osm:way/23664053",
@@ -434,28 +438,14 @@
               }
             ],
             "label": "Christmas lights and ornaments",
-            "id": "magsaysay-orange-middle-garlands",
-            "grounds": "magsaysay-orange-middle",
+            "id": "magsaysay-orange-border",
+            "grounds": "magsaysay-orange-display",
             "kind": "light-string",
             "layout": "perimeter",
             "spacing_m": 3,
-            "mount": "canopy"
-          },
-          {
-            "anchor": "osm:way/23664053",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
-              }
-            ],
-            "label": "Christmas lights and ornaments",
-            "id": "magsaysay-orange-inner-garlands",
-            "grounds": "magsaysay-orange-inner",
-            "kind": "light-string",
-            "layout": "perimeter",
-            "spacing_m": 3,
-            "mount": "canopy"
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas"
           }
         ],
         "grounds": [
@@ -477,49 +467,6 @@
               [123.19575364, 13.63241914],
               [123.19574887, 13.63244043],
               [123.19573371, 13.63244469]
-            ],
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-orange-middle",
-            "anchor": "osm:way/23664053",
-            "ring": [
-              [123.19575202, 13.63245248],
-              [123.19576931, 13.63247513],
-              [123.19579145, 13.63249242],
-              [123.19580632, 13.63251209],
-              [123.19581845, 13.63251865],
-              [123.19581906, 13.63249839],
-              [123.19582664, 13.63247931],
-              [123.19583028, 13.6324653],
-              [123.19582118, 13.63245934],
-              [123.19579388, 13.63244712],
-              [123.19577447, 13.6324343],
-              [123.19576597, 13.6324346],
-              [123.19576263, 13.6324495],
-              [123.19575202, 13.63245248]
-            ],
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-orange-inner",
-            "anchor": "osm:way/23664053",
-            "ring": [
-              [123.19576491, 13.632463],
-              [123.19581084, 13.6325026],
-              [123.19583641, 13.63246556],
-              [123.19578268, 13.63243234],
-              [123.19576491, 13.632463]
             ],
             "sources": [
               {

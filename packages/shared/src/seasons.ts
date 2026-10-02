@@ -57,9 +57,11 @@ export type SeasonInstallation = {
   | { kind: 'christmas-tree'; radius_m: number }
   | {
       kind: 'light-string';
-      layout: 'paths' | 'perimeter' | 'building-perimeter';
+      layout: 'paths' | 'perimeter' | 'building-perimeter' | 'canopy';
       spacing_m: number;
       mount?: 'canopy';
+      bulb_spacing_m?: number;
+      palette?: 'warm' | 'christmas';
     }
   | { kind: 'decorated-canopy' }
 );

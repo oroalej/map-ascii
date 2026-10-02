@@ -49,6 +49,21 @@ it('reads every installation kind and rejects invalid envelopes without blocking
   expect(parseSeasonalRecord(JSON.stringify(mounted))).toEqual(SeasonalRecordSchema.parse(mounted));
   const canopy = { ...string, mount: 'canopy' };
   expect(parseSeasonalRecord(JSON.stringify(canopy))).toEqual(SeasonalRecordSchema.parse(canopy));
+  for (const palette of ['warm', 'christmas']) {
+    const dense = { ...canopy, bulb_spacing_m: 0.4, palette };
+    expect(parseSeasonalRecord(JSON.stringify(dense))).toEqual(SeasonalRecordSchema.parse(dense));
+  }
+  for (const change of [
+    { bulb_spacing_m: 0.29 },
+    { bulb_spacing_m: 3.01 },
+    { bulb_spacing_m: NaN },
+    { bulb_spacing_m: null },
+    { palette: 'unknown' },
+  ]) {
+    const invalid = { ...canopy, ...change };
+    expect(isSeasonalRecord(invalid)).toBe(false);
+    expect(SeasonalRecordSchema.safeParse(invalid).success).toBe(false);
+  }
   for (const mount of ['ground', 'roof', null, 1]) {
     const invalid = { ...string, mount };
     expect(isSeasonalRecord(invalid)).toBe(false);

@@ -1,7 +1,12 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { expect, it } from 'vitest';
 import type { SeasonConfig, SeasonalDisplayRecord, SeasonalLightStringRecord } from '@atlas/shared';
-import { admitsInstallation, festivePulse, installationLamps } from './seasonal-installations';
+import {
+  admitsInstallation,
+  festivePulse,
+  installationLamps,
+  packInstallation,
+} from './seasonal-installations';
 import { createSeasonalFixtureCache, seasonalFixtures } from './seasonal';
 import { LifeBuilder, LifeLine } from './geometry';
 import {
@@ -79,6 +84,45 @@ const grid: FixtureGrid = {
   ],
 };
 const index = (glyph: string) => mapGlyphs(themes.dark).indexOf(glyph);
+it('packs dense continuous bulbs with bounded Christmas accents and a world-anchored pattern', () => {
+  const cells = (record: SeasonalLightStringRecord, shift = 0) => {
+    const out = new Map<string, { part: number; info: number; glyph: string }>();
+    packInstallation(
+      record,
+      {
+        ...grid,
+        toCell: (lng, lat) => {
+          const [x, y] = grid.toCell(lng, lat);
+          return [x + shift, y];
+        },
+      },
+      (x, y, glyph, part, info) => {
+        out.set(`${Math.floor(x) - shift}/${Math.floor(y)}`, { glyph, part, info });
+        return true;
+      },
+    );
+    return out;
+  };
+  const dense: SeasonalLightStringRecord = {
+    ...string,
+    mount: 'building',
+    bulb_spacing_m: 0.4,
+    palette: 'christmas',
+  };
+  const bulbCount = (out: ReturnType<typeof cells>) =>
+    [...out.values()].filter((c) => c.part === FixturePart.buildingLight).length;
+  expect(bulbCount(cells(dense))).toBeGreaterThan(
+    bulbCount(cells({ ...string, mount: 'building' })) * 2,
+  );
+  expect(
+    new Set(
+      [...cells(dense).values()]
+        .filter((c) => c.part === FixturePart.buildingLight)
+        .map((c) => c.info & 7),
+    ),
+  ).toEqual(new Set([0, 1, 2, 5]));
+  expect(cells(dense, 8)).toEqual(cells(dense));
+});
 it('reuses seasonal admission scratch, refills ownership and resizes with the target', () => {
   const scratch = createFixturePackingScratch();
   const fixtures = [{ kind: 'season-installation' as const, record: tree }];

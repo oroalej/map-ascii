@@ -33,6 +33,9 @@ export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
   to: SeasonalPoint;
   /** Explicit mounting; omitted records retain ordinary ground-string occlusion. */
   mount?: 'building' | 'canopy';
+  /** Omitted fields preserve the original sparse ornament pattern. */
+  bulb_spacing_m?: number;
+  palette?: 'warm' | 'christmas';
 };
 export type SeasonalRecord =
   SeasonalBuntingRecord | SeasonalDisplayRecord | SeasonalLightStringRecord;
@@ -79,10 +82,22 @@ export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
           'from',
           'to',
           ...(Object.hasOwn(v, 'mount') ? ['mount'] : []),
+          ...(Object.hasOwn(v, 'bulb_spacing_m') ? ['bulb_spacing_m'] : []),
+          ...(Object.hasOwn(v, 'palette') ? ['palette'] : []),
         ];
     return (
       (display || v.kind === 'light-string') &&
       (display || !Object.hasOwn(v, 'mount') || v.mount === 'building' || v.mount === 'canopy') &&
+      (display ||
+        !Object.hasOwn(v, 'bulb_spacing_m') ||
+        (typeof v.bulb_spacing_m === 'number' &&
+          Number.isFinite(v.bulb_spacing_m) &&
+          v.bulb_spacing_m >= 0.3 &&
+          v.bulb_spacing_m <= 3)) &&
+      (display ||
+        !Object.hasOwn(v, 'palette') ||
+        v.palette === 'warm' ||
+        v.palette === 'christmas') &&
       Object.keys(v).length === keys.length &&
       Object.keys(v).every((k) => keys.includes(k)) &&
       v.version === 1 &&

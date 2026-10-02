@@ -13,8 +13,8 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
     ...season,
     installations: season.installations!.filter((i) => i.id.startsWith('magsaysay-')),
   };
-  expect(config.installations).toHaveLength(4);
-  expect(config.grounds).toHaveLength(3);
+  expect(config.installations).toHaveLength(3);
+  expect(config.grounds).toHaveLength(1);
   expect(config.installations.every((i) => i.anchor === 'osm:way/23664053')).toBe(true);
   const features = reference.features as AtlasFeature[];
   const result = generateSeasonalInstallations(features, [config]);
@@ -47,6 +47,10 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
         ]);
       }
     } else if (record.kind === 'light-string') {
+      expect(record.bulb_spacing_m).toBeLessThanOrEqual(0.4);
+      expect(record.palette).toBe(
+        record.installation === 'magsaysay-orange-garlands' ? 'warm' : 'christmas',
+      );
       if (record.mount === 'building') roofStrings++;
       else groundStrings++;
       for (let i = 0; i <= 100; i++) {
@@ -60,7 +64,9 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
     } else throw new Error('unexpected Magsaysay decoration');
   }
   expect(trees).toBe(0);
-  expect(groundStrings).toBeGreaterThan(0);
+  expect(groundStrings).toBeGreaterThan(5);
+  const canopy = config.installations.find((i) => i.id === 'magsaysay-orange-garlands')!;
+  expect(canopy).toMatchObject({ layout: 'canopy', mount: 'canopy', spacing_m: 0.9 });
   expect(roofStrings).toBeGreaterThan(10);
   expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
   // The independently authored landscape tree occupies the orange patch. Hanging lights

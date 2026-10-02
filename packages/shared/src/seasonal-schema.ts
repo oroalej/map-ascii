@@ -60,6 +60,8 @@ export const SeasonalRecordSchema = z.union([
       from: point,
       to: point,
       mount: z.enum(['building', 'canopy']).optional(),
+      bulb_spacing_m: z.number().min(0.3).max(3).optional(),
+      palette: z.enum(['warm', 'christmas']).optional(),
     })
     .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty light string'),
 ]) satisfies z.ZodType<SeasonalRecord>;
