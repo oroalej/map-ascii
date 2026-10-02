@@ -1,0 +1,5762 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1739473, 13.6209815],
+          [123.1739752, 13.6209351],
+          [123.1740599, 13.6209815],
+          [123.1740422, 13.6210445],
+          [123.1739473, 13.6209815]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492732",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1740436, 13.6205077],
+          [123.1740641, 13.6203516],
+          [123.1741554, 13.6203629],
+          [123.1741349, 13.620519],
+          [123.1740436, 13.6205077]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492735",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1737018, 13.6210104],
+          [123.1737483, 13.620938],
+          [123.1738624, 13.6210072],
+          [123.1738159, 13.6210796],
+          [123.1737018, 13.6210104]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492736",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1738722, 13.6210831],
+          [123.1739392, 13.6209893],
+          [123.1740492, 13.6210623],
+          [123.1739939, 13.6211801],
+          [123.1738722, 13.6210831]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492744",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1739879, 13.6206294],
+          [123.1740179, 13.6205618],
+          [123.1741312, 13.6206094],
+          [123.1741012, 13.620677],
+          [123.1739879, 13.6206294]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492746",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1733558, 13.6210177],
+          [123.1734161, 13.620937],
+          [123.1734747, 13.6209785],
+          [123.1734144, 13.6210591],
+          [123.1733558, 13.6210177]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492749",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.173845, 13.6204775],
+          [123.1738837, 13.6203967],
+          [123.1739783, 13.6204396],
+          [123.1739396, 13.6205203],
+          [123.173845, 13.6204775]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492753",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1738175, 13.6205665],
+          [123.1738494, 13.6204935],
+          [123.173996, 13.620554],
+          [123.1739641, 13.620627],
+          [123.1738175, 13.6205665]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310492755",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1734287, 13.6207835],
+          [123.1734907, 13.6206997],
+          [123.1735668, 13.6207529],
+          [123.1735048, 13.6208366],
+          [123.1734287, 13.6207835]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310624553",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1741523, 13.6202766],
+          [123.1741608, 13.6202005],
+          [123.1742242, 13.6202071],
+          [123.1742158, 13.6202833],
+          [123.1741523, 13.6202766]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310624556",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1733371, 13.620744],
+          [123.1733673, 13.6207017],
+          [123.173341, 13.6206839],
+          [123.1733905, 13.6206147],
+          [123.173483, 13.6206773],
+          [123.1734033, 13.6207887],
+          [123.1733371, 13.620744]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/310624559",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1739192, 13.6203228],
+          [123.1739416, 13.6202313],
+          [123.1740211, 13.6202497],
+          [123.1739986, 13.6203413],
+          [123.1739192, 13.6203228]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/839238884",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1739198, 13.6203401],
+          [123.1739953, 13.6203518],
+          [123.1739846, 13.6204164],
+          [123.1739092, 13.6204047],
+          [123.1739198, 13.6203401]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/839238885",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1737951, 13.6205721],
+          [123.1739621, 13.6201485],
+          [123.1740837, 13.6201711],
+          [123.1742311, 13.6201984],
+          [123.1741198, 13.6206924],
+          [123.1737951, 13.6205721]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/839238886",
+      "class": "building_school",
+      "name": "San Roque Elementary School",
+      "kind": "amenity=school",
+      "operator": "Camaligan District of Camarines Sur Schools Division, DepEd",
+      "start_year": 1968,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1759696, 13.6210572],
+        [123.1757319, 13.6209908],
+        [123.1755298, 13.6209345],
+        [123.1741894, 13.6205154]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23520326",
+      "class": "road_minor",
+      "highway": "unclassified",
+      "kind": "highway=unclassified",
+      "width": 4
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1741894, 13.6205154],
+        [123.1742201, 13.6203211],
+        [123.1742511, 13.6201967],
+        [123.1744114, 13.6194074]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/224703849",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1739989, 13.621259],
+        [123.1741057, 13.6208862],
+        [123.1741894, 13.6205154]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/904039977",
+      "class": "road_minor",
+      "highway": "unclassified",
+      "kind": "highway=unclassified",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1758464, 13.6225665],
+        [123.1757839, 13.6225217],
+        [123.1749612, 13.6219315],
+        [123.1748589, 13.6218587],
+        [123.1739989, 13.621259],
+        [123.1730405, 13.6205962],
+        [123.1719671, 13.6198863],
+        [123.1717241, 13.6197818],
+        [123.1716156, 13.6197629],
+        [123.1710599, 13.6196741]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/904066261",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "P. Bustamante Road",
+      "kind": "highway=tertiary",
+      "width": 6.4
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1742209, 13.6205734]
+    },
+    "properties": {
+      "id": "osm:node/7831521340",
+      "class": "place_label",
+      "name": "Zone 5",
+      "kind": "place=neighbourhood",
+      "place": "neighbourhood"
+    },
+    "tippecanoe": {
+      "layer": "labels",
+      "minzoom": 13,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [
+        [
+          [
+            [123.21333, 13.6025],
+            [123.21333, 13.60417],
+            [123.21333, 13.60583],
+            [123.21333, 13.6075],
+            [123.21333, 13.60917],
+            [123.21333, 13.61083],
+            [123.21333, 13.6125],
+            [123.21333, 13.61417],
+            [123.21333, 13.61583],
+            [123.21333, 13.6175],
+            [123.21333, 13.61917],
+            [123.21333, 13.62083],
+            [123.21333, 13.6225],
+            [123.21333, 13.62417],
+            [123.21333, 13.62583],
+            [123.21333, 13.6275],
+            [123.21333, 13.62917],
+            [123.21333, 13.63083],
+            [123.21333, 13.6325],
+            [123.21333, 13.63417],
+            [123.21333, 13.63583],
+            [123.21333, 13.6375],
+            [123.21333, 13.63917],
+            [123.2125, 13.64],
+            [123.21083, 13.64],
+            [123.20917, 13.64],
+            [123.2075, 13.64],
+            [123.20583, 13.64],
+            [123.20417, 13.64],
+            [123.2025, 13.64],
+            [123.20083, 13.64],
+            [123.19917, 13.64],
+            [123.1975, 13.64],
+            [123.19583, 13.64],
+            [123.19417, 13.64],
+            [123.1925, 13.64],
+            [123.19083, 13.64],
+            [123.18917, 13.64],
+            [123.1875, 13.64],
+            [123.18583, 13.64],
+            [123.18417, 13.64],
+            [123.1825, 13.64],
+            [123.18083, 13.64],
+            [123.17917, 13.64],
+            [123.1775, 13.64],
+            [123.17583, 13.64],
+            [123.17417, 13.64],
+            [123.1725, 13.64],
+            [123.17083, 13.64],
+            [123.17, 13.63917],
+            [123.17, 13.6375],
+            [123.17, 13.63583],
+            [123.17, 13.63417],
+            [123.17, 13.6325],
+            [123.17, 13.63083],
+            [123.17, 13.62917],
+            [123.17, 13.6275],
+            [123.17, 13.62583],
+            [123.17, 13.62417],
+            [123.17, 13.6225],
+            [123.17, 13.62083],
+            [123.17, 13.61917],
+            [123.17, 13.6175],
+            [123.17, 13.61583],
+            [123.17, 13.61417],
+            [123.17, 13.6125],
+            [123.17, 13.61083],
+            [123.17, 13.60917],
+            [123.17, 13.6075],
+            [123.17, 13.60583],
+            [123.17, 13.60417],
+            [123.17, 13.6025],
+            [123.17083, 13.60167],
+            [123.1725, 13.60167],
+            [123.17417, 13.60167],
+            [123.17583, 13.60167],
+            [123.1775, 13.60167],
+            [123.17917, 13.60167],
+            [123.18083, 13.60167],
+            [123.1825, 13.60167],
+            [123.18417, 13.60167],
+            [123.18583, 13.60167],
+            [123.1875, 13.60167],
+            [123.18917, 13.60167],
+            [123.19083, 13.60167],
+            [123.1925, 13.60167],
+            [123.19417, 13.60167],
+            [123.19583, 13.60167],
+            [123.1975, 13.60167],
+            [123.19917, 13.60167],
+            [123.20083, 13.60167],
+            [123.2025, 13.60167],
+            [123.20417, 13.60167],
+            [123.20583, 13.60167],
+            [123.2075, 13.60167],
+            [123.20917, 13.60167],
+            [123.21083, 13.60167],
+            [123.2125, 13.60167],
+            [123.21333, 13.6025]
+          ],
+          [
+            [123.18083, 13.61565],
+            [123.18063, 13.61583],
+            [123.18083, 13.61593],
+            [123.18104, 13.61583],
+            [123.18083, 13.61565]
+          ],
+          [
+            [123.18583, 13.6121],
+            [123.18564, 13.6125],
+            [123.18583, 13.61304],
+            [123.18639, 13.6125],
+            [123.18583, 13.6121]
+          ],
+          [
+            [123.1875, 13.60711],
+            [123.18705, 13.6075],
+            [123.1875, 13.60817],
+            [123.18808, 13.6075],
+            [123.1875, 13.60711]
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "terrain/1",
+      "class": "terrain",
+      "height": 1,
+      "elevation_min": 1,
+      "region": true
+    },
+    "tippecanoe": {
+      "layer": "terrain",
+      "minzoom": 6,
+      "maxzoom": 10
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180033, 13.6146397],
+          [123.180056, 13.6147407],
+          [123.179973, 13.6147587],
+          [123.179949, 13.6146587],
+          [123.180033, 13.6146397]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23617012",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180361, 13.615622],
+          [123.18036, 13.615629],
+          [123.180388, 13.61569],
+          [123.180329, 13.615716],
+          [123.180298, 13.615649],
+          [123.180361, 13.615622]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23661718",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181549, 13.614851],
+          [123.181607, 13.614857],
+          [123.181603, 13.614894],
+          [123.181545, 13.614889],
+          [123.181549, 13.614851]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23661919",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1809558, 13.6145326],
+          [123.1810468, 13.6145386],
+          [123.1810418, 13.6145966],
+          [123.1809508, 13.6145896],
+          [123.1809558, 13.6145326]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23661936",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1810429, 13.6155126],
+          [123.1810659, 13.6155916],
+          [123.1810059, 13.6156086],
+          [123.1809819, 13.6155296],
+          [123.1810429, 13.6155126]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662099",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1809946, 13.6147361],
+          [123.1812046, 13.6153041],
+          [123.1811276, 13.6153311],
+          [123.1809176, 13.6147631],
+          [123.1809946, 13.6147361]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662281",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180242, 13.615303],
+          [123.180253, 13.615356],
+          [123.180171, 13.615373],
+          [123.18016, 13.61532],
+          [123.180242, 13.615303]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662375",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181618, 13.614994],
+          [123.181647, 13.614995],
+          [123.181663, 13.615032],
+          [123.181639, 13.615042],
+          [123.181618, 13.614994]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662450",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180836, 13.615736],
+          [123.180865, 13.61581],
+          [123.180815, 13.615829],
+          [123.180786, 13.615756],
+          [123.180836, 13.615736]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663339",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812234, 13.6156361],
+          [123.1812574, 13.6157201],
+          [123.1812054, 13.6157401],
+          [123.1811724, 13.6156551],
+          [123.1812234, 13.6156361]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663938",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180502, 13.615884],
+          [123.180521, 13.615966],
+          [123.180467, 13.615977],
+          [123.180448, 13.615895],
+          [123.180502, 13.615884]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664068",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180587, 13.615548],
+          [123.180618, 13.615645],
+          [123.180493, 13.615684],
+          [123.180462, 13.615586],
+          [123.180587, 13.615548]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664734",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180204, 13.615874],
+          [123.180207, 13.615938],
+          [123.18017, 13.61594],
+          [123.180167, 13.615876],
+          [123.180204, 13.615874]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664886",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181554, 13.61502],
+          [123.181574, 13.615064],
+          [123.181514, 13.61509],
+          [123.181494, 13.615046],
+          [123.181554, 13.61502]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665264",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180773, 13.615486],
+          [123.180807, 13.615579],
+          [123.180643, 13.615635],
+          [123.180609, 13.615541],
+          [123.180773, 13.615486]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665333",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180224, 13.615868],
+          [123.180284, 13.615874],
+          [123.180278, 13.615923],
+          [123.180219, 13.615918],
+          [123.180224, 13.615868]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665343",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181537, 13.6145747],
+          [123.181557, 13.6147097],
+          [123.181495, 13.6147187],
+          [123.181475, 13.6145847],
+          [123.181537, 13.6145747]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665347",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180271, 13.615393],
+          [123.180294, 13.615452],
+          [123.180227, 13.615478],
+          [123.180203, 13.615419],
+          [123.180271, 13.615393]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665894",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181587, 13.615082],
+          [123.1816, 13.615122],
+          [123.181531, 13.615143],
+          [123.181519, 13.615102],
+          [123.181587, 13.615082]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666175",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180625, 13.61581],
+          [123.180641, 13.615881],
+          [123.180595, 13.615891],
+          [123.180578, 13.61582],
+          [123.180625, 13.61581]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666970",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181412, 13.614965],
+          [123.18145, 13.614998],
+          [123.181418, 13.615037],
+          [123.181379, 13.615004],
+          [123.181412, 13.614965]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23667307",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180899, 13.6146948],
+          [123.180915, 13.6147618],
+          [123.180762, 13.6147968],
+          [123.180746, 13.6147308],
+          [123.180899, 13.6146948]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23667596",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1816165, 13.6152815],
+          [123.1816445, 13.6153395],
+          [123.1815985, 13.6153605],
+          [123.1815695, 13.6153035],
+          [123.1816165, 13.6152815]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668263",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1811312, 13.6145308],
+          [123.1811322, 13.6145798],
+          [123.1810882, 13.6145818],
+          [123.1810862, 13.6145318],
+          [123.1811312, 13.6145308]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668338",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1815725, 13.6147219],
+          [123.1815775, 13.6147859],
+          [123.1815035, 13.6147899],
+          [123.1814985, 13.6147269],
+          [123.1815725, 13.6147219]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668377",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180002, 13.61477],
+          [123.180005, 13.614807],
+          [123.179943, 13.614812],
+          [123.17994, 13.614774],
+          [123.180002, 13.61477]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668715",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1807019, 13.6143294],
+          [123.1807749, 13.6143334],
+          [123.1807679, 13.6144384],
+          [123.1806949, 13.6144344],
+          [123.1807019, 13.6143294]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668941",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180465, 13.615725],
+          [123.180493, 13.615802],
+          [123.180447, 13.615818],
+          [123.180418, 13.615741],
+          [123.180465, 13.615725]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669165",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180314, 13.615497],
+          [123.180339, 13.615572],
+          [123.180283, 13.615589],
+          [123.180259, 13.615515],
+          [123.180314, 13.615497]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669428",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814661, 13.6145935],
+          [123.1814821, 13.6146935],
+          [123.1814041, 13.6147045],
+          [123.1813891, 13.6146045],
+          [123.1814661, 13.6145935]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669456",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1806657, 13.6143202],
+          [123.1806737, 13.6144382],
+          [123.1805897, 13.6144442],
+          [123.1805807, 13.6143262],
+          [123.1806657, 13.6143202]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669509",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181664, 13.615225],
+          [123.181685, 13.615264],
+          [123.181635, 13.615291],
+          [123.181614, 13.615252],
+          [123.181664, 13.615225]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669538",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181611, 13.615039],
+          [123.181636, 13.615081],
+          [123.181615, 13.615093],
+          [123.18159, 13.615051],
+          [123.181611, 13.615039]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669654",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180067, 13.614908],
+          [123.180081, 13.614995],
+          [123.180028, 13.615003],
+          [123.180015, 13.614916],
+          [123.180067, 13.614908]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669987",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180956, 13.615761],
+          [123.180971, 13.615811],
+          [123.180923, 13.615823],
+          [123.180909, 13.615775],
+          [123.180956, 13.615761]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670233",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181277, 13.615589],
+          [123.181329, 13.615665],
+          [123.181277, 13.615698],
+          [123.181225, 13.615622],
+          [123.181277, 13.615589]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671851",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180762, 13.6146084],
+          [123.180775, 13.6146824],
+          [123.180673, 13.6146994],
+          [123.18066, 13.6146254],
+          [123.180762, 13.6146084]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672072",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180413, 13.615762],
+          [123.180419, 13.615833],
+          [123.180366, 13.615837],
+          [123.18036, 13.615767],
+          [123.180413, 13.615762]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672591",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180254, 13.615565],
+          [123.180265, 13.615616],
+          [123.180204, 13.615628],
+          [123.180192, 13.615579],
+          [123.180254, 13.615565]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672966",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180352, 13.615175],
+          [123.180408, 13.615363],
+          [123.180339, 13.615383],
+          [123.180283, 13.615196],
+          [123.180352, 13.615175]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673515",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180344, 13.615886],
+          [123.180409, 13.61589],
+          [123.180405, 13.61594],
+          [123.180341, 13.615936],
+          [123.180344, 13.615886]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673830",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181186, 13.615343],
+          [123.181214, 13.615436],
+          [123.181005, 13.615498],
+          [123.180977, 13.615405],
+          [123.181186, 13.615343]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674160",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180263, 13.6146234],
+          [123.18028, 13.6147044],
+          [123.180218, 13.6147164],
+          [123.180201, 13.6146354],
+          [123.180263, 13.6146234]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674254",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180283, 13.614931],
+          [123.180343, 13.615126],
+          [123.18027, 13.615147],
+          [123.18021, 13.614953],
+          [123.180283, 13.614931]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674263",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1805053, 13.614642],
+          [123.1805093, 13.614675],
+          [123.1805463, 13.614671],
+          [123.1805543, 13.614742],
+          [123.1804513, 13.614754],
+          [123.1804393, 13.61465],
+          [123.1805053, 13.614642]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674688",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814271, 13.6153487],
+          [123.1814541, 13.6153887],
+          [123.1814131, 13.6154147],
+          [123.1813871, 13.6153747],
+          [123.1814271, 13.6153487]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674781",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813042, 13.6145181],
+          [123.1813102, 13.6145981],
+          [123.1812242, 13.6146031],
+          [123.1812192, 13.6145241],
+          [123.1813042, 13.6145181]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674937",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180761, 13.615779],
+          [123.180779, 13.615844],
+          [123.180686, 13.615868],
+          [123.180669, 13.615804],
+          [123.180761, 13.615779]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674986",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181478, 13.615091],
+          [123.181502, 13.615126],
+          [123.181457, 13.615156],
+          [123.181433, 13.61512],
+          [123.181478, 13.615091]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675082",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181607, 13.615139],
+          [123.181641, 13.615199],
+          [123.181578, 13.615234],
+          [123.181544, 13.615174],
+          [123.181607, 13.615139]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675426",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1806177, 13.6147466],
+          [123.1806317, 13.6148216],
+          [123.1804777, 13.6148486],
+          [123.1804647, 13.6147726],
+          [123.1806177, 13.6147466]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675737",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180013, 13.614832],
+          [123.180018, 13.614879],
+          [123.179974, 13.614884],
+          [123.179969, 13.614837],
+          [123.180013, 13.614832]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23676562",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1809742, 13.6146841],
+          [123.1810207, 13.6146799],
+          [123.1810256, 13.6147206],
+          [123.1809786, 13.6147261],
+          [123.1809742, 13.6146841]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677071",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181051, 13.615709],
+          [123.181062, 13.615762],
+          [123.180993, 13.615776],
+          [123.180982, 13.615723],
+          [123.181051, 13.615709]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677275",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.18152, 13.615168],
+          [123.181535, 13.615198],
+          [123.181482, 13.615223],
+          [123.181478, 13.615187],
+          [123.18152, 13.615168]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677742",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180441, 13.61538],
+          [123.180487, 13.615528],
+          [123.180397, 13.615554],
+          [123.180352, 13.615406],
+          [123.180441, 13.61538]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677899",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802909, 13.6168813],
+          [123.1795278, 13.6167962],
+          [123.1789767, 13.6166775],
+          [123.178794, 13.616504],
+          [123.1787495, 13.6164968],
+          [123.17862, 13.616476],
+          [123.178513, 13.616439],
+          [123.1782163, 13.6163727],
+          [123.1779284, 13.6163084],
+          [123.177779, 13.616275],
+          [123.177542, 13.616238],
+          [123.177404, 13.616228],
+          [123.177291, 13.616235],
+          [123.17712, 13.616262],
+          [123.176951, 13.616267],
+          [123.176845, 13.616303],
+          [123.176659, 13.6163],
+          [123.176491, 13.616379],
+          [123.1764179, 13.6163465],
+          [123.1764323, 13.615931],
+          [123.1764453, 13.6155481],
+          [123.176771, 13.615422],
+          [123.17684, 13.615432],
+          [123.177025, 13.615381],
+          [123.177912, 13.615401],
+          [123.178152, 13.615449],
+          [123.178412, 13.615521],
+          [123.178988, 13.615715],
+          [123.179201, 13.61583],
+          [123.179747, 13.616052],
+          [123.180022, 13.616111],
+          [123.180251, 13.616144],
+          [123.180489, 13.616067],
+          [123.181416, 13.615711],
+          [123.1821302, 13.6154131],
+          [123.1824576, 13.6152101],
+          [123.1828279, 13.6150888],
+          [123.1830445, 13.6150351],
+          [123.1834172, 13.6149277],
+          [123.183744, 13.6149141],
+          [123.1840193, 13.6148217],
+          [123.1842163, 13.6146747],
+          [123.184386, 13.614494],
+          [123.18455, 13.61431],
+          [123.1846444, 13.6141909],
+          [123.1847183, 13.6140439],
+          [123.1847995, 13.6139069],
+          [123.18486, 13.613725],
+          [123.1849215, 13.6134082],
+          [123.1850043, 13.6131022],
+          [123.1849863, 13.6129182],
+          [123.1850211, 13.6127287],
+          [123.1850351, 13.6124715],
+          [123.1850215, 13.6123404],
+          [123.1851069, 13.6118356],
+          [123.1852927, 13.6116593],
+          [123.1853972, 13.6114089],
+          [123.1856479, 13.6108674],
+          [123.1858568, 13.6103869],
+          [123.1860309, 13.6099672],
+          [123.1860831, 13.6096872],
+          [123.1862426, 13.6090802],
+          [123.1863961, 13.6085825],
+          [123.186511, 13.6081187],
+          [123.18664, 13.6077669],
+          [123.1866914, 13.6075375],
+          [123.1866813, 13.6072202],
+          [123.1867081, 13.6069364],
+          [123.1867299, 13.606706],
+          [123.1868245, 13.6061113],
+          [123.1869326, 13.6057463],
+          [123.1869558, 13.6053864],
+          [123.1869141, 13.6049297],
+          [123.186908, 13.6044807],
+          [123.1869219, 13.6039389],
+          [123.1869428, 13.6030004],
+          [123.186875, 13.6024745],
+          [123.1868255, 13.6019298],
+          [123.1867626, 13.6015631],
+          [123.186584, 13.6010936],
+          [123.186349, 13.600352],
+          [123.186288, 13.6001058],
+          [123.1862025, 13.6000287],
+          [123.1860835, 13.5999723],
+          [123.1859309, 13.5999486],
+          [123.1857417, 13.5999367],
+          [123.1855464, 13.5999427],
+          [123.1853175, 13.600005],
+          [123.1848201, 13.6003876],
+          [123.1846352, 13.6005697],
+          [123.1841676, 13.6009515],
+          [123.183961, 13.601091],
+          [123.1835724, 13.6012489],
+          [123.1833556, 13.6013364],
+          [123.1829284, 13.6013415],
+          [123.1827201, 13.6013574],
+          [123.1824945, 13.6014114],
+          [123.181895, 13.6014227],
+          [123.1817595, 13.6013934],
+          [123.1813681, 13.6012577],
+          [123.181089, 13.601161],
+          [123.180759, 13.6010177],
+          [123.180341, 13.6008007],
+          [123.1799798, 13.6005777],
+          [123.1798328, 13.6004455],
+          [123.179593, 13.6002834],
+          [123.179196, 13.5999764],
+          [123.1791054, 13.599896],
+          [123.1789303, 13.5996636],
+          [123.178812, 13.5994802],
+          [123.1787067, 13.5992284],
+          [123.1786806, 13.5991607],
+          [123.1786363, 13.5989227],
+          [123.1786421, 13.5987783],
+          [123.178664, 13.598673],
+          [123.178713, 13.5985697],
+          [123.1787173, 13.598461],
+          [123.178783, 13.5982185],
+          [123.1789038, 13.5979763],
+          [123.179046, 13.5977777],
+          [123.1792406, 13.5974996],
+          [123.1793914, 13.5973102],
+          [123.1795322, 13.5971863],
+          [123.179965, 13.5968347],
+          [123.1802988, 13.596628],
+          [123.1806312, 13.5965683],
+          [123.1811463, 13.596357],
+          [123.181284, 13.5962682],
+          [123.1814486, 13.5962242],
+          [123.1816471, 13.5961386],
+          [123.1819923, 13.5960688],
+          [123.1822055, 13.5959831],
+          [123.1823019, 13.5959087],
+          [123.1824691, 13.5958972],
+          [123.1828035, 13.5958079],
+          [123.1830862, 13.5957437],
+          [123.1831579, 13.5956829],
+          [123.1832788, 13.5956999],
+          [123.1833862, 13.595692],
+          [123.1834359, 13.5956478],
+          [123.1834879, 13.5955988],
+          [123.1838095, 13.5955225],
+          [123.183925, 13.5955236],
+          [123.184203, 13.5953837],
+          [123.1843728, 13.5952915],
+          [123.1845516, 13.5952473],
+          [123.1848072, 13.5951377],
+          [123.1849172, 13.5950524],
+          [123.1850301, 13.5950305],
+          [123.1853069, 13.5948595],
+          [123.1854645, 13.5947357],
+          [123.185665, 13.5945172],
+          [123.1857714, 13.5943607],
+          [123.185838, 13.5941428],
+          [123.1858939, 13.5938975],
+          [123.1859193, 13.5936509],
+          [123.1858603, 13.5931437],
+          [123.185819, 13.5928729],
+          [123.1857577, 13.5924144],
+          [123.185659, 13.5920208],
+          [123.1855604, 13.5915928],
+          [123.1854931, 13.5912545],
+          [123.1860538, 13.5911783],
+          [123.1860676, 13.5915093],
+          [123.1860353, 13.5916917],
+          [123.1860779, 13.591922],
+          [123.1861358, 13.5922721],
+          [123.1862291, 13.5925267],
+          [123.1862538, 13.5927972],
+          [123.1863264, 13.5931375],
+          [123.1863857, 13.5934679],
+          [123.1864181, 13.5937719],
+          [123.1864061, 13.5940287],
+          [123.1862854, 13.5943247],
+          [123.186187, 13.5945324],
+          [123.1860509, 13.594696],
+          [123.1859766, 13.5947465],
+          [123.1859586, 13.5948464],
+          [123.1858661, 13.59491],
+          [123.1856499, 13.5950865],
+          [123.1854142, 13.5952425],
+          [123.1852182, 13.5953392],
+          [123.1850005, 13.5954187],
+          [123.1847762, 13.5955227],
+          [123.184572, 13.595634],
+          [123.1844244, 13.5957334],
+          [123.1843056, 13.5957772],
+          [123.1842014, 13.595842],
+          [123.1840199, 13.5959155],
+          [123.1838609, 13.5959919],
+          [123.1836181, 13.5960351],
+          [123.1833856, 13.5960763],
+          [123.1830076, 13.5961547],
+          [123.1827178, 13.5962742],
+          [123.1824753, 13.5964771],
+          [123.1820244, 13.5966461],
+          [123.1813842, 13.5968624],
+          [123.1811072, 13.5969798],
+          [123.1808669, 13.5971022],
+          [123.1807003, 13.5971836],
+          [123.1806017, 13.59721],
+          [123.1804821, 13.5972871],
+          [123.1802953, 13.5973183],
+          [123.1802551, 13.5973344],
+          [123.1801892, 13.5974505],
+          [123.180135, 13.5975073],
+          [123.1800437, 13.5974955],
+          [123.1799565, 13.5975476],
+          [123.179902, 13.5975774],
+          [123.1798796, 13.5976664],
+          [123.1797794, 13.5976969],
+          [123.1796569, 13.5978718],
+          [123.1795663, 13.5979424],
+          [123.1794725, 13.5979338],
+          [123.1793393, 13.5980302],
+          [123.1792212, 13.5981416],
+          [123.1792169, 13.5981771],
+          [123.1792515, 13.5982172],
+          [123.1792551, 13.5982629],
+          [123.1792046, 13.5983415],
+          [123.1790577, 13.5985967],
+          [123.1790129, 13.5986878],
+          [123.1789932, 13.5989447],
+          [123.1790092, 13.5991639],
+          [123.1790294, 13.5993175],
+          [123.1790794, 13.5994803],
+          [123.1791734, 13.5996095],
+          [123.1793193, 13.5997267],
+          [123.1795323, 13.5999069],
+          [123.1796439, 13.5999934],
+          [123.1797886, 13.6000372],
+          [123.1802561, 13.6003277],
+          [123.1803351, 13.6004216],
+          [123.1805215, 13.6005136],
+          [123.1814403, 13.6008721],
+          [123.1818003, 13.6010162],
+          [123.1819362, 13.6010532],
+          [123.1821886, 13.6010815],
+          [123.1826216, 13.6010704],
+          [123.1830501, 13.6010236],
+          [123.1833863, 13.600952],
+          [123.183668, 13.6008294],
+          [123.1839418, 13.6006526],
+          [123.1842377, 13.6004216],
+          [123.1844914, 13.6001425],
+          [123.1847529, 13.5998715],
+          [123.1849543, 13.5997261],
+          [123.1852443, 13.5995155],
+          [123.1853389, 13.599474],
+          [123.1857417, 13.5994503],
+          [123.1860439, 13.5994888],
+          [123.1862392, 13.5995808],
+          [123.1864894, 13.5997113],
+          [123.1867061, 13.5999486],
+          [123.1867946, 13.6001533],
+          [123.1870143, 13.6007228],
+          [123.1871456, 13.6011381],
+          [123.1872431, 13.6014203],
+          [123.187346, 13.601913],
+          [123.1873889, 13.6025024],
+          [123.1874688, 13.6033085],
+          [123.1875142, 13.6039917],
+          [123.1874956, 13.6045054],
+          [123.187513, 13.605798],
+          [123.187354, 13.6069776],
+          [123.1872723, 13.6074809],
+          [123.1871958, 13.6079187],
+          [123.1870128, 13.6086338],
+          [123.1869084, 13.6089113],
+          [123.1867552, 13.609243],
+          [123.1866006, 13.609626],
+          [123.1864018, 13.6101414],
+          [123.186236, 13.6105378],
+          [123.1860851, 13.6109616],
+          [123.1859533, 13.6112468],
+          [123.1858962, 13.6113793],
+          [123.1857615, 13.6117987],
+          [123.1857145, 13.6121259],
+          [123.1857071, 13.6123832],
+          [123.1856771, 13.6126887],
+          [123.1856477, 13.6131928],
+          [123.1856137, 13.613637],
+          [123.1855597, 13.6139222],
+          [123.1854796, 13.6141759],
+          [123.1852962, 13.6145706],
+          [123.184991, 13.614956],
+          [123.1847463, 13.6151723],
+          [123.1844135, 13.6154238],
+          [123.1840262, 13.6155208],
+          [123.183796, 13.6155904],
+          [123.1836136, 13.6155537],
+          [123.1833973, 13.615553],
+          [123.183193, 13.6156915],
+          [123.1830799, 13.6157263],
+          [123.1829648, 13.6157592],
+          [123.182793, 13.6157921],
+          [123.1820465, 13.6161439],
+          [123.1811543, 13.6165217],
+          [123.1809213, 13.6165439],
+          [123.1807938, 13.6166249],
+          [123.1807424, 13.616716],
+          [123.1805248, 13.6167766],
+          [123.1802909, 13.6168813]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/616064762",
+      "class": "water_area",
+      "kind": "natural=water"
+    },
+    "tippecanoe": {
+      "layer": "water",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181475, 13.6149949],
+          [123.1815715, 13.6149544],
+          [123.1815864, 13.6149881],
+          [123.1814899, 13.6150285],
+          [123.181475, 13.6149949]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185608",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814575, 13.6149727],
+          [123.181441, 13.6149064],
+          [123.1815242, 13.6148869],
+          [123.1815407, 13.6149531],
+          [123.1814575, 13.6149727]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185610",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1815547, 13.6144468],
+          [123.1815165, 13.614218],
+          [123.1815979, 13.6142052],
+          [123.1816361, 13.6144339],
+          [123.1815547, 13.6144468]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185742",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814233, 13.6144526],
+          [123.1814025, 13.6142148],
+          [123.1815056, 13.6142062],
+          [123.1815264, 13.6144441],
+          [123.1814233, 13.6144526]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185743",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813154, 13.6144416],
+          [123.181304, 13.6142278],
+          [123.1813962, 13.6142231],
+          [123.1814076, 13.6144369],
+          [123.1813154, 13.6144416]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185744",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1811927, 13.6143125],
+          [123.1811896, 13.6142243],
+          [123.1812909, 13.6142211],
+          [123.1812939, 13.6143093],
+          [123.1811927, 13.6143125]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185745",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812248, 13.6143868],
+          [123.1812268, 13.6143269],
+          [123.1812644, 13.614328],
+          [123.1812624, 13.614388],
+          [123.1812248, 13.6143868]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185746",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812181, 13.6144363],
+          [123.1812181, 13.6144024],
+          [123.1812678, 13.6144024],
+          [123.1812678, 13.6144363],
+          [123.1812181, 13.6144363]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185747",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1811611, 13.6144591],
+          [123.1811619, 13.6144322],
+          [123.1812102, 13.6144335],
+          [123.1812094, 13.6144605],
+          [123.1811611, 13.6144591]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185748",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1810015, 13.6144083],
+          [123.1809989, 13.6143008],
+          [123.1810853, 13.6142987],
+          [123.181088, 13.6144063],
+          [123.1810015, 13.6144083]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185749",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1810036, 13.6144689],
+          [123.1810032, 13.6144226],
+          [123.1811025, 13.614422],
+          [123.1811028, 13.6144683],
+          [123.1810036, 13.6144689]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185750",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1808433, 13.6142806],
+          [123.1808437, 13.6142265],
+          [123.1809469, 13.6142272],
+          [123.1809466, 13.6142812],
+          [123.1808433, 13.6142806]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185755",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.18085, 13.6144363],
+          [123.180846, 13.6142995],
+          [123.1809465, 13.6142967],
+          [123.1809505, 13.6144335],
+          [123.18085, 13.6144363]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185756",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812443, 13.6147159],
+          [123.1812315, 13.6146429],
+          [123.1812798, 13.614635],
+          [123.1812925, 13.614708],
+          [123.1812443, 13.6147159]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185767",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813529, 13.6147922],
+          [123.1813494, 13.6147336],
+          [123.1814768, 13.6147264],
+          [123.1814803, 13.614785],
+          [123.1813529, 13.6147922]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185768",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812577, 13.6148],
+          [123.1812536, 13.6147513],
+          [123.1813361, 13.6147448],
+          [123.1813402, 13.6147935],
+          [123.1812577, 13.6148]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185769",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1811162, 13.6148241],
+          [123.1810874, 13.6146677],
+          [123.1812143, 13.6146456],
+          [123.1812431, 13.614802],
+          [123.1811162, 13.6148241]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185770",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813657, 13.6148788],
+          [123.181358, 13.614805],
+          [123.1814848, 13.6147926],
+          [123.1814924, 13.6148665],
+          [123.1813657, 13.6148788]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185771",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813147, 13.6148873],
+          [123.1812973, 13.614813],
+          [123.1813391, 13.6148038],
+          [123.1813565, 13.614878],
+          [123.1813147, 13.6148873]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185772",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813556, 13.6149597],
+          [123.1813432, 13.614904],
+          [123.1814236, 13.614887],
+          [123.1814361, 13.6149427],
+          [123.1813556, 13.6149597]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185773",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813046, 13.6150802],
+          [123.1812825, 13.6149975],
+          [123.1813524, 13.6149798],
+          [123.1813746, 13.6150626],
+          [123.1813046, 13.6150802]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185774",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1811759, 13.6150072],
+          [123.1812543, 13.6149851],
+          [123.1812813, 13.6150752],
+          [123.1812028, 13.6150973],
+          [123.1811759, 13.6150072]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185775",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813167, 13.6151063],
+          [123.1813811, 13.6150757],
+          [123.1813977, 13.6151087],
+          [123.1813333, 13.6151393],
+          [123.1813167, 13.6151063]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185776",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181251, 13.6152542],
+          [123.1812141, 13.6151135],
+          [123.1812951, 13.6150934],
+          [123.181332, 13.6152342],
+          [123.181251, 13.6152542]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185777",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813549, 13.6151474],
+          [123.1814227, 13.6151206],
+          [123.1814406, 13.6151637],
+          [123.1813729, 13.6151904],
+          [123.1813549, 13.6151474]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185778",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813724, 13.6152041],
+          [123.1814528, 13.6151734],
+          [123.181475, 13.6152285],
+          [123.1813945, 13.6152591],
+          [123.1813724, 13.6152041]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185779",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814763, 13.6154028],
+          [123.1814542, 13.6153279],
+          [123.1815076, 13.615313],
+          [123.1815298, 13.6153879],
+          [123.1814763, 13.6154028]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185780",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814086, 13.6152718],
+          [123.181477, 13.6152405],
+          [123.1815013, 13.6152908],
+          [123.1814329, 13.6153221],
+          [123.1814086, 13.6152718]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185781",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181538, 13.6154537],
+          [123.1816171, 13.6154106],
+          [123.1816502, 13.6154681],
+          [123.181571, 13.6155111],
+          [123.181538, 13.6154537]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185784",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1814575, 13.6155527],
+          [123.1814404, 13.6154928],
+          [123.1815128, 13.6154732],
+          [123.1815299, 13.6155332],
+          [123.1814575, 13.6155527]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185785",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1815004, 13.6156622],
+          [123.1814669, 13.6155879],
+          [123.1815164, 13.6155668],
+          [123.1815499, 13.6156411],
+          [123.1815004, 13.6156622]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185786",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181133, 13.6158004],
+          [123.1810968, 13.6156818],
+          [123.1811689, 13.615661],
+          [123.1812051, 13.6157796],
+          [123.181133, 13.6158004]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185787",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180909, 13.6156713],
+          [123.1808775, 13.615574],
+          [123.1809714, 13.6155453],
+          [123.1810029, 13.6156427],
+          [123.180909, 13.6156713]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185788",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.181365, 13.6155964],
+          [123.1813374, 13.6155603],
+          [123.181379, 13.6155303],
+          [123.1814066, 13.6155664],
+          [123.181365, 13.6155964]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185789",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813683, 13.6156042],
+          [123.1814133, 13.6155742],
+          [123.1814499, 13.6156261],
+          [123.181405, 13.6156561],
+          [123.1813683, 13.6156042]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185790",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812859, 13.615397],
+          [123.1812425, 13.6152929],
+          [123.1812954, 13.615272],
+          [123.1813388, 13.6153761],
+          [123.1812859, 13.615397]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185791",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1813254, 13.6155019],
+          [123.1812885, 13.61541],
+          [123.1813402, 13.6153904],
+          [123.1813771, 13.6154823],
+          [123.1813254, 13.6155019]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185792",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1812, 13.6155514],
+          [123.1811813, 13.6154934],
+          [123.1812743, 13.615465],
+          [123.1812931, 13.615523],
+          [123.1812, 13.6155514]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185793",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1810626, 13.6155162],
+          [123.1811578, 13.6154836],
+          [123.1811835, 13.6155545],
+          [123.1810882, 13.6155871],
+          [123.1810626, 13.6155162]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185794",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802901, 13.6159294],
+          [123.1802887, 13.6158414],
+          [123.1803364, 13.6158407],
+          [123.1803378, 13.6159287],
+          [123.1802901, 13.6159294]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185795",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180274, 13.6160578],
+          [123.1802753, 13.6160337],
+          [123.1803364, 13.6160369],
+          [123.1803351, 13.616061],
+          [123.180274, 13.6160578]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185796",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802713, 13.6160252],
+          [123.180276, 13.6159392],
+          [123.1803622, 13.6159436],
+          [123.1803575, 13.6160296],
+          [123.1802713, 13.6160252]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185797",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799977, 13.6160878],
+          [123.1800052, 13.6159846],
+          [123.1801856, 13.615997],
+          [123.1801781, 13.6161002],
+          [123.1799977, 13.6160878]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185798",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1803671, 13.614581],
+          [123.1804475, 13.6145737],
+          [123.1804526, 13.6146277],
+          [123.1803723, 13.6146349],
+          [123.1803671, 13.614581]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185799",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802579, 13.6148039],
+          [123.1804309, 13.61477],
+          [123.1804518, 13.6148709],
+          [123.1802788, 13.6149048],
+          [123.1802579, 13.6148039]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185800",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1805047, 13.6149258],
+          [123.1806408, 13.6148984],
+          [123.1806771, 13.6150692],
+          [123.180541, 13.6150966],
+          [123.1805047, 13.6149258]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185801",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802163, 13.6152001],
+          [123.1801473, 13.6149968],
+          [123.1801851, 13.6149847],
+          [123.1802542, 13.615188],
+          [123.1802163, 13.6152001]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185802",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1801942, 13.6148951],
+          [123.1801841, 13.6148404],
+          [123.1802436, 13.6148301],
+          [123.1802537, 13.6148848],
+          [123.1801942, 13.6148951]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185803",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800728, 13.6146103],
+          [123.1800688, 13.6145647],
+          [123.180126, 13.61456],
+          [123.18013, 13.6146056],
+          [123.1800728, 13.6146103]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185804",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800869, 13.6147896],
+          [123.1800748, 13.6146742],
+          [123.1801694, 13.6146649],
+          [123.1801814, 13.6147802],
+          [123.1800869, 13.6147896]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185805",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1808316, 13.6149985],
+          [123.1808044, 13.6149004],
+          [123.1809404, 13.6148648],
+          [123.1809676, 13.6149629],
+          [123.1808316, 13.6149985]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185806",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179808, 13.6146051],
+          [123.179865, 13.6145999],
+          [123.1798697, 13.6146485],
+          [123.1798127, 13.6146538],
+          [123.179808, 13.6146051]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185807",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798274, 13.6147263],
+          [123.1798187, 13.6146872],
+          [123.1798488, 13.6146809],
+          [123.1798575, 13.61472],
+          [123.1798274, 13.6147263]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185808",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798663, 13.6147563],
+          [123.179863, 13.6147227],
+          [123.1799267, 13.6147169],
+          [123.17993, 13.6147505],
+          [123.1798663, 13.6147563]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185809",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798448, 13.6147681],
+          [123.1799119, 13.6147615],
+          [123.1799144, 13.6147861],
+          [123.1798474, 13.6147926],
+          [123.1798448, 13.6147681]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185810",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179873, 13.614856],
+          [123.1798643, 13.6148148],
+          [123.17992, 13.6148037],
+          [123.1799287, 13.614845],
+          [123.179873, 13.614856]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185811",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798569, 13.6148762],
+          [123.1799582, 13.6148593],
+          [123.1799711, 13.6149321],
+          [123.1798698, 13.614949],
+          [123.1798569, 13.6148762]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185812",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799615, 13.6150711],
+          [123.1799226, 13.6149733],
+          [123.1799878, 13.6149488],
+          [123.1800267, 13.6150466],
+          [123.1799615, 13.6150711]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185813",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179816, 13.6152621],
+          [123.1797885, 13.6151649],
+          [123.1799347, 13.6151258],
+          [123.1799622, 13.615223],
+          [123.179816, 13.6152621]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185814",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179989, 13.615219],
+          [123.1801184, 13.6151623],
+          [123.1801527, 13.6152363],
+          [123.1800233, 13.615293],
+          [123.179989, 13.615219]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185815",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800997, 13.6153038],
+          [123.1801419, 13.6152901],
+          [123.1801542, 13.6153259],
+          [123.1801119, 13.6153395],
+          [123.1800997, 13.6153038]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185816",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800748, 13.6153715],
+          [123.1801479, 13.6153487],
+          [123.1801661, 13.6154036],
+          [123.180093, 13.6154264],
+          [123.1800748, 13.6153715]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185817",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1801137, 13.6155462],
+          [123.1800748, 13.6154539],
+          [123.1801794, 13.6154122],
+          [123.1802183, 13.6155045],
+          [123.1801137, 13.6155462]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185818",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1802472, 13.6157632],
+          [123.1802143, 13.6156596],
+          [123.1802825, 13.6156392],
+          [123.1803153, 13.6157428],
+          [123.1802472, 13.6157632]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185819",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800943, 13.6156251],
+          [123.1801801, 13.6156088],
+          [123.1801932, 13.6156737],
+          [123.1801073, 13.61569],
+          [123.1800943, 13.6156251]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185820",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800997, 13.6157632],
+          [123.1800932, 13.6157216],
+          [123.1801508, 13.6157131],
+          [123.1801573, 13.6157547],
+          [123.1800997, 13.6157632]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185821",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1801037, 13.6158173],
+          [123.180101, 13.6157763],
+          [123.1801476, 13.6157734],
+          [123.1801503, 13.6158144],
+          [123.1801037, 13.6158173]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185823",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800098, 13.6158818],
+          [123.1800038, 13.6157828],
+          [123.1800935, 13.6157776],
+          [123.1800995, 13.6158767],
+          [123.1800098, 13.6158818]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185824",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799702, 13.6157736],
+          [123.1799672, 13.6157338],
+          [123.1800845, 13.6157253],
+          [123.1800876, 13.6157652],
+          [123.1799702, 13.6157736]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185827",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800071, 13.6157176],
+          [123.1799944, 13.6156303],
+          [123.1800731, 13.6156194],
+          [123.1800859, 13.6157067],
+          [123.1800071, 13.6157176]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185829",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799883, 13.6156192],
+          [123.1799725, 13.6155506],
+          [123.1800261, 13.6155389],
+          [123.180042, 13.6156075],
+          [123.1799883, 13.6156192]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185830",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799904, 13.6154999],
+          [123.1799843, 13.6154445],
+          [123.1800571, 13.615437],
+          [123.1800632, 13.6154924],
+          [123.1799904, 13.6154999]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185831",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798723, 13.6153305],
+          [123.1798551, 13.6152852],
+          [123.1799295, 13.6152585],
+          [123.1799468, 13.6153038],
+          [123.1798723, 13.6153305]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185832",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179979, 13.6154256],
+          [123.1799756, 13.6153891],
+          [123.1800095, 13.6153862],
+          [123.1800129, 13.6154227],
+          [123.179979, 13.6154256]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185833",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.17993, 13.6154133],
+          [123.1799246, 13.6153768],
+          [123.1799657, 13.6153711],
+          [123.179971, 13.6154076],
+          [123.17993, 13.6154133]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185834",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798857, 13.6153396],
+          [123.1799501, 13.6153174],
+          [123.179962, 13.61535],
+          [123.1798976, 13.6153721],
+          [123.1798857, 13.6153396]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185835",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798596, 13.6154556],
+          [123.1798576, 13.6154028],
+          [123.1799094, 13.615401],
+          [123.1799114, 13.6154537],
+          [123.1798596, 13.6154556]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185836",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798341, 13.615524],
+          [123.1798334, 13.6154645],
+          [123.1799427, 13.6154632],
+          [123.1799434, 13.6155227],
+          [123.1798341, 13.615524]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185837",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798549, 13.6155397],
+          [123.1799414, 13.6155319],
+          [123.1799451, 13.6155705],
+          [123.1798586, 13.6155783],
+          [123.1798549, 13.6155397]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185838",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798596, 13.6156198],
+          [123.1798591, 13.6155877],
+          [123.1799415, 13.6155864],
+          [123.1799421, 13.6156185],
+          [123.1798596, 13.6156198]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185839",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798207, 13.6156446],
+          [123.1799394, 13.6156322],
+          [123.1799464, 13.615696],
+          [123.1798277, 13.6157084],
+          [123.1798207, 13.6156446]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185840",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799059, 13.6157997],
+          [123.1799032, 13.6157241],
+          [123.1799466, 13.6157227],
+          [123.1799493, 13.6157983],
+          [123.1799059, 13.6157997]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185841",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179816, 13.6157938],
+          [123.1798134, 13.6157218],
+          [123.1798905, 13.6157192],
+          [123.1798931, 13.6157912],
+          [123.179816, 13.6157938]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185842",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799602, 13.6159868],
+          [123.1799642, 13.6159138],
+          [123.1800017, 13.6159157],
+          [123.1799977, 13.6159887],
+          [123.1799602, 13.6159868]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185843",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798878, 13.6159933],
+          [123.179887, 13.6159274],
+          [123.179946, 13.6159268],
+          [123.1799468, 13.6159926],
+          [123.1798878, 13.6159933]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185844",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798609, 13.6160565],
+          [123.1798603, 13.6160011],
+          [123.1799634, 13.6159999],
+          [123.1799641, 13.6160553],
+          [123.1798609, 13.6160565]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185845",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798911, 13.6159092],
+          [123.1798945, 13.6158323],
+          [123.179958, 13.6158349],
+          [123.1799546, 13.6159118],
+          [123.1798911, 13.6159092]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185846",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.179812, 13.6159307],
+          [123.1798153, 13.6158056],
+          [123.1798841, 13.6158073],
+          [123.1798808, 13.6159324],
+          [123.179812, 13.6159307]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185847",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1796752, 13.615917],
+          [123.1796785, 13.6158316],
+          [123.179777, 13.6158353],
+          [123.1797736, 13.6159207],
+          [123.1796752, 13.615917]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/652185848",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Sabang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1805281, 13.6144618],
+          [123.1805322, 13.6144116],
+          [123.1805714, 13.6144145],
+          [123.1805674, 13.6144647],
+          [123.1805281, 13.6144618]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025111",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1804537, 13.6142877],
+          [123.1804523, 13.6142623],
+          [123.1805026, 13.6142597],
+          [123.180504, 13.6142851],
+          [123.1804537, 13.6142877]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025116",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1804564, 13.6143718],
+          [123.1804571, 13.6142943],
+          [123.1805207, 13.6142948],
+          [123.18052, 13.6143723],
+          [123.1804564, 13.6143718]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025117",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1804604, 13.6144696],
+          [123.1804597, 13.6143816],
+          [123.1805207, 13.6143812],
+          [123.1805214, 13.6144691],
+          [123.1804604, 13.6144696]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025118",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1803585, 13.6144735],
+          [123.1803531, 13.6143464],
+          [123.1804416, 13.6143429],
+          [123.180447, 13.61447],
+          [123.1803585, 13.6144735]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025119",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.180341, 13.6143314],
+          [123.1803406, 13.6142577],
+          [123.1804425, 13.614257],
+          [123.180443, 13.6143308],
+          [123.180341, 13.6143314]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025120",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1803209, 13.6144761],
+          [123.1803229, 13.6144402],
+          [123.1803507, 13.6144417],
+          [123.1803487, 13.6144776],
+          [123.1803209, 13.6144761]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025121",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1801312, 13.614321],
+          [123.180133, 13.6142678],
+          [123.1801927, 13.6142697],
+          [123.1801908, 13.6143229],
+          [123.1801312, 13.614321]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025122",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1801647, 13.6144761],
+          [123.1801513, 13.6143431],
+          [123.1802384, 13.6143348],
+          [123.1802518, 13.6144678],
+          [123.1801647, 13.6144761]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025123",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800071, 13.6143503],
+          [123.1800028, 13.6142808],
+          [123.1800692, 13.6142768],
+          [123.1800735, 13.6143464],
+          [123.1800071, 13.6143503]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025124",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1800433, 13.614493],
+          [123.180038, 13.6143542],
+          [123.1801423, 13.6143504],
+          [123.1801477, 13.6144892],
+          [123.1800433, 13.614493]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025125",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1798375, 13.6144064],
+          [123.1798194, 13.6142636],
+          [123.1798866, 13.6142556],
+          [123.1799047, 13.6143983],
+          [123.1798375, 13.6144064]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025126",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1797154, 13.6143562],
+          [123.1797141, 13.6142369],
+          [123.1797898, 13.6142361],
+          [123.1797912, 13.6143554],
+          [123.1797154, 13.6143562]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025127",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1797322, 13.6144618],
+          [123.1797302, 13.6143914],
+          [123.1798219, 13.6143889],
+          [123.1798239, 13.6144593],
+          [123.1797322, 13.6144618]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025128",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1799649, 13.6144911],
+          [123.1799588, 13.6143992],
+          [123.1800252, 13.6143951],
+          [123.1800312, 13.614487],
+          [123.1799649, 13.6144911]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/653025129",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1810379, 13.6146632],
+          [123.1812523, 13.6154582],
+          [123.1804275, 13.6157183],
+          [123.1801057, 13.6148369],
+          [123.1810379, 13.6146632]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/660166143",
+      "class": "building_school",
+      "name": "Mabolo Elementary School",
+      "kind": "amenity=school",
+      "operator": "Naga West District Naga City Schools Division, DepEd",
+      "subdivision": "Mabolo",
+      "subdivision_approx": true,
+      "start_year": 1939,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1806043, 13.6152546],
+          [123.1807857, 13.6151969],
+          [123.1808705, 13.6154488],
+          [123.1806892, 13.6155065],
+          [123.1806043, 13.6152546]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/791360136",
+      "class": "building",
+      "kind": "leisure=sports_hall",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1806589, 13.6156791],
+          [123.1806747, 13.6157604],
+          [123.1805899, 13.6157885],
+          [123.1805649, 13.6157038],
+          [123.1806589, 13.6156791]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/866098948",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1810753, 13.6144769],
+        [123.1810702, 13.6146969],
+        [123.1811663, 13.615037],
+        [123.1813122, 13.6155415]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518784",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1813122, 13.6155415],
+        [123.181966, 13.615194],
+        [123.182124, 13.615143],
+        [123.1824676, 13.6149799],
+        [123.182512, 13.614962],
+        [123.1826635, 13.6148587]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518922",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1808944, 13.6157146],
+        [123.18124, 13.615549],
+        [123.1813122, 13.6155415]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521968",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1895555, 13.5842237],
+        [123.1892108, 13.5849968],
+        [123.1886222, 13.5861305],
+        [123.187641, 13.5875477],
+        [123.1867035, 13.5885506],
+        [123.1861149, 13.5897062],
+        [123.1858314, 13.5908399],
+        [123.1858532, 13.5917992],
+        [123.1860494, 13.5930856],
+        [123.186141, 13.5933634],
+        [123.1861056, 13.5940479],
+        [123.1860042, 13.5944266],
+        [123.1857213, 13.5947532],
+        [123.1852536, 13.5950512],
+        [123.1839223, 13.5957289],
+        [123.18278, 13.5960091],
+        [123.182097, 13.5962643],
+        [123.1816318, 13.5964382],
+        [123.1806487, 13.5968238],
+        [123.1800123, 13.5970735],
+        [123.1795291, 13.5975449],
+        [123.17917, 13.5980067],
+        [123.1789045, 13.5984685],
+        [123.1787798, 13.5989307],
+        [123.1788458, 13.5992986],
+        [123.1790551, 13.5996533],
+        [123.1795589, 13.6000878],
+        [123.1800833, 13.6004078],
+        [123.1805538, 13.600704],
+        [123.1812528, 13.6010099],
+        [123.1818957, 13.6012304],
+        [123.1824566, 13.6012315],
+        [123.1832642, 13.6011836],
+        [123.1841013, 13.6007528],
+        [123.184771, 13.6002168],
+        [123.1853816, 13.5997286],
+        [123.1859331, 13.5995946],
+        [123.1863763, 13.5997956],
+        [123.1866521, 13.6002072],
+        [123.1868356, 13.6010654],
+        [123.1870263, 13.6015569],
+        [123.1871285, 13.6024681],
+        [123.1871544, 13.6031076],
+        [123.1871741, 13.6036724],
+        [123.1871886, 13.6052299],
+        [123.1872009, 13.6065559],
+        [123.1869502, 13.6080247],
+        [123.1864418, 13.6094867],
+        [123.1860401, 13.6105141],
+        [123.1857635, 13.6111839],
+        [123.1855077, 13.6119876],
+        [123.1853288, 13.6132899],
+        [123.1850866, 13.6142444],
+        [123.1845122, 13.6149479],
+        [123.1836667, 13.6151286],
+        [123.1816337, 13.6158708],
+        [123.1809367, 13.6162129],
+        [123.1803483, 13.6164311],
+        [123.1796007, 13.6163807],
+        [123.1785785, 13.6161987],
+        [123.1781468, 13.6160351],
+        [123.1771404, 13.6158843],
+        [123.1766802, 13.6159024],
+        [123.1764323, 13.615931],
+        [123.1762201, 13.615999],
+        [123.1759299, 13.6161707],
+        [123.1755782, 13.6164509],
+        [123.1753344, 13.6168833],
+        [123.1751748, 13.6173455],
+        [123.1747337, 13.6178631],
+        [123.1745204, 13.6179767],
+        [123.1742257, 13.6179875],
+        [123.1736509, 13.6177555],
+        [123.1731004, 13.6173692],
+        [123.1728106, 13.6172267],
+        [123.1722305, 13.6170218],
+        [123.1713586, 13.6168302],
+        [123.1706376, 13.61692],
+        [123.1697745, 13.6175351],
+        [123.1692758, 13.618016],
+        [123.1685487, 13.6188454],
+        [123.1681887, 13.6191712],
+        [123.1678038, 13.6193545],
+        [123.1672541, 13.6194391],
+        [123.1663552, 13.6193343],
+        [123.1656405, 13.6192106],
+        [123.1649878, 13.6191218]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/84529720",
+      "class": "water_river",
+      "name": "Bicol River",
+      "kind": "waterway=river"
+    },
+    "tippecanoe": {
+      "layer": "water",
+      "minzoom": 9,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.182698, 13.614476],
+        [123.1825123, 13.6144817],
+        [123.1820609, 13.6144529],
+        [123.1810753, 13.6144769],
+        [123.1807068, 13.6144902],
+        [123.1806713, 13.6144915],
+        [123.1796884, 13.6145605]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/903389740",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "Mabolo-Gainza Road",
+      "kind": "highway=tertiary",
+      "width": 6,
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1807068, 13.6144902],
+        [123.180711, 13.6140542],
+        [123.180979, 13.6140263]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1358960319",
+      "class": "path",
+      "kind": "highway=footway",
+      "subdivision": "Mabolo",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  }
+]

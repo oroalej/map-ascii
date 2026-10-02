@@ -107,6 +107,14 @@
     {
       "slug": "bicol-access-health-centrum",
       "at": [123.192114342, 13.618618498]
+    },
+    {
+      "slug": "san-roque-elementary-school",
+      "at": [123.174022332, 13.620376831]
+    },
+    {
+      "slug": "mabolo-elementary-school",
+      "at": [123.180893551, 13.615331716]
     }
   ]
 }

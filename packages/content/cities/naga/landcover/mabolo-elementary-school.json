@@ -999,6 +999,56 @@
         [123.180851271, 13.614847073]
       ],
       "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.180944654, 13.615431197],
+        [123.180949294, 13.615444005],
+        [123.180982484, 13.615444005],
+        [123.180971234, 13.61540664],
+        [123.180971097, 13.615406087],
+        [123.180971016, 13.615405523],
+        [123.180970992, 13.615404955],
+        [123.180971025, 13.615404387],
+        [123.180971115, 13.615403825],
+        [123.180971261, 13.615403274],
+        [123.180971461, 13.61540274],
+        [123.180971713, 13.615402227],
+        [123.180972016, 13.61540174],
+        [123.180972366, 13.615401284],
+        [123.18097276, 13.615400863],
+        [123.180973194, 13.615400482],
+        [123.180973664, 13.615400144],
+        [123.180974166, 13.615399851],
+        [123.180974695, 13.615399608],
+        [123.180975246, 13.615399415],
+        [123.181009086, 13.615389377],
+        [123.181009086, 13.615381123],
+        [123.180944654, 13.615381123],
+        [123.180944654, 13.615431197]
+      ],
+      "cover": "parking"
+    },
+    {
+      "ring": [
+        [123.180953629, 13.615219427],
+        [123.180953629, 13.615282309],
+        [123.180972115, 13.615282309],
+        [123.180972115, 13.615219427],
+        [123.180953629, 13.615219427]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.180875203, 13.615390107],
+        [123.18088334, 13.615255655],
+        [123.180878689, 13.615210444],
+        [123.180861201, 13.615210444],
+        [123.180861201, 13.615390107],
+        [123.180875203, 13.615390107]
+      ],
+      "cover": "grass"
     }
   ],
   "status": "draft",
@@ -1012,6 +1062,10 @@
     {
       "title": "Owner-supplied five landscaped grounds references",
       "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative draft landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Owner-supplied school grounds references",
+      "note": "Inspected 2026-10-03. Restrained planting, paths and small schematic parking areas fit the saved OSM campus and complete source obstacles. Draft, undated estimates; no species, construction date, roof reconstruction, surveyed parcel or exact vehicle inventory inferred. Reference bitmaps remain in ignored evidence."
     }
   ]
 }
