@@ -151,6 +151,29 @@ for (const city of cities) {
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
+          // Reuse the loaded map for browser-only keyboard and layout checks. Focus
+          // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
+          const summary = legend.locator('summary');
+          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
+            await summary.click();
+          const focus = legend.getByRole('button', { name: 'Secondary road', exact: true });
+          await expect(focus).toBeVisible();
+          if (hasTouch) await focus.tap();
+          else {
+            await focus.focus();
+            await page.keyboard.press('Enter');
+            await expect(focus).toHaveCSS('outline-style', 'solid');
+          }
+          const clear = page.getByRole('button', { name: /^Clear legend focus:/ });
+          await expect(clear).toBeVisible();
+          if (hasTouch) {
+            for (const control of [focus, summary, clear])
+              expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            const tours = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
+            const zoom = (await page.getByLabel('Zoom').boundingBox())!;
+            expect(zoom.x).toBeGreaterThanOrEqual(tours.x + tours.width + 8);
+          }
+          await clear.click();
         },
       );
 

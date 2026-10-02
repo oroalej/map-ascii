@@ -11,6 +11,78 @@ export function createProgram(gl: GL, vertex: string, fragment: string): twgl.Pr
   });
 }
 
+export type PendingProgram = {
+  ready(): boolean;
+  finish(): twgl.ProgramInfo;
+  cancel(): void;
+};
+
+/** Link without querying status until parallel compilation completes (or input needs it). */
+export function prepareProgram(gl: GL, vertex: string, fragment: string): PendingProgram {
+  const extension = gl.getExtension('KHR_parallel_shader_compile');
+  const program = gl.createProgram();
+  if (!program) throw new Error('ASCII Atlas: cannot allocate shader program');
+  const shaders: WebGLShader[] = [];
+  let info: twgl.ProgramInfo | undefined;
+  let cancelled = false;
+  const deleteShaders = () => {
+    for (const shader of shaders) gl.deleteShader(shader);
+    shaders.length = 0;
+  };
+  const cancel = () => {
+    if (cancelled || info) return;
+    cancelled = true;
+    if (!gl.isContextLost()) {
+      deleteShaders();
+      gl.deleteProgram(program);
+    }
+  };
+  try {
+    for (const [type, source] of [
+      [gl.VERTEX_SHADER, vertex],
+      [gl.FRAGMENT_SHADER, fragment],
+    ] as const) {
+      const shader = gl.createShader(type);
+      if (!shader) throw new Error('ASCII Atlas: cannot allocate shader');
+      shaders.push(shader);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      gl.attachShader(program, shader);
+    }
+    gl.linkProgram(program);
+  } catch (error) {
+    cancel();
+    throw error;
+  }
+  return {
+    ready: () =>
+      !cancelled &&
+      !gl.isContextLost() &&
+      (!extension || Boolean(gl.getProgramParameter(program, extension.COMPLETION_STATUS_KHR))),
+    finish: () => {
+      if (cancelled || gl.isContextLost())
+        throw new Error('ASCII Atlas: shader compilation cancelled');
+      if (info) return info;
+      try {
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const details = [
+            gl.getProgramInfoLog(program),
+            ...shaders.map((s) => gl.getShaderInfoLog(s)),
+          ];
+          throw new Error(`ASCII Atlas shader error: ${details.filter(Boolean).join('\n')}`);
+        }
+        info = twgl.createProgramInfoFromProgram(gl, program);
+        deleteShaders();
+        return info;
+      } catch (error) {
+        cancel();
+        throw error;
+      }
+    },
+    cancel,
+  };
+}
+
 /** A nearest-filtered, edge-clamped 2D texture. */
 export function createTexture(
   gl: GL,
@@ -19,11 +91,12 @@ export function createTexture(
   width: number,
   height: number,
   data: ArrayBufferView | null = null,
+  type: number = gl.UNSIGNED_BYTE,
 ): WebGLTexture {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, gl.UNSIGNED_BYTE, data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, data);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -46,6 +119,8 @@ export type CellTargets = {
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
   lifeTex: WebGLTexture;
+  /** Lazy RG32F per-item candle clock tokens; never a render attachment. */
+  effectClockTex?: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
   lightTex: WebGLTexture;
   /** Static fixtures: ten-bit glyph, part, lamp/phase state, opacity. */
@@ -192,6 +267,7 @@ export function createCellTargets(
 }
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
+  if (t.effectClockTex) gl.deleteTexture(t.effectClockTex);
   for (const tex of [
     t.classTex,
     t.attrTex,
@@ -242,6 +318,28 @@ export function uploadLights(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lightTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+export function uploadEffectClocks(gl: GL, targets: CellTargets, values: Float32Array | undefined) {
+  if (!values) {
+    if (targets.effectClockTex) gl.deleteTexture(targets.effectClockTex);
+    targets.effectClockTex = undefined;
+    return;
+  }
+  if (!targets.effectClockTex) {
+    targets.effectClockTex = createTexture(
+      gl,
+      gl.RG32F,
+      gl.RG,
+      targets.cols,
+      targets.rows,
+      values,
+      gl.FLOAT,
+    );
+  } else {
+    gl.bindTexture(gl.TEXTURE_2D, targets.effectClockTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, targets.cols, targets.rows, gl.RG, gl.FLOAT, values);
+  }
 }
 
 /** Replace the independent street-hardware texture. */

@@ -15,7 +15,9 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   // Each worker is a browser rendering WebGL in software; more than a couple pins the CPU locally.
   workers: process.env.CI ? undefined : 2,
-  reporter: process.env.CI ? 'github' : 'list',
+  reporter: process.env.CI
+    ? [['github'], ['json', { outputFile: 'test-results/shard-duration.json' }]]
+    : 'list',
   // Name tests that dominate the run so they get moved to unit tests before CI's job limit hits.
   reportSlowTests: { max: 5, threshold: 30_000 },
   use: {

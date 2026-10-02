@@ -110,7 +110,7 @@
   }
 
   .panel[data-expanded='true'] {
-    max-height: 88dvh;
+    max-height: min(88dvh, calc(100dvh - var(--focus-header-bottom, 0px) - 8px));
   }
 
   /* During a tour, the tour's sheet takes its place; the selection still shows on the map. */

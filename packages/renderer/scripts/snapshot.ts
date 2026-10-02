@@ -41,14 +41,59 @@ export async function snapshotRevision(root: string, revision: string, destinati
     .trim()
     .split('\n')
     .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'));
+  return writeSnapshot(root, destination, paths, (path) =>
+    execFileSync('git', ['show', `${revision}:${path}`], { cwd: root, encoding: 'utf8' }),
+  );
+}
+
+function workingPaths(root: string) {
+  return [
+    ...new Set(
+      execFileSync(
+        'git',
+        [
+          'ls-files',
+          '--cached',
+          '--others',
+          '--exclude-standard',
+          '--',
+          'packages/renderer/src',
+          'packages/shared/src',
+        ],
+        { cwd: root, encoding: 'utf8' },
+      )
+        .trim()
+        .split('\n'),
+    ),
+  ]
+    .filter(
+      (path) => path.endsWith('.ts') && !path.endsWith('.test.ts') && existsSync(join(root, path)),
+    )
+    .sort();
+}
+
+/** Same independent graph and alias/link rules for an uncommitted candidate. */
+export async function snapshotWorkingTree(root: string, destination: string) {
+  const hash = await currentSourceHash(root);
+  const snapshot = await writeSnapshot(root, destination, workingPaths(root), (path) =>
+    readFile(join(root, path), 'utf8'),
+  );
+  if (hash !== snapshot.hash || hash !== (await currentSourceHash(root)))
+    throw new Error('Runtime source changed during snapshot');
+  return snapshot;
+}
+
+async function writeSnapshot(
+  root: string,
+  destination: string,
+  paths: string[],
+  read: (path: string) => Promise<string> | string,
+) {
   const hash = createHash('sha256');
   await mkdir(destination, { recursive: true });
   await writeFile(join(destination, 'package.json'), '{"type":"module"}');
   for (const path of paths) {
-    const source = execFileSync('git', ['show', `${revision}:${path}`], {
-      cwd: root,
-      encoding: 'utf8',
-    }).replace(/\r\n/g, '\n');
+    const source = (await read(path)).replace(/\r\n/g, '\n');
     hash.update(path).update('\0').update(source);
     const target = join(destination, path);
     await mkdir(dirname(target), { recursive: true });
@@ -77,23 +122,7 @@ export async function snapshotRevision(root: string, revision: string, destinati
   };
 }
 export async function currentSourceHash(root: string) {
-  const paths = execFileSync(
-    'git',
-    [
-      'ls-files',
-      '--cached',
-      '--others',
-      '--exclude-standard',
-      '--',
-      'packages/renderer/src',
-      'packages/shared/src',
-    ],
-    { cwd: root, encoding: 'utf8' },
-  )
-    .trim()
-    .split('\n')
-    .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))
-    .sort();
+  const paths = workingPaths(root);
   const hash = createHash('sha256');
   for (const p of paths) {
     if (!existsSync(join(root, p))) continue;

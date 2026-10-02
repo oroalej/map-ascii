@@ -100,6 +100,30 @@ describe('moment admission adapter', () => {
       }),
     ).toEqual(before);
   });
+  it('holds only the inspected gesture while another speaker and the exchange continue', () => {
+    const t = tile(),
+      [a, b] = walkers(t);
+    const host = new MomentHost(t, 5, {
+      rng: () => 0,
+      dialogue: [{ id: 'hello', kind: 'greet', period: 'afternoon', turns: 2, speakers: [0, 1] }],
+    });
+    host.step(0.1, 21, { rain: 0, minutes: 720 }, undefined, undefined, 0.2, 1.8);
+    expect(host.pose(a)).toBe('gesture');
+    const facing = structuredClone(a.momentFacing);
+    let otherGestures = 0;
+    for (let i = 0; i < 60; i++) {
+      host.step(0.1, 21, { rain: 0, minutes: 720 }, undefined, undefined, 0.2, 1.8, a);
+      expect(host.pose(a)).toBe('gesture');
+      expect(a.momentFacing).toEqual(facing);
+      if (host.pose(b) === 'gesture') otherGestures++;
+    }
+    expect(otherGestures).toBeGreaterThan(0);
+    expect(host.moments.size).toBe(0);
+    host.step(0.1, 21, { rain: 0 }, undefined, undefined, 0.2, 1.8);
+    expect(host.pose(a)).toBeUndefined();
+    host.release(a);
+    expect(a.momentFacing).toBeUndefined();
+  });
   it('admits safely spaced greetings across actual desktop and phone cell schedules', () => {
     for (const phone of [false, true])
       for (const zoom of [18, 19, 19.5, 20, 20.5, 21]) {
