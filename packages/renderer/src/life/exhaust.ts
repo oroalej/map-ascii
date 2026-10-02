@@ -1,6 +1,6 @@
 import { VEHICLES, type CraftType } from './vehicles';
 import { frameBetween } from './frames';
-import { lngLatToTile, tileToLngLat } from '../raster/geometry';
+import { lngLatToTile, tileToLngLat } from '@atlas/shared';
 import type { TileId } from '../tiles';
 
 export const PUFF = {

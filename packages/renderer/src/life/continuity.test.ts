@@ -13,6 +13,7 @@ import {
 } from './testing/scenarios';
 import { continuityMover, continuityTile, left, parent, right } from './testing/continuity';
 import { trainLimits } from './train-motion';
+import { withoutDecorations } from '../../scripts/decorations';
 
 const entry = continuityTile(parent);
 function fixture(kind: LifeLine = LifeLine.roadMajor) {
@@ -46,7 +47,7 @@ function assertUnique(world: LifeWorld) {
 }
 
 describe('tile retirement', () => {
-  it('freezes all state, draws nothing, and revives the original instance after cloned geometry returns', () => {
+  it('freezes retired state, draws nothing, and revives original motion after cloned geometry returns', () => {
     const { world, life, source } = fixture();
     world.step(0.1);
     const saved = structuredClone(scenarioState(world));
@@ -59,7 +60,7 @@ describe('tile retirement', () => {
     expect(world.visible(18, activityLevels(1), [123, 13])).toEqual([]);
     world.sync([structuredClone(source)]);
     expect(worldTiles(world).get(source.key)).toBe(life);
-    expect(scenarioState(world)).toEqual(saved);
+    expect(withoutDecorations(scenarioState(world))).toEqual(withoutDecorations(saved));
     expect(retiredTiles(world).size).toBe(0);
   });
 

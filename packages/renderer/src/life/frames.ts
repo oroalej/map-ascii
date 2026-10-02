@@ -1,6 +1,6 @@
 import type { TileId } from '../tiles';
 import { ancestorAt } from '../tiles';
-import { EXTENT } from '../raster/geometry';
+import { TILE_EXTENT as EXTENT } from '@atlas/shared';
 
 /** Affine transform from one tile's units to another, including different zoom levels. */
 export function frameBetween(from: TileId, to: TileId) {
