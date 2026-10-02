@@ -1,0 +1,20 @@
+{
+  "id": "landmark/camarines-sur-national-high-school",
+  "osm_id": "osm:way/1314530226",
+  "name": {
+    "en": "Camarines Sur National High School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/1314530226",
+      "note": "ODbL. Original footprints, roads and mapped facilities preserved. No edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied overhead reference, seven-site adjustment",
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. Name identifies the referenced campus; no historical dates added."
+    }
+  ]
+}

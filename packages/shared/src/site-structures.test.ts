@@ -39,6 +39,10 @@ describe('site structure content', () => {
     ).toBe(false);
   });
   it('accepts courts, holed tracks and explicit mapped roof wings without ambiguous roof fields', () => {
+    expect(SiteStructure.safeParse({ ...part, material: 'water', overhead: false }).success).toBe(
+      true,
+    );
+    expect(SiteStructure.safeParse({ ...part, material: 'water' }).success).toBe(false);
     expect(SiteStructure.safeParse({ ...part, material: 'pitch', overhead: false }).success).toBe(
       true,
     );

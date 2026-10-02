@@ -1,0 +1,232 @@
+{
+  "id": "landcover/magsaysay-avenue",
+  "title": "Magsaysay Avenue roadside planting",
+  "trees": [
+    {
+      "at": [123.195045787, 13.633082301],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.194736944, 13.633190353],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200956386, 13.622065451],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201093394, 13.622353713],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201091792, 13.622641168],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201090189, 13.622928623],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201088587, 13.623216079],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201086984, 13.623503534],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201085381, 13.62379099],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201083779, 13.624078445],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201080515, 13.624366521],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201076117, 13.624653949],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201071718, 13.624941376],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201067415, 13.625228726],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201063364, 13.625516159],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201055386, 13.625805834],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.201017662, 13.626101782],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200814574, 13.62665422],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200664283, 13.626914205],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200485499, 13.627152069],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200296621, 13.62737329],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.200107743, 13.62759451],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.199918865, 13.627815731],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.199729987, 13.628036952],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.199541109, 13.628258172],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.199352231, 13.628479393],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.199162778, 13.628700479],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198975976, 13.628922117],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198681862, 13.629060279],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198602803, 13.629368284],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198416127, 13.629591263],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198229451, 13.629814242],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.198041258, 13.630036927],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.197852091, 13.630257944],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.197475055, 13.630700347],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.197285318, 13.630921749],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.197097213, 13.631142873],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.19690371, 13.631367103],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.196693225, 13.631573784],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.196477544, 13.631770344],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.196262049, 13.631966792],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.19604605, 13.63216205],
+      "crown_m": 7,
+      "height_m": 6
+    },
+    {
+      "at": [123.195739097, 13.632443287],
+      "crown_m": 7,
+      "height_m": 6
+    }
+  ],
+  "rows": [],
+  "areas": [],
+  "status": "draft",
+  "credit": "Magsaysay Avenue — Owner-requested sparse roadside planting; draft estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Magsaysay Avenue carriageways",
+      "url": "https://www.openstreetmap.org/way/252223483",
+      "note": "Road-relative draft landscaping requested by owner; no supplied image or exact tree inventory. At least 24-metre spacing along each sampled road side, seven-metre crowns, full road/roof exclusions and three-metre mapped-tree deduplication. Junction and narrow developed-frontage gaps retained."
+    }
+  ]
+}

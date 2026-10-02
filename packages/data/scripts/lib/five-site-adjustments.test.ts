@@ -37,7 +37,7 @@ const metres = ([x, y]: readonly number[], [lng, lat]: readonly number[]) =>
   Math.hypot((x! - lng!) * 111320 * Math.cos((lat! * Math.PI) / 180), (y! - lat!) * 111320);
 
 describe('five owner-referenced landmark adjustments', () => {
-  it('enlarges mapped Civic Center crowns without moving or duplicating trunks or changing the pool', () => {
+  it('restrains mapped Civic Center crowns without moving or duplicating trunks or changing the pool', () => {
     const cover = covers[0]!;
     expect(cover.tree_overrides).toHaveLength(24);
     for (const tree of cover.tree_overrides) {
@@ -45,7 +45,8 @@ describe('five owner-referenced landmark adjustments', () => {
       const result = adjusted.find((f) => f.properties.id === tree.osm_id)!;
       expect(result.geometry).toEqual(original.geometry);
       expect(result.properties).toEqual({ ...original.properties, crown: tree.crown_m });
-      expect(tree.crown_m).toBeGreaterThanOrEqual(16);
+      expect(tree.crown_m).toBeGreaterThanOrEqual(8);
+      expect(tree.crown_m).toBeLessThanOrEqual(12);
     }
     for (const tree of cover.trees)
       for (const f of source.filter(
@@ -184,6 +185,8 @@ describe('five owner-referenced landmark adjustments', () => {
     ) as { site: string; id: string; ring: LngLat[] }[];
     const trees = input.filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point');
     for (const mask of masks) {
+      // Owner's latest comparison explicitly requests less Civic Center canopy.
+      if (mask.site === 'naga-city-civic-center') continue;
       // The latest annotation explicitly replaces these oversized northern groves.
       if (
         mask.site === 'naga-hope-christian-school' &&

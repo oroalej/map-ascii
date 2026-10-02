@@ -298,7 +298,7 @@ SiteDetail {                     // cities/<slug>/details/*.json — sourced out
   structures?: {
     id: string; ring: [lng, lat][]; height_m: number;
     holes?: [lng, lat][][];       // simple non-overlapping open interiors inside the outer ring
-    material: 'wood' | 'stone' | 'roof' | 'paving' | 'pitch'; overhead: boolean;
+    material: 'wood' | 'stone' | 'roof' | 'paving' | 'pitch' | 'water'; overhead: boolean;
     roof_shape?: 'flat' | 'gabled' | 'hipped' | 'pyramidal';
     roof_osm_id?: string;         // both roof fields required for an explicit overhead roof wing
     ground_override?: boolean; // paving only; omitted/false retains ordinary terrace priority
@@ -330,7 +330,11 @@ their vertices lie inside. Existing detail records need no changes.
 
 Structures may have open interiors: the merge rejects holes outside the outer footprint,
 overlapping holes and empty surfaces. Tile triangulation retains the holes, so a running
-track leaves its lawn infield open without seams between radial pieces. `material: 'pitch'`
+track leaves its lawn infield open without seams between radial pieces. `material: 'water'`
+adds a sourced swimming-pool footprint using the existing water renderer and canonical
+site selection. Pools block pedestrian routes and reject standing-roof and mapped-water
+overlap. Author surrounding decks with an open water interior. No new renderer
+class or timeline date is introduced. `material: 'pitch'`
 emits a walkable sports pitch with canonical site selection and rejects overhead placement
 or intersections with standing buildings. Thin paving strips can represent painted court
 markings without introducing blocked stonework.

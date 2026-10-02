@@ -30,9 +30,17 @@ const details = readCollection('details').map((data) => SiteDetail.parse(data));
 const covers = readCollection('landcover').map((data) => Landcover.parse(data));
 const plans = readCollection('plans').map((data) => LandmarkPlan.parse(data));
 const landmarks = readCollection('landmarks').map((data) => Landmark.parse(data));
-const source = JSON.parse(
+const existingSource = JSON.parse(
   readFileSync(new URL('../__fixtures__/landmark-parents.json', import.meta.url), 'utf8'),
 ) as AtlasFeature[];
+const campusSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/seven-site-parents.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
+const existingIds = new Set(existingSource.map((f) => f.properties.id));
+const source = [
+  ...existingSource,
+  ...campusSource.filter((f) => !existingIds.has(f.properties.id)),
+];
 mergeContent(source, { landmarks } as ContentBundle);
 const areaFor = (detail: SiteDetail): Polygon | MultiPolygon => {
   if (detail.grounds) return { type: 'Polygon', coordinates: [detail.grounds] };
@@ -49,7 +57,7 @@ const newDetails = details.filter(
 
 describe('landmark detail tier coverage (fast)', () => {
   it('covers three rendered tiers, including close-up Place detail, for every pack', () => {
-    expect(newDetails).toHaveLength(14);
+    expect(newDetails).toHaveLength(17);
     for (const detail of details) {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
@@ -60,11 +68,13 @@ describe('landmark detail tier coverage (fast)', () => {
             ? 'building'
             : part.material === 'pitch'
               ? 'pitch'
-              : part.material === 'paving'
-                ? 'paving'
-                : part.material === 'wood'
-                  ? 'building_woodwork'
-                  : 'building_part',
+              : part.material === 'water'
+                ? 'water_area'
+                : part.material === 'paving'
+                  ? 'paving'
+                  : part.material === 'wood'
+                    ? 'building_woodwork'
+                    : 'building_part',
         );
       if (detail.seating.length) add('seating');
       if (detail.lamps.length || detail.flagpoles.length) add('furniture');

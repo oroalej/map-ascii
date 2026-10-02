@@ -58,6 +58,7 @@ describe('detail layout fingerprints', () => {
       },
       { ...detail, structures: detail.structures.map((part) => ({ ...part, height_m: 0.3 })) },
       { ...detail, structures: [] },
+      { ...detail, structures: detail.structures.map((part) => ({ ...part, material: 'water' })) },
       { ...detail, roof_overrides: [{ osm_id: 'osm:way/2', shape: 'flat' }] },
       { ...detail, building_overrides: [{ osm_id: 'osm:way/2', height_m: 9 }] },
     ])

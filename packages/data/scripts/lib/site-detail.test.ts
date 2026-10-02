@@ -42,6 +42,46 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('links a sourced pool to its site, blocks pedestrian routes and rejects mapped water duplicates', () => {
+    const pool = {
+      id: 'pool',
+      ring: [p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)],
+      material: 'water' as const,
+      height_m: 0.05,
+      overhead: false,
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      structures: [pool],
+      walks: [],
+      seating: [],
+      lamps: [],
+    });
+    const result = mergeSiteDetails([parent], [pack]).features;
+    const water = result.find((f) => f.properties.class === 'water_area')!;
+    expect(water.properties).toMatchObject({
+      kind: 'leisure=swimming_pool',
+      detail_parent: parent.properties.id,
+      detail_blocked: true,
+    });
+    const mappedWater: AtlasFeature = {
+      ...water,
+      properties: { id: 'osm:way/3', class: 'water_area' },
+    };
+    expect(() => mergeSiteDetails([parent, mappedWater], [pack])).toThrow('duplicates');
+    expect(() =>
+      mergeSiteDetails(
+        [parent],
+        [{ ...pack, walks: [{ id: 'crossing', line: [p(5, 15), p(25, 15)], width_m: 2 }] }],
+      ),
+    ).toThrow('crosses');
+    const roof: AtlasFeature = {
+      ...water,
+      properties: { id: 'osm:way/2', class: 'building', height: 6 },
+    };
+    expect(() => mergeSiteDetails([parent, roof], [pack])).toThrow('crosses');
+  });
   it('applies sourced building height without mutating input and rejects missing or exterior targets', () => {
     const building: AtlasFeature = {
       ...parent,

@@ -1,0 +1,183 @@
+{
+  "id": "landcover/university-of-nueva-caceres",
+  "title": "University of Nueva Caceres planting",
+  "trees": [
+    {
+      "at": [123.182361549, 13.625473509],
+      "crown_m": 15,
+      "height_m": 8
+    },
+    {
+      "at": [123.182458308, 13.625583959],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.182615454, 13.625632494],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.18266932, 13.625681503],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.182825781, 13.625631695],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.182899269, 13.625581805],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.182986694, 13.625468976],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.183068332, 13.625339219],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.183157816, 13.625149383],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.183248474, 13.624977061],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.183335787, 13.624733292],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.183597347, 13.624398813],
+      "crown_m": 17,
+      "height_m": 8
+    },
+    {
+      "at": [123.183405362, 13.623676809],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.183283707, 13.623711682],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.183136783, 13.623846887],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.18298552, 13.623950658],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.182866181, 13.624018215],
+      "crown_m": 15,
+      "height_m": 8
+    },
+    {
+      "at": [123.182653592, 13.624217381],
+      "crown_m": 16,
+      "height_m": 8
+    },
+    {
+      "at": [123.182608924, 13.624328655],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.182423999, 13.624589959],
+      "crown_m": 9,
+      "height_m": 6
+    },
+    {
+      "at": [123.182251693, 13.624692858],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.182188206, 13.624807269],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.18211113, 13.624926092],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.182034198, 13.62523615],
+      "crown_m": 11,
+      "height_m": 8
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.183000319, 13.625315581],
+        [123.182760409, 13.625610504],
+        [123.1828104, 13.625627389],
+        [123.183030299, 13.625336743],
+        [123.183000319, 13.625315581]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.182720149, 13.625659997],
+        [123.182720783, 13.625670738],
+        [123.182767698, 13.62568383],
+        [123.182772577, 13.625677381],
+        [123.182720355, 13.625659742],
+        [123.182720149, 13.625659997]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.18319659, 13.624866101],
+        [123.183043561, 13.625110913],
+        [123.183082768, 13.625130903],
+        [123.183222746, 13.624882877],
+        [123.18319659, 13.624866101]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.182307072, 13.624665884],
+        [123.182319026, 13.624694931],
+        [123.182397767, 13.624598449],
+        [123.182347874, 13.624617302],
+        [123.182307072, 13.624665884]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "University of Nueva Caceres — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/383244706",
+      "note": "ODbL. Original footprints, roads and mapped facilities preserved. No edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied overhead reference, seven-site adjustment",
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. "
+    }
+  ]
+}

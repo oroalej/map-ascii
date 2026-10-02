@@ -316,7 +316,7 @@ export function mergeSiteDetails(
       }
       // Opt-in ground replacements must not paint a court through a standing footprint.
       // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
-      if (part.ground_override || part.material === 'pitch')
+      if (part.ground_override || ['pitch', 'water'].includes(part.material))
         for (const obstacle of blocked)
           if (
             bboxesOverlap(bbox(shape) as [number, number, number, number], obstacle.bounds) &&
@@ -325,18 +325,27 @@ export function mergeSiteDetails(
             throw new Error(
               `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
             );
+      if (part.material === 'water')
+        for (const water of input.filter(
+          (f) => f.properties.class === 'water_area' && isArea(f.geometry),
+        ))
+          if (intersection(rings, clip(water.geometry as Polygon | MultiPolygon)).length)
+            throw new Error(`${pack.id} structure ${part.id}: duplicates ${water.properties.id}`);
       return feature(`${prefix}/structure-${part.id}`, shape, {
         class: part.roof_shape
           ? // Roof surfaces have no independent school/market activity; selection uses link.
             'building'
-          : part.material === 'pitch'
-            ? 'pitch'
-            : part.material === 'paving'
-              ? 'paving'
-              : part.material === 'wood'
-                ? 'building_woodwork'
-                : 'building_part',
+          : part.material === 'water'
+            ? 'water_area'
+            : part.material === 'pitch'
+              ? 'pitch'
+              : part.material === 'paving'
+                ? 'paving'
+                : part.material === 'wood'
+                  ? 'building_woodwork'
+                  : 'building_part',
         height: part.height_m,
+        ...(part.material === 'water' && { kind: 'leisure=swimming_pool' }),
         variant:
           part.roof_shape ??
           (part.material === 'paving'

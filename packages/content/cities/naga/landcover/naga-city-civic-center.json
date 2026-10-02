@@ -4,171 +4,108 @@
   "trees": [
     {
       "at": [123.196735038, 13.627993106],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196808457, 13.628051447],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.196881875, 13.628109788],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196955294, 13.628168129],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197007363, 13.628217876],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.19710213, 13.628284812],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.196758448, 13.627879269],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196831867, 13.62793761],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.196905285, 13.627995951],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196978703, 13.628054292],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197052122, 13.628112633],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197138612, 13.628183679],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197198958, 13.628229316],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197272377, 13.628287657],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197345795, 13.628345998],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197419214, 13.628404339],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196909087, 13.62790117],
-      "crown_m": 18
-    },
-    {
-      "at": [123.196989733, 13.627969503],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197052655, 13.628021028],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197122806, 13.628082545],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197196224, 13.628140887],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197266374, 13.628202404],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197339793, 13.628260745],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197117122, 13.629043692],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197140531, 13.628929854],
-      "crown_m": 18
-    },
-    {
-      "at": [123.19721395, 13.628988196],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197163941, 13.628816017],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197237359, 13.628874358],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.197260769, 13.628760521],
-      "crown_m": 18
-    },
-    {
-      "at": [123.197334188, 13.628818862],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.196350441, 13.628066587],
-      "crown_m": 14
-    },
-    {
-      "at": [123.196368649, 13.627978047],
-      "crown_m": 14
-    },
-    {
-      "at": [123.196425752, 13.628023424],
-      "crown_m": 14
+      "crown_m": 7.7,
+      "height_m": 6
     },
     {
       "at": [123.196386856, 13.627889507],
-      "crown_m": 14
-    },
-    {
-      "at": [123.19644396, 13.627934884],
-      "crown_m": 14
-    },
-    {
-      "at": [123.196462167, 13.627846344],
-      "crown_m": 14
+      "crown_m": 7.7,
+      "height_m": 6
     },
     {
       "at": [123.19651927, 13.62789172],
-      "crown_m": 14
+      "crown_m": 7.7,
+      "height_m": 6
     },
     {
       "at": [123.196480375, 13.627757804],
-      "crown_m": 14
-    },
-    {
-      "at": [123.196514602, 13.627780948],
-      "crown_m": 14
+      "crown_m": 7.7,
+      "height_m": 6
     },
     {
       "at": [123.196580394, 13.628595868],
-      "crown_m": 19
+      "crown_m": 10,
+      "height_m": 6
     },
     {
       "at": [123.196675411, 13.628394407],
-      "crown_m": 18
+      "crown_m": 9.9,
+      "height_m": 6
     },
     {
       "at": [123.196960842, 13.628359364],
-      "crown_m": 20
+      "crown_m": 10,
+      "height_m": 6
     }
   ],
   "rows": [],
@@ -200,104 +137,108 @@
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",
       "note": "Inspected supplied image; registered to cached OSM roof/pool outlines. Capture and imagery dates unknown. Positions, sizes and counts are estimates; no construction dates inferred. Reference bitmap remains ignored evidence and is not distributed. Mapped footprints are preserved, including alignment uncertainty."
+    },
+    {
+      "title": "Owner correction: restrained Civic Center canopy",
+      "note": "Latest owner ASCII view shows excessive coverage. Crown diameters reduced about 45 percent; redundant estimated trunks thinned with 11-metre spacing. All mapped tree ids/positions/heights, pool, courts, museum and monuments retained. Earlier dense foliage masks are superseded; dimensions remain draft."
     }
   ],
   "tree_overrides": [
     {
       "osm_id": "osm:node/13982141801",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141806",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141813",
-      "crown_m": 16
+      "crown_m": 8.8
     },
     {
       "osm_id": "osm:node/13982141814",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141815",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141816",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141817",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141818",
-      "crown_m": 16
+      "crown_m": 8.8
     },
     {
       "osm_id": "osm:node/13982141868",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141869",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141870",
-      "crown_m": 22
+      "crown_m": 12
     },
     {
       "osm_id": "osm:node/13982141871",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847945",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847946",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847947",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847948",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847950",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847954",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847955",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847962",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847967",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847969",
-      "crown_m": 18
+      "crown_m": 9.9
     },
     {
       "osm_id": "osm:node/13984847970",
-      "crown_m": 16
+      "crown_m": 8.8
     },
     {
       "osm_id": "osm:node/13984847975",
-      "crown_m": 16
+      "crown_m": 8.8
     }
   ]
 }

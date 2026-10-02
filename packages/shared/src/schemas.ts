@@ -350,7 +350,7 @@ export const SiteStructure = z
     /** Open interiors, e.g. a running track surrounding a lawn. */
     holes: z.array(SimpleRing).max(16).optional(),
     height_m: z.number().positive().max(255),
-    material: z.enum(['wood', 'stone', 'roof', 'paving', 'pitch']),
+    material: z.enum(['wood', 'stone', 'roof', 'paving', 'pitch', 'water']),
     overhead: z.boolean(),
     /** Explicit roof wing on a standing mapped building; generic ridges follow this outline. */
     roof_shape: z.enum(['flat', 'gabled', 'hipped', 'pyramidal']).optional(),
@@ -358,9 +358,9 @@ export const SiteStructure = z
     /** Explicit paving replacing a coarse ground fill; omitted preserves legacy priority. */
     ground_override: z.boolean().optional(),
   })
-  .refine((part) => !['paving', 'pitch'].includes(part.material) || !part.overhead, {
+  .refine((part) => !['paving', 'pitch', 'water'].includes(part.material) || !part.overhead, {
     path: ['overhead'],
-    message: 'walkable surfaces cannot be overhead',
+    message: 'ground surfaces cannot be overhead',
   })
   .refine((part) => part.ground_override === undefined || part.material === 'paving', {
     path: ['ground_override'],
