@@ -65,6 +65,68 @@ function fixture() {
   return { frame, queue, events, readback, controller, finish, clock };
 }
 describe('speech visibility', () => {
+  it('accepts replies after redraw changes the shared grid before the next frame update', () => {
+    const f = fixture();
+    const speaker = f.frame.agents[0]!;
+    const previous = { ...f.frame, agents: [{ ...speaker, speech: undefined }, speaker] };
+    previous.owners[210] = 2;
+    previous.speakers = { members: new Uint8Array(400), points: new Map([[2, [10.5, 10.5]]]) };
+    previous.speakers.members[210] = 1;
+    f.controller.update(previous, 0);
+    const next = { ...previous, agents: [speaker] };
+    // drawLife reuses these buffers while the previous agents array stays unchanged.
+    next.owners[210] = 1;
+    next.speakers!.points.clear();
+    next.speakers!.points.set(1, [10.5, 10.5]);
+    f.clock.now = 20;
+    f.finish();
+    f.controller.update(next, 20);
+    expect(previous.agents).toHaveLength(2);
+    expect(f.events.at(-1)).toHaveLength(1);
+    expect(f.readback.request).toHaveBeenCalledTimes(3);
+  });
+  it('removes a departed cue even when its reply completes between redraw and update', () => {
+    const f = fixture();
+    f.controller.update(f.frame, 0);
+    const next = { ...f.frame, agents: [] };
+    next.owners.fill(0);
+    f.finish();
+    f.controller.update(next, 20);
+    expect(f.events.flat()).toEqual([]);
+  });
+  it('bounds stationary rechecks when GPU replies are immediate', () => {
+    const f = fixture();
+    for (let now = 0; now <= 6000; now += 20) {
+      f.clock.now = now;
+      f.controller.update(f.frame, now);
+      f.finish();
+    }
+    expect(f.events.at(-1)).toHaveLength(1);
+    expect(f.readback.request.mock.calls.length / 3).toBeLessThanOrEqual(16);
+  });
+  it('forgets a slow batch after eight completions and resets latency on clear', () => {
+    const f = fixture();
+    f.controller.update(f.frame, 0);
+    f.clock.now = 800;
+    f.finish();
+    for (let i = 1; i <= 8; i++) {
+      f.clock.now = 800 + i * 100;
+      f.controller.update(f.frame, f.clock.now);
+      f.finish();
+    }
+    expect(f.readback.request).toHaveBeenCalledTimes(27);
+    f.controller.update(f.frame, 1700);
+    expect(f.readback.request).toHaveBeenCalledTimes(27);
+    f.controller.update(f.frame, 2000);
+    expect(f.readback.request).toHaveBeenCalledTimes(30);
+    f.clock.now = 2800;
+    f.finish();
+    f.controller.clear();
+    f.controller.update(f.frame, 2800);
+    f.finish();
+    f.controller.update(f.frame, 2900);
+    expect(f.readback.request).toHaveBeenCalledTimes(33);
+  });
   it('keeps the last positive confirmation while a speaker walks across cells', () => {
     const f = fixture();
     f.controller.update(f.frame, 0);
@@ -111,6 +173,7 @@ describe('speech visibility', () => {
   it.each([
     [800, 3, 50],
     [500, 2, 100],
+    [800, 3, 200],
     [800, 1, 800],
   ])(
     'keeps %s-wide confirmed speakers stable through %s-speaker GPU rechecks at %s ms',
@@ -150,11 +213,12 @@ describe('speech visibility', () => {
     const f = fixture();
     f.controller.update(f.frame, 0);
     f.finish();
-    f.controller.update(f.frame, 130);
+    f.clock.now = 400;
+    f.controller.update(f.frame, 400);
     expect(f.events.at(-1)).toHaveLength(1);
-    f.clock.now = 300;
+    f.clock.now = 500;
     f.finish('tree_crown');
-    f.controller.update(f.frame, 300);
+    f.controller.update(f.frame, 500);
     expect(f.events.at(-1)).toEqual([]);
   });
   it('dates the pending watchdog from issuance after a slow drawing frame', () => {
@@ -250,10 +314,16 @@ describe('speech visibility', () => {
       if (block === 'owner') f.frame.owners.fill(0);
       if (block === 'label') f.frame.labelsCover = () => true;
       if (block === 'edge') f.frame.size = { width: 50, height: 50 };
-      if (block === 'queue') f.readback.size = 2;
+      if (block === 'queue') f.readback.size = 4;
       f.controller.update(f.frame, 0);
       expect(f.readback.request).not.toHaveBeenCalled();
     }
+  });
+  it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])('reserves two queue slots with %s reads pending', (size) => {
+    const f = fixture();
+    f.readback.size = size;
+    f.controller.update(f.frame, 0);
+    expect(f.readback.request).toHaveBeenCalledTimes(size <= 3 ? 3 : 0);
   });
   it('discards geometry/speaker changes and incomplete old batches, and clears synchronously', () => {
     const f = fixture();

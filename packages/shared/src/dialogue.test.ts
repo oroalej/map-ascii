@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dialogueCatalog } from './dialogue';
-import { dialogueChoices, greetingPeriod } from './dialogue-options';
+import { dialogueCatalog, RuntimeDialogueCatalog } from './dialogue';
+import { dialogueChoices, greetingPeriod, runtimeDialogueCatalog } from './dialogue-options';
 
 const catalog = {
   native: { code: 'bcl', label: 'Bikol' },
@@ -23,6 +23,21 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
+  it('projects a source-free runtime schema without weakening pack validation', () => {
+    const full = schema.parse({
+      ...catalog,
+      periods: { morningStart: 360, afternoonStart: 780, eveningStart: 1140 },
+    });
+    const runtime = runtimeDialogueCatalog(full)!;
+    expect(RuntimeDialogueCatalog.parse(runtime)).toEqual(runtime);
+    expect(runtime.exchanges[0]).not.toHaveProperty('sources');
+    expect(runtime.exchanges[0]!.lines).toEqual(full.exchanges[0]!.lines);
+    expect(runtime.periods).toEqual(full.periods);
+    expect(dialogueChoices(runtime)).toEqual(dialogueChoices(full));
+    expect(schema.safeParse(runtime).success).toBe(false);
+    expect(full.exchanges[0]!.sources).toHaveLength(1);
+    expect(runtimeDialogueCatalog(undefined)).toBeUndefined();
+  });
   it('separates one speaking turn from the actual participant slot', () => {
     const base = {
       ...catalog.exchanges[0],

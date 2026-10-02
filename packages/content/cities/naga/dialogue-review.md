@@ -14,17 +14,17 @@ Fourteen utterances were rewritten; the other converted scenes retain a self-con
 
 The happiness wording in `plans-done` uses maugma, also found in [Kerwin Orville Tate's original Bikol essay, Solo trip](https://magbikolkita.com/layason-officer/solo-trip/). This establishes written word-family usage, not local spoken approval of the authored sentence. Existing lexical and grammatical references remain applicable. The revised rest wording uses the previously reviewed magpahingalo family. Preserve the owner's Halaton correction.
 
-The renderer can choose a quiet expression instead of speech. These quiet episodes are not extra catalog entries. Walking remarks preserve walking; stationary expressive episodes can use a small gesture or attentive pause. The inventory and final implementation evidence are retained in the independent-human-moments handoff.
+The renderer can choose a quiet expression instead of speech. These quiet episodes are not extra catalog entries. Walking remarks preserve walking; stationary expressive episodes can use a small gesture or attentive pause. The tracked [catalog](dialogue.json) is the complete current inventory, including delivery, speaker slots and all three languages. The editorial criteria and changes are summarized below.
 
 The weather-warm ID is retained from the plan but describes daylight, because the simulation has no measured temperature. School and weekend dialogue expresses fictional plans without asserting school hours or the current weekday. Common loanwords such as fountain and monumento are intentional. Direction remarks require a nearby mapped anchor and do not provide route instructions.
 
-The 100-ID editorial inventory and per-turn review sheet are retained with the implementation handoff under `.plans/active/human-moments-100/` during implementation, then `.plans/done/human-moments-100/` at completion.
+The tracked [local usage audit](dialogue-usage-review.md) records a decision and evidence for all 100 IDs from the earlier conversational review. Read it alongside the current catalog: its paired-turn descriptions predate the independent-expression edit. The current catalog's 40 utterances and 60 exchanges supersede those historical line counts.
 
 Following the project owner's feedback that "andam" was unfamiliar in their childhood usage, all six occurrences across five exchanges were replaced with context-specific wording. The companion question became "Madya na?" ("Shall we go?"); translations follow the revised meaning. Dictionary attestation alone does not establish locally familiar everyday usage.
 
 The owner corrected "Hulaton" to "Halaton" in "Halaton taka digdi." Preserve this correction in future edits; the English and Tagalog meanings remain unchanged. This feedback covers this wording, not approval of the entire catalog.
 
-## Conversational edit
+## Historical conversational edit (before independent expressions)
 
 A second editorial pass reviewed all 100 exchanges as paired speech and revised 63. The original wording often repeated a prompt without adding a useful reply, switched topics abruptly, or sounded more like a phrasebook than a brief encounter. This pass is an editorial improvement, not native-speaker certification.
 
@@ -45,7 +45,7 @@ Examples of the revised conversational intent:
 | Waiting for someone | "I'll wait here." / "Thanks for waiting." | "I'll wait for you here." / "Okay, I'll be back." |
 | Familiar place | "Do you come here often?" / "Yes." | "Do you come here often?" / "Yes, I come here for walks." |
 
-The catalog still has 100 exchanges, 199 turns and the same category allocation. IDs, speaker slots, event conditions and timing remain unchanged. Some legacy IDs (for example, `food-smell` and `farewell-thanks`) now identify revised conversational situations; they are stable identifiers, not literal descriptions of the current lines. See the handoff's `content-review.md` for the complete three-language inventory and per-exchange edit status.
+At this stage, the catalog had 100 scenes and 199 turns with the same category allocation; this count predates the independent-expression edit above. IDs, speaker slots, event conditions and timing were preserved during that conversational pass. Some legacy IDs (for example, `food-smell` and `farewell-thanks`) identify revised situations; they are stable identifiers, not literal descriptions of the current lines. The current three-language inventory is in [dialogue.json](dialogue.json), and the [local usage audit](dialogue-usage-review.md) retains the per-ID editorial decisions and evidence limits.
 
 
 ## Local usage follow-up

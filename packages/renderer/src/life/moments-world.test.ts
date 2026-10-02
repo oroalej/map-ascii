@@ -178,6 +178,46 @@ describe('moments through the simulation', () => {
     const capped = f.world.visible(21, levels, f.center, undefined, undefined, 1, 1);
     expect(capped.some((a) => a.prop)).toBe(false);
   });
+  it('counts groups as records and keeps train/procession exemptions when admitting a ball', () => {
+    const f = fixture();
+    for (let i = 0; i < 8; i++) f.step();
+    f.a.group = Array.from({ length: 6 }, () => ({ ...member }));
+    const ordinary = f.world
+      .visible(21, levels, f.center)
+      .filter((a) => !a.prop && a.kind !== 'train');
+    expect(ordinary.some((a) => (a.people?.length ?? 0) > 1)).toBe(true);
+    const cap = ordinary.length + 1;
+    const draw = () => f.world.visible(21, levels, f.center, undefined, undefined, 1, cap);
+    expect(draw().filter((a) => a.prop === 'ball')).toHaveLength(1);
+    for (let i = 0; i < cap + 1; i++)
+      f.tile.standby.push({ x: 1000 + i, y: 1000, hx: 1, hy: 0, vehicle: 'coach', paint: 1 });
+    f.world.setProcessions([
+      {
+        id: 'procession/cap-test',
+        title: { en: 'Test' },
+        status: 'draft',
+        kind: 'fluvial',
+        route: [f.center, [f.center[0] + 0.01, f.center[1]]],
+        length_m: 1000,
+        schedule: {
+          month: 9,
+          weekday: 0,
+          nth: 3,
+          offset_days: -1,
+          start: '15:00',
+          duration_min: 180,
+          timezone: 'Asia/Manila',
+        },
+      },
+    ]);
+    f.world.setLive('procession/cap-test', 0.5);
+    const agents = draw();
+    expect(agents.filter((a) => a.kind === 'train')).toHaveLength(cap + 1);
+    expect(agents.some((a) => a.vehicle === 'pagoda')).toBe(true);
+    expect(agents.filter((a) => a.prop === 'ball')).toHaveLength(1);
+    const full = f.world.visible(21, levels, f.center, undefined, undefined, 1, ordinary.length);
+    expect(full.some((a) => a.prop === 'ball')).toBe(false);
+  });
   it('freezes moments on retirement and revives the same interaction on return', () => {
     const f = fixture();
     f.step();

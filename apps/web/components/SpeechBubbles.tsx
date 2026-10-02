@@ -1,6 +1,6 @@
 'use client';
 
-import type { DialogueCatalog } from '@atlas/shared';
+import type { RuntimeDialogueCatalog } from '@atlas/shared';
 import type { SpeechInView } from '@atlas/renderer';
 import { useEffect, useRef } from 'react';
 import { placeSpeech, type SpeechRect } from '@/lib/speech-layout';
@@ -9,7 +9,7 @@ import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import styles from './SpeechBubbles.module.css';
 
 /** Only this small overlay changes on each renderer event; no app-wide frame state. */
-export function SpeechBubbles({ catalog }: { catalog: DialogueCatalog }) {
+export function SpeechBubbles({ catalog }: { catalog: RuntimeDialogueCatalog }) {
   const root = useRef<HTMLDivElement>(null);
   const atlas = useAtlasInstance((s) => s.atlas);
   const theme = useAtlasStore((s) => s.theme);

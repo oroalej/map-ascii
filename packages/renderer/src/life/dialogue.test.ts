@@ -4,6 +4,7 @@ import {
   DialogueMemory,
   DialogueSelector,
   dialogueEligible,
+  makeDialogueContext,
   type DialogueContext,
 } from './dialogue';
 
@@ -16,6 +17,52 @@ const entries: DialogueChoice[] = Array.from({ length: 12 }, (_, i) => ({
   speakers: [0, 1],
 }));
 describe('contextual dialogue', () => {
+  it('shares defaults, participants and all-participant anchor reach while retaining focus', () => {
+    const people = [
+      { x: 0, y: 0, figure: 'adult', place: 'monument' },
+      { x: 20, y: 0, figure: 'child' },
+    ];
+    const anchors = [
+      { x: 0, y: 0, kind: 'seat' as const, source: 1 },
+      { x: 10, y: 0, kind: 'monument' as const, source: 2 },
+    ];
+    const options = { perMeter: 1, reach: 15 };
+    const result = makeDialogueContext(people, anchors, options);
+    expect(result.nearby).toEqual([anchors[1]]);
+    expect(result.context).toEqual({
+      minutes: 720,
+      rain: 0,
+      wind: 0,
+      place: 'monument',
+      figures: ['adult', 'child'],
+      anchors: ['monument'],
+    });
+    expect(makeDialogueContext([people[0]!], anchors, options).context.anchors).toEqual([
+      'seat',
+      'monument',
+    ]);
+    expect(makeDialogueContext(people, anchors, options, anchors[0]).context.anchors).toEqual([
+      'seat',
+    ]);
+    const scene = {
+      ...makeDialogueContext(people, anchors, { ...options, minutes: 1200, rain: 0.2, wind: 0.8 })
+        .context,
+      easing: true,
+      arrival: true,
+      sheltered: true,
+    };
+    expect(scene).toMatchObject({
+      minutes: 1200,
+      rain: 0.2,
+      wind: 0.8,
+      easing: true,
+      arrival: true,
+      sheltered: true,
+    });
+    expect(makeDialogueContext(people, anchors, { perMeter: 2, reach: 15 }).nearby).toEqual(
+      anchors,
+    );
+  });
   it('keeps silent outcomes bounded and independent of dialogue selection', () => {
     const memory = new DialogueMemory(1);
     const remark: DialogueChoice = {

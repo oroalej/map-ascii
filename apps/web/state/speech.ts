@@ -1,10 +1,13 @@
-import type { DialogueCatalog } from '@atlas/shared';
+import type { RuntimeDialogueCatalog } from '@atlas/shared';
 import { create } from 'zustand';
 
 export type SpeechPrefs = { enabled: boolean; translation: string | null };
 export const useSpeechStore = create<SpeechPrefs>()(() => ({ enabled: true, translation: null }));
 const key = (slug: string) => `atlas.speech.${slug}`;
-export function loadSpeechPrefs(slug: string, catalog: DialogueCatalog): SpeechPrefs {
+export function loadSpeechPrefs(
+  slug: string,
+  catalog: Pick<RuntimeDialogueCatalog, 'translations'>,
+): SpeechPrefs {
   try {
     const saved = JSON.parse(
       localStorage.getItem(key(slug)) ?? '{}',

@@ -1,14 +1,14 @@
 import type { CellTargets } from '../gpu';
 import { SUB, unpackGlyph } from '../glyphs/select';
 import type { GridPlacement } from '../picking';
-import type { Readback } from '../readback';
+import { MAX_PENDING_READS, type Readback } from '../readback';
 import type { VisibleAgent } from './simulate';
 import type { SpeechCue } from './moments';
 import { lifeVisibleOnSurface } from './surface-visibility';
 import type { SpeakerGrid } from './draw';
 
 const CONFIRMATION_MS = 1000;
-const RECHECK_MS = 120;
+const RECHECK_MS = 400;
 
 export type SpeechInView = SpeechCue & { point: [number, number] };
 export type SpeechFrame = {
@@ -35,7 +35,9 @@ type Candidate = {
 
 /** One three-texel batch at a time, sharing the existing eight-read queue. Never blocks GL. */
 export class SpeechController {
-  private frame: SpeechFrame | null = null;
+  private latencies = new Float64Array(8);
+  private latencyCursor = 0;
+  private maxLatency = 0;
   private serial = 0;
   private cursor = 0;
   private spareCursor = 0;
@@ -51,7 +53,9 @@ export class SpeechController {
 
   clear() {
     this.serial++;
-    this.frame = null;
+    this.latencies.fill(0);
+    this.latencyCursor = 0;
+    this.maxLatency = 0;
     this.pending = undefined;
     this.confirmed.clear();
     this.publish([]);
@@ -128,7 +132,6 @@ export class SpeechController {
       this.clear();
       return;
     }
-    this.frame = frame;
     const candidates = this.candidates(frame),
       keys = new Set(candidates.map((entry) => entry.key));
     for (const key of this.confirmed.keys()) if (!keys.has(key)) this.confirmed.delete(key);
@@ -145,10 +148,17 @@ export class SpeechController {
       .slice(0, limit);
     this.publish(displayed.map((entry) => entry.cue));
     // Leave headroom for picks arriving while this three-read batch is in flight.
-    if (this.pending || !candidates.length || this.readback.size > 1) return;
+    if (this.pending || !candidates.length || this.readback.size + 3 + 2 > MAX_PENDING_READS)
+      return;
+    // Finish a rotation before confirmations expire, including a spare candidate.
+    const refreshSlots = Math.min(limit, candidates.length) + Number(candidates.length > limit);
+    const refreshAge = Math.max(
+      0,
+      Math.min(RECHECK_MS, CONFIRMATION_MS - this.maxLatency * refreshSlots - 100),
+    );
     const due = (entry: Candidate) => {
       const result = this.confirmed.get(entry.key);
-      return !result || now - result.at >= RECHECK_MS;
+      return !result || now - result.at >= refreshAge;
     };
     const spares = candidates.filter((entry) => !displayed.includes(entry) && due(entry));
     const spare = spares.length ? spares[this.spareCursor % spares.length] : undefined;
@@ -165,11 +175,18 @@ export class SpeechController {
       if (this.pending?.serial !== serial) return;
       bytes[index] = data;
       if (!bytes[0] || !bytes[1] || !bytes[2]) return;
+      const completedAt = this.clock();
+      this.latencies[this.latencyCursor++ % this.latencies.length] = Math.max(
+        0,
+        completedAt - this.pending.at,
+      );
+      this.maxLatency = 0;
+      for (const latency of this.latencies) this.maxLatency = Math.max(this.maxLatency, latency);
       this.pending = undefined;
-      if (!this.frame || !this.candidates(this.frame).some((entry) => entry.key === candidate.key))
-        return;
+      // The shared grids may already contain the next draw. update() filters this
+      // captured key against that frame before publishing its current position.
       this.confirmed.set(candidate.key, {
-        at: this.clock(),
+        at: completedAt,
         visible: lifeVisibleOnSurface(
           candidate.cls,
           candidate.flags,

@@ -5,6 +5,7 @@ import { inTile } from './geometry';
 import { SceneSpeech, type SceneSpeaker } from './scene-speech';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
 import { DIALOGUE_WEATHER } from '@atlas/shared';
+import { makeDialogueContext } from './dialogue';
 
 export class SceneSpeechHost {
   readonly speech: SceneSpeech;
@@ -66,17 +67,14 @@ export class SceneSpeechHost {
             ? tile.gatherers.includes(owner) && !tile.momentHost.moments.busy(owner)
             : tile.stalls.includes(owner) && owner.open !== false);
       const contextFor = (owner: Mover | Gatherer) => ({
-        minutes: env?.minutes ?? 720,
-        rain: env?.rain ?? 0,
-        wind: env?.wind?.strength ?? 0,
+        ...makeDialogueContext([owner], anchors, {
+          perMeter: tile.perMeter,
+          reach: MOMENTS.look.reach,
+          minutes: env?.minutes,
+          rain: env?.rain,
+          wind: env?.wind?.strength,
+        }).context,
         easing: (env?.rain ?? 0) < this.previousRain - 0.001,
-        figures: [] as string[],
-        ...('place' in owner && { place: owner.place }),
-        anchors: anchors
-          .filter(
-            (a) => Math.hypot(a.x - owner.x, a.y - owner.y) / tile.perMeter <= MOMENTS.look.reach,
-          )
-          .map((a) => a.kind!),
       });
       const tryAmbient = (owner: Mover | Gatherer) => {
         if (!visible(owner) || (env?.rain ?? 0) >= MOMENTS.rain) return;

@@ -14,7 +14,7 @@ import {
   windArrow,
   zoomLevel,
   type ClimateConfig,
-  type DialogueCatalog,
+  type RuntimeDialogueCatalog,
   type SubdivisionArea,
 } from '@atlas/shared';
 import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -434,7 +434,7 @@ export function Hud({
   sidewalksDerived = true,
 }: {
   city: string;
-  dialogue?: DialogueCatalog | undefined;
+  dialogue?: RuntimeDialogueCatalog | undefined;
   subdivisionLabel: string;
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (its pack's `timezone`). */

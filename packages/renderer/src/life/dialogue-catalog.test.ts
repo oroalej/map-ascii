@@ -101,7 +101,7 @@ it.each(entries)(
         wind: context.wind,
         perMeter: 1,
         actors: () => actors,
-        anchors: [{ x: 8, y: 0, source: 0, kind: context.anchors![0] }],
+        anchors: [{ x: 8, y: 0, source: 0, kind: context.anchors![0]! }],
         eligible: () => true,
         clearance: () => 0.5,
         face: () => true,

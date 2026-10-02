@@ -25,6 +25,32 @@ export type DialogueContext = {
   profiles?: readonly DialogueProfile[];
   delivery?: DialogueChoice['delivery'];
 };
+
+/** Shared spatial/default context; scene-specific weather and event flags stay with callers. */
+export function makeDialogueContext<Anchor extends { x: number; y: number; kind: DialogueAnchor }>(
+  participants: readonly { x: number; y: number; figure?: string; place?: string }[],
+  anchors: readonly Anchor[],
+  options: { perMeter: number; reach: number; minutes?: number; rain?: number; wind?: number },
+  focus?: Anchor,
+): { context: DialogueContext; nearby: Anchor[] } {
+  const nearby = anchors.filter((anchor) =>
+    participants.every(
+      (person) =>
+        Math.hypot(anchor.x - person.x, anchor.y - person.y) / options.perMeter <= options.reach,
+    ),
+  );
+  return {
+    nearby,
+    context: {
+      minutes: options.minutes ?? 720,
+      rain: options.rain ?? 0,
+      wind: options.wind ?? 0,
+      place: participants[0]?.place,
+      figures: participants.flatMap((person) => (person.figure ? [person.figure] : [])),
+      anchors: (focus ? [focus] : nearby).map((anchor) => anchor.kind),
+    },
+  };
+}
 export class DialogueMemory {
   readonly recent: string[] = [];
   private actors = new WeakMap<object, string[]>();

@@ -202,6 +202,18 @@ export function dialogueCatalog(languages?: readonly string[]) {
 export const DialogueCatalog = dialogueCatalog();
 export type DialogueCatalog = z.infer<typeof DialogueCatalog>;
 
+/** Validated pack fields needed by the browser; editorial sources stay on the server. */
+export const RuntimeDialogueCatalog = z
+  .object({
+    ...DialogueCatalog.shape,
+    exchanges: z
+      .array(DialogueCatalog.shape.exchanges.element.omit({ sources: true }))
+      .min(1)
+      .max(100),
+  })
+  .strict();
+export type RuntimeDialogueCatalog = z.infer<typeof RuntimeDialogueCatalog>;
+
 /** Text-free worker configuration; language switches never reach the simulation. */
 export const DialogueChoice = z.object({
   id: z.string(),

@@ -2,7 +2,7 @@
 
 import type {
   CityLifeConfig,
-  DialogueCatalog,
+  RuntimeDialogueCatalog,
   ClimateConfig,
   Landmark,
   LandmarkArt,
@@ -47,7 +47,7 @@ export type CityAtlasProps = {
   timezone?: string | undefined;
   /** The daily rhythm of simulated traffic (the city pack's `life`). */
   cityLife?: CityLifeConfig | undefined;
-  dialogue?: DialogueCatalog | undefined;
+  dialogue?: RuntimeDialogueCatalog | undefined;
   /** Whether the city's street layer supplements mapped sidewalks. */
   sidewalksDerived?: boolean;
   utilitiesDerived?: boolean;

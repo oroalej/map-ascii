@@ -1,6 +1,6 @@
 'use client';
 
-import { SPEECH_ZOOM, type DialogueCatalog } from '@atlas/shared';
+import { SPEECH_ZOOM, type RuntimeDialogueCatalog } from '@atlas/shared';
 import { useSyncExternalStore } from 'react';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { useLifeStore } from '@/state/life';
@@ -8,7 +8,7 @@ import { useAtlasStore } from '@/state/store';
 import { useSpeechStore } from '@/state/speech';
 import styles from './Hud.module.css';
 
-export function SpeechControls({ catalog }: { catalog: DialogueCatalog }) {
+export function SpeechControls({ catalog }: { catalog: RuntimeDialogueCatalog }) {
   const enabled = useSpeechStore((s) => s.enabled);
   const translation = useSpeechStore((s) => s.translation);
   const life = useLifeStore((s) => s.enabled);

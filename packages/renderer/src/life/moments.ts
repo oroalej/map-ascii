@@ -10,7 +10,7 @@ import {
 } from '@atlas/shared';
 import type { PersonPose } from './people';
 import { between, random } from './random';
-import { DialogueSelector, type DialogueMemory } from './dialogue';
+import { DialogueSelector, makeDialogueContext, type DialogueMemory } from './dialogue';
 
 export type MomentKind = DialogueChoice['kind'];
 export const MOMENTS = {
@@ -54,7 +54,7 @@ export type MomentActor<Owner extends object = object> = {
   /** Original place record ordinal, never an inferred coordinate match. */
   source?: number;
 };
-export type MomentAnchor = { x: number; y: number; source: number; kind?: DialogueAnchor };
+export type MomentAnchor = { x: number; y: number; source: number; kind: DialogueAnchor };
 export type MomentContext<Owner extends object = object> = {
   zoom: number;
   rain: number;
@@ -671,19 +671,21 @@ export class Moments<Owner extends object = object> {
       }
       admitted.push(a);
     }
-    const nearby = c.anchors.filter((a) =>
-      members.every((member) => distance(member, a) / c.perMeter <= MOMENTS.look.reach),
+    const { context, nearby } = makeDialogueContext(
+      members,
+      c.anchors,
+      {
+        perMeter: c.perMeter,
+        reach: MOMENTS.look.reach,
+        minutes: c.minutes,
+        rain: c.rain,
+        wind: c.wind,
+      },
+      anchor,
     );
     const dialogue = this.selector.choose(
       kind,
-      {
-        minutes: c.minutes ?? 720,
-        rain: c.rain,
-        wind: c.wind ?? 0,
-        place: members[0]?.place,
-        figures: members.map((a) => a.figure),
-        anchors: (anchor ? [anchor] : nearby).map((a) => a.kind ?? 'monument'),
-      },
+      context,
       members.map((a) => a.owner),
       false,
     );

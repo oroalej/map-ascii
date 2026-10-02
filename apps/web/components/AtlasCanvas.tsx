@@ -4,7 +4,7 @@ import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
   type CityLifeConfig,
-  type DialogueCatalog,
+  type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
   type ProcessionRoute,
@@ -110,7 +110,7 @@ export function AtlasCanvas({
   climate?: ClimateConfig | undefined;
   timezone?: string | undefined;
   cityLife?: CityLifeConfig | undefined;
-  dialogue?: DialogueCatalog | undefined;
+  dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Static export renders on the server, where we optimistically assume support.

@@ -9,7 +9,7 @@ import {
 } from './moments';
 import { FIGURE_SIZE_M, figureFit } from './people';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
-import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
+import { LIFE_SITE_KINDS, type DialogueChoice, type GreetingPeriods } from '@atlas/shared';
 import type { DialogueMemory } from './dialogue';
 import { SceneSpeechHost } from './scene-speech-host';
 
@@ -65,9 +65,14 @@ export class MomentHost {
               : (PLACE_CODES[places[i + 2]!] as 'monument' | 'fountain'),
         });
     const geo = tile.geo;
-    for (let i = 0; i < geo.sites.length; i += SITE_STRIDE)
-      if (geo.sites[i + 2]! < 2 && inTile({ x: geo.sites[i]!, y: geo.sites[i + 1]! }))
+    for (let i = 0; i < geo.sites.length; i += SITE_STRIDE) {
+      const kind = LIFE_SITE_KINDS[geo.sites[i + 2]!];
+      if (
+        (kind === 'stop' || kind === 'terminal') &&
+        inTile({ x: geo.sites[i]!, y: geo.sites[i + 1]! })
+      )
         this.anchors.push({ x: geo.sites[i]!, y: geo.sites[i + 1]!, source: -1 - i, kind: 'stop' });
+    }
     for (let i = 0; i < geo.kinds.length; i++)
       if (geo.kinds[i] === LifeLine.plaza) {
         const at = geo.starts[i]! * 2;

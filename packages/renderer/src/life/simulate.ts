@@ -4856,9 +4856,11 @@ export class LifeWorld {
     const withBalls = (admitted: VisibleAgent[]) => {
       if (!balls.length) return admitted;
       const kept = new Set(admitted);
-      const weight = (a: VisibleAgent) =>
-        a.vehicle ? 1 + (a.people?.length ?? 0) : Math.max(1, a.people?.length ?? 0);
-      let spare = Math.max(0, maxAgents - admitted.reduce((n, a) => n + weight(a), 0));
+      // The cap counts ordinary records. Procession prefix and trains are protected.
+      let count = 0;
+      for (let i = staged.length; i < admitted.length; i++)
+        if (admitted[i]!.kind !== 'train') count++;
+      let spare = Math.max(0, maxAgents - count);
       for (const ball of balls) {
         if (spare <= 0) break;
         const a = owners?.get(ball.a),

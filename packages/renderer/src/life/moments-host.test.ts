@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { LIFE_SITE_KINDS } from '@atlas/shared';
 import { MomentHost } from './moments-host';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, type Gatherer, type Mover } from './simulate';
@@ -41,6 +42,22 @@ function walkers(t: TileLife, separation = 2.5) {
 }
 
 describe('moment admission adapter', () => {
+  it('decodes named stops and terminals without admitting shelters or unknown sites', () => {
+    const b = new LifeBuilder();
+    for (const [i, kind] of LIFE_SITE_KINDS.entries())
+      b.site({ x: 1000 + i * 100, y: 1000 }, LIFE_SITE_KINDS.indexOf(kind), 0, false);
+    b.site({ x: 1500, y: 1000 }, 99, 0, false);
+    const t = new TileLife(tileId, b.finish(), 5);
+    const host = new MomentHost(t, 5);
+    const step = vi.spyOn(host.moments, 'step');
+    host.step(0.1, 21, undefined, undefined, undefined, 0.2, 1.8);
+    const anchors = step.mock.calls[0]![1].anchors;
+    expect(anchors.map(({ x, kind }) => [x, kind])).toEqual(
+      LIFE_SITE_KINDS.flatMap((kind, i) =>
+        kind === 'stop' || kind === 'terminal' ? [[1000 + i * 100, 'stop']] : [],
+      ),
+    );
+  });
   it('lets a physical greeting replace a same-owner background remark and speak', () => {
     const t = tile(),
       [a, b] = walkers(t);

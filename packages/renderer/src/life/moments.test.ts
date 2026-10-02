@@ -30,7 +30,7 @@ function fixture(
     rain: 0,
     perMeter: 1,
     actors: () => actors,
-    anchors: kind === 'look' ? [{ x: 8, y: 0, source: 0 }] : [],
+    anchors: kind === 'look' ? [{ x: 8, y: 0, source: 0, kind: 'monument' }] : [],
     eligible: () => true,
     clearance: () => 0.5,
     face: (actor, hx, hy) => {
@@ -144,8 +144,8 @@ describe('small human moments', () => {
     f.b.x = 9.16;
     f.actors.push(f.b);
     f.c.anchors = [
-      { x: -1, y: 0, source: 99 },
-      { x: 4.58, y: 0, source: 0 },
+      { x: -1, y: 0, source: 99, kind: 'monument' },
+      { x: 4.58, y: 0, source: 0, kind: 'monument' },
     ];
     f.m.step(0.1, f.c);
     expect(f.m.stats.started.look).toBe(2);

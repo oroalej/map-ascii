@@ -16,6 +16,7 @@ import type {
   CityLifeConfig,
   ClimateConfig,
   DialogueCatalog,
+  RuntimeDialogueCatalog,
   ProcessionRoute,
   TrafficMix,
 } from '@atlas/shared';
@@ -162,7 +163,7 @@ export type LifeSettings = {
 
 export type AtlasOptions = {
   /** Optional curated city-pack speech. Display preferences do not affect simulation. */
-  dialogue?: DialogueCatalog;
+  dialogue?: DialogueCatalog | RuntimeDialogueCatalog;
   speech?: boolean;
   /** Static city-pack utility policy; omitted means disabled. */
   utilities?: { derive: boolean };

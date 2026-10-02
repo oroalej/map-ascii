@@ -4,6 +4,7 @@ import type {
   DialogueCatalog,
   DialogueChoice,
   DialogueProfile,
+  RuntimeDialogueCatalog,
   GreetingPeriods,
 } from './dialogue';
 
@@ -30,7 +31,19 @@ export const DEFAULT_GREETING_PERIODS: Readonly<GreetingPeriods> = {
   eveningStart: 1080,
 };
 
-export const dialogueChoices = (catalog: DialogueCatalog): DialogueChoice[] =>
+export function runtimeDialogueCatalog(
+  catalog: DialogueCatalog | undefined,
+): RuntimeDialogueCatalog | undefined {
+  if (!catalog) return undefined;
+  return {
+    ...catalog,
+    exchanges: catalog.exchanges.map(({ sources: _sources, ...exchange }) => exchange),
+  };
+}
+
+export const dialogueChoices = (
+  catalog: DialogueCatalog | RuntimeDialogueCatalog,
+): DialogueChoice[] =>
   catalog.exchanges.map(({ id, kind, period, lines, profile, conditions, speakers, delivery }) => ({
     id,
     kind,
