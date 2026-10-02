@@ -1,10 +1,20 @@
 # Naga ambient dialogue
 
-The catalog contains 100 short, fictional exchanges in 15 scene categories. All turns include Central Bikol, English and Tagalog. These are illustrative conversations, not quotations from residents or claims about actual businesses, products, fares or timetables.
+The catalog contains 100 short, fictional scenes in 15 categories: 40 one-speaker utterances and 60 exchanges. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
 
 New scripts are original compositions. [Jon Epstein's *Standard Bikol* (Peace Corps, 1967)](https://files.eric.ed.gov/fulltext/ED018772.pdf) supplies grammatical reference for actor/goal focus, pronouns, questions and demonstratives. [Malcolm Mintz's *Bikol Dictionary* (University of Hawaii Press, 1971)](https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary) supplies lexical reference. Existing catalog entries retain their original sources. A reference supports language forms; it does not attest each authored sentence.
 
 Structural validation checks the exact count, category allocation, translations, speaker slots and duplicate complete scripts. Editorial review checks meaning, concise wording, age suitability and context. Native-speaker review has **not** occurred; idiomatic wording remains a content follow-up. No native-language approval is implied by a source citation.
+
+## Independent expression edit (2026-10-02)
+
+The owner requested spontaneous remarks and emotional expressions without obligatory replies. Exactly the approved 40 IDs now use `delivery: "utterance"`; all remaining entries use `delivery: "exchange"`. Participant slots remain distinct from line count: a vendor can say goodbye alone from slot 1, and a receiver can celebrate a catch from slot 1. All four place reactions are now genuinely solitary observations; the old `talk-visit` ID is retained with the looking mechanism.
+
+Fourteen utterances were rewritten; the other converted scenes retain a self-contained existing line. Examples include happiness during a walk, enjoying a breeze, resting, waiting alone and appreciating a place. No question requiring an answer is left behind by truncation. Functional direction and vendor-order scripts retain complete replies. Existing greeting periods, contextual anchors and weather/event restrictions still apply.
+
+The happiness wording in `plans-done` uses maugma, also found in [Kerwin Orville Tate's original Bikol essay, Solo trip](https://magbikolkita.com/layason-officer/solo-trip/). This establishes written word-family usage, not local spoken approval of the authored sentence. Existing lexical and grammatical references remain applicable. The revised rest wording uses the previously reviewed magpahingalo family. Preserve the owner's Halaton correction.
+
+The renderer can choose a quiet expression instead of speech. These quiet episodes are not extra catalog entries. Walking remarks preserve walking; stationary expressive episodes can use a small gesture or attentive pause. The inventory and final implementation evidence are retained in the independent-human-moments handoff.
 
 The weather-warm ID is retained from the plan but describes daylight, because the simulation has no measured temperature. School and weekend dialogue expresses fictional plans without asserting school hours or the current weekday. Common loanwords such as fountain and monumento are intentional. Direction remarks require a nearby mapped anchor and do not provide route instructions.
 

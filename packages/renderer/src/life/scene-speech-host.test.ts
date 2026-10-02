@@ -75,6 +75,109 @@ const order: DialogueChoice = {
   speakers: [0, 1],
 };
 describe('real local-scene adapters', () => {
+  const happy: DialogueChoice = {
+    id: 'happy',
+    kind: 'talk',
+    profile: 'daily-plans',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+  };
+  it('lets one walker express themselves without holding or changing navigation', () => {
+    const f = fixture(happy);
+    f.tile.scenes.visits.clear();
+    f.person.pause = 0;
+    const before = structuredClone(f.person);
+    let spoken = false;
+    for (let tick = 0; tick < 40; tick++) {
+      f.host.step(60, 21, { rain: 0, clock: tick * 60, minutes: 720 }, undefined, []);
+      if (!f.host.speech.speech(f.person)) continue;
+      spoken = true;
+      expect(f.host.speech.speech(f.person)).toMatchObject({
+        exchangeId: 'happy',
+        line: 0,
+        member: 0,
+      });
+      expect(f.host.speech.pose(f.person, 0)).toBeUndefined();
+      expect(f.host.speech.busy(f.person)).toBe(false);
+      expect(f.person).toEqual(before);
+      f.host.step(3, 21, { rain: 0, clock: tick * 60 + 3 }, undefined, []);
+      expect(f.host.speech.speech(f.person)).toBeUndefined();
+      break;
+    }
+    expect(spoken).toBe(true);
+  });
+  it('preserves a silent rest gesture and lets a purchase cancel the expression', () => {
+    const f = fixture(happy);
+    f.tile.scenes.visits.clear();
+    let silent = false;
+    for (let tick = 0; tick < 40; tick++) {
+      f.host.step(60, 21, { rain: 0, clock: tick * 60 }, undefined, []);
+      if (!f.host.speech.size || f.host.speech.speech(f.person)) continue;
+      silent = true;
+      expect(f.host.speech.pose(f.person, 0)).toBe('gesture');
+      const before = structuredClone(f.person);
+      f.tile.scenes.visits.set(f.person, f.visit);
+      f.tile.scenes.speechEvents.push({
+        kind: 'purchase',
+        mover: f.person,
+        visit: f.visit,
+        key: {},
+      });
+      f.host.step(0.02, 21, { rain: 0, clock: tick * 60 + 0.02 }, undefined, []);
+      expect(f.host.speech.size).toBe(0);
+      expect(f.visit.time).toBe(3);
+      expect(f.person).toEqual(before);
+      break;
+    }
+    expect(silent).toBe(true);
+  });
+  it('lets a solitary school gatherer speak without changing the existing activity', () => {
+    const builder = new LifeBuilder();
+    builder.place({ x: 1000, y: 1000 }, 'school', 20);
+    const tile = new TileLife({ z: 16, x: 55192, y: 30266 }, builder.finish(), 5);
+    const person = tile.gatherers[0]!;
+    expect(person).toBeDefined();
+    tile.gatherers.splice(1);
+    tile.movers.length = 0;
+    tile.stalls.length = 0;
+    const host = new SceneSpeechHost(tile, 1, {
+      dialogue: [{ ...happy, id: 'school', profile: 'school' }],
+    });
+    const before = structuredClone(person);
+    let spoken = false;
+    for (let tick = 0; tick < 40; tick++) {
+      host.step(60, 21, { rain: 0, clock: tick * 60 }, undefined, []);
+      if (!host.speech.speech(person)) continue;
+      spoken = true;
+      expect(host.speech.speech(person)).toMatchObject({ exchangeId: 'school', member: 0 });
+      expect(person).toEqual(before);
+      host.step(0.02, 21, { rain: 0, clock: tick * 60 + 0.02 }, () => false, []);
+      expect(host.speech.size).toBe(0);
+      break;
+    }
+    expect(spoken).toBe(true);
+  });
+  it('lets a lone transit passenger react only to a real arrival', () => {
+    const f = fixture({
+      ...happy,
+      id: 'arrival',
+      profile: 'transit',
+      conditions: { event: 'arrival' },
+    });
+    f.site.kind = 'stop';
+    f.visit.state = 'wait';
+    f.host.step(0.1, 21, { rain: 0 }, undefined, []);
+    expect(f.host.speech.size).toBe(0);
+    f.tile.scenes.speechEvents.push({ kind: 'arrival', mover: f.person, visit: f.visit, key: {} });
+    f.host.step(0.02, 21, { rain: 0 }, undefined, []);
+    expect(f.host.speech.size).toBe(1);
+    expect(f.host.speech.selector.selected.arrival).toBe(1);
+    f.visit.state = 'board';
+    expect(f.host.speech.speech(f.person)).toBeUndefined();
+    f.host.step(0.02, 21, { rain: 0 }, undefined, []);
+    expect(f.host.speech.size).toBe(0);
+  });
   it('reserves a check for a purchase beginning between background scans', () => {
     const f = fixture(order);
     f.tile.scenes.visits.clear();

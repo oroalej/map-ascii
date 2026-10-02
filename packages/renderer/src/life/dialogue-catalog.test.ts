@@ -43,24 +43,26 @@ it.each(choices)(
     const seen = new Map<number, number>();
     if (sceneOwned) {
       const host = new SceneSpeech(42, [entry]);
-      expect(
-        host.admit(
-          {
-            key: {},
-            speakers: owners.map((owner, i) => ({ owner, member: 0, figure: context.figures[i]! })),
-            profiles: [entry.profile!],
-            context,
-            valid: () => true,
-          },
-          12,
-        ),
-      ).toBe(true);
-      for (let tick = 0; tick < 100; tick++) {
+      const scene = {
+        key: {},
+        speakers: owners.map((owner, i) => ({ owner, member: 0, figure: context.figures[i]! })),
+        profiles: [entry.profile!],
+        context,
+        valid: () => true,
+      };
+      if (
+        entry.delivery === 'utterance' &&
+        !['vendor-thanks', 'companion'].includes(entry.profile!)
+      )
+        scene.speakers = scene.speakers.slice(0, 1);
+      expect(host.admit(scene, 12)).toBe(true);
+      for (let tick = 0; tick < 2200 && seen.size < entry.turns; tick++) {
         owners.forEach((owner, slot) => {
           const cue = host.speech(owner);
           if (cue) seen.set(cue.line, slot);
         });
         host.step(0.1, true);
+        if (!host.size) host.admit({ ...scene, key: {} }, 12);
       }
     } else {
       const a: MomentActor = {
@@ -91,7 +93,7 @@ it.each(choices)(
         release: () => {},
       };
       const host = new Moments(42, true, () => 0, [entry]);
-      for (let tick = 0; tick < 200; tick++) {
+      for (let tick = 0; tick < 2200; tick++) {
         host.step(0.1, c);
         actors.forEach((actor, slot) => {
           const cue = host.speech(actor.owner);

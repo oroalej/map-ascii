@@ -1,6 +1,7 @@
 /** Text-free, context-aware selection. Never consumes a population or movement RNG. */
 import {
   greetingPeriod,
+  dialogueDelivery,
   type DialogueAnchor,
   type DialogueChoice,
   type DialogueProfile,
@@ -19,10 +20,45 @@ export type DialogueContext = {
   anchors?: readonly DialogueAnchor[];
   figures: readonly string[];
   profiles?: readonly DialogueProfile[];
+  delivery?: DialogueChoice['delivery'];
 };
 export class DialogueMemory {
   readonly recent: string[] = [];
   private actors = new WeakMap<object, string[]>();
+  private speechCooldown = new WeakMap<object, number>();
+  private attempts = new WeakMap<object, number>();
+  private outcomes: boolean[] = [];
+  private expressionRng: () => number;
+  private attemptRng: () => number;
+  constructor(private readonly seed = 0) {
+    this.expressionRng = random(seed ^ 0x31f253ab);
+    this.attemptRng = random(seed ^ 0x673052a1);
+  }
+  ready(owners: readonly object[], at: number) {
+    return owners.every((owner) => (this.speechCooldown.get(owner) ?? 0) <= at);
+  }
+  reserve(owners: readonly object[], until: number) {
+    for (const owner of owners) this.speechCooldown.set(owner, until);
+  }
+  /** One attempt per simulation minute, including failed rolls and camera re-entry. */
+  ambientAttempt(owner: object, at: number) {
+    const epoch = Math.floor(at / 60);
+    if (this.attempts.get(owner) === epoch) return false;
+    this.attempts.set(owner, epoch);
+    return this.attemptRng() < 0.25;
+  }
+  /** Legacy catalogs and functional exchanges retain their authored speaking turns. */
+  voiced(entry: DialogueChoice) {
+    if (entry.delivery !== 'utterance') return true;
+    if (!this.outcomes.length) {
+      this.outcomes = [true, true, false];
+      for (let i = 2; i > 0; i--) {
+        const j = Math.floor(this.expressionRng() * (i + 1));
+        [this.outcomes[i], this.outcomes[j]] = [this.outcomes[j]!, this.outcomes[i]!];
+      }
+    }
+    return this.outcomes.pop()!;
+  }
   rank(id: string, owners: readonly object[]) {
     const recent = this.recent.lastIndexOf(id);
     return (
@@ -46,6 +82,11 @@ export class DialogueMemory {
   clear() {
     this.recent.length = 0;
     this.actors = new WeakMap();
+    this.speechCooldown = new WeakMap();
+    this.attempts = new WeakMap();
+    this.outcomes = [];
+    this.expressionRng = random(this.seed ^ 0x31f253ab);
+    this.attemptRng = random(this.seed ^ 0x673052a1);
   }
 }
 
@@ -55,6 +96,8 @@ export function dialogueEligible(
   c: DialogueContext,
   periods?: Readonly<GreetingPeriods>,
 ) {
+  if (c.delivery && dialogueDelivery(entry) !== c.delivery) return false;
+  if (dialogueDelivery(entry) === 'exchange' && c.figures.length < 2) return false;
   if (entry.kind === 'greet' && entry.period !== greetingPeriod(c.minutes, periods)) return false;
   if (entry.speakers?.some((slot) => slot >= c.figures.length)) return false;
   const p = entry.profile;
@@ -107,7 +150,7 @@ export class DialogueSelector {
     seed: number,
     choices: readonly DialogueChoice[],
     private readonly periods?: Readonly<GreetingPeriods>,
-    readonly memory = new DialogueMemory(),
+    readonly memory = new DialogueMemory(seed),
   ) {
     this.rng = random(seed ^ 0x592cf6a3);
     for (const choice of choices) {

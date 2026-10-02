@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { LanguageCode, localizedText, Source } from './schemas';
 
 export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look']);
+export const DialogueDelivery = z.enum(['exchange', 'utterance']);
+export type DialogueDelivery = z.infer<typeof DialogueDelivery>;
 export const DialogueProfile = z.enum([
   'greeting',
   'reunion',
@@ -34,6 +36,8 @@ export const DialogueConditions = z
   .strict();
 export type DialogueConditions = z.infer<typeof DialogueConditions>;
 const metadata = {
+  /** Speaking turns are independent of how many people participate physically. */
+  delivery: DialogueDelivery.optional(),
   profile: DialogueProfile.optional(),
   conditions: DialogueConditions.optional(),
   /** Ordered participant slots: caller/customer is 0; respondent/vendor is 1. */
@@ -109,6 +113,16 @@ export function dialogueCatalog(languages?: readonly string[]) {
           });
         ids.add(exchange.id);
         const count = exchange.lines.length;
+        const delivery = exchange.delivery ?? (exchange.kind === 'look' ? 'utterance' : 'exchange');
+        const slots =
+          exchange.kind === 'look'
+            ? 1
+            : exchange.kind === 'talk' &&
+                !['vendor-order', 'vendor-thanks', 'transit', 'companion'].includes(
+                  exchange.profile ?? '',
+                )
+              ? 3
+              : 2;
         if (exchange.profile && (!exchange.speakers || exchange.speakers.length !== count))
           ctx.addIssue({
             code: 'custom',
@@ -118,9 +132,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
         if (
           exchange.speakers &&
           (exchange.speakers.length !== count ||
-            exchange.speakers.some(
-              (speaker) => speaker >= Math.min(count, exchange.kind === 'look' ? 1 : 3),
-            ) ||
+            exchange.speakers.some((speaker) => speaker >= slots) ||
             (count > 1 && new Set(exchange.speakers).size < 2))
         )
           ctx.addIssue({
@@ -148,7 +160,9 @@ export function dialogueCatalog(languages?: readonly string[]) {
           ((exchange.conditions?.event === 'catch' || exchange.conditions?.event === 'pass') &&
             profile !== 'play') ||
           (exchange.conditions?.audience === 'adult-child' && profile !== 'companion') ||
-          (profile?.startsWith('vendor-') && count !== 2)
+          (profile === 'vendor-order' && delivery !== 'exchange') ||
+          (profile === 'directions' && delivery !== 'exchange') ||
+          (profile?.startsWith('vendor-') && delivery === 'exchange' && count !== 2)
         )
           ctx.addIssue({
             code: 'custom',
@@ -156,9 +170,12 @@ export function dialogueCatalog(languages?: readonly string[]) {
             message: 'unsupported scene conditions',
           });
         if (
-          ((exchange.kind === 'greet' || exchange.kind === 'ball') && count !== 2) ||
-          (exchange.kind === 'talk' && count < 2) ||
-          (exchange.kind === 'look' && count !== 1)
+          (delivery === 'utterance' && count !== 1) ||
+          (delivery === 'exchange' && count < 2) ||
+          ((exchange.kind === 'greet' || exchange.kind === 'ball') &&
+            delivery === 'exchange' &&
+            count !== 2) ||
+          (exchange.kind === 'look' && delivery !== 'utterance')
         )
           ctx.addIssue({
             code: 'custom',

@@ -16,6 +16,40 @@ const entries: DialogueChoice[] = Array.from({ length: 12 }, (_, i) => ({
   speakers: [0, 1],
 }));
 describe('contextual dialogue', () => {
+  it('keeps silent outcomes bounded and independent of dialogue selection', () => {
+    const memory = new DialogueMemory(1);
+    const remark: DialogueChoice = {
+      ...entries[0]!,
+      delivery: 'utterance',
+      turns: 1,
+      speakers: [0],
+    };
+    for (let cycle = 0; cycle < 10; cycle++)
+      expect(Array.from({ length: 3 }, () => memory.voiced(remark)).filter(Boolean)).toHaveLength(
+        2,
+      );
+    expect(memory.voiced(entries[0]!)).toBe(true);
+    const alone = { ...context, figures: ['adult'], delivery: 'utterance' as const };
+    expect(dialogueEligible(entries[0]!, alone)).toBe(false);
+    expect(dialogueEligible(remark, alone)).toBe(true);
+    expect(dialogueEligible({ ...remark, speakers: [1] }, alone)).toBe(false);
+  });
+  it('shares cooldowns and remembers unsuccessful ambient rolls across camera re-entry', () => {
+    const memory = new DialogueMemory(1),
+      owner = {};
+    memory.reserve([owner], 63);
+    expect(memory.ready([owner], 62.9)).toBe(false);
+    expect(memory.ready([owner], 63)).toBe(true);
+    const attempts = Array.from({ length: 100 }, (_, epoch) => {
+      const attempt = memory.ambientAttempt(owner, epoch * 60);
+      expect(memory.ambientAttempt(owner, epoch * 60 + 59)).toBe(false);
+      return attempt;
+    });
+    expect(attempts.filter(Boolean).length).toBeGreaterThan(10);
+    expect(attempts.filter(Boolean).length).toBeLessThan(40);
+    memory.clear();
+    expect(memory.ready([owner], 0)).toBe(true);
+  });
   it('records only admitted choices and relaxes older history before newer history', () => {
     const selector = new DialogueSelector(1, entries);
     const owners = [{}];

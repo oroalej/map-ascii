@@ -23,11 +23,6 @@
           "bcl": "Marhay na aga!",
           "en": "Good morning!",
           "fil": "Magandang umaga!"
-        },
-        {
-          "bcl": "Marhay na aga!",
-          "en": "Good morning!",
-          "fil": "Magandang umaga!"
         }
       ],
       "sources": [
@@ -38,7 +33,8 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "greet-morning-well",
@@ -64,7 +60,8 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "morning"
+      "period": "morning",
+      "delivery": "exchange"
     },
     {
       "id": "greet-morning-early",
@@ -90,7 +87,8 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "morning"
+      "period": "morning",
+      "delivery": "exchange"
     },
     {
       "id": "greet-morning-day",
@@ -100,11 +98,6 @@
           "bcl": "Marhay na aldaw saimo!",
           "en": "Good day!",
           "fil": "Magandang araw sa iyo!"
-        },
-        {
-          "bcl": "Saimo man!",
-          "en": "You too!",
-          "fil": "Sa iyo rin!"
         }
       ],
       "sources": [
@@ -115,19 +108,15 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1],
-      "period": "morning"
+      "speakers": [0],
+      "period": "morning",
+      "delivery": "utterance"
     },
     {
       "id": "greet-afternoon",
       "kind": "greet",
       "period": "afternoon",
       "lines": [
-        {
-          "bcl": "Marhay na hapon!",
-          "en": "Good afternoon!",
-          "fil": "Magandang hapon!"
-        },
         {
           "bcl": "Marhay na hapon!",
           "en": "Good afternoon!",
@@ -142,7 +131,8 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "greet-afternoon-well",
@@ -168,7 +158,8 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "afternoon"
+      "period": "afternoon",
+      "delivery": "exchange"
     },
     {
       "id": "greet-afternoon-walk",
@@ -194,7 +185,8 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "afternoon"
+      "period": "afternoon",
+      "delivery": "exchange"
     },
     {
       "id": "greet-afternoon-see",
@@ -204,11 +196,6 @@
           "bcl": "Ay, ika palan!",
           "en": "Oh, it's you!",
           "fil": "Ay, ikaw pala!"
-        },
-        {
-          "bcl": "Iyo! Marhay na hapon!",
-          "en": "Yes! Good afternoon!",
-          "fil": "Oo! Magandang hapon!"
         }
       ],
       "sources": [
@@ -219,19 +206,15 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1],
-      "period": "afternoon"
+      "speakers": [0],
+      "period": "afternoon",
+      "delivery": "utterance"
     },
     {
       "id": "greet-evening",
       "kind": "greet",
       "period": "evening",
       "lines": [
-        {
-          "bcl": "Marhay na banggi!",
-          "en": "Good evening!",
-          "fil": "Magandang gabi!"
-        },
         {
           "bcl": "Marhay na banggi!",
           "en": "Good evening!",
@@ -246,7 +229,8 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "greet-evening-well",
@@ -272,7 +256,8 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "evening"
+      "period": "evening",
+      "delivery": "exchange"
     },
     {
       "id": "greet-evening-walk",
@@ -298,21 +283,17 @@
       ],
       "profile": "greeting",
       "speakers": [0, 1],
-      "period": "evening"
+      "period": "evening",
+      "delivery": "exchange"
     },
     {
       "id": "greet-evening-rest",
       "kind": "greet",
       "lines": [
         {
-          "bcl": "Mapuli ka na?",
-          "en": "Heading home now?",
-          "fil": "Uuwi ka na?"
-        },
-        {
-          "bcl": "Iyo, pagal na ako.",
-          "en": "Yes, I'm tired.",
-          "fil": "Oo, pagod na ako."
+          "bcl": "Mapuli na ako.",
+          "en": "I'm heading home now.",
+          "fil": "Uuwi na ako."
         }
       ],
       "sources": [
@@ -323,8 +304,9 @@
         }
       ],
       "profile": "greeting",
-      "speakers": [0, 1],
-      "period": "evening"
+      "speakers": [0],
+      "period": "evening",
+      "delivery": "utterance"
     },
     {
       "id": "talk-meet-again",
@@ -359,7 +341,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1, 0]
+      "speakers": [0, 1, 0],
+      "delivery": "exchange"
     },
     {
       "id": "talk-how-are-you",
@@ -384,7 +367,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "reunion-surprise",
@@ -394,11 +378,6 @@
           "bcl": "Ay, yaon ka palan digdi!",
           "en": "Oh, you're here!",
           "fil": "Ay, nandito ka pala!"
-        },
-        {
-          "bcl": "Iyo, naglalakaw-lakaw sana.",
-          "en": "Yes, just taking a stroll.",
-          "fil": "Oo, namamasyal lang."
         }
       ],
       "sources": [
@@ -409,7 +388,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "reunion-wave",
@@ -434,7 +414,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "reunion-walk",
@@ -459,7 +440,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "reunion-glad",
@@ -469,11 +451,6 @@
           "bcl": "Ay, yaon ka palan!",
           "en": "Oh, there you are!",
           "fil": "Ay, nariyan ka pala!"
-        },
-        {
-          "bcl": "Madya, mag-ulay kita.",
-          "en": "Come on, let's chat.",
-          "fil": "Halika, kuwentuhan tayo."
         }
       ],
       "sources": [
@@ -484,7 +461,8 @@
         }
       ],
       "profile": "reunion",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "farewell-going",
@@ -494,11 +472,6 @@
           "bcl": "Mauna na ako.",
           "en": "I'll get going.",
           "fil": "Mauuna na ako."
-        },
-        {
-          "bcl": "Mag-ingat ka.",
-          "en": "Take care.",
-          "fil": "Mag-ingat ka."
         }
       ],
       "sources": [
@@ -509,7 +482,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "farewell-again",
@@ -519,11 +493,6 @@
           "bcl": "Hasta sa sunod!",
           "en": "See you next time!",
           "fil": "Hanggang sa susunod!"
-        },
-        {
-          "bcl": "Sige, mag-ingat ka!",
-          "en": "All right, take care!",
-          "fil": "Sige, mag-ingat ka!"
         }
       ],
       "sources": [
@@ -534,7 +503,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "farewell-home",
@@ -559,7 +529,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "farewell-later",
@@ -584,7 +555,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "farewell-thanks",
@@ -609,7 +581,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "farewell-wave",
@@ -619,11 +592,6 @@
           "bcl": "Mauna na!",
           "en": "I'm off!",
           "fil": "Mauuna na!"
-        },
-        {
-          "bcl": "Sige, mag-ingat!",
-          "en": "All right, take care!",
-          "fil": "Sige, mag-ingat!"
         }
       ],
       "sources": [
@@ -634,7 +602,8 @@
         }
       ],
       "profile": "farewell",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "directions-monument",
@@ -662,7 +631,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "monument"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "directions-fountain",
@@ -690,7 +660,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "fountain"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "directions-stall",
@@ -718,7 +689,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "stall"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "directions-stop",
@@ -746,7 +718,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "stop"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "directions-seat",
@@ -774,7 +747,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "seat"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "directions-plaza",
@@ -807,7 +781,8 @@
       "speakers": [0, 1, 0],
       "conditions": {
         "anchor": "plaza"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "courtesy-after-you",
@@ -832,7 +807,8 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "courtesy-excuse",
@@ -842,11 +818,6 @@
           "bcl": "Maki-agi po.",
           "en": "Excuse me, coming through.",
           "fil": "Makikiraan po."
-        },
-        {
-          "bcl": "Sige po.",
-          "en": "Go ahead.",
-          "fil": "Sige po."
         }
       ],
       "sources": [
@@ -857,7 +828,8 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "courtesy-pass",
@@ -882,7 +854,8 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "courtesy-wait",
@@ -892,11 +865,6 @@
           "bcl": "Halaton taka digdi.",
           "en": "I'll wait for you here.",
           "fil": "Hihintayin kita rito."
-        },
-        {
-          "bcl": "Sige, mabalik ako.",
-          "en": "Okay, I'll be back.",
-          "fil": "Sige, babalik ako."
         }
       ],
       "sources": [
@@ -907,7 +875,8 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "talk-thanks",
@@ -917,11 +886,6 @@
           "bcl": "Salamat na marhay!",
           "en": "Thank you very much!",
           "fil": "Maraming salamat!"
-        },
-        {
-          "bcl": "Daing ano man.",
-          "en": "You're welcome.",
-          "fil": "Walang anuman."
         }
       ],
       "sources": [
@@ -932,7 +896,8 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "courtesy-sorry",
@@ -957,21 +922,17 @@
         }
       ],
       "profile": "courtesy",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "weather-warm",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Maliwanag pa.",
-          "en": "It's still light out.",
-          "fil": "Maliwanag pa."
-        },
-        {
-          "bcl": "Maglakaw-lakaw pa kita.",
-          "en": "Let's walk a little more.",
-          "fil": "Mamasyal pa tayo."
+          "bcl": "Marhay maglakaw-lakaw.",
+          "en": "It's nice to walk around!",
+          "fil": "Ang sarap mamasyal!"
         }
       ],
       "sources": [
@@ -982,24 +943,20 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "daylight"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "weather-breeze",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Presko an duros ngunyan.",
-          "en": "The breeze feels cool today.",
-          "fil": "Presko ang simoy ngayon."
-        },
-        {
-          "bcl": "Iyo, marhay maglakaw-lakaw.",
-          "en": "Yes, nice for a stroll.",
-          "fil": "Oo, masarap mamasyal."
+          "bcl": "Ah, presko an duros!",
+          "en": "Ah, what a cool breeze!",
+          "fil": "Ah, presko ang simoy!"
         }
       ],
       "sources": [
@@ -1010,10 +967,11 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "breeze"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "weather-windy",
@@ -1041,7 +999,8 @@
       "speakers": [0, 1],
       "conditions": {
         "weather": "gust"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "weather-calm",
@@ -1051,11 +1010,6 @@
           "bcl": "Dai makusog an duros digdi.",
           "en": "It isn't windy here.",
           "fil": "Hindi malakas ang hangin dito."
-        },
-        {
-          "bcl": "Magpahingalo muna ako digdi.",
-          "en": "I'll rest here for a bit.",
-          "fil": "Dito muna ako magpapahinga."
         }
       ],
       "sources": [
@@ -1066,10 +1020,11 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "calm"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "weather-rain-wait",
@@ -1097,7 +1052,8 @@
       "speakers": [0, 1],
       "conditions": {
         "weather": "rain"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "weather-rain-listen",
@@ -1107,11 +1063,6 @@
           "bcl": "Makusog an uran!",
           "en": "It's raining hard!",
           "fil": "Ang lakas ng ulan!"
-        },
-        {
-          "bcl": "Dai muna kita magluwas.",
-          "en": "Let's not go out yet.",
-          "fil": "Huwag muna tayong lumabas."
         }
       ],
       "sources": [
@@ -1122,10 +1073,11 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "heavy-rain"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "weather-rain-easing",
@@ -1135,11 +1087,6 @@
           "bcl": "Dai na makusog an uran.",
           "en": "The rain isn't heavy now.",
           "fil": "Hindi na malakas ang ulan."
-        },
-        {
-          "bcl": "Maghalat kita nin kadikit pa.",
-          "en": "Let's wait a little longer.",
-          "fil": "Maghintay pa tayo sandali."
         }
       ],
       "sources": [
@@ -1150,10 +1097,11 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "easing"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "weather-evening",
@@ -1163,11 +1111,6 @@
           "bcl": "Magayon maglakaw ngunyang banggi.",
           "en": "It's nice walking tonight.",
           "fil": "Masarap maglakad ngayong gabi."
-        },
-        {
-          "bcl": "Sige, kadikit pa bago kita magpuli.",
-          "en": "All right, a little longer before we head home.",
-          "fil": "Sige, sandali pa bago tayo umuwi."
         }
       ],
       "sources": [
@@ -1178,10 +1121,11 @@
         }
       ],
       "profile": "weather",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "weather": "evening-calm"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "food-hungry",
@@ -1206,7 +1150,8 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "food-snack",
@@ -1231,21 +1176,17 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "food-ate",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Nagkakan ka na?",
-          "en": "Have you eaten?",
-          "fil": "Kumain ka na ba?"
-        },
-        {
-          "bcl": "Dai pa. Makakan ako pag-uli.",
-          "en": "Not yet. I'll eat when I get home.",
-          "fil": "Hindi pa. Kakain ako pag-uwi."
+          "bcl": "Makakan ako pag-uli.",
+          "en": "I'll eat when I get home.",
+          "fil": "Kakain ako pag-uwi."
         }
       ],
       "sources": [
@@ -1256,7 +1197,8 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "food-later",
@@ -1281,7 +1223,8 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "food-smell",
@@ -1291,11 +1234,6 @@
           "bcl": "Igwa daw nin kakanon duman?",
           "en": "I wonder if they have food over there.",
           "fil": "May pagkain kaya roon?"
-        },
-        {
-          "bcl": "Dai ko aram. Hilingon ta.",
-          "en": "I don't know. Let's take a look.",
-          "fil": "Hindi ko alam. Tingnan natin."
         }
       ],
       "sources": [
@@ -1306,24 +1244,20 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "anchor": "stall"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "food-choose",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Ano an gusto mo?",
-          "en": "What would you like?",
-          "fil": "Ano ang gusto mo?"
-        },
-        {
-          "bcl": "Dai pa ako sigurado. Maghiling muna ako.",
-          "en": "I'm not sure yet. I'll look first.",
-          "fil": "Hindi pa ako sigurado. Titingin muna ako."
+          "bcl": "Maghiling muna ako.",
+          "en": "I'll have a look first.",
+          "fil": "Titingin muna ako."
         }
       ],
       "sources": [
@@ -1334,10 +1268,11 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "anchor": "stall"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "food-drink",
@@ -1362,7 +1297,8 @@
         }
       ],
       "profile": "food",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "food-meet",
@@ -1390,7 +1326,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "stall"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "school-study",
@@ -1415,7 +1352,8 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "school-understand",
@@ -1440,7 +1378,8 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "school-help",
@@ -1465,7 +1404,8 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "school-book",
@@ -1490,7 +1430,8 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "school-practice",
@@ -1515,21 +1456,17 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "school-break",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Magpahingalo kita muna?",
-          "en": "Shall we take a break?",
-          "fil": "Pahinga muna tayo?"
-        },
-        {
-          "bcl": "Sige, pagal na man ako.",
-          "en": "Sure, I'm tired too.",
-          "fil": "Sige, pagod na rin ako."
+          "bcl": "Pagal na ako.",
+          "en": "I'm tired.",
+          "fil": "Pagod na ako."
         }
       ],
       "sources": [
@@ -1540,7 +1477,8 @@
         }
       ],
       "profile": "school",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "plans-busy",
@@ -1568,21 +1506,17 @@
       "speakers": [0, 1],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "plans-rest",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Nagpapahingalo ka?",
-          "en": "Taking a break?",
-          "fil": "Nagpapahinga ka ba?"
-        },
-        {
-          "bcl": "Iyo, bago magtrabaho giraray.",
-          "en": "Yes, before getting back to work.",
-          "fil": "Oo, bago magtrabaho ulit."
+          "bcl": "Marhay magpahingalo nin kadikit.",
+          "en": "A little rest feels good.",
+          "fil": "Ang sarap magpahinga sandali."
         }
       ],
       "sources": [
@@ -1593,10 +1527,11 @@
         }
       ],
       "profile": "daily-plans",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "plans-errand",
@@ -1624,7 +1559,8 @@
       "speakers": [0, 1],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "plans-weekend",
@@ -1652,21 +1588,17 @@
       "speakers": [0, 1],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "plans-done",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Tapos ka na sa trabaho?",
-          "en": "Done with work?",
-          "fil": "Tapos ka na sa trabaho?"
-        },
-        {
-          "bcl": "Harani na. Kadikit na sana.",
-          "en": "Almost. Just a little left.",
-          "fil": "Malapit na. Kaunti na lang."
+          "bcl": "Maugma ako ngunyan!",
+          "en": "I'm happy right now!",
+          "fil": "Masaya ako ngayon!"
         }
       ],
       "sources": [
@@ -1674,13 +1606,19 @@
           "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
           "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
           "note": "Original fictional dialogue composed using Central Bikol vocabulary and grammar; reference supports language forms, not a quotation or native-speaker approval. See dialogue-review.md for review status."
+        },
+        {
+          "title": "Solo trip - Kerwin Orville Tate (2020)",
+          "url": "https://magbikolkita.com/layason-officer/solo-trip/",
+          "note": "Original local Bikol writing uses maugma. Word-family evidence only; this authored expression is not quoted or native-speaker approved."
         }
       ],
       "profile": "daily-plans",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "plans-tomorrow",
@@ -1708,7 +1646,8 @@
       "speakers": [0, 1],
       "conditions": {
         "audience": "adults"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "vendor-ask-price",
@@ -1733,7 +1672,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-order-one",
@@ -1758,7 +1698,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-order-two",
@@ -1783,7 +1724,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-available",
@@ -1808,7 +1750,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-look",
@@ -1833,7 +1776,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-choose",
@@ -1858,7 +1802,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-ready",
@@ -1883,7 +1828,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-wait",
@@ -1908,7 +1854,8 @@
         }
       ],
       "profile": "vendor-order",
-      "speakers": [1, 0]
+      "speakers": [1, 0],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-thank-you",
@@ -1933,7 +1880,8 @@
         }
       ],
       "profile": "vendor-thanks",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-come-again",
@@ -1943,11 +1891,6 @@
           "bcl": "Balik ka giraray!",
           "en": "Come again!",
           "fil": "Balik ka ulit!"
-        },
-        {
-          "bcl": "Sige po, salamat!",
-          "en": "Will do, thank you!",
-          "fil": "Sige po, salamat!"
         }
       ],
       "sources": [
@@ -1958,7 +1901,8 @@
         }
       ],
       "profile": "vendor-thanks",
-      "speakers": [1, 0]
+      "speakers": [1],
+      "delivery": "utterance"
     },
     {
       "id": "vendor-all",
@@ -1983,21 +1927,17 @@
         }
       ],
       "profile": "vendor-thanks",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "vendor-goodbye",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Sige po, salamat!",
-          "en": "All right, thank you!",
-          "fil": "Sige po, salamat!"
-        },
-        {
-          "bcl": "Salamat man po. Mag-ingat!",
-          "en": "Thank you too. Take care!",
-          "fil": "Salamat din po. Ingat!"
+          "bcl": "Salamat po. Mag-ingat!",
+          "en": "Thank you. Take care!",
+          "fil": "Salamat po. Ingat!"
         }
       ],
       "sources": [
@@ -2008,7 +1948,8 @@
         }
       ],
       "profile": "vendor-thanks",
-      "speakers": [0, 1]
+      "speakers": [1],
+      "delivery": "utterance"
     },
     {
       "id": "transit-waiting",
@@ -2033,21 +1974,17 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "transit-wait-here",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Digdi kita mahalat?",
-          "en": "Shall we wait here?",
-          "fil": "Dito tayo maghihintay?"
-        },
-        {
-          "bcl": "Iyo, digdi sana.",
-          "en": "Yes, right here.",
-          "fil": "Oo, dito lang."
+          "bcl": "Maghalat muna ako digdi.",
+          "en": "I'll wait here for now.",
+          "fil": "Maghihintay muna ako rito."
         }
       ],
       "sources": [
@@ -2058,7 +1995,8 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "transit-company",
@@ -2083,7 +2021,8 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "transit-arriving",
@@ -2093,11 +2032,6 @@
           "bcl": "Yaon na an sasakyan!",
           "en": "Here comes a ride!",
           "fil": "Nariyan na ang sasakyan!"
-        },
-        {
-          "bcl": "Madya na.",
-          "en": "Let's go.",
-          "fil": "Tara na."
         }
       ],
       "sources": [
@@ -2108,24 +2042,20 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "event": "arrival"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "transit-our-turn",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Kita na?",
-          "en": "Is it our turn?",
-          "fil": "Tayo na ba?"
-        },
-        {
-          "bcl": "Maghalat muna kita.",
-          "en": "Let's wait a moment.",
-          "fil": "Maghintay muna tayo."
+          "bcl": "Mahalat pa ako nin kadikit.",
+          "en": "I'll wait a little longer.",
+          "fil": "Maghihintay pa ako sandali."
         }
       ],
       "sources": [
@@ -2136,21 +2066,17 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "transit-watch",
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Sabihon mo kun yaon na an sasakyan, ha?",
-          "en": "Let me know when the ride is here, okay?",
-          "fil": "Sabihin mo kapag nandiyan na ang sasakyan, ha?"
-        },
-        {
-          "bcl": "Sige, babantayan ko.",
-          "en": "Sure, I'll keep an eye out.",
-          "fil": "Sige, babantayan ko."
+          "bcl": "Babantayan ko kun yaon na an sasakyan.",
+          "en": "I'll keep an eye out for a ride.",
+          "fil": "Mag-aabang ako ng masasakyan."
         }
       ],
       "sources": [
@@ -2161,7 +2087,8 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "transit-destination",
@@ -2186,7 +2113,8 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "transit-together",
@@ -2211,7 +2139,8 @@
         }
       ],
       "profile": "transit",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "companion-here",
@@ -2221,11 +2150,6 @@
           "bcl": "Digdi ako!",
           "en": "I'm over here!",
           "fil": "Nandito ako!"
-        },
-        {
-          "bcl": "Ah, yaon ka palan!",
-          "en": "Ah, there you are!",
-          "fil": "Ah, nariyan ka pala!"
         }
       ],
       "sources": [
@@ -2236,7 +2160,8 @@
         }
       ],
       "profile": "companion",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "companion-ready",
@@ -2261,7 +2186,8 @@
         }
       ],
       "profile": "companion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "companion-look",
@@ -2289,7 +2215,8 @@
       "speakers": [0, 1],
       "conditions": {
         "anchor": "monument"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "companion-rest",
@@ -2314,7 +2241,8 @@
         }
       ],
       "profile": "companion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "companion-near",
@@ -2342,7 +2270,8 @@
       "speakers": [0, 1],
       "conditions": {
         "audience": "adult-child"
-      }
+      },
+      "delivery": "exchange"
     },
     {
       "id": "companion-next",
@@ -2367,7 +2296,8 @@
         }
       ],
       "profile": "companion",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "ball-here",
@@ -2377,11 +2307,6 @@
           "bcl": "Saimo an bola!",
           "en": "The ball's coming your way!",
           "fil": "Sa iyo ang bola!"
-        },
-        {
-          "bcl": "Digdi mo ipasa!",
-          "en": "Pass it here!",
-          "fil": "Ipasa mo rito!"
         }
       ],
       "sources": [
@@ -2397,7 +2322,8 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "ball-play",
@@ -2432,7 +2358,8 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "ball-ready",
@@ -2457,17 +2384,13 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "ball-catch",
       "kind": "ball",
       "lines": [
-        {
-          "bcl": "Salua!",
-          "en": "Catch!",
-          "fil": "Saluhin mo!"
-        },
         {
           "bcl": "Nasalo ko!",
           "en": "Got it!",
@@ -2482,10 +2405,11 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1],
+      "speakers": [1],
       "conditions": {
         "event": "catch"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "ball-good",
@@ -2495,11 +2419,6 @@
           "bcl": "Marhay na pasa!",
           "en": "Nice pass!",
           "fil": "Gandang pasa!"
-        },
-        {
-          "bcl": "Salamat!",
-          "en": "Thanks!",
-          "fil": "Salamat!"
         }
       ],
       "sources": [
@@ -2510,10 +2429,11 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1],
+      "speakers": [0],
       "conditions": {
         "event": "pass"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "ball-again",
@@ -2538,7 +2458,8 @@
         }
       ],
       "profile": "play",
-      "speakers": [0, 1]
+      "speakers": [0, 1],
+      "delivery": "exchange"
     },
     {
       "id": "look-beautiful",
@@ -2558,16 +2479,17 @@
         }
       ],
       "profile": "place-reaction",
-      "speakers": [0]
+      "speakers": [0],
+      "delivery": "utterance"
     },
     {
       "id": "look-monument",
       "kind": "look",
       "lines": [
         {
-          "bcl": "Hilinga an monumento.",
-          "en": "Look at the monument.",
-          "fil": "Tingnan ang monumento."
+          "bcl": "Magayon an monumento!",
+          "en": "What a lovely monument!",
+          "fil": "Ang ganda ng monumento!"
         }
       ],
       "sources": [
@@ -2581,7 +2503,8 @@
       "speakers": [0],
       "conditions": {
         "anchor": "monument"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "look-fountain",
@@ -2604,21 +2527,17 @@
       "speakers": [0],
       "conditions": {
         "anchor": "fountain"
-      }
+      },
+      "delivery": "utterance"
     },
     {
       "id": "talk-visit",
-      "kind": "talk",
+      "kind": "look",
       "lines": [
         {
-          "bcl": "Pirmi kang yaon digdi?",
-          "en": "Do you come here often?",
-          "fil": "Madalas ka bang pumunta rito?"
-        },
-        {
-          "bcl": "Iyo, digdi ako naglalakaw-lakaw.",
-          "en": "Yes, I come here for walks.",
-          "fil": "Oo, dito ako namamasyal."
+          "bcl": "Marhay maglakaw-lakaw digdi.",
+          "en": "This is a nice place for a stroll.",
+          "fil": "Magandang mamasyal dito."
         }
       ],
       "sources": [
@@ -2629,7 +2548,11 @@
         }
       ],
       "profile": "place-reaction",
-      "speakers": [0, 1]
+      "speakers": [0],
+      "delivery": "utterance",
+      "conditions": {
+        "anchor": "plaza"
+      }
     }
   ]
 }

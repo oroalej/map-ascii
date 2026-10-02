@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { Moments, MOMENTS, type MomentActor, type MomentContext, type MomentKind } from './moments';
+import { SceneSpeech } from './scene-speech';
 
 function fixture(
   kind: MomentKind,
@@ -49,6 +50,67 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  it('shares the scene speech cooldown without preventing a physical encounter', () => {
+    const reaction: DialogueChoice = { id: 'look', kind: 'look', turns: 1 };
+    const happy: DialogueChoice = {
+      id: 'happy',
+      kind: 'talk',
+      profile: 'daily-plans',
+      delivery: 'utterance',
+      turns: 1,
+      speakers: [0],
+    };
+    const f = fixture('look', () => 0, [reaction]);
+    const scene = new SceneSpeech(1, [happy], undefined, f.m.selector.memory);
+    expect(
+      scene.admit(
+        {
+          key: {},
+          speakers: [{ owner: f.a.owner, member: 0, figure: 'adult' }],
+          profiles: ['daily-plans'],
+          context: { minutes: 720, rain: 0, wind: 0, figures: [] },
+          ambient: true,
+          valid: () => true,
+        },
+        12,
+      ),
+    ).toBe(true);
+    start(f, 'look');
+    expect(f.m.busy(f.a.owner)).toBe(true);
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+  });
+  it('shows a one-line catch celebration only after the actual receiver catches', () => {
+    const choice: DialogueChoice = {
+      id: 'caught',
+      kind: 'ball',
+      profile: 'play',
+      delivery: 'utterance',
+      turns: 1,
+      speakers: [1],
+      conditions: { event: 'catch' },
+    };
+    let checked = false;
+    const f = fixture('ball', () => 0, [choice]);
+    start(f, 'ball');
+    expect(f.m.speech(f.a.owner)).toBeUndefined();
+    expect(f.m.speech(f.b.owner)).toBeUndefined();
+    let flying = false;
+    // Allow complete quiet games and their cooldown, rather than forcing a spoken outcome.
+    for (let tick = 0; tick < 4400; tick++) {
+      f.m.step(0.05, f.c);
+      flying ||= f.m.balls().length > 0;
+      const a = f.m.speech(f.a.owner),
+        b = f.m.speech(f.b.owner);
+      if (!a && !b) continue;
+      checked = true;
+      expect(flying).toBe(true);
+      expect(f.m.balls()).toEqual([]);
+      expect(a).toBeUndefined();
+      expect(b).toMatchObject({ exchangeId: 'caught', line: 0 });
+      break;
+    }
+    expect(checked).toBe(true);
+  });
   const reaction = [{ id: 'monument-reaction', kind: 'look', turns: 1 }] as const;
   const visitor = () => {
     const f = fixture('look', () => 0.99, reaction);

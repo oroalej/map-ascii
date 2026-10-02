@@ -57,6 +57,7 @@ export type MomentContext<Owner extends object = object> = {
   rain: number;
   minutes?: number;
   wind?: number;
+  clock?: number;
   reserved?: number;
   sceneChecks?: number;
   perMeter: number;
@@ -75,6 +76,7 @@ export type MomentContext<Owner extends object = object> = {
 type Moment<Owner extends object = object> = {
   id: number;
   dialogue?: DialogueChoice;
+  voiced: boolean;
   speechStart?: number;
   speechHolder: number;
   lastSpeech: number;
@@ -156,14 +158,19 @@ export class Moments<Owner extends object = object> {
   /** A detached cue: participant references never cross the worker boundary. */
   speech(owner: object): SpeechCue | undefined {
     const m = this.membership.get(owner);
-    if (!m?.dialogue || m.speechStart === undefined) return;
+    if (!m?.dialogue || !m.voiced || m.speechStart === undefined) return;
     const seconds = MOMENTS[m.kind].speechTurn;
     const caught = m.dialogue.conditions?.event === 'catch';
-    const line = caught
-      ? m.caught === undefined
+    const utterance = m.dialogue.delivery === 'utterance';
+    if (caught && utterance && m.caught === undefined) return;
+    const line =
+      caught && utterance
         ? 0
-        : 1
-      : Math.floor((this.time - m.speechStart) / seconds + 1e-9);
+        : caught
+          ? m.caught === undefined
+            ? 0
+            : 1
+          : Math.floor((this.time - m.speechStart) / seconds + 1e-9);
     const slot = m.dialogue.speakers?.[line] ?? line;
     if (
       line < 0 ||
@@ -669,6 +676,13 @@ export class Moments<Owner extends object = object> {
     const m: Moment<Owner> = {
       id: ++this.serial,
       dialogue,
+      voiced:
+        !!dialogue &&
+        this.selector.memory.ready(
+          members.map((a) => a.owner),
+          c.clock ?? this.time,
+        ) &&
+        this.selector.memory.voiced(dialogue),
       focus,
       speechHolder: 0,
       lastSpeech: -Infinity,
@@ -696,6 +710,11 @@ export class Moments<Owner extends object = object> {
     }
     if (kind === 'ball') m.phaseEnd += between(this.rng, MOMENTS.ball.hold);
     if (kind === 'look') m.point = this.rng() < MOMENTS.look.point;
+    if (dialogue)
+      this.selector.memory.reserve(
+        members.map((a) => a.owner),
+        (c.clock ?? this.time) + m.end - m.start + MOMENTS.cooldown,
+      );
     this.active.push(m);
     for (const a of members) this.membership.set(a.owner, m);
     this.stats.started[kind]++;

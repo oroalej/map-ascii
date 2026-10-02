@@ -28,12 +28,52 @@ function fixture(choice = vendor) {
   return { a, b, state, scenes, scene };
 }
 describe('scene-owned dialogue', () => {
+  it('limits background expressions to two and makes space for service activity', () => {
+    const utterance: DialogueChoice = {
+      ...vendor,
+      delivery: 'utterance',
+      profile: 'daily-plans',
+      turns: 1,
+      speakers: [0],
+    };
+    const host = new SceneSpeech(1, [utterance, vendor]);
+    for (let i = 0; i < 2; i++) {
+      const f = fixture(utterance);
+      expect(
+        host.admit({ ...f.scene, ambient: true, speakers: f.scene.speakers.slice(0, 1) }, 12),
+      ).toBe(true);
+      expect(host.busy(f.a)).toBe(false);
+    }
+    const extra = fixture(utterance);
+    expect(host.admit({ ...extra.scene, ambient: true }, 12)).toBe(false);
+    expect(host.admit(fixture().scene, 12)).toBe(true);
+    expect(host.admit(fixture().scene, 12)).toBe(true);
+    expect(host.admit(fixture().scene, 12)).toBe(true);
+    expect(host.size).toBe(4);
+  });
   it('leaves capacity for physical encounters when many groups can speak', () => {
     const host = fixture().scenes;
     for (let i = 0; i < SCENE_SPEECH_CAPACITY; i++)
       expect(host.admit(fixture().scene, 12)).toBe(true);
     expect(host.admit(fixture().scene, 12)).toBe(false);
     expect(host.size).toBe(4);
+  });
+  it('does not evict an unrelated expression for a service too short to speak', () => {
+    const utterance: DialogueChoice = {
+      ...vendor,
+      delivery: 'utterance',
+      profile: 'daily-plans',
+      turns: 1,
+      speakers: [0],
+    };
+    const host = new SceneSpeech(1, [utterance, vendor]);
+    const ambient = fixture(utterance);
+    expect(host.admit({ ...ambient.scene, ambient: true }, 1)).toBe(true);
+    expect(host.admit({ ...fixture().scene, remaining: 2.9 }, 1)).toBe(false);
+    expect(host.size).toBe(1);
+    expect(host.busy(ambient.a)).toBe(false);
+    expect(host.admit(fixture().scene, 1)).toBe(true);
+    expect(host.size).toBe(1);
   });
   it('places thanks in the final three seconds without changing the service lifetime', () => {
     const f = fixture({ ...vendor, profile: 'vendor-thanks' });

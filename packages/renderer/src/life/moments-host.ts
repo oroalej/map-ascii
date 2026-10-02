@@ -168,6 +168,7 @@ export class MomentHost {
       rain: env?.rain ?? 0,
       minutes: env?.minutes,
       wind: env?.wind?.strength,
+      clock: env?.clock,
       reserved: this.scenes.size,
       sceneChecks,
       perMeter: tile.perMeter,

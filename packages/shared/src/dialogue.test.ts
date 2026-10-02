@@ -23,6 +23,46 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
+  it('separates one speaking turn from the actual participant slot', () => {
+    const base = {
+      ...catalog.exchanges[0],
+      delivery: 'utterance',
+      profile: 'greeting',
+      lines: [catalog.exchanges[0]!.lines[0]],
+      speakers: [1],
+    };
+    const parsed = schema.parse({ ...catalog, exchanges: [base] });
+    expect(dialogueChoices(parsed)[0]).toMatchObject({
+      delivery: 'utterance',
+      speakers: [1],
+      turns: 1,
+    });
+    for (const change of [
+      { speakers: [2] },
+      { lines: catalog.exchanges[0]!.lines },
+      { delivery: 'exchange' },
+      { kind: 'look', profile: 'place-reaction', period: undefined },
+    ])
+      expect(schema.safeParse({ ...catalog, exchanges: [{ ...base, ...change }] }).success).toBe(
+        false,
+      );
+    const vendor = { ...base, kind: 'talk', profile: 'vendor-thanks', period: undefined };
+    expect(schema.safeParse({ ...catalog, exchanges: [vendor] }).success).toBe(true);
+    for (const profile of ['vendor-thanks', 'transit', 'companion'])
+      expect(
+        schema.safeParse({
+          ...catalog,
+          exchanges: [{ ...vendor, profile, speakers: [2] }],
+        }).success,
+      ).toBe(false);
+    for (const profile of ['vendor-order', 'directions'])
+      expect(
+        schema.safeParse({
+          ...catalog,
+          exchanges: [{ ...vendor, profile, conditions: { anchor: 'stall' } }],
+        }).success,
+      ).toBe(false);
+  });
   it('keeps role and scene metadata in text-free choices and rejects mismatched contracts', () => {
     const entry = { ...catalog.exchanges[0], profile: 'greeting', speakers: [0, 1] };
     const valid = schema.parse({ ...catalog, exchanges: [entry] });

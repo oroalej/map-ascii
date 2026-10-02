@@ -13,6 +13,8 @@ describe('loadCityPacks', () => {
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
     expect(speech?.exchanges).toHaveLength(100);
+    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(40);
+    expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(60);
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
@@ -28,6 +30,7 @@ describe('loadCityPacks', () => {
       expect(scripts.has(script), e.id).toBe(false);
       scripts.add(script);
       expect(e.speakers).toHaveLength(e.lines.length);
+      expect(e.lines.length === 1).toBe(e.delivery === 'utterance');
       for (const line of e.lines)
         for (const code of ['bcl', 'en', 'fil']) expect(line[code], e.id).toMatch(/\p{L}/u);
     }

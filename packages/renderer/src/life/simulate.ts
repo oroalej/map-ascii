@@ -4732,6 +4732,7 @@ export class LifeWorld {
             flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
             pose:
               life.momentHost.moments.pose(g) ??
+              life.momentHost.scenes.pose(g, 0) ??
               (still && g.momentFacing ? 'attentive' : undefined),
           };
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
@@ -4763,7 +4764,7 @@ export class LifeWorld {
               flap: 0,
               people: [look],
             };
-            const speech = life.momentHost.moments.speech(g);
+            const speech = life.momentHost.moments.speech(g) ?? life.momentHost.scenes.speech(g);
             if (speech)
               agent.speech = { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` };
             out.push(agent);

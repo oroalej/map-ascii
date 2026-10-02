@@ -1,6 +1,6 @@
 # Naga dialogue: local usage review
 
-Reviewed on 2026-10-02 after the owner's corrections to unfamiliar wording. All 100 exchanges were reread; 20 exchanges (25 turns) were revised in this pass. There are still 100 exchanges and 199 turns. Selection metadata, speaker roles, event timing and category allocation are unchanged.
+This records the earlier usage audit on 2026-10-02, before the independent-expression adjustment. At that audit, all 100 exchanges were reread and 20 exchanges (25 turns) were revised; the catalog then had 199 turns. The later adjustment changes 40 entries to one-speaker utterances, including some role and mechanism metadata. Category totals and all IDs are preserved. See dialogue-review.md, "Independent expression edit", for current delivery and wording; the historical row decisions below describe the earlier versions.
 
 The result is mixed: several core forms have identifiable Naga/local usage, while the complete exchanges remain authored fiction. No recorded conversation corpus or independent Naga speaker has validated the entire catalog. A locally published word, a grammatical sentence and a natural spoken exchange are different kinds of evidence. This review does not assign a misleading percentage of "native-approved" lines.
 
