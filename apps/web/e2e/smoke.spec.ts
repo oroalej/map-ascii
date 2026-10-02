@@ -103,6 +103,12 @@ for (const city of cities) {
         await page.reload();
         await mapReady(page);
         await expect(preview).toBeVisible();
+        // Preferences hydrate before the asynchronous tiles populate the fixture legend.
+        // Wait for the rebuilt display before checking that reduced motion retains it.
+        if (first.lanterns)
+          await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible({
+            timeout: 20_000,
+          });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         if (first.lanterns)
           await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();

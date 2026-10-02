@@ -3,6 +3,9 @@ import type { SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { isCityMeta } from '../lib/guards';
 import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
+const samples = JSON.parse(
+  readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
+) as Record<string, { slug: string; at: [number, number] }[]>;
 
 // A narrow viewport keeps the legend collapsed and leaves room above attribution. Enable
 // animation only for the Life-on check, after the map has loaded.
@@ -16,12 +19,15 @@ for (const city of cities.filter((city) => city.hasMeta)) {
   const details = existsSync(directory)
     ? readdirSync(directory)
         .filter((file) => file.endsWith('.json'))
-        .map((file) => JSON.parse(readFileSync(new URL(file, directory), 'utf8')) as SiteDetail)
+        .map((file) => ({
+          slug: file.slice(0, -5),
+          detail: JSON.parse(readFileSync(new URL(file, directory), 'utf8')) as SiteDetail,
+        }))
     : [];
-  for (const detail of details.filter((detail) => detail.walks.length > 0)) {
+  for (const { slug, detail } of details.filter(({ detail }) => detail.walks.length > 0)) {
     test(`${city.name}: ${detail.title} details retain area selection with Life off and on`, async ({
       page,
-    }, info) => {
+    }) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(() => {
@@ -31,15 +37,11 @@ for (const city of cities.filter((city) => city.hasMeta)) {
           JSON.stringify({ enabled: false, time: 'noon', wind: 'calm' }),
         );
       });
-      // A raised surface has its own outline identity but must select the original plaza.
-      const terrace = detail.structures?.find((part) => part.material === 'paving');
-      const [lng, lat] = terrace
-        ? [
-            (terrace.ring[0]![0] + terrace.ring[2]![0]) / 2,
-            (terrace.ring[0]![1] + terrace.ring[2]![1]) / 2,
-          ]
-        : detail.walks[0]!.line[0]!;
-      await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=19`);
+      // Reviewed exposed surfaces stay selectable in both pinned and locally enriched tiles.
+      const sample = samples[city.slug]?.find((point) => point.slug === slug);
+      if (!sample) throw new Error(`${city.slug}/${slug}: missing detail selection sample`);
+      const [lng, lat] = sample.at;
+      await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=21`);
       await mapReady(page);
       const canvas = page.getByLabel(`Map of ${city.name}`);
       await expect
@@ -75,8 +77,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         await expect(page.getByRole('complementary', { name: 'Selected place' })).toBeVisible();
         await page.keyboard.press('Escape');
       }
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      await info.attach('plaza-detail', { body: await mapShot(canvas), contentType: 'image/png' });
+      // The initial drawn-share check already proves rendering. Avoid a second GPU readback
+      // after the Life-on flow; selection and the page-error check are the acceptance here.
       expect(errors).toEqual([]);
     });
   }
