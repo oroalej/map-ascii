@@ -7,6 +7,7 @@ import { fireworksPass, deleteFireworks } from './fireworks-pass';
 import { FIREWORK_INSTANCE_COUNT } from './fireworks-layout';
 
 const setters = vi.hoisted(() => ({
+  u_shells: vi.fn(),
   u_time: vi.fn(),
   u_still: vi.fn(),
   u_wind: vi.fn(),
@@ -60,6 +61,49 @@ function gpu() {
 }
 beforeEach(() => vi.clearAllMocks());
 describe('seasonal GPU fireworks', () => {
+  it('scales bursts and wind drift on zoom without uploading particles or resetting their clock', () => {
+    const gl = gpu(),
+      programs = {} as Programs;
+    for (const [zoom, dpr] of [
+      [19, 1],
+      [19.5, 1],
+      [20, 2],
+      [21, 3],
+    ] as const) {
+      const v = {
+        ...view,
+        camera: { ...view.camera, zoom },
+        dpr,
+        cellDev: { w: 5 * dpr, h: 9 * dpr },
+      };
+      const grid = placeGrid(v, v.cellDev, 202, 92).grid;
+      fireworksPass(
+        gl as unknown as GL,
+        programs,
+        {} as CellTargets,
+        resources,
+        v,
+        grid,
+        grid,
+        config,
+        2.6,
+        false,
+        wind,
+        0,
+      );
+      const scale = 2 ** (zoom - 19);
+      for (let i = 0; i < programs.fireworks!.shells.length; i += 4) {
+        const seed = programs.fireworks!.shells[i + 2]!;
+        expect(programs.fireworks!.shells[i + 3]).toBeCloseTo((75 + (seed % 65)) * dpr * scale, 3);
+      }
+      expect(setters.u_wind).toHaveBeenLastCalledWith([0.5 * dpr * scale, 0]);
+      expect(setters.u_time.mock.calls.at(-1)?.[0]).toBeCloseTo(2.6);
+      expect(setters.u_still).toHaveBeenLastCalledWith(false);
+    }
+    expect(gl.bufferData).toHaveBeenCalledTimes(1);
+    expect(gl.createBuffer).toHaveBeenCalledTimes(1);
+    expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(4);
+  });
   it('creates nothing for old packs, inactive seasons or low zoom, and does not leave a stale overlay', () => {
     const gl = gpu(),
       programs = {} as Programs,

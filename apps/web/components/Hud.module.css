@@ -17,6 +17,29 @@
   gap: 8px;
 }
 
+.header {
+  max-width: 100%;
+}
+
+.header .zoom {
+  flex: none;
+  white-space: nowrap;
+}
+
+.focusClear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 32ch;
+}
+
+.focusLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .zoom {
   margin: 0;
   padding: 4px 8px;
@@ -27,7 +50,9 @@
 }
 
 .legend {
-  max-height: calc(100dvh - 120px);
+  max-height: calc(
+    100dvh - var(--hud-header-bottom, 44px) - var(--attribution-height, 16px) - 16px
+  );
   overflow-y: auto;
   padding: 6px 10px;
   background: rgb(4 5 10 / 88%);
@@ -43,6 +68,12 @@
   font-size: 11px;
 }
 
+.legend summary:focus-visible,
+.focusClear:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
+}
+
 .legend ul {
   margin: 6px 0 0;
   padding: 0;
@@ -53,6 +84,32 @@
   display: flex;
   gap: 10px;
   line-height: 1.6;
+}
+
+.legendEntry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.legendEntry:hover,
+.legendEntry[aria-pressed='true'] {
+  color: #ffd35c;
+  background: rgb(255 255 255 / 8%);
+}
+
+.legendEntry:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
 }
 
 .glyphs {
@@ -158,6 +215,23 @@
 
   .zoom {
     font-size: 12px;
+  }
+
+  /* Tours occupies the left of this row; keep zoom and clear focus beside it. */
+  .header {
+    max-width: calc(100vw - 120px);
+  }
+
+  .legendEntry,
+  .legend summary,
+  .focusClear {
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .legend summary {
+    align-content: center;
   }
 
   /* Above the attribution, which wraps to a few lines on phones (Attribution.tsx publishes its height). */

@@ -8,6 +8,7 @@ import {
   FIREWORKS,
   FIREWORK_INSTANCE_COUNT,
   fireworkInstances,
+  fireworkScale,
   fireworkShells,
   fireworkTime,
   fireworkVariantCodes,
@@ -73,6 +74,7 @@ export function fireworksPass(
     resources.config = config;
   }
   fireworkShells(view, grid, resources.shells);
+  const windScale = view.dpr * fireworkScale(view.camera.zoom);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.disable(gl.DEPTH_TEST);
@@ -86,7 +88,7 @@ export function fireworksPass(
     u_still: reduced,
     u_wind: reduced
       ? [0, 0]
-      : [wind.dir[0] * wind.strength * view.dpr, wind.dir[1] * wind.strength * view.dpr],
+      : [wind.dir[0] * wind.strength * windScale, wind.dir[1] * wind.strength * windScale],
     u_variants: resources.variants,
     u_variantCount: config.variants.length,
     u_atlas: theme.map.atlasTex,

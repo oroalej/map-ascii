@@ -13,6 +13,7 @@ import {
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
+import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
@@ -29,6 +30,7 @@ const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
 const SMALL_SCREEN = '(max-width: 640px)';
 const SMALL_SCREEN_MIN_CELL = 6;
+const lifeHoverPause = parseLifeHoverPause(process.env.NEXT_PUBLIC_LIFE_HOVER_PAUSE);
 
 /** The map's cell sizes by zoom (SPEC.md §2 "Cell size"), with a floor on small screens. */
 const cellSchedule = (small: boolean): CellSchedule =>
@@ -151,6 +153,7 @@ export function AtlasCanvas({
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
+      lifeHoverPause,
       quality,
       utilities: { derive: utilitiesDerived },
       tilesUrl: `/tiles/${slug}.pmtiles`,

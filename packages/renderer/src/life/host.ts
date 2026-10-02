@@ -9,8 +9,10 @@ import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
+let nextGeneration = 0;
 
 export type FrameView = {
+  generation?: number;
   agents: VisibleAgent[];
   procession: ProcessionRun | undefined;
   signalClock: number;
@@ -24,7 +26,7 @@ export interface LifeHost {
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
-  setLive(id: string | undefined, progress?: number): void;
+  setLive(id: string | undefined, progress?: number, occurrence?: string): void;
   play(id: string): boolean;
   stop(): void;
   dispose(): void;
@@ -39,6 +41,7 @@ export function createInlineHost(
   const preparation = new LifePreparation(world, profiler, preparationClock);
   let disposed = false;
   let acceptedPost: number | undefined;
+  let generation = ++nextGeneration;
   return {
     invalidateFrame() {
       if (view) view = { ...view, agents: [] };
@@ -50,6 +53,7 @@ export function createInlineHost(
       if (!tiles.length) view = undefined;
     },
     clearTiles() {
+      generation = ++nextGeneration;
       world.clearTiles();
       preparation.clear();
       view = undefined;
@@ -67,6 +71,7 @@ export function createInlineHost(
       const terrain = world.cellTerrain();
       view = {
         ...result,
+        generation,
         cellGuard: (toCell) =>
           terrain &&
           makeCellGuard(
@@ -90,7 +95,7 @@ export function createInlineHost(
         procession: world.procession(),
       };
     },
-    setLive: (id, progress) => world.setLive(id, progress),
+    setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
     play: (id) => world.play(id),
     stop: () => world.stop(),
     dispose: () => {
@@ -103,14 +108,19 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix; cityLife?: CityLifeConfig; moments?: MomentOptions },
+  options: {
+    traffic?: TrafficMix;
+    cityLife?: CityLifeConfig;
+    itemInspection?: boolean;
+    moments?: MomentOptions;
+  },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler, options.moments);
+    const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
     world.setProcessions(processions);
     world.setSeasons(seasons);
     world.setShopSchedule(options.cityLife?.schedules?.shops);
@@ -125,7 +135,7 @@ export function createWorkerHost(
   let ready = false,
     inFlight = false,
     disposed = false,
-    generation = 0,
+    generation = ++nextGeneration,
     agentEpoch = 0,
     frames = 0,
     playedFrom = 0;
@@ -136,7 +146,7 @@ export function createWorkerHost(
   let tiles: readonly LifeTile[] = [];
   let focus: readonly [number, number] | undefined;
   let viewContext: LifeViewContext | undefined;
-  let live: { id: string | undefined; progress?: number } = { id: undefined };
+  let live: { id: string | undefined; progress?: number; occurrence?: string } = { id: undefined };
   let played: string | undefined;
   const sent = new Set<string>();
   const release = () => {
@@ -145,12 +155,12 @@ export function createWorkerHost(
   };
   const fail = () => {
     if (disposed || fallback) return;
-    generation++;
+    generation = ++nextGeneration;
     ready = false;
     release();
     fallback = inline();
     fallback.sync(tiles, focus, viewContext);
-    fallback.setLive(live.id, live.progress);
+    fallback.setLive(live.id, live.progress, live.occurrence);
     if (played) fallback.play(played);
   };
   worker.addEventListener('error', fail);
@@ -163,6 +173,7 @@ export function createWorkerHost(
       profiling: !!profiler,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      itemInspection: options.itemInspection,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
     })
@@ -188,7 +199,7 @@ export function createWorkerHost(
       const keep = new Set(next.map((tile) => tile.key));
       if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
         if (!nextView || !keep.size) {
-          generation++;
+          generation = ++nextGeneration;
           terrain = undefined;
         }
         // Keep the last complete frame while nonempty geometry loads. It is never combined
@@ -211,7 +222,7 @@ export function createWorkerHost(
       tiles = [];
       focus = undefined;
       viewContext = undefined;
-      generation++;
+      generation = ++nextGeneration;
       acceptedPost = undefined;
       profiler?.clearContinuity();
       terrain = undefined;
@@ -243,6 +254,7 @@ export function createWorkerHost(
             if (view || result.terrain !== undefined)
               view = {
                 agents: [],
+                generation,
                 procession: view?.procession,
                 signalClock: view?.signalClock ?? 0,
                 cellGuard: (toCell) =>
@@ -260,6 +272,7 @@ export function createWorkerHost(
           const cellTerrain = terrain;
           view = {
             agents: result.agents,
+            generation,
             procession: result.procession,
             signalClock: result.signalClock,
             cellGuard: (toCell) =>
@@ -280,11 +293,11 @@ export function createWorkerHost(
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return view;
     },
-    setLive(id, progress) {
+    setLive(id, progress, occurrence) {
       if (disposed) return;
-      live = { id, progress };
-      if (fallback) fallback.setLive(id, progress);
-      else void remote.setLive(id, progress).catch(fail);
+      live = { id, progress, occurrence };
+      if (fallback) fallback.setLive(id, progress, occurrence);
+      else void remote.setLive(id, progress, occurrence).catch(fail);
     },
     play(id) {
       if (disposed || !processions.some((route) => route.id === id)) return false;
@@ -303,7 +316,7 @@ export function createWorkerHost(
     dispose() {
       if (disposed) return;
       disposed = true;
-      generation++;
+      generation = ++nextGeneration;
       worker.removeEventListener('error', fail);
       worker.removeEventListener('messageerror', fail);
       if (fallback) fallback.dispose();

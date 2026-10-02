@@ -12,6 +12,7 @@
  */
 import { nthWeekdayDay, type ProcessionRoute, type ProcessionSchedule } from '@atlas/shared';
 import { localTime } from './clock';
+import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
@@ -172,6 +173,17 @@ export function profileAt(table: Float64Array, u: number): number {
 
 /** One procession's boats and crowds along its route. */
 export class ProcessionScene {
+  private liveOwners?: { scope: string; keys: WeakMap<object, object> };
+  private playedOwners?: { scope: string; keys: WeakMap<object, object> };
+
+  private owner(scope: string, actor: object) {
+    const field = scope.startsWith('live/') ? 'liveOwners' : 'playedOwners';
+    let owners = this[field];
+    if (owners?.scope !== scope) this[field] = owners = { scope, keys: new WeakMap() };
+    let owner = owners.keys.get(actor);
+    if (!owner) owners.keys.set(actor, (owner = {}));
+    return owner;
+  }
   readonly length: number;
   private readonly origin: Point;
   private readonly kx: number;
@@ -412,6 +424,7 @@ export class ProcessionScene {
     const [lng, lat] = this.lngLat(x, y);
     return {
       kind: 'boat',
+      inspectionId: undefined,
       lng,
       lat,
       ahead: this.lngLat(x + hx, y + hy),
@@ -444,6 +457,7 @@ export class ProcessionScene {
         const [lng, lat] = this.lngLat(px, py);
         out.push({
           kind: 'person',
+          inspectionId: undefined,
           lng,
           lat,
           ahead: this.lngLat(px + hx, py + hy),
@@ -507,7 +521,16 @@ export class ProcessionScene {
       crowds = true,
       crews = false,
       bounds,
-    }: { boats?: boolean; crowds?: boolean; crews?: boolean; bounds?: LngLatBounds } = {},
+      inspection,
+      scope = 'live/default',
+    }: {
+      boats?: boolean;
+      crowds?: boolean;
+      crews?: boolean;
+      bounds?: LngLatBounds;
+      inspection?: LifeInspection;
+      scope?: string;
+    } = {},
   ): VisibleAgent[] {
     // A voyador's length, so a crew half in view still shows.
     const inView = this.inside(bounds, VEHICLES.voyador.length);
@@ -520,15 +543,20 @@ export class ProcessionScene {
     if (boats) {
       const { columns } = this.formation;
       for (const b of this.boats) {
+        // Every column is roped to the same pagoda, so the whole connected tow is one item.
+        const group = b.vehicle === 'pagoda' || b.column !== undefined ? this.boats[0]! : b;
+        const owner = inspection && this.owner(scope, group);
+        const actorTime = owner ? inspection.clock(owner, time) : time;
+        const actorProgress = owner ? inspection.progress(owner, progress) : progress;
         const { sway } = b;
-        const beat = (2 * Math.PI * time) / sway.period + sway.phase;
+        const beat = (2 * Math.PI * actorTime) / sway.period + sway.phase;
         // Past the landing (or not yet at the start), it's out of the scene; its own sway
         // doesn't carry it over either end.
-        const base = this.travelled(progress, b.lag) + b.along;
+        const base = this.travelled(actorProgress, b.lag) + b.along;
         if (!onRoute(base)) continue;
         const s = Math.min(
           this.length,
-          Math.max(0, base + sway.surge * Math.sin(time * 2.1 + sway.phase)),
+          Math.max(0, base + sway.surge * Math.sin(actorTime * 2.1 + sway.phase)),
         );
         const here = this.at(s);
         const { left, right } = here;
@@ -546,14 +574,22 @@ export class ProcessionScene {
         }
         const at = this.place(s, off, b.vehicle, sway.yaw * Math.cos(beat), here);
         placed.set(b, at);
+        const first = out.length;
         out.push(this.boatAgent(at, b));
         if (crews && b.vehicle === 'voyador' && inView(at.x, at.y)) {
-          this.crewOf(at, b, time, out);
+          this.crewOf(at, b, actorTime, out);
         }
+        if (owner)
+          for (let i = first; i < out.length; i++) out[i] = inspection.present(owner, out[i]!);
       }
       this.towRopes(placed, ropes);
       const pagodaAt = placed.get(this.boats[0]!);
-      if (pagodaAt) this.polesOn(pagodaAt, time, poles);
+      if (pagodaAt)
+        this.polesOn(
+          pagodaAt,
+          inspection ? inspection.clock(this.owner(scope, this.boats[0]!), time) : time,
+          poles,
+        );
     }
     if (crowds) {
       const landing = this.length;
@@ -565,12 +601,17 @@ export class ProcessionScene {
         if (!near && p.rank >= PROCESSION.crowdShare) continue;
         const { x, y, tx, ty, off } = p;
         if (!inView(x + ty * off, y - tx * off)) continue;
-        const sway = Math.sin(time * 1.3 + p.phase) * 0.3;
+        const owner = inspection && this.owner(scope, p);
+        const actorTime = owner ? inspection.clock(owner, time) : time;
+        const sway = Math.sin(actorTime * 1.3 + p.phase) * 0.3;
         const [lng, lat] = this.lngLat(x + ty * off + tx * sway, y - tx * off + ty * sway);
         // Facing the river, a meter nearer it.
         const facing = off - Math.sign(off);
-        out.push({
+        const agent: VisibleAgent = {
           kind: 'person',
+          inspectionId: undefined,
+          candleSeed: undefined,
+          effectClock: undefined,
           lng,
           lat,
           ahead: this.lngLat(x + ty * facing + tx * sway, y - tx * facing + ty * sway),
@@ -578,7 +619,8 @@ export class ProcessionScene {
           paint: SHIRT_PAINTS[Math.floor(p.phase * 997) % SHIRT_PAINTS.length],
           flap: 0,
           candle: p.candle,
-        });
+        };
+        out.push(owner ? inspection.present(owner, agent) : agent);
       }
     }
     // Ropes under the boats, poles over the pagoda.

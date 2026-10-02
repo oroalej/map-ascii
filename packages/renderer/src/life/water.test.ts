@@ -21,4 +21,15 @@ describe('water effects', () => {
     expect(frames.some((f) => f.includes(3))).toBe(true);
     expect(frames.some((f) => f.includes(0) || f.includes(1))).toBe(true);
   });
+  it('freezes fish on Life time while rain keeps following environmental time', () => {
+    const sampleTimes = (time: number, rain: number, lifeTime: number) =>
+      Array.from({ length: 64 * 64 }, (_, i) =>
+        waterEffect((i % 64) - 32, Math.floor(i / 64) - 32, time, rain, true, lifeTime),
+      );
+    const first = sampleTimes(4, 0, 4);
+    expect(first.some((v) => v !== null)).toBe(true);
+    expect(sampleTimes(9, 0, 4)).toEqual(first);
+    expect(sampleTimes(9, 0, 9)).not.toEqual(first);
+    expect(sampleTimes(9, 1, 4)).not.toEqual(sampleTimes(4, 1, 4));
+  });
 });

@@ -89,7 +89,9 @@ void main() {
   vec2 corner = vec2(float((gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4) ? 1 : 0),
                      float((gl_VertexID == 2 || gl_VertexID == 4 || gl_VertexID == 5) ? 1 : 0));
   vec2 screen = p + (corner - 0.5) * quad;
-  gl_Position = vec4(screen.x / u_size.x * 2.0 - 1.0, 1.0 - screen.y / u_size.y * 2.0, 0.0, 1.0);
+  // Expired/invisible particles have no fragments, even when close zoom enlarges their quads.
+  gl_Position = opacity < 0.002 ? vec4(2.0, 2.0, 0.0, 1.0) :
+    vec4(screen.x / u_size.x * 2.0 - 1.0, 1.0 - screen.y / u_size.y * 2.0, 0.0, 1.0);
   v_uv = corner;
   v_code = code;
   v_color = vec4(color, opacity);

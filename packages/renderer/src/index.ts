@@ -49,6 +49,7 @@ import {
   deleteLabelGlyphs,
   deleteMapGlyphs,
   deletePrograms,
+  prewarmGlyphPrograms,
   type LabelGlyphs,
   type MapGlyphs,
   type Programs,
@@ -59,11 +60,13 @@ import { attachInput } from './input';
 import {
   cellPass,
   crownPass,
+  effectClockPass,
   glyphPass,
   fixturePass,
   hasCrowns,
   lifePass,
   lifeRaster,
+  labelsCoverPoint,
   labelCovers,
   lightPass,
   metersPerCssPx,
@@ -78,6 +81,8 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { LifeHoverController, type LifeHover } from './life/hover';
+import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
@@ -110,7 +115,8 @@ import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { simulationSeasons } from './life/seasonal-simulation';
 import { fireworksPass } from './fireworks-pass';
-import { createInlineHost, createWorkerHost } from './life/host';
+import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
@@ -141,11 +147,13 @@ import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
+export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
+export type { LifeHover } from './life/hover';
 export type { RenderClass } from './classes';
+export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
 export type { WindChoice } from './life/wind';
@@ -189,6 +197,8 @@ export type LifeSettings = {
 };
 
 export type AtlasOptions = {
+  /** Per-item hover pause; 'all' restores the previous global inspection path. */
+  lifeHoverPause?: 'item' | 'all';
   /** Optional curated city-pack speech. Display preferences do not affect simulation. */
   dialogue?: DialogueCatalog | RuntimeDialogueCatalog;
   speech?: boolean;
@@ -258,6 +268,8 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  /** A visible simulated agent under the mouse, in canvas CSS pixels. */
+  lifehover: LifeHover;
   /** Visible simulated speakers, anchored in CSS pixels from the canvas top left. */
   speechchange: SpeechInView[];
   qualitychange: QualityState;
@@ -347,6 +359,8 @@ export type AtlasStats = {
 };
 
 export type Atlas = {
+  /** Transient legend focus; null restores ordinary map colours. */
+  setFocus(focus: LegendFocus | null): void;
   setSpeech(enabled: boolean): void;
   setQuality(choice: QualityChoice): void;
   getQuality(): QualityChoice;
@@ -514,9 +528,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
+  let lastPointerInput = start;
+  const lifePause = new LifePause<FrameView>(start, life.enabled && !reducedMotion);
+  const itemInspection = options.lifeHoverPause !== 'all';
+  let inspected: { id: number; generation: number | undefined } | undefined;
+  let inspectionRevision = 0;
+  const livePause = new LivePauseOffset();
+  let drawnLife: FrameView | undefined;
   /** Timing stats (`getStats`): when recent frames were drawn, and smoothed durations. */
   const drawTimes: number[] = [];
   let frameMs = 0;
@@ -544,11 +566,31 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  const lifeHover = new LifeHoverController(
+    readback,
+    gl.COLOR_ATTACHMENT0,
+    (hover) => emit('lifehover', hover),
+    (active) => {
+      if (!itemInspection) {
+        if (active) lifePause.pause(drawnLife, performance.now());
+        else lifePause.resume(performance.now());
+      }
+      drawDirty = true;
+    },
+    (agent) => {
+      if (!itemInspection) return;
+      inspected =
+        agent?.inspectionId === undefined
+          ? undefined
+          : { id: agent.inspectionId, generation: drawnLife?.generation };
+      inspectionRevision++;
+      drawDirty = true;
+    },
+  );
   let speechEnabled = options.speech ?? true;
   const speech = new SpeechController(readback, gl.COLOR_ATTACHMENT0, (cues) =>
     emit('speechchange', cues),
   );
-  let speechOwners = new Uint32Array(0);
   const speechSpeakers = {
     members: new Uint8Array(0),
     points: new Map<number, [number, number]>(),
@@ -596,6 +638,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const resize = () => {
+    lifeHover.clear();
     resetQualitySamples();
     const nextDpr = Math.min(window.devicePixelRatio || 1, knobs.maxDpr);
     const width = Math.max(1, Math.round(canvas.clientWidth * nextDpr));
@@ -625,12 +668,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (targets) deleteCellTargets(gl, targets);
       targets = createCellTargets(gl, cols, rows, labelCols, labelRows);
       targetsGeneration++;
+      lifeHover.clear();
     }
     // Zooming out stops where the bounds fill the view (SPEC.md §3).
     const size = cssSize();
     limits.minZoom = Math.min(limits.maxZoom, Math.max(baseMinZoom, fitZoom(limits.bounds, size)));
     const clamped = clampCamera(camera, limits, size);
     if (!sameCamera(clamped, camera)) {
+      lifeHover.pointer(null);
       camera = clamped;
       emit('camerachange', { ...camera });
     }
@@ -788,9 +833,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
-      ? createWorkerHost({ ...options, moments }, processions, profiler)
+      ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
       : (() => {
-          const world = new LifeWorld(options.traffic, profiler, moments);
+          const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
           world.setProcessions(processions);
           world.setSeasons(simulationSeasons(options.cityLife?.seasons));
           world.setShopSchedule(options.cityLife?.schedules?.shops);
@@ -798,15 +843,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         })();
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
+  const lifeView = () => lifePause.view(host.latest());
   const reportProcession = () => {
-    const run = host.latest()?.procession;
+    const run = lifeView()?.procession;
     const key = run ? `${run.id} ${run.live}` : '';
     if (key === processionKey) return;
     processionKey = key;
     emit('procession', run ?? null);
   };
   const lifeActive = () => life.enabled && !reducedMotion;
-  let lastLifeStep = -Infinity;
+  const lifeRunning = () => lifeActive() && !lost && watch.watched();
+  let lifeInputs: LifeTile[] = [];
   /** Whether the life texture holds agents (so turning the layer off clears it once). */
   let lifeShown = false;
   let agentsDrawn = 0;
@@ -822,6 +869,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const loaded = tileCache.get(tile);
       if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
     }
+    if (
+      lifeTiles.length !== lifeInputs.length ||
+      lifeTiles.some(
+        (tile) => !lifeInputs.some((old) => old.key === tile.key && old.life === tile.life),
+      )
+    )
+      lifeHover.clear();
+    lifeInputs = lifeTiles;
     const cell = stepCell(schedule, step ?? 0);
     host.sync(lifeTiles, [camera.lng, camera.lat], {
       bounds: viewBounds(),
@@ -856,32 +911,41 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
-      const accepted = host.request({
-        gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
-        step: {
-          dt: (at - lastLifeStep) / 1000,
-          zoom: camera.zoom,
-          bounds: viewBounds(),
-          wind: worldWind(time),
-          weather: {
-            rain: currentRain(),
-            minutes: cityMinutes,
-            season: season?.id ?? null,
+      const accepted =
+        !lifePause.inspecting &&
+        host.request({
+          ...(itemInspection
+            ? {
+                inspection: {
+                  id: inspected?.id ?? null,
+                  revision: inspectionRevision,
+                  time: lifePause.time,
+                },
+              }
+            : {}),
+          gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
+          step: {
+            dt: lifePause.delta,
+            zoom: camera.zoom,
+            bounds: viewBounds(),
+            wind: worldWind(time),
+            weather: { rain: currentRain(), minutes: cityMinutes, season: season?.id ?? null },
+            cellMeters: metersPerCssPx(camera) * cssCell.width,
           },
-          cellMeters: metersPerCssPx(camera) * cssCell.width,
-        },
-        visible: [
-          camera.zoom,
-          activity,
-          [camera.lng, camera.lat],
-          { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
-          viewBounds(),
-          knobs.crowd,
-          knobs.maxAgents,
-        ],
-      });
-      if (accepted) lastLifeStep = at;
-      agents = host.latest()?.agents ?? [];
+          visible: [
+            camera.zoom,
+            activity,
+            [camera.lng, camera.lat],
+            { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+            viewBounds(),
+            knobs.crowd,
+            knobs.maxAgents,
+          ],
+        });
+      if (accepted) lifePause.accept();
+      drawnLife = lifeView();
+      if (inspected && drawnLife?.generation !== inspected.generation) lifeHover.clear();
+      agents = drawnLife?.agents ?? [];
       reportProcession();
     } else if (!lifeShown) {
       return;
@@ -893,10 +957,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
     const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
-    if (trackSpeech && speechOwners.length !== targets.cols * targets.rows)
-      speechOwners = new Uint32Array(targets.cols * targets.rows);
-    if (trackSpeech && speechSpeakers.members.length !== speechOwners.length)
-      speechSpeakers.members = new Uint8Array(speechOwners.length);
+    if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
+      speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -907,15 +969,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       agents,
       knobs.shadows ? sun : null,
       profiler,
-      host.latest()?.cellGuard(placement.toCell),
-      trackSpeech ? speechOwners : undefined,
+      drawnLife?.cellGuard(placement.toCell),
+      focus.life,
+      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
       trackSpeech ? speechSpeakers : undefined,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
   };
   const reportSpeech = (now: number) => {
+    const raster = targets && lifeRaster(targets);
     if (
+      !raster ||
       !speechEnabled ||
       now - lastInput < 150 ||
       !options.dialogue ||
@@ -925,7 +990,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !targets ||
       !placement ||
       !lifeAgents.length ||
-      speechOwners.length !== targets.cols * targets.rows
+      speechSpeakers.members.length !== raster.owners.length
     ) {
       speech.clear();
       return;
@@ -937,9 +1002,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         targets,
         dpr,
         agents: lifeAgents,
-        owners: speechOwners,
+        owners: raster.owners,
         speakers: speechSpeakers,
-        life: lifeRaster(targets),
+        life: raster.life,
         geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
         toCell: placement.toCell,
@@ -1161,7 +1226,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       view(),
       placement,
       fixtures,
-      host.latest()?.signalClock ?? 0,
+      lifeView()?.signalClock ?? 0,
       cellsDrawn,
       { time, strength: wind.strength },
     );
@@ -1188,7 +1253,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const key = on ? litNow().key : '';
     const shopsChanged = key !== shopsKey;
     shopsKey = key;
-    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) {
+      effectClockPass(gl, targets);
+      return;
+    }
     lightPass(
       gl,
       targets,
@@ -1215,6 +1283,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
+    lifeHover.clear();
     season = next;
     seasonSnapshot = seasonState();
     host.invalidateFrame();
@@ -1223,22 +1292,42 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     cellsFor = null;
     emit('seasonchange', seasonSnapshot);
   };
+  let liveOccurrence: string | undefined;
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
     updateSeason();
     // A procession under way by its schedule, when the map follows the real clock.
     let live: { id: string; progress: number } | undefined;
+    let occurrence: string | undefined;
+    let duration = 1;
     if (life.time === 'live') {
       for (const route of processions) {
-        const progress = liveProgress(route.schedule, now());
+        const date = now();
+        const progress = liveProgress(route.schedule, date);
         if (progress !== undefined) {
+          const local = cityTime(date, { ...zone, timezone: route.schedule.timezone });
+          occurrence = `${route.id}/${local.year}`;
+          duration = route.schedule.duration_min * 60;
           live = { id: route.id, progress };
           break;
         }
       }
     }
-    host.setLive(live?.id, live?.progress);
+    if (occurrence !== liveOccurrence) {
+      lifeHover.pointer(null);
+      livePause.reset();
+      liveOccurrence = occurrence;
+    }
+    if (live && occurrence)
+      live.progress = livePause.progress(
+        occurrence,
+        live.progress,
+        duration,
+        lifePause.pausedSeconds(at),
+      );
+    else livePause.reset();
+    host.setLive(live?.id, live?.progress, occurrence);
     // The moment the map shows: now, or today at the fixed time in the city.
     const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
@@ -1302,6 +1391,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let flight: Flight | null = null;
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
+    lifeHover.pointer(null);
     const now = performance.now();
     flight = startFlight(camera, target, limits, cssSize(), {
       reducedMotion,
@@ -1350,8 +1440,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
 
   let raf = 0;
+  const canWarmGlyphs = () =>
+    !destroyed &&
+    !lost &&
+    watch.watched() &&
+    !flight &&
+    performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
   const frame = (now: number) => {
     if (destroyed || lost) return;
+    lifePause.tick(now, lifeRunning());
     profiler?.begin(now);
     raf = requestAnimationFrame(frame);
     gpuTimer.poll();
@@ -1463,6 +1560,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         lampShow(),
         moon,
         sun,
+        focus,
+        lifePause.time,
       );
       drawDirty = false;
       fireworksPass(
@@ -1510,6 +1609,37 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // Deliver reads after drawing and issuing prioritized picks/class queries so a slow
     // frame cannot consume freshly confirmed speech before it is published.
     readback.poll();
+    const raster = lifeRaster(targets);
+    if (lastDraw !== -Infinity)
+      prewarmGlyphPrograms(gl, programs, canWarmGlyphs, Boolean(raster?.candles));
+    lifeHover.update(
+      lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
+        ? {
+            targets,
+            generation: drawnLife?.generation,
+            grid: {
+              shiftX: grid.shiftX,
+              shiftY: grid.shiftY,
+              cellWidth: cellDev().w,
+              cellHeight: cellDev().h,
+            },
+            dpr,
+            geometry: `${targetsGeneration}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            revision: raster.revision,
+            owners: raster.owners,
+            life: raster.life,
+            agents: lifeAgents,
+            labelsCover: (point) =>
+              labelsCoverPoint(targets!, point, dpr, {
+                shiftX: labelGrid.shiftX,
+                shiftY: labelGrid.shiftY,
+                cellWidth: view().labelDev.w,
+                cellHeight: view().labelDev.h,
+              }),
+          }
+        : null,
+      performance.now(),
+    );
     reportSpeech(performance.now());
     profiler?.end();
   };
@@ -1521,11 +1651,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    lifeHover.pointer(null);
+    lifePause.tick(performance.now(), false);
     speech.clear();
     canvas.style.cursor = '';
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
     cancelAnimationFrame(raf);
+    programs?.glyphWarmup?.cancel();
     programs = undefined;
     dropGlyphs(false);
     targets = undefined;
@@ -1545,6 +1678,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const onContextRestored = () => {
     if (!lost || destroyed) return;
     lost = false;
+    lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
     programs = createPrograms(gl);
@@ -1563,14 +1697,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // agents carry on from where they stood.
   const watch = watchVisibility(canvas, (watched) => {
     resetQualitySamples();
-    if (watched) lastLifeStep = performance.now();
-    else speech.clear();
+    if (!watched) lifeHover.pointer(null);
+    lifePause.tick(performance.now(), watched && lifeActive() && !lost);
+    if (!watched) speech.clear();
   });
 
   /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
   let cameraMoved = false;
   /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
   const applyCamera = (next: CameraState, batched = false) => {
+    lifeHover.pointer(null);
     speech.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
@@ -1595,6 +1731,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
     hover: (point) => {
+      lastPointerInput = performance.now();
+      lifeHover.pointer(flight ? null : point);
       pointerOver = point !== null;
       if (!point) canvas.style.cursor = '';
       if (point) {
@@ -1612,6 +1750,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   });
 
   return {
+    setFocus(input) {
+      const next = normalizeFocus(input);
+      if (next.key === focus.key) return;
+      focus = next;
+      drawDirty = true;
+    },
     setSpeech(enabled) {
       if (speechEnabled === enabled) return;
       speechEnabled = enabled;
@@ -1636,8 +1780,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       speech.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      lifeHover.pointer(null);
+      lifePause.tick(performance.now(), lifeRunning());
       if (enabled) host.clearTiles();
-      lastLifeStep = performance.now();
       lastSun = -Infinity;
       cellDirty = true;
       cellsFor = null;
@@ -1675,8 +1820,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
+      lifeHover.pointer(null);
+      if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       life = { ...life, ...settings };
       updateSeason();
+      lifePause.tick(performance.now(), lifeRunning());
       speech.clear();
       if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
@@ -1688,10 +1836,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getSeason: () => seasonSnapshot,
     playProcession(id) {
       if (!lifeActive() || !host.play(id)) return false;
+      lifeHover.pointer(null);
+      lastSun = -Infinity;
       drawDirty = true;
       return true;
     },
     stopProcession() {
+      lifeHover.pointer(null);
+      lastSun = -Infinity;
       host.stop();
       drawDirty = true;
     },
@@ -1699,6 +1851,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Phase 4: time filtering.
     },
     setTheme(name) {
+      lifeHover.pointer(null);
       theme = themes[name];
       uniforms = themeUniforms(theme);
       // `resize` builds the new theme's glyphs (on restore, while the context is lost).
@@ -1715,6 +1868,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      lifeHover.pointer(null);
       speech.clear();
       host.dispose();
       destroyed = true;

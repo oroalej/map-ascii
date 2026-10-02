@@ -6,6 +6,7 @@
  */
 import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
 import { ROAD_AREA_ZOOM } from './glyphs/select';
+import type { LegendFocus, LifeFocus } from './focus';
 import {
   classDepths,
   classId,
@@ -34,9 +35,17 @@ import {
   type ThemeName,
 } from './theme';
 
+export type LegendEntryId =
+  | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`
+  | `class:${RenderClass}`
+  | `life:${LifeFocus}`
+  | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'utilities'}`;
+
 export type LegendEntry = {
-  /** Informational decorations have stable ids and no selectable focus category. */
-  id?: `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`;
+  /** Stable identity, independent of display wording and currently visible class membership. */
+  id: LegendEntryId;
+  /** A clickable entry's map classes and simulated-agent groups, after label merging. */
+  focus?: LegendFocus;
   /** The classes the entry covers (a marker and its building class share one). */
   classes: RenderClass[];
   label: string;
@@ -142,6 +151,7 @@ function vendorsEntry(theme: Theme): LegendEntry {
   const paint = (p: number) => theme.vehiclePaints[p]!;
   const skin = css(theme.styles.life_person!.color);
   return {
+    id: 'life:vendors',
     classes: [],
     label: 'Street vendors (simulated)',
     glyphs: '',
@@ -158,6 +168,7 @@ function vendorsEntry(theme: Theme): LegendEntry {
  * lamps' warm color (shaders/glyph.ts `LAMP`).
  */
 export const STREETLIGHTS_ENTRY: Readonly<LegendEntry> = {
+  id: 'info:streetlights',
   classes: [],
   label: 'Streetlights',
   glyphs: streetlightGlyph,
@@ -204,9 +215,23 @@ const depths = classDepths();
 /** Whether the cell pass draws a class into cells (so a read of the class buffer can see it). */
 const isCellClass = (cls: RenderClass) => depths[classId(cls)]! <= 1;
 
+const classAliases: Partial<Record<RenderClass, RenderClass>> = {
+  tree_crown: 'tree',
+  marker_religious: 'building_religious',
+  marker_school: 'building_school',
+  marker_station: 'building_station',
+};
+const lifeGroups: Partial<Record<RenderClass, LifeFocus>> = {
+  life_vehicle: 'traffic',
+  life_person: 'people',
+  life_boat: 'boats',
+  life_train: 'trains',
+  life_bird: 'birds',
+};
+
 /**
  * The legend entries for the classes the theme draws at `zoom`, in the theme's order. Classes
- * with the same label (a school marker and school buildings) share an entry. With `present`
+ * in the same explicit category (a school marker and school buildings) share an entry. With `present`
  * (the classes on screen), a class drawn in cells is listed only if it is there. The life
  * layer's agents are listed only with `life`. Static hardware follows `fixtureschange`,
  * independently of Life/daylight; `lights` remains an illumination flag and a legacy fallback.
@@ -233,35 +258,45 @@ export function legendEntries(
 ): LegendEntry[] {
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
-  const byLabel = new Map<string, LegendEntry>();
+  const byId = new Map<LegendEntryId, LegendEntry>();
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
     if (!life && (lifeClasses as readonly string[]).includes(cls)) continue;
     if (!visibleAt(cls, zoom)) continue;
     if (onScreen && isCellClass(cls) && !onScreen.has(cls)) continue;
     // Trains only run where there is track on screen.
     if (cls === 'life_train' && onScreen && !onScreen.has('rail')) continue;
-    const label = CLASS_LABELS[cls];
+    const canonical = classAliases[cls] ?? cls;
+    const group = lifeGroups[cls];
+    const id: LegendEntryId = group ? `life:${group}` : `class:${canonical}`;
+    const label = CLASS_LABELS[canonical];
     const glyphs = sample(style);
-    const existing = byLabel.get(label);
+    const existing = byId.get(id);
     if (existing) {
       existing.classes.push(cls);
       if (!existing.glyphs.includes(glyphs)) existing.glyphs += ` ${glyphs}`;
     } else {
-      const entry: LegendEntry = { classes: [cls], label, glyphs, color: css(style.color) };
+      const entry: LegendEntry = { id, classes: [cls], label, glyphs, color: css(style.color) };
       if (cls === 'life_person') entry.icons = peopleIcons(theme);
       if (cls === 'life_boat') entry.icons = boatIcons(theme);
-      byLabel.set(label, entry);
+      byId.set(id, entry);
     }
   }
-  const entries = [...byLabel.values()];
+  const entries = [...byId.values()];
   if ((!onScreen || onScreen.has('furniture')) && visibleAt('furniture', zoom))
-    entries.push({ classes: [], label: 'Shops', glyphs: '¤', color: css(theme.awningPaints[0]!) });
+    entries.push({
+      id: 'info:shops',
+      classes: [],
+      label: 'Shops',
+      glyphs: '¤',
+      color: css(theme.awningPaints[0]!),
+    });
   // Vendors show wherever people do, from the same zoom.
-  const people = entries.findIndex((e) => e.classes.includes('life_person'));
+  const people = entries.findIndex((e) => e.id === 'life:people');
   if (people >= 0) entries.splice(people + 1, 0, vendorsEntry(theme));
   if (life && zoom >= 17.5) {
     const paint = css(theme.vehiclePaints[Paint.orange]!);
     entries.push({
+      id: 'life:pets',
       classes: [],
       label: 'Cats and dogs (simulated)',
       glyphs: '',
@@ -279,6 +314,7 @@ export function legendEntries(
     (!onScreen || onScreen.has('water_river') || onScreen.has('water_area'))
   )
     entries.push({
+      id: 'info:fish',
       classes: [],
       label: 'Fish (simulated)',
       glyphs: '◊ ( )',
@@ -301,6 +337,7 @@ export function legendEntries(
     ['road_major', 'road_mid', 'road_minor'].some((c) => onScreen.has(c as RenderClass));
   if (roads && zoom >= ROAD_AREA_ZOOM)
     entries.push({
+      id: 'info:crosswalks',
       classes: [],
       label: 'Crosswalks (mapped or simulated)',
       glyphs: '═ ║',
@@ -309,16 +346,30 @@ export function legendEntries(
   if (roads && zoom >= ROAD_AREA_ZOOM)
     entries.push(
       {
+        id: 'info:sidewalks',
         classes: [],
         label: sidewalksDerived ? 'Sidewalks (partly derived)' : 'Sidewalks (mapped)',
         glyphs: '·',
         color: css(theme.styles.path!.color),
       },
-      { classes: [], label: 'Stop lines', glyphs: '─', color: css(theme.styles.road_mid!.color) },
-      { classes: [], label: 'One-way', glyphs: '→', color: css(theme.styles.road_mid!.color) },
+      {
+        id: 'info:stop-lines',
+        classes: [],
+        label: 'Stop lines',
+        glyphs: '─',
+        color: css(theme.styles.road_mid!.color),
+      },
+      {
+        id: 'info:one-way',
+        classes: [],
+        label: 'One-way',
+        glyphs: '→',
+        color: css(theme.styles.road_mid!.color),
+      },
     );
   if (fixtures ? fixtures.trafficSignals : roads && life && zoom >= 17)
     entries.push({
+      id: 'info:traffic-signals',
       classes: [],
       label: 'Traffic signals (simulated phases)',
       glyphs: zoom >= 18.5 ? '○○○' : '•',
@@ -326,6 +377,7 @@ export function legendEntries(
     });
   if (fixtures?.utilities)
     entries.push({
+      id: 'info:utilities',
       classes: [],
       label: 'Utility poles and wires (illustrative)',
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
@@ -374,5 +426,13 @@ export function legendEntries(
       id: 'info:season-stalls',
       label: `${season.labels.stalls} (simulated)`,
     });
+  for (const entry of entries) {
+    if (entry.id.startsWith('info:season-')) continue;
+    const classes = entry.classes.filter((cls) => isCellClass(cls));
+    const life = entry.classes.flatMap((cls) => (lifeGroups[cls] ? [lifeGroups[cls]] : []));
+    if (entry.id === 'life:vendors') life.push('vendors');
+    if (entry.id === 'life:pets') life.push('pets');
+    if (classes.length || life.length) entry.focus = { classes, life };
+  }
   return entries;
 }

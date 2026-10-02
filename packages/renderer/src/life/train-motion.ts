@@ -71,6 +71,7 @@ export function trainLimits(
   lives: readonly TileLife[],
   dt: number,
   owns?: (life: TileLife, p: { x: number; y: number }) => boolean,
+  inspecting?: object,
 ): Map<Mover, TrainLimit> {
   const trains = lives.flatMap((life) =>
     life.movers
@@ -83,7 +84,7 @@ export function trainLimits(
       brake = kinematicsOf('locomotive').brake * pm;
     const limit: TrainLimit = { target: m.speed, cap: Infinity, station: Infinity };
     limits.set(m, limit);
-    if (m.pause > 0 || m.train!.reverse) continue;
+    if (inspecting === m || m.pause > 0 || m.train!.reverse) continue;
     const { points, end } = lookahead(
       life,
       m,
@@ -172,8 +173,9 @@ export function trainLimits(
         if (hit) {
           constrain(
             p.distance - (TRAIN_FOLLOW.minGap + TRAIN_FOLLOW.tolerance) * pm,
-            (other.m.pause > 0 || other.m.train!.reverse ? 0 : (other.m.v ?? other.m.speed)) *
-              f.scale,
+            (inspecting === other.m || other.m.pause > 0 || other.m.train!.reverse
+              ? 0
+              : (other.m.v ?? other.m.speed)) * f.scale,
           );
           break;
         }

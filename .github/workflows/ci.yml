@@ -90,6 +90,10 @@ jobs:
       # Prepares the static export before Playwright starts or reuses its web server.
       - run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
+      - name: Check browser shard duration
+        if: always()
+        run: pnpm check:e2e-budget --report=apps/web/test-results/shard-duration.json --shard=${{ matrix.shard }}/2
+
       - run: pnpm check:budgets
         if: matrix.shard == 1
 

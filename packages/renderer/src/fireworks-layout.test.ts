@@ -5,6 +5,7 @@ import {
   FIREWORKS,
   FIREWORK_INSTANCE_COUNT,
   fireworkInstances,
+  fireworkScale,
   fireworkShells,
   fireworkTime,
   fireworkVariantCodes,
@@ -89,6 +90,37 @@ describe('bounded New Year shells', () => {
     expect(fireworkVariantCodes({ label: 'Display', variants: [...FIREWORK_VARIANTS] })).toEqual([
       0, 1, 2, 3,
     ]);
+  });
+  it('magnifies burst and smoke extent with continuous zoom rather than map-cell density', () => {
+    const radii = (zoom: number, dpr: number, cell: number) => {
+      const v = {
+        ...view,
+        camera: { ...view.camera, zoom },
+        dpr,
+        cellDev: { w: cell * dpr, h: cell * 1.8 * dpr },
+      };
+      const out = new Float32Array(36);
+      fireworkShells(v, placeGrid(v, v.cellDev, 202, 92).grid, out);
+      return Array.from({ length: 9 }, (_, i) => ({
+        seed: out[i * 4 + 2]!,
+        radius: out[i * 4 + 3]! / dpr,
+      }));
+    };
+    for (const zoom of [14, 15.5, 17, 18.5, 19, 19.5, 20, 20.5, 21]) {
+      expect(fireworkScale(zoom)).toBeCloseTo(2 ** (zoom - 19));
+      for (const dpr of [1, 1.25, 2, 3])
+        for (const cell of [5, 6, 8])
+          for (const { seed, radius } of radii(zoom, dpr, cell))
+            expect(radius).toBeCloseTo((75 + (seed % 65)) * 2 ** (zoom - 19), 3);
+    }
+    expect(fireworkScale(19.5) / fireworkScale(19)).toBeCloseTo(Math.SQRT2);
+    expect(fireworkScale(20) / fireworkScale(19)).toBe(2);
+    expect(fireworkScale(21) / fireworkScale(19)).toBe(4);
+    for (const zoom of [-1000, 1000, NaN, Infinity]) {
+      expect(Number.isFinite(fireworkScale(zoom))).toBe(true);
+      expect(fireworkScale(zoom)).toBeGreaterThanOrEqual(1 / 32);
+      expect(fireworkScale(zoom)).toBeLessThanOrEqual(4);
+    }
   });
   it('the real city pack selects New Year automatically and explicitly, without replacing Christmas previews', () => {
     const seasons = city.life.seasons as SeasonConfig[];

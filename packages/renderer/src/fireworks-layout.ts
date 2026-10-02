@@ -1,10 +1,12 @@
 import type { FireworksConfig } from '@atlas/shared';
 import { FIREWORK_VARIANTS } from '@atlas/shared';
+import { MAX_ZOOM } from './camera';
 import type { Grid, View } from './grid';
 
 /** Nine world-anchored shells, with bounded, immutable particle geometry. */
 export const FIREWORKS = Object.freeze({
   minZoom: 14,
+  referenceZoom: 19,
   shells: 9,
   stars: 40,
   tails: 4,
@@ -16,6 +18,14 @@ export const FIREWORKS = Object.freeze({
 });
 export const FIREWORK_INSTANCE_COUNT =
   FIREWORKS.shells * (FIREWORKS.stars * FIREWORKS.tails + FIREWORKS.smoke);
+
+/** Match map magnification continuously: each zoom level doubles burst and smoke extent. */
+export function fireworkScale(zoom: number): number {
+  const finiteZoom = Number.isFinite(zoom) ? zoom : FIREWORKS.referenceZoom;
+  return (
+    2 ** (Math.min(MAX_ZOOM, Math.max(FIREWORKS.minZoom, finiteZoom)) - FIREWORKS.referenceZoom)
+  );
+}
 
 /** Smoke goes first, then spark tails and tips, so clouds cannot dim a burst. */
 export function fireworkInstances(): Float32Array {
@@ -44,6 +54,7 @@ function seedAt(x: number, y: number, zoom: number) {
 
 /** Refill the same nine vec4 uniforms. Sub-cell panning preserves a shell's world position. */
 export function fireworkShells(view: View, grid: Grid, out: Float32Array): number {
+  const scale = fireworkScale(view.camera.zoom);
   const gap = Math.max(280 * view.dpr, Math.max(view.width, view.height) / 2);
   const left = grid.originCol * view.cellDev.w + grid.shiftX;
   const top = grid.originRow * view.cellDev.h + grid.shiftY;
@@ -58,7 +69,7 @@ export function fireworkShells(view: View, grid: Grid, out: Float32Array): numbe
       out[at] = (x + 0.2 + ((seed % 997) / 997) * 0.6) * gap - left;
       out[at + 1] = (y + 0.2 + ((seed % 991) / 991) * 0.6) * gap - top;
       out[at + 2] = seed;
-      out[at + 3] = (75 + (seed % 65)) * view.dpr;
+      out[at + 3] = (75 + (seed % 65)) * view.dpr * scale;
     }
   return FIREWORKS.shells;
 }
