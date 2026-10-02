@@ -2,18 +2,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas } from './index';
 import { LifeWorld } from './life/simulate';
-import { cellPass, fixturePass, glyphPass, lifePass, lightPass, selectPass } from './passes';
+import { LifeInspection } from './life/inspection';
+import {
+  cellPass,
+  effectClockPass,
+  fixturePass,
+  glyphPass,
+  lifePass,
+  lifeRaster,
+  lightPass,
+  selectPass,
+} from './passes';
+import { classId } from './classes';
+import type { InputIntents } from './input';
+const input = vi.hoisted(() => ({ intents: undefined as InputIntents | undefined }));
+const visibility = vi.hoisted(() => ({
+  watched: true,
+  changed: undefined as ((watched: boolean) => void) | undefined,
+}));
+import * as Hosts from './life/host';
+import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
+import type * as PickingModule from './picking';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { LifeBuilder } from './life/geometry';
 import type { TileMesh } from './gpu';
 import { Readback } from './readback';
 import { SpeechController } from './life/speech';
+import { LifeHoverController } from './life/hover';
+import { prewarmGlyphPrograms } from './gpu-context';
 
 vi.mock('./gpu-context', () => ({
   createPrograms: () => ({ streetText: { count: 0 } }),
   deletePrograms: vi.fn(),
+  prewarmGlyphPrograms: vi.fn(),
   createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
   createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 } }),
   deleteMapGlyphs: vi.fn(),
@@ -26,8 +49,9 @@ vi.mock('./gpu', () => ({
     rows: number,
     labelCols: number,
     labelRows: number,
-  ) => ({ cols, rows, labelCols, labelRows }),
+  ) => ({ cols, rows, labelCols, labelRows, glyphFbo: 'glyph', sub: { fbo: 'sub' } }),
   deleteCellTargets: vi.fn(),
+  uploadEffectClocks: vi.fn(),
 }));
 vi.mock('./passes', async (load) => ({
   ...(await load<typeof PassesModule>()),
@@ -37,6 +61,8 @@ vi.mock('./passes', async (load) => ({
   glyphPass: vi.fn(),
   overlayPass: () => [],
   lifePass: vi.fn(() => 0),
+  effectClockPass: vi.fn(),
+  lifeRaster: vi.fn(() => null),
   lightPass: vi.fn(),
   fixturePass: vi.fn(() => ({ streetlights: false, trafficSignals: false, utilities: false })),
 }));
@@ -57,22 +83,57 @@ vi.mock('./tile-cache', () => ({
   },
 }));
 vi.mock('./readback', () => ({
+  MAX_PENDING_READS: 8,
   Readback: class {
-    poll() {}
-    reset() {}
-    request() {}
+    pending: (() => void)[] = [];
+    get size() {
+      return this.pending.length;
+    }
+    poll() {
+      this.pending.splice(0).forEach((done) => done());
+    }
+    reset() {
+      this.pending.length = 0;
+    }
+    request(
+      fbo: WebGLFramebuffer,
+      attachment: number,
+      _rect: unknown,
+      done: (bytes: Uint8Array) => void,
+    ) {
+      this.pending.push(() =>
+        done(
+          new Uint8Array(
+            (fbo as unknown) === 'glyph'
+              ? [0, classId('road_mid'), 0, 0]
+              : [attachment === 100 ? classId('road_mid') : 0, 0, 0, 0],
+          ),
+        ),
+      );
+    }
   },
 }));
-vi.mock('./picking', () => ({
+vi.mock('./picking', async (load) => ({
+  ...(await load<typeof PickingModule>()),
   MAX_HIGHLIGHT: 64,
   Picker: class {
     issue() {}
+    hover() {}
+    cancelHover() {}
   },
 }));
-vi.mock('./input', () => ({ attachInput: () => () => {} }));
+vi.mock('./input', () => ({
+  attachInput: (_canvas: HTMLCanvasElement, intents: InputIntents) => {
+    input.intents = intents;
+    return () => {};
+  },
+}));
 vi.mock('./pacing', async (load) => ({
   ...(await load<typeof PacingModule>()),
-  watchVisibility: () => ({ watched: () => true, detach() {} }),
+  watchVisibility: (_canvas: HTMLCanvasElement, changed: (watched: boolean) => void) => {
+    visibility.changed = changed;
+    return { watched: () => visibility.watched, detach() {} };
+  },
 }));
 
 describe('live motion preference', () => {
@@ -82,12 +143,28 @@ describe('live motion preference', () => {
     atlas: Atlas,
     time: number,
     next: FrameRequestCallback;
+  let resized: ResizeObserverCallback;
   const draw = (at: number) => {
     time = at;
     next(at);
   };
+  const usePauseMode = (mode: 'item' | 'all') => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      life: { time: 720, wind: 'storm' },
+      lifeHoverPause: mode,
+      lifeWorker: false,
+    });
+  };
   beforeEach(() => {
     vi.clearAllMocks();
+    visibility.watched = true;
+    vi.mocked(lifeRaster).mockReturnValue(null);
+    vi.mocked(lifePass).mockReset().mockReturnValue(0);
     time = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => time);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -98,6 +175,9 @@ describe('live motion preference', () => {
     vi.stubGlobal(
       'ResizeObserver',
       class {
+        constructor(callback: ResizeObserverCallback) {
+          resized = callback;
+        }
         observe() {}
         disconnect() {}
       },
@@ -105,6 +185,7 @@ describe('live motion preference', () => {
     canvas = document.createElement('canvas');
     Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
     gl = {
+      COLOR_ATTACHMENT0: 100,
       getExtension: defaultGetExtension,
       getParameter: vi.fn(),
     } as unknown as WebGL2RenderingContext;
@@ -115,12 +196,453 @@ describe('live motion preference', () => {
       initialCamera: { lat: 0, lng: 0, zoom: 18 },
       year: 2026,
       life: { time: 720, wind: 'storm' },
+      lifeHoverPause: 'all',
     });
   });
   afterEach(() => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      timezone: 'UTC',
+      now: () => new Date('2026-10-02T12:00:00Z'),
+      life: { time: 720, wind: 'calm' },
+      lifeWorker: false,
+    });
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+      { kind: 'person', lng: 0, lat: 0, flap: 0, candle: true, effectClock: -2 },
+    ]);
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(targets.cols * targets.rows),
+        revision: 1,
+        light: life,
+        lamps: null,
+        candles: true,
+      });
+      return 1;
+    });
+    draw(100);
+    draw(150);
+    expect(prewarmGlyphPrograms).toHaveBeenLastCalledWith(
+      gl,
+      expect.anything(),
+      expect.any(Function),
+      true,
+    );
+    expect(lightPass).not.toHaveBeenCalled();
+    expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
+  });
+
+  const hoverAgent = () => {
+    atlas.setQuality('high');
+    vi.spyOn(LifeWorld.prototype, 'visible').mockImplementation(function (this: LifeWorld) {
+      return [
+        {
+          kind: 'person',
+          inspectionId: 99,
+          lng: this.signalClock * 0.00001,
+          lat: 0,
+          flap: this.signalClock,
+        },
+      ];
+    });
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      for (let i = 0; i < life.length; i += 4) {
+        life[i + 1] = classId('life_person');
+        life[i + 2] = 2;
+      }
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(targets.cols * targets.rows).fill(1),
+        revision: time,
+        light: life,
+        lamps: null,
+      });
+      return 1;
+    });
+    draw(100);
+    input.intents!.hover([2, 3]);
+    draw(150);
+    draw(200);
+  };
+
+  it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
+    atlas.destroy();
+    let generation = 1,
+      clock = 0;
+    let first = 0,
+      second = 0;
+    let latest: Hosts.FrameView | undefined;
+    const request = vi.fn((frame: FrameInput) => {
+      clock += frame.step.dt;
+      if (frame.inspection?.id !== 1) first += 0.000001;
+      second += 0.000001;
+      latest = {
+        generation,
+        signalClock: clock,
+        procession: undefined,
+        cellGuard: () => undefined,
+        agents: [
+          { kind: 'person', inspectionId: 1, lng: first, lat: 0, flap: 0 },
+          { kind: 'person', inspectionId: 2, lng: second, lat: 0, flap: 0 },
+        ],
+      };
+      return true;
+    });
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      clearTiles() {},
+      request,
+      latest: () => latest,
+      setLive() {},
+      play: () => false,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    hoverAgent();
+    draw(250);
+    const held = first,
+      moving = second,
+      signal = clock;
+    for (const at of [300, 350, 400]) draw(at);
+    expect(first).toBe(held);
+    expect(second).toBeGreaterThan(moving);
+    expect(clock).toBeGreaterThan(signal);
+    expect(request.mock.calls.at(-1)![0].inspection?.id).toBe(1);
+    generation++;
+    draw(450);
+    draw(490);
+    expect(request.mock.calls.at(-1)![0].inspection?.id).toBeNull();
+    input.intents!.hover(null);
+    draw(530);
+    expect(first).toBeGreaterThan(held);
+  });
+
+  it('keeps the drawn Life pose, traffic clock and tooltip while environmental time advances', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    hoverAgent();
+    const count = step.mock.calls.length;
+    const agents = vi.mocked(lifePass).mock.calls.at(-1)![6];
+    const signal = vi.mocked(fixturePass).mock.calls.at(-1)![6];
+    const lifeTime = vi.mocked(glyphPass).mock.calls.at(-1)![16];
+    for (let at = 250; at <= 1200; at += 50) draw(at);
+    expect(step.mock.calls.length).toBe(count);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(agents);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(signal);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![16]).toBe(lifeTime);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![8]).toBeCloseTo(1.2);
+    expect(hovered.mock.calls).toEqual([[{ label: 'Person (simulated)', point: [2, 3] }]]);
+    input.intents!.hover(null);
+    draw(1220);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
+    expect(atlas.getLife().enabled).toBe(true);
+  });
+
+  it.each(['item', 'all'] as const)(
+    'reacquires %s inspection at a stationary pointer after internal resize and tile arrival',
+    (mode) => {
+      usePauseMode(mode);
+      const hovered = vi.fn();
+      atlas.on('lifehover', hovered);
+      hoverAgent();
+      resized([], {} as ResizeObserver);
+      draw(250);
+      draw(300);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+      // A quality-driven DPR rebuild keeps the same CSS point and requests fresh evidence.
+      atlas.setQuality('low');
+      draw(310);
+      draw(330);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+      const tile = { z: 16, x: 32768, y: 32768 };
+      const loaded = {
+        mesh: { crowns: { count: 0 } } as TileMesh,
+        labels: [],
+        life: new LifeBuilder().finish(),
+      } as LoadedTile;
+      vi.spyOn(TileCache.prototype, 'tilesToDraw').mockReturnValue([tile]);
+      vi.spyOn(TileCache.prototype, 'get').mockReturnValue(loaded);
+      draw(350);
+      draw(400);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+    },
+  );
+
+  it.each(
+    (['item', 'all'] as const).flatMap((mode) =>
+      (['pan', 'zoom', 'camera', 'theme', 'time'] as const).map((action) => ({ mode, action })),
+    ),
+  )('clears $mode inspection on $action and requires fresh hover', ({ mode, action }) => {
+    usePauseMode(mode);
+    const select = vi.spyOn(LifeInspection.prototype, 'select');
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    hoverAgent();
+    if (action === 'pan') input.intents!.pan(20, 0);
+    if (action === 'zoom') input.intents!.zoom(0.2, [0, 0]);
+    if (action === 'camera') atlas.setCamera({ lng: 0.01 });
+    if (action === 'theme') atlas.setTheme('light');
+    if (action === 'time') atlas.setLife({ time: 1320 });
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    if (mode === 'item') expect(select.mock.calls.at(-1)![0].id).toBeNull();
+    draw(250);
+    draw(300);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.05);
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    input.intents!.hover([2, 3]);
+    draw(350);
+    draw(400);
+    const count = step.mock.calls.length;
+    draw(450);
+    if (mode === 'all') expect(step.mock.calls.length).toBe(count);
+    else expect(step.mock.calls.length).toBeGreaterThan(count);
+  });
+
+  it.each(['item', 'all'] as const)(
+    'suppresses %s hover during flights and lost visibility',
+    (mode) => {
+      usePauseMode(mode);
+      const step = vi.spyOn(LifeWorld.prototype, 'step');
+      const hovered = vi.fn();
+      atlas.on('lifehover', hovered);
+      hoverAgent();
+      atlas.flyTo({ lng: 0.01 }, { duration: 1000 });
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      input.intents!.hover([2, 3]);
+      draw(300);
+      draw(350);
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      visibility.watched = false;
+      visibility.changed!(false);
+      draw(5000);
+      time = 10_000;
+      visibility.watched = true;
+      visibility.changed!(true);
+      draw(10_020);
+      expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
+    },
+  );
+
+  it.each(['item', 'all'] as const)('handles a late host reply during %s inspection', (mode) => {
+    atlas.destroy();
+    const original: Hosts.FrameView = {
+      agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
+      procession: undefined,
+      signalClock: 1,
+      cellGuard: () => undefined,
+    };
+    let latest = original;
+    const request = vi.fn<(input: FrameInput) => boolean>(() => true);
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      clearTiles() {},
+      request,
+      latest: () => latest,
+      setLive() {},
+      play: () => false,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+      lifeHoverPause: mode,
+    });
+    hoverAgent();
+    const count = request.mock.calls.length;
+    latest = {
+      ...original,
+      signalClock: 2,
+      agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
+      cellGuard: () => undefined,
+    };
+    draw(250);
+    if (mode === 'all') {
+      expect(request.mock.calls.length).toBe(count);
+      expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(original.agents);
+      expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(1);
+    } else {
+      expect(request.mock.calls.length).toBeGreaterThan(count);
+      expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
+      draw(260);
+      expect(request.mock.calls.at(-1)![0].inspection!.id).toBeNull();
+    }
+    input.intents!.hover(null);
+    draw(270);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(2);
+  });
+
+  it('preserves live occurrence hover delay across replay start and stop', () => {
+    atlas.destroy();
+    const setLive = vi.fn<(id: string | undefined, progress?: number) => void>();
+    const visible: Hosts.FrameView = {
+      agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
+      procession: undefined,
+      signalClock: 0,
+      cellGuard: () => undefined,
+    };
+    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      sync() {},
+      clearTiles() {},
+      request: () => true,
+      latest: () => visible,
+      setLive,
+      play: () => true,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+      life: { time: 'live' },
+      lifeHoverPause: 'all',
+      now: () => new Date('2026-09-19T08:00:00Z'),
+      processions: [
+        {
+          id: 'test',
+          title: { en: 'Test' },
+          status: 'draft',
+          kind: 'fluvial',
+          route: [
+            [0, 0],
+            [0.01, 0],
+          ],
+          length_m: 1000,
+          schedule: {
+            month: 9,
+            weekday: 0,
+            nth: 3,
+            offset_days: -1,
+            start: '15:00',
+            duration_min: 180,
+            timezone: 'Asia/Manila',
+          },
+        },
+      ],
+    });
+    hoverAgent();
+    const initial = setLive.mock.calls.at(-1)![1] as number;
+    for (let at = 250; at <= 1200; at += 50) draw(at);
+    const delayed = setLive.mock.calls.at(-1)![1] as number;
+    expect(delayed).toBeLessThan(initial);
+    atlas.playProcession('test');
+    draw(1220);
+    expect(setLive.mock.calls.at(-1)![1]).toBeLessThanOrEqual(delayed);
+    const resumed = setLive.mock.calls.at(-1)![1];
+    atlas.stopProcession();
+    draw(1240);
+    expect(setLive.mock.calls.at(-1)![1]).toBe(resumed);
+    atlas.setLife({ time: 720 });
+    draw(1260);
+    atlas.setLife({ time: 'live' });
+    draw(1280);
+    expect(setLive.mock.calls.at(-1)![1]).toBe(initial);
+  });
+
+  it.each(['item', 'all'] as const)(
+    'clears %s hover on exit, Life off, reduced motion and context loss',
+    (mode) => {
+      usePauseMode(mode);
+      vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
+        { kind: 'person', inspectionId: 99, lng: 0, lat: 0, flap: 0 },
+      ]);
+      vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+        const life = new Uint8Array(targets.cols * targets.rows * 4);
+        for (let i = 0; i < life.length; i += 4) {
+          life[i + 1] = classId('life_person');
+          life[i + 2] = 2;
+        }
+        vi.mocked(lifeRaster).mockReturnValue({
+          life,
+          owners: new Uint32Array(targets.cols * targets.rows).fill(1),
+          revision: time,
+          light: life,
+          lamps: null,
+        });
+        return 1;
+      });
+      const hovered = vi.fn();
+      atlas.on('lifehover', hovered);
+      draw(100);
+      input.intents!.hover([2, 3]);
+      draw(150);
+      draw(200);
+      expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+      expect(canvas.style.cursor).toBe('');
+      input.intents!.hover(null);
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      input.intents!.hover([2, 3]);
+      draw(250);
+      draw(300);
+      atlas.setLife({ enabled: false });
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      atlas.setLife({ enabled: true });
+      draw(350);
+      draw(400);
+      atlas.setReducedMotion(true);
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+      atlas.setReducedMotion(false);
+      draw(450);
+      draw(500);
+      canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+      expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+    },
+  );
+
+  it('copies focus inputs, avoids identical redraws and preserves focus across context restore', () => {
+    atlas.setReducedMotion(true);
+    draw(100);
+    const descriptor = { classes: ['road_mid' as const], life: ['vendors' as const] };
+    atlas.setFocus(descriptor);
+    descriptor.life.length = 0;
+    draw(200);
+    const count = vi.mocked(glyphPass).mock.calls.length;
+    const focused = vi.mocked(glyphPass).mock.calls.at(-1)![15]!;
+    expect([...focused.life]).toEqual(['vendors']);
+    atlas.setFocus({ classes: ['road_mid'], life: ['vendors'] });
+    draw(250);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(count);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(300);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![15]!.key).toBe(focused.key);
+    atlas.setFocus(null);
+    draw(350);
+    expect(
+      vi
+        .mocked(glyphPass)
+        .mock.calls.at(-1)![15]!
+        .mask.every((word) => word === 0),
+    ).toBe(true);
   });
 
   it('packs speech ownership only at the speech zoom threshold', () => {
@@ -136,13 +658,13 @@ describe('live motion preference', () => {
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
     ]);
     draw(100);
-    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeUndefined();
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![12]).toBeUndefined();
     atlas.setCamera({ lng: 0, lat: 0, zoom: 18 });
     draw(200);
-    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeInstanceOf(Uint32Array);
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![12]!.members).toBeInstanceOf(Uint8Array);
     atlas.setCamera({ lng: 0, lat: 0, zoom: 17 });
     draw(300);
-    expect(vi.mocked(lifePass).mock.calls.at(-1)![10]).toBeUndefined();
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![12]).toBeUndefined();
   });
 
   it('delivers GPU visibility replies after a slow drawing frame', () => {
@@ -154,12 +676,26 @@ describe('live motion preference', () => {
       year: 2026,
       dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
     });
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(life.length / 4),
+        revision: 0,
+        light: life,
+        lamps: null,
+      });
+      return 0;
+    });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
     ]);
     const delivered: [string, number][] = [];
     vi.spyOn(Readback.prototype, 'poll').mockImplementation(() => {
       delivered.push(['poll', performance.now()]);
+    });
+    vi.spyOn(LifeHoverController.prototype, 'update').mockImplementation(() => {
+      delivered.push(['hover', performance.now()]);
     });
     vi.spyOn(SpeechController.prototype, 'update').mockImplementation(() => {
       delivered.push(['speech', performance.now()]);
@@ -170,6 +706,7 @@ describe('live motion preference', () => {
     draw(20);
     expect(delivered).toEqual([
       ['poll', 320],
+      ['hover', 320],
       ['speech', 320],
     ]);
   });
@@ -181,6 +718,17 @@ describe('live motion preference', () => {
       initialCamera: { lng: 0, lat: 0, zoom: 18 },
       year: 2026,
       dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
+    });
+    vi.mocked(lifePass).mockImplementation((_gl, targets) => {
+      const life = new Uint8Array(targets.cols * targets.rows * 4);
+      vi.mocked(lifeRaster).mockReturnValue({
+        life,
+        owners: new Uint32Array(life.length / 4),
+        revision: 0,
+        light: life,
+        lamps: null,
+      });
+      return 0;
     });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
@@ -357,6 +905,13 @@ describe('live motion preference', () => {
   it('invalidates once, preserves Life settings, freezes animations, and resumes without catching up', () => {
     const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
+    vi.mocked(lifeRaster).mockReturnValue({
+      life: new Uint8Array(4),
+      owners: new Uint32Array(1),
+      revision: 0,
+      light: new Uint8Array(4),
+      lamps: null,
+    });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
     ]);
@@ -398,6 +953,13 @@ describe('live motion preference', () => {
   it('disables animals and fish with Life while keeping the selected weather', () => {
     const clear = vi.spyOn(LifeWorld.prototype, 'clearTiles');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
+    vi.mocked(lifeRaster).mockReturnValue({
+      life: new Uint8Array(4),
+      owners: new Uint32Array(1),
+      revision: 0,
+      light: new Uint8Array(4),
+      lamps: null,
+    });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'cat', lng: 0, lat: 0, flap: 2 },
     ]);
@@ -420,6 +982,13 @@ describe('live motion preference', () => {
 
   it('clears moving headlight beams when motion is reduced', () => {
     atlas.setLife({ time: 1320 });
+    vi.mocked(lifeRaster).mockReturnValue({
+      life: new Uint8Array(4),
+      owners: new Uint32Array(1),
+      revision: 0,
+      light: new Uint8Array(4),
+      lamps: null,
+    });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'vehicle', vehicle: 'car', lng: 0, lat: 0, ahead: [0.01, 0], flap: 0 },
     ]);
@@ -454,6 +1023,19 @@ describe('live motion preference', () => {
     expect(next.label).not.toEqual(first.label);
     draw(200);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![3].uniforms).toBe(next);
+  });
+
+  it('does not accumulate lost-context time when Life is reenabled before restoration', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    draw(100);
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    time = 1000;
+    atlas.setLife({ enabled: false });
+    atlas.setLife({ enabled: true });
+    time = 10_000;
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(10_020);
+    expect(step.mock.calls.at(-1)![0]).toBeCloseTo(0.02);
   });
 
   it('applies a preference changed while the context was lost to the restored frame', () => {

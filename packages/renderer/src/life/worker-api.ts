@@ -10,9 +10,11 @@ import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
+import type { InspectionCommand } from './inspection';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
+  inspection?: InspectionCommand;
   gust: {
     camera: CameraState;
     size: { width: number; height: number };
@@ -38,6 +40,7 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  itemInspection?: boolean;
   dialogue?: readonly DialogueChoice[];
   periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
@@ -49,6 +52,7 @@ export type SyncTile = Omit<LifeTile, 'life'> & { life?: LifeGeometry };
 /** Shared synchronous execution keeps the fallback's order and arguments identical. */
 export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: FrameProfiler) {
   const { gust, step } = input;
+  if (input.inspection) world.inspection?.select(input.inspection, world.signalClock);
   const { grid, toCell } = placeGrid(
     { camera: gust.camera, dpr: 1, ...gust.size },
     gust.cssCell,
@@ -75,7 +79,11 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
   const visibleStart = profiler?.time();
   const agents = world.visible(...input.visible);
   if (visibleStart !== undefined) profiler!.add('visible', profiler!.time() - visibleStart);
-  return { agents, procession: world.procession(), signalClock: world.signalClock };
+  return {
+    agents,
+    procession: world.procession(),
+    signalClock: world.signalClock,
+  };
 }
 
 /** Plain API for both Comlink and deterministic tests; no DOM or GL dependencies. */
@@ -90,10 +98,15 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
     init(options: LifeInit) {
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
-      world = new LifeWorld(options.traffic, profiler, {
-        dialogue: options.dialogue,
-        periods: options.periods,
-      });
+      world = new LifeWorld(
+        options.traffic,
+        profiler,
+        {
+          dialogue: options.dialogue,
+          periods: options.periods,
+        },
+        options.itemInspection,
+      );
       preparation = new LifePreparation(world, profiler, preparationClock);
       world.setProcessions(options.processions);
       geometries.clear();
@@ -155,8 +168,8 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },
-    setLive(id: string | undefined, progress?: number) {
-      world.setLive(id, progress);
+    setLive(id: string | undefined, progress?: number, occurrence?: string) {
+      world.setLive(id, progress, occurrence);
     },
     play(id: string) {
       return world.play(id);

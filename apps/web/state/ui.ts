@@ -1,4 +1,4 @@
-import type { FeatureInfo, ProcessionRun } from '@atlas/renderer';
+import type { FeatureInfo, LegendEntryId, LifeHover, ProcessionRun } from '@atlas/renderer';
 import type { CityMeta, ProcessionRoute } from '@atlas/shared';
 import { create } from 'zustand';
 
@@ -8,6 +8,8 @@ import { create } from 'zustand';
  */
 export type UiState = {
   hover: { feature: FeatureInfo; point: [number, number] } | null;
+  lifeHover: Exclude<LifeHover, { label: null }> | null;
+  legendFocus: LegendEntryId | null;
   /** The selected feature as last picked, if it was picked on the map. */
   picked: FeatureInfo | null;
   /** The city's generated meta, once loaded. */
@@ -22,6 +24,8 @@ export type UiState = {
 
 export const useUiStore = create<UiState>()(() => ({
   hover: null,
+  lifeHover: null,
+  legendFocus: null,
   picked: null,
   meta: null,
   subdivision: null,

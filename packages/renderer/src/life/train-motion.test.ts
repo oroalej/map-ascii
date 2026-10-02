@@ -50,6 +50,38 @@ function train(x: number, speed = 12, dir: 1 | -1 = 1): Mover {
   };
 }
 describe('train motion', () => {
+  it('holds the full inspected consist while another train advances and treats it as stopped', () => {
+    const world = new LifeWorld(undefined, undefined, undefined, true);
+    world.sync([{ key: 'rail', tile, life: rail() }]);
+    const life = worldTiles(world).get('rail')!;
+    const leader = train(400 * pm),
+      follower = train(100 * pm);
+    life.movers.splice(0, life.movers.length, leader, follower);
+    const center = tileToLngLat(tile, { x: 2048, y: 2048 });
+    const visible = () => world.visible(18, activityLevels(1), center);
+    const before = visible();
+    const id = before[0]!.inspectionId!;
+    expect(before.filter((agent) => agent.inspectionId === id)).toHaveLength(2);
+    world.inspection!.select({ id, revision: 1, time: 0 }, world.signalClock);
+    const state = structuredClone(leader);
+    const stopped = trainLimits([life], 0.1, undefined, world.inspection!.owner).get(follower)!;
+    const moving = trainLimits([life], 0.1).get(follower)!;
+    expect(stopped.target).toBeLessThanOrEqual(moving.target);
+    for (let frame = 0; frame < 30; frame++) {
+      world.step(0.1, undefined, 18);
+      visible();
+    }
+    expect(leader).toEqual(state);
+    expect(follower.x).toBeGreaterThan(100 * pm);
+    expect(visible().filter((agent) => agent.inspectionId === id)).toEqual(
+      before.filter((agent) => agent.inspectionId === id),
+    );
+    world.inspection!.select({ id: null, revision: 2, time: 3 }, world.signalClock);
+    world.step(0.1, undefined, 18);
+    expect(leader.x - state.x).toBeGreaterThan(0);
+    expect(leader.x - state.x).toBeLessThanOrEqual(leader.speed * 0.1 + 1e-6);
+  });
+
   for (const state of ['moving', 'dwelling'] as const)
     it(`keeps an existing ${state} train active at zero activity`, () => {
       const world = new LifeWorld();

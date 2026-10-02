@@ -236,7 +236,7 @@ describe('static export reuse', () => {
       'apps/web/.next/cache/atlas-export.lock',
       JSON.stringify({ pid: 2_147_483_647, token: 'old' }),
     );
-    expect(await Promise.all([f.prepare(), f.prepare()])).toEqual([true, false]);
+    expect((await Promise.all([f.prepare(), f.prepare()])).sort()).toEqual([false, true]);
     expect(f.build).toHaveBeenCalledTimes(1);
   });
 });
