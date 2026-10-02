@@ -42,6 +42,78 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('anchors riverside detail to a complete mapped bridge line without changing its road', () => {
+    const bridge: AtlasFeature = {
+      ...parent,
+      geometry: { type: 'LineString', coordinates: [p(5, 25), p(45, 25)] },
+      properties: { ...parent.properties, class: 'road_mid', width: 10 },
+      tippecanoe: { layer: 'roads', minzoom: 10, maxzoom: 16 },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      grounds: (parent.geometry as Polygon).coordinates[0],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'bank-wall',
+          ring: [p(5, 10), p(45, 10), p(45, 11), p(5, 11), p(5, 10)],
+          height_m: 3,
+          material: 'stone',
+          overhead: false,
+        },
+      ],
+    });
+    const original = structuredClone(bridge);
+    const result = mergeSiteDetails([bridge], [pack]);
+    expect(result.features.find((f) => f.properties.id === bridge.properties.id)).toEqual(original);
+    expect(bridge).toEqual(original);
+    const wall = result.features.find(
+      (f) => f.properties.id === 'detail:test/structure-bank-wall',
+    )!;
+    expect(wall.properties.detail_parent).toBe(bridge.properties.id);
+    expect(JSON.parse(wall.properties.detail_selection!)).toMatchObject({
+      id: bridge.properties.id,
+      class: 'road_mid',
+      name: 'Test plaza',
+    });
+    expect(() => mergeSiteDetails([bridge], [{ ...pack, grounds: undefined }])).toThrow(
+      'explicit grounds',
+    );
+    const concave = [
+      p(0, 0),
+      p(50, 0),
+      p(50, 50),
+      p(30, 50),
+      p(30, 20),
+      p(20, 20),
+      p(20, 50),
+      p(0, 50),
+      p(0, 0),
+    ];
+    expect(() => mergeSiteDetails([bridge], [{ ...pack, grounds: concave }])).toThrow(
+      'contain parent',
+    );
+    const bent: AtlasFeature = {
+      ...bridge,
+      geometry: {
+        type: 'LineString',
+        coordinates: [p(5, 25), p(25, 60), p(45, 25)],
+      },
+    };
+    expect(() => mergeSiteDetails([bent], [pack])).toThrow('contain parent');
+    // A centreline on the outline is contained, rather than needing a buffered road envelope.
+    const edge: AtlasFeature = {
+      ...bridge,
+      geometry: {
+        type: 'LineString',
+        coordinates: [p(0, 0), p(50, 0)],
+      },
+    };
+    expect(() => mergeSiteDetails([edge], [pack])).not.toThrow();
+  });
+
   it('links a sourced pool to its site, blocks pedestrian routes and rejects mapped water duplicates', () => {
     const pool = {
       id: 'pool',

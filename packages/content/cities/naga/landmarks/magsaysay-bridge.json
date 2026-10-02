@@ -1,0 +1,20 @@
+{
+  "id": "landmark/magsaysay-bridge",
+  "osm_id": "osm:way/30518281",
+  "name": {
+    "en": "Magsaysay Bridge"
+  },
+  "type": "bridge",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Magsaysay Avenue bridge",
+      "url": "https://www.openstreetmap.org/way/30518281",
+      "note": "Mapped bridge crossing the Naga River."
+    },
+    {
+      "title": "Owner-supplied riverbank reference",
+      "note": "Undated reference guides approximate riverside retaining walls, walks and railings on both banks near the bridge."
+    }
+  ]
+}

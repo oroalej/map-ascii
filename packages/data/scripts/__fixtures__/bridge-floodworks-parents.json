@@ -1,0 +1,5079 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1963772, 13.6336735],
+          [123.1963477, 13.6337514],
+          [123.1962878, 13.6337299],
+          [123.1963173, 13.633652],
+          [123.1963772, 13.6336735]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518811",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1957131, 13.6332594],
+          [123.1957552, 13.6333335],
+          [123.195682, 13.6333728],
+          [123.19564, 13.6332986],
+          [123.1957131, 13.6332594]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521569",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943211, 13.6317984],
+          [123.1943422, 13.6318659],
+          [123.194254, 13.6318976],
+          [123.1942334, 13.6318306],
+          [123.1943211, 13.6317984]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23617107",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946069, 13.6322771],
+          [123.1946152, 13.6323134],
+          [123.1945116, 13.6323478],
+          [123.1944971, 13.6323129],
+          [123.1946069, 13.6322771]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23617223",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945193, 13.6327077],
+          [123.1945613, 13.6327553],
+          [123.1945032, 13.632815],
+          [123.1944519, 13.6327673],
+          [123.1945193, 13.6327077]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23617275",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1965113, 13.6326273],
+          [123.1965771, 13.6325612],
+          [123.1967781, 13.632704],
+          [123.1965187, 13.6328921],
+          [123.1966975, 13.6329342],
+          [123.1966623, 13.63304],
+          [123.1962446, 13.6329177],
+          [123.196272, 13.6328442],
+          [123.196542, 13.6326487],
+          [123.1965113, 13.6326273]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23661854",
+      "class": "building",
+      "name": "Avenue Plaza Hotel",
+      "kind": "tourism=hotel",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194515, 13.6325532],
+          [123.1945461, 13.6326117],
+          [123.1945011, 13.6326346],
+          [123.1944739, 13.6325711],
+          [123.194515, 13.6325532]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662059",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1949805, 13.6327956],
+          [123.1950102, 13.6328284],
+          [123.1949723, 13.6328627],
+          [123.1949415, 13.632829],
+          [123.1949805, 13.6327956]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662391",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1954702, 13.6336392],
+          [123.1955585, 13.6337239],
+          [123.195481, 13.6338002],
+          [123.1953927, 13.6337155],
+          [123.1954702, 13.6336392]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663797",
+      "class": "building",
+      "name": "Peñafrancia Barangay Hall",
+      "kind": "amenity=townhall",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1949777, 13.6318119],
+          [123.1950622, 13.6318958],
+          [123.1949839, 13.6319702],
+          [123.1948994, 13.6318862],
+          [123.1949777, 13.6318119]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663986",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1951668, 13.6335406],
+          [123.1951989, 13.6335694],
+          [123.1951741, 13.6336021],
+          [123.1951349, 13.6335746],
+          [123.1951668, 13.6335406]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664038",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1959935, 13.6323999],
+          [123.1960961, 13.6325016],
+          [123.1960736, 13.632523],
+          [123.1961, 13.6325492],
+          [123.1960134, 13.6326318],
+          [123.1960454, 13.6326635],
+          [123.1959914, 13.6327149],
+          [123.1959358, 13.6326598],
+          [123.1959469, 13.6326492],
+          [123.1958664, 13.6325696],
+          [123.1958804, 13.6325562],
+          [123.1958322, 13.6325085],
+          [123.1959087, 13.6324356],
+          [123.1959319, 13.6324586],
+          [123.1959935, 13.6323999]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664053",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194542, 13.6321879],
+          [123.194571, 13.6322512],
+          [123.1944701, 13.6322971],
+          [123.1944385, 13.632236],
+          [123.194542, 13.6321879]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664183",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1952061, 13.6330342],
+          [123.1952683, 13.6331043],
+          [123.1950263, 13.6333073],
+          [123.1949641, 13.6332373],
+          [123.1952061, 13.6330342]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664226",
+      "class": "building",
+      "name": "Our Lady of Peñafrancia Museum",
+      "kind": "tourism=museum",
+      "addr:street": "Peñafrancia Avenue",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1961482, 13.6326749],
+          [123.196216, 13.6326873],
+          [123.196206, 13.6327395],
+          [123.1961381, 13.6327272],
+          [123.1961482, 13.6326749]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664317",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1958473, 13.633645],
+          [123.195887, 13.6337252],
+          [123.195807, 13.6337627],
+          [123.1957672, 13.6336825],
+          [123.1958473, 13.633645]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664599",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1944264, 13.6327538],
+          [123.1944497, 13.6327755],
+          [123.1944992, 13.6328215],
+          [123.1944089, 13.6329124],
+          [123.1943708, 13.632874],
+          [123.1943025, 13.6329403],
+          [123.194264, 13.6329098],
+          [123.1944264, 13.6327538]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664788",
+      "class": "building",
+      "name": "Pavia Apartment",
+      "kind": "building=residential",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1941622, 13.6320427],
+          [123.1942013, 13.6321151],
+          [123.1941597, 13.6321407],
+          [123.1941177, 13.6320755],
+          [123.1941622, 13.6320427]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664924",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194229, 13.6319281],
+          [123.194284, 13.6320241],
+          [123.1942445, 13.632046],
+          [123.1941902, 13.6319536],
+          [123.194229, 13.6319281]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665016",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946577, 13.6331176],
+          [123.1947128, 13.6331872],
+          [123.1945963, 13.6331728],
+          [123.1946577, 13.6331176]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665473",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19465559999999,
+      "shop_lat": 13.6331592,
+      "shop_radius_m": 6.928780303255714,
+      "name": "Boss Chili Kinalas",
+      "kind": "amenity=restaurant",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942217, 13.6325296],
+          [123.1942681, 13.6325723],
+          [123.1942088, 13.6326364],
+          [123.1941624, 13.6325937],
+          [123.1942217, 13.6325296]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665477",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195328, 13.633409],
+          [123.195364, 13.633452],
+          [123.195302, 13.633501],
+          [123.195266, 13.633458],
+          [123.195328, 13.633409]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666692",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943318, 13.6321711],
+          [123.1943584, 13.6322134],
+          [123.1942934, 13.632252],
+          [123.1942668, 13.6322097],
+          [123.1943318, 13.6321711]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666883",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194572, 13.6329851],
+          [123.1946769, 13.6330902],
+          [123.1945914, 13.6331689],
+          [123.1944753, 13.633077],
+          [123.194572, 13.6329851]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23667836",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.19457889999998,
+      "shop_lat": 13.6330803,
+      "shop_radius_m": 11.213836352541856,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1948998, 13.6329113],
+          [123.1949515, 13.6329683],
+          [123.1949103, 13.6330036],
+          [123.1948586, 13.6329466],
+          [123.1948998, 13.6329113]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23667837",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19490504999999,
+      "shop_lat": 13.63295745,
+      "shop_radius_m": 5.168718104479312,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945782, 13.6323353],
+          [123.1946074, 13.6323977],
+          [123.1945536, 13.6324201],
+          [123.1945278, 13.6323548],
+          [123.1945782, 13.6323353]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668776",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195563, 13.633757],
+          [123.195595, 13.633803],
+          [123.19552, 13.633854],
+          [123.195487, 13.633809],
+          [123.195563, 13.633757]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669349",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1958271, 13.6316976],
+          [123.1960401, 13.6319147],
+          [123.1959676, 13.6319818],
+          [123.1957547, 13.6317647],
+          [123.1958271, 13.6316976]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669427",
+      "class": "building",
+      "kind": "building=roof",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1947877, 13.6337797],
+          [123.194833, 13.6338183],
+          [123.1947823, 13.6338735],
+          [123.1947367, 13.6338339],
+          [123.1947877, 13.6337797]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669555",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1960745, 13.6336624],
+          [123.1961496, 13.6336884],
+          [123.196123, 13.6337606],
+          [123.1960479, 13.6337346],
+          [123.1960745, 13.6336624]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669591",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943921, 13.6320658],
+          [123.194415, 13.6321246],
+          [123.1943371, 13.632164],
+          [123.1943108, 13.6321127],
+          [123.1943921, 13.6320658]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669805",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945681, 13.6326546],
+          [123.1946103, 13.6327105],
+          [123.1945677, 13.6327499],
+          [123.1945228, 13.6326944],
+          [123.1945681, 13.6326546]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669825",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1949051, 13.6327058],
+          [123.194981, 13.6327883],
+          [123.194945, 13.6328173],
+          [123.194918, 13.6327853],
+          [123.194882, 13.6328153],
+          [123.1948346, 13.6327626],
+          [123.1949051, 13.6327058]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669830",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1949046, 13.6337041],
+          [123.1949646, 13.6337521],
+          [123.1949096, 13.6338191],
+          [123.1948486, 13.6337701],
+          [123.1949046, 13.6337041]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669904",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1949882, 13.6333574],
+          [123.1950637, 13.6334286],
+          [123.1950016, 13.6335048],
+          [123.1949125, 13.6334277],
+          [123.1949882, 13.6333574]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669976",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942986, 13.6323253],
+          [123.1943346, 13.6323869],
+          [123.1942556, 13.6324299],
+          [123.194223, 13.6323683],
+          [123.1942986, 13.6323253]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670178",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194346, 13.6318948],
+          [123.1943964, 13.6320037],
+          [123.1943243, 13.6320427],
+          [123.194265, 13.6319321],
+          [123.194346, 13.6318948]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670509",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195425, 13.633529],
+          [123.195457, 13.633562],
+          [123.195415, 13.6336],
+          [123.195383, 13.633568],
+          [123.195425, 13.633529]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670693",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1941458, 13.6329889],
+          [123.1942671, 13.6330992],
+          [123.1941786, 13.6332061],
+          [123.1939347, 13.6332588],
+          [123.1939122, 13.6332385],
+          [123.1941458, 13.6329889]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670840",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.19408767999998,
+      "shop_lat": 13.6331583,
+      "shop_radius_m": 20.978578703302478,
+      "name": "Dacudao Building",
+      "kind": "building=yes",
+      "addr:street": "Peñafrancia Avenue",
+      "building:levels": "2",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195814, 13.6325638],
+          [123.1959608, 13.6327214],
+          [123.1959037, 13.6327717],
+          [123.1958452, 13.632709],
+          [123.1958009, 13.632748],
+          [123.1957125, 13.6326531],
+          [123.195814, 13.6325638]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671056",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195606, 13.633828],
+          [123.195655, 13.633882],
+          [123.195598, 13.63393],
+          [123.195549, 13.633876],
+          [123.195606, 13.633828]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671274",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945624, 13.6324357],
+          [123.1945869, 13.6324886],
+          [123.1944896, 13.6325415],
+          [123.1944588, 13.6324858],
+          [123.1945624, 13.6324357]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671716",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195345, 13.6336],
+          [123.195377, 13.633623],
+          [123.195352, 13.633655],
+          [123.195321, 13.633633],
+          [123.195345, 13.6336]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672134",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942865, 13.6327168],
+          [123.1943538, 13.6327742],
+          [123.1942337, 13.632901],
+          [123.1941695, 13.6328409],
+          [123.1942865, 13.6327168]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672142",
+      "class": "building",
+      "frontage": "service",
+      "shop_lng": 123.194260875,
+      "shop_lat": 13.632808225,
+      "shop_radius_m": 10.742838947841802,
+      "name": "Dirty Business",
+      "kind": "shop=laundry",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942199, 13.6326636],
+          [123.1942795, 13.6327143],
+          [123.1941771, 13.6328237],
+          [123.1941191, 13.6327734],
+          [123.1942199, 13.6326636]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672230",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.1941989,
+      "shop_lat": 13.63274375,
+      "shop_radius_m": 9.315540734229709,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942402, 13.6336522],
+          [123.1942462, 13.6337162],
+          [123.1941812, 13.6337222],
+          [123.1941742, 13.6336582],
+          [123.1942402, 13.6336522]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672274",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1941934, 13.6323897],
+          [123.1942444, 13.6324427],
+          [123.1941874, 13.6324947],
+          [123.1941364, 13.6324417],
+          [123.1941934, 13.6323897]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673025",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945288, 13.6321244],
+          [123.1945475, 13.632162],
+          [123.1944718, 13.6322022],
+          [123.1944502, 13.6321655],
+          [123.1945288, 13.6321244]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673065",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1960245, 13.6327622],
+          [123.1960563, 13.6327918],
+          [123.1959793, 13.6328701],
+          [123.1959475, 13.6328406],
+          [123.1960245, 13.6327622]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673953",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194526, 13.6323637],
+          [123.1945446, 13.632432],
+          [123.1944846, 13.6324598],
+          [123.1944412, 13.6323669],
+          [123.1944782, 13.6323511],
+          [123.194526, 13.6323637]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674190",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942706, 13.6321279],
+          [123.1942986, 13.6321799],
+          [123.1942386, 13.6322119],
+          [123.1942096, 13.6321609],
+          [123.1942706, 13.6321279]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674334",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946774, 13.6324664],
+          [123.1947016, 13.6325277],
+          [123.1946045, 13.6325639],
+          [123.1945793, 13.6325055],
+          [123.1946774, 13.6324664]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674929",
+      "class": "building_religious",
+      "name": "San Ramon Chapel",
+      "kind": "building=chapel",
+      "height": 15,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943856, 13.63364],
+          [123.1943916, 13.63375],
+          [123.1943086, 13.633754],
+          [123.1943026, 13.633645],
+          [123.1943856, 13.63364]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674982",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946353, 13.6334945],
+          [123.1947026, 13.6336103],
+          [123.1946028, 13.6337088],
+          [123.1945518, 13.6337239],
+          [123.194527, 13.6335089],
+          [123.1946353, 13.6334945]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675080",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19460389999999,
+      "shop_lat": 13.633609279999998,
+      "shop_radius_m": 13.948951745958452,
+      "name": "Nikko's Ark Jelatto Restaurant",
+      "kind": "amenity=restaurant",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1951184, 13.6333245],
+          [123.1951694, 13.6333825],
+          [123.1951094, 13.6334335],
+          [123.1950584, 13.6333755],
+          [123.1951184, 13.6333245]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675976",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195071, 13.6334314],
+          [123.1951628, 13.633522],
+          [123.1951078, 13.633589],
+          [123.1950105, 13.6335071],
+          [123.195071, 13.6334314]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23676343",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.195449, 13.633338],
+          [123.195468, 13.633375],
+          [123.195426, 13.633396],
+          [123.195446, 13.633437],
+          [123.195405, 13.633457],
+          [123.195366, 13.633377],
+          [123.195449, 13.633338]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677332",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1941092, 13.6324531],
+          [123.1941721, 13.632511],
+          [123.1941158, 13.6325689],
+          [123.1940528, 13.632511],
+          [123.1941092, 13.6324531]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677453",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1944234, 13.6323744],
+          [123.194474, 13.6324711],
+          [123.1944093, 13.6325125],
+          [123.1943451, 13.6324353],
+          [123.1944234, 13.6323744]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677611",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946983, 13.6330862],
+          [123.194754, 13.6331548],
+          [123.1947194, 13.6331814],
+          [123.1946637, 13.6331128],
+          [123.1946983, 13.6330862]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677788",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1948289, 13.6325907],
+          [123.1948659, 13.6326317],
+          [123.1948319, 13.6326607],
+          [123.1947949, 13.6326187],
+          [123.1948289, 13.6325907]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23677796",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1807424, 13.616716],
+          [123.1807641, 13.6168404],
+          [123.1808538, 13.616983],
+          [123.1809127, 13.6171215],
+          [123.1810798, 13.6172983],
+          [123.1812332, 13.6174771],
+          [123.1814243, 13.6176794],
+          [123.1817676, 13.6179401],
+          [123.1820839, 13.6184462],
+          [123.1825789, 13.6189224],
+          [123.182828, 13.619166],
+          [123.1830756, 13.6193473],
+          [123.1832748, 13.6194755],
+          [123.1836206, 13.6196889],
+          [123.1837254, 13.6197463],
+          [123.1839655, 13.6197963],
+          [123.1840787, 13.6198268],
+          [123.1842476, 13.6198647],
+          [123.1843738, 13.6198812],
+          [123.1848909, 13.6201309],
+          [123.1853297, 13.6204146],
+          [123.1855864, 13.6205901],
+          [123.1857161, 13.6206974],
+          [123.1861676, 13.6211117],
+          [123.186362, 13.6214784],
+          [123.18654, 13.621857],
+          [123.186689, 13.6222152],
+          [123.1868039, 13.6224933],
+          [123.1870226, 13.6229064],
+          [123.187279, 13.6234183],
+          [123.1875099, 13.6239098],
+          [123.1877378, 13.624413],
+          [123.188003, 13.6248101],
+          [123.188189, 13.625031],
+          [123.188654, 13.625597],
+          [123.188823, 13.62589],
+          [123.1889422, 13.6262869],
+          [123.1889637, 13.626784],
+          [123.1889798, 13.6270394],
+          [123.1890349, 13.627302],
+          [123.1891622, 13.6275033],
+          [123.1892868, 13.6275999],
+          [123.1894372, 13.6277133],
+          [123.1895526, 13.6277849],
+          [123.1898421, 13.6279726],
+          [123.1900166, 13.6280603],
+          [123.1901001, 13.6281109],
+          [123.1901398, 13.6281321],
+          [123.1902352, 13.6281847],
+          [123.1903096, 13.6282277],
+          [123.1904055, 13.6282695],
+          [123.1907272, 13.6284723],
+          [123.1909584, 13.6286283],
+          [123.1910926, 13.6287324],
+          [123.1912403, 13.6288424],
+          [123.191515, 13.6290892],
+          [123.1917063, 13.6292398],
+          [123.1920071, 13.6295273],
+          [123.1921085, 13.6296427],
+          [123.1922123, 13.6297365],
+          [123.1923657, 13.6298213],
+          [123.1925035, 13.6298707],
+          [123.1926535, 13.6298567],
+          [123.1927495, 13.6298793],
+          [123.1933311, 13.6301503],
+          [123.1935074, 13.6302232],
+          [123.1935952, 13.6302433],
+          [123.1936949, 13.6302218],
+          [123.193798, 13.6301748],
+          [123.1940083, 13.6300851],
+          [123.194106, 13.6300483],
+          [123.194218, 13.6300645],
+          [123.1943726, 13.6301096],
+          [123.1945887, 13.6302094],
+          [123.1946811, 13.6302697],
+          [123.1947383, 13.630346],
+          [123.1947998, 13.6304958],
+          [123.1948578, 13.6306635],
+          [123.1948752, 13.6307451],
+          [123.1948673, 13.6308255],
+          [123.1948113, 13.6309734],
+          [123.1947318, 13.6311581],
+          [123.1947143, 13.6312333],
+          [123.1947027, 13.6312728],
+          [123.1946834, 13.6312973],
+          [123.1946659, 13.6313725],
+          [123.1946519, 13.6315114],
+          [123.1946672, 13.6317143],
+          [123.1947501, 13.6319224],
+          [123.1948453, 13.6320928],
+          [123.1949858, 13.6323237],
+          [123.195124, 13.6324912],
+          [123.1952481, 13.6326144],
+          [123.1954579, 13.6327517],
+          [123.1957457, 13.6328429],
+          [123.1960576, 13.6329581],
+          [123.1966803, 13.6331448],
+          [123.1971076, 13.6332558],
+          [123.1973188, 13.6332916],
+          [123.1975634, 13.6332834],
+          [123.1978197, 13.6332497],
+          [123.1979828, 13.6332574],
+          [123.1981847, 13.6333102],
+          [123.198378, 13.6333902],
+          [123.1985687, 13.6334877],
+          [123.1985465, 13.633536],
+          [123.1986524, 13.6335855],
+          [123.1986793, 13.6335331],
+          [123.1989989, 13.6337072],
+          [123.1992056, 13.633829],
+          [123.1994018, 13.634034],
+          [123.1995012, 13.6342336],
+          [123.1995511, 13.6344267],
+          [123.1995643, 13.634601],
+          [123.1995488, 13.6347337],
+          [123.1994858, 13.634931],
+          [123.1993917, 13.6351548],
+          [123.1992951, 13.6353678],
+          [123.1992449, 13.6354898],
+          [123.199233, 13.6355679],
+          [123.1992354, 13.6356352],
+          [123.1992601, 13.6356943],
+          [123.1992969, 13.6357539],
+          [123.199383, 13.6358447],
+          [123.1994523, 13.6358783],
+          [123.1995838, 13.6359333],
+          [123.1996469, 13.6359582],
+          [123.1997495, 13.6359881],
+          [123.1998213, 13.6359939],
+          [123.1999085, 13.6359679],
+          [123.2000123, 13.6358987],
+          [123.2001284, 13.6357925],
+          [123.2002552, 13.6356818],
+          [123.2003724, 13.6355697],
+          [123.2005321, 13.6353325],
+          [123.20065, 13.6352119],
+          [123.2007832, 13.6351122],
+          [123.2009377, 13.6349995],
+          [123.2010918, 13.6349127],
+          [123.2013138, 13.6347824],
+          [123.2014525, 13.634742],
+          [123.2015691, 13.6347474],
+          [123.2016695, 13.6348054],
+          [123.2017512, 13.6348992],
+          [123.2018098, 13.6350029],
+          [123.2018477, 13.6351649],
+          [123.201807, 13.6354057],
+          [123.2017546, 13.6356501],
+          [123.2016943, 13.6359162],
+          [123.2016555, 13.6361171],
+          [123.2015926, 13.6363447],
+          [123.201578, 13.6364943],
+          [123.201595, 13.6366043],
+          [123.2016342, 13.6366782],
+          [123.2017128, 13.6367613],
+          [123.2019062, 13.6369248],
+          [123.2020736, 13.6370267],
+          [123.2022314, 13.6370635],
+          [123.2024461, 13.6370733],
+          [123.20262, 13.637022],
+          [123.2028052, 13.6369188],
+          [123.2029848, 13.6367715],
+          [123.2031269, 13.6365902],
+          [123.2032189, 13.6364189],
+          [123.2033109, 13.6362319],
+          [123.2034282, 13.6357042],
+          [123.2035442, 13.6353719],
+          [123.2036878, 13.6352076],
+          [123.203815, 13.6351052],
+          [123.2040303, 13.6349861],
+          [123.2042105, 13.6348871],
+          [123.2043531, 13.6348096],
+          [123.2044793, 13.6347812],
+          [123.2046153, 13.6347603],
+          [123.2048563, 13.6348025],
+          [123.2049768, 13.6348616],
+          [123.2052086, 13.6349843],
+          [123.205454, 13.6351019],
+          [123.2056494, 13.6351741],
+          [123.2058915, 13.6353161],
+          [123.2060317, 13.6355285],
+          [123.2060811, 13.6357362],
+          [123.2060965, 13.6359103],
+          [123.2060744, 13.6361157],
+          [123.2060192, 13.6362813],
+          [123.2059372, 13.636413],
+          [123.205781, 13.6366015],
+          [123.2055596, 13.6368816],
+          [123.2054527, 13.6370326],
+          [123.2053888, 13.6371784],
+          [123.2053465, 13.6373317],
+          [123.2053349, 13.6374959],
+          [123.2053751, 13.6376475],
+          [123.2054049, 13.6377023],
+          [123.20555, 13.6378361],
+          [123.2056976, 13.6379108],
+          [123.2058929, 13.6379832],
+          [123.2060638, 13.637994],
+          [123.2062149, 13.6379591],
+          [123.2063988, 13.6378825],
+          [123.2065144, 13.6378112],
+          [123.2066031, 13.6375977],
+          [123.2066081, 13.6374423],
+          [123.2066017, 13.6371274],
+          [123.2066607, 13.6369133],
+          [123.2067066, 13.6368773],
+          [123.2067356, 13.6368325],
+          [123.2066978, 13.6367684],
+          [123.2067109, 13.6366678],
+          [123.2067627, 13.6364952],
+          [123.2068087, 13.6363347],
+          [123.2068386, 13.6361142],
+          [123.2069424, 13.6357454],
+          [123.2069339, 13.635477],
+          [123.2069526, 13.6353712],
+          [123.2070195, 13.6351437],
+          [123.2069792, 13.6349631],
+          [123.2069136, 13.6348331],
+          [123.2068748, 13.6346771],
+          [123.2068217, 13.6344865],
+          [123.2067471, 13.634322],
+          [123.2066704, 13.6340772],
+          [123.2067103, 13.6338504],
+          [123.20679, 13.633633],
+          [123.2069838, 13.6333902],
+          [123.2071433, 13.6332723],
+          [123.2072393, 13.6332309],
+          [123.2074243, 13.6332016],
+          [123.2075826, 13.6331862],
+          [123.2077988, 13.6332519],
+          [123.2080742, 13.6333577],
+          [123.2082311, 13.6335841],
+          [123.2082653, 13.6336869],
+          [123.2083781, 13.6342211],
+          [123.2084237, 13.6343813],
+          [123.2084881, 13.6344516],
+          [123.2085781, 13.6344821],
+          [123.2087218, 13.6344736],
+          [123.2089181, 13.6343771],
+          [123.2091581, 13.6342341],
+          [123.2092798, 13.6341109],
+          [123.2094351, 13.6340595],
+          [123.2095521, 13.6338311],
+          [123.2096221, 13.6336651],
+          [123.2096681, 13.633419],
+          [123.2096955, 13.6332706],
+          [123.2097646, 13.6330908],
+          [123.2097991, 13.6329281],
+          [123.2098881, 13.6325281],
+          [123.2100033, 13.6324073],
+          [123.2101468, 13.6323393],
+          [123.2103023, 13.6323197],
+          [123.2104392, 13.6323418],
+          [123.210666, 13.6324822],
+          [123.2109471, 13.6328411],
+          [123.2111072, 13.6330119],
+          [123.2112909, 13.6331367],
+          [123.2114981, 13.6332051],
+          [123.2117124, 13.6332657],
+          [123.211857, 13.6332868],
+          [123.2120446, 13.6332723],
+          [123.2123171, 13.6331439],
+          [123.2127033, 13.6328709],
+          [123.2130699, 13.6324726],
+          [123.2133701, 13.6322003],
+          [123.2135603, 13.6319457],
+          [123.2136189, 13.6316686],
+          [123.213624, 13.6314659],
+          [123.2134469, 13.6312595],
+          [123.2132584, 13.63109],
+          [123.2130961, 13.6310291],
+          [123.2129516, 13.6310027],
+          [123.2127556, 13.631014],
+          [123.2124793, 13.6310473],
+          [123.2122861, 13.6310547],
+          [123.2121129, 13.631084],
+          [123.2119142, 13.6310952],
+          [123.2117191, 13.6309571],
+          [123.2116601, 13.6308631],
+          [123.2116017, 13.6306314],
+          [123.2116681, 13.6304291],
+          [123.211864, 13.6301208],
+          [123.2121701, 13.6298651],
+          [123.2124138, 13.629681],
+          [123.2125889, 13.6296542],
+          [123.2128028, 13.6296454],
+          [123.2129593, 13.6296603],
+          [123.2131231, 13.6297521],
+          [123.2132311, 13.6298149],
+          [123.2134449, 13.6299237],
+          [123.213637, 13.6300035],
+          [123.2138068, 13.630091],
+          [123.2139356, 13.6301532],
+          [123.2140564, 13.6302177],
+          [123.2143644, 13.630453],
+          [123.2145562, 13.6306871],
+          [123.2148802, 13.630708],
+          [123.2152074, 13.6307022],
+          [123.2153462, 13.6306145],
+          [123.2154785, 13.6304675],
+          [123.2156469, 13.6302755],
+          [123.2157271, 13.6301031],
+          [123.2158751, 13.6298381],
+          [123.2159127, 13.6295992],
+          [123.2160071, 13.6293648],
+          [123.2161135, 13.629],
+          [123.2162319, 13.6286762],
+          [123.21629, 13.628196],
+          [123.216303, 13.6277308],
+          [123.216356, 13.6274443],
+          [123.2165575, 13.6273186],
+          [123.2168857, 13.6272414],
+          [123.2171619, 13.6272884],
+          [123.2176006, 13.6275885],
+          [123.2179693, 13.6278981],
+          [123.2182185, 13.6281064],
+          [123.2184977, 13.6283021],
+          [123.2187652, 13.6284732],
+          [123.219069, 13.6285527],
+          [123.2196124, 13.6285656],
+          [123.2198739, 13.6286976],
+          [123.2195621, 13.6287499],
+          [123.2189914, 13.6287151],
+          [123.2186749, 13.6286189],
+          [123.2182045, 13.6283083],
+          [123.2178431, 13.6280249],
+          [123.2175232, 13.6277396],
+          [123.2171753, 13.6274851],
+          [123.2168378, 13.6274007],
+          [123.2165653, 13.6275372],
+          [123.2164998, 13.6278789],
+          [123.2163764, 13.6286917],
+          [123.2162038, 13.6291882],
+          [123.2161315, 13.6297079],
+          [123.2160461, 13.6299457],
+          [123.2158765, 13.6302524],
+          [123.2157271, 13.6305241],
+          [123.2155651, 13.6306701],
+          [123.2152411, 13.6308421],
+          [123.2149441, 13.6309081],
+          [123.2146347, 13.6308885],
+          [123.2144851, 13.6308161],
+          [123.2142184, 13.630522],
+          [123.2138928, 13.6303403],
+          [123.2132641, 13.6300451],
+          [123.2128841, 13.6298651],
+          [123.2127298, 13.6298237],
+          [123.2126014, 13.6298182],
+          [123.2123965, 13.6298805],
+          [123.2122057, 13.6300417],
+          [123.2120077, 13.6302619],
+          [123.2119311, 13.6303901],
+          [123.2118571, 13.6305081],
+          [123.2117971, 13.6307327],
+          [123.2118326, 13.6308842],
+          [123.2119487, 13.6309449],
+          [123.2120701, 13.6309391],
+          [123.2122831, 13.6309091],
+          [123.2126443, 13.6308401],
+          [123.2130471, 13.6308437],
+          [123.2132358, 13.6308678],
+          [123.2133871, 13.6309408],
+          [123.2134641, 13.6309961],
+          [123.2136253, 13.6311629],
+          [123.2137322, 13.6313736],
+          [123.2137881, 13.6315948],
+          [123.2137976, 13.6318845],
+          [123.2136603, 13.6321385],
+          [123.2133681, 13.6324383],
+          [123.2130781, 13.6327731],
+          [123.2127651, 13.6330831],
+          [123.2125551, 13.6332001],
+          [123.2121131, 13.6333631],
+          [123.2119766, 13.6334107],
+          [123.2117993, 13.6334381],
+          [123.2116211, 13.6334251],
+          [123.2115481, 13.6333811],
+          [123.2114371, 13.6333621],
+          [123.2112371, 13.6332841],
+          [123.2110631, 13.6331886],
+          [123.2108391, 13.6330151],
+          [123.2107141, 13.6328881],
+          [123.2106051, 13.6327421],
+          [123.2104851, 13.6326041],
+          [123.2103364, 13.6325242],
+          [123.2102259, 13.6325493],
+          [123.2101331, 13.6325877],
+          [123.2100451, 13.6326911],
+          [123.2099971, 13.6329461],
+          [123.209897, 13.6331863],
+          [123.2098567, 13.6334369],
+          [123.209847, 13.6337325],
+          [123.2098101, 13.6339121],
+          [123.2097035, 13.6341289],
+          [123.2094814, 13.63428],
+          [123.2092014, 13.6343971],
+          [123.2089738, 13.6345187],
+          [123.2087691, 13.6345818],
+          [123.2085456, 13.6345968],
+          [123.2083672, 13.6345677],
+          [123.2082405, 13.6343787],
+          [123.2081991, 13.6341901],
+          [123.2079733, 13.6335994],
+          [123.20788, 13.6334869],
+          [123.2078023, 13.6334446],
+          [123.2076406, 13.6333976],
+          [123.2075007, 13.6333758],
+          [123.2073661, 13.6333931],
+          [123.2072503, 13.6334358],
+          [123.2070642, 13.6335763],
+          [123.2069639, 13.6337167],
+          [123.2068952, 13.6338346],
+          [123.2068292, 13.6340176],
+          [123.2068662, 13.6342324],
+          [123.2069415, 13.6343993],
+          [123.2070208, 13.634658],
+          [123.2070826, 13.6348937],
+          [123.2071172, 13.635101],
+          [123.2070818, 13.6353659],
+          [123.2070818, 13.6356276],
+          [123.2070462, 13.6358077],
+          [123.2070027, 13.6359618],
+          [123.2069886, 13.6361876],
+          [123.2069048, 13.6364186],
+          [123.2069099, 13.6366049],
+          [123.2068667, 13.6367912],
+          [123.2068151, 13.6369725],
+          [123.2068145, 13.6371408],
+          [123.2067917, 13.6373417],
+          [123.2067382, 13.6375325],
+          [123.2067339, 13.6376509],
+          [123.2066276, 13.6378241],
+          [123.2065492, 13.6379514],
+          [123.2064514, 13.638008],
+          [123.2063999, 13.6380735],
+          [123.2064061, 13.6381636],
+          [123.2063168, 13.6381889],
+          [123.2062288, 13.6381866],
+          [123.2061316, 13.6381349],
+          [123.2060262, 13.6380923],
+          [123.2058194, 13.6380708],
+          [123.2056495, 13.6380031],
+          [123.2055027, 13.6379152],
+          [123.2053729, 13.6378032],
+          [123.205256, 13.637708],
+          [123.205196, 13.6375859],
+          [123.2051966, 13.6374637],
+          [123.2052323, 13.6372373],
+          [123.2053368, 13.6369587],
+          [123.2055597, 13.6366302],
+          [123.2057105, 13.6364718],
+          [123.2058721, 13.6362698],
+          [123.2059372, 13.6361356],
+          [123.2059967, 13.6359991],
+          [123.205994, 13.6358712],
+          [123.2059857, 13.6357093],
+          [123.2059358, 13.6355761],
+          [123.2058094, 13.635403],
+          [123.2056376, 13.6352763],
+          [123.2054732, 13.63522],
+          [123.2053863, 13.6352087],
+          [123.205316, 13.6351562],
+          [123.2052242, 13.6351341],
+          [123.205154, 13.6350692],
+          [123.2050572, 13.635063],
+          [123.2049918, 13.6350334],
+          [123.2048574, 13.6349824],
+          [123.204725, 13.6349183],
+          [123.2046465, 13.6348736],
+          [123.204472, 13.6348699],
+          [123.2043546, 13.6349383],
+          [123.2042551, 13.6349864],
+          [123.2041341, 13.6350649],
+          [123.2039796, 13.6351709],
+          [123.2038214, 13.6352928],
+          [123.2036854, 13.6354509],
+          [123.20357, 13.6358709],
+          [123.2034958, 13.6361447],
+          [123.2033889, 13.6364821],
+          [123.2031893, 13.6367371],
+          [123.2031286, 13.6368253],
+          [123.2029246, 13.6370044],
+          [123.2026914, 13.6371434],
+          [123.2024476, 13.6372335],
+          [123.2022256, 13.6372395],
+          [123.2020447, 13.6371837],
+          [123.201905, 13.6370973],
+          [123.2017281, 13.6369877],
+          [123.2015381, 13.6368033],
+          [123.2014707, 13.6366518],
+          [123.2014232, 13.6365385],
+          [123.2014232, 13.6364306],
+          [123.2014714, 13.6363409],
+          [123.2014649, 13.6362572],
+          [123.2014916, 13.6360733],
+          [123.2015861, 13.6355595],
+          [123.201627, 13.6354758],
+          [123.2016183, 13.6354042],
+          [123.2015908, 13.6353743],
+          [123.2015814, 13.6351607],
+          [123.2015304, 13.635064],
+          [123.2014146, 13.6350322],
+          [123.2013015, 13.6350317],
+          [123.2010972, 13.6351073],
+          [123.2009023, 13.6352497],
+          [123.2007393, 13.6353719],
+          [123.2005463, 13.6356415],
+          [123.2002701, 13.6359555],
+          [123.2001033, 13.6361153],
+          [123.1998905, 13.6361893],
+          [123.199714, 13.6361884],
+          [123.199534, 13.6361504],
+          [123.1993617, 13.6360856],
+          [123.1992162, 13.6359995],
+          [123.1990832, 13.6358685],
+          [123.1990263, 13.635754],
+          [123.199003, 13.635591],
+          [123.1990255, 13.6354461],
+          [123.1990878, 13.6352926],
+          [123.199164, 13.6350909],
+          [123.1992136, 13.6349158],
+          [123.1992837, 13.6346844],
+          [123.19933, 13.6344953],
+          [123.1993334, 13.6343496],
+          [123.1992746, 13.6342125],
+          [123.1991426, 13.6340558],
+          [123.199014, 13.6339251],
+          [123.1988102, 13.6338176],
+          [123.1985909, 13.6337099],
+          [123.1983283, 13.6335816],
+          [123.1980705, 13.6334777],
+          [123.1978643, 13.6334127],
+          [123.1976945, 13.6334295],
+          [123.1973982, 13.6334859],
+          [123.1972721, 13.6334667],
+          [123.1970823, 13.6334323],
+          [123.1967134, 13.6333317],
+          [123.1963849, 13.6332493],
+          [123.1960795, 13.6331628],
+          [123.1958516, 13.6331181],
+          [123.195661, 13.6330576],
+          [123.1953415, 13.6329785],
+          [123.1951986, 13.6329443],
+          [123.1950118, 13.6327776],
+          [123.1948475, 13.6325426],
+          [123.1947005, 13.6323302],
+          [123.1945879, 13.6321532],
+          [123.1944995, 13.6320001],
+          [123.1944347, 13.631865],
+          [123.1943969, 13.6317222],
+          [123.1943874, 13.631479],
+          [123.1944123, 13.631321],
+          [123.1944912, 13.6311524],
+          [123.1946241, 13.6309034],
+          [123.1946363, 13.6307696],
+          [123.194611, 13.6306427],
+          [123.1945458, 13.630465],
+          [123.1944978, 13.6304087],
+          [123.1943995, 13.6303427],
+          [123.194269, 13.630316],
+          [123.1941254, 13.6303044],
+          [123.1939834, 13.6303108],
+          [123.1938768, 13.6303666],
+          [123.1937964, 13.6304057],
+          [123.1936967, 13.6304591],
+          [123.1935879, 13.6305023],
+          [123.1934875, 13.6305173],
+          [123.1933977, 13.6305035],
+          [123.1933424, 13.6304677],
+          [123.193285, 13.630439],
+          [123.193208, 13.630387],
+          [123.1929095, 13.6302589],
+          [123.1926842, 13.6301892],
+          [123.1925583, 13.6301712],
+          [123.1923704, 13.6301043],
+          [123.1922456, 13.6300592],
+          [123.1921527, 13.6299896],
+          [123.1919776, 13.6298715],
+          [123.1918493, 13.6297686],
+          [123.1917324, 13.6296435],
+          [123.1915652, 13.6294901],
+          [123.1912602, 13.6292467],
+          [123.1911077, 13.6291259],
+          [123.1909905, 13.6290235],
+          [123.1908691, 13.628935],
+          [123.1906955, 13.6288006],
+          [123.1906106, 13.6287354],
+          [123.1905581, 13.6287006],
+          [123.1903902, 13.6285965],
+          [123.1902564, 13.6285162],
+          [123.1901809, 13.628478],
+          [123.189975, 13.6283734],
+          [123.1897779, 13.628251],
+          [123.189644, 13.62817],
+          [123.1893336, 13.6280231],
+          [123.189189, 13.6279166],
+          [123.1890854, 13.6278155],
+          [123.1888943, 13.6275941],
+          [123.1887679, 13.627426],
+          [123.1887491, 13.6273066],
+          [123.1887569, 13.6271445],
+          [123.188762, 13.6269771],
+          [123.1887557, 13.6267941],
+          [123.1887305, 13.6265497],
+          [123.1887146, 13.6264096],
+          [123.1887022, 13.626326],
+          [123.1886798, 13.6262324],
+          [123.1886609, 13.6261626],
+          [123.1886192, 13.6260846],
+          [123.1885541, 13.6259675],
+          [123.1883219, 13.6256408],
+          [123.1881557, 13.6254397],
+          [123.1877736, 13.624957],
+          [123.1876238, 13.624736],
+          [123.187425, 13.624363],
+          [123.1872177, 13.6239729],
+          [123.1870231, 13.6235501],
+          [123.1869239, 13.6233624],
+          [123.186762, 13.6231153],
+          [123.1864985, 13.6223547],
+          [123.1863866, 13.6221109],
+          [123.1861368, 13.6215925],
+          [123.1858576, 13.62117],
+          [123.1857572, 13.62103],
+          [123.185638, 13.6209419],
+          [123.1855101, 13.6208709],
+          [123.1853393, 13.6207408],
+          [123.1850908, 13.6205805],
+          [123.1848445, 13.620454],
+          [123.1845727, 13.6203149],
+          [123.1843952, 13.6202101],
+          [123.1841969, 13.6201589],
+          [123.1842039, 13.6201265],
+          [123.184077, 13.6201044],
+          [123.1840703, 13.6201398],
+          [123.1838875, 13.6201169],
+          [123.1837651, 13.6200427],
+          [123.1832849, 13.6198508],
+          [123.1830351, 13.6197136],
+          [123.182675, 13.619398],
+          [123.1823201, 13.6190645],
+          [123.1820654, 13.618831],
+          [123.1818508, 13.618601],
+          [123.1816648, 13.6183641],
+          [123.1814436, 13.6180895],
+          [123.1812594, 13.6178879],
+          [123.1808731, 13.617474],
+          [123.1804168, 13.6169703],
+          [123.1802909, 13.6168813],
+          [123.1805248, 13.6167766],
+          [123.1807424, 13.616716]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/168706218",
+      "class": "water_area",
+      "kind": "natural=water",
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "water",
+      "minzoom": 6,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1963769, 13.6335133],
+          [123.1963607, 13.6335739],
+          [123.1963041, 13.6335596],
+          [123.1963203, 13.633499],
+          [123.1963769, 13.6335133]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/478259482",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1962459, 13.6324224],
+          [123.1962143, 13.6323893],
+          [123.1961179, 13.6324761],
+          [123.196037, 13.6323912],
+          [123.19648, 13.6319629],
+          [123.1965224, 13.631954],
+          [123.1965964, 13.6320316],
+          [123.1965742, 13.6320583],
+          [123.1965473, 13.6320778],
+          [123.1965152, 13.6320859],
+          [123.1965664, 13.6321336],
+          [123.1962459, 13.6324224]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/746057996",
+      "class": "building_market",
+      "frontage": "food",
+      "shop_lng": 123.19640154545453,
+      "shop_lat": 13.632180281818183,
+      "shop_radius_m": 45.898114351221466,
+      "name": "Avenue Convention Plazaa",
+      "kind": "shop=mall",
+      "building:levels": "3",
+      "height": 9,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1959851, 13.6316379],
+          [123.1960797, 13.6315254],
+          [123.1962436, 13.6316686],
+          [123.1961445, 13.6317692],
+          [123.1959851, 13.6316379]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935821",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.196113225,
+      "shop_lat": 13.631650275,
+      "shop_radius_m": 14.366432894467891,
+      "name": "Jollibee",
+      "kind": "amenity=fast_food",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1951834, 13.6323206],
+          [123.1953131, 13.6322076],
+          [123.1954445, 13.6323499],
+          [123.1953148, 13.632463],
+          [123.1951834, 13.6323206]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1202491469",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19531395,
+      "shop_lat": 13.632335275,
+      "shop_radius_m": 14.218644357800956,
+      "name": "Krispy Kreme",
+      "kind": "amenity=fast_food",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1950429, 13.6321417],
+          [123.1951649, 13.6320297],
+          [123.1952886, 13.6321569],
+          [123.1952562, 13.6321867],
+          [123.1952694, 13.6322003],
+          [123.1951877, 13.6322754],
+          [123.1951518, 13.6322384],
+          [123.1951185, 13.632269],
+          [123.1950371, 13.6321853],
+          [123.1950625, 13.6321619],
+          [123.1950429, 13.6321417]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1202491471",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1950896, 13.6318756],
+          [123.1953744, 13.6316159],
+          [123.1954465, 13.6316906],
+          [123.1954208, 13.6317141],
+          [123.1955785, 13.6318774],
+          [123.1957852, 13.6320915],
+          [123.1956297, 13.6322333],
+          [123.1952683, 13.631859],
+          [123.1951648, 13.6319534],
+          [123.1950896, 13.6318756]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1202491472",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19541753333334,
+      "shop_lat": 13.631878977777777,
+      "shop_radius_m": 46.27964510595184,
+      "name": "Uma Hotel + Residences",
+      "kind": "tourism=hotel",
+      "website": "https://umahotel.ph/",
+      "building:levels": "18",
+      "height": 54,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945826, 13.6337444],
+          [123.194729, 13.633605],
+          [123.1947645, 13.6335909],
+          [123.1948027, 13.6335952],
+          [123.1948115, 13.6336314],
+          [123.1947999, 13.6336657],
+          [123.1947622, 13.6337018],
+          [123.1947714, 13.6337207],
+          [123.1946981, 13.6337834],
+          [123.1946861, 13.6337721],
+          [123.1946483, 13.6338047],
+          [123.1945826, 13.6337444]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1426179185",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19473239090908,
+      "shop_lat": 13.6336923,
+      "shop_radius_m": 17.21148635600308,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1966272, 13.6321131],
+          [123.1967195, 13.6321686],
+          [123.196644, 13.6322338],
+          [123.1967277, 13.6323302],
+          [123.1963194, 13.6326745],
+          [123.1961764, 13.6325431],
+          [123.1966272, 13.6321131]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534490773",
+      "class": "parking",
+      "kind": "amenity=parking",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943138, 13.6331326],
+          [123.1945057, 13.6333047],
+          [123.1945074, 13.6333422],
+          [123.1944666, 13.6333769],
+          [123.194307, 13.6333876],
+          [123.194279, 13.6332655],
+          [123.19422, 13.6332766],
+          [123.1942153, 13.6332399],
+          [123.1943138, 13.6331326]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534879997",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19435184999999,
+      "shop_lat": 13.63329075,
+      "shop_radius_m": 18.08009132779508,
+      "kind": "building=commercial",
+      "building:levels": "2",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943064, 13.6331325],
+          [123.1942253, 13.6332237],
+          [123.19419, 13.6331969],
+          [123.1942715, 13.6330983],
+          [123.1943064, 13.6331325]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534879998",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.1942483,
+      "shop_lat": 13.63316285,
+      "shop_radius_m": 7.6114228201997145,
+      "name": "Gotohan",
+      "kind": "amenity=restaurant",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1944348, 13.633045],
+          [123.1943936, 13.6330124],
+          [123.1945143, 13.6328937],
+          [123.1945546, 13.6329291],
+          [123.1944348, 13.633045]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534879999",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.194474325,
+      "shop_lat": 13.63297005,
+      "shop_radius_m": 9.92436476528149,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1944412, 13.63305],
+          [123.1945457, 13.6329481],
+          [123.1945754, 13.6329726],
+          [123.194471, 13.6330737],
+          [123.1944412, 13.63305]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534880000",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.19450832500002,
+      "shop_lat": 13.633011100000001,
+      "shop_radius_m": 8.454939566891442,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1947524, 13.6331387],
+          [123.1947045, 13.6330814],
+          [123.1947419, 13.6330518],
+          [123.1947898, 13.6331091],
+          [123.1947524, 13.6331387]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534880001",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1947573, 13.6330297],
+          [123.1948514, 13.6329511],
+          [123.1949035, 13.6330099],
+          [123.1948093, 13.6330885],
+          [123.1947573, 13.6330297]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534880002",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.19483037500001,
+      "shop_lat": 13.6330198,
+      "shop_radius_m": 7.987320864839813,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945164, 13.6328907],
+          [123.1945573, 13.6328455],
+          [123.1946248, 13.6329032],
+          [123.1945838, 13.6329484],
+          [123.1945164, 13.6328907]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940711",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.19459, 13.632965],
+          [123.1946283, 13.6329291],
+          [123.1946637, 13.6329649],
+          [123.1946254, 13.6330007],
+          [123.19459, 13.632965]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940712",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1946343, 13.6329203],
+          [123.1946954, 13.6328613],
+          [123.1947391, 13.6329042],
+          [123.1946759, 13.6329632],
+          [123.1946343, 13.6329203]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940713",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194619, 13.6328889],
+          [123.1945821, 13.632858],
+          [123.1946305, 13.6328056],
+          [123.1946699, 13.6328386],
+          [123.194619, 13.6328889]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940714",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194529, 13.6328026],
+          [123.1945673, 13.6327608],
+          [123.1946068, 13.6327951],
+          [123.1945684, 13.6328368],
+          [123.194529, 13.6328026]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940715",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194569, 13.6326448],
+          [123.1946149, 13.6326092],
+          [123.1946675, 13.6326731],
+          [123.1946216, 13.6327088],
+          [123.194569, 13.6326448]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940716",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943875, 13.6327492],
+          [123.1943227, 13.632692],
+          [123.1943681, 13.6326434],
+          [123.1943477, 13.6326254],
+          [123.1943893, 13.632581],
+          [123.1944744, 13.6326563],
+          [123.1943875, 13.6327492]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940717",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194621, 13.6325771],
+          [123.1946751, 13.632543],
+          [123.1947068, 13.632571],
+          [123.1946542, 13.6326041],
+          [123.194621, 13.6325771]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940718",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942058, 13.6334154],
+          [123.1941878, 13.633331],
+          [123.1942631, 13.6333158],
+          [123.1942812, 13.6334002],
+          [123.1942058, 13.6334154]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940719",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.194234475,
+      "shop_lat": 13.633365600000001,
+      "shop_radius_m": 6.355084494384381,
+      "name": "G-Spot",
+      "kind": "amenity=restaurant",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1940935, 13.6326658],
+          [123.1941492, 13.6326063],
+          [123.1942022, 13.6326532],
+          [123.1941465, 13.6327126],
+          [123.1940935, 13.6326658]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940721",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942306, 13.6325256],
+          [123.1942614, 13.6324961],
+          [123.1943346, 13.6325682],
+          [123.1943039, 13.6325977],
+          [123.1942306, 13.6325256]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940722",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1942693, 13.6324927],
+          [123.1943308, 13.6324401],
+          [123.194382, 13.6325145],
+          [123.1943259, 13.6325533],
+          [123.1942693, 13.6324927]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940723",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1945863, 13.6323334],
+          [123.1946404, 13.6323107],
+          [123.1946682, 13.63236],
+          [123.1946097, 13.6323889],
+          [123.1945863, 13.6323334]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940724",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194597, 13.6324865],
+          [123.1945658, 13.6324235],
+          [123.1946419, 13.6323898],
+          [123.1946673, 13.6324552],
+          [123.194597, 13.6324865]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940725",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194806, 13.6326652],
+          [123.1947556, 13.6327252],
+          [123.1947, 13.632681],
+          [123.1947504, 13.6326211],
+          [123.194806, 13.6326652]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940726",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.194629, 13.6327924],
+          [123.1945832, 13.6327523],
+          [123.1946214, 13.632711],
+          [123.1946672, 13.6327511],
+          [123.194629, 13.6327924]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940727",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1943479, 13.6323705],
+          [123.194308, 13.6323102],
+          [123.1943802, 13.6322624],
+          [123.194415, 13.63233],
+          [123.1943479, 13.6323705]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940728",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1944, 13.6319982],
+          [123.1944449, 13.631977],
+          [123.1944695, 13.6320216],
+          [123.1944213, 13.632045],
+          [123.1944, 13.6319982]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940734",
+      "class": "building_religious",
+      "name": "San Martin Chapel",
+      "kind": "building=chapel",
+      "height": 15,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1941859, 13.6319529],
+          [123.1942408, 13.632049],
+          [123.1942014, 13.6320709],
+          [123.1941471, 13.6319785],
+          [123.1941859, 13.6319529]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940735",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1947112, 13.6336119],
+          [123.1946488, 13.6334912],
+          [123.1946983, 13.6334944],
+          [123.1947736, 13.6335413],
+          [123.1947112, 13.6336119]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940741",
+      "class": "building",
+      "frontage": "commercial",
+      "shop_lng": 123.19470797500001,
+      "shop_lat": 13.6335347,
+      "shop_radius_m": 8.60098314862201,
+      "kind": "building=commercial",
+      "height": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1958155, 13.631622],
+          [123.1955785, 13.6318774],
+          [123.1954208, 13.6317141],
+          [123.1954465, 13.6316906],
+          [123.1954546, 13.6316115],
+          [123.195621, 13.6314305],
+          [123.1958138, 13.6315979],
+          [123.1958155, 13.631622]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534966517",
+      "class": "parking",
+      "kind": "amenity=parking",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1965304, 13.6334241],
+        [123.1964426, 13.6336684],
+        [123.1963038, 13.633871],
+        [123.1962125, 13.6340437]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518797",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 4,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1965304, 13.6334241],
+        [123.1960801, 13.6333051]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518808",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 4,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1959998, 13.6337373],
+        [123.1959461, 13.6336219],
+        [123.195883, 13.633486],
+        [123.195771, 13.6332593]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518813",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 4,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1971976, 13.6341019],
+        [123.1971658, 13.6339819],
+        [123.1970539, 13.6339057],
+        [123.196818, 13.6338067],
+        [123.1964426, 13.6336684],
+        [123.195883, 13.633486]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518874",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1966931, 13.6339934],
+        [123.1963038, 13.633871],
+        [123.1960266, 13.6337587],
+        [123.1959998, 13.6337373]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518880",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 4,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.195771, 13.6332593],
+        [123.1955208, 13.6330982]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518914",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 5,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1946808, 13.6333485],
+        [123.1947793, 13.6334283],
+        [123.1949646, 13.6335746],
+        [123.1954238, 13.6339079],
+        [123.1954959, 13.6339571],
+        [123.1956356, 13.634065],
+        [123.1958917, 13.6343623],
+        [123.1961312, 13.6346432],
+        [123.1962097, 13.6347361],
+        [123.1963038, 13.634805],
+        [123.1964073, 13.6348547],
+        [123.1965933, 13.6349352],
+        [123.1967742, 13.6350159]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519386",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Peñafrancia Avenue",
+      "kind": "highway=secondary",
+      "width": 8,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1939901, 13.6327285],
+        [123.1940612, 13.6326477],
+        [123.1941698, 13.6325304],
+        [123.1942389, 13.6324639],
+        [123.1943093, 13.6324073]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521166",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Del Rosario Street",
+      "kind": "highway=residential",
+      "width": 2.5,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1942186, 13.6329361],
+        [123.1945948, 13.6325939]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521205",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "San Ramon Street",
+      "kind": "highway=residential",
+      "width": 3,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1943093, 13.6324073],
+        [123.194434, 13.6323323],
+        [123.1946128, 13.6322616]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521339",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Del Rosario Street",
+      "kind": "highway=residential",
+      "width": 2.5,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1884649, 13.6275283],
+        [123.1887402, 13.6278769],
+        [123.1888725, 13.6280326],
+        [123.1891232, 13.6283066],
+        [123.1896341, 13.628777],
+        [123.189918, 13.6290371],
+        [123.1900364, 13.6291339],
+        [123.1901787, 13.6292465],
+        [123.190217, 13.6292826],
+        [123.1904842, 13.6295253],
+        [123.1906323, 13.6296598],
+        [123.1908044, 13.6298165],
+        [123.1908458, 13.6298533],
+        [123.1912873, 13.6302786],
+        [123.1913099, 13.6302953],
+        [123.1913947, 13.6303709],
+        [123.1915681, 13.6305328],
+        [123.191813, 13.6307565],
+        [123.1921618, 13.6310728],
+        [123.192469, 13.6313428],
+        [123.1925981, 13.631462],
+        [123.1927557, 13.6316057],
+        [123.1931521, 13.631964],
+        [123.1931912, 13.6319991],
+        [123.1933387, 13.632135],
+        [123.1937461, 13.6325095],
+        [123.1939901, 13.6327285],
+        [123.1942186, 13.6329361],
+        [123.1944908, 13.6331884],
+        [123.1946808, 13.6333485]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521401",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Peñafrancia Avenue",
+      "kind": "highway=secondary",
+      "width": 8,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1937461, 13.6325095],
+        [123.1940083, 13.6322616],
+        [123.1943902, 13.6320356]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521470",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "San Martin Street",
+      "kind": "highway=residential",
+      "width": 3,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1954494, 13.6326164],
+        [123.1951151, 13.6329206]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/30518281",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 10,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1951151, 13.6329206],
+        [123.1947883, 13.6332356],
+        [123.1946808, 13.6333485]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/30518283",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 10,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2198739, 13.6286976],
+        [123.2192731, 13.6286564],
+        [123.2189409, 13.6286263],
+        [123.21859, 13.6284752],
+        [123.2181329, 13.6281234],
+        [123.217891, 13.6279227],
+        [123.2174753, 13.6275794],
+        [123.217115, 13.6273259],
+        [123.216898, 13.6272903],
+        [123.216674, 13.6273525],
+        [123.2165122, 13.6274299],
+        [123.2164441, 13.6276111],
+        [123.2164017, 13.6278223],
+        [123.2163895, 13.6282331],
+        [123.2163222, 13.6286672],
+        [123.2161419, 13.6291968],
+        [123.2159883, 13.6297849],
+        [123.2158643, 13.6301004],
+        [123.2155256, 13.6305674],
+        [123.2152422, 13.6307825],
+        [123.2149537, 13.6308575],
+        [123.2146792, 13.6308174],
+        [123.2144754, 13.6307131],
+        [123.2142683, 13.6304662],
+        [123.213921, 13.6302318],
+        [123.2136586, 13.6301337],
+        [123.2133756, 13.6299924],
+        [123.2130707, 13.6298463],
+        [123.2129064, 13.6297733],
+        [123.2127457, 13.6297357],
+        [123.2126039, 13.6297279],
+        [123.2124653, 13.629744],
+        [123.2123593, 13.6297871],
+        [123.2119372, 13.6301621],
+        [123.2118025, 13.6303698],
+        [123.2117102, 13.630553],
+        [123.2117297, 13.6308577],
+        [123.2118583, 13.6309778],
+        [123.2119671, 13.6310144],
+        [123.2121985, 13.6309937],
+        [123.2126237, 13.6309187],
+        [123.2129764, 13.6309253],
+        [123.2131634, 13.6309332],
+        [123.2133089, 13.6309963],
+        [123.213449, 13.6311223],
+        [123.2136009, 13.6312721],
+        [123.2136856, 13.6314457],
+        [123.2136944, 13.6316768],
+        [123.2136719, 13.6318605],
+        [123.2136046, 13.6320558],
+        [123.21311, 13.6325537],
+        [123.2128713, 13.6328185],
+        [123.2127619, 13.6329237],
+        [123.2125218, 13.6331017],
+        [123.2123538, 13.6331982],
+        [123.2120423, 13.6333155],
+        [123.2118374, 13.6333463],
+        [123.2116325, 13.6333129],
+        [123.2114099, 13.6332648],
+        [123.2111823, 13.6331645],
+        [123.2109981, 13.6330426],
+        [123.210801, 13.6328248],
+        [123.2106015, 13.632563],
+        [123.2104305, 13.6324511],
+        [123.2102588, 13.6324487],
+        [123.2100472, 13.6325083],
+        [123.2099551, 13.632613],
+        [123.209861, 13.6330023],
+        [123.209775, 13.6333547],
+        [123.209741, 13.6336333],
+        [123.2096171, 13.6339447],
+        [123.2095192, 13.6340865],
+        [123.2093928, 13.6341834],
+        [123.2089708, 13.6344308],
+        [123.2087498, 13.6345279],
+        [123.208571, 13.6345512],
+        [123.208397, 13.6344782],
+        [123.2083152, 13.6343343],
+        [123.2082664, 13.6341872],
+        [123.208218, 13.6339553],
+        [123.2081242, 13.6336636],
+        [123.2080071, 13.6334659],
+        [123.2078483, 13.6333823],
+        [123.2075768, 13.6333103],
+        [123.2074394, 13.633294],
+        [123.2072437, 13.6333397],
+        [123.2070441, 13.6334658],
+        [123.2069217, 13.6336168],
+        [123.2068415, 13.633778],
+        [123.2067755, 13.6339639],
+        [123.2067887, 13.6342219],
+        [123.2068947, 13.6344871],
+        [123.2069879, 13.6348162],
+        [123.2070382, 13.6349646],
+        [123.2070697, 13.6351259],
+        [123.2070194, 13.6353824],
+        [123.2069998, 13.6357147],
+        [123.2069319, 13.6359871],
+        [123.2069014, 13.6362509],
+        [123.2067966, 13.6366752],
+        [123.2067069, 13.637345],
+        [123.2066518, 13.6376778],
+        [123.2065276, 13.6378604],
+        [123.2063156, 13.6380088],
+        [123.2061237, 13.638048],
+        [123.2058851, 13.6380306],
+        [123.2056686, 13.637958],
+        [123.2054573, 13.6378271],
+        [123.2053263, 13.6376803],
+        [123.2052837, 13.6374895],
+        [123.2052911, 13.6373714],
+        [123.2053437, 13.63716],
+        [123.2053855, 13.637058],
+        [123.2054683, 13.6369057],
+        [123.2056179, 13.636726],
+        [123.2058649, 13.6364191],
+        [123.206001, 13.6362066],
+        [123.2060534, 13.6359824],
+        [123.2060497, 13.6358191],
+        [123.206012, 13.6356201],
+        [123.2059417, 13.6354606],
+        [123.2058583, 13.6353663],
+        [123.2057213, 13.6352694],
+        [123.2054112, 13.6351485],
+        [123.2051432, 13.6350092],
+        [123.2049404, 13.6349149],
+        [123.2047651, 13.634848],
+        [123.2045839, 13.6348232],
+        [123.2044218, 13.6348411],
+        [123.2042023, 13.6349401],
+        [123.2039805, 13.6350695],
+        [123.2037923, 13.6352056],
+        [123.203655, 13.6353398],
+        [123.2035552, 13.6355182],
+        [123.2034726, 13.6358695],
+        [123.2034103, 13.6361408],
+        [123.2033203, 13.6364039],
+        [123.2032143, 13.6366025],
+        [123.2030752, 13.6367628],
+        [123.2029142, 13.6369148],
+        [123.2027093, 13.6370633],
+        [123.2024035, 13.6371372],
+        [123.202084, 13.6371008],
+        [123.2018223, 13.6369596],
+        [123.2016397, 13.636776],
+        [123.2015535, 13.6366665],
+        [123.2015013, 13.6364642],
+        [123.201557, 13.636164],
+        [123.2016815, 13.6355889],
+        [123.2017133, 13.6353097],
+        [123.2017022, 13.6351139],
+        [123.2016447, 13.6349596],
+        [123.2015217, 13.6349095],
+        [123.2013817, 13.634904],
+        [123.2012517, 13.6349525],
+        [123.201052, 13.6350329],
+        [123.2008979, 13.6351381],
+        [123.2006009, 13.6353802],
+        [123.2003775, 13.635691],
+        [123.2001166, 13.6359574],
+        [123.1998837, 13.6360721],
+        [123.199626, 13.636073],
+        [123.1993505, 13.6359691],
+        [123.1991687, 13.6357864],
+        [123.1991091, 13.6356165],
+        [123.1991455, 13.635434],
+        [123.1993188, 13.6350143],
+        [123.1994115, 13.6347733],
+        [123.1994604, 13.6345807],
+        [123.1994556, 13.6344533],
+        [123.1993779, 13.6341796],
+        [123.1992068, 13.6339486],
+        [123.1989391, 13.6337917],
+        [123.1987344, 13.6336872],
+        [123.1984174, 13.6335259],
+        [123.1980355, 13.6333719],
+        [123.1977438, 13.6333422],
+        [123.1972812, 13.6333982],
+        [123.1968664, 13.6333179],
+        [123.1964277, 13.6331844],
+        [123.1959047, 13.6330394],
+        [123.1953611, 13.6328887],
+        [123.1950845, 13.6327194],
+        [123.1949587, 13.6325419],
+        [123.194858, 13.6324057],
+        [123.1946969, 13.6321748],
+        [123.1946138, 13.6319471],
+        [123.1945301, 13.6317753],
+        [123.1945199, 13.6315829],
+        [123.1945352, 13.631409],
+        [123.1945733, 13.6312194],
+        [123.1946683, 13.631029],
+        [123.1947107, 13.6309049],
+        [123.1947383, 13.6307717],
+        [123.1946959, 13.6305865],
+        [123.1946618, 13.6304694],
+        [123.1946244, 13.6303891],
+        [123.194529, 13.6303083],
+        [123.194385, 13.6302223],
+        [123.1942504, 13.6301865],
+        [123.1939417, 13.630227],
+        [123.1936542, 13.6303715],
+        [123.1934758, 13.6303709],
+        [123.1933322, 13.6303259],
+        [123.1930524, 13.6301764],
+        [123.1928355, 13.6300793],
+        [123.1922747, 13.6299033],
+        [123.1920343, 13.6297604],
+        [123.1919311, 13.629662],
+        [123.1917971, 13.6295305],
+        [123.1913096, 13.6290901],
+        [123.1911439, 13.6289576],
+        [123.1909815, 13.6288341],
+        [123.1904725, 13.6284913],
+        [123.1897604, 13.6280777],
+        [123.1893094, 13.6278198],
+        [123.1890978, 13.6276338],
+        [123.1889093, 13.6273773],
+        [123.188865, 13.6270509],
+        [123.1888577, 13.6267501],
+        [123.1888382, 13.6263655],
+        [123.1887579, 13.6260631],
+        [123.1884917, 13.625613],
+        [123.1880357, 13.6250732],
+        [123.1878043, 13.6247629],
+        [123.1875494, 13.6243333],
+        [123.1874079, 13.6240222],
+        [123.187089, 13.6233685],
+        [123.1869246, 13.623032]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/84735131",
+      "class": "water_river",
+      "name": "Naga River",
+      "kind": "waterway=river",
+      "subdivision": "Balatas",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "water",
+      "minzoom": 9,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2010268, 13.6219042],
+        [123.2010255, 13.6220969],
+        [123.2010138, 13.6241955],
+        [123.2009992, 13.6251495],
+        [123.2009915, 13.6256958],
+        [123.2009806, 13.625913],
+        [123.2009667, 13.6260139],
+        [123.2009331, 13.6261612],
+        [123.2008687, 13.6263647],
+        [123.2008333, 13.6264454],
+        [123.2007299, 13.626674],
+        [123.2006544, 13.626806],
+        [123.2005168, 13.6270099],
+        [123.1991999, 13.6285523],
+        [123.1990551, 13.6287206],
+        [123.1987017, 13.6291434],
+        [123.1980718, 13.6298958],
+        [123.1980548, 13.6299157],
+        [123.1979732, 13.6300111],
+        [123.1977397, 13.6302839],
+        [123.1976009, 13.630452],
+        [123.1974584, 13.6306139],
+        [123.1973624, 13.6307275],
+        [123.1971993, 13.6309166],
+        [123.1968746, 13.6312994],
+        [123.1967731, 13.6314016],
+        [123.1966734, 13.6314995],
+        [123.1964589, 13.6316949],
+        [123.1963753, 13.6317713],
+        [123.196329, 13.6318116],
+        [123.1962521, 13.6318831],
+        [123.1961817, 13.631948],
+        [123.1960123, 13.6321],
+        [123.1958668, 13.6322372],
+        [123.1958125, 13.6322833]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/252223483",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 10,
+      "sidewalk": "both",
+      "sidewalk_width": 2,
+      "sidewalk_left_width": 2,
+      "sidewalk_right_width": 2,
+      "sidewalk_src": "mapped",
+      "subdivision": "Dayangdang",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1873131, 13.6341823],
+        [123.1873993, 13.6341875],
+        [123.1878095, 13.6342121],
+        [123.188235, 13.6342253],
+        [123.1884868, 13.6342332],
+        [123.1886905, 13.634239],
+        [123.1890047, 13.6342339],
+        [123.1893142, 13.6342094],
+        [123.1896116, 13.6341773],
+        [123.1897094, 13.6341608],
+        [123.190096, 13.6340941],
+        [123.1902115, 13.6340749],
+        [123.1905462, 13.6340177],
+        [123.1907146, 13.6339868],
+        [123.1908804, 13.6339585],
+        [123.1909675, 13.6339434],
+        [123.1911526, 13.6339089],
+        [123.1918238, 13.6337954],
+        [123.1919459, 13.633772],
+        [123.1925513, 13.6336792],
+        [123.192978, 13.6336229],
+        [123.1935454, 13.6335567],
+        [123.1944691, 13.6334514],
+        [123.1945573, 13.6334289],
+        [123.1946808, 13.6333485]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/596568225",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "M. T. Villanueva Avenue",
+      "kind": "highway=secondary",
+      "width": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1956754, 13.6317951],
+        [123.1958268, 13.6316572],
+        [123.1958449, 13.6316546],
+        [123.1958677, 13.6316715],
+        [123.1961817, 13.631948]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600074315",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1956585, 13.631575],
+        [123.1955592, 13.6316885],
+        [123.1956754, 13.6317951],
+        [123.1960123, 13.6321]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600074316",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1944691, 13.6334514],
+        [123.1944889, 13.63354],
+        [123.1945614, 13.6339092]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600074318",
+      "class": "path",
+      "kind": "highway=track",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1961764, 13.6325431],
+        [123.1966272, 13.6321131],
+        [123.1965742, 13.6320583]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/696861761",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 3.2,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1945061, 13.6333521],
+        [123.1945573, 13.6334289],
+        [123.194594, 13.6334831]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935813",
+      "class": "path",
+      "kind": "highway=footway",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1944511, 13.6332318],
+        [123.1944908, 13.6331884],
+        [123.1945327, 13.6331443]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935814",
+      "class": "path",
+      "kind": "highway=footway",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1947285, 13.6334763],
+        [123.1947793, 13.6334283],
+        [123.194826, 13.6333837]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935815",
+      "class": "path",
+      "kind": "highway=footway",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1947442, 13.6331799],
+        [123.1947883, 13.6332356],
+        [123.1948337, 13.6332956]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935816",
+      "class": "path",
+      "kind": "highway=footway",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1962521, 13.6318831],
+        [123.1959039, 13.6315887],
+        [123.1960239, 13.6314591],
+        [123.1963753, 13.6317713]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/838935820",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "oneway": 1,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1958125, 13.6322833],
+        [123.1954494, 13.6326164]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1060925382",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Magsaysay Avenue",
+      "kind": "highway=secondary",
+      "width": 10,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.19648, 13.6319629],
+        [123.196329, 13.6318116]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1202491464",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 3.2,
+      "oneway": 1,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1958668, 13.6322372],
+        [123.1961764, 13.6325431]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1422394648",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 3.2,
+      "oneway": 1,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1953834, 13.6339604],
+        [123.1954238, 13.6339079],
+        [123.1954745, 13.6338471]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534471279",
+      "class": "path",
+      "kind": "highway=footway",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1943025, 13.6329403],
+        [123.1943271, 13.6329597],
+        [123.1943462, 13.6329749],
+        [123.1944089, 13.6329124]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534879996",
+      "class": "barrier",
+      "variant": "gate",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1952029, 13.6329945],
+        [123.1948318, 13.6333172],
+        [123.1948335, 13.6333601],
+        [123.1948701, 13.6333914],
+        [123.1949125, 13.6334277]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940742",
+      "class": "barrier",
+      "variant": "wall",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1949125, 13.6334277],
+        [123.1949882, 13.6333574],
+        [123.1950993, 13.6332652],
+        [123.1952878, 13.6331125]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1534940743",
+      "class": "barrier",
+      "variant": "wall",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "landuse",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1946808, 13.6333485]
+    },
+    "properties": {
+      "id": "osm:node/254709879",
+      "class": "furniture",
+      "kind": "highway=traffic_signals",
+      "variant": "signals",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1945573, 13.6334289]
+    },
+    "properties": {
+      "id": "osm:node/254709882",
+      "class": "furniture",
+      "kind": "highway=crossing",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1961091, 13.6323183]
+    },
+    "properties": {
+      "id": "osm:node/642897379",
+      "class": "furniture",
+      "shop_lng": 123.1961091,
+      "shop_lat": 13.6323183,
+      "shop_radius_m": 5,
+      "name": "Mercury Drug",
+      "kind": "amenity=pharmacy",
+      "addr:street": "Magsaysay Avenue",
+      "variant": "shop_service",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1947793, 13.6334283]
+    },
+    "properties": {
+      "id": "osm:node/2319205336",
+      "class": "furniture",
+      "kind": "highway=crossing",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.194691, 13.6333839]
+    },
+    "properties": {
+      "id": "osm:node/12717296940",
+      "class": "place_label",
+      "name": "Peñafrancia",
+      "kind": "place=quarter",
+      "place": "quarter",
+      "subdivision_label": true,
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "labels",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1943271, 13.6329597]
+    },
+    "properties": {
+      "id": "osm:node/13985369905",
+      "class": "barrier",
+      "variant": "gate",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1948701, 13.6333914]
+    },
+    "properties": {
+      "id": "osm:node/13985945138",
+      "class": "barrier",
+      "variant": "gate",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1944908, 13.6331884]
+    },
+    "properties": {
+      "id": "osm:node/6791648462",
+      "class": "furniture",
+      "kind": "highway=crossing",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1947883, 13.6332356]
+    },
+    "properties": {
+      "id": "osm:node/7828859973",
+      "class": "furniture",
+      "kind": "highway=crossing",
+      "variant": "crossing",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1947673, 13.6330766]
+    },
+    "properties": {
+      "id": "osm:node/11986412508",
+      "class": "furniture",
+      "shop_lng": 123.1947673,
+      "shop_lat": 13.6330766,
+      "shop_radius_m": 5,
+      "name": "Gear Up Motor Garage",
+      "kind": "shop=motorcycle_repair",
+      "variant": "shop_retail",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1949291, 13.6329307]
+    },
+    "properties": {
+      "id": "osm:node/11986503316",
+      "class": "furniture",
+      "shop_lng": 123.1949291,
+      "shop_lat": 13.6329307,
+      "shop_radius_m": 5,
+      "name": "3JZ's Houseware Trading",
+      "kind": "shop=houseware",
+      "variant": "shop_retail",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.1944693, 13.6330216]
+    },
+    "properties": {
+      "id": "osm:node/11986511689",
+      "class": "furniture",
+      "shop_lng": 123.1944693,
+      "shop_lat": 13.6330216,
+      "shop_radius_m": 5,
+      "name": "Weejoe Musical Instruments & Supplies",
+      "kind": "shop=musical_instrument",
+      "variant": "shop_retail",
+      "subdivision": "Peñafrancia",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [
+        [
+          [
+            [123.21333, 13.6025],
+            [123.21333, 13.60417],
+            [123.21333, 13.60583],
+            [123.21333, 13.6075],
+            [123.21333, 13.60917],
+            [123.21333, 13.61083],
+            [123.21333, 13.6125],
+            [123.21333, 13.61417],
+            [123.21333, 13.61583],
+            [123.21333, 13.6175],
+            [123.21333, 13.61917],
+            [123.21333, 13.62083],
+            [123.21333, 13.6225],
+            [123.21333, 13.62417],
+            [123.21333, 13.62583],
+            [123.21333, 13.6275],
+            [123.21333, 13.62917],
+            [123.21333, 13.63083],
+            [123.21333, 13.6325],
+            [123.21333, 13.63417],
+            [123.21333, 13.63583],
+            [123.21333, 13.6375],
+            [123.21333, 13.63917],
+            [123.2125, 13.64],
+            [123.21083, 13.64],
+            [123.20917, 13.64],
+            [123.2075, 13.64],
+            [123.20583, 13.64],
+            [123.20417, 13.64],
+            [123.2025, 13.64],
+            [123.20083, 13.64],
+            [123.19917, 13.64],
+            [123.1975, 13.64],
+            [123.19583, 13.64],
+            [123.19417, 13.64],
+            [123.1925, 13.64],
+            [123.19083, 13.64],
+            [123.18917, 13.64],
+            [123.1875, 13.64],
+            [123.18583, 13.64],
+            [123.18417, 13.64],
+            [123.1825, 13.64],
+            [123.18083, 13.64],
+            [123.17917, 13.64],
+            [123.1775, 13.64],
+            [123.17583, 13.64],
+            [123.17417, 13.64],
+            [123.1725, 13.64],
+            [123.17083, 13.64],
+            [123.17, 13.63917],
+            [123.17, 13.6375],
+            [123.17, 13.63583],
+            [123.17, 13.63417],
+            [123.17, 13.6325],
+            [123.17, 13.63083],
+            [123.17, 13.62917],
+            [123.17, 13.6275],
+            [123.17, 13.62583],
+            [123.17, 13.62417],
+            [123.17, 13.6225],
+            [123.17, 13.62083],
+            [123.17, 13.61917],
+            [123.17, 13.6175],
+            [123.17, 13.61583],
+            [123.17, 13.61417],
+            [123.17, 13.6125],
+            [123.17, 13.61083],
+            [123.17, 13.60917],
+            [123.17, 13.6075],
+            [123.17, 13.60583],
+            [123.17, 13.60417],
+            [123.17, 13.6025],
+            [123.17083, 13.60167],
+            [123.1725, 13.60167],
+            [123.17417, 13.60167],
+            [123.17583, 13.60167],
+            [123.1775, 13.60167],
+            [123.17917, 13.60167],
+            [123.18083, 13.60167],
+            [123.1825, 13.60167],
+            [123.18417, 13.60167],
+            [123.18583, 13.60167],
+            [123.1875, 13.60167],
+            [123.18917, 13.60167],
+            [123.19083, 13.60167],
+            [123.1925, 13.60167],
+            [123.19417, 13.60167],
+            [123.19583, 13.60167],
+            [123.1975, 13.60167],
+            [123.19917, 13.60167],
+            [123.20083, 13.60167],
+            [123.2025, 13.60167],
+            [123.20417, 13.60167],
+            [123.20583, 13.60167],
+            [123.2075, 13.60167],
+            [123.20917, 13.60167],
+            [123.21083, 13.60167],
+            [123.2125, 13.60167],
+            [123.21333, 13.6025]
+          ],
+          [
+            [123.18083, 13.61565],
+            [123.18063, 13.61583],
+            [123.18083, 13.61593],
+            [123.18104, 13.61583],
+            [123.18083, 13.61565]
+          ],
+          [
+            [123.18583, 13.6121],
+            [123.18564, 13.6125],
+            [123.18583, 13.61304],
+            [123.18639, 13.6125],
+            [123.18583, 13.6121]
+          ],
+          [
+            [123.1875, 13.60711],
+            [123.18705, 13.6075],
+            [123.1875, 13.60817],
+            [123.18808, 13.6075],
+            [123.1875, 13.60711]
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "terrain/1",
+      "class": "terrain",
+      "height": 1,
+      "elevation_min": 1,
+      "region": true
+    },
+    "tippecanoe": {
+      "layer": "terrain",
+      "minzoom": 6,
+      "maxzoom": 10
+    }
+  }
+]

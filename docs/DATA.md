@@ -294,7 +294,7 @@ Cemetery {                      // cities/<slug>/cemeteries/*.json — sourced b
 SiteDetail {                     // cities/<slug>/details/*.json — sourced outdoor detail
   id: string;                    // "detail/<slug>"
   osm_id: string; title: string; surface: 'paving' | 'keep';
-  grounds?: [lng, lat][];         // simple closed ring containing the full area or point parent
+  grounds?: [lng, lat][];         // simple closed ring containing the complete area, point or line parent
   extent?: [lng, lat][];          // alternatively, confine detail wholly inside an area parent
   selection_osm_id?: string;      // optional canonical curated landmark for these grounds
   structures?: {
@@ -357,6 +357,13 @@ overrides preserve older layout fingerprints; height changes invalidate them. St
 estimates must document floor height and uncertain wing assignment in the pack's sources.
 Missing, non-building, exterior and duplicate targets fail. These visual estimates do not
 establish construction history or cadastral ownership.
+
+An existing OSM `LineString`, such as a bridge centreline, can anchor a detail pack only
+with explicit `grounds`. The outline must contain every complete segment, including
+intermediate vertices and segments crossing concave boundaries; endpoint containment
+alone is insufficient. The original road geometry, width, class and identity remain.
+Use `surface: 'keep'` for riverbank structures so the coverage envelope adds no ground
+fill across water or bridge traffic.
 
 Landcover `tree_overrides` refine a mapped tree's crown, height or kind before curated-tree
 deduplication. They never move the trunk or create another feature. At least one attribute

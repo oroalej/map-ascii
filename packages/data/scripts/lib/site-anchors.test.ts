@@ -87,7 +87,7 @@ describe('site anchor surfaces', () => {
     });
     expect([building, detail]).toEqual(before);
   });
-  it('requires grounds for building and point parents and rejects unsupported line parents', () => {
+  it('requires grounds for building, point and line parents and rejects unsupported geometry', () => {
     expect(() => mergeSiteDetails([building], [pack({ osm_id: building.properties.id })])).toThrow(
       'building parent needs curated grounds',
     );
@@ -100,8 +100,14 @@ describe('site anchor surfaces', () => {
       ...parent,
       geometry: { type: 'LineString' as const, coordinates: [p(5, 5), p(10, 10)] },
     };
-    expect(() => mergeSiteDetails([line], [pack({ grounds: ring() })])).toThrow(
-      'existing OSM area',
+    expect(() => mergeSiteDetails([line], [pack()])).toThrow('explicit grounds');
+    expect(mergeSiteDetails([line], [pack({ grounds: ring() })]).features).toEqual([line]);
+    const multiLine = {
+      ...line,
+      geometry: { type: 'MultiLineString' as const, coordinates: [line.geometry.coordinates] },
+    };
+    expect(() => mergeSiteDetails([multiLine], [pack({ grounds: ring() })])).toThrow(
+      'explicit grounds',
     );
   });
   it('checks complete area and point containment, including multiple polygons', () => {

@@ -390,7 +390,7 @@ export const SiteDetail = z
     osm_id: OsmId,
     title: z.string().min(1),
     surface: z.enum(['paving', 'keep']),
-    /** Optional site outline containing an area parent or a point parent. */
+    /** Optional site outline containing a complete area, point or line parent. */
     grounds: SimpleRing.optional(),
     /** Detail confined to part of an existing area parent; preserves the complete parent. */
     extent: SimpleRing.optional(),

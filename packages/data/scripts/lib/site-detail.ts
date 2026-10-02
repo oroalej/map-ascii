@@ -10,7 +10,7 @@ import {
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import { difference, intersection, union } from 'polyclip-ts';
-import type { Polygon, MultiPolygon, Position } from 'geojson';
+import type { Polygon, MultiPolygon, LineString, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
 import { bboxesOverlap } from './geo';
@@ -111,10 +111,41 @@ const clip = (g: Polygon | MultiPolygon) =>
   (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((p) =>
     p.map((r) => r.map(([lng, lat]): LngLat => [lng!, lat!])),
   );
+/** Check whole segments, including crossings of concave outlines and open interiors. */
+function lineContained(line: LineString, area: Polygon | MultiPolygon): boolean {
+  if (!line.coordinates.every((p) => inside(p, area))) return false;
+  const rings = clip(area).flat();
+  const cross = ([ax, ay]: LngLat, [bx, by]: LngLat) => ax * by - ay * bx;
+  return line.coordinates.slice(1).every((b, i) => {
+    const a = line.coordinates[i]!;
+    const f = frame(a as LngLat);
+    const end = f.local(b);
+    const cuts = [0, 1];
+    for (const ring of rings)
+      for (let j = 1; j < ring.length; j++) {
+        const c = f.local(ring[j - 1]!);
+        const d = f.local(ring[j]!);
+        const edge: LngLat = [d[0] - c[0], d[1] - c[1]];
+        const denominator = cross(end, edge);
+        if (Math.abs(denominator) < 1e-12) continue;
+        const t = cross(c, edge) / denominator;
+        const u = cross(c, end) / denominator;
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts.push(t);
+      }
+    cuts.sort((a, b) => a - b);
+    return cuts.slice(1).every((t, j) => {
+      const mid = (cuts[j]! + t) / 2;
+      return inside(f.world([end[0] * mid, end[1] * mid]), area);
+    });
+  });
+}
+
 const contained = (g: AtlasFeature['geometry'], area: Polygon | MultiPolygon) =>
   g.type === 'Point'
     ? inside(g.coordinates, area)
-    : isArea(g) && difference(clip(g), clip(area)).length === 0;
+    : g.type === 'LineString'
+      ? lineContained(g, area)
+      : isArea(g) && difference(clip(g), clip(area)).length === 0;
 
 /** OSM grounds can stop at a church's facade; allow a small boundary gap, not a remote alias. */
 function selectionNear(g: AtlasFeature['geometry'], area: Polygon | MultiPolygon): boolean {
@@ -158,9 +189,12 @@ export function mergeSiteDetails(
     const parent = features.find((f) => f.properties.id === pack.osm_id);
     if (
       !parent ||
-      (!isArea(parent.geometry) && !(pack.grounds && parent.geometry.type === 'Point'))
+      (!isArea(parent.geometry) &&
+        !(pack.grounds && ['Point', 'LineString'].includes(parent.geometry.type)))
     )
-      throw new Error(`${pack.id}: parent ${pack.osm_id} must be an existing OSM area`);
+      throw new Error(
+        `${pack.id}: parent ${pack.osm_id} needs an existing OSM area or explicit grounds`,
+      );
     if (parents.has(pack.osm_id))
       throw new Error(`${pack.id}: duplicate detail parent ${pack.osm_id}`);
     parents.add(pack.osm_id);
