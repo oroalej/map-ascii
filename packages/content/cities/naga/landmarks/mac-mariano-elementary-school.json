@@ -1,0 +1,20 @@
+{
+  "id": "landmark/mac-mariano-elementary-school",
+  "osm_id": "osm:way/222976550",
+  "name": {
+    "en": "Mac Mariano Elementary School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/222976550",
+      "note": "ODbL. Complete mapped grounds, buildings, roads and identities retained."
+    },
+    {
+      "title": "Owner-supplied five landscaped grounds references",
+      "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative draft landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}
