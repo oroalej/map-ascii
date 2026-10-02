@@ -10,6 +10,9 @@ describe('vehicle lamps', () => {
     expect(hold).toBeCloseTo(0.1);
     expect(brakeHold(hold, 5, 5, 0.1, false)).toBeCloseTo(0);
     expect(brakeHold(0, 0, 0, 0.1, false)).toBe(BRAKE.hold);
+    expect(brakeHold(0, 0, 0.1, 0.1, false)).toBe(0);
+    expect(brakeHold(BRAKE.hold, 0, 0.1, 0.1, false)).toBeCloseTo(0.2);
+    expect(brakeHold(0.1, 0.1, 0.2, 0.1, false)).toBeCloseTo(0);
     expect(brakeHold(0, 5, 5, 0.1, false)).toBe(0);
     expect(brakeHold(BRAKE.hold, 5, 0, 0.1, true)).toBe(0);
   });

@@ -43,6 +43,7 @@ const glyphs = [
   ...sextantGlyphs.slice(1),
 ];
 const glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
+const packedGlyph = (texel: readonly number[]) => unpackGlyph(texel[0]!, texel[1]!).glyph;
 /** lng → column and lat → row, one cell per degree. */
 const grid: LifeGrid = {
   cols: 10,
@@ -220,7 +221,7 @@ describe('packLife birds', () => {
     for (let i = 0; i < egret.out.length; i += 4) {
       if (egret.out[i + 2]) texels.push(Array.from(egret.out.subarray(i, i + 4)));
     }
-    expect(texels.every(([g]) => sextantGlyphs.includes(glyphs[g!]!))).toBe(true);
+    expect(texels.every((t) => sextantGlyphs.includes(glyphs[packedGlyph(t)]!))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret', true))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret'))).toBe(true);
   });
@@ -543,20 +544,21 @@ describe('packLife lines', () => {
       { glyph: '¶', paint: Paint.white },
     );
     expect(cells.map((c) => c.col)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(cells.slice(0, -1).every((c) => c.texel[0] === index('─'))).toBe(true);
-    expect(cells.at(-1)!.texel[0]).toBe(index('¶'));
+    expect(cells.slice(0, -1).every((c) => packedGlyph(c.texel) === index('─'))).toBe(true);
+    expect(packedGlyph(cells.at(-1)!.texel)).toBe(index('¶'));
     expect(cells.at(-1)!.texel[3]).toBe(vehicleByte(Paint.white, VehiclePart.body));
     expect(cells[0]!.texel[3]).toBe(vehicleByte(Paint.yellow, VehiclePart.body));
     expect(cells[1]!.texel[3]).toBe(vehicleByte(Paint.graphite, VehiclePart.body));
     // Over the water only.
     for (const { texel } of cells) {
-      expect(texel[1]).toBe(classId('life_boat'));
+      expect(unpackGlyph(texel[0]!, texel[1]!).cls).toBe(classId('life_boat'));
       expect(texel[2]).toBe(CellBit.boat);
     }
   });
 
   it('turns with its direction on screen, and skips lines under a cell', () => {
-    const glyphs = (points: [number, number][]) => new Set(draw(points).map((c) => c.texel[0]));
+    const glyphs = (points: [number, number][]) =>
+      new Set(draw(points).map((c) => packedGlyph(c.texel)));
     expect(
       glyphs([
         [5.5, 5.5],
@@ -735,8 +737,9 @@ describe('packLife people', () => {
     // 0.6 m at 6 cells per meter: over 3 columns, each cell a sextant of the figure.
     expect(new Set(near.cells.map((c) => c.col)).size).toBeGreaterThanOrEqual(3);
     for (const c of near.cells) {
-      expect(sextantGlyphs.map(glyphIndex)).toContain(c.texel[0]);
-      expect(c.texel.slice(1, 3)).toEqual([classId('life_person'), CellBit.person]);
+      expect(sextantGlyphs.map(glyphIndex)).toContain(packedGlyph(c.texel));
+      expect(unpackGlyph(c.texel[0]!, c.texel[1]!).cls).toBe(classId('life_person'));
+      expect(c.texel[2]).toBe(CellBit.person);
     }
     // Shirt around, skin in its middle.
     const parts = new Set(near.cells.map((c) => (c.texel[3]! >> 4) & 7));

@@ -1,5 +1,6 @@
 import * as Comlink from 'comlink';
 import type { CameraState, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid, metersPerCssPx } from '../grid';
 import { treeGust } from '../glyphs/select';
@@ -26,6 +27,8 @@ export type FrameInput = {
     wind: Step[4];
     weather: Step[5];
     cellMeters: Step[6];
+    /** Actual rounded render grid scale; movement still uses CSS clearance. */
+    effectCellMeters?: number;
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -38,6 +41,8 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  dialogue?: readonly DialogueChoice[];
+  periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
   processions: readonly ProcessionRoute[];
   profiling?: boolean;
@@ -67,7 +72,8 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.wind,
     step.weather,
     step.cellMeters,
-    metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
+    gust.cssCell.h / gust.cssCell.w,
+    step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
@@ -82,7 +88,14 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
 }
 
 /** Plain API for both Comlink and deterministic tests; no DOM or GL dependencies. */
-export function createLifeWorkerApi(preparationClock?: () => number) {
+export function createLifeWorkerApi(
+  preparationClock?: () => number,
+  worldFactory = (options: LifeInit, profiler?: FrameProfiler) =>
+    new LifeWorld(options.traffic, profiler, {
+      dialogue: options.dialogue,
+      periods: options.periods,
+    }),
+) {
   let world: LifeWorld;
   let profiler: FrameProfiler | undefined;
   let preparation: LifePreparation;
@@ -93,7 +106,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
     init(options: LifeInit) {
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
-      world = new LifeWorld(options.traffic, profiler);
+      world = worldFactory(options, profiler);
       preparation = new LifePreparation(world, profiler, preparationClock);
       world.setProcessions(options.processions);
       geometries.clear();

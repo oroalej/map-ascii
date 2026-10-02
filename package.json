@@ -23,7 +23,8 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify:life": "tsx packages/renderer/scripts/verify-life.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

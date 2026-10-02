@@ -8,7 +8,10 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json"
+  },
+  "devDependencies": {
+    "@atlas/content": "workspace:^"
   },
   "dependencies": {
     "@atlas/shared": "workspace:^",

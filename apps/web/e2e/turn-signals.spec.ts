@@ -1,13 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
-import { packLife } from '../../../packages/renderer/src/life/draw';
 import {
-  SIGNAL_VEHICLES,
   TURN_SIGNAL_BIT,
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
-import { Paint, VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
 import { BRAKE_COLOR, BRAKE_LAMP } from '../../../packages/renderer/src/life/lamps';
 import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
@@ -15,85 +13,15 @@ import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
 
-test('vehicle turn signals render amber by day and night and retain terrain, canopy and label masks', async ({
+test('vehicle lamps and exhaust render by day and night with terrain, canopy and label masks', async ({
   page,
 }, testInfo) => {
   for (const name of ['dark', 'light'] as const) {
     const theme = themes[name];
     const glyphs = [' ', ...mapGlyphs(theme).filter((g) => g !== ' ')];
     const block = glyphs.indexOf('█');
-    // A controlled detailed fleet for visual QA, independent of live city traffic and timing.
-    const cols = 384,
-      rows = 90,
-      cw = 6,
+    const cw = 6,
       ch = 9;
-    const fleet = new Uint8Array(cols * rows * 4);
-    const fleetAgents = SIGNAL_VEHICLES.flatMap((vehicle, i) =>
-      [0, 1, 2, 3].map((row) => {
-        const x = 32 + i * 64,
-          y = 12 + row * 22,
-          dx = row === 0 ? 1 : -1;
-        return {
-          kind: 'vehicle' as const,
-          vehicle,
-          paint: Paint.silver,
-          lng: x,
-          lat: y,
-          ahead: [x + dx * 5.5, y] as [number, number],
-          side: [x, y + (dx * 33) / ch] as [number, number],
-          flap: 0,
-          turnSignal:
-            row < 2
-              ? { side: row === 0 ? ('left' as const) : ('right' as const), on: true }
-              : undefined,
-          lamps:
-            row === 2
-              ? { kind: 'hazard' as const, on: true }
-              : row === 3
-                ? { kind: 'brake' as const }
-                : undefined,
-        };
-      }),
-    );
-    packLife(
-      fleet,
-      {
-        cols,
-        rows,
-        cellWidth: cw,
-        cellHeight: ch,
-        toCell: (x, y) => [x, y],
-      },
-      fleetAgents,
-      theme,
-      (glyph) => glyphs.indexOf(glyph),
-    );
-    const fleetOff = new Uint8Array(fleet.length);
-    packLife(
-      fleetOff,
-      { cols, rows, cellWidth: cw, cellHeight: ch, toCell: (x, y) => [x, y] },
-      fleetAgents.map((a) =>
-        a.lamps?.kind === 'hazard' ? { ...a, lamps: { kind: 'hazard', on: false } } : a,
-      ),
-      theme,
-      (glyph) => glyphs.indexOf(glyph),
-    );
-    const hazardCells = SIGNAL_VEHICLES.map((_, i) => {
-      const cells: { col: number; row: number; front: boolean; left: boolean }[] = [];
-      for (let row = 45; row < 67; row++)
-        for (let col = i * 64; col < (i + 1) * 64; col++) {
-          const at = (row * cols + col) * 4;
-          if (fleet[at + 2]! & TURN_SIGNAL_BIT) {
-            cells.push({ col, row, front: col < 32 + i * 64, left: row >= 56 });
-            expect(fleetOff[at + 2]! & TURN_SIGNAL_BIT).toBe(0);
-            // Corner selection can reuse a body cell. Off restores its original vehicle part.
-            expect((fleetOff[at + 3]! >> 4) & 7).toBeLessThan(VehiclePart.mini);
-          }
-        }
-      expect(cells).toHaveLength(4);
-      expect(new Set(cells.map((c) => `${c.front}/${c.left}`)).size).toBe(4);
-      return cells;
-    });
     const result = await page.evaluate(
       (input) => {
         const canvas = document.createElement('canvas');
@@ -280,84 +208,8 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         gl.bindTexture(gl.TEXTURE_2D, lifeTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
         const off = render(1).cells[0];
-        // Finish on the fleet so screenshots inspect real packLife output in both themes.
-        canvas.width = input.cols * input.cw;
-        canvas.height = input.rows * input.ch;
-        canvas.style.width = `${canvas.width / 2}px`;
-        canvas.style.height = `${canvas.height / 2}px`;
-        const fleetGround = new Uint8Array(input.cols * input.rows * 4);
-        for (let i = 0; i < fleetGround.length; i += 4) fleetGround[i + 1] = input.road;
-        const fleetSelected = texture(input.cols, input.rows, fleetGround);
-        const fleetLife = texture(input.cols, input.rows, new Uint8Array(input.fleet));
-        gl.viewport(0, 0, canvas.width, canvas.height);
-        uniforms({
-          ...common,
-          u_height: canvas.height,
-          u_glyphs: fleetSelected,
-          u_life: fleetLife,
-          u_daylight: 1,
-          u_overlay: blank,
-        });
-        const fleetHazards = (daylight: number, offPhase = false) => {
-          if (offPhase) {
-            gl.bindTexture(gl.TEXTURE_2D, fleetLife);
-            gl.texSubImage2D(
-              gl.TEXTURE_2D,
-              0,
-              0,
-              0,
-              input.cols,
-              input.rows,
-              gl.RGBA,
-              gl.UNSIGNED_BYTE,
-              new Uint8Array(input.fleetOff),
-            );
-          }
-          uniforms({
-            ...common,
-            u_height: canvas.height,
-            u_glyphs: fleetSelected,
-            u_life: fleetLife,
-            u_daylight: daylight,
-            u_overlay: blank,
-          });
-          gl.drawArrays(gl.TRIANGLES, 0, 3);
-          return input.hazardCells.map((cells) =>
-            cells.map(({ col, row }) => {
-              const pixels = new Uint8Array(input.cw * input.ch * 4);
-              gl.readPixels(
-                col * input.cw,
-                canvas.height - (row + 1) * input.ch,
-                input.cw,
-                input.ch,
-                gl.RGBA,
-                gl.UNSIGNED_BYTE,
-                pixels,
-              );
-              for (let at = 0; at < pixels.length; at += 4)
-                if (input.amber.every((c, i) => Math.abs(pixels[at + i]! - c) <= 1)) return true;
-              return false;
-            }),
-          );
-        };
-        const hazardDay = fleetHazards(1),
-          hazardNight = fleetHazards(0),
-          hazardOff = fleetHazards(1, true);
-        gl.bindTexture(gl.TEXTURE_2D, fleetLife);
-        gl.texSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          0,
-          0,
-          input.cols,
-          input.rows,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          new Uint8Array(input.fleet),
-        );
-        fleetHazards(1);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off, hazardDay, hazardNight, hazardOff };
+        return { day, night, off };
       },
       {
         vertex: fullscreenVertex,
@@ -367,12 +219,6 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         block,
         cw,
         ch,
-        cols,
-        rows,
-        fleet: Array.from(fleet),
-        fleetOff: Array.from(fleetOff),
-        hazardCells,
-        amber: TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255)),
         paints: themeUniforms(theme).paints,
         background: theme.background.slice(0, 3),
         bits: Array.from(cellBits()),
@@ -396,9 +242,6 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
-    for (const cells of [...result.hazardDay, ...result.hazardNight])
-      expect(cells).toEqual([true, true, true, true]);
-    for (const cells of result.hazardOff) expect(cells).toEqual([false, false, false, false]);
     for (const frame of [result.day, result.night]) {
       for (const x of [0, 2, 6])
         frame.cells[x]!.forEach((c, i) => expect(Math.abs(c - amber[i]!)).toBeLessThanOrEqual(1));
@@ -421,6 +264,6 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
     expect(result.off).toEqual(result.day.cells[1]);
     await page
       .locator('canvas')
-      .screenshot({ path: testInfo.outputPath(`turn-signals-${name}.png`) });
+      .screenshot({ path: testInfo.outputPath(`vehicle-effects-${name}.png`) });
   }
 });

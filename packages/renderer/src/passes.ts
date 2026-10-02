@@ -42,6 +42,7 @@ import {
   type Overlay,
 } from './labels';
 import { cellBits } from './life/config';
+import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
   utilityViewportVisibility,
@@ -446,6 +447,18 @@ const texels = (targets: CellTargets): Texels => {
   return found;
 };
 
+/** CPU raster backing the current uploaded Life texture, for bounded visibility queries. */
+export const lifeRaster = (targets: CellTargets): Uint8Array => texels(targets).life;
+/** A conservative label/halo guard, including rotated labels' collision bounds. */
+export function labelCovers(targets: CellTargets, col: number, row: number): boolean {
+  const overlay = overlays.get(targets)?.overlay;
+  if (!overlay) return false;
+  return overlay.taken.some(
+    (box) =>
+      col >= box.left && col < box.left + box.width && row >= box.top && row < box.top + box.height,
+  );
+}
+
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
  * is up, and upload them to the life texture. Returns how many landed on the grid.
@@ -461,6 +474,8 @@ export function lifePass(
   sun?: Sun | null,
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
+  owners?: Uint32Array,
+  speakers?: LifeGrid['speakers'],
   puffs?: Float64Array,
 ): number {
   const { cols, rows } = targets;
@@ -475,6 +490,8 @@ export function lifePass(
       cellHeight: view.cellDev.h,
       toCell: placement.toCell,
       allowsGroundCell,
+      owners,
+      speakers,
     },
     agents,
     theme,
@@ -724,7 +741,7 @@ export function glyphPass(
     u_crownSun:
       sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),
-    u_vehicleOccluders: [classId('tree'), classId('tree_crown'), classId('trees')],
+    u_vehicleOccluders: LIFE_OCCLUDERS,
     u_boat: classId('life_boat'),
     u_train: classId('life_train'),
     u_person: classId('life_person'),

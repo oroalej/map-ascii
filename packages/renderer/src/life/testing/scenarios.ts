@@ -1,3 +1,4 @@
+import { metersPerCssPx } from '../../grid';
 /** Shared synthetic geography for CPU benchmarks and combined simulation tests. */
 import { viewportFor } from '../../camera';
 import { metersPerUnit, tileToLngLat } from '../../raster/geometry';
@@ -7,9 +8,46 @@ import { LifeWorld, type TileLife, type LifeTile } from '../simulate';
 import type { FrameProfiler } from '../../profile';
 import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
-import { vehicleEffects } from '../vehicle-effects';
+import type { MomentOptions } from '../moments-host';
+import type { DialogueChoice } from '@atlas/shared';
+import { vehicleEffectSnapshot } from '../vehicle-effects';
 
-export const SCENARIOS = ['sparse', 'junction', 'crossroads', 'transit', 'rain'] as const;
+/** Text-free fixtures explicitly enable speech in CPU runs; ordinary scenarios stay unchanged. */
+export const SCENARIO_DIALOGUE: readonly DialogueChoice[] = [
+  { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2, speakers: [0, 1] },
+  { id: 'talk', kind: 'talk', turns: 2, speakers: [0, 1] },
+  { id: 'look', kind: 'look', turns: 1, speakers: [0] },
+  { id: 'play', kind: 'ball', turns: 2, speakers: [0, 1] },
+  {
+    id: 'ambient',
+    kind: 'talk',
+    profile: 'daily-plans',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+  },
+  { id: 'order', kind: 'talk', profile: 'vendor-order', turns: 2, speakers: [0, 1] },
+  { id: 'wait', kind: 'talk', profile: 'transit', turns: 2, speakers: [0, 1] },
+  {
+    id: 'rain',
+    kind: 'talk',
+    profile: 'weather',
+    delivery: 'utterance',
+    turns: 1,
+    speakers: [0],
+    conditions: { weather: 'rain' },
+  },
+  { id: 'companion', kind: 'talk', profile: 'companion', turns: 2, speakers: [0, 1] },
+];
+
+export const SCENARIOS = [
+  'sparse',
+  'junction',
+  'crossroads',
+  'transit',
+  'rain',
+  'moments',
+] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 const base = { z: 16, x: 55192, y: 30266 };
 // Explicit mapped sidewalk outside the 14 m carriageway, wide enough for waiting groups.
@@ -106,6 +144,15 @@ export function scenarioLife(kind: Scenario) {
       b.market({ x: 1300, y: 1800 });
     }
   }
+  if (kind === 'moments') {
+    // Bounded legal gathering rings, away from roads and buildings. Benchmark real holds,
+    // not an empty controller running over a geography with no places.
+    const pm = 1 / metersPerUnit(base);
+    b.place({ x: 1500, y: 1500 }, 'monument', 2 * pm);
+    b.place({ x: 2500, y: 1500 }, 'school', 8 * pm);
+    b.place({ x: 1500, y: 2600 }, 'pitch', 14 * pm);
+    b.place({ x: 3000, y: 2700 }, 'worship', 6 * pm);
+  }
   return b.finish();
 }
 export function scenarioTilesAt(
@@ -187,12 +234,13 @@ export function makeScenario(
   seed = 1,
   Simulation: typeof LifeWorld = LifeWorld,
   profiler?: FrameProfiler,
+  moments?: MomentOptions,
   zoom = 18,
 ) {
   const tiles = scenarioTiles(kind, count, seed);
   const traffic =
     kind === 'transit' || kind === 'rain' ? { road_major: { jeepney: 1 } } : undefined;
-  const world = new Simulation(traffic, profiler);
+  const world = new Simulation(traffic, profiler, moments);
   world.sync(tiles);
   const center = tileToLngLat(tiles[0]!.tile, { x: 2048, y: 2048 });
   const size = mobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 };
@@ -230,7 +278,17 @@ export function makeScenario(
     },
     step(frame: number, dt = 1 / 30, minimum = 0.9) {
       const env = this.environment(frame);
-      world.step(dt, undefined, zoom, bounds, undefined, env, minimum);
+      world.step(
+        dt,
+        undefined,
+        zoom,
+        bounds,
+        undefined,
+        env,
+        minimum,
+        1.8,
+        metersPerCssPx(camera) * 10,
+      );
       return world.visible(zoom, levels, center, { rain: env.rain, sunAltitude: 40 }, bounds);
     },
   };
@@ -245,7 +303,7 @@ function tileState(key: string, tile: TileLife, clock = tile.elapsed) {
     // Benchmark fixtures also inspect frozen pre-exhaust revisions.
     decorations: {
       puffs: tile.puffs?.snapshot(clock) ?? [],
-      effects: tile.movers.map((m) => vehicleEffects(m)),
+      effects: tile.movers.map((m) => vehicleEffectSnapshot(m, clock)),
     },
     flocks: tile.flocks,
     movers: tile.movers,
@@ -304,6 +362,10 @@ export function completeScenarioState(world: LifeWorld) {
     junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),
     tiles: scenarioState(world),
+    moments: [...worldTiles(world)].map(([key, tile]) => ({
+      key,
+      state: tile.momentHost.moments.snapshot(),
+    })),
     retired: [...retiredTiles(world)].map(([key, { life, at }]) => ({
       at,
       ...tileState(key, life, at),

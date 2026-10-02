@@ -11,14 +11,15 @@ import {
   PUFF_AGE_MASK,
   PUFF_KIND_BIT,
   puffGlyph,
+  stoppedFor,
 } from './exhaust';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
 import { PersonPart, personByte } from './people';
-import { ensureVehicleEffects, vehicleEffects } from './vehicle-effects';
+import { ensureVehicleEffects, vehicleEffects, vehicleEffectSnapshot } from './vehicle-effects';
 import { packLife, type LifeGrid } from './draw';
 import { Paint, VehiclePart } from './vehicles';
-import { TURN_SIGNAL_BIT } from './turn-signals';
+import { SIGNAL_VEHICLES, TURN_SIGNAL_BIT } from './turn-signals';
 import { themes } from '../theme';
 import { tileToLngLat } from '../raster/geometry';
 import type { Visit } from './interactions';
@@ -68,10 +69,8 @@ const car: VisibleAgent = {
   ahead: [43, 40],
   side: [40, 43],
   flap: 0,
-  sourceId: 1,
 };
-const puff = (age = 0.2, kind = 0, x = 40, y = 40) =>
-  new Float64Array([1, x, y, x + 3, y, age, kind, 3]);
+const puff = (age = 0.2, kind = 0, x = 40, y = 40) => new Float64Array([0, x, y, age, kind]);
 const glyphIndex = (g: string) => (g.codePointAt(0)! % 1023) + 1;
 const packed = (agents: VisibleAgent[], customGrid = grid, puffs = new Float64Array(0)) => {
   const out = new Uint8Array(customGrid.cols * customGrid.rows * 4);
@@ -91,30 +90,169 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
 
 describe('accepted vehicle effects', () => {
-  it('matches accepted-speed scheduling through stationary fast paths and pull-away', () => {
-    const entry = continuityTile(left),
-      life = new TileLife(left, entry.life, 1);
+  it.each([30, 60, 120])(
+    'matches eager accepted-speed scheduling through lazy idle and pull-away at %s Hz',
+    (hz) => {
+      const life = new TileLife(left, continuityTile(left).life, 1);
+      life.movers.length = 0;
+      const m = continuityMover(life, 1000);
+      m.vehicle = 'bus';
+      m.v = 0;
+      life.movers.push(m);
+      const dt = 1 / hz,
+        reference = emitter(m.routing!.seed, 0);
+      const speed = (clock: number) => Math.max(0, Math.min(2, clock - 6));
+      for (let frame = 1; frame <= hz * 9; frame++) {
+        const clock = frame / hz,
+          before = speed(clock - dt),
+          after = speed(clock);
+        life.effects.begin(clock, dt, 0, undefined);
+        m.v = before * life.perMeter;
+        life.effects.capture(
+          m,
+          0,
+          true,
+          frame <= hz * 6 ? 0 : 2 * life.perMeter,
+          frame <= hz * 6 ? 0 : 2 * life.perMeter,
+          false,
+        );
+        m.v = after * life.perMeter;
+        life.effects.finish(clock, dt, undefined);
+        stepEmitter(reference, 'diesel', before, after, clock, dt, () => {});
+        expect(vehicleEffectSnapshot(m, clock)!.exhaust).toEqual({
+          ...reference,
+          clock,
+          stopped: stoppedFor(reference, clock),
+        });
+      }
+      expect(reference.emitted).toBeGreaterThan(0);
+    },
+  );
+  it('leaves established idle sidecars and emitters untouched between wake deadlines', () => {
+    const life = new TileLife(left, continuityTile(left).life, 1);
     life.movers.length = 0;
     const m = continuityMover(life, 1000);
     m.vehicle = 'bus';
+    m.v = 0;
     life.movers.push(m);
-    life.step(0.1, undefined, undefined, undefined, undefined, () => false);
-    const reference = { ...vehicleEffects(m)!.exhaust! };
-    for (let frame = 0; frame < 240; frame++) {
-      const before = m.v! / life.perMeter;
-      const dt = 1 / 30;
-      life.step(
-        dt,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        frame < 180 ? () => false : undefined,
-      );
-      stepEmitter(reference, 'diesel', before, m.v! / life.perMeter, life.elapsed, dt, () => {});
-      expect(vehicleEffects(m)!.exhaust).toEqual(reference);
+    const tracker = life.effects;
+    tracker.begin(0.1, 0.1, 0, undefined);
+    tracker.capture(m, 0, true, 0, 0, false);
+    tracker.finish(0.1, 0.1, undefined);
+    const state = vehicleEffects(m)!;
+    expect(state.brake).toBe(BRAKE.hold);
+    Object.freeze(state.exhaust!);
+    Object.freeze(state);
+    for (let frame = 2; frame < 20; frame++) {
+      tracker.begin(frame / 10, 0.1, 0, undefined);
+      tracker.capture(m, 0, true, 0, 0, false);
+      expect(() => tracker.finish(frame / 10, 0.1, undefined)).not.toThrow();
     }
-    expect(reference.emitted).toBeGreaterThan(0);
+    expect(state.exhaust!.clock).toBe(0.1);
+    expect(stoppedFor(state.exhaust!, 1.9)).toBeCloseTo(1.9);
+  });
+  it('reuses cache allocations after splice and pauses a newly adopted ineligible identity', () => {
+    const life = new TileLife(left, continuityTile(left).life, 1);
+    life.movers.length = 0;
+    const a = continuityMover(life, 1000),
+      b = continuityMover(life, 1500);
+    a.vehicle = b.vehicle = 'bus';
+    a.v = b.v = 0;
+    life.movers.push(a, b);
+    const tracker = life.effects;
+    tracker.begin(0.1, 0.1, 0, undefined);
+    tracker.capture(a, 0, true, 0, 0, false);
+    tracker.capture(b, 1, true, 0, 0, false);
+    tracker.finish(0.1, 0.1, undefined);
+    const cache = (tracker as unknown as { cache: object[] }).cache;
+    const record = cache[0];
+    life.movers.splice(0, 1);
+    tracker.begin(0.2, 0.1, 0, undefined);
+    tracker.capture(b, 0, false, 0, 0, false);
+    tracker.finish(0.2, 0.1, undefined);
+    expect(cache[0]).toBe(record);
+    expect(cache.length).toBe(1);
+    expect(vehicleEffects(b)?.brake).toBe(0);
+    expect(vehicleEffects(b)?.inactiveAt).toBeCloseTo(0.1);
+  });
+  it('freezes coarse-scale deadlines and particles once, then resumes without catch-up', () => {
+    const life = new TileLife(left, continuityTile(left).life, 1);
+    life.movers.length = 0;
+    const m = continuityMover(life, 1000);
+    m.vehicle = 'bus';
+    m.v = 0;
+    life.movers.push(m);
+    const tracker = life.effects;
+    tracker.begin(0.1, 0.1, 0, undefined);
+    tracker.capture(m, 0, true, 0, 0, false);
+    tracker.finish(0.1, 0.1, undefined);
+    const state = vehicleEffects(m)!,
+      deadline = state.exhaust!.nextIdle;
+    life.puffs.add({
+      sourceId: state.sourceId!,
+      vehicle: 'bus',
+      kind: 'diesel',
+      x: 20,
+      y: 30,
+      vx: 0,
+      vy: 0,
+      t0: 0.1,
+      life: 2,
+    });
+    const advance = vi.spyOn(life.puffs, 'advance');
+    for (let frame = 2; frame <= 102; frame++)
+      expect(tracker.begin(frame / 10, 0.1, 100, undefined)).toBe(false);
+    expect(state.brake).toBe(0);
+    expect(advance).not.toHaveBeenCalled();
+    expect(state.exhaust!.nextIdle).toBe(deadline);
+    tracker.begin(10.3, 0.1, 0, undefined);
+    tracker.capture(m, 0, true, 0, 0, false);
+    tracker.finish(10.3, 0.1, undefined);
+    expect(state.exhaust!.emitted).toBe(0);
+    expect(state.exhaust!.nextIdle).toBeCloseTo(deadline + 10.1);
+    expect(life.puffs.snapshot(10.3)[0]!.t0).toBeCloseTo(10.2);
+  });
+  it('honors the rounded render-cell gate and omits serialized lamps on mini craft', () => {
+    const {
+      world,
+      lives: [life],
+    } = fixture();
+    const m = continuityMover(life!, 1000);
+    m.vehicle = 'bus';
+    m.v = 0;
+    life!.movers.push(m);
+    world.step(0.1, undefined, 20, undefined, undefined, undefined, 0, 1.8, 0.1);
+    const state = vehicleEffects(m)!;
+    state.brake = BRAKE.hold;
+    world.step(0.1, undefined, 20, undefined, undefined, undefined, 0, 1.8, 10);
+    expect(state.brake).toBe(0);
+    const agents = world.visible(20, 1, tileToLngLat(left, m));
+    expect(agents).toHaveLength(1);
+    expect(agents[0]).not.toHaveProperty('lamps');
+    expect(agents[0]).not.toHaveProperty('sourceId');
+  });
+  it('pauses adopted emitters even when their destination skips the whole effects loop', () => {
+    const source = new TileLife(left, continuityTile(left).life, 1);
+    const target = new TileLife(parent, continuityTile(parent).life, 1);
+    source.movers.length = target.movers.length = 0;
+    const m = continuityMover(source, 1000);
+    m.vehicle = 'bus';
+    const state = ensureVehicleEffects(m);
+    state.brake = BRAKE.hold;
+    state.exhaust = emitter(42, 1);
+    state.exhaust.stoppedSince = 0;
+    state.exhaust.nextIdle = 5;
+    source.movers.push(m);
+    target.effects.begin(1, 0.1, 100, undefined);
+    expect(target.adoptFrom(m, source)).toBe(true);
+    expect(state.inactiveAt).toBe(1);
+    expect(state.brake).toBe(0);
+    target.effects.begin(20.1, 0.1, 0, undefined);
+    m.v = 0;
+    target.effects.capture(m, 0, true, 0, 0, false);
+    target.effects.finish(20.1, 0.1, undefined);
+    expect(state.exhaust.nextIdle).toBeCloseTo(24);
+    expect(state.exhaust.emitted).toBe(0);
   });
   it('uses accepted guarded velocity in metres per second, including complete rejection', () => {
     const entry = continuityTile(left),
@@ -138,7 +276,7 @@ describe('accepted vehicle effects', () => {
     m.v = 0.49 * source!.perMeter;
     const state = ensureVehicleEffects(m);
     state.exhaust = emitter(123, 0);
-    state.exhaust.stopped = 2;
+    state.exhaust.stoppedSince = state.exhaust.clock - 2;
     source!.movers.push(m);
     const adopt = vi.spyOn(target!, 'adoptFrom').mockReturnValue(false);
     world.step(0.1);
@@ -157,7 +295,7 @@ describe('accepted vehicle effects', () => {
     const state = ensureVehicleEffects(m);
     state.brake = 0.2;
     state.exhaust = emitter(123, 1);
-    state.exhaust.stopped = 2;
+    state.exhaust.stoppedSince = state.exhaust.clock - 2;
     source.movers.push(m);
     const preview = target.projectFrom(m, source)!;
     expect(vehicleEffects(preview)?.brake).toBe(state.brake);
@@ -200,8 +338,6 @@ describe('accepted vehicle effects', () => {
           sourceId: index + 1,
           x: 1000 + i,
           y: 2000,
-          hx: 1,
-          hy: 0,
           vx: 0,
           vy: 0,
           t0: 0,
@@ -217,7 +353,7 @@ describe('accepted vehicle effects', () => {
     world.visible(20, 1, center, undefined, undefined, 1, 1);
     expect(world.visiblePuffs.length).toBe(PUFF.cap * PUFF_STRIDE);
     expect(Array.from(world.visiblePuffs).filter((_, i) => i % PUFF_STRIDE === 0)).toEqual(
-      Array(PUFF.cap).fill(1),
+      Array(PUFF.cap).fill(0),
     );
     for (const crowd of [0, 0.3, 0.4]) {
       expect(world.visible(20, 1, center, undefined, undefined, crowd)).toEqual([]);
@@ -351,26 +487,44 @@ describe('lamp and puff packing', () => {
       packed([{ ...car, parked: true }]).out,
     );
   });
-  it('packs four hazards without enlarging the footprint and restores normal cells when off', () => {
-    const normal = packed([car]);
-    const hazard = packed([{ ...car, lamps: { kind: 'hazard', on: true } }]);
-    const cells: number[] = [];
-    for (let at = 0; at < hazard.out.length; at += 4) {
-      if (hazard.out[at + 2]! & TURN_SIGNAL_BIT) cells.push(at);
-      expect(hazard.out[at + 2]! & 127).toBe(normal.out[at + 2]);
+  it.each(SIGNAL_VEHICLES)('packs all four hazard quadrants for %s at both headings', (vehicle) => {
+    for (const angle of [0, Math.PI, Math.PI / 4]) {
+      const dx = Math.cos(angle),
+        dy = Math.sin(angle);
+      const source = {
+        ...car,
+        vehicle,
+        ahead: [40 + 3 * dx, 40 + 3 * dy] as [number, number],
+        side: [40 - 3 * dy, 40 + 3 * dx] as [number, number],
+      };
+      const normal = packed([source]);
+      const hazard = packed([{ ...source, lamps: { kind: 'hazard', on: true } }]);
+      const corners = new Set<string>();
+      let lamps = 0;
+      for (let at = 0; at < hazard.out.length; at += 4) {
+        expect(hazard.out[at + 2]! & 127).toBe(normal.out[at + 2]);
+        if (!(hazard.out[at + 2]! & TURN_SIGNAL_BIT)) continue;
+        lamps++;
+        const x = ((at / 4) % grid.cols) + 0.5 - 40,
+          y = Math.floor(at / 4 / grid.cols) + 0.5 - 40;
+        corners.add(`${x * dx + y * dy > 0}/${-x * dy + y * dx > 0}`);
+      }
+      expect(lamps).toBe(4);
+      expect(corners.size).toBe(4);
+      sameBytes(packed([{ ...source, lamps: { kind: 'hazard', on: false } }]).out, normal.out);
+      sameBytes(
+        packed([{ ...source, parked: true, lamps: { kind: 'hazard', on: true } }]).out,
+        packed([{ ...source, parked: true }]).out,
+      );
+      const mini = { ...source, ahead: [40.01, 40] as [number, number] };
+      sameBytes(packed([{ ...mini, lamps: { kind: 'hazard', on: true } }]).out, packed([mini]).out);
+      const denied = packed([{ ...source, lamps: { kind: 'hazard', on: true } }], {
+        ...grid,
+        allowsGroundCell: () => false,
+      });
+      expect(denied.count).toBe(0);
+      expect(denied.out.every((b) => b === 0)).toBe(true);
     }
-    expect(cells).toHaveLength(4);
-    sameBytes(packed([{ ...car, lamps: { kind: 'hazard', on: false } }]).out, normal.out);
-    sameBytes(
-      packed([{ ...car, parked: true, lamps: { kind: 'hazard', on: true } }]).out,
-      packed([{ ...car, parked: true }]).out,
-    );
-    const denied = packed([{ ...car, lamps: { kind: 'hazard', on: true } }], {
-      ...grid,
-      allowsGroundCell: () => false,
-    });
-    expect(denied.count).toBe(0);
-    expect(denied.out.every((b) => b === 0)).toBe(true);
   });
   it('packs a visible puff with the correct glyph, permission and age/kind bytes', () => {
     for (const age of [0, 0.5, 1])
@@ -432,7 +586,10 @@ describe('lamp and puff packing', () => {
     expect(vendor.count).toBeGreaterThan(0);
     expect(vendor.out.some((_, at) => at % 4 === 2 && vendor.out[at] === 2)).toBe(true);
     sameBytes(packed([vendorOnly], grid, puff(0, 0, 5, 5)).out, vendor.out);
-    const overlap = { ...car, sourceId: 2 };
-    sameBytes(packed([overlap, car], grid, puff(0, 0, 5, 5)).out, packed([overlap, car]).out);
+    const overlap = { ...car };
+    sameBytes(
+      packed([overlap, car], grid, new Float64Array([1, 5, 5, 0, 0])).out,
+      packed([overlap, car]).out,
+    );
   });
 });

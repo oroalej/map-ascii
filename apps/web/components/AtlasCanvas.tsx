@@ -4,6 +4,7 @@ import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
   type CityLifeConfig,
+  type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
   type ProcessionRoute,
@@ -15,6 +16,7 @@ import { isDebugRequested } from '@/lib/debug';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
+import { loadSpeechPrefs, saveSpeechPrefs, useSpeechStore } from '@/state/speech';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
@@ -97,6 +99,7 @@ export function AtlasCanvas({
   climate,
   timezone,
   cityLife,
+  dialogue,
   utilitiesDerived = false,
 }: {
   utilitiesDerived?: boolean;
@@ -107,6 +110,7 @@ export function AtlasCanvas({
   climate?: ClimateConfig | undefined;
   timezone?: string | undefined;
   cityLife?: CityLifeConfig | undefined;
+  dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Static export renders on the server, where we optimistically assume support.
@@ -140,6 +144,10 @@ export function AtlasCanvas({
     // The life layer's settings are remembered in this browser, not in the URL.
     const lifePrefs = loadLifePrefs();
     useLifeStore.setState(lifePrefs);
+    const speechPrefs = dialogue
+      ? loadSpeechPrefs(slug, dialogue)
+      : { enabled: false, translation: null };
+    useSpeechStore.setState(speechPrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
@@ -160,6 +168,8 @@ export function AtlasCanvas({
       climate,
       timezone,
       cityLife,
+      dialogue,
+      speech: speechPrefs.enabled,
       processions: processions ?? [],
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
@@ -169,6 +179,10 @@ export function AtlasCanvas({
       useQualityStore.subscribe(({ choice }) => {
         atlas.setQuality(choice);
         saveQualityPref(choice);
+      }),
+      useSpeechStore.subscribe((prefs, previous) => {
+        if (prefs.enabled !== previous.enabled) atlas.setSpeech(prefs.enabled);
+        saveSpeechPrefs(slug, prefs);
       }),
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
@@ -187,7 +201,18 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife, utilitiesDerived]);
+  }, [
+    supported,
+    meta,
+    processions,
+    slug,
+    traffic,
+    climate,
+    timezone,
+    cityLife,
+    dialogue,
+    utilitiesDerived,
+  ]);
 
   if (!supported) {
     return (

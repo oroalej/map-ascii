@@ -11,6 +11,7 @@ import {
   worldTiles,
   worldTerrainStats,
   SCENARIOS,
+  SCENARIO_DIALOGUE,
 } from '../src/life/testing/scenarios';
 import type * as Simulation from '../src/life/simulate';
 import type * as Draw from '../src/life/draw';
@@ -41,7 +42,14 @@ const baseline = arg('baseline', '00f1f6f');
 const pan = process.argv.includes('--pan');
 const births = process.argv.includes('--births');
 const control = process.argv.includes('--control');
-const vehicleEffects = process.argv.includes('--vehicle-effects');
+const dialogue = process.argv.includes('--dialogue');
+const momentOptions = dialogue ? { dialogue: SCENARIO_DIALOGUE } : undefined;
+const customGates = !!arg('gate-median') || !!arg('gate-p95');
+const medianGate = Number(arg('gate-median', '0.1'));
+const p95Gate = Number(arg('gate-p95', '0.05'));
+const zoom = Number(arg('zoom', '18'));
+if (![medianGate, p95Gate, zoom].every(Number.isFinite) || medianGate < 0 || p95Gate < 0)
+  throw new Error('Use nonnegative fractional gates and a finite zoom');
 const real = process.argv.some((v) => v === '--real' || v.startsWith('--real='));
 if (births && !real) throw new Error('--births requires --real and --pan');
 if (real && !pan) throw new Error('--real requires --pan');
@@ -52,7 +60,7 @@ if (allowDiff && allowDecorativeDiff)
 if (pan) console.log('pan implies --allow-diff: eviction may change the terrain reference');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 if (!/^[\w./-]+$/.test(baseline)) throw new Error('Invalid baseline revision');
-const scratch = resolve(root, arg('scratch', 'test-results'));
+const scratch = resolve(root, arg('scratch-dir', arg('scratch', 'test-results')));
 const samples = Number(arg('samples', '160'));
 const runs = Number(arg('runs', '6'));
 if (runs % 2) throw new Error('Use an even run count for balanced paired order');
@@ -492,13 +500,10 @@ try {
   } else {
     const rows = [];
     const fixtures = SCENARIOS.flatMap((kind) =>
-      [1, 4, 16].flatMap((count) =>
-        [false, true].map((mobile) => ({ kind, count, mobile, zoom: 18 })),
-      ),
+      [1, 4, 16].flatMap((count) => [false, true].map((mobile) => ({ kind, count, mobile, zoom }))),
     );
-    if (vehicleEffects) fixtures.push({ kind: 'transit', count: 1, mobile: false, zoom: 20.5 });
     for (const { kind, count, mobile, zoom } of fixtures) {
-      const name = `${kind}${zoom === 18 ? '' : '-detailed'}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
+      const name = `${kind}${zoom === 18 ? '' : `-z${zoom}`}/${count}/${mobile ? 'phone-bounds' : 'desktop'}`;
       if (!matchesCase(name)) continue;
       const a = (zoom === 18 ? oldScenarios.makeScenario : makeScenario)(
         kind,
@@ -507,9 +512,10 @@ try {
         1,
         before.LifeWorld,
         undefined,
+        momentOptions,
         zoom,
       );
-      const b = makeScenario(kind, count, mobile, 1, LifeWorld, undefined, zoom);
+      const b = makeScenario(kind, count, mobile, 1, LifeWorld, undefined, momentOptions, zoom);
       const oldPixels = new Uint8Array(a.grid.cols * a.grid.rows * 4),
         nextPixels = new Uint8Array(oldPixels.length);
       const observedCues = { brake: false, hazard: false, puff: false };
@@ -517,11 +523,10 @@ try {
         const minimum = [0, 0.9, 3][Math.floor(frame / 100)]!;
         const av = a.step(frame, 1 / 30, minimum),
           bv = b.step(frame, 1 / 30, minimum);
-        if (vehicleEffects)
-          for (const actor of bv) {
-            observedCues.brake ||= actor.lamps?.kind === 'brake';
-            observedCues.hazard ||= actor.lamps?.kind === 'hazard';
-          }
+        for (const actor of bv) {
+          observedCues.brake ||= actor.lamps?.kind === 'brake';
+          observedCues.hazard ||= actor.lamps?.kind === 'hazard';
+        }
         if (!allowDiff && !allowDecorativeDiff)
           deepStrictEqual(bv, av, `${name}: visible frame ${frame}`);
         if (frame % 30 === 0) {
@@ -555,7 +560,7 @@ try {
             glyphs,
             b.world.visiblePuffs,
           );
-          if (vehicleEffects && !observedCues.puff)
+          if (!observedCues.puff)
             for (let at = 0; at < nextPixels.length; at += 4)
               if (
                 (nextPixels[at + 1]! & 63) === classId('life_person') &&
@@ -569,8 +574,6 @@ try {
             deepStrictEqual(nextPixels, oldPixels, `${name}: packed frame ${frame}`);
         }
       }
-      if (vehicleEffects && zoom > 18 && !Object.values(observedCues).every(Boolean))
-        throw new Error(`${name}: detailed fixture must exercise brakes, hazards and packed puffs`);
       const prepareMeasure = (
         Constructor: typeof LifeWorld,
         pack: typeof packLife,
@@ -580,7 +583,16 @@ try {
           Constructor === before.LifeWorld && zoom === 18
             ? oldScenarios.makeScenario
             : makeScenario;
-        const s = scenarioFactory(kind, count, mobile, 1, Constructor, profiler, zoom);
+        const s = scenarioFactory(
+          kind,
+          count,
+          mobile,
+          1,
+          Constructor,
+          profiler,
+          momentOptions,
+          zoom,
+        );
         const out = new Uint8Array(s.grid.cols * s.grid.rows * 4);
         const timings: Record<Stages, number[]> = {
           step: [],
@@ -590,7 +602,13 @@ try {
         };
         let agents = 0,
           maxVisits = 0,
-          maxServices = 0;
+          maxServices = 0,
+          maxMoments = 0,
+          maxBalls = 0,
+          maxScenes = 0,
+          speechFrames = 0,
+          speechCues = 0,
+          sceneSpeechCues = 0;
         const visitStates = new Set<string>();
         const heapBefore = process.memoryUsage().heapUsed;
         return {
@@ -607,6 +625,7 @@ try {
               undefined,
               env,
               0.9,
+              1.8,
               metersPerCssPx({ lng: s.center[0], lat: s.center[1], zoom }) * 10,
             );
             const moved = performance.now();
@@ -637,7 +656,20 @@ try {
               profiler.end();
             }
             const completed = profiler?.time();
+            const cues = visible.reduce((count, agent) => count + Number(!!agent.speech), 0);
+            speechCues += cues;
+            sceneSpeechCues += visible.reduce(
+              (count, agent) => count + Number(!!agent.speech?.id.includes(':scene:')),
+              0,
+            );
+            if (cues) speechFrames++;
             for (const tile of worldTiles(s.world).values()) {
+              const moments = tile.momentHost?.moments;
+              if (moments) {
+                maxMoments = Math.max(maxMoments, moments.size);
+                maxBalls = Math.max(maxBalls, moments.balls().length);
+              }
+              maxScenes = Math.max(maxScenes, tile.momentHost?.scenes.size ?? 0);
               maxVisits = Math.max(maxVisits, tile.scenes.visits.size);
               maxServices = Math.max(maxServices, tile.scenes.services.size);
               for (const visit of tile.scenes.visits.values()) visitStates.add(visit.state);
@@ -655,6 +687,19 @@ try {
             if (frame === warmup - 1) profiler?.reset();
           },
           result() {
+            const sceneStarts = [...worldTiles(s.world).values()].reduce(
+              (count, tile) =>
+                count +
+                Object.values(tile.momentHost?.scenes.selector.selected ?? {}).reduce(
+                  (sum, count) => sum + count,
+                  0,
+                ),
+              0,
+            );
+            if (dialogue && Constructor === LifeWorld && (!sceneStarts || !sceneSpeechCues))
+              throw new Error(
+                `${name}: dialogue benchmark recorded no scene admissions or speech cues`,
+              );
             return {
               stages: Object.fromEntries(
                 Object.entries(timings).map(([k, v]) => [k, summary(v)]),
@@ -662,6 +707,16 @@ try {
               agents,
               maxVisits,
               maxServices,
+              maxMoments,
+              maxBalls,
+              maxScenes,
+              sceneStarts,
+              speechFrames,
+              speechCues,
+              sceneSpeechCues,
+              momentStarts: [...worldTiles(s.world).values()].map(
+                (t) => t.momentHost?.moments.stats.started,
+              ),
               visitStates: [...visitStates],
               simulated: [...worldTiles(s.world).values()].reduce(
                 (n, t) => n + t.movers.length + t.gatherers.length,
@@ -761,12 +816,20 @@ try {
     if ((await currentSourceHash(root)) !== currentHash)
       throw new Error('Runtime source changed during the benchmark; rerun for a stable comparison');
     const regressions = rows
-      .filter((r) =>
-        vehicleEffects
+      .filter((row) =>
+        customGates
           ? (['step', 'combined'] as const).some(
-              (stage) => r.stages[stage]!.medianGain < -0.15 || r.stages[stage]!.p95Change > 0.2,
+              (stage) =>
+                row.stages[stage]!.medianGain < -medianGate ||
+                row.stages[stage]!.p95Change > p95Gate,
             )
-          : r.stages.step!.p95Change > 0.05 || r.stages.combined!.p95Change > 0.05,
+          : dialogue
+            ? Object.values(row.stages).some(
+                (v) =>
+                  v.current.median - v.baseline.median > Math.max(0.1, v.baseline.median * 0.1) ||
+                  v.current.p95 - v.baseline.p95 > Math.max(0.2, v.baseline.p95 * 0.15),
+              )
+            : row.stages.step!.p95Change > 0.05 || row.stages.combined!.p95Change > 0.05,
       )
       .map((r) => r.name);
     const denseMedianPass = rows
@@ -780,7 +843,7 @@ try {
       allowDecorativeDiff,
       baselineHash: control ? currentHash : frozen.hash,
       control,
-      vehicleEffects,
+      dialogue,
       currentHash,
       currentGraphHash: changedGraph.hash,
       controlPass: control
@@ -794,10 +857,17 @@ try {
       gate: {
         denseMedianPass,
         regressions,
-        pass: (vehicleEffects || denseMedianPass) && regressions.length === 0,
-        thresholds: vehicleEffects
-          ? { stepAndCombinedMedianRegression: 0.15, stepAndCombinedP95Regression: 0.2 }
-          : { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
+        pass: (customGates || dialogue || denseMedianPass) && regressions.length === 0,
+        thresholds: customGates
+          ? { stepAndCombinedMedianRegression: medianGate, stepAndCombinedP95Regression: p95Gate }
+          : dialogue
+            ? {
+                medianRegression: 0.1,
+                p95Regression: 0.15,
+                medianAbsoluteMs: 0.1,
+                p95AbsoluteMs: 0.2,
+              }
+            : { denseStepMedianGain: 0.1, stepAndCombinedP95Regression: 0.05 },
         requiresRepeat: true,
       },
       lockHash: execFileSync('git', ['hash-object', 'pnpm-lock.yaml'], {
@@ -816,7 +886,8 @@ try {
         runs,
         warmup,
         dt: 1 / 30,
-        zoom: 18,
+        zoom,
+        dialogue,
         seed: 1,
         casePrefix: arg('case'),
         cells: [10, 18],

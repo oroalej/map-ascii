@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { VEHICLES } from './vehicles';
+import { tileToLngLat } from '../raster/geometry';
 import {
   emitter,
   exhaustKind,
   PUFF,
   PuffStore,
+  PuffSelector,
+  PUFF_STRIDE,
   stepEmitter,
   puffGlyph,
   type PuffKind,
+  spawnPuff,
+  stoppedFor,
 } from './exhaust';
 
 function replay(hz: number, kind: PuffKind = 'diesel', idle = false) {
@@ -26,20 +32,24 @@ function replay(hz: number, kind: PuffKind = 'diesel', idle = false) {
       1 / hz,
       (at, life, spread) => {
         events.push({ at, life, spread });
-        // Identical accepted pose histories: exact birth position and partial-frame advection.
-        store.add({
-          sourceId: 1,
-          x: (PUFF.drift + spread) * (clock - at),
-          y: 0,
-          t0: at,
-          life,
-          vx: spread,
-          vy: 0,
-          hx: 1,
-          hy: 0,
-          kind,
-          vehicle: 'bus',
-        });
+        // An analytic linear accepted pose exercises real birth interpolation/advection.
+        const pose = (time: number) => ({ x: time * 2, y: time, hx: 1, hy: 0 });
+        store.add(
+          spawnPuff(
+            1,
+            'bus',
+            kind,
+            pose(clock - 1 / hz),
+            pose(clock),
+            at,
+            life,
+            spread,
+            clock,
+            1 / hz,
+            1,
+            { dir: [1, 0], strength: 1 },
+          ),
+        );
       },
     );
   }
@@ -96,7 +106,10 @@ describe('exhaust scheduling', () => {
             expect(e.spread).toBe(a.events[i]!.spread);
           });
           expect(b.puffs.length).toBe(a.puffs.length);
-          b.puffs.forEach((p, i) => expect(p.x).toBeCloseTo(a.puffs[i]!.x, 6));
+          b.puffs.forEach((p, i) => {
+            expect(p.x).toBeCloseTo(a.puffs[i]!.x, 6);
+            expect(p.y).toBeCloseTo(a.puffs[i]!.y, 6);
+          });
         }
       }
   });
@@ -105,7 +118,7 @@ describe('exhaust scheduling', () => {
     const events: number[] = [];
     stepEmitter(state, 'diesel', 0, 0, 100, 0.1, (at) => events.push(at));
     expect(events).toEqual([]);
-    expect(state.stopped).toBeCloseTo(18.1);
+    expect(stoppedFor(state, 100)).toBeCloseTo(18.1);
   });
 });
 
@@ -121,8 +134,6 @@ describe('puff ring', () => {
         life: 2,
         vx: 0,
         vy: 0,
-        hx: 1,
-        hy: 0,
         kind: 'diesel',
         vehicle: 'bus',
       });
@@ -148,8 +159,6 @@ describe('puff ring', () => {
       life: 2,
       vx: 0.2,
       vy: 0,
-      hx: 1,
-      hy: 0,
       kind: 'diesel',
       vehicle: 'bus',
     });
@@ -159,5 +168,87 @@ describe('puff ring', () => {
     expect(p!.x).toBeCloseTo(0.02);
     store.advance(13.1, 2, undefined, 1);
     expect(store.snapshot(13.1)).toEqual([]);
+  });
+});
+
+describe('accepted tailpipe geometry', () => {
+  it.each(['bus', 'motorcycle'] as const)(
+    'interpolates the birth pose and advects the remaining step (%s)',
+    (vehicle) => {
+      const kind = exhaustKind(vehicle)!;
+      const spec = VEHICLES[vehicle];
+      const start = { x: 10, y: 20, hx: 1, hy: 0 };
+      const end = { x: 14, y: 26, hx: 1, hy: 0 };
+      const p = spawnPuff(3, vehicle, kind, start, end, 0.25, 2, 0.4, 1, 1, 2, {
+        dir: [1, -1],
+        strength: 0.5,
+      });
+      expect(p.x).toBeCloseTo(11 - spec.length + 0.3 * 0.75 * 2);
+      expect(p.y).toBeCloseTo(21.5 + 0.3 * spec.width * 2 + (-0.3 + 0.4) * 0.75 * 2);
+      expect(p.t0).toBe(0.25);
+      expect(p.sourceId).toBe(3);
+      const born = spawnPuff(3, vehicle, kind, start, start, 1, 2, 0, 1, 1, 1, undefined);
+      expect(born.x).toBeCloseTo(10 - spec.length / 2);
+      expect(born.y).toBeCloseTo(20 + 0.3 * spec.width);
+    },
+  );
+  it('normalizes the interpolated heading before placing the rear-side offset', () => {
+    const p = spawnPuff(
+      1,
+      'bus',
+      'diesel',
+      { x: 0, y: 0, hx: 1, hy: 0 },
+      { x: 4, y: 6, hx: 0, hy: 1 },
+      0.5,
+      2,
+      0,
+      1,
+      1,
+      1,
+      undefined,
+    );
+    const unit = Math.SQRT1_2,
+      spec = VEHICLES.bus;
+    expect(p.x).toBeCloseTo(2 - unit * (spec.length / 2 + 0.3 * spec.width));
+    expect(p.y).toBeCloseTo(3 - unit * (spec.length / 2 - 0.3 * spec.width));
+  });
+});
+
+describe('bounded puff selection', () => {
+  it('projects nearest winners only and maps stable emitter IDs to final actor indices', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const stores = [1, 2, 3].map((sourceId) => {
+      const puffs = new PuffStore();
+      for (let i = 1; i <= PUFF.cap; i++)
+        puffs.add({
+          sourceId,
+          x: i + (sourceId - 1) * 200,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          t0: 0,
+          life: 2,
+          kind: 'diesel',
+          vehicle: 'bus',
+        });
+      return { tile, perMeter: 1, puffs };
+    });
+    const selector = new PuffSelector();
+    const sources = new Map([
+      [1, 4],
+      [2, 0],
+    ]);
+    const select = () =>
+      selector.select(stores, sources, tileToLngLat(tile, { x: 0, y: 0 }), 0, () => (x) => x < 281);
+    const packet = select();
+    expect(packet.length).toBe(PUFF.visible * PUFF_STRIDE);
+    for (let i = 0; i < PUFF.visible; i++) {
+      const x = i < 96 ? i + 1 : i - 96 + 201;
+      expect(packet[i * PUFF_STRIDE]).toBe(i < 96 ? 4 : 0);
+      expect(packet[i * PUFF_STRIDE + 1]).toBe(tileToLngLat(tile, { x, y: 0 })[0]);
+    }
+    expect(select()).toEqual(packet);
+    selector.clear();
+    expect(selector.select(stores, new Map(), [0, 0], 0, () => () => true).length).toBe(0);
   });
 });

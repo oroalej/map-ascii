@@ -18,7 +18,8 @@ export function brakeHold(
   held: boolean,
 ) {
   if (held) return 0;
-  return (before - after) / dt >= BRAKE.on - 1e-9 || after < BRAKE.stopped
+  return (before - after) / dt >= BRAKE.on - 1e-9 ||
+    (after < BRAKE.stopped && after <= before + 1e-9)
     ? BRAKE.hold
     : Math.max(0, previous - dt);
 }

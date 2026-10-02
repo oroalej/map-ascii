@@ -1,4 +1,4 @@
-/** Strict PRE movement equivalence plus deterministic decoration replay, 24 seeded rows. */
+/** Strict movement equivalence plus deterministic full-state replay, 24 seeded rows. */
 import { deepStrictEqual } from 'node:assert';
 import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve, basename } from 'node:path';
@@ -11,12 +11,14 @@ import type * as Simulation from '../src/life/simulate';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback: string) =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const revision = arg('baseline', '');
+if (!revision || !/^[\w./-]+$/.test(revision)) throw new Error('Provide --baseline=<revision>');
 const scratch = resolve(root, arg('scratch', 'test-results'));
 await mkdir(scratch, { recursive: true });
-const temporary = await mkdtemp(join(scratch, 'vehicle-invariants-'));
+const temporary = await mkdtemp(join(scratch, 'life-invariants-'));
 try {
   const sourceHash = await currentSourceHash(root);
-  const old = await snapshotRevision(root, arg('baseline', 'af120b1'), join(temporary, 'baseline'));
+  const old = await snapshotRevision(root, revision, join(temporary, 'baseline'));
   const next = await snapshotCurrent(root, join(temporary, 'current'));
   const baseline = (await import(old.path('life/simulate.ts'))) as typeof Simulation;
   const current = (await import(next.path('life/simulate.ts'))) as typeof Simulation;
@@ -58,20 +60,16 @@ try {
     }
   }
   deepStrictEqual(await currentSourceHash(root), sourceHash, 'Source changed during verification');
-  const output = resolve(root, arg('output', 'test-results/vehicle-invariants.json'));
+  const output = resolve(root, arg('output', 'test-results/life-invariants.json'));
   await mkdir(dirname(output), { recursive: true });
   await writeFile(
     output,
-    JSON.stringify(
-      { baseline: arg('baseline', 'af120b1'), baselineHash: old.hash, sourceHash, rows },
-      null,
-      2,
-    ),
+    JSON.stringify({ baseline: revision, baselineHash: old.hash, sourceHash, rows }, null, 2),
   );
 } finally {
   if (
     dirname(resolve(temporary)) !== scratch ||
-    !basename(temporary).startsWith('vehicle-invariants-')
+    !basename(temporary).startsWith('life-invariants-')
   )
     process.exitCode = 1;
   else await rm(temporary, { recursive: true, force: true });

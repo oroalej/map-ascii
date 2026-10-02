@@ -1,4 +1,7 @@
 import { VEHICLES, type CraftType } from './vehicles';
+import { frameBetween } from './frames';
+import { lngLatToTile, tileToLngLat } from '../raster/geometry';
+import type { TileId } from '../tiles';
 
 export const PUFF = {
   cap: 96,
@@ -12,9 +15,8 @@ export const PUFF = {
 } as const;
 export const PUFF_AGE_MASK = 7;
 export const PUFF_KIND_BIT = 8;
-/** Reply-owned packet: source id, position, heading point, age, kind, craft. */
-export const PUFF_STRIDE = 8;
-export const PUFF_CRAFT = ['motorcycle', 'tricycle', 'jeepney', 'bus', 'truck'] as const;
+/** Reply-owned packet: final actor index, position, age and kind. */
+export const PUFF_STRIDE = 5;
 export const EMPTY_PUFFS = new Float64Array(0);
 export const PUFF_COLOR = { diesel: [0.45, 0.45, 0.45], twoStroke: [0.55, 0.6, 0.64] } as const;
 export const PUFF_GLYPHS = ['°', '∘', '·'] as const;
@@ -29,13 +31,11 @@ export type Puff = {
   vehicle: CraftType;
   vx: number;
   vy: number;
-  hx: number;
-  hy: number;
 };
 export type ExhaustEmitter = {
   seed: number;
   clock: number;
-  stopped: number;
+  stoppedSince: number | undefined;
   nextIdle: number;
   idle: number;
   burstAt: number;
@@ -63,7 +63,7 @@ export function emitter(seed: number, clock: number): ExhaustEmitter {
   return {
     seed,
     clock,
-    stopped: 0,
+    stoppedSince: undefined,
     nextIdle: Infinity,
     idle: 0,
     burstAt: 0,
@@ -74,30 +74,28 @@ export function emitter(seed: number, clock: number): ExhaustEmitter {
   };
 }
 
-const burstDeadline = (s: ExhaustEmitter) =>
+export const burstDeadline = (s: ExhaustEmitter) =>
   s.burstAt + (s.burstNext * PUFF.pullAway.window) / (s.burstCount - 1);
 export const burstDue = (s: ExhaustEmitter, clock: number) =>
   s.burstNext < s.burstCount && burstDeadline(s) <= clock + 1e-9;
 export function rebaseEmitter(s: ExhaustEmitter, clock: number, dt: number) {
   const gap = Math.max(0, clock - dt - s.clock);
-  applyRebase(s, clock, gap);
+  shiftEmitter(s, gap);
+  s.clock = clock;
 }
-function applyRebase(s: ExhaustEmitter, clock: number, gap: number) {
+/** Shift only genuinely inactive time, never an eligible lazy interval. */
+export function shiftEmitter(s: ExhaustEmitter, gap: number) {
   if (gap > 1e-8) {
     s.nextIdle += gap;
     s.burstAt += gap;
+    if (s.stoppedSince !== undefined) s.stoppedSince += gap;
+    s.clock += gap;
   }
-  s.clock = clock;
 }
-/** Fast path only when accepted motion is guaranteed to remain stopped. */
-export function idleTick(s: ExhaustEmitter, clock: number, dt: number) {
-  const gap = Math.max(0, clock - dt - s.clock);
-  if (s.burstNext < s.burstCount || s.nextIdle === Infinity || s.nextIdle + gap <= clock + 1e-9)
-    return false;
-  applyRebase(s, clock, gap);
-  s.stopped += dt;
-  return true;
-}
+export const stoppedFor = (s: ExhaustEmitter, clock: number) =>
+  s.stoppedSince === undefined ? 0 : Math.max(0, clock - s.stoppedSince);
+export const emitterWake = (s: ExhaustEmitter) =>
+  Math.min(s.nextIdle, s.burstNext < s.burstCount ? burstDeadline(s) : Infinity);
 const windComponent = (wind: Wind, axis: 0 | 1) =>
   (wind?.dir[axis] ?? 0) * (wind?.strength ?? 0) * PUFF.drift;
 function drift(
@@ -138,8 +136,6 @@ export function spawnPuff(
     kind,
     t0: at,
     life,
-    hx: dx,
-    hy: dy,
     vx: -dy * spread,
     vy: dx * spread,
     x:
@@ -171,8 +167,6 @@ export function stepEmitter(
   rebaseEmitter(state, clock, dt);
   const low = before < PUFF.pullAway.v;
   const stopped = after < PUFF.pullAway.v;
-  // Most emitters idle for many updates between deadlines. Avoid closures and hashing there.
-  if (low && stopped && idleTick(state, clock, dt)) return;
   const fraction =
     low === stopped ? 0 : Math.max(0, Math.min(1, (PUFF.pullAway.v - before) / (after - before)));
   const crossing = start + fraction * dt;
@@ -188,18 +182,18 @@ export function stepEmitter(
     );
   };
   if (stopped) {
+    if (!low || state.stoppedSince === undefined) state.stoppedSince = low ? start : crossing;
     if (!low || state.nextIdle === Infinity) {
       state.nextIdle = (low ? start : crossing) + interval();
       state.burstCount = 0;
     }
-    state.stopped += low ? dt : clock - crossing;
     while (state.nextIdle <= clock + 1e-9) {
       puff(state.nextIdle);
       state.idle++;
       state.nextIdle += interval();
     }
   } else {
-    if (low && state.stopped + fraction * dt >= PUFF.pullAway.minStop - 1e-9) {
+    if (low && stoppedFor(state, crossing) >= PUFF.pullAway.minStop - 1e-9) {
       state.burstAt = crossing;
       state.burstCount =
         PUFF.pullAway.count[0] +
@@ -209,7 +203,7 @@ export function stepEmitter(
         );
       state.burstNext = 0;
     }
-    state.stopped = 0;
+    state.stoppedSince = undefined;
     state.nextIdle = Infinity;
     while (state.burstNext < state.burstCount) {
       const i = state.burstNext;
@@ -258,6 +252,91 @@ export class PuffStore {
   }
   snapshot(clock: number) {
     return [...this.active(clock)].map((p) => ({ ...p }));
+  }
+}
+
+export type PuffSelectionTile = {
+  tile: TileId;
+  perMeter: number;
+  puffs: PuffStore;
+};
+type Candidate = { p: Puff; tile: TileId; d: number };
+
+/** Bounded selection in tile units; only winners are projected into reply-owned storage. */
+export class PuffSelector {
+  private readonly heap: Candidate[] = [];
+  private readonly pool: Candidate[] = [];
+  clear() {
+    this.heap.length = this.pool.length = 0;
+  }
+  select(
+    tiles: Iterable<PuffSelectionTile>,
+    sources: ReadonlyMap<number, number>,
+    center: readonly [number, number],
+    clock: number,
+    inside: (tile: TileId) => (x: number, y: number) => boolean,
+  ) {
+    const heap = this.heap;
+    heap.length = 0;
+    if (!sources.size) return EMPTY_PUFFS;
+    let reference: TileId | undefined;
+    let origin = { x: 0, y: 0 };
+    for (const life of tiles) {
+      if (!reference) {
+        reference = life.tile;
+        origin = lngLatToTile(reference, ...center);
+      }
+      const frame = frameBetween(life.tile, reference);
+      const contains = inside(life.tile);
+      for (const p of life.puffs.active(clock)) {
+        if (!sources.has(p.sourceId) || !contains(p.x, p.y)) continue;
+        const d =
+          (frame.x + p.x * frame.scale - origin.x) ** 2 +
+          (frame.y + p.y * frame.scale - origin.y) ** 2;
+        if (heap.length < PUFF.visible) {
+          const entry = (this.pool[heap.length] ??= { p, tile: { ...life.tile }, d });
+          entry.p = p;
+          Object.assign(entry.tile, life.tile);
+          entry.d = d;
+          let i = heap.length;
+          heap.push(entry);
+          while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (heap[parent]!.d >= d) break;
+            heap[i] = heap[parent]!;
+            heap[parent] = entry;
+            i = parent;
+          }
+        } else if (d < heap[0]!.d) {
+          const entry = heap[0]!;
+          entry.p = p;
+          Object.assign(entry.tile, life.tile);
+          entry.d = d;
+          for (let i = 0; ;) {
+            let child = i * 2 + 1;
+            if (child >= heap.length) break;
+            if (child + 1 < heap.length && heap[child + 1]!.d > heap[child]!.d) child++;
+            if (heap[i]!.d >= heap[child]!.d) break;
+            [heap[i], heap[child]] = [heap[child]!, heap[i]!];
+            i = child;
+          }
+        }
+      }
+    }
+    heap.sort((a, b) => a.d - b.d);
+    if (!heap.length) return EMPTY_PUFFS;
+    const packet = new Float64Array(heap.length * PUFF_STRIDE);
+    for (let i = 0; i < heap.length; i++) {
+      const { p, tile } = heap[i]!;
+      const [lng, lat] = tileToLngLat(tile, p);
+      const at = i * PUFF_STRIDE;
+      packet[at] = sources.get(p.sourceId)!;
+      packet[at + 1] = lng;
+      packet[at + 2] = lat;
+      packet[at + 3] = Math.max(0, Math.min(1, (clock - p.t0) / p.life));
+      packet[at + 4] = p.kind === 'twoStroke' ? 1 : 0;
+    }
+    return packet;
   }
 }
 
