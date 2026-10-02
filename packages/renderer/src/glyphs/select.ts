@@ -868,30 +868,22 @@ function flutters(h: number, gust: number, time: number): boolean {
 /** Where the sun is when there is none (night): to the northwest, a unit vector (x east, y south). */
 export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 
-/** Overlapping branch banks: center and long axis before the identity-seeded rotation. */
-export const CROWN_BANKS = [
-  [-0.55, -0.3, 0.8, 0.6],
-  [-0.13, -0.58, 0.6, -0.8],
-  [0.45, -0.46, 0.8, 0.6],
-  [0.6, 0.07, 0.6, 0.8],
-  [0.25, 0.53, 0.8, -0.6],
-  [-0.29, 0.6, 0.6, 0.8],
-  [-0.6, 0.23, 0.8, -0.6],
-  [-0.1, 0.05, 0.8, 0.6],
-  [0.23, -0.05, 0.6, -0.8],
-] as const;
+/** Bounded shader work; each identity chooses four to seven outer banks and one or two inside. */
+export const CROWN_BANK_COUNT = 9;
 /** Shared raised leaf surfaces, used by individual crowns and the woods lattice. */
 export const CLUMPS = {
   coarse: 2.8,
   relief: 0.65,
-  jitter: 0.12,
-  radius: 0.4,
-  radiusSpread: 0.18,
+  jitter: 0.38,
+  radius: 0.42,
+  radiusSpread: 0.22,
   shoulder: 0.24,
   cap: 0.4,
   tier: 0.22,
   tierSpread: 0.32,
   innerLift: 0.05,
+  innerTier: 0.41,
+  innerTierSpread: 0.13,
   edgeScale: 6.5,
   edgeWarp: 0.3,
   crease: 0.09,
@@ -899,6 +891,8 @@ export const CLUMPS = {
 } as const;
 export const CROWN = { dryEvery: 12 } as const;
 export const CROWN_RAMP = [0.4, 0.56, 0.73, 0.95, 1.16] as const;
+/** Match the R8 light scale; integer ramp comparisons avoid threshold roundoff. */
+export const CROWN_DENSITY_STEPS = 255 / 1.5;
 export const CROWN_LIGHT = {
   tilt: 0.6,
   minZ: 0.08,
@@ -917,6 +911,15 @@ export const CROWN_TINTS = [
   [1, 1, 1],
   [1.03, 1.03, 0.96],
 ] as const;
+/** Relief chooses leaf density independently of pigment. Gusts turn leaves, without white light. */
+export const CROWN_PIGMENT = { base: 0.16, gain: 0.46, wind: 0.015 } as const;
+export function crownPigment(light: number, windLevel = 0): number {
+  return (
+    CROWN_PIGMENT.base +
+    CROWN_PIGMENT.gain * Math.max(CROWN_LIGHT.min, Math.min(CROWN_LIGHT.max, light)) +
+    CROWN_PIGMENT.wind * Math.max(0, Math.min(3, windLevel))
+  );
+}
 export const CROWN_SUN_MIN_ALT = 25;
 export type CrownSun = readonly [number, number, number];
 export const MOON_SUN: CrownSun = [
@@ -935,6 +938,44 @@ export function crownSun(sun: { altitude: number; azimuth: number } | null): Cro
 
 export type CrownClumps = { top: number; crevice: number; nx: number; ny: number };
 const hashByte = (h: number, shift: number) => ((h >>> shift) & 255) / 255;
+
+export type CrownBank = {
+  cx: number;
+  cy: number;
+  ux: number;
+  uy: number;
+  width: number;
+  depth: number;
+  tier: number;
+};
+/** Stratified placement avoids empty sectors while changing topology, reach and axes per tree. */
+export function crownBank(seed: number, index: number): CrownBank | null {
+  const layout = cellHash(seed, 37);
+  const outer = 4 + ((layout >>> 16) & 3),
+    inner = 1 + ((layout >>> 20) & 1);
+  if (index < 0 || index >= outer + inner) return null;
+  const h = cellHash(seed, index + 71),
+    isInner = index >= outer;
+  const angle = isInner
+    ? hashByte(h, 0) * 2 * Math.PI
+    : ((index + 0.5 + (hashByte(h, 0) * 2 - 1) * CLUMPS.jitter) * 2 * Math.PI) / outer;
+  const reach = isInner ? 0.12 + hashByte(h, 8) * 0.18 : 0.45 + hashByte(h, 8) * 0.28;
+  const ax = hashByte(cellHash(seed, index + 137), 0) * 2 - 1,
+    ay = hashByte(cellHash(seed, index + 137), 8) * 2 - 1,
+    norm = Math.hypot(ax, ay);
+  const width = (CLUMPS.radius + hashByte(h, 16) * CLUMPS.radiusSpread) * (1.15 - 0.03 * outer);
+  return {
+    cx: Math.cos(angle) * reach,
+    cy: Math.sin(angle) * reach,
+    ux: ax / norm,
+    uy: ay / norm,
+    width,
+    depth: width * (0.65 + hashByte(h, 24) * 0.6),
+    tier: isInner
+      ? CLUMPS.innerTier + hashByte(h, 24) * CLUMPS.innerTierSpread + CLUMPS.innerLift
+      : CLUMPS.tier + hashByte(h, 24) * CLUMPS.tierSpread,
+  };
+}
 
 /** Smooth seeded height and its analytic derivatives; no extra neighbour samples. */
 function crownNoiseGradient(x: number, y: number, seed: number): readonly [number, number, number] {
@@ -974,25 +1015,21 @@ export function crownClumps(x: number, y: number, seed: number): CrownClumps {
     second = height,
     dx = ground[1] * CLUMPS.coarse * 0.16,
     dy = ground[2] * CLUMPS.coarse * 0.16;
-  for (const [i, [cx, cy, ux, uy]] of CROWN_BANKS.entries()) {
-    const h = cellHash(seed, i + 71);
-    // Lower branch banks can be hidden by the crown's other branches; avoid a fixed rosette.
-    if (i < 7 && ((h >>> 24) & 7) === 0) continue;
-    const bx = px - cx - (hashByte(h, 0) * 2 - 1) * CLUMPS.jitter,
-      by = py - cy - (hashByte(h, 8) * 2 - 1) * CLUMPS.jitter;
-    const width = CLUMPS.radius + hashByte(h, 16) * CLUMPS.radiusSpread,
-      depth = width * (0.45 + hashByte(h, 24) * 0.8);
+  for (let i = 0; i < CROWN_BANK_COUNT; i++) {
+    const bank = crownBank(seed, i);
+    if (!bank) continue;
+    const { cx, cy, ux, uy, width, depth, tier } = bank;
+    const bx = px - cx,
+      by = py - cy;
     const qx = (bx * ux + by * uy) / width,
       qy = (-bx * uy + by * ux) / depth,
       radius2 = qx * qx + qy * qy,
       v = 1 - radius2 * shape;
     if (v <= 0) continue;
-    const tier =
-      CLUMPS.tier + hashByte(h, 24) * CLUMPS.tierSpread + (i >= 7 ? CLUMPS.innerLift : 0);
-    const bank = tier * smoothstep(0, CLUMPS.shoulder, v) + CLUMPS.cap * v;
-    if (bank > height) {
+    const elevation = tier * smoothstep(0, CLUMPS.shoulder, v) + CLUMPS.cap * v;
+    if (elevation > height) {
       second = height;
-      height = bank;
+      height = elevation;
       const t = Math.min(1, v / CLUMPS.shoulder);
       const slope = CLUMPS.cap + (tier * 6 * t * (1 - t)) / CLUMPS.shoulder;
       dx =
@@ -1003,7 +1040,7 @@ export function crownClumps(x: number, y: number, seed: number): CrownClumps {
         slope *
         (-2 * shape * ((qx * uy) / width + (qy * ux) / depth) +
           radius2 * edge[2] * CLUMPS.edgeScale * CLUMPS.edgeWarp);
-    } else second = Math.max(second, bank);
+    } else second = Math.max(second, elevation);
   }
   return {
     top: height,
@@ -1033,8 +1070,10 @@ export function crownLevel(
   rim = false,
   boundary = false,
 ): number {
-  const density = light - 0.06 * crevice - 0.08 * smoothstep(0.8, 1.15, radius);
-  let level = CROWN_RAMP.filter((t) => density >= t).length;
+  const density =
+    Math.round(light * CROWN_DENSITY_STEPS) -
+    Math.round((0.06 * crevice + 0.08 * smoothstep(0.8, 1.15, radius)) * CROWN_DENSITY_STEPS);
+  let level = CROWN_RAMP.filter((t) => density >= Math.round(t * CROWN_DENSITY_STEPS)).length;
   if (boundary) level = Math.max(1, level - 1);
   if (rim) level = Math.min(level, 3);
   return level;

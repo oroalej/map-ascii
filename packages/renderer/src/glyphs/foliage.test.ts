@@ -7,11 +7,15 @@ import {
   CANOPY,
   CanopyGlyph,
   crownClumps,
+  crownBank,
+  crownPigment,
+  crownLevel,
   crownShade,
   crownTexture,
   crownSun,
   crownTint,
   CROWN_LIGHT,
+  CROWN_BANK_COUNT,
   CLUMPS,
   foliageVariant,
   foliageShadowHeight,
@@ -25,6 +29,61 @@ const disc = Array.from(
   (_, i) => [(i % 41) / 20 - 1, Math.floor(i / 41) / 20 - 1] as const,
 ).filter(([x, y]) => x * x + y * y < 1);
 describe('leaf clumps', () => {
+  it('varies bank count, reach and axes rather than rotating one repeated template', () => {
+    const layouts = Array.from({ length: 128 }, (_, seed) =>
+      Array.from({ length: CROWN_BANK_COUNT }, (_, i) => crownBank(seed, i)).filter(
+        (b) => b !== null,
+      ),
+    );
+    expect(new Set(layouts.map((banks) => banks.length))).toEqual(new Set([5, 6, 7, 8, 9]));
+    for (const [seed, banks] of layouts.entries()) {
+      expect(banks).toEqual(Array.from({ length: banks.length }, (_, i) => crownBank(seed, i)));
+      expect(crownBank(seed, banks.length)).toBeNull();
+      for (const bank of banks) {
+        expect(Math.hypot(bank.ux, bank.uy)).toBeCloseTo(1);
+        expect(Math.hypot(bank.cx, bank.cy)).toBeLessThanOrEqual(0.73);
+        expect(bank.width).toBeGreaterThan(0.39);
+        expect(bank.depth).toBeGreaterThan(0.25);
+      }
+    }
+    // Rotation cannot change bank radii, axis ratios or tiers; these vary even at the same count.
+    const equalCount = layouts.filter((banks) => banks.length === 7);
+    const signatures = equalCount.map((banks) =>
+      banks
+        .map((b) =>
+          [Math.hypot(b.cx, b.cy), b.depth / b.width, b.tier].map((v) => v.toFixed(2)).join(','),
+        )
+        .join(';'),
+    );
+    expect(new Set(signatures).size).toBe(equalCount.length);
+    expect(equalCount.length).toBeGreaterThan(15);
+  });
+  it('bounds green pigment under extreme relief and gusts while retaining layer contrast', () => {
+    const sun = crownSun({ altitude: 60, azimuth: 270 });
+    for (let seed = 0; seed < 32; seed++)
+      for (const [x, y] of disc.filter((_, i) => i % 17 === 0))
+        for (const night of [false, true]) {
+          const relief = crownShade(x, y, crownClumps(x, y, seed), sun, night).light;
+          for (const wind of [0, 1, 2, 3]) {
+            const pigment = crownPigment(relief, wind);
+            expect(pigment).toBeGreaterThanOrEqual(0.25);
+            // Even the warm mature-leaf tint stays below the theme paint, before global daylit.
+            for (const tint of crownTint(seed)) expect(pigment * tint * 1.06).toBeLessThan(0.88);
+          }
+        }
+    expect(crownPigment(100, 100)).toBe(crownPigment(CROWN_LIGHT.max, 3));
+    expect(crownPigment(-100, -100)).toBe(crownPigment(CROWN_LIGHT.min, 0));
+    expect(crownPigment(1.3) / crownPigment(0.2)).toBeGreaterThan(2.5);
+    expect(crownPigment(0.5, 3) - crownPigment(0.5, 0)).toBeLessThan(0.05);
+  });
+  it('keeps density choices stable within light bins around the integer ramp thresholds', () => {
+    // 0.95 lies halfway between R8 bins; 0.953 is inside its threshold bin.
+    for (const light of [0.4, 0.56, 0.73, 0.953, 1.16])
+      expect(crownLevel(light - 0.0003, 0, 0)).toBe(crownLevel(light + 0.0003, 0, 0));
+    expect(crownLevel(0.55, 0, 0)).toBeLessThan(crownLevel(0.57, 0, 0));
+    // A bank join formerly landed on opposite sides of a threshold in CPU and GPU arithmetic.
+    expect(crownLevel(0.559743352, 0, 0)).toBe(crownLevel(0.5601, 0, 0));
+  });
   it('has deterministic raised leaf banks with analytic normals and no quadrant bias', () => {
     const means = [0, 0, 0, 0];
     const counts = [0, 0, 0, 0];

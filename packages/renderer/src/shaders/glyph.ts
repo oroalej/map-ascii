@@ -563,7 +563,7 @@ void main() {
     // Relief changes brightness within the theme's green, without a yellow highlight tint.
     float leafLight = cachedLight > 0.0 ? filteredLight
       : tone == ${Tone.light} ? 1.1 : tone == ${Tone.shade} ? ${float(TONE.shade)} : 1.0;
-    color = daylit(u_colors[cls]) * leafLight;
+    color = daylit(u_colors[cls] * crownPigment(leafLight, windLevel));
   }
   if (cls == u_crownClass && (!edge || int(texelFetch(u_subClass, subAt, 0).r*255.0+0.5) == cls)) {
     // Identity and local surface come from the same sample. Exposed edge ground keeps its fill.
@@ -587,7 +587,8 @@ void main() {
     // Keep leaf variation in the theme palette; the grass's dry straw tint is too yellow here.
     vec3 pigment = crownTint(seed);
     if (tone == ${Tone.dry}) pigment *= vec3(1.06,1.02,0.94);
-    color = toned(daylit(u_colors[cls])*pigment, tone == ${Tone.dry} ? ${Tone.none} : tone, night) * leafLight;
+    // The high-contrast relief selects dense glyphs, but never overexposes the green paint.
+    color = daylit(u_colors[cls] * pigment * crownPigment(leafLight, windLevel));
   }
   if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];
@@ -614,7 +615,7 @@ void main() {
   }
   // Blades caught by a gust show their pale sides, more as it strengthens (glyphs/select.ts
   // WIND_LIGHT by wind level).
-  if (awning == 0 && windLevel > 0) {
+  if (awning == 0 && windLevel > 0 && !leaf) {
     color = mix(color, vec3(1.0), windLevel == 3 ? ${float(WIND_LIGHT[3])}
       : windLevel == 2 ? ${float(WIND_LIGHT[2])} : ${float(WIND_LIGHT[1])});
   }

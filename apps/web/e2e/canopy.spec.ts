@@ -20,6 +20,7 @@ import {
   treeGust,
   Tone,
   TONE_SHIFT,
+  WIND_SHIFT,
   EDGE_STATE,
   foliageVariant,
   MAX_VARIANTS,
@@ -599,6 +600,62 @@ for (const theme of ['dark', 'light'] as const) {
         const foreignEdgeLight = redrawEdge();
         upload(live.textures[2]!, cols, rows, edgeIds);
         render();
+        // Extreme cached relief, legacy light tones and gusts must remain ambient green,
+        // including at night. Use the production glyph pass and real theme colors.
+        const ambientLeaves = [];
+        upload(lifeTex, cols, rows, new Uint8Array(life.length));
+        for (const cls of [input.crown, input.woods]) {
+          const paint = cls === input.crown ? input.crownColor : input.woodsColor;
+          colors.splice(cls * 3, 3, ...paint);
+          render();
+          const binding = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
+          const lit = new Uint8Array(cols * rows * 4);
+          for (const daylight of [1, 0])
+            for (const wind of [0, 3]) {
+              for (let i = 0; i < lit.length; i += 4)
+                lit.set(
+                  [
+                    input.denseGlyph & 255,
+                    cls | ((input.denseGlyph >> 8) << 6),
+                    (input.lightTone << input.toneShift) | (wind << input.windShift),
+                    0,
+                  ],
+                  i,
+                );
+              upload(selected, cols, rows, lit);
+              gl.bindTexture(gl.TEXTURE_2D, foliageLight);
+              gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                0,
+                cols,
+                rows,
+                gl.RED,
+                gl.UNSIGNED_BYTE,
+                new Uint8Array(cols * rows).fill(255),
+              );
+              gl.bindTexture(gl.TEXTURE_2D, binding);
+              // The fixture's uniforms() helper binds unspecified samplers to blank, so
+              // update only these scalars while retaining production texture bindings.
+              gl.useProgram(glyph);
+              gl.uniform1f(gl.getUniformLocation(glyph, 'u_daylight'), daylight);
+              gl.uniform1f(gl.getUniformLocation(glyph, 'u_moon'), 0);
+              gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+              gl.drawArrays(gl.TRIANGLES, 0, 3);
+              const bytes = new Uint8Array(canvas.width * canvas.height * 4);
+              gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+              // All pixels must be dimmer than the themed paint, after the shared night tint.
+              const maxima = [0, 0, 0];
+              for (let i = 0; i < bytes.length; i += 4)
+                for (let channel = 0; channel < 3; channel++)
+                  maxima[channel] = Math.max(maxima[channel]!, bytes[i + channel]!);
+              ambientLeaves.push({ cls, daylight, wind, maxima });
+            }
+          colors.splice(cls * 3, 3, 0, 1, 0);
+        }
+        upload(lifeTex, cols, rows, life);
+        render();
         const setAgent = (cls: number, bit: number, byte: number) => {
           life.fill(0);
           for (let x = 0; x < 6; x++)
@@ -740,10 +797,24 @@ for (const theme of ['dark', 'light'] as const) {
           const bytes = new Uint8Array(cols * rows * 4);
           gl.readPixels(0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
           for (let i = 0; i < bytes.length; i++) {
-            if (bytes[i] !== sample.expected[i])
-              throw new Error(
-                `${sample.feature} night=${sample.night} wind=${sample.wind} byte ${i}: ${bytes[i]} != ${sample.expected[i]}`,
+            if (bytes[i] !== sample.expected[i]) {
+              const cached = new Uint8Array(4),
+                cell = Math.floor(i / 4);
+              gl.readBuffer(gl.COLOR_ATTACHMENT1);
+              gl.readPixels(
+                cell % cols,
+                Math.floor(cell / cols),
+                1,
+                1,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                cached,
               );
+              gl.readBuffer(gl.COLOR_ATTACHMENT0);
+              throw new Error(
+                `${sample.feature} night=${sample.night} wind=${sample.wind} byte ${i}: ${bytes[i]} != ${sample.expected[i]}; cached light ${cached[0]} expected ${sample.expectedLight[cell]}`,
+              );
+            }
             compared++;
           }
           gl.readBuffer(gl.COLOR_ATTACHMENT1);
@@ -849,6 +920,7 @@ void main() {
           edgeWithoutCache,
           matchingEdgeLight,
           foreignEdgeLight,
+          ambientLeaves,
           falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
           lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
           roadJoinGlyph,
@@ -892,6 +964,13 @@ void main() {
         crownColor: [16, 8, 0].map(
           (shift) => ((themes[theme].styles.tree_crown!.color >> shift) & 255) / 255,
         ),
+        woodsColor: [16, 8, 0].map(
+          (shift) => ((themes[theme].styles.trees!.color >> shift) & 255) / 255,
+        ),
+        denseGlyph: index('@'),
+        lightTone: Tone.light,
+        toneShift: TONE_SHIFT,
+        windShift: WIND_SHIFT,
         woods: classId('trees'),
         marker: classId('marker_landmark'),
         roads: roadMask(),
@@ -982,10 +1061,28 @@ void main() {
     for (const p of result.leafColors) {
       // Scalar relief may change brightness, but leaf tints must stay close to the theme hue.
       expect(p[1]).toBeGreaterThan(20);
+      expect(p[1]).toBeLessThan(((paint >> 8) & 255) * 0.88 + 1);
       expect(p[0]! / p[1]!).toBeGreaterThan(redOverGreen * 0.85);
       expect(p[0]! / p[1]!).toBeLessThan(redOverGreen * 1.15);
       expect(p[2]! / p[1]!).toBeGreaterThan(blueOverGreen * 0.8);
       expect(p[2]! / p[1]!).toBeLessThan(blueOverGreen * 1.15);
+    }
+    for (const { cls, daylight, wind, maxima } of result.ambientLeaves) {
+      const paint =
+        themes[theme].styles[cls === classId('tree_crown') ? 'tree_crown' : 'trees']!.color;
+      const nightTint = [0.49, 0.558, 0.813]; // shared daylit, no moon
+      for (const [channel, shift] of [16, 8, 0].entries())
+        expect(
+          maxima[channel],
+          JSON.stringify({ cls, daylight, wind, maxima }),
+        ).toBeLessThanOrEqual(
+          Math.ceil(((paint >> shift) & 255) * 0.88 * (daylight ? 1 : nightTint[channel]!)),
+        );
+      const still = result.ambientLeaves.find(
+        (c) => c.cls === cls && c.daylight === daylight && c.wind === 0,
+      )!;
+      expect(maxima[1]).toBeGreaterThan(15);
+      if (wind === 3) expect(maxima[1]).toBeGreaterThan(still.maxima[1]!);
     }
     expect(result.falseCurbGlyph).toBe(0);
     expect(result.lowerRoofEdgeClass).toBe(classId('tree_crown'));
