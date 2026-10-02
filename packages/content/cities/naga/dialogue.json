@@ -1502,9 +1502,9 @@
           "fil": "Magpraktis tayo ulit."
         },
         {
-          "bcl": "Andam na ako.",
-          "en": "I'm ready.",
-          "fil": "Handa na ako."
+          "bcl": "Sige, magpraktis kita.",
+          "en": "Okay, let's practice.",
+          "fil": "Sige, magpraktis tayo."
         }
       ],
       "sources": [
@@ -1865,9 +1865,9 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Andam na?",
-          "en": "Is it ready?",
-          "fil": "Handa na ba?"
+          "bcl": "Tapos na?",
+          "en": "Is it done?",
+          "fil": "Tapos na ba?"
         },
         {
           "bcl": "Iyo, ini na.",
@@ -2095,9 +2095,9 @@
           "fil": "Nariyan na ang sasakyan!"
         },
         {
-          "bcl": "Mag-andam na kita.",
-          "en": "Let's get ready.",
-          "fil": "Maghanda na tayo."
+          "bcl": "Madya na.",
+          "en": "Let's go.",
+          "fil": "Tara na."
         }
       ],
       "sources": [
@@ -2243,14 +2243,14 @@
       "kind": "talk",
       "lines": [
         {
-          "bcl": "Andam ka na?",
-          "en": "Are you ready?",
-          "fil": "Handa ka na ba?"
+          "bcl": "Madya na?",
+          "en": "Shall we go?",
+          "fil": "Tara na ba?"
         },
         {
-          "bcl": "Andam na!",
-          "en": "Ready!",
-          "fil": "Handa na!"
+          "bcl": "Iyo, madya na!",
+          "en": "Yes, let's go!",
+          "fil": "Oo, tara na!"
         }
       ],
       "sources": [
@@ -2439,9 +2439,9 @@
       "kind": "ball",
       "lines": [
         {
-          "bcl": "Andam na kamo?",
-          "en": "Are you ready?",
-          "fil": "Handa na ba kayo?"
+          "bcl": "Ipasa ko na?",
+          "en": "Shall I pass it now?",
+          "fil": "Ipasa ko na ba?"
         },
         {
           "bcl": "Digdi mo ipasa!",

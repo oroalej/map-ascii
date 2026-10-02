@@ -9,3 +9,5 @@ Structural validation checks the exact count, category allocation, translations,
 The weather-warm ID is retained from the plan but describes daylight, because the simulation has no measured temperature. School and weekend dialogue expresses fictional plans without asserting school hours or the current weekday. Common loanwords such as fountain and monumento are intentional. Direction remarks require a nearby mapped anchor and do not provide route instructions.
 
 The 100-ID editorial inventory and per-turn review sheet are retained with the implementation handoff under `.plans/active/human-moments-100/` during implementation, then `.plans/done/human-moments-100/` at completion.
+
+Following the project owner's feedback that "andam" was unfamiliar in their childhood usage, all six occurrences across five exchanges were replaced with context-specific wording. The companion exchange now says "Madya na?" / "Iyo, madya na!"; translations follow the revised meaning. Dictionary attestation alone does not establish locally familiar everyday usage.
