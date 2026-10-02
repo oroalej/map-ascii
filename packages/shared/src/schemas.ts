@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
-import { validMonthDay, type SeasonConfig, type SeasonWindow } from './seasons';
+import { validMonthDay, type SeasonConfig, type SeasonGrounds, type SeasonWindow } from './seasons';
 import { BuntingCorridorSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
@@ -914,6 +914,13 @@ const SeasonPlaces = z
   .array(z.enum(PLACE_KINDS))
   .min(1)
   .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
+export const SeasonGroundsSchema = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+  anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
+  // Reuse the simple, closed, nonzero-area ring contract from plan-view structures.
+  ring: SiteStructure.shape.ring.max(64),
+  sources: Sources,
+}) satisfies z.ZodType<SeasonGrounds>;
 export const Season = z
   .strictObject({
     id: z
@@ -924,6 +931,15 @@ export const Season = z
     status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
     note: z.string().trim().min(1).optional(),
+    grounds: z
+      .array(SeasonGroundsSchema)
+      .min(1)
+      .max(16)
+      .refine(
+        (grounds) => new Set(grounds.map((g) => g.id)).size === grounds.length,
+        'duplicate grounds ids',
+      )
+      .optional(),
     installations: z
       .array(
         z.discriminatedUnion('kind', [
@@ -932,54 +948,35 @@ export const Season = z
             anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
             label: z.string().trim().min(1),
             sources: Sources,
+            grounds: z
+              .string()
+              .regex(/^[a-z][a-z0-9-]*$/)
+              .optional(),
             kind: z.literal('christmas-tree'),
             radius_m: z.number().min(1).max(12),
           }),
-          z.discriminatedUnion('layout', [
-            z.strictObject({
-              id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-              anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-              label: z.string().trim().min(1),
-              sources: Sources,
-              kind: z.literal('light-string'),
-              layout: z.enum(['paths', 'perimeter']),
-              spacing_m: z.number().min(3).max(12),
-            }),
-            z
-              .strictObject({
-                id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-                anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-                label: z.string().trim().min(1),
-                sources: Sources,
-                kind: z.literal('light-string'),
-                layout: z.literal('street'),
-                spacing_m: z.number().min(3).max(12),
-                ways: z
-                  .array(z.string().regex(/^osm:way\/\d+$/))
-                  .min(1)
-                  .max(100)
-                  .refine((ways) => new Set(ways).size === ways.length, 'duplicate ways'),
-                from: z
-                  .string()
-                  .regex(/^osm:(node|way|relation)\/\d+$/)
-                  .optional(),
-                to: z
-                  .string()
-                  .regex(/^osm:(node|way|relation)\/\d+$/)
-                  .optional(),
-              })
-              .superRefine((installation, ctx) => {
-                if (!installation.ways.includes(installation.anchor))
-                  ctx.addIssue({ code: 'custom', message: 'street anchor must be a selected way' });
-                if (installation.from && installation.from === installation.to)
-                  ctx.addIssue({ code: 'custom', message: 'street endpoints must differ' });
-              }),
-          ]),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
             anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
             label: z.string().trim().min(1),
             sources: Sources,
+            grounds: z
+              .string()
+              .regex(/^[a-z][a-z0-9-]*$/)
+              .optional(),
+            kind: z.literal('light-string'),
+            layout: z.enum(['paths', 'perimeter']),
+            spacing_m: z.number().min(3).max(12),
+          }),
+          z.strictObject({
+            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
+            label: z.string().trim().min(1),
+            sources: Sources,
+            grounds: z
+              .string()
+              .regex(/^[a-z][a-z0-9-]*$/)
+              .optional(),
             kind: z.literal('decorated-canopy'),
           }),
         ]),
@@ -1025,6 +1022,16 @@ export const Season = z
     sources: Sources,
   })
   .superRefine((season, ctx) => {
+    for (const [index, installation] of (season.installations ?? []).entries()) {
+      if (!installation.grounds) continue;
+      const grounds = season.grounds?.find((g) => g.id === installation.grounds);
+      if (!grounds || grounds.anchor !== installation.anchor)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['installations', index, 'grounds'],
+          message: 'grounds must exist and share the installation anchor',
+        });
+    }
     if (!season.lanterns && !season.bunting && !season.stalls && !season.installations?.length)
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
     const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>

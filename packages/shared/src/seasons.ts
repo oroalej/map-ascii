@@ -1,6 +1,7 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
 import type { PlaceKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
+import type { SeasonalPoint } from './seasonal-record';
 export * from './seasonal-record';
 
 /** Selected source ways, optionally trimmed to the frontage of an OSM feature. */
@@ -18,12 +19,20 @@ export type NthWeekday = { month: number; weekday: number; nth: number; offset_d
 export type SeasonWindow =
   | { from: MonthDay; to: MonthDay }
   | { anchor: NthWeekday; days_before: number; days_after: number };
+/** Sourced, schematic property grounds; seasonal only, never permanent land cover. */
+export type SeasonGrounds = {
+  id: string;
+  anchor: string;
+  ring: SeasonalPoint[];
+  sources: Source[];
+};
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
   status: 'draft' | 'verified';
   window: SeasonWindow;
   note?: string;
+  grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
   lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };
   bunting?: {
@@ -43,12 +52,10 @@ export type SeasonInstallation = {
   anchor: string;
   label: string;
   sources: Source[];
+  grounds?: string;
 } & (
   | { kind: 'christmas-tree'; radius_m: number }
-  | ({ kind: 'light-string'; spacing_m: number } & (
-      | { layout: 'paths' | 'perimeter' }
-      | { layout: 'street'; ways: string[]; from?: string; to?: string }
-    ))
+  | { kind: 'light-string'; layout: 'paths' | 'perimeter'; spacing_m: number }
   | { kind: 'decorated-canopy' }
 );
 

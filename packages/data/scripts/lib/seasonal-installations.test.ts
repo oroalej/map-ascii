@@ -151,104 +151,155 @@ it('closes display envelopes exactly even at the equator', () => {
   expect(ring.at(-1)).toEqual(ring[0]);
 });
 
-const roadPoint = (x: number, y = 0): SeasonalPoint => [x / 111320, y / 111320];
-const road = (id: number, points: SeasonalPoint[]): AtlasFeature => ({
-  type: 'Feature',
-  properties: { id: `osm:way/${id}`, class: 'road_mid', width: 10 },
-  geometry: { type: 'LineString', coordinates: points },
-  tippecanoe: { layer: 'roads', minzoom: 12, maxzoom: 16 },
-});
-const frontage = (id: number, point: SeasonalPoint): AtlasFeature => ({
-  type: 'Feature',
-  properties: { id: `osm:node/${id}`, class: 'furniture' },
-  geometry: { type: 'Point', coordinates: point },
-  tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
-});
-const street: SeasonConfig = {
+const at = (x: number, y: number): SeasonalPoint => [x / 111320, y / 111320];
+const groundRing = [at(0, 0), at(40, 0), at(40, 40), at(0, 40), at(0, 0)];
+const propertyAnchor: AtlasFeature = {
+  ...area,
+  properties: { id: 'osm:way/10', class: 'building' },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [[at(30, 0), at(40, 0), at(40, 40), at(30, 40), at(30, 0)]],
+  },
+};
+const propertyFeatures: AtlasFeature[] = [
+  propertyAnchor,
+  {
+    ...features[1]!,
+    properties: { id: 'osm:way/11', class: 'road_minor', width: 6 },
+    geometry: { type: 'LineString', coordinates: [at(5, -10), at(5, 50)] },
+  },
+  {
+    ...features[1]!,
+    properties: { id: 'osm:way/12', class: 'path', width: 2 },
+    geometry: { type: 'LineString', coordinates: [at(0, 20), at(40, 20)] },
+  },
+];
+const propertySeason: SeasonConfig = {
   ...season,
+  grounds: [{ id: 'forecourt', anchor: 'osm:way/10', ring: groundRing, sources: shared.sources }],
   installations: [
     {
       ...shared,
-      id: 'street',
       anchor: 'osm:way/10',
+      grounds: 'forecourt',
+      id: 'tree-a',
+      kind: 'christmas-tree',
+      radius_m: 3,
+    },
+    {
+      ...shared,
+      anchor: 'osm:way/10',
+      grounds: 'forecourt',
+      id: 'tree-b',
+      kind: 'christmas-tree',
+      radius_m: 3,
+    },
+    {
+      ...shared,
+      anchor: 'osm:way/10',
+      grounds: 'forecourt',
+      id: 'garlands',
       kind: 'light-string',
-      layout: 'street',
-      ways: ['osm:way/10', 'osm:way/11'],
-      from: 'osm:node/12',
-      to: 'osm:node/13',
+      layout: 'perimeter',
       spacing_m: 3,
     },
   ],
 };
-const streetFeatures = [
-  road(10, [roadPoint(0), roadPoint(10)]),
-  road(11, [roadPoint(10, 40), roadPoint(10)]),
-  frontage(12, roadPoint(4, -5)),
-  frontage(13, roadPoint(15, 15)),
-];
-it('continues dense street lights across reversed ways and a bend, clipped to projected frontages', () => {
-  const before = structuredClone(streetFeatures);
-  const result = generateSeasonalInstallations(streetFeatures, [street]);
-  expect(generateSeasonalInstallations([...streetFeatures].reverse(), [street])).toEqual(result);
-  expect(streetFeatures).toEqual(before);
-  // 6 m before the bend + 15 m after it: seven 3 m rows, excluding the far frontage.
-  expect(result.stats).toEqual([
-    { season: 'winter', installation: 'street', kind: 'light-string', records: 7 },
+it('keeps property trees and entire garlands outside the anchor building and carriageways', () => {
+  const before = structuredClone(propertyFeatures);
+  const result = generateSeasonalInstallations(propertyFeatures, [propertySeason]);
+  expect(generateSeasonalInstallations([...propertyFeatures].reverse(), [propertySeason])).toEqual(
+    result,
+  );
+  expect(propertyFeatures).toEqual(before);
+  const trees = result.records.filter((r) => r.kind === 'christmas-tree');
+  expect(trees).toHaveLength(2);
+  expect(result.records.some((r) => r.kind === 'light-string')).toBe(true);
+  for (const record of result.records) {
+    expect(SeasonalRecordSchema.safeParse(record).success).toBe(true);
+    if (record.kind === 'christmas-tree') {
+      const x = record.at[0] * 111320,
+        y = record.at[1] * 111320;
+      expect(x + record.radius_m + 1).toBeLessThanOrEqual(30.001);
+      expect(Math.abs(x - 5)).toBeGreaterThanOrEqual(record.radius_m + 4 - 0.001);
+      expect(Math.abs(y - 20)).toBeGreaterThanOrEqual(record.radius_m + 2 - 0.001);
+    } else if (record.kind === 'light-string') {
+      for (let i = 0; i <= 100; i++) {
+        const x = (record.from[0] + ((record.to[0] - record.from[0]) * i) / 100) * 111320;
+        const y = (record.from[1] + ((record.to[1] - record.from[1]) * i) / 100) * 111320;
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(30);
+        expect(y).toBeGreaterThan(0);
+        expect(y).toBeLessThan(40);
+        expect(Math.abs(x - 5)).toBeGreaterThanOrEqual(4 - 0.001);
+      }
+    }
+  }
+  const [a, b] = trees;
+  if (a?.kind !== 'christmas-tree' || b?.kind !== 'christmas-tree')
+    throw new Error('expected trees');
+  expect(Math.hypot(a.at[0] - b.at[0], a.at[1] - b.at[1]) * 111320).toBeGreaterThanOrEqual(
+    7 - 0.001,
+  );
+});
+it('rejects complete light spans crossing a narrow concave notch between sample points', () => {
+  const result = generateSeasonalInstallations(propertyFeatures, [
+    {
+      ...propertySeason,
+      grounds: [
+        {
+          ...propertySeason.grounds![0]!,
+          ring: [
+            at(0, 0),
+            at(40, 0),
+            at(40, 18.1),
+            at(18, 18.1),
+            at(18, 18.2),
+            at(40, 18.2),
+            at(40, 40),
+            at(0, 40),
+            at(0, 0),
+          ],
+        },
+      ],
+      installations: [
+        {
+          ...propertySeason.installations![2]!,
+          kind: 'light-string',
+          layout: 'paths',
+          spacing_m: 3,
+        },
+      ],
+    },
   ]);
-  const centers = result.records
-    .map((r) => {
-      expect(SeasonalRecordSchema.safeParse(r).success).toBe(true);
-      if (r.kind !== 'light-string') throw new Error('expected street light string');
-      expect(r.anchor).toBe('osm:way/10');
-      expect(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) * 111320).toBeCloseTo(11, 3);
-      const x = ((r.from[0] + r.to[0]) / 2) * 111320;
-      const y = ((r.from[1] + r.to[1]) / 2) * 111320;
-      expect(x).toBeLessThanOrEqual(10.001);
-      expect(y).toBeLessThan(15);
-      if (x < 9.999) expect(r.to[0]).toBeCloseTo(r.from[0], 8);
-      else expect(r.to[1]).toBeCloseTo(r.from[1], 8);
-      return x + y;
-    })
-    .sort((a, b) => a - b);
-  for (const [i, p] of centers.entries()) expect(p).toBeCloseTo(4 + i * 3, 3);
+  expect(result.records.length).toBeGreaterThan(0);
+  for (const record of result.records) {
+    if (record.kind !== 'light-string') throw new Error('expected a light span');
+    expect(record.from[0] * 111320).toBeLessThan(18);
+    expect(record.from[1] * 111320).toBeLessThan(18.1);
+    expect(record.to[1] * 111320).toBeGreaterThan(18.2);
+  }
 });
-it('rejects missing street geometry, disconnected ways and unavailable frontage targets', () => {
-  expect(() => generateSeasonalInstallations(streetFeatures.slice(1), [street])).toThrow(
-    'missing road',
-  );
-  expect(() => generateSeasonalInstallations(streetFeatures.slice(0, -1), [street])).toThrow(
-    'missing endpoint',
+it('fails for missing or mismatched property grounds, distant grounds and unavailable anchor geometry', () => {
+  expect(() =>
+    generateSeasonalInstallations(propertyFeatures, [{ ...propertySeason, grounds: undefined }]),
+  ).toThrow('grounds');
+  expect(() =>
+    generateSeasonalInstallations(propertyFeatures, [
+      { ...propertySeason, grounds: [{ ...propertySeason.grounds![0]!, anchor: 'osm:way/99' }] },
+    ]),
+  ).toThrow('mismatched');
+  expect(() => generateSeasonalInstallations(propertyFeatures.slice(1), [propertySeason])).toThrow(
+    'missing',
   );
   expect(() =>
-    generateSeasonalInstallations(
-      [streetFeatures[0]!, road(11, [roadPoint(50), roadPoint(70)]), ...streetFeatures.slice(2)],
-      [street],
-    ),
-  ).toThrow('disconnected');
-  expect(() =>
-    generateSeasonalInstallations(
-      [...streetFeatures.slice(0, -1), frontage(13, roadPoint(10, 500))],
-      [street],
-    ),
-  ).toThrow('not near');
-});
-
-it('requires a selected street anchor and bounds the generated installation size', () => {
-  const config = street.installations![0]!;
-  if (config.kind !== 'light-string' || config.layout !== 'street')
-    throw new Error('expected street');
-  expect(() =>
-    generateSeasonalInstallations(streetFeatures, [
+    generateSeasonalInstallations(propertyFeatures, [
       {
-        ...street,
-        installations: [{ ...config, anchor: 'osm:way/99' }],
+        ...propertySeason,
+        grounds: [
+          { ...propertySeason.grounds![0]!, ring: groundRing.map((p) => [p[0] + 0.01, p[1]]) },
+        ],
       },
     ]),
-  ).toThrow('street anchor is not selected');
-  expect(() =>
-    generateSeasonalInstallations(
-      [road(10, [roadPoint(0), roadPoint(3006)]), road(11, [roadPoint(3006), roadPoint(3012)])],
-      [{ ...street, installations: [{ ...config, from: undefined, to: undefined }] }],
-    ),
-  ).toThrow('too many records');
+  ).toThrow('not near');
 });

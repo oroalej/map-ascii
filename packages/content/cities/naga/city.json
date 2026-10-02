@@ -248,8 +248,8 @@
             "note": "December 3, 2022: giant Plaza Quezon tree absent; Plaza Rizal and Quince Martires illuminated. Supports multi-year interpretation rather than claiming a current exact layout."
           },
           {
-            "title": "Project owner: circled Magsaysay Avenue Christmas enhancement (2026-10-02)",
-            "note": "Requested dense Christmas lights and designs on the southeast side after Magsaysay Bridge, beside Avenue Convention Plaza. The mapped Balatas stop is an illustrative frontage endpoint; this is an owner-requested atlas design, not a surveyed installation."
+            "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+            "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
           }
         ],
         "installations": [
@@ -396,19 +396,152 @@
             "spacing_m": 5
           },
           {
-            "id": "magsaysay-after-bridge-lights",
-            "anchor": "osm:way/1060925382",
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-forecourt",
             "label": "Christmas trees and lights",
-            "kind": "light-string",
-            "layout": "street",
-            "ways": ["osm:way/1060925382", "osm:way/252223483"],
-            "from": "osm:way/30518281",
-            "to": "osm:node/13710579643",
-            "spacing_m": 3,
             "sources": [
               {
-                "title": "Project owner: circled Magsaysay Avenue Christmas enhancement (2026-10-02)",
-                "note": "Requested dense Christmas lights and designs on the southeast side after Magsaysay Bridge, beside Avenue Convention Plaza. The mapped Balatas stop is an illustrative frontage endpoint; this is an owner-requested atlas design, not a surveyed installation."
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-forecourt-garlands",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-forecourt",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-forecourt-tree-1",
+            "kind": "christmas-tree",
+            "radius_m": 3
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-forecourt",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-forecourt-tree-2",
+            "kind": "christmas-tree",
+            "radius_m": 3
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-forecourt",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-forecourt-tree-3",
+            "kind": "christmas-tree",
+            "radius_m": 3
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-building-front",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-building-front-garlands",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-building-front",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-building-front-tree-1",
+            "kind": "christmas-tree",
+            "radius_m": 3.2
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-building-front",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-building-front-tree-2",
+            "kind": "christmas-tree",
+            "radius_m": 3.2
+          },
+          {
+            "anchor": "osm:way/746057996",
+            "grounds": "magsaysay-building-front",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ],
+            "id": "magsaysay-building-front-tree-3",
+            "kind": "christmas-tree",
+            "radius_m": 3.2
+          }
+        ],
+        "grounds": [
+          {
+            "id": "magsaysay-forecourt",
+            "anchor": "osm:way/746057996",
+            "ring": [
+              [123.1956062, 13.63257513],
+              [123.19588838, 13.63231599],
+              [123.19594551, 13.63237476],
+              [123.19566334, 13.63263389],
+              [123.1956062, 13.63257513]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-building-front",
+            "anchor": "osm:way/746057996",
+            "ring": [
+              [123.19595556, 13.6322543],
+              [123.19635194, 13.63189027],
+              [123.19643448, 13.63197515],
+              [123.19603809, 13.63233917],
+              [123.19595556, 13.6322543]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay property Christmas placement correction (2026-10-02)",
+                "note": "Owner annotated ASCII screenshot highlights the forecourt northwest of Avenue Convention Plaza and the southwest grounds strip along its frontage. These schematic seasonal boundaries follow the mapped building and avenue alignment; they are not surveyed property lines or a claim about a real annual installation. Existing driveways and the road carriageway remain clear."
               }
             ]
           }

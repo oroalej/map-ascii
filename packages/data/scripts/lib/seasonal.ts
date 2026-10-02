@@ -14,13 +14,7 @@ type Node = { key: string; at: SeasonalPoint; xy: SeasonalPoint; edges: Edge[] }
 type Edge = { id: string; road: string; width: number; a: Node; b: Node; length: number };
 const pointKey = (p: SeasonalPoint) => `${p[0].toFixed(7)}/${p[1].toFixed(7)}`;
 
-type CorridorRow = Omit<SeasonalBuntingRecord, 'version' | 'kind' | 'season' | 'corridor'>;
-/** Shared road geometry and continuous spacing for bunting and overhead light strings. */
-export function bakeSeasonalCorridor(
-  features: readonly AtlasFeature[],
-  season: string,
-  config: Pick<BuntingCorridor, 'id' | 'ways' | 'from' | 'to' | 'spacing_m'>,
-) {
+function bakeCorridor(features: readonly AtlasFeature[], season: string, config: BuntingCorridor) {
   if (!Number.isFinite(config.spacing_m) || config.spacing_m < 3 || config.spacing_m > 80)
     throw new Error(`Season ${season}, corridor ${config.id}: invalid spacing`);
   const byId = new Map(
@@ -156,7 +150,7 @@ export function bakeSeasonalCorridor(
       n = e.a === n ? e.b : e.a;
     }
   }
-  const records = new Map<string, CorridorRow>();
+  const records = new Map<string, SeasonalBuntingRecord>();
   for (const e of selected.slice().sort((a, b) => a.id.localeCompare(b.id))) {
     const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b,
       b = a === e.a ? e.b : e.a;
@@ -175,7 +169,11 @@ export function bakeSeasonalCorridor(
         id = `season:${season}/${config.id}/${pointKey(at)}`;
       const reach = e.width / 2 + 0.5;
       records.set(id, {
+        version: 1,
+        kind: 'bunting',
         id,
+        season,
+        corridor: config.id,
         road: e.road,
         from: unproject([x - nx * reach, y - ny * reach]),
         to: unproject([x + nx * reach, y + ny * reach]),
@@ -186,7 +184,7 @@ export function bakeSeasonalCorridor(
         throw new Error(`Season ${season}, corridor ${config.id}: too many rows`);
     }
   }
-  if (!records.size) throw new Error(`Season ${season}, corridor ${config.id}: no seasonal rows`);
+  if (!records.size) throw new Error(`Season ${season}, corridor ${config.id}: no bunting rows`);
   return { records: [...records.values()], meters: selected.reduce((n, e) => n + e.length, 0) };
 }
 
@@ -198,16 +196,8 @@ export function generateSeasonalBunting(
     stats: { season: string; corridor: string; ways: number; meters: number; rows: number }[] = [];
   for (const season of seasons ?? [])
     for (const corridor of season.bunting?.corridors ?? []) {
-      const baked = bakeSeasonalCorridor(features, season.id, corridor);
-      records.push(
-        ...baked.records.map((row): SeasonalBuntingRecord => ({
-          ...row,
-          version: 1,
-          kind: 'bunting',
-          season: season.id,
-          corridor: corridor.id,
-        })),
-      );
+      const baked = bakeCorridor(features, season.id, corridor);
+      records.push(...baked.records);
       stats.push({
         season: season.id,
         corridor: corridor.id,

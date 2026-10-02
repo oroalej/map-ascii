@@ -9,7 +9,6 @@ import {
 import type { AtlasFeature } from '../03-normalize';
 import type { Geometry } from 'geojson';
 import { lines } from './road-geometry';
-import { bakeSeasonalCorridor } from './seasonal';
 
 type Point = SeasonalPoint;
 const distance = (p: Point, a: Point, b: Point) => {
@@ -20,6 +19,18 @@ const distance = (p: Point, a: Point, b: Point) => {
     Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)),
   );
   return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+};
+const segmentDistance = (a: Point, b: Point, c: Point, d: Point) => {
+  const cross = (p: Point, q: Point, r: Point) =>
+    (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const overlapping =
+    Math.max(Math.min(a[0], b[0]), Math.min(c[0], d[0])) <=
+      Math.min(Math.max(a[0], b[0]), Math.max(c[0], d[0])) &&
+    Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) <=
+      Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1]));
+  if (overlapping && cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0)
+    return 0;
+  return Math.min(distance(a, c, d), distance(b, c, d), distance(c, a, b), distance(d, a, b));
 };
 function rings(f: AtlasFeature): Point[][] {
   if (f.geometry.type === 'Polygon') return f.geometry.coordinates as Point[][];
@@ -54,45 +65,39 @@ export function generateSeasonalInstallations(
   const stats: { season: string; installation: string; kind: string; records: number }[] = [];
   for (const season of seasons ?? [])
     for (const config of season.installations ?? []) {
-      if (config.kind === 'light-string' && config.layout === 'street') {
-        if (!config.ways.includes(config.anchor))
-          throw new Error(`Season installation ${config.id}: street anchor is not selected`);
-        const baked = bakeSeasonalCorridor(features, season.id, config);
-        if (baked.records.length > 1000)
-          throw new Error(`Season installation ${config.id}: too many records`);
-        records.push(
-          ...baked.records.map((r) => ({
-            version: 1 as const,
-            kind: 'light-string' as const,
-            id: r.id,
-            season: season.id,
-            installation: config.id,
-            anchor: config.anchor,
-            from: r.from,
-            to: r.to,
-            seed: r.seed,
-          })),
-        );
-        stats.push({
-          season: season.id,
-          installation: config.id,
-          kind: config.kind,
-          records: baked.records.length,
-        });
-        continue;
-      }
       const anchor = byId.get(config.anchor);
-      if (!anchor || !['park', 'paving'].includes(anchor.properties.class) || !rings(anchor).length)
+      const grounds = config.grounds
+        ? season.grounds?.find((g) => g.id === config.grounds)
+        : undefined;
+      if (config.grounds && (!grounds || grounds.anchor !== config.anchor))
+        throw new Error(`Season installation ${config.id}: missing or mismatched grounds`);
+      if (
+        !anchor ||
+        !rings(anchor).length ||
+        !(grounds
+          ? anchor.properties.class.startsWith('building') ||
+            ['park', 'paving'].includes(anchor.properties.class)
+          : ['park', 'paving'].includes(anchor.properties.class))
+      )
         throw new Error(
           `Season ${season.id}, installation ${config.id}: missing public area ${config.anchor}`,
         );
-      const ll = rings(anchor),
+      const ll = grounds ? [grounds.ring] : rings(anchor),
         lat = ll[0]![0]![1];
       const mx = 111320 * Math.cos((lat * Math.PI) / 180),
         my = 111320;
       const project = (p: Point): Point => [p[0] * mx, p[1] * my];
       const unproject = (p: Point): Point => [p[0] / mx, p[1] / my];
       const polygon = ll.map((r) => r.map(project));
+      if (grounds) {
+        const source = rings(anchor).flat().map(project);
+        const center: Point = [
+          (Math.min(...source.map((p) => p[0])) + Math.max(...source.map((p) => p[0]))) / 2,
+          (Math.min(...source.map((p) => p[1])) + Math.max(...source.map((p) => p[1]))) / 2,
+        ];
+        if (polygon.flat().some((p) => Math.hypot(p[0] - center[0], p[1] - center[1]) > 200))
+          throw new Error(`Season installation ${config.id}: grounds are not near the anchor`);
+      }
       const all = polygon.flat();
       const x0 = Math.min(...all.map((p) => p[0])),
         x1 = Math.max(...all.map((p) => p[0]));
@@ -149,7 +154,7 @@ export function generateSeasonalInstallations(
       if (config.kind === 'christmas-tree') {
         const obstacles = local.filter(
           (f) =>
-            f !== anchor &&
+            (f !== anchor || grounds !== undefined) &&
             ([
               'path',
               'monument',
@@ -215,6 +220,37 @@ export function generateSeasonalInstallations(
             ![0, 0.25, 0.5, 0.75, 1].every((t) =>
               inside([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], polygon),
             )
+          )
+            return;
+          // Sampling alone can miss a narrow concave notch in a curated property boundary.
+          if (
+            grounds &&
+            polygon.some((r) => r.slice(1).some((d, i) => segmentDistance(a, b, r[i]!, d) < 1e-6))
+          )
+            return;
+          if (
+            grounds &&
+            local.some((f) => {
+              if (f.properties.class.startsWith('building')) {
+                const rs = rings(f).map((r) => r.map(project));
+                return (
+                  inside(a, rs) ||
+                  inside(b, rs) ||
+                  rs.some((r) => r.slice(1).some((d, i) => segmentDistance(a, b, r[i]!, d) < 1))
+                );
+              }
+              if (f.properties.class.startsWith('road_'))
+                return lines(f).some((l) =>
+                  l
+                    .slice(1)
+                    .some(
+                      (d, i) =>
+                        segmentDistance(a, b, project(l[i] as Point), project(d as Point)) <
+                        Number(f.properties.width ?? 6) / 2 + 1,
+                    ),
+                );
+              return false;
+            })
           )
             return;
           if (
