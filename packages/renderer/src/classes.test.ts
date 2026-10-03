@@ -6,7 +6,22 @@ import {
   classVisibility,
   crownSurfaces,
   groundDepth,
+  pavingOverrideBase,
+  pavingOverrideDepth,
+  renderClasses,
 } from './classes';
+
+it('limits paving overrides to surfaces below the planting tier', () => {
+  const depths = classDepths();
+  for (const cls of renderClasses) {
+    expect(pavingOverrideBase.includes(cls), cls).toBe(
+      depths[classId(cls)]! < 2 && depths[classId(cls)]! > pavingOverrideDepth(),
+    );
+  }
+  expect(pavingOverrideBase).toHaveLength(8);
+  for (const cls of ['road_major', 'building', 'water_area', 'shrubs', 'planting', 'tree_crown'])
+    expect(pavingOverrideBase).not.toContain(cls);
+});
 
 describe('classesIn', () => {
   it('lists the class ids in a class-buffer read, once each, in id order', () => {

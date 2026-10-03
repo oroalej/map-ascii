@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from 'react';
 import { useUiStore } from '@/state/ui';
+import { additionalCredits } from '@/lib/attribution';
 import styles from './Attribution.module.css';
 
 /** One empty list, so the store selector returns a stable value before the meta loads. */
@@ -15,7 +16,8 @@ const HEIGHT_VAR = '--attribution-height';
  * other layers need (e.g. the DEM behind the terrain), from its meta.
  */
 export function Attribution() {
-  const extra = useUiStore((s) => s.meta?.attribution ?? NONE);
+  const credits = useUiStore((s) => s.meta?.attribution ?? NONE);
+  const extra = additionalCredits(credits);
   const ref = useRef<HTMLElement>(null);
 
   // The credits wrap to more lines on narrow screens, so publish the real height rather than

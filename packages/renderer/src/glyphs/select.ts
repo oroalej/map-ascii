@@ -304,8 +304,19 @@ export function subcellEdge(
   center: Sample,
   samples: readonly Sample[],
   outlined: (sample: Sample) => boolean,
+  beforeOutline = false,
 ): SubcellEdge | null {
   const isArea = (s: Sample) => s.cls !== null && subcellClasses.includes(s.cls);
+  // The shader's first pass is for road/roof crowns and non-area paving edges.
+  // Outlined parks and terraces must reach their outline before the ordinary edge pass.
+  if (
+    beforeOutline &&
+    center.cls !== null &&
+    !roadClasses.includes(center.cls) &&
+    !center.cls.startsWith('building') &&
+    !(!isArea(center) && belowPavingOverride(center))
+  )
+    return null;
   if (
     center.cls !== null &&
     !isArea(center) &&

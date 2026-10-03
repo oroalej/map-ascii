@@ -763,6 +763,9 @@ export function buildTileGeometry(
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
   const utilities: UtilityRecord[] = [];
+  // Burial rows repeat one parent descriptor thousands of times. Keep this cache
+  // local to a decode, including failed parses, so archives cannot grow it forever.
+  const selections = new Map<string, ReturnType<typeof parseDetailSelection>>();
 
   for (const [name, layer] of Object.entries(layers)) {
     if (name === 'utilities') {
@@ -785,7 +788,10 @@ export function buildTileGeometry(
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
       // A site's building or monument may be in another tile on a cold direct-URL load.
       // Register its real metadata without assigning its id to the surface's outline.
-      const selection = parseDetailSelection(feature.properties.detail_selection);
+      const descriptor = feature.properties.detail_selection;
+      if (typeof descriptor === 'string' && !selections.has(descriptor))
+        selections.set(descriptor, parseDetailSelection(descriptor));
+      const selection = typeof descriptor === 'string' ? selections.get(descriptor) : undefined;
       if (selection && selection.id === feature.properties.detail_parent)
         registry.index(selection.id, () => selection);
       const id = registry.index(featureId, () =>

@@ -10,11 +10,11 @@ import centroid from '@turf/centroid';
 import inside from '@turf/boolean-point-in-polygon';
 import type { Polygon, MultiPolygon } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature } from '../03-normalize';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, clearanceWidth, localFrame, METERS_PER_DEGREE as METERS } from './geo';
+import { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
 import { seatingFootprint } from './site-detail';
 import { interiorPoint } from './frontage';
 
-const METERS = 111_320;
 const latForBounds = (bounds: [number, number, number, number]) => (bounds[1] + bounds[3]) / 2;
 
 type Segment = { a: LngLat; b: LngLat; bounds: [number, number, number, number] };
@@ -74,20 +74,18 @@ const prepare = (coordinates: LngLat[][][]) => {
 };
 
 function trunk(at: LngLat): Polygon {
-  const mx = METERS * Math.cos((at[1] * Math.PI) / 180);
-  const ring = Array.from({ length: 17 }, (_, i): LngLat => [
-    at[0] + (Math.cos((i * Math.PI) / 8) * 0.5) / mx,
-    at[1] + (Math.sin((i * Math.PI) / 8) * 0.5) / METERS,
-  ]);
+  const frame = localFrame(at);
+  const ring = Array.from({ length: 17 }, (_, i): LngLat =>
+    frame.toLngLat([Math.cos((i * Math.PI) / 8) * 0.5, Math.sin((i * Math.PI) / 8) * 0.5]),
+  );
   return { type: 'Polygon', coordinates: [ring] };
 }
 
 /** Explicit burial geometry uses existing stone parts, keeping the renderer city-agnostic. */
 export function burialRow(row: Cemetery['rows'][number]): Polygon[] {
   const [start, end] = row.line;
-  const mx = METERS * Math.cos((start[1] * Math.PI) / 180);
-  const dx = (end[0] - start[0]) * mx;
-  const dy = (end[1] - start[1]) * METERS;
+  const frame = localFrame(start);
+  const [dx, dy] = frame.toMeters(end);
   const span = Math.hypot(dx, dy);
   if (row.count > 1 && span / (row.count - 1) < row.width_m + 0.1)
     throw new Error(`${row.id}: burial markers overlap along the row`);
@@ -103,10 +101,12 @@ export function burialRow(row: Cemetery['rows'][number]): Polygon[] {
       [1, 1],
       [-1, 1],
       [-1, -1],
-    ].map(([a, b]) => [
-      start[0] + (x + (a! * ux * row.width_m) / 2 - (b! * uy * row.length_m) / 2) / mx,
-      start[1] + (y + (a! * uy * row.width_m) / 2 + (b! * ux * row.length_m) / 2) / METERS,
-    ]);
+    ].map(([a, b]) =>
+      frame.toLngLat([
+        x + (a! * ux * row.width_m) / 2 - (b! * uy * row.length_m) / 2,
+        y + (a! * uy * row.width_m) / 2 + (b! * ux * row.length_m) / 2,
+      ]),
+    );
     return { type: 'Polygon', coordinates: [ring] };
   });
 }
@@ -127,12 +127,12 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
     const area = original.geometry as Polygon | MultiPolygon;
     const bounds = bbox(area) as [number, number, number, number];
     const [lng, lat] = centroid(area).geometry.coordinates;
-    const mx = METERS * Math.cos((lat! * Math.PI) / 180);
+    const frame = localFrame([lng!, lat!]);
     // Clip in local metres: degree coordinates near 123° make tiny plaque intersections
     // unnecessarily expensive for the robust polygon arithmetic.
     const clip = (g: Polygon | MultiPolygon): LngLat[][][] =>
       (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((p) =>
-        p.map((r) => r.map(([x, y]): LngLat => [(x! - lng!) * mx, (y! - lat!) * METERS])),
+        p.map((r) => r.map(frame.toMeters)),
       );
     const areaClip = prepare(clip(area));
     const obstacles = source.flatMap<
@@ -141,7 +141,7 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
       const g = f.geometry,
         p = f.properties;
       const near = bbox(f) as [number, number, number, number];
-      const margin = (p.width ?? 6) / METERS;
+      const margin = (p.width ?? DEFAULT_ROAD_WIDTH_M) / METERS;
       const longitudeMargin = margin / Math.cos((latForBounds(bounds) * Math.PI) / 180);
       if (
         !bboxesOverlap(bounds, [
@@ -172,10 +172,7 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
             Math.max(start[1]!, end[1]!) + margin,
           ];
           if (!bboxesOverlap(bounds, segmentBounds)) return [];
-          const shape = seatingFootprint(
-            [start, end] as LngLat[],
-            (p.width ?? (p.class === 'path' ? 2 : 6)) + 0.1,
-          );
+          const shape = seatingFootprint([start, end] as LngLat[], clearanceWidth(p, 0.1));
           return [
             { ...prepare(clip(shape)), bounds: bbox(shape) as [number, number, number, number] },
           ];
@@ -213,16 +210,10 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
     const cells = new Map<string, ReturnType<typeof prepare>[]>();
     const keys = (b: [number, number, number, number]) => {
       const out: string[] = [];
-      for (
-        let x = Math.floor(((b[0] - lng!) * mx) / 10);
-        x <= Math.floor(((b[2] - lng!) * mx) / 10);
-        x++
-      )
-        for (
-          let y = Math.floor(((b[1] - lat!) * METERS) / 10);
-          y <= Math.floor(((b[3] - lat!) * METERS) / 10);
-          y++
-        )
+      const [west, south] = frame.toMeters([b[0], b[1]]);
+      const [east, north] = frame.toMeters([b[2], b[3]]);
+      for (let x = Math.floor(west / 10); x <= Math.floor(east / 10); x++)
+        for (let y = Math.floor(south / 10); y <= Math.floor(north / 10); y++)
           out.push(`${x}/${y}`);
       return out;
     };

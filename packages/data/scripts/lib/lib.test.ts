@@ -18,7 +18,21 @@ import {
   intersectBbox,
   splitOverpassBbox,
   toOverpassBbox,
+  localFrame,
+  clearanceWidth,
 } from './geo';
+
+it('keeps meter-frame origins and explicit clearance margins', () => {
+  const frame = localFrame([123, 14], 15);
+  const point: [number, number] = [123.001, 14.002];
+  const meters = frame.toMeters(point);
+  expect(meters[0]).toBeCloseTo(111.32 * Math.cos((15 * Math.PI) / 180), 6);
+  expect(meters[1]).toBeCloseTo(222.64, 6);
+  expect(frame.toLngLat(meters)).toEqual(point);
+  expect(clearanceWidth({ class: 'road_minor' })).toBe(6);
+  expect(clearanceWidth({ class: 'path' })).toBe(2);
+  expect(clearanceWidth({ class: 'road_minor', width: 8 }, 0.1)).toBe(8.1);
+});
 
 describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);

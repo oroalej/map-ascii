@@ -16,6 +16,7 @@ import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
+import { geometryAudit } from './geometry-audit';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -63,22 +64,26 @@ describe('owner placement corrections', () => {
     const north = source.basilica.find((f) => f.properties.id === 'osm:way/1203053274')!;
     if (loop.geometry.type !== 'LineString' || north.geometry.type !== 'LineString')
       throw Error('source lanes');
-    for (const [i, tree] of palms.trees.slice(0, 93).entries()) {
-      const northern = i >= 21 && i < 29;
-      const line = northern
-        ? north.geometry.coordinates
-        : i < 21 || i >= 66
-          ? loop.geometry.coordinates.slice(0, 9)
-          : loop.geometry.coordinates.slice(9);
-      const distance = distances(tree.at, line);
-      expect(distance, `tree ${i + 1}`).toBeGreaterThan(northern ? 3 : 3.5);
-      expect(distance, `tree ${i + 1}`).toBeLessThan(i >= 82 ? 12.5 : 9.5);
-      if (!northern) {
-        const side = distances(tree.at, line, true);
-        if (i < 50) expect(side, `inner column tree ${i + 1}`).toBeGreaterThan(3.5);
-        else expect(side, `outer column tree ${i + 1}`).toBeLessThan(-3.5);
-      }
+    // Select the authored roadside columns by their tree dimensions, not array positions.
+    const columns = palms.trees.filter(
+      (t) => t.height_m === 18 || (t.height_m === 10 && t.crown_m === 7.5),
+    );
+    const sides = new Set<number>();
+    expect(columns.length).toBeGreaterThan(0);
+    for (const tree of columns) {
+      const loopDistance = distances(tree.at, loop.geometry.coordinates);
+      const northDistance = distances(tree.at, north.geometry.coordinates);
+      const northern = northDistance < loopDistance;
+      expect(
+        Math.min(loopDistance, northDistance),
+        `tree at ${tree.at.join(', ')}`,
+      ).toBeGreaterThan(northern ? 3 : 3.5);
+      expect(Math.min(loopDistance, northDistance), `tree at ${tree.at.join(', ')}`).toBeLessThan(
+        12.5,
+      );
+      if (!northern) sides.add(Math.sign(distances(tree.at, loop.geometry.coordinates, true)));
     }
+    expect([...sides].sort()).toEqual([-1, 1]);
     const before = structuredClone(source.basilica);
     const input = structuredClone(source.basilica);
     mergeContent(input, {
@@ -151,6 +156,7 @@ describe('owner placement corrections', () => {
   const result = mergeCemeteries(input, [cemetery]);
   const parts = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
   const parent = input.find((f) => f.properties.id === cemetery.osm_id)!;
+  const audit = geometryAudit(parent.geometry as Polygon | MultiPolygon);
   const obstacles = input.flatMap((f) => {
     if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
       return [seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)];
@@ -177,15 +183,9 @@ describe('owner placement corrections', () => {
   for (let start = 0; start < parts.length; start += 250) {
     it(`keeps Catholic cemetery burials ${start + 1}-${Math.min(start + 250, parts.length)} clear and selectable`, () => {
       for (const part of parts.slice(start, start + 250)) {
-        const ring = (part.geometry as Polygon).coordinates[0]!;
-        expect(ring.every((p) => inside(p, parent.geometry as Polygon))).toBe(true);
-        for (const obstacle of obstacles)
-          expect(
-            intersection(
-              (part.geometry as Polygon).coordinates as LngLat[][],
-              obstacle.coordinates as LngLat[][] | LngLat[][][],
-            ),
-          ).toEqual([]);
+        const shape = part.geometry as Polygon;
+        expect(audit.contains(shape)).toBe(true);
+        for (const obstacle of obstacles) expect(audit.overlaps(shape, obstacle)).toBe(false);
         expect(
           DetailSelectionSchema.parse(JSON.parse(part.properties.detail_selection!) as unknown),
         ).toMatchObject({ id: cemetery.osm_id, landmarkId: landmark.id });

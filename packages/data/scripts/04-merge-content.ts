@@ -16,6 +16,7 @@ import { mergeTraffic } from './lib/traffic';
 import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
+import { writeDetailLayouts } from './lib/detail-layout';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
@@ -101,7 +102,8 @@ export function checkTours(
 // Join the city pack's curated content onto features
 export const step: Step = {
   name: '04-merge-content',
-  async run({ city, content, buildDir, outDir }) {
+  async run(ctx) {
+    const { city, content, buildDir, outDir } = ctx;
     let features: AtlasFeature[] = [];
     for await (const f of readFeatures(join(buildDir, files.normalized))) {
       features.push(f as AtlasFeature);
@@ -150,6 +152,7 @@ export const step: Step = {
     const art = placeArt(features, content.art);
     await mkdir(outDir, { recursive: true });
     await writeJson(join(outDir, `${city.slug}.art.json`), art);
+    await writeDetailLayouts(ctx);
     const drafts = art.pieces.filter((p) => p.status === 'draft').length;
     console.log(`  placed ${art.pieces.length} art pieces (${drafts} draft)`);
   },

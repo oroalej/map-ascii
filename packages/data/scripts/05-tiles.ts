@@ -2,7 +2,7 @@ import { buildUtilityTiles } from './lib/utility-tiles';
 import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CityMeta, SubdivisionAreas, type City, type SiteDetail } from '@atlas/shared';
+import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normalize';
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
@@ -11,7 +11,7 @@ import { landcoverCredits } from './lib/landcover';
 import { cemeteryCredits } from './lib/cemeteries';
 import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
-import { detailLayoutKey } from './lib/detail-layout';
+import { readDetailLayouts } from './lib/detail-layout';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
 
@@ -36,7 +36,7 @@ export function buildMeta(
   geography: Geography,
   years: [number, number],
   credits: readonly string[] = [],
-  details?: readonly SiteDetail[],
+  detailLayouts?: Readonly<Record<string, string>>,
 ): CityMeta {
   return CityMeta.parse({
     slug: city.slug,
@@ -48,14 +48,16 @@ export function buildMeta(
     defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
     attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
-    detail_layouts: details && Object.fromEntries(details.map((d) => [d.id, detailLayoutKey(d)])),
+    detail_layouts: detailLayouts,
   });
 }
 
 // Build <city>.pmtiles with tippecanoe and write <city>.meta.json
 export const step: Step = {
   name: '05-tiles',
-  async run({ city, content, buildDir, outDir }) {
+  async run(ctx) {
+    const { city, content, buildDir, outDir } = ctx;
+    const layouts = await readDetailLayouts(ctx);
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
     const years = await yearRange(merged, new Date().getFullYear());
@@ -69,7 +71,7 @@ export const step: Step = {
         ...detailCredits(content.details),
         ...planCredits(content.plans),
       ],
-      content.details,
+      layouts,
     );
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);

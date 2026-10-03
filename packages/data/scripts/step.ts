@@ -72,4 +72,5 @@ export const files = {
   normalized: 'normalized.geojsonl',
   subdivisions: 'subdivisions.json',
   merged: 'merged.geojsonl',
+  detailLayouts: 'detail-layouts.json',
 };

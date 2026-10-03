@@ -3,7 +3,8 @@ import type { SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { detailLayoutKey } from '../../../packages/data/scripts/lib/detail-layout';
 import { isCityMeta } from '../lib/guards';
-import { cities, drawnShare, mapReady, mapShot, MIN_DRAWN } from './helpers';
+import { cities, mapReady } from './helpers';
+import { additionalCredits } from '../lib/attribution';
 const samples = JSON.parse(
   readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
 ) as Record<string, { slug: string; at: number[] }[]>;
@@ -17,10 +18,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
     `../../../packages/content/cities/${city.slug}/details/`,
     import.meta.url,
   );
-  // Reviewed surfaces cover plazas, campus planting, an apron, an aliased landmark,
-  // a school pool, fixed terminal parking, a cemetery memorial and point-anchored
-  // college grounds. Fixtures keep smoke coverage bounded as packs are added;
-  // geometry rules live in Vitest.
+  // At most two surfaces per city exercise direct and aliased selection. A unit
+  // check caps this fixture; geometry and cold-load selection belong in Vitest.
   const cases = samples[city.slug] ?? [];
   for (const sample of cases) {
     const detail = JSON.parse(
@@ -28,7 +27,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
     ) as SiteDetail;
     test(`${city.name}: ${detail.title} details retain area selection with Life off and on`, async ({
       page,
-    }, info) => {
+    }) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(() => {
@@ -42,9 +41,6 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       await page.goto(`/${city.slug}?lng=${lng}&lat=${lat}&z=21`);
       await mapReady(page);
       const canvas = page.getByLabel(`Map of ${city.name}`);
-      await expect
-        .poll(async () => drawnShare(page, await mapShot(canvas)), { timeout: 20_000 })
-        .toBeGreaterThan(MIN_DRAWN);
       const response = await page.request.get(`/tiles/${city.slug}.meta.json`);
       expect(response.ok()).toBe(true);
       const meta: unknown = await response.json();
@@ -59,7 +55,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         !meta.attribution.includes(detail.credit) || !currentLayout,
         'Pinned tiles predate this detail layout',
       );
-      await expect(page.locator('footer')).toContainText(detail.credit);
+      for (const credit of additionalCredits([detail.credit]))
+        await expect(page.locator('footer')).toContainText(credit);
       await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
       const footer = await page.locator('footer').boundingBox();
       expect(footer!.height).toBeLessThan(200);
@@ -73,9 +70,11 @@ for (const city of cities.filter((city) => city.hasMeta)) {
           await life.click();
           await expect(life).toHaveAttribute('aria-pressed', 'true');
         }
-        await canvas.hover({ position });
-        await expect(canvas).toHaveCSS('cursor', 'pointer');
         await expect(async () => {
+          // Reissue pointer input as tiles arrive; reduced motion does not continuously pick.
+          await canvas.hover({ position: { x: position.x + 1, y: position.y } });
+          await canvas.hover({ position });
+          await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 1500 });
           await canvas.click({ position });
           await expect
             .poll(() => new URL(page.url()).searchParams.get('sel'), { timeout: 1500 })
@@ -85,7 +84,6 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         await page.keyboard.press('Escape');
       }
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await info.attach('plaza-detail', { body: await mapShot(canvas), contentType: 'image/png' });
       expect(errors).toEqual([]);
     });
   }

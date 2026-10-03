@@ -42,6 +42,52 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('accepts normalized paths with repeated vertices without losing endpoint caps', () => {
+    const path: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/path', class: 'path' },
+      geometry: { type: 'LineString', coordinates: [p(5, 5), p(5, 5), p(45, 5)] },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      parked_vehicles: [{ id: 'one', at: p(35, 35), bearing: 0, kind: 'car' }],
+    });
+    expect(() => mergeSiteDetails([parent, path], [pack])).not.toThrow();
+    const shape = seatingFootprint([p(5, 5), p(5, 5), p(45, 5)], 2);
+    expect(shape.coordinates.flat(3).every(Number.isFinite)).toBe(true);
+    expect(inside(p(4.5, 5), shape)).toBe(true);
+    expect(inside(p(45.5, 5), shape)).toBe(true);
+    expect(() =>
+      mergeSiteDetails(
+        [parent, path],
+        [{ ...pack, parked_vehicles: [{ ...pack.parked_vehicles[0]!, at: p(30, 5) }] }],
+      ),
+    ).toThrow('crosses');
+  });
+  it('rejects overriding paving that erases a mapped carriageway, including its full width', () => {
+    const road: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/road', class: 'road_minor', width: 6 },
+      geometry: { type: 'LineString', coordinates: [p(5, 40), p(45, 40)] },
+    };
+    const court = {
+      id: 'court',
+      ring: [p(10, 35), p(20, 35), p(20, 38), p(10, 38), p(10, 35)],
+      height_m: 0.15,
+      material: 'paving' as const,
+      overhead: false,
+      ground_override: true,
+    };
+    expect(() => mergeSiteDetails([parent, road], [{ ...detail, structures: [court] }])).toThrow(
+      'structure court: crosses osm:way/road',
+    );
+    expect(() =>
+      mergeSiteDetails(
+        [parent, road],
+        [{ ...detail, structures: [{ ...court, ground_override: false }] }],
+      ),
+    ).not.toThrow();
+  });
   it('anchors riverside detail to a complete mapped bridge line without changing its road', () => {
     const bridge: AtlasFeature = {
       ...parent,

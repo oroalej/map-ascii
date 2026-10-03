@@ -9,6 +9,7 @@ import { tippecanoe } from './tippecanoe';
 import { step } from '../05-tiles';
 import type { StepContext } from '../step';
 import { readJson } from './io';
+import { writeDetailLayouts } from './detail-layout';
 
 import {
   archive,
@@ -252,6 +253,7 @@ it('excludes pipeline-only highway from base tiling while retaining it for utili
     buildDir: dir,
     outDir: join(dir, 'public'),
   } as unknown as StepContext;
+  await writeDetailLayouts(context);
   await step.run(context);
   expect(vi.mocked(tippecanoe).mock.calls[0]![2]).toContain('--exclude=highway');
 });

@@ -13,19 +13,12 @@ import { difference, intersection, union } from 'polyclip-ts';
 import type { Polygon, MultiPolygon, LineString, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, bufferBbox, clearanceWidth, inBbox, localFrame as frame } from './geo';
 import { parkedVehicleParts } from './parked-vehicles';
+import { geometryAudit } from './geometry-audit';
 
-const METERS = 111_320;
 type MultiPoly = ReturnType<typeof union>;
-const frame = ([lng, lat]: LngLat) => {
-  const mx = METERS * Math.cos((lat * Math.PI) / 180);
-  return {
-    local: ([x, y]: Position): LngLat => [(x! - lng) * mx, (y! - lat) * METERS],
-    world: ([x, y]: LngLat): LngLat => [lng + x / mx, lat + y / METERS],
-  };
-};
-const distance = (a: Position, b: Position) => Math.hypot(...frame(a as LngLat).local(b));
+const distance = (a: Position, b: Position) => Math.hypot(...frame(a as LngLat).toMeters(b));
 
 function strokePieces(points: LngLat[], width: number): LngLat[][][] {
   const half = width / 2;
@@ -40,6 +33,7 @@ function strokePieces(points: LngLat[], width: number): LngLat[][][] {
     const a = points[i - 1]!,
       b = points[i]!;
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (length === 0) continue;
     const nx = (-(b[1] - a[1]) / length) * half,
       ny = ((b[0] - a[0]) / length) * half;
     pieces.push([
@@ -62,7 +56,7 @@ export function seatingFootprint(
   spans: SiteDetail['seating'][number]['bench_spans'] = [],
 ): MultiPolygon {
   const f = frame(line[0]!);
-  const points = line.map(f.local);
+  const points = line.map(f.toMeters);
   const pieces = strokePieces(points, width);
   for (const span of spans)
     pieces.push(...strokePieces(points.slice(span.start, span.end + 1), span.width_m));
@@ -81,7 +75,7 @@ export function seatingFootprint(
   }
   return {
     type: 'MultiPolygon',
-    coordinates: merged[0]!.map((p) => p.map((r) => r.map((p) => f.world(p)))),
+    coordinates: merged[0]!.map((p) => p.map((r) => r.map((p) => f.toLngLat(p)))),
   };
 }
 
@@ -119,12 +113,12 @@ function lineContained(line: LineString, area: Polygon | MultiPolygon): boolean 
   return line.coordinates.slice(1).every((b, i) => {
     const a = line.coordinates[i]!;
     const f = frame(a as LngLat);
-    const end = f.local(b);
+    const end = f.toMeters(b);
     const cuts = [0, 1];
     for (const ring of rings)
       for (let j = 1; j < ring.length; j++) {
-        const c = f.local(ring[j - 1]!);
-        const d = f.local(ring[j]!);
+        const c = f.toMeters(ring[j - 1]!);
+        const d = f.toMeters(ring[j]!);
         const edge: LngLat = [d[0] - c[0], d[1] - c[1]];
         const denominator = cross(end, edge);
         if (Math.abs(denominator) < 1e-12) continue;
@@ -135,7 +129,7 @@ function lineContained(line: LineString, area: Polygon | MultiPolygon): boolean 
     cuts.sort((a, b) => a - b);
     return cuts.slice(1).every((t, j) => {
       const mid = (cuts[j]! + t) / 2;
-      return inside(f.world([end[0] * mid, end[1] * mid]), area);
+      return inside(f.toLngLat([end[0] * mid, end[1] * mid]), area);
     });
   });
 }
@@ -160,8 +154,8 @@ function selectionNear(g: AtlasFeature['geometry'], area: Polygon | MultiPolygon
         const f = frame(point);
         return rings.some((boundary) =>
           boundary.slice(1).some((b, i) => {
-            const [ax, ay] = f.local(boundary[i]!);
-            const [bx, by] = f.local(b);
+            const [ax, ay] = f.toMeters(boundary[i]!);
+            const [bx, by] = f.toMeters(b);
             const dx = bx - ax,
               dy = by - ay;
             const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy)));
@@ -184,6 +178,7 @@ export function mergeSiteDetails(
   const relocated = new Set<string>();
   const roofTargets = new Set<string>();
   const buildingTargets = new Set<string>();
+  const roadFootprints = new Map<AtlasFeature, MultiPolygon>();
   // Validate every anchor before mutation; overlap decisions must not depend on pack order.
   const sites = packs.map((pack) => {
     const parent = features.find((f) => f.properties.id === pack.osm_id);
@@ -265,8 +260,22 @@ export function mergeSiteDetails(
     )
     .map((f) => ({ feature: f, bounds: bbox(f) as [number, number, number, number] }));
   for (const { pack, parent, area, selectionId, metadata } of sites) {
-    const parentClip = clip(area);
+    const audit = geometryAudit(area);
     const siteBounds = bbox(area) as [number, number, number, number];
+    const roads = pack.structures.some((part) => part.ground_override)
+      ? input.filter(
+          (f) =>
+            f.geometry.type === 'LineString' &&
+            f.properties.class.startsWith('road') &&
+            bboxesOverlap(
+              siteBounds,
+              bufferBbox(
+                bbox(f) as [number, number, number, number],
+                clearanceWidth(f.properties) / 1000,
+              ),
+            ),
+        )
+      : [];
     const requireInside = (points: Position[], item: string) => {
       if (points.some((p) => !inside(p, area)))
         throw new Error(`${pack.id} ${item}: outside parent footprint`);
@@ -326,19 +335,22 @@ export function mergeSiteDetails(
       seat,
       shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
     }));
-    const vehicleParts = pack.parked_vehicles.flatMap(parkedVehicleParts);
+    const inventory = pack.parked_vehicles.map((vehicle) => ({
+      vehicle,
+      parts: parkedVehicleParts(vehicle),
+    }));
+    const vehicleParts = inventory.flatMap(({ parts }) => parts);
     const vehicleIds = new Set(vehicleParts.map((part) => part.id));
     const vehicleKinds = new Map(
-      pack.parked_vehicles.flatMap((vehicle) =>
-        parkedVehicleParts(vehicle).map((part) => [part.id, vehicle.kind] as const),
+      inventory.flatMap(({ vehicle, parts }) =>
+        parts.map((part) => [part.id, vehicle.kind] as const),
       ),
     );
     if (pack.structures.some((part) => vehicleIds.has(part.id)))
       throw new Error(`${pack.id}: duplicate parked vehicle structure id`);
-    const vehicleFootprints = pack.parked_vehicles.map((vehicle) => {
-      const [body, ...parts] = parkedVehicleParts(vehicle);
-      return union([body!.ring], ...parts.map((part) => [part.ring]));
-    });
+    const vehicleFootprints = inventory.map(({ parts }) =>
+      audit.union(parts.map((part) => ({ type: 'Polygon', coordinates: [part.ring] }))),
+    );
     const parkingObstacles = (vehicleParts.length ? input : []).flatMap((f) => {
       if (!bboxesOverlap(bbox(f) as [number, number, number, number], siteBounds)) return [];
       if (f.properties.class.startsWith('water') && isArea(f.geometry))
@@ -353,21 +365,21 @@ export function mergeSiteDetails(
           id: f.properties.id,
           geometry: seatingFootprint(
             f.geometry.coordinates as LngLat[],
-            f.properties.width ?? (f.properties.class === 'path' ? 2 : 6),
+            clearanceWidth(f.properties),
           ),
         },
       ];
     });
     for (const part of vehicleParts) {
       for (const obstacle of parkingObstacles)
-        if (intersection([part.ring], clip(obstacle.geometry)).length)
+        if (audit.overlaps({ type: 'Polygon', coordinates: [part.ring] }, obstacle.geometry))
           throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
       for (const roof of pack.structures.filter((part) => part.material === 'roof'))
         if (intersection([part.ring], [roof.ring, ...(roof.holes ?? [])]).length)
           throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
     }
     for (const [i, footprint] of vehicleFootprints.entries()) {
-      if (vehicleFootprints.slice(0, i).some((other) => intersection(footprint, other).length))
+      if (vehicleFootprints.slice(0, i).some((other) => audit.overlaps(footprint, other)))
         throw new Error(`${pack.id}: overlapping parked vehicles`);
     }
     const structures = [...pack.structures, ...vehicleParts].map((part) => {
@@ -383,8 +395,22 @@ export function mergeSiteDetails(
       }
       requireInside(part.ring, `structure ${part.id}`);
       // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
-      if (difference(rings, parentClip).length > 0)
+      if (!audit.contains(shape))
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+      // Ground replacements must clear complete mapped carriageways in every city pack.
+      if (part.ground_override)
+        for (const road of roads) {
+          let footprint = roadFootprints.get(road);
+          if (!footprint) {
+            footprint = seatingFootprint(
+              (road.geometry as LineString).coordinates as LngLat[],
+              clearanceWidth(road.properties),
+            );
+            roadFootprints.set(road, footprint);
+          }
+          if (audit.overlaps(shape, footprint))
+            throw new Error(`${pack.id} structure ${part.id}: crosses ${road.properties.id}`);
+        }
       if (part.roof_osm_id) {
         const roof = features.find((f) => f.properties.id === part.roof_osm_id);
         if (
@@ -407,10 +433,7 @@ export function mergeSiteDetails(
         ['pitch', 'water'].includes(part.material)
       )
         for (const obstacle of blocked)
-          if (
-            bboxesOverlap(bbox(shape) as [number, number, number, number], obstacle.bounds) &&
-            intersection(rings, clip(obstacle.feature.geometry as Polygon | MultiPolygon)).length
-          )
+          if (audit.overlaps(shape, obstacle.feature.geometry as Polygon | MultiPolygon))
             throw new Error(
               `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
             );
@@ -458,11 +481,17 @@ export function mergeSiteDetails(
         feature(`${prefix}/seating-${seat.id}`, shape, { detail_blocked: true }),
       ),
       ...structures.filter((f) => f.properties.detail_blocked),
-    ];
+    ].map((feature) => ({ feature, bounds: bbox(feature) as [number, number, number, number] }));
     const requireClear = (points: Position[], item: string) => {
       requireInside(points, item);
-      for (const obstacle of obstacles)
-        if (points.some((p) => inside(p, obstacle.geometry as Polygon | MultiPolygon)))
+      for (const { feature: obstacle, bounds } of obstacles)
+        if (
+          points.some(
+            (p) =>
+              inBbox(p[0]!, p[1]!, bounds) &&
+              inside(p, obstacle.geometry as Polygon | MultiPolygon),
+          )
+        )
           throw new Error(`${pack.id} ${item}: crosses ${obstacle.properties.id}`);
     };
     for (const pole of pack.flagpoles) {
@@ -539,13 +568,13 @@ export function mergeSiteDetails(
           const a = seat.line[i - 1]!,
             b = seat.line[i]!,
             f = frame(a);
-          const [dx, dy] = f.local(b),
+          const [dx, dy] = f.toMeters(b),
             length = Math.hypot(dx, dy);
           const side = seat.facing === 'left' ? 1 : -1;
           const nx = (-dy / length) * side,
             ny = (dx / length) * side;
           for (; phase < length; phase += 4) {
-            const at = f.world([
+            const at = f.toLngLat([
               (dx / length) * phase + nx * (span.width_m / 2 + 0.75),
               (dy / length) * phase + ny * (span.width_m / 2 + 0.75),
             ]);

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import * as shared from '@atlas/shared';
+import { describe, expect, it, vi } from 'vitest';
 import { classId, crownSurfaces, MAX_CLASSES, renderClasses, variantCode } from './classes';
 import { wallStyle } from './glyphs/select';
 import { CellBit, cellBits } from './life/config';
@@ -38,6 +39,42 @@ const rectangle = (
 });
 
 describe('outdoor structure rendering', () => {
+  it('parses each descriptor once per tile, caches invalid input and still checks each parent', () => {
+    const target = { id: 'osm:way/7', class: 'building_religious', name: 'Church' };
+    const descriptor = JSON.stringify(target);
+    const features = [descriptor, descriptor, '{broken', '{broken', descriptor].map((text, i) => {
+      const ground = rectangle(`ground-${i}`, 100 + i * 100, 100, 50, 50, false);
+      ground.properties = {
+        id: `ground-${i}`,
+        class: 'paving',
+        detail_parent: i === 4 ? 'osm:way/8' : target.id,
+        detail_selection: text,
+      };
+      return ground;
+    });
+    const parser = vi.spyOn(shared, 'parseDetailSelection');
+    try {
+      const registry = createIdRegistry();
+      const decode = () =>
+        buildTileGeometry(
+          {
+            landuse: {
+              extent: EXTENT,
+              length: features.length,
+              feature: (i) => features[i]!,
+            },
+          },
+          registry,
+        );
+      decode();
+      expect(parser).toHaveBeenCalledTimes(2);
+      expect(registry.takeNew().filter((f) => f.id.startsWith('osm:'))).toEqual([target]);
+      decode();
+      expect(parser).toHaveBeenCalledTimes(4); // Cache lifetime is one decode.
+    } finally {
+      parser.mockRestore();
+    }
+  });
   it('registers a linked landmark from grounds on a cold load before its own tile arrives', () => {
     const ground = rectangle('detail:church/grounds', 100, 100, 600, 600, false);
     const target = {

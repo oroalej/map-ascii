@@ -196,8 +196,7 @@ export function classify(
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
   if (tags.natural === 'wood' || oneOf(tags.landuse, 'forest', 'orchard')) return 'trees';
-  if (oneOf(tags.natural, 'scrub', 'heath') || oneOf(tags.landuse, 'plant_nursery', 'cemetery'))
-    return 'grass';
+  if (oneOf(tags.natural, 'scrub', 'heath') || tags.landuse === 'plant_nursery') return 'grass';
   if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
   if (
     tags.natural === 'grassland' ||

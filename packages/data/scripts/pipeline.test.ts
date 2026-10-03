@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
-import { buildMeta } from './05-tiles';
+import { buildMeta, step as tileStep } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
-import { detailLayoutKey } from './lib/detail-layout';
+import { detailLayoutKey, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
 // A fixture city that is not tied to any real place (ARCHITECTURE.md §9).
@@ -209,10 +209,39 @@ describe('pipeline (02–04) on the fixture extract', () => {
       sources: [{ title: 'Fixture survey' }],
     });
     expect(buildMeta(city, geography, [1890, 2026]).detail_layouts).toBeUndefined();
-    expect(buildMeta(city, geography, [1890, 2026], [], []).detail_layouts).toEqual({});
-    expect(buildMeta(city, geography, [1890, 2026], [], [detail]).detail_layouts).toEqual({
+    expect(buildMeta(city, geography, [1890, 2026], [], {}).detail_layouts).toEqual({});
+    expect(
+      buildMeta(city, geography, [1890, 2026], [], {
+        [detail.id]: detailLayoutKey(detail),
+      }).detail_layouts,
+    ).toEqual({
       [detail.id]: detailLayoutKey(detail),
     });
+  });
+
+  it('rejects changed-pack step-05 inputs before invoking the tile compiler', async () => {
+    expect(await readDetailLayouts(ctx)).toEqual({});
+    const detail = SiteDetail.parse({
+      id: 'detail/fixture',
+      osm_id: 'osm:way/105',
+      title: 'Fixture plaza',
+      surface: 'paving',
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    const changed = { ...ctx, content: { ...content, details: [detail] } };
+    await expect(tileStep.run(changed)).rejects.toThrow('rerun from step 04');
+    await mergeContent.run(changed);
+    expect(await readDetailLayouts(changed)).toEqual({ [detail.id]: detailLayoutKey(detail) });
+    await mergeContent.run(ctx);
+  });
+
+  it('rejects changed merge bytes even when the city pack is unchanged', async () => {
+    await appendFile(join(ctx.buildDir, files.merged), '\n');
+    await expect(readDetailLayouts(ctx)).rejects.toThrow('rerun from step 04');
+    await writeDetailLayouts(ctx);
+    expect(await readDetailLayouts(ctx)).toEqual({});
   });
 
   it('checks that tours point at features in the data and stay in the region', () => {

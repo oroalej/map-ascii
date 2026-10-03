@@ -420,6 +420,19 @@ describe('sub-cell edges', () => {
     expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
   });
 
+  it('defers outlined areas to their walls while still covering road cells with crowns', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    for (const center of [
+      P,
+      { cls: 'paving', id: 11, height: 0.15, variant: PavingVariant.terrace } as Sample,
+    ]) {
+      const samples = [center, crown, center, crown, center, crown];
+      expect(subcellEdge(center, samples, never, true)).toBeNull();
+      expect(subcellEdge(center, samples, never)?.fg).toEqual(crown);
+    }
+    expect(subcellEdge(R, [R, crown, R, crown, R, crown], never, true)?.fg).toEqual(crown);
+  });
+
   it('shows crowns reaching into road cells without promoting unrelated ground areas', () => {
     const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
     expect(subcellEdge(R, [crown, R, crown, R, crown, R], never)).toEqual({

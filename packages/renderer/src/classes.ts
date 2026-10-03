@@ -176,20 +176,15 @@ export function groundDepth(): number {
 
 /** Opt-in paving above coarse ground fills, below planted islands and higher surfaces. */
 export const PavingVariant = { terrace: 1, override: 2 } as const;
-export const pavingOverrideBase: readonly RenderClass[] = [
-  'park',
-  'trees',
-  'farmland',
-  'parking',
-  'pitch',
-  'grass',
-  'paving',
-  'terrain',
-];
 export function pavingOverrideDepth(): number {
   const depths = classDepths();
   return (depths[classId('park')]! + depths[classId('planting')]!) / 2;
 }
+export const pavingOverrideBase: readonly RenderClass[] = (() => {
+  const depths = classDepths();
+  const cutoff = pavingOverrideDepth();
+  return priority.flat().filter((cls) => depths[classId(cls)]! > cutoff);
+})();
 
 /**
  * How much of each class shows at `zoom`, 0–1, from the shared `CLASS_ZOOM` table (SPEC.md §2

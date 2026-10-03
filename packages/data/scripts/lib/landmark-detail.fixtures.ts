@@ -3,6 +3,10 @@ import { SiteDetail, Landcover, LandmarkPlan, Landmark, type LngLat } from '@atl
 import type { Polygon, MultiPolygon } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
+import bbox from '@turf/bbox';
+import { planParts } from './plan';
+import { landcoverFeatures } from './landcover';
+import { bboxesOverlap } from './geo';
 import type { ContentBundle } from '@atlas/content';
 
 // Declare disk-read content dependencies so every shard is selected on pack edits.
@@ -90,6 +94,16 @@ export const source = [
   ).values(),
 ];
 mergeContent(source, { landmarks } as ContentBundle);
+// Prepare immutable inputs and their bounds once, only when a geometry audit needs them.
+let auditInput: { feature: AtlasFeature; bounds: [number, number, number, number] }[] | undefined;
+export const nearby = (bounds: [number, number, number, number]) => {
+  auditInput ??= [
+    ...source,
+    ...planParts(source, plans).parts,
+    ...landcoverFeatures(source, covers).features,
+  ].map((feature) => ({ feature, bounds: bbox(feature) as [number, number, number, number] }));
+  return auditInput.filter((f) => bboxesOverlap(bounds, f.bounds)).map((f) => f.feature);
+};
 export const areaFor = (detail: SiteDetail): Polygon | MultiPolygon => {
   if (detail.extent || detail.grounds)
     return { type: 'Polygon', coordinates: [detail.extent ?? detail.grounds!] };

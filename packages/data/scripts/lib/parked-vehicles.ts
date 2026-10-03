@@ -1,20 +1,21 @@
 import type { LngLat, SiteDetail, SiteStructure } from '@atlas/shared';
+import { localFrame } from './geo';
 
 /** Neutral plan-view silhouettes: body, glazing, roof and four wheels. No activity anchor. */
 export function parkedVehicleParts(
   vehicle: SiteDetail['parked_vehicles'][number],
 ): SiteStructure[] {
-  const meters = 111_320;
-  const mx = meters * Math.cos((vehicle.at[1] * Math.PI) / 180);
+  const frame = localFrame(vehicle.at);
   const angle = (vehicle.bearing * Math.PI) / 180;
   const bus = vehicle.kind === 'bus';
   const length = bus ? 10 : 4.4;
   const width = bus ? 2.5 : 1.8;
   const height = bus ? 3 : 1.5;
-  const point = (x: number, y: number): LngLat => [
-    vehicle.at[0] + (x * Math.cos(angle) + y * Math.sin(angle)) / mx,
-    vehicle.at[1] + (-x * Math.sin(angle) + y * Math.cos(angle)) / meters,
-  ];
+  const point = (x: number, y: number): LngLat =>
+    frame.toLngLat([
+      x * Math.cos(angle) + y * Math.sin(angle),
+      -x * Math.sin(angle) + y * Math.cos(angle),
+    ]);
   const part = (
     name: string,
     x: number,
