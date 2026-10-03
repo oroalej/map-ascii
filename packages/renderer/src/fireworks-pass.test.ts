@@ -4,7 +4,7 @@ import type { GL, CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass, deleteFireworks } from './fireworks-pass';
-import { FIREWORK_INSTANCE_COUNT } from './fireworks-layout';
+import { FIREWORKS, FIREWORK_INSTANCE_COUNT } from './fireworks-layout';
 
 const setters = vi.hoisted(() => ({
   u_shells: vi.fn(),
@@ -94,7 +94,10 @@ describe('seasonal GPU fireworks', () => {
       const scale = 2 ** (zoom - 19);
       for (let i = 0; i < programs.fireworks!.shells.length; i += 4) {
         const seed = programs.fireworks!.shells[i + 2]!;
-        expect(programs.fireworks!.shells[i + 3]).toBeCloseTo((75 + (seed % 65)) * dpr * scale, 3);
+        expect(programs.fireworks!.shells[i + 3]).toBeCloseTo(
+          (FIREWORKS.radius + (seed % FIREWORKS.radiusVariation)) * dpr * scale,
+          3,
+        );
       }
       expect(setters.u_wind).toHaveBeenLastCalledWith([0.5 * dpr * scale, 0]);
       expect(setters.u_time.mock.calls.at(-1)?.[0]).toBeCloseTo(2.6);

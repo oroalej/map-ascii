@@ -3,18 +3,22 @@ import { FIREWORK_VARIANTS } from '@atlas/shared';
 import { MAX_ZOOM } from './camera';
 import type { Grid, View } from './grid';
 
-/** Nine world-anchored shells, with bounded, immutable particle geometry. */
+/** A dense, overlapping display with bounded, immutable particle geometry. */
 export const FIREWORKS = Object.freeze({
   minZoom: 14,
   referenceZoom: 19,
-  shells: 9,
+  shells: 25,
+  columns: 5,
+  worldGap: 48,
+  radius: 120,
+  radiusVariation: 80,
   stars: 40,
   tails: 4,
   smoke: 12,
-  cycle: 9,
+  cycle: 6,
   burst: 1.1,
-  sparkLife: 3.8,
-  smokeLife: 6.8,
+  sparkLife: 4.4,
+  smokeLife: 4.8,
 });
 export const FIREWORK_INSTANCE_COUNT =
   FIREWORKS.shells * (FIREWORKS.stars * FIREWORKS.tails + FIREWORKS.smoke);
@@ -45,31 +49,40 @@ export function fireworkInstances(): Float32Array {
   return out;
 }
 
-function seedAt(x: number, y: number, zoom: number) {
-  let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(zoom, 83492791);
+function seedAt(x: number, y: number) {
+  let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  // Neighboring lattice sites stagger by three seconds, avoiding an empty viewport lull.
+  // Power-of-two strides preserve three staggered phases, two seconds apart.
   return ((h ^ (h >>> 16)) & 65532) | ((((x + 2 * y) % 3) + 3) % 3);
 }
 
-/** Refill the same nine vec4 uniforms. Sub-cell panning preserves a shell's world position. */
+/**
+ * Refill fixed uniforms from a reference-world lattice. Zoom projects the same sites and
+ * enlarges their radii; resize never moves a shared site. Coarser power-of-two strides bound
+ * the number of sites in a large/distant view without changing their seeds or world positions.
+ */
 export function fireworkShells(view: View, grid: Grid, out: Float32Array): number {
   const scale = fireworkScale(view.camera.zoom);
-  const gap = Math.max(280 * view.dpr, Math.max(view.width, view.height) / 2);
   const left = grid.originCol * view.cellDev.w + grid.shiftX;
   const top = grid.originRow * view.cellDev.h + grid.shiftY;
-  const x0 = Math.floor(left / gap),
-    y0 = Math.floor(top / gap);
-  for (let row = 0; row < 3; row++)
-    for (let col = 0; col < 3; col++) {
-      const x = x0 + col,
-        y = y0 + row,
-        seed = seedAt(x, y, Math.floor(view.camera.zoom));
-      const at = (row * 3 + col) * 4;
-      out[at] = (x + 0.2 + ((seed % 997) / 997) * 0.6) * gap - left;
-      out[at + 1] = (y + 0.2 + ((seed % 991) / 991) * 0.6) * gap - top;
+  const worldToDevice = view.dpr * scale;
+  const targetGap = Math.max(180, Math.max(view.width, view.height) / view.dpr / 4);
+  const stride = 2 ** Math.max(0, Math.ceil(Math.log2(targetGap / (FIREWORKS.worldGap * scale))));
+  const gap = FIREWORKS.worldGap * stride;
+  const x0 = Math.floor(left / worldToDevice / gap),
+    y0 = Math.floor(top / worldToDevice / gap);
+  for (let row = 0; row < FIREWORKS.columns; row++)
+    for (let col = 0; col < FIREWORKS.columns; col++) {
+      const x = (x0 + col) * stride,
+        y = (y0 + row) * stride,
+        seed = seedAt(x, y);
+      const at = (row * FIREWORKS.columns + col) * 4;
+      // Jitter belongs to the finest world lattice, never to the selected stride.
+      out[at] = (x + 0.2 + ((seed % 997) / 997) * 0.6) * FIREWORKS.worldGap * worldToDevice - left;
+      out[at + 1] =
+        (y + 0.2 + ((seed % 991) / 991) * 0.6) * FIREWORKS.worldGap * worldToDevice - top;
       out[at + 2] = seed;
-      out[at + 3] = (75 + (seed % 65)) * view.dpr * scale;
+      out[at + 3] = (FIREWORKS.radius + (seed % FIREWORKS.radiusVariation)) * worldToDevice;
     }
   return FIREWORKS.shells;
 }
