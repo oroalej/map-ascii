@@ -1,14 +1,14 @@
 /**
  * Delete a handoff task's scratch from the main checkout's `.plans/` (scripts/plans-cleanup.ts):
- *   pnpm plans:clean <task> [--keep <name>]... [--dry-run]
- * keeps `handoff.md` and each `--keep` entry (removing the folder when nothing is kept), and works
- * from any worktree.
+ *   pnpm plans:clean <task> [--keep <path>]... [--dry-run]
+ * keeps `handoff.md` and each `--keep` path (relative to the task folder, nested allowed),
+ * removes the folder when nothing is kept, and works from any worktree.
  */
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { cleanTask } from './plans-cleanup';
 
-const usage = 'usage: pnpm plans:clean <task> [--keep <name>]... [--dry-run]';
+const usage = 'usage: pnpm plans:clean <task> [--keep <path>]... [--dry-run]';
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 const keep: string[] = [];
 const tasks: string[] = [];

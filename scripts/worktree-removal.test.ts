@@ -52,6 +52,32 @@ describe('removeWorktree', () => {
     expect(branches()).toContain(branch);
   });
 
+  it('changes nothing on a dry run', () => {
+    git(repo, 'merge', '-q', '--ff-only', branch);
+    const result = removeWorktree({ repo, branch, mergedInto: 'main', cwd: repo, dryRun: true });
+    expect(result).toMatchObject({ removedWorktree: true, deletedBranch: true, resumed: false });
+    expect(existsSync(wt)).toBe(true);
+    expect(branches()).toContain(branch);
+  });
+
+  it('finishes a removal that a busy file interrupted partway', () => {
+    writeFileSync(join(wt, 'tracked.txt'), 'x');
+    git(wt, 'add', 'tracked.txt');
+    git(wt, 'commit', '-q', '-m', 'tracked');
+    git(repo, 'merge', '-q', '--ff-only', branch);
+    const busy = (path: string) => {
+      rmSync(join(path, 'tracked.txt'));
+      throw Object.assign(new Error('resource busy'), { code: 'EBUSY' });
+    };
+    const options = { repo, branch, mergedInto: 'main', cwd: repo };
+    expect(() => removeWorktree({ ...options, remove: busy })).toThrow(/Partially deleted/);
+    expect(branches()).toContain(branch);
+    // The deleted tracked file now shows as a change; the rerun still finishes.
+    expect(removeWorktree(options)).toMatchObject({ removedWorktree: true, resumed: true });
+    expect(existsSync(wt)).toBe(false);
+    expect(branches()).toEqual(['main']);
+  });
+
   it('deletes only the branch when the worktree folder is already gone', () => {
     git(repo, 'merge', '-q', '--ff-only', branch);
     rmSync(wt, { recursive: true, force: true });

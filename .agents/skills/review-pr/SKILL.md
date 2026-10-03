@@ -92,7 +92,7 @@ Otherwise, work in `<pr-checkout>` on the PR's head branch:
 5. Commit with a gitmoji + conventional message that matches `git log` (e.g. `🐛 fix(renderer): …`). Use one commit, or one per area if the fixes are unrelated.
 6. Push to the PR's branch with a plain `git push`. If the fixes change what the PR description says, update it with `gh pr edit <N> --body-file`.
 
-Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeVerdict, entries, commits}` (shape in step 7).
+Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeVerdict, entries, noticed, commits}` (shape in step 7).
 
 ## 5. Review loop (at most 3 rounds)
 
@@ -106,7 +106,9 @@ Nits are fixed when they come up. New nits alone never start another round, beca
 
 ## 6. CI gate (at most 3 fix attempts)
 
-1. Wait until the PR has checks for its current head SHA (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch`, with a shell timeout of at least 30 minutes. If everything passes, go to step 7 with `clean`.
+1. Wait until the PR has checks for its current head SHA (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch`, with a shell timeout of at least 30 minutes. If everything passes:
+   - If a CI fix in this run touched non-test source code and no review round has run since that fix, go to 3.
+   - Otherwise go to step 7 with `clean`.
 2. If a check fails, find its run and read it: `gh run view <run-id> --log-failed`. For e2e failures, also download the Playwright artifact: `gh run download <run-id> -n playwright-results-<shard> -D <scratch>/ci`.
    - **Infrastructure flake** (runner, network or dependency-download error, or a timeout with no failing test): rerun once with `gh run rerun <run-id> --failed`, then go back to 1. If the same failure comes back, treat it as real.
    - **Real failure:**
@@ -120,10 +122,11 @@ Nits are fixed when they come up. New nits alone never start another round, beca
 
 Report:
 
+- First line: `Review rounds: <k> of 3`, counting every round, including one run after a CI fix. Then one line per round with its outcome (`clean`, `fixed`, `stalled` or `stopped`)
 - Each round: Claude's verdict, and the validation table (# / Claude's severity / verdict / evidence / final severity)
 - Fixed entries, with the commit hashes
 - Skipped entries, each with its reason
-- Anything under "Noticed, not in Claude's review", for the user to decide on (not fixed)
+- Anything under "Noticed, not in Claude's review", with its severity, for the user to decide on (not fixed). A noticed blocker or should-fix makes the status `stopped` (see `status` below)
 - The CI gate: reruns, fix attempts and fix commits, and the final check state
 - Which checks ran locally, and which were left to CI
 - The PR URL, the speed Codex #1 ran at (fast or normal), and the final status
@@ -134,7 +137,9 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 {
   "status": "clean",
   "pr": 12,
+  "headSha": "def5678",
   "fast": false,
+  "roundCount": 1,
   "rounds": [
     {
       "round": 1,
@@ -156,18 +161,24 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
       "commits": ["abc1234"]
     }
   ],
+  "noticed": [
+    { "round": 1, "path": "scripts/y.ts", "line": 7, "claim": "one line", "severity": "nit" }
+  ],
   "ci": { "status": "green", "reruns": 0, "attempts": 0, "fixCommits": [] },
   "stopReason": null
 }
 ```
 
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`.
+- `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
+- `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
+- `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity.
 - `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), `red`, or `not-run` (the run stopped before step 6).
 - `status`:
-  - `clean`: the last round was clean and CI passed (`ci.status` is `green` or `fixed`).
+  - `clean`: the last round was clean, CI passed (`ci.status` is `green` or `fixed`), and `noticed` has no `blocker` or `should-fix`.
   - `capped`: still had valid blockers or should-fix items after round 3.
   - `stalled`: a repeat or an oscillation was found. Nothing was edited in that round.
-  - `stopped`: a fix needed files outside the PR's diff without a reason, or a valid blocker or should-fix was skipped.
+  - `stopped`: a fix needed files outside the PR's diff without a reason, a valid blocker or should-fix was skipped, or the validator noticed a blocker or should-fix that Claude's review missed (`stopReason`: `validator noticed: <path:line — claim>`).
   - `ci-red`: CI still failed after 3 fix attempts.
   - `error`: no PR, Claude or Codex #1 failed, or a `git status` check found unexpected changes.
 - If a `Result file` was given, also write the same JSON object to that path. Write only the object, without the fence.

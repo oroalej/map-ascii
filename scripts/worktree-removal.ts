@@ -6,8 +6,8 @@
  * (`Remove-Item -Recurse`, `rm -rf`) as "blocked by policy" when it can't ask for approval.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 
 export interface RemoveWorktreeOptions {
   /** Any checkout of the repository; git commands run there. */
@@ -17,6 +17,10 @@ export interface RemoveWorktreeOptions {
   mergedInto: string;
   /** Defaults to `process.cwd()`. Windows can't delete a folder some process is using as its cwd. */
   cwd?: string;
+  /** Run every check and report what would be removed, without removing anything. */
+  dryRun?: boolean;
+  /** Deletes the worktree folder; tests replace it to simulate an interrupted removal. */
+  remove?: (path: string) => void;
 }
 
 export interface RemovalResult {
@@ -24,6 +28,8 @@ export interface RemovalResult {
   worktree: string | null;
   removedWorktree: boolean;
   deletedBranch: boolean;
+  /** True when this run finishes an earlier, interrupted removal. */
+  resumed: boolean;
 }
 
 const git = (cwd: string, ...args: string[]) =>
@@ -35,6 +41,9 @@ const inside = (path: string, folder: string) => {
   const rel = relative(resolve(folder), resolve(path));
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 };
+
+const removeFolder = (path: string) =>
+  rmSync(path, { recursive: true, force: true, maxRetries: 3 });
 
 /** `git worktree list --porcelain` as `{ path, branch }`, the main checkout first. */
 export function listWorktrees(repo: string): { path: string; branch: string | null }[] {
@@ -48,12 +57,19 @@ export function listWorktrees(repo: string): { path: string; branch: string | nu
     });
 }
 
-/** Removes the merged branch's worktree folder and local branch, refusing anything unsafe. */
+/**
+ * Removes the merged branch's worktree folder and local branch, refusing anything unsafe.
+ * Before deleting, it leaves a marker in the git directory. If a process holds a file and the
+ * deletion stops partway, a rerun sees the marker and finishes, instead of refusing the
+ * half-deleted worktree as one with uncommitted changes.
+ */
 export function removeWorktree({
   repo,
   branch,
   mergedInto,
   cwd = process.cwd(),
+  dryRun = false,
+  remove = removeFolder,
 }: RemoveWorktreeOptions): RemovalResult {
   if (branch === 'main') throw new Error('Refusing to remove main');
   const [mainCheckout, ...others] = listWorktrees(repo);
@@ -68,30 +84,46 @@ export function removeWorktree({
     throw new Error(`${branch} is not merged into ${mergedInto}; nothing was removed`);
   }
 
-  let removedWorktree = false;
-  if (worktree && existsSync(worktree)) {
-    const changes = git(worktree, 'status', '--porcelain');
-    if (changes) throw new Error(`${worktree} has uncommitted changes:\n${changes}`);
+  const markers = join(
+    resolve(main, git(main, 'rev-parse', '--git-common-dir')),
+    'atlas-worktree-removal',
+  );
+  const marker = join(markers, encodeURIComponent(branch));
+  const resumed = existsSync(marker);
+  const folderExists = worktree !== null && existsSync(worktree);
+  if (folderExists) {
+    // A resumed run already checked the worktree; the files it deleted now show as changes.
+    if (!resumed) {
+      const changes = git(worktree, 'status', '--porcelain');
+      if (changes) throw new Error(`${worktree} has uncommitted changes:\n${changes}`);
+    }
     if (inside(cwd, worktree)) {
       throw new Error(`The current directory is inside ${worktree}. Run this from ${main}.`);
     }
+  }
+  const result = { worktree, removedWorktree: folderExists, deletedBranch: branchExists, resumed };
+  if (dryRun) return result;
+
+  if (folderExists) {
+    mkdirSync(markers, { recursive: true });
+    writeFileSync(marker, `${worktree}\n`);
     try {
-      rmSync(worktree, { recursive: true, force: true, maxRetries: 3 });
+      remove(worktree);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY') {
         throw new Error(
-          `A process (dev server, terminal, editor) is using ${worktree}; close it and rerun. ` +
-            `The branch was kept. (${code})`,
+          `Partially deleted ${worktree}: a process (dev server, terminal, editor) is using it. ` +
+            `Close it and rerun to finish. The branch was kept. (${code})`,
         );
       }
       throw error;
     }
-    removedWorktree = true;
   }
   if (worktree) git(main, 'worktree', 'prune');
   // -D, not -d: -d compares against the possibly stale local main; the merge into
   // `mergedInto` was verified above.
   if (branchExists) git(main, 'branch', '-D', branch);
-  return { worktree, removedWorktree, deletedBranch: branchExists };
+  rmSync(marker, { force: true });
+  return result;
 }

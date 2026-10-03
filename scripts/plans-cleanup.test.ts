@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -36,6 +44,41 @@ describe('cleanTask', () => {
       removedFolder: false,
     });
     expect(readdirSync(folder).sort()).toEqual(['handoff.md', 'report.json']);
+  });
+
+  it('keeps nested paths while deleting their siblings', () => {
+    const folder = task('done', 'labels', [
+      'handoff.md',
+      'e2e-results/final/shot.png',
+      'e2e-results/final/trace.zip',
+      'e2e-results/first.png',
+    ]);
+    const result = cleanTask(root, 'labels', ['e2e-results\\final\\shot.png']);
+    expect(result.deleted).toEqual(['e2e-results/final/trace.zip', 'e2e-results/first.png']);
+    expect(result.kept).toEqual(['e2e-results/final/shot.png', 'handoff.md']);
+    expect(readdirSync(join(folder, 'e2e-results', 'final'))).toEqual(['shot.png']);
+  });
+
+  it('rejects keep paths that leave the task folder', () => {
+    const folder = task('done', 'labels', ['handoff.md', 'log.txt']);
+    expect(() => cleanTask(root, 'labels', ['../labels/log.txt'])).toThrow(/Invalid keep path/);
+    expect(() => cleanTask(root, 'labels', [join(folder, 'log.txt')])).toThrow(/Invalid keep path/);
+    expect(readdirSync(folder).sort()).toEqual(['handoff.md', 'log.txt']);
+  });
+
+  it('refuses a linked task folder and never follows links inside one', () => {
+    const outside = join(root, 'outside');
+    mkdirSync(outside);
+    writeFileSync(join(outside, 'precious.txt'), 'x');
+    mkdirSync(join(root, 'done'));
+    symlinkSync(outside, join(root, 'done', 'linked'), 'junction');
+    expect(() => cleanTask(root, 'linked')).toThrow(/linked task folder/);
+
+    const folder = task('done', 'labels', ['handoff.md']);
+    symlinkSync(outside, join(folder, 'link'), 'junction');
+    expect(cleanTask(root, 'labels').deleted).toEqual(['link']);
+    expect(existsSync(join(folder, 'link'))).toBe(false);
+    expect(readdirSync(outside)).toEqual(['precious.txt']);
   });
 
   it('removes a folder that keeps nothing, such as review scratch', () => {

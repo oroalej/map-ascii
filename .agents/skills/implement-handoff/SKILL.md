@@ -123,7 +123,7 @@ Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block 
 Report, following the handoff's "Report back" section, and add:
 
 - **Handoff review:** the verdict and every amendment, with the design amendments listed first.
-- **The PR URL**, and the `$review-pr` result: rounds, final status, the CI status, and anything it skipped or noticed.
+- **The PR URL**, and the `$review-pr` result: review rounds (`roundCount` of 3), final status, the CI status, and anything it skipped or noticed.
 - Which checks ran locally, and which were left to CI.
 - The speed the Codex instances ran at (fast or normal).
 

@@ -33,8 +33,8 @@ Read these before doing substantial work:
 - `pnpm test:related <files>` — only the Vitest files that depend on the given files (what you work with). `pnpm test` runs every unit test; CI does that.
 - `pnpm test:e2e` — prepares the static export (rebuilding only when needed) and serves it on this checkout's own port (`apps/web/scripts/e2e-port.ts`; `E2E_PORT` overrides it). Takes filters: `pnpm test:e2e smoke.spec.ts --project=chromium -g "<test name>"`.
 - `pnpm worktree:new <short> <topic>` — create a task worktree `../naga-ascii-<short>` on `codex/<topic>` from `main`, with dependencies and tiles.
-- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` entry (a folder that keeps nothing goes too). Works from any worktree.
-- `pnpm worktree:remove <branch>` — after its PR merges, delete a task's worktree folder and local branch (the remote branch stays). Run it from the main checkout; it refuses an unmerged branch or a worktree with uncommitted changes.
+- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` path (relative to the task folder, nested allowed; a folder that keeps nothing goes too). Works from any worktree. Refuses a linked task folder.
+- `pnpm worktree:remove <branch> [--dry-run]` — after its PR merges, delete a task's worktree folder and local branch (the remote branch stays). Run it from the main checkout; it refuses an unmerged branch or a worktree with uncommitted changes. Rerun it to finish a removal that a busy file interrupted.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas

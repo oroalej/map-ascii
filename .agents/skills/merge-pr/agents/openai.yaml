@@ -1,4 +1,4 @@
 interface:
   display_name: 'Merge PR'
-  short_description: "Merge this branch's PR once CI is green, then delete its scratch, local branch and worktree."
+  short_description: 'Merge this PR once CI is green, then remove its worktree.'
   default_prompt: "Use $merge-pr to merge this branch's PR and clean up after it."
