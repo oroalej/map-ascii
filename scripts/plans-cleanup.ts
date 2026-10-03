@@ -73,6 +73,50 @@ function keepPath(path: string): string {
   return parts.join('/');
 }
 
+/** Use directory-entry spelling so Windows lookup and preservation agree. */
+function existingKeepPath(folder: string, path: string): string | null {
+  const parts = path.split('/');
+  const actual: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const parent = join(folder, ...actual);
+    const entries = readdirSync(parent);
+    const part = parts[i]!;
+    const matches = entries.filter(
+      (entry) =>
+        entry === part ||
+        (process.platform === 'win32' && entry.toLowerCase() === part.toLowerCase()),
+    );
+    if (matches.length > 1) throw new Error(`Ambiguous keep path ${path} in ${folder}`);
+    const name = matches[0];
+    if (!name) {
+      if (i < parts.length - 1) throw new Error(`Keep path folder ${path} is missing in ${folder}`);
+      return null;
+    }
+    actual.push(name);
+    if (i < parts.length - 1) {
+      const stats = lstatSync(join(folder, ...actual));
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error(`Keep path folder ${actual.join('/')} is missing or a link in ${folder}`);
+      }
+    }
+  }
+  return actual.join('/');
+}
+
+function deleteScratch(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY') {
+      throw new Error(
+        `Partially cleaned ${path}: a process is using it. Close it and rerun to finish. (${code})`,
+      );
+    }
+    throw error;
+  }
+}
+
 /**
  * Deletes everything in the task folder except `handoff.md` and the `keep` paths (relative to
  * the folder, nested allowed), and the folder itself when nothing is kept.
@@ -84,23 +128,20 @@ export function cleanTask(
   dryRun = false,
 ): CleanupResult {
   const folder = findTaskFolder(plansRoot, task);
-  const keepSet = new Set(['handoff.md', ...keep.map(keepPath)]);
+  // Resolve and validate every keep before the first deletion, including the implicit handoff.
+  const normalized = keep.map(keepPath);
+  const resolved = normalized.map((path) => existingKeepPath(folder, path));
+  const missing = normalized.filter((_, i) => resolved[i] === null);
+  if (missing.length > 0) throw new Error(`Keep paths not in ${folder}: ${missing.join(', ')}`);
+  const handoff = existingKeepPath(folder, 'handoff.md');
+  const keepSet = new Set(resolved.filter((path): path is string => path !== null));
+  if (handoff) keepSet.add(handoff);
   // Folders holding a kept path are cleaned inside instead of deleted whole.
   const ancestors = new Set<string>();
   for (const path of keepSet) {
     const parts = path.split('/');
     for (let i = 1; i < parts.length; i++) ancestors.add(parts.slice(0, i).join('/'));
   }
-  // Check every keep path before deleting anything.
-  for (const path of ancestors) {
-    const stats = lstatOrNull(join(folder, path));
-    if (!stats?.isDirectory() || stats.isSymbolicLink()) {
-      throw new Error(`Keep path folder ${path} is missing or a link in ${folder}`);
-    }
-  }
-  const missing = keep.map(keepPath).filter((path) => !lstatOrNull(join(folder, path)));
-  if (missing.length > 0) throw new Error(`Keep paths not in ${folder}: ${missing.join(', ')}`);
-
   const deleted: string[] = [];
   const kept: string[] = [];
   const walk = (prefix: string) => {
@@ -110,13 +151,13 @@ export function cleanTask(
       else if (ancestors.has(path)) walk(path);
       else {
         // rmSync removes a link itself, never its target.
-        if (!dryRun) rmSync(join(folder, path), { recursive: true, force: true });
+        if (!dryRun) deleteScratch(join(folder, path));
         deleted.push(path);
       }
     }
   };
   walk('');
   const removedFolder = kept.length === 0;
-  if (removedFolder && !dryRun) rmSync(folder, { recursive: true, force: true });
+  if (removedFolder && !dryRun) deleteScratch(folder);
   return { folder, deleted, kept, removedFolder };
 }

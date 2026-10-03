@@ -71,7 +71,7 @@ Then process the branches one at a time, in the order given. `<slug>` is the bra
 5. If `origin/<branch>` has commits the local branch lacks, run `git merge origin/<branch>`. Resolve any conflicts with the rules in `<review-pr-skill>` step 1.7.
 6. `git push -u origin <branch>`. If the push is rejected, stop.
 
-## 2. Merge origin/main
+## 2. Delegate main synchronization to review-pr
 
 Nothing to do here: `$review-pr` merges `origin/main` into the branch as its first step (step 1.7 of `<review-pr-skill>`), resolving conflicts, before Claude reviews. Each branch is synced once, after the previous branch merged, so it includes that branch's changes.
 
@@ -116,7 +116,7 @@ codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o
 
 Only when a branch stopped before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
 
-## 8. Report and clean up
+## 8. Report
 
 After each branch, print one line:
 

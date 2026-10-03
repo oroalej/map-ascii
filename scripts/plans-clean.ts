@@ -4,8 +4,8 @@
  * keeps `handoff.md` and each `--keep` path (relative to the task folder, nested allowed),
  * removes the folder when nothing is kept, and works from any worktree.
  */
-import { execFileSync } from 'node:child_process';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { mainCheckout } from './git';
 import { cleanTask } from './plans-cleanup';
 
 const usage = 'usage: pnpm plans:clean <task> [--keep <path>]... [--dry-run]';
@@ -30,13 +30,9 @@ if (tasks.length !== 1) {
   process.exit(2);
 }
 
-// The main checkout is the common directory's parent, whichever worktree this runs from.
-const common = resolve(
-  execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim(),
-);
 try {
   const { folder, deleted, kept, removedFolder } = cleanTask(
-    join(dirname(common), '.plans'),
+    join(mainCheckout(process.cwd()), '.plans'),
     tasks[0]!,
     keep,
     dryRun,

@@ -22,7 +22,7 @@ Don't ask for confirmation between steps. Stop only where this skill says to sto
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, commit, or pass `--no-verify`. This skill never changes the branch's content.
 - **Remote branch stays:** never pass `--delete-branch` to `gh pr merge`, and never run `git push --delete` or `git push origin :<branch>`.
 - **Deleting:** delete only with `pnpm plans:clean` and `pnpm worktree:remove`. Never delete files or folders with shell commands (`Remove-Item`, `rm`, `del`, `rmdir`): Codex rejects recursive deletes as "blocked by policy".
-- **Working directory:** run steps 4–6 with `<main-checkout>` as the working directory, never from inside `<wt>`. Windows can't delete a folder that a process is using as its current directory.
+- **Working directory:** run steps 4–6 with `<main-checkout>` as the command working directory. On Windows, also determine the session process's own directory, using its startup context (not a child command's directory). If that directory is inside `<wt>`, or cannot be established, defer the actual removal in step 6. A child command running in main does not release the session's handle on `<wt>`.
 - **On "stop with `<status>`"**, skip straight to step 7 with that status and a `stopReason`.
 
 ## 1. Resolve
@@ -56,24 +56,36 @@ From here on the merge is done. A cleanup failure in steps 4–6 is reported, no
 
 Before cleaning anything, from `<main-checkout>`:
 
+1. Confirm `git -C <main-checkout> branch --show-current` is `main` and `git -C <main-checkout> status --porcelain` is empty. Otherwise report a cleanup error and skip steps 5–6; never switch branches or discard changes.
+2. `git -C <main-checkout> fetch origin main`, then `git -C <main-checkout> merge --ff-only origin/main`. This refreshes both the merge ref and the cleanup scripts used below, including on a rerun after an earlier cleanup failure. If either command fails, report a cleanup error and skip steps 5–6.
+3. Run:
+
 ```
 pnpm worktree:remove <branch> --dry-run
 ```
 
-It runs every check of step 6 without deleting: the branch is merged into `origin/main` (no local commits after the merge) and the worktree has no uncommitted changes. If it refuses, skip steps 5 and 6 entirely: someone is still working on the branch, and its scratch may still be needed. Report the refusal as the cleanup result. A reported `finishing an interrupted removal` is fine: go on.
+It runs every check of step 6 without deleting: the branch is merged into `origin/main` (no local commits after the merge), and the worktree has no new uncommitted work or protected ignored files. Refusals saying `is not merged into`, `uncommitted changes`, or `protected ignored files` preserve the branch's scratch: skip steps 5–6 and report the safety refusal. Report other failures (missing scripts, Git errors, inaccessible metadata) as cleanup errors and also skip steps 5–6. A reported `finishing an interrupted removal` is fine: go on; dry-run must still establish current safety.
 
 ## 5. Plans: rows and scratch
 
-Work in `<main-checkout>/.plans/`. Find the rows of `README.md` whose Evidence names the branch.
+Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associates them with the branch and this PR, using the handoff to resolve an unclear association. Do not infer task completion from the branch having merged. Earlier completed tasks on the same branch can be cleaned only when their association and keep inventory are established too.
 
 1. **Move:**
-   - Exactly one row isn't in `done/`: move its folder to `.plans/done/`, set its Status to `Complete; merged (PR #N)`, and add `merge <sha>` to its Evidence.
-   - Several rows aren't in `done/`: only set their Next step to `branch merged (PR #N); check whether this task is finished`. Don't move or clean them. List them in the report.
+   - Never move or clean `todo/` or `paused/` tasks, even when they name this PR. Set their Next step to `branch merged (PR #N); check whether this task is finished`, retaining unresolved work, and list them in the report.
+   - Move an `active/` task to `.plans/done/` only when its row/handoff explicitly records completed work and met acceptance criteria for this PR. Set its Status to `Complete; merged (PR #N)` and add `merge <sha>` to its Evidence. If completion is unresolved or ambiguous, only note the merge in Next step; preserve its folder and scratch.
    - No row: nothing to move.
-2. **Clean** every row of this branch that is now in `done/`. For each, read its `handoff.md` for entries marked **keep** that still exist in its folder, and run from `<main-checkout>`:
+2. **Clean** associated, explicitly completed rows now in `done/`. For each, inventory its files without following symlinks/junctions, then reconcile its handoff's **keep** entries with the README's Keep column. Future handoffs list exact relative file or directory paths. For legacy prose (counts, patterns, “all prior evidence”), resolve it against the actual inventory; if the protected file identities cannot be established, skip cleanup for that task and report the ambiguity. Never use matching counts as proof of matching files.
+
+   Run a dry-run from `<main-checkout>` with the resolved exact paths:
 
    ```
-   pnpm plans:clean <task> --keep <name> --keep <name> ...
+   pnpm plans:clean <task> --keep <path> --keep <path> ... --dry-run
+   ```
+
+   Verify every protected file is represented by a kept file or a kept directory ancestor, including all descendants of kept directories. Check that the deletion list contains no protected file or ancestor. If anything is missing or uncertain, preserve the whole task. Otherwise run the same keep arguments without `--dry-run`:
+
+   ```
+   pnpm plans:clean <task> --keep <path> --keep <path> ...
    ```
 
    - `--keep` takes paths relative to the task folder, nested ones included (`e2e-results/final.png`). Pass each file or folder the handoff marks **keep**. `handoff.md` is always kept.
@@ -84,7 +96,9 @@ Work in `<main-checkout>/.plans/`. Find the rows of `README.md` whose Evidence n
 
 ## 6. Worktree and local branch
 
-From `<main-checkout>`:
+On Windows, if the session process's directory is inside `<wt>` (or unknown), run only `pnpm worktree:remove <branch> --dry-run` from main. Report removal as deferred, retain the worktree and local branch, and tell the user to close/leave the session using that directory and run `pnpm worktree:remove <branch>` from `<main-checkout>`. This also applies to the no-argument invocation that started inside the worktree. Do not attempt partial deletion.
+
+Otherwise, from `<main-checkout>`:
 
 ```
 pnpm worktree:remove <branch>

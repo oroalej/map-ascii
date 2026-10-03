@@ -7,10 +7,16 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import type * as NodeFs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanTask } from './plans-cleanup';
+
+vi.mock('node:fs', async (importOriginal) => {
+  const fs = await importOriginal<typeof NodeFs>();
+  return { ...fs, rmSync: vi.fn(fs.rmSync) };
+});
 
 let root: string;
 beforeEach(() => {
@@ -29,6 +35,70 @@ function task(status: string, name: string, files: string[]): string {
 }
 
 describe('cleanTask', () => {
+  it.runIf(process.platform === 'win32')(
+    'preserves the actual spelling of Windows keep paths and handoff',
+    () => {
+      const folder = task('done', 'case-keeps', [
+        'Handoff.md',
+        'Notes.md',
+        'logs/final.txt',
+        'scratch.txt',
+      ]);
+      const preview = cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'], true);
+      expect(preview.kept).toEqual(['Handoff.md', 'Notes.md', 'logs/final.txt']);
+      expect(cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'])).toEqual(preview);
+      expect(readdirSync(folder).sort()).toEqual(['Handoff.md', 'Notes.md', 'logs']);
+      const handoffOnly = task('done', 'handoff-only', ['Handoff.md']);
+      expect(cleanTask(root, 'handoff-only').removedFolder).toBe(false);
+      expect(existsSync(join(handoffOnly, 'Handoff.md'))).toBe(true);
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'keeps distinct casing on case-sensitive filesystems',
+    () => {
+      const folder = task('done', 'case-keeps', ['handoff.md', 'Notes.md', 'notes.md']);
+      expect(cleanTask(root, 'case-keeps', ['Notes.md']).kept).toEqual(['Notes.md', 'handoff.md']);
+      expect(existsSync(join(folder, 'notes.md'))).toBe(false);
+    },
+  );
+
+  it('refuses a linked status folder without deleting its target', () => {
+    const plansRoot = join(root, 'plans');
+    mkdirSync(plansRoot);
+    const outside = join(root, 'outside');
+    mkdirSync(join(outside, 'labels'), { recursive: true });
+    writeFileSync(join(outside, 'labels', 'scratch.txt'), 'x');
+    symlinkSync(outside, join(plansRoot, 'done'), 'junction');
+    expect(() => cleanTask(plansRoot, 'labels')).toThrow(/resolves outside/);
+    expect(existsSync(join(outside, 'labels', 'scratch.txt'))).toBe(true);
+  });
+
+  it('rejects linked and non-directory keep parents before deleting scratch', () => {
+    const folder = task('active', 'parents', ['handoff.md', 'scratch.txt', 'file']);
+    const outside = join(root, 'outside');
+    mkdirSync(outside);
+    writeFileSync(join(outside, 'report.txt'), 'x');
+    symlinkSync(outside, join(folder, 'linked'), 'junction');
+    expect(() => cleanTask(root, 'parents', ['linked/report.txt'])).toThrow(/Keep path folder/);
+    expect(() => cleanTask(root, 'parents', ['file/report.txt'])).toThrow(/Keep path folder/);
+    expect(existsSync(join(folder, 'scratch.txt'))).toBe(true);
+    expect(existsSync(join(outside, 'report.txt'))).toBe(true);
+  });
+
+  it('reports a busy scratch file and preserves kept files for a retry', () => {
+    const folder = task('active', 'busy', ['handoff.md', 'report.txt', 'scratch.txt']);
+    vi.mocked(rmSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('resource busy'), { code: 'EBUSY' });
+    });
+    expect(() => cleanTask(root, 'busy', ['report.txt'])).toThrow(
+      /Partially cleaned.*Close it and rerun/,
+    );
+    expect(existsSync(join(folder, 'handoff.md'))).toBe(true);
+    expect(existsSync(join(folder, 'report.txt'))).toBe(true);
+    expect(cleanTask(root, 'busy', ['report.txt']).deleted).toEqual(['scratch.txt']);
+  });
+
   it('deletes scratch files and folders, keeping handoff.md and keep entries', () => {
     const folder = task('paused', 'labels', [
       'handoff.md',

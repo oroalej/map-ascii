@@ -33,7 +33,7 @@ Read these before doing substantial work:
 - `pnpm test:related <files>` — only the Vitest files that depend on the given files (what you work with). `pnpm test` runs every unit test; CI does that.
 - `pnpm test:e2e` — prepares the static export (rebuilding only when needed) and serves it on this checkout's own port (`apps/web/scripts/e2e-port.ts`; `E2E_PORT` overrides it). Takes filters: `pnpm test:e2e smoke.spec.ts --project=chromium -g "<test name>"`.
 - `pnpm worktree:new <short> <topic>` — create a task worktree `../naga-ascii-<short>` on `codex/<topic>` from the latest `origin/main`, with dependencies and tiles.
-- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` path (relative to the task folder, nested allowed; a folder that keeps nothing goes too). Works from any worktree. Refuses a linked task folder.
+- `pnpm plans:clean <task> [--keep <path>]... [--dry-run]` — delete a task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` path (relative to the task folder, nested allowed; a folder that keeps nothing goes too). Works from any worktree. Refuses a linked task folder.
 - `pnpm worktree:remove <branch> [--dry-run]` — after its PR merges, delete a task's worktree folder and local branch (the remote branch stays). Run it from the main checkout; it refuses an unmerged branch or a worktree with uncommitted changes. Rerun it to finish a removal that a busy file interrupted.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
@@ -86,6 +86,7 @@ If one fails, fix it and rerun only that check.
 - **One worktree per task.** Start a new task with `pnpm worktree:new <short> <topic>` (a worktree `../naga-ascii-<short>` on `codex/<topic>` from the latest `origin/main`). The main checkout stays on `main` and is only for planning and `.plans/`; a pre-commit hook (`.githooks/`, enabled on install) refuses commits there on any other branch.
 - **Merge with `$merge-pr`.** After the merge it deletes the task's scratch, its local branch and its worktree folder. The remote branch stays.
 - A follow-up to an existing task (an adjustment, fix, review fix, or next phase) continues in that task's worktree and branch. Find them with `git worktree list` and the task's row in `.plans/README.md`. Don't create a new worktree or branch for a follow-up, and don't add suffixes like `-ii`, `-hardening` or `-pause`.
+- If `$merge-pr` already removed that task's local branch and worktree, recreate the original branch from its retained `origin/<branch>` and the original worktree path with `git worktree add --track -b <branch> <original-path> origin/<branch>`. If the local branch still exists, reuse it with `git worktree add <original-path> <branch>`. Continue there without inventing a replacement branch or suffix.
 - Before each commit, run `git status` and `git branch`.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`.
 - Commit messages are gitmoji + conventional commits, lowercase and imperative: `✨ feat(life): …`, `🐛 fix(renderer): …`, `⚡️ perf(web): …`, `📝 docs(roadmap): …`. Match `git log`.
@@ -95,6 +96,7 @@ If one fails, fix it and rerun only that check.
 Implementation plans live in the gitignored `.plans/` folder of the main checkout. `.plans/README.md` indexes them.
 
 - Each task has one folder, `.plans/<status>/<task>/`, where `<status>` is `todo`, `active`, `paused` or `done`. `handoff.md` is the plan.
+- In new handoffs, list **keep** entries as exact paths relative to that task folder (files or directories, including nested paths). Counts and prose alone do not identify protected files. Cleanup reconciles legacy keep prose with the README and inventory, verifies a dry-run by file identity and directory coverage, and preserves the whole task when the protected set is ambiguous.
 - Put every scratch file for the task in its folder: logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
 - Confirm each step with targeted tests only; the end-of-task checks run once (see "Verifying changes"). No screenshots or evidence sets.
 - When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.

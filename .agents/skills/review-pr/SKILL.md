@@ -41,7 +41,7 @@ The PR is always the current branch's PR. No input selects a different one.
 2. Run `git branch --show-current`, then `gh pr view --json number,title,headRefName,headRefOid,baseRefName,url`.
    - If the branch has no PR, stop with `error` (`No PR for <branch>`). Never fall back to another PR, a branch diff, or a PR number from anywhere else.
 3. Find the checkout with this branch: `git worktree list`. Call it `<pr-checkout>`.
-4. The main checkout is the first entry of `git worktree list`. Set `<scratch>` to `<main-checkout>/.plans/active/pr<N>-review-fixes/` and create it. `.plans/` is gitignored. Put every file this skill writes there.
+4. The main checkout is the first entry of `git worktree list`. Create the review root `<main-checkout>/.plans/active/pr<N>-review-fixes/` if needed, then create a **new, unique invocation folder** beneath it (for example `run-<timestamp>-<uuid>/`). Set `<scratch>` to that fresh folder, refusing any already-existing invocation path. `.plans/` is gitignored. Put this invocation's baseline, rounds, rejected entries, logs and results there. Never reuse earlier round output or delete another invocation's files. Earlier runs remain available until `$merge-pr` cleans the review root.
 5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
 6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. This is the only place the review flows merge `main`; `$sync-review` and `$implement-handoff` rely on it. Work in `<pr-checkout>`.
@@ -76,7 +76,7 @@ claude -p "/review-pr <N>" --model claude-opus-5-5 --effort high --dangerously-s
 - Use exactly these flags. Never change the model or effort, or drop a flag.
 - From round 2 on, if `<scratch>/rejected.md` exists, add `--append-system-prompt (Get-Content -Raw <scratch>/rejected.md)` to the command (PowerShell).
 - Afterwards, compare `git -C <pr-checkout> status --porcelain` with the baseline. If anything changed, report the difference and stop with `error`. Do not revert it.
-- If the command failed, or `claude-review.md` has no `**Verdict:**` line, stop with `error`, including the file's tail. Do not review the PR yourself instead.
+- Require a successful Claude exit status and this invocation's newly written `claude-review.md`. Capture the native command's exit code immediately after it finishes, before any other command. If it failed, or the new file has no `**Verdict:**` line, stop with `error`, including the file's tail. Never consume another run's output. Do not review the PR yourself instead.
 
 ## 3. Round k: validate Claude's review (Codex #1: Sol 6.1, max, analysis only)
 
@@ -88,7 +88,7 @@ codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-fu
 
 - Never change the model, effort or speed flags, and never skip this run to validate in this session instead.
 - Afterwards, compare `git -C <pr-checkout> status --porcelain` with the baseline. Gitignored test caches don't show up. If anything changed, report the difference and stop with `error`. Do not revert it.
-- If `validation.md` is missing or has no validation table, stop with `error`.
+- Require a successful validator exit status and this invocation's newly written `validation.md`; capture the native command's exit code immediately, before any other command. If the command failed, the file is missing, or it has no validation table, stop with `error`. An older valid table from another invocation cannot substitute for a failed run.
 - Append this round's `invalid` entries to `<scratch>/rejected.md`, one per line: `path:line — claim`. When creating the file, start it with this line: "Entries below were already judged invalid in earlier review rounds. Don't report them again unless the cited code has changed since."
 
 ## 4. Round k: implement the valid entries
@@ -204,4 +204,4 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   - `error`: no PR, Claude or Codex #1 failed, or a `git status` check found unexpected changes.
 - If a `Result file` was given, also write the same JSON object to that path. Write only the object, without the fence.
 
-Leave `<scratch>` in place. `$merge-pr` deletes it with `pnpm plans:clean` after the PR merges. Never delete it with shell commands: Codex rejects recursive deletes as "blocked by policy".
+Leave this invocation's `<scratch>` in place. `$merge-pr` deletes the entire `pr<N>-review-fixes/` root, including all invocation folders, with `pnpm plans:clean` after the PR merges. Never delete it with shell commands: Codex rejects recursive deletes as "blocked by policy".

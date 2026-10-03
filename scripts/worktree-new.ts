@@ -4,9 +4,10 @@
  * adds ../naga-ascii-<short> on a new branch codex/<topic> from the latest origin/main, installs
  * dependencies and fetches the pinned tiles.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+import { mainCheckout } from './git';
 
 const [short, topic] = process.argv.slice(2).filter((arg) => arg !== '--');
 const slug = /^[a-z0-9][a-z0-9-]*$/;
@@ -15,10 +16,7 @@ if (!short || !topic || !slug.test(short) || !slug.test(topic)) {
   process.exit(2);
 }
 
-const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-// The main checkout is the common directory's parent, whichever worktree this runs from.
-const common = resolve(git('rev-parse', '--git-common-dir'));
-const main = dirname(common);
+const main = mainCheckout(process.cwd());
 const path = resolve(dirname(main), `${basename(main)}-${short}`);
 const branch = `codex/${topic}`;
 
