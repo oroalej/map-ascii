@@ -32,13 +32,17 @@ export type View = {
 export type Grid = { originCol: number; originRow: number; shiftX: number; shiftY: number };
 
 /** Whole cells inside the viewport: inclusive left/top, exclusive right/bottom. */
-export function screenArea(view: View, grid: Grid, cellDev = view.cellDev) {
-  return {
-    left: Math.ceil(grid.shiftX / cellDev.w),
-    top: Math.ceil(grid.shiftY / cellDev.h),
-    right: Math.floor((grid.shiftX + view.width) / cellDev.w),
-    bottom: Math.floor((grid.shiftY + view.height) / cellDev.h),
-  };
+export function screenArea(
+  view: View,
+  grid: Grid,
+  cellDev = view.cellDev,
+  out = { left: 0, top: 0, right: 0, bottom: 0 },
+) {
+  out.left = Math.ceil(grid.shiftX / cellDev.w);
+  out.top = Math.ceil(grid.shiftY / cellDev.h);
+  out.right = Math.floor((grid.shiftX + view.width) / cellDev.w);
+  out.bottom = Math.floor((grid.shiftY + view.height) / cellDev.h);
+  return out;
 }
 
 /** The grid for a view, and how tiles and points map onto it. */

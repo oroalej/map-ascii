@@ -79,7 +79,7 @@ import {
 } from './passes';
 import { LabelRank } from './labels';
 import { screenArea } from './grid';
-import { AtlasLabels } from './label-controller';
+import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
@@ -689,7 +689,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
-    const labels: { labels: readonly TileLabel[]; zoom: number }[] = [];
+    const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
       for (const tile of ids) {

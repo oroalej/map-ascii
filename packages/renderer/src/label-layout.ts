@@ -258,14 +258,18 @@ export function layoutLabels(
   const retained = retentionArea(area);
   const screen = stability.screen ?? area;
   for (const label of orderLabels(candidates, stability)) {
-    const nearby = names.get(label.text) ?? [];
-    if (
-      nearby.some(
-        (p) =>
-          Math.hypot(p.col - label.col, (p.row - label.row) * aspect) < repeatDistance(label.rank),
-      )
-    )
-      continue;
+    let nearby = names.get(label.text);
+    let repeated = false;
+    if (nearby) {
+      const distance = repeatDistance(label.rank);
+      for (const point of nearby) {
+        if (Math.hypot(point.col - label.col, (point.row - label.row) * aspect) < distance) {
+          repeated = true;
+          break;
+        }
+      }
+    }
+    if (repeated) continue;
     const previous = stability.memory?.get(label.id);
     const allowed = placementArea(area, retained, previous !== undefined);
     for (const slot of labelSlots(label.mode, previous?.slot)) {
@@ -300,7 +304,7 @@ export function layoutLabels(
             };
       take(overlay, layout.collision);
       if (labelIntersectsArea(layout.textBounds, screen)) {
-        if (!nearby.length) names.set(label.text, nearby);
+        if (!nearby) names.set(label.text, (nearby = []));
         nearby.push({ col: label.col, row: label.row });
       }
       accepted.push(layout);

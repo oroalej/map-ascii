@@ -75,13 +75,15 @@ export function labelSlots(
   return (mode === 'rotated' ? rotatedSlots : besideSlots)[beside]!;
 }
 
-export function retentionArea(area: LabelArea): LabelArea {
-  return {
-    left: area.left - KEEP_OVERHANG,
-    top: area.top - KEEP_OVERHANG,
-    right: area.right + KEEP_OVERHANG,
-    bottom: area.bottom + KEEP_OVERHANG,
-  };
+export function retentionArea(
+  area: LabelArea,
+  out: LabelArea = { left: 0, top: 0, right: 0, bottom: 0 },
+): LabelArea {
+  out.left = area.left - KEEP_OVERHANG;
+  out.top = area.top - KEEP_OVERHANG;
+  out.right = area.right + KEEP_OVERHANG;
+  out.bottom = area.bottom + KEEP_OVERHANG;
+  return out;
 }
 
 /** Shared admission policy; eligibility and individual-slot collision checks stay separate. */

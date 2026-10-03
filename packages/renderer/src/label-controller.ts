@@ -2,16 +2,17 @@ import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { screenArea, type Grid, type GridPlacement, type View } from './grid';
 import { labelCandidate, labelScreenArea } from './label-candidates';
-import { collectLabels } from './label-collection';
+import { collectLabel } from './label-collection';
 import { labelFitsArea, labelTouchesArea } from './label-layout';
 import { labelFocus, placementArea, retentionArea } from './label-stability';
-import type { LabelCandidate } from './labels';
+import type { LabelArea, LabelCandidate } from './labels';
 import {
   forgetLabelPlacement,
   labelMemory,
   labelOverlayChanged,
   labelsInView,
   overlayPass,
+  transferLabelPlacement,
 } from './passes';
 import type { TileLabel } from './raster/geometry';
 
@@ -23,11 +24,24 @@ export class AtlasLabels {
   private labels = new Map<number, TileLabel>();
   private visible: LabelCandidate[] = [];
   private targets: CellTargets | undefined;
+  private labelWidth = 0;
+  private labelHeight = 0;
   private candidates = new Map<number, LabelCandidate>();
   private prepared: LabelCandidate[] = [];
+  private copies = new Map<TileLabel, LabelCandidate | undefined>();
+  private sourceZooms = new Map<TileLabel, number>();
+  private copyVisible = new Map<TileLabel, boolean>();
+  private previous = new Map<number, TileLabel>();
+  private admission = {
+    area: { left: 0, top: 0, right: 0, bottom: 0 },
+    retained: { left: 0, top: 0, right: 0, bottom: 0 },
+    aspect: 1.8,
+  };
+  private screen: LabelArea = { left: 0, top: 0, right: 0, bottom: 0 };
   private placement: GridPlacement | undefined;
   private focused: readonly number[] = [];
   private observed = false;
+  private observedArea = { left: 0, top: 0, right: 0, bottom: 0 };
   private inputs:
     | {
         selected: number;
@@ -36,6 +50,10 @@ export class AtlasLabels {
         originRow: number;
         shiftX: number;
         shiftY: number;
+        left: number;
+        top: number;
+        right: number;
+        bottom: number;
         zoom: number;
         width: number;
         height: number;
@@ -51,73 +69,49 @@ export class AtlasLabels {
     placement: GridPlacement,
     sources: Iterable<LabelSource>,
   ): void {
-    if (this.targets !== targets) this.clear();
+    if (this.targets !== targets) {
+      if (
+        this.targets &&
+        this.targets.labelCols === targets.labelCols &&
+        this.targets.labelRows === targets.labelRows &&
+        this.labelWidth === view.labelDev.w &&
+        this.labelHeight === view.labelDev.h
+      )
+        transferLabelPlacement(this.targets, targets);
+      else this.clear();
+    }
     this.targets = targets;
+    this.labelWidth = view.labelDev.w;
+    this.labelHeight = view.labelDev.h;
     this.placement = placement;
     this.observed = false;
+    this.clearCopies();
     const memory = labelMemory(targets);
-    const previous = new Map<number, TileLabel>();
-    for (const [id, label] of this.labels) if (memory?.has(id)) previous.set(id, label);
-    const area = screenArea(view, placement.grid, view.labelDev),
-      screen = labelScreenArea(view, placement.grid),
-      retained = retentionArea(area);
-    const aspect = view.labelDev.h / view.labelDev.w;
-    const candidates = new Map<
-      TileLabel,
-      { candidate: LabelCandidate | undefined; zoom: number }
-    >();
-    function* copies() {
-      for (const { labels, zoom } of sources) {
-        for (const label of labels) {
-          const known = candidates.get(label);
-          if (known) known.zoom = Math.max(known.zoom, zoom);
-          else
-            candidates.set(label, {
-              candidate: labelCandidate(label, view, placement, area),
-              zoom,
-            });
-          yield label;
-        }
+    for (const [id, label] of this.labels) if (memory?.has(id)) this.previous.set(id, label);
+    this.prepareAdmission(view, placement.grid);
+    this.screen = labelScreenArea(view, placement.grid);
+    for (const { labels, zoom } of sources) {
+      for (const label of labels) {
+        if (!this.copies.has(label))
+          this.copies.set(label, labelCandidate(label, view, placement, this.admission.area));
+        this.sourceZooms.set(label, Math.max(this.sourceZooms.get(label) ?? -Infinity, zoom));
       }
     }
-    const candidate = (label: TileLabel) => candidates.get(label)?.candidate;
-    const visible = new Map<TileLabel, boolean>();
-    this.labels = collectLabels(
-      copies(),
-      previous,
-      (label) => {
-        const prepared = candidate(label);
-        return (
-          prepared !== undefined &&
-          labelFitsArea(
-            prepared,
-            placementArea(area, retained, memory?.has(label.id) ?? false),
-            aspect,
-          )
+    this.labels.clear();
+    for (const [label, candidate] of this.copies) {
+      if (this.fits(candidate, memory?.has(label.id) ?? false))
+        collectLabel(
+          this.labels,
+          label,
+          this.previous.get(label.id),
+          this.onScreen,
+          this.sourceZoom,
         );
-      },
-      (label) => {
-        const known = visible.get(label);
-        if (known !== undefined) return known;
-        const prepared = candidate(label);
-        const onScreen =
-          prepared !== undefined &&
-          labelTouchesArea(
-            prepared,
-            screen,
-            placementArea(area, retained, memory?.has(label.id) ?? false),
-            aspect,
-            memory?.get(label.id)?.slot,
-          );
-        visible.set(label, onScreen);
-        return onScreen;
-      },
-      (label) => candidates.get(label)!.zoom,
-    );
+    }
     this.candidates.clear();
-    this.prepared = [];
+    this.prepared.length = 0;
     for (const [id, label] of this.labels) {
-      const prepared = candidate(label);
+      const prepared = this.copies.get(label);
       if (prepared) {
         this.candidates.set(id, prepared);
         this.prepared.push(prepared);
@@ -125,7 +119,52 @@ export class AtlasLabels {
     }
     // Layout applies its own priorities. Reporting keeps the ordinary rank/id order.
     this.prepared.sort((a, b) => a.rank - b.rank || a.id - b.id);
+    this.clearCopies();
   }
+
+  private clearCopies(): void {
+    this.copies.clear();
+    this.sourceZooms.clear();
+    this.copyVisible.clear();
+    this.previous.clear();
+  }
+
+  private prepareAdmission(view: View, grid: Grid): void {
+    screenArea(view, grid, view.labelDev, this.admission.area);
+    retentionArea(this.admission.area, this.admission.retained);
+    this.admission.aspect = view.labelDev.h / view.labelDev.w;
+  }
+
+  private fits(candidate: LabelCandidate | undefined, kept: boolean): boolean {
+    return (
+      candidate !== undefined &&
+      labelFitsArea(
+        candidate,
+        placementArea(this.admission.area, this.admission.retained, kept),
+        this.admission.aspect,
+      )
+    );
+  }
+
+  private onScreen = (label: TileLabel): boolean => {
+    const known = this.copyVisible.get(label);
+    if (known !== undefined) return known;
+    const candidate = this.copies.get(label);
+    const previous = this.targets && labelMemory(this.targets)?.get(label.id);
+    const visible =
+      candidate !== undefined &&
+      labelTouchesArea(
+        candidate,
+        this.screen,
+        placementArea(this.admission.area, this.admission.retained, previous !== undefined),
+        this.admission.aspect,
+        previous?.slot,
+      );
+    this.copyVisible.set(label, visible);
+    return visible;
+  };
+
+  private sourceZoom = (label: TileLabel): number => this.sourceZooms.get(label) ?? 0;
 
   private focus(
     targets: CellTargets,
@@ -135,42 +174,51 @@ export class AtlasLabels {
     hover: number,
   ): readonly number[] {
     if (selected <= 0 && hover <= 0) return noFocus;
-    const memory = labelMemory(targets),
-      area = screenArea(view, grid, view.labelDev),
-      retained = retentionArea(area);
-    return labelFocus(selected, hover, (id) => {
-      const candidate = this.candidates.get(id);
-      return (
-        candidate !== undefined &&
-        labelFitsArea(
-          candidate,
-          placementArea(area, retained, memory?.has(id) ?? false),
-          view.labelDev.h / view.labelDev.w,
-        )
-      );
-    });
+    const memory = labelMemory(targets);
+    this.prepareAdmission(view, grid);
+    return labelFocus(selected, hover, (id) =>
+      this.fits(this.candidates.get(id), memory?.has(id) ?? false),
+    );
   }
 
   /** Record misses too: an ineligible focus must not repeat geometry work every frame. */
   private observe(view: View, grid: Grid, selected: number, hover: number): boolean {
     const old = this.inputs;
-    if (
-      this.observed &&
-      old &&
-      old.selected === selected &&
-      old.hover === hover &&
+    const sameView =
+      old !== undefined &&
       old.originCol === grid.originCol &&
       old.originRow === grid.originRow &&
-      old.shiftX === grid.shiftX &&
-      old.shiftY === grid.shiftY &&
       old.zoom === view.camera.zoom &&
       old.width === view.width &&
       old.height === view.height &&
       old.dpr === view.dpr &&
       old.w === view.labelDev.w &&
-      old.h === view.labelDev.h
+      old.h === view.labelDev.h;
+    const sameFocus = old?.selected === selected && old.hover === hover;
+    if (
+      this.observed &&
+      sameView &&
+      sameFocus &&
+      old.shiftX === grid.shiftX &&
+      old.shiftY === grid.shiftY
     )
       return false;
+    const area =
+      selected > 0 || hover > 0
+        ? screenArea(view, grid, view.labelDev, this.observedArea)
+        : undefined;
+    const left = area?.left ?? 0,
+      top = area?.top ?? 0,
+      right = area?.right ?? 0,
+      bottom = area?.bottom ?? 0;
+    const changed =
+      !this.observed ||
+      !sameView ||
+      !sameFocus ||
+      old?.left !== left ||
+      old.top !== top ||
+      old.right !== right ||
+      old.bottom !== bottom;
     const inputs = (this.inputs ??= {
       selected: 0,
       hover: 0,
@@ -178,6 +226,10 @@ export class AtlasLabels {
       originRow: 0,
       shiftX: 0,
       shiftY: 0,
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
       zoom: 0,
       width: 0,
       height: 0,
@@ -191,6 +243,10 @@ export class AtlasLabels {
     inputs.originRow = grid.originRow;
     inputs.shiftX = grid.shiftX;
     inputs.shiftY = grid.shiftY;
+    inputs.left = left;
+    inputs.top = top;
+    inputs.right = right;
+    inputs.bottom = bottom;
     inputs.zoom = view.camera.zoom;
     inputs.width = view.width;
     inputs.height = view.height;
@@ -198,7 +254,7 @@ export class AtlasLabels {
     inputs.w = view.labelDev.w;
     inputs.h = view.labelDev.h;
     this.observed = true;
-    return true;
+    return changed;
   }
 
   draw(
@@ -261,10 +317,13 @@ export class AtlasLabels {
   clear(): void {
     if (this.targets) forgetLabelPlacement(this.targets);
     this.targets = undefined;
+    this.labelWidth = 0;
+    this.labelHeight = 0;
     this.labels.clear();
     this.visible.length = 0;
     this.candidates.clear();
-    this.prepared = [];
+    this.prepared.length = 0;
+    this.clearCopies();
     this.placement = undefined;
     this.inputs = undefined;
     this.observed = false;

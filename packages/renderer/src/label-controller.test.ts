@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as layout from './label-layout';
 import * as grid from './grid';
+import * as candidates from './label-candidates';
 import { AtlasLabels } from './label-controller';
 import { LabelRank } from './labels';
 import { labelMemory } from './passes';
@@ -61,6 +62,137 @@ function fixture(atView = view) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('cached atlas labels', () => {
+  it('prepares shared copy identities once at their maximum source depth in either order', () => {
+    const shared = street(3, 6),
+      detail = street(7, 20),
+      hidden = { ...street(3, 6), band: { min: 20 } };
+    const sources = [
+      { labels: [shared, hidden], zoom: 11 },
+      { labels: [detail, hidden], zoom: 16 },
+      { labels: [shared], zoom: 17 },
+    ];
+    for (const ordered of [sources, [...sources].reverse()]) {
+      const { names, targets, gl, theme, programs } = fixture();
+      const at = placement();
+      const prepare = vi.spyOn(candidates, 'labelCandidate');
+      names.collect(targets, view, at, ordered);
+      expect(prepare).toHaveBeenCalledTimes(3);
+      expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(shared);
+      prepare.mockClear();
+      names.collect(targets, view, at, [{ labels: [detail], zoom: 16 }]);
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(detail);
+      prepare.mockRestore();
+    }
+  });
+  it('reuses collection maps and releases all copy scratch after each pass and clearing', () => {
+    const { names, targets, draw } = fixture();
+    draw([street(3, 6)]);
+    const clear = vi.spyOn(Map.prototype, 'clear');
+    let cleared: readonly unknown[] = [];
+    let created = 0;
+    vi.stubGlobal(
+      'Map',
+      new Proxy(Map, {
+        construct(target, args) {
+          created++;
+          const map: unknown = Reflect.construct(target, args);
+          if (typeof map !== 'object' || map === null) throw new Error('Expected a Map object');
+          return map;
+        },
+      }),
+    );
+    try {
+      for (const lng of [3, 7])
+        names.collect(targets, view, placement(), [{ labels: [street(lng, 6)], zoom: 16 }]);
+    } finally {
+      cleared = clear.mock.contexts.slice();
+      vi.unstubAllGlobals();
+      clear.mockRestore();
+    }
+    expect(created).toBe(0);
+    const counts = new Map<unknown, number>();
+    for (const map of cleared) counts.set(map, (counts.get(map) ?? 0) + 1);
+    const scratch = [...counts].filter(([, times]) => times === 4).map(([map]) => map);
+    expect(scratch).toHaveLength(4);
+    expect(scratch.every((map) => map instanceof Map && map.size === 0)).toBe(true);
+    names.clear();
+    expect(scratch.every((map) => map instanceof Map && map.size === 0)).toBe(true);
+    expect(labelMemory(targets)).toBeUndefined();
+  });
+  it.each(['selected', 'hovered'])(
+    'skips %s eligibility through fractional shifts inside the same admission bounds',
+    (kind) => {
+      const { names, targets, gl, theme, programs } = fixture();
+      const at = placement();
+      at.grid.shiftX = 1;
+      at.grid.shiftY = 1;
+      const selected = kind === 'selected' ? 1 : 0;
+      const hover = kind === 'hovered' ? 1 : 0;
+      names.collect(targets, view, at, [{ labels: [street(3, 6)], zoom: 16 }]);
+      names.draw(gl, targets, theme, view, at, programs, selected, hover);
+      const fit = vi.spyOn(layout, 'labelFitsArea');
+      const texture = vi.spyOn(gl, 'texSubImage2D');
+      const uploads = texture.mock.calls.length;
+      for (let offset = 2; offset < 10; offset++)
+        expect(
+          names.relabel(gl, targets, theme, view, programs, selected, hover, {
+            ...at.grid,
+            shiftX: offset,
+            shiftY: offset,
+          }),
+        ).toBeUndefined();
+      expect(fit).not.toHaveBeenCalled();
+      expect(texture).toHaveBeenCalledTimes(uploads);
+      names.relabel(gl, targets, theme, view, programs, selected, hover, {
+        ...at.grid,
+        shiftX: 10,
+      });
+      expect(fit).toHaveBeenCalled();
+    },
+  );
+  it('keeps acceptance and copy references across map-only target and density changes', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    const accepted = { ...street(3, 6), id: 9 };
+    expect(draw([accepted])[0]).toBe(accepted);
+    const memory = [...labelMemory(targets)!];
+    const replacement = { ...targets, cols: 61, rows: 27 };
+    const nextView = { ...view, cellDev: { w: 4, h: 7 } };
+    const at = placement();
+    names.collect(replacement, nextView, at, [
+      { labels: [street(3, 6), { ...accepted, run: street(7, 20).run }, accepted], zoom: 16 },
+    ]);
+    expect(labelMemory(targets)).toBeUndefined();
+    expect([...labelMemory(replacement)!]).toEqual(memory);
+    expect(names.draw(gl, replacement, theme, nextView, at, programs, 0, 0)[0]).toBe(accepted);
+    names.clear();
+    expect(labelMemory(replacement)).toBeUndefined();
+  });
+  it.each(['cols', 'rows', 'width', 'height'] as const)(
+    'drops acceptance when label %s changes on target replacement',
+    (dimension) => {
+      const { names, targets, gl, theme, programs, draw } = fixture();
+      const accepted = { ...street(3, 6), id: 9 };
+      draw([accepted]);
+      const replacement = {
+        ...targets,
+        labelCols: targets.labelCols + (dimension === 'cols' ? 1 : 0),
+        labelRows: targets.labelRows + (dimension === 'rows' ? 1 : 0),
+      };
+      const nextView = {
+        ...view,
+        labelDev: {
+          w: view.labelDev.w + (dimension === 'width' ? 1 : 0),
+          h: view.labelDev.h + (dimension === 'height' ? 1 : 0),
+        },
+      };
+      const incoming = street(3, 6);
+      const at = placement();
+      names.collect(replacement, nextView, at, [{ labels: [accepted, incoming], zoom: 16 }]);
+      expect(labelMemory(targets)).toBeUndefined();
+      expect(names.draw(gl, replacement, theme, nextView, at, programs, 0, 0)[0]).toBe(incoming);
+    },
+  );
   it('replaces a remembered coarse run when eligible detail arrives in either source order', () => {
     const coarse = street(3, 20),
       detail = street(7, 6);

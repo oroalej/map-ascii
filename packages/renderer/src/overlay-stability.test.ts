@@ -1,6 +1,6 @@
 import { labelCandidate } from './label-candidates';
 import { describe, expect, it, vi } from 'vitest';
-import { labelMemory, labelsInView, overlayPass } from './passes';
+import { labelMemory, labelsInView, overlayPass, transferLabelPlacement } from './passes';
 import { LabelRank } from './labels';
 import type { GridPlacement, View } from './grid';
 import type { CellTargets, GL } from './gpu';
@@ -45,7 +45,13 @@ function fixture() {
     label: { atlas: { index: (c: string) => c.charCodeAt(0) } },
   } as unknown as ThemeResources;
   const programs = { streetText: { buffer: null, count: 0 } } as unknown as Programs;
-  const draw = (labels: TileLabel[], focus: number[] = [], at = view, target = targets) =>
+  const draw = (
+    labels: TileLabel[],
+    focus: number[] = [],
+    at = view,
+    target = targets,
+    commit = true,
+  ) =>
     overlayPass(
       gl,
       target,
@@ -55,11 +61,33 @@ function fixture() {
       labels.flatMap((label) => labelCandidate(label, at, placement) ?? []),
       programs,
       focus,
+      commit,
     );
   return { targets, draw, uploaded, programs };
 }
 
 describe('overlay placement memory', () => {
+  it('transfers only durable memory, uploads fresh textures and isolates replacement targets', () => {
+    const { targets, draw, uploaded } = fixture();
+    const accepted = label({ id: 9 });
+    draw([accepted]);
+    const oldMemory = labelMemory(targets)!;
+    const replacement = { ...targets };
+    const uploads = uploaded.length;
+    transferLabelPlacement(targets, replacement);
+    expect(labelMemory(targets)).toBeUndefined();
+    expect(labelMemory(replacement)).not.toBe(oldMemory);
+    expect(labelMemory(replacement)?.get(9)).toEqual(oldMemory.get(9));
+    expect(labelMemory(replacement)?.get(9)).not.toBe(oldMemory.get(9));
+    expect(draw([label(), accepted], [], view, replacement, false).map(({ id }) => id)).toEqual([
+      9,
+    ]);
+    expect(uploaded).toHaveLength(uploads + 1);
+    draw([label({ id: 3 })], [], view, replacement);
+    expect([...oldMemory.keys()]).toEqual([9]);
+    expect(draw([label(), accepted], [], view, targets).map(({ id }) => id)).toEqual([1]);
+    expect([...labelMemory(replacement)!.keys()]).toEqual([3]);
+  });
   it('keeps the accepted duplicate on its target and starts fresh on another target', () => {
     const { targets, draw } = fixture();
     draw([label({ id: 9 })]);

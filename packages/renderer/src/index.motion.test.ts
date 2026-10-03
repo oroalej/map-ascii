@@ -7,6 +7,7 @@ import {
   cellPass,
   crownPass,
   labelsInView,
+  labelMemory,
   overlayPass,
   effectClockPass,
   fixturePass,
@@ -1464,14 +1465,22 @@ describe('label focus in the renderer frame', () => {
     expect(crownPass).toHaveBeenCalledOnce();
   });
   it('shifts subcell pans without placement and restores selection after context recreation', () => {
+    const reports = vi.fn<(labels: LabelInView[]) => void>();
+    atlas.on('labelschange', reports);
     draw(10);
+    expect(reports.mock.calls[0]?.[0].length).toBeGreaterThan(0);
     atlas.setSelected('feature/9');
     draw(11);
     const passes = vi.mocked(overlayPass).mock.calls.length;
     atlas.setCamera({ lng: 0.00000001 });
     draw(12);
     expect(overlayPass).toHaveBeenCalledTimes(passes);
+    const oldTargets = vi.mocked(overlayPass).mock.calls.at(-1)![1];
+    expect(labelMemory(oldTargets)?.size).toBeGreaterThan(0);
+    reports.mockClear();
     canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    expect(reports.mock.calls).toEqual([[[]]]);
+    expect(labelMemory(oldTargets)).toBeUndefined();
     canvas.dispatchEvent(new Event('webglcontextrestored'));
     draw(100);
     expect(focus()).toEqual([9]);

@@ -163,6 +163,16 @@ export const forgetLabelPlacement = (targets: CellTargets): void => {
   overlays.delete(targets);
 };
 
+/** Move durable acceptance only; replacement textures need fresh layout/upload state. */
+export function transferLabelPlacement(from: CellTargets, to: CellTargets): void {
+  const memory = labelMemory(from);
+  if (memory) {
+    const replacement = overlayBuffers(to).memory;
+    for (const [id, entry] of memory) replacement.set(id, { ...entry });
+  }
+  forgetLabelPlacement(from);
+}
+
 /** Whether the latest overlay pass uploaded label geometry. */
 export const labelOverlayChanged = (targets: CellTargets): boolean =>
   overlays.get(targets)?.changed ?? false;
