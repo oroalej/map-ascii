@@ -4,6 +4,7 @@ import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
   type CityLifeConfig,
+  type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
   type ProcessionRoute,
@@ -12,9 +13,11 @@ import {
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
+import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
+import { loadSpeechPrefs, saveSpeechPrefs, useSpeechStore } from '@/state/speech';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
@@ -27,6 +30,7 @@ const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
 const SMALL_SCREEN = '(max-width: 640px)';
 const SMALL_SCREEN_MIN_CELL = 6;
+const lifeHoverPause = parseLifeHoverPause(process.env.NEXT_PUBLIC_LIFE_HOVER_PAUSE);
 
 /** The map's cell sizes by zoom (SPEC.md §2 "Cell size"), with a floor on small screens. */
 const cellSchedule = (small: boolean): CellSchedule =>
@@ -97,6 +101,7 @@ export function AtlasCanvas({
   climate,
   timezone,
   cityLife,
+  dialogue,
   utilitiesDerived = false,
 }: {
   utilitiesDerived?: boolean;
@@ -107,6 +112,7 @@ export function AtlasCanvas({
   climate?: ClimateConfig | undefined;
   timezone?: string | undefined;
   cityLife?: CityLifeConfig | undefined;
+  dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Static export renders on the server, where we optimistically assume support.
@@ -140,9 +146,14 @@ export function AtlasCanvas({
     // The life layer's settings are remembered in this browser, not in the URL.
     const lifePrefs = loadLifePrefs();
     useLifeStore.setState(lifePrefs);
+    const speechPrefs = dialogue
+      ? loadSpeechPrefs(slug, dialogue)
+      : { enabled: false, translation: null };
+    useSpeechStore.setState(speechPrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
+      lifeHoverPause,
       quality,
       utilities: { derive: utilitiesDerived },
       tilesUrl: `/tiles/${slug}.pmtiles`,
@@ -160,6 +171,8 @@ export function AtlasCanvas({
       climate,
       timezone,
       cityLife,
+      dialogue,
+      speech: speechPrefs.enabled,
       processions: processions ?? [],
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
@@ -169,6 +182,10 @@ export function AtlasCanvas({
       useQualityStore.subscribe(({ choice }) => {
         atlas.setQuality(choice);
         saveQualityPref(choice);
+      }),
+      useSpeechStore.subscribe((prefs, previous) => {
+        if (prefs.enabled !== previous.enabled) atlas.setSpeech(prefs.enabled);
+        saveSpeechPrefs(slug, prefs);
       }),
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
@@ -187,7 +204,18 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [supported, meta, processions, slug, traffic, climate, timezone, cityLife, utilitiesDerived]);
+  }, [
+    supported,
+    meta,
+    processions,
+    slug,
+    traffic,
+    climate,
+    timezone,
+    cityLife,
+    dialogue,
+    utilitiesDerived,
+  ]);
 
   if (!supported) {
     return (

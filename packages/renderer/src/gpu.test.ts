@@ -1,6 +1,51 @@
 import { expect, it, vi } from 'vitest';
-import { deleteTile, drawCrowns, drawGround, uploadTile, type GL } from './gpu';
+import {
+  deleteTile,
+  drawCrowns,
+  drawGround,
+  uploadTile,
+  uploadEffectClocks,
+  type GL,
+  type CellTargets,
+} from './gpu';
 import { buildTileGeometry, createIdRegistry } from './raster/geometry';
+
+it('allocates an exact float clock texture lazily, reuses it, and releases it when unused', () => {
+  const texture = {};
+  const gl = {
+    UNSIGNED_BYTE: 5121,
+    FLOAT: 5126,
+    RG32F: 33328,
+    RG: 33319,
+    createTexture: vi.fn(() => texture),
+    bindTexture: vi.fn(),
+    pixelStorei: vi.fn(),
+    texImage2D: vi.fn(),
+    texSubImage2D: vi.fn(),
+    texParameteri: vi.fn(),
+    deleteTexture: vi.fn(),
+  };
+  const targets = { cols: 2, rows: 2 } as CellTargets;
+  const values = new Float32Array(8).fill(-2.4);
+  uploadEffectClocks(gl as unknown as GL, targets, undefined);
+  expect(gl.createTexture).not.toHaveBeenCalled();
+  uploadEffectClocks(gl as unknown as GL, targets, values);
+  expect(gl.texImage2D.mock.calls[0]!.slice(2)).toEqual([
+    gl.RG32F,
+    2,
+    2,
+    0,
+    gl.RG,
+    gl.FLOAT,
+    values,
+  ]);
+  uploadEffectClocks(gl as unknown as GL, targets, values);
+  expect(gl.createTexture).toHaveBeenCalledTimes(1);
+  expect(gl.texSubImage2D).toHaveBeenCalledTimes(1);
+  uploadEffectClocks(gl as unknown as GL, targets, undefined);
+  expect(gl.deleteTexture).toHaveBeenCalledWith(texture);
+  expect(targets.effectClockTex).toBeUndefined();
+});
 
 function setup() {
   const gl = {

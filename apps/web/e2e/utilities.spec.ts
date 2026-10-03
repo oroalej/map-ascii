@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits } from '../../../packages/renderer/src/life/config';
 import { UtilityPart } from '../../../packages/renderer/src/life/utilities';
-import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
+import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { themes } from '../../../packages/renderer/src/theme';
 import { mapReady } from './helpers';
@@ -109,7 +109,7 @@ test('utility poles and overhead wires', async ({ page }) => {
     },
     {
       vertex: fullscreenVertex,
-      fragment: glyphFragment,
+      fragment: glyphFragmentFor({ focus: false, effectClocks: false }),
       max: MAX_CLASSES,
       cable: UtilityPart.cable,
       classes: ['road_major', 'building', 'tree_crown', 'water_area', 'road_major'].map(classId),

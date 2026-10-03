@@ -1,3 +1,5 @@
+import { DEFAULT_CELLS } from '../density';
+import { MOMENTS } from './moments';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -6,6 +8,7 @@
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
 import { makeCellGuard } from './cell-guard';
+import type { SpeechCue } from './moments';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
 import {
   projectMover,
@@ -85,6 +88,9 @@ import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from '
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { LifeInspection } from './inspection';
+import { MomentHost, type MomentOptions } from './moments-host';
+import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
 import { approach, nextSpeed } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
@@ -154,6 +160,7 @@ export type StepPass = {
   trains?: ReadonlyMap<Mover, TrainLimit>;
   owns?: (p: { x: number; y: number }) => boolean;
   seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
+  momentView?: { zoom: number; cellWidth: number; cellAspect: number };
 };
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
@@ -183,6 +190,8 @@ const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo +
 
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
+  /** Displayed social heading, separate from the navigation cursor and detour. */
+  momentFacing?: { hx: number; hy: number };
   /** Cats' resting or grooming pose. */
   grooming?: boolean;
   kind: Exclude<AgentKind, 'bird'>;
@@ -238,6 +247,7 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  inspecting?: object;
   clock?: number;
   minutes?: number;
   cityLife?: CityLifeConfig;
@@ -296,6 +306,9 @@ export type Stall = {
  * end: `sign`), leading a carabao in `carabao`'s paint.
  */
 export type Gatherer = {
+  /** Original place ordinal; adjacent or coincident records retain separate ownership. */
+  source?: number;
+  momentFacing?: { hx: number; hy: number };
   place: PlaceKind;
   behavior: PlaceBehavior;
   cx: number;
@@ -443,6 +456,9 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private inspected?: object;
+  readonly momentHost: MomentHost;
+  private readonly walkerRng: () => number;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
@@ -565,9 +581,11 @@ export class TileLife {
     seed: number,
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
     deferred = false,
+    momentOptions?: MomentOptions,
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
+    this.walkerRng = random(seed ^ 0x3c6ef372);
     this.routingSeed = seed;
     this.routeRng = random(seed ^ 0x2545f491);
     this.looks = random(seed ^ 0xc2b2ae35);
@@ -580,6 +598,7 @@ export class TileLife {
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
     this.curvable = new Uint8Array(lines);
+    this.momentHost = new MomentHost(this, seed, momentOptions);
     if (!deferred) complete(this.prepare());
   }
 
@@ -624,6 +643,7 @@ export class TileLife {
       seed,
       this.stalls,
       (m) => this.canIdle(m),
+      (m) => this.momentHost.moments.busy(m),
       true,
     );
     yield* this.scenes.prepare(geo, this.stalls);
@@ -812,6 +832,7 @@ export class TileLife {
   pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }): Pose {
     const offset = this.offsetOf(m) * this.perMeter;
     Object.assign(out, { x: m.x - m.hy * offset, y: m.y + m.hx * offset, hx: m.hx, hy: m.hy });
+    if (m.momentFacing) Object.assign(out, m.momentFacing);
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
     const reach = FILLET.maxM * this.perMeter;
     const behind = m.d <= reach ? this.corner(m, m.from) : undefined;
@@ -918,14 +939,15 @@ export class TileLife {
       return out;
     }
     const walkers = mover ? (a.group ?? []) : [a.walker];
+    const { hx, hy } = a.momentFacing ?? a;
     const spacing = Math.max(1, minimum);
     for (let i = 0; i < walkers.length; i++) {
       const w = walkers[i]!;
       const b = out[i] ?? (out[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
-      b.x = x - a.hy * w.lateral * spacing - a.hx * w.back * spacing;
-      b.y = y + a.hx * w.lateral * spacing - a.hy * w.back * spacing;
-      b.hx = a.hx;
-      b.hy = a.hy;
+      b.x = x - hy * w.lateral * spacing - hx * w.back * spacing;
+      b.y = y + hx * w.lateral * spacing - hy * w.back * spacing;
+      b.hx = hx;
+      b.hy = hy;
       b.length = Math.max(memberSize(w.figure).length, minimum);
       b.width = Math.max(memberSize(w.figure).width, minimum);
     }
@@ -1338,6 +1360,7 @@ export class TileLife {
         yield;
         const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
         const g: Gatherer = {
+          source: i / PLACE_STRIDE,
           place,
           behavior: rule.behavior,
           cx,
@@ -1491,10 +1514,16 @@ export class TileLife {
   private stepGatherers(dt: number, near?: (x: number, y: number) => boolean, guard?: GroundGuard) {
     const rng = this.placeRng;
     for (const g of this.gatherers) {
+      if (this.inspected === g) continue;
       if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
+      if (this.momentHost.moments.busy(g)) {
+        g.pause = Math.max(0, g.pause - dt);
+        continue;
+      }
       if (!this.canIdle(g)) g.pause = 0;
       if (g.pause > 0) {
+        this.momentHost.attend(g, guard);
         g.pause -= dt;
         continue;
       }
@@ -1503,6 +1532,7 @@ export class TileLife {
       const dist = Math.hypot(dx, dy);
       const move = g.speed * dt;
       const before = guard && { ...g };
+      delete g.momentFacing;
       if (dist <= move) {
         g.x = g.tx;
         g.y = g.ty;
@@ -2118,7 +2148,9 @@ export class TileLife {
                         ? this.catRng()
                         : m.kind === 'dog'
                           ? this.dogRng()
-                          : this.rng()) * options.length,
+                          : m.kind === 'person'
+                            ? this.walkerRng()
+                            : this.rng()) * options.length,
                   )
                 ]!;
     m.next = undefined;
@@ -2527,7 +2559,11 @@ export class TileLife {
       speeds[i] = Math.min(
         speeds[i]!,
         room / FOLLOW.headway,
-        approach(room, leader.v ?? leader.speed, kinematicsOf(m.vehicle).brake * pm),
+        approach(
+          room,
+          this.inspected === leader ? 0 : (leader.v ?? leader.speed),
+          kinematicsOf(m.vehicle).brake * pm,
+        ),
       );
       caps[i] = Math.min(caps[i]!, room / dt);
     };
@@ -2600,6 +2636,7 @@ export class TileLife {
     pass?: StepPass,
   ) {
     if (dt <= 0) return;
+    this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
     this.time += dt;
@@ -2615,6 +2652,18 @@ export class TileLife {
       (m) => this.offsetOf(m),
       (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
       pass?.owns,
+      this.inspected,
+    );
+    const momentView = pass?.momentView;
+    this.momentHost.step(
+      dt,
+      momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
+      env,
+      pass?.owns ? (x, y) => (!near || near(x, y)) && pass.owns!({ x, y }) : near,
+      guard,
+      momentView?.cellWidth ?? 0,
+      momentView?.cellAspect ?? DEFAULT_CELLS.aspect,
+      this.inspected,
     );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) {
@@ -2641,6 +2690,7 @@ export class TileLife {
           a.i - b.i,
       );
     for (const { i, m } of order) {
+      if (this.inspected === m) continue;
       if (pass?.owns && !pass.owns(m)) continue;
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
@@ -2727,17 +2777,21 @@ export class TileLife {
         }
       }
       if (m.kind === 'person') {
+        if (this.momentHost.moments.busy(m)) {
+          m.pause = Math.max(0, m.pause - dt);
+          continue;
+        }
         const idle = this.canIdle(m);
         if (!idle) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
-        if (idle && rng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(rng, PERSON_PAUSE.seconds);
+        if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
+          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
           continue;
         }
-        if (idle && rng() < PERSON_TURN_CHANCE * dt) {
+        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -2785,6 +2839,7 @@ export class TileLife {
       }
       const before = { ...m };
       if (walking) {
+        delete m.momentFacing;
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
@@ -2919,10 +2974,12 @@ export class TileLife {
     for (const m of this.movers) {
       if (this.ownership && !this.ownership(m)) continue;
       if (levels && m.rank >= levels[m.kind]) continue;
+      if (this.momentHost.moments.busy(m)) continue;
       if (m.pause > 0 && m.kind !== 'train') continue;
       if (within(m.x, m.y, m.kind === 'dog' ? 2 * reach : reach)) return true;
     }
     for (const g of this.gatherers) {
+      if (this.momentHost.moments.busy(g)) continue;
       if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || g.pause > 0) continue;
       if (levels && g.rank >= levels.places[g.place]) continue;
@@ -3096,6 +3153,15 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
+  inspectionId?: number;
+  /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
+  effectClock?: number;
+  /** Stable candle-pool phase seed in per-item mode. */
+  candleSeed?: number;
+  speech?: SpeechCue;
+  /** A transient airborne ball, packed before the ordinary person figure dispatch. */
+  prop?: 'ball';
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -3171,6 +3237,7 @@ type GroundTerrain = {
 };
 
 export class LifeWorld {
+  readonly inspection?: LifeInspection;
   preparationEpoch = 0;
   hasBootstrapped() {
     return this.bootstrapped;
@@ -3185,6 +3252,7 @@ export class LifeWorld {
       hashString(entry.key),
       this.traffic,
       true,
+      this.momentOptions,
     ).prepare();
     if (this.profiler) {
       this.profiler.registerPopulation(entry.key, life.movers);
@@ -3266,7 +3334,7 @@ export class LifeWorld {
   /** Seconds simulated, for played processions. */
   private clock = 0;
   private played: { id: string; start: number } | undefined;
-  private live: { id: string; progress: number } | undefined;
+  private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
   private lastRain = 0;
@@ -3275,8 +3343,12 @@ export class LifeWorld {
   constructor(
     traffic?: TrafficMix,
     private readonly profiler?: FrameProfiler,
+    private readonly momentOptions?: MomentOptions,
+    itemInspection = false,
   ) {
     this.traffic = resolveTraffic(traffic);
+    if (itemInspection) this.inspection = new LifeInspection();
+    this.momentOptions = { ...momentOptions, memory: new DialogueMemory() };
   }
 
   /** Change the vehicle mix: every tile's agents spawn again with it. */
@@ -3287,6 +3359,8 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.inspection?.clear();
+    this.momentOptions?.memory?.clear();
     this.preparationEpoch++;
     this.preparedTerrain = new WeakMap();
     this.preparedSettled = new WeakSet();
@@ -3294,6 +3368,8 @@ export class LifeWorld {
     this.seamWait = new WeakMap();
     this.preparedRegistered = undefined;
     this.profiler?.clearContinuity();
+    for (const tile of this.tiles.values()) tile.momentHost.clear();
+    for (const { life } of this.retired.values()) life.momentHost.clear();
     this.tiles.clear();
     this.retired.clear();
     this.covers.clear();
@@ -3312,9 +3388,25 @@ export class LifeWorld {
 
   private pruneRetired(cap = true) {
     for (const [key, entry] of this.retired)
-      if (this.clock - entry.at >= RETIRE.seconds) this.retired.delete(key);
+      if (this.clock - entry.at >= RETIRE.seconds) {
+        this.forgetBirds(entry.life);
+        entry.life.momentHost.clear();
+        this.retired.delete(key);
+      }
     if (cap)
-      while (this.retired.size > RETIRE.max) this.retired.delete(this.retired.keys().next().value!);
+      while (this.retired.size > RETIRE.max) {
+        const key = this.retired.keys().next().value!;
+        const life = this.retired.get(key)!.life;
+        this.forgetBirds(life);
+        life.momentHost.clear();
+        this.retired.delete(key);
+      }
+  }
+
+  private forgetBirds(life: TileLife) {
+    if (!this.inspection?.birds && !this.inspection?.recoveringBirds) return;
+    for (const flock of life.flocks)
+      for (const bird of flock.birds) this.inspection.forgetBird(bird);
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
@@ -3361,7 +3453,7 @@ export class LifeWorld {
           const fresh =
             saved?.life ??
             prepared?.get(key) ??
-            new TileLife(tile, life, hashString(key), this.traffic);
+            new TileLife(tile, life, hashString(key), this.traffic, false, this.momentOptions);
           this.retired.delete(key);
           this.tiles.set(key, fresh);
           if (!saved) {
@@ -4088,6 +4180,7 @@ export class LifeWorld {
     wind?: LifeEnv['wind'],
     weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig },
     cellMeters = 0,
+    cellAspect = DEFAULT_CELLS.aspect,
   ) {
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
@@ -4103,6 +4196,7 @@ export class LifeWorld {
         ? undefined
         : (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const env: LifeEnv = {
+      inspecting: this.inspection?.owner,
       clock: this.clock,
       levels: this.lastLevels,
       rain: this.lastRain,
@@ -4130,6 +4224,7 @@ export class LifeWorld {
       [...this.tiles.values()],
       clamped,
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
+      env.inspecting,
     );
     const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
     const intents: {
@@ -4150,6 +4245,7 @@ export class LifeWorld {
     for (const source of this.tiles.values())
       for (const m of source.movers) {
         if (
+          env.inspecting === m ||
           (m.kind !== 'vehicle' && m.kind !== 'boat') ||
           !eligibility.get(source)!(m) ||
           !source.scenes.transferable(m)
@@ -4214,6 +4310,7 @@ export class LifeWorld {
       tile.step(clamped, inTile, shows, near, env, (owner, before) => guard(tile, owner, before), {
         junctions: this.junctions,
         trains,
+        momentView: { zoom: zoom ?? MOMENTS.zoom, cellWidth: cellMeters, cellAspect },
         seams: seamLimits,
         owns: this.covers.has(tile) ? (p) => this.owns(tile, p) : undefined,
       });
@@ -4481,8 +4578,8 @@ export class LifeWorld {
   }
 
   /** The procession under way by its schedule, and how far through it is; or none. */
-  setLive(id: string | undefined, progress = 0) {
-    this.live = id && this.scenes.has(id) ? { id, progress } : undefined;
+  setLive(id: string | undefined, progress = 0, occurrence?: string) {
+    this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
   }
 
   /** The procession to show: one being played, else a live one. */
@@ -4493,7 +4590,7 @@ export class LifeWorld {
       if (progress < 1) return { id: this.played.id, progress, live: false };
       this.played = undefined;
     }
-    return this.live && { ...this.live, live: true };
+    return this.live && { id: this.live.id, progress: this.live.progress, live: true };
   }
 
   get size() {
@@ -4528,6 +4625,14 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const inspection = this.inspection;
+    inspection?.begin(this.clock);
+    // Choose the plain fallback once, outside the per-actor loop.
+    const push: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
+      ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
+      : (_owner, agent) => out.push(agent);
+    const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
+    const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
@@ -4538,6 +4643,10 @@ export class LifeWorld {
           crowds: zoom >= PROCESSION.crowdZoom,
           crews: zoom >= PROCESSION.crewZoom,
           bounds,
+          inspection,
+          scope: run.live
+            ? `live/${this.live?.occurrence ?? run.id}`
+            : `play/${this.played?.start}`,
         })
       : [];
     for (const life of this.tiles.values()) {
@@ -4553,7 +4662,7 @@ export class LifeWorld {
           if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
             this.previouslyVisible.add(m);
           // A train is long, and there are few: all its cars, wherever its head is.
-          for (const car of trainCars(life, m)) out.push({ ...car, consist: m.train });
+          for (const car of trainCars(life, m)) push(m, { ...car, consist: m.train });
           continue;
         }
         if (!inView(m.x, m.y)) continue;
@@ -4566,7 +4675,7 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
-          out.push({
+          push(m, {
             kind: m.kind,
             lng,
             lat,
@@ -4574,20 +4683,37 @@ export class LifeWorld {
             side,
             vehicle: m.vehicle,
             paint: m.paint,
-            turnSignal: m.kind === 'vehicle' ? visibleTurnSignal(m.routing, this.clock) : undefined,
+            turnSignal:
+              m.kind === 'vehicle'
+                ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
+                : undefined,
             flap: 0,
           });
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
-          const people = m.group.map((w): PersonLook => ({
+          const people = m.group.map((w, member): PersonLook => ({
             figure: w.figure === 'adult' && w.umbrella < umbrellas ? 'umbrella' : w.figure,
             paint: w.figure === 'adult' && w.umbrella < umbrellas ? w.canopy : w.shirt,
             lateral: w.lateral,
             back: w.back,
             // Standing still, feet together.
             flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+            pose: life.momentHost.pose(m, member),
           }));
-          out.push({ kind: m.kind, lng, lat, ahead, flap: 0, people });
+          const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
+          const agent: VisibleAgent = {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            flap: 0,
+            people,
+            ...(speech && {
+              speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
+            }),
+          };
+          push(m, agent);
+          owners?.set(m, agent);
         } else if (m.kind === 'dog' || m.kind === 'cat') {
           // Standing, sniffing, or lying down, it keeps still.
           const still = m.pause > 0 || life.scenes.still(m);
@@ -4596,9 +4722,22 @@ export class LifeWorld {
           const stillFlap = cat ? (m.grooming ? 3 : 2) : m.lying ? 2 : 0;
           const stride = cat ? CAT.stride : DOG.stride;
           const flap = still ? stillFlap : Math.floor((m.walked ?? 0) / stride) & 1;
-          out.push({ kind: m.kind, lng, lat, ahead, paint: m.paint, flap });
+          push(m, {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            paint: m.paint,
+            flap,
+          });
         } else {
-          out.push({ kind: m.kind, lng, lat, ahead, flap: 0 });
+          push(m, {
+            kind: m.kind,
+            lng,
+            lat,
+            ahead,
+            flap: 0,
+          });
         }
       }
       if (shows('person')) {
@@ -4610,7 +4749,8 @@ export class LifeWorld {
             continue;
           if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
-          out.push({
+          const speech = life.momentHost.scenes.speech(s);
+          const agent: VisibleAgent = {
             kind: 'person',
             lng,
             lat,
@@ -4620,8 +4760,21 @@ export class LifeWorld {
             covered: s.covered,
             paint: s.paint,
             flap: 0,
-            people: [{ figure: 'adult', paint: s.shirt, lateral: s.side, back: 0, flap: 0 }],
-          });
+            people: [
+              {
+                figure: 'adult',
+                paint: s.shirt,
+                lateral: s.side,
+                back: 0,
+                flap: 0,
+                pose: life.momentHost.pose(s),
+              },
+            ],
+            ...(speech && {
+              speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
+            }),
+          };
+          push(s, agent);
         }
       }
       if (shows('person')) {
@@ -4638,6 +4791,7 @@ export class LifeWorld {
             back: 0,
             // Standing still (or sitting), feet together.
             flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+            pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
           };
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
@@ -4645,7 +4799,7 @@ export class LifeWorld {
             const x = g.x + g.hx * 1.8 * perMeter;
             const y = g.y + g.hy * 1.8 * perMeter;
             const [lng, lat] = at(x, y);
-            out.push({
+            push(g, {
               kind: 'person',
               lng,
               lat,
@@ -4658,17 +4812,39 @@ export class LifeWorld {
             });
           } else {
             const [lng, lat] = at(g.x, g.y);
-            const ahead = at(g.x + g.hx * perMeter, g.y + g.hy * perMeter);
-            out.push({ kind: 'person', lng, lat, ahead, flap: 0, people: [look] });
+            const { hx, hy } = g.momentFacing ?? g;
+            const ahead = at(g.x + hx * perMeter, g.y + hy * perMeter);
+            const agent: VisibleAgent = {
+              kind: 'person',
+              lng,
+              lat,
+              ahead,
+              flap: 0,
+              people: [look],
+            };
+            const speech = life.momentHost.moments.speech(g) ?? life.momentHost.scenes.speech(g);
+            if (speech)
+              agent.speech = { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` };
+            push(g, agent);
+            owners?.set(g, agent);
           }
         }
       }
+      if (zoom >= MOMENTS.zoom)
+        for (const ball of life.momentHost.moments.balls()) {
+          const [lng, lat] = tileToLngLat(tile, ball);
+          balls.push({
+            a: ball.a,
+            b: ball.b,
+            agent: { kind: 'person', prop: 'ball', glyph: '•', lng, lat, flap: 0 },
+          });
+        }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
           if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          out.push({
+          push(p, {
             kind: 'vehicle',
             lng,
             lat,
@@ -4686,7 +4862,7 @@ export class LifeWorld {
         for (const p of life.standby) {
           if (!this.owns(life, p)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
-          out.push({
+          push(p, {
             kind: 'train',
             lng,
             lat,
@@ -4704,7 +4880,12 @@ export class LifeWorld {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
         const out_ = spec.nocturnal ? levels.night : levels.bird;
-        if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
+        if (
+          flock.rank >= out_ * crowd ||
+          (!inView(flock.x, flock.y) &&
+            !(inspection?.recoveringBirds && flock.birds.some((bird) => inspection.hasBird(bird))))
+        )
+          continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
@@ -4723,7 +4904,8 @@ export class LifeWorld {
           const x = flock.x + bird.ox * cos - bird.oy * sin;
           const y = flock.y + bird.ox * sin + bird.oy * cos;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const flap = sitting ? 0 : Math.floor(life.elapsed * spec.flap + bird.phase * 2) & 1;
+          const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
+          const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
           const face = sitting ? bird.phase * 2 * Math.PI : heading + (bird.phase - 0.5) * 0.6;
@@ -4731,11 +4913,37 @@ export class LifeWorld {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          out.push({ kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } });
+          push(
+            bird,
+            { kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } },
+            spec.speed,
+          );
         }
       }
     }
-    if (out.length <= maxAgents) return [...staged, ...out];
+    const withBalls = (admitted: VisibleAgent[]) => {
+      if (!balls.length) return admitted;
+      const kept = new Set(admitted);
+      // The cap counts ordinary records. Procession prefix and trains are protected.
+      let count = 0;
+      for (let i = staged.length; i < admitted.length; i++)
+        if (admitted[i]!.kind !== 'train') count++;
+      let spare = Math.max(0, maxAgents - count);
+      for (const ball of balls) {
+        if (spare <= 0) break;
+        const a = owners?.get(ball.a),
+          b = owners?.get(ball.b);
+        if (a && b && kept.has(a) && kept.has(b)) {
+          admitted.push(ball.agent);
+          spare--;
+        }
+      }
+      return admitted;
+    };
+    if (out.length <= maxAgents) {
+      const result = withBalls([...staged, ...out]);
+      return inspection?.finish(result) ?? result;
+    }
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
     const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
@@ -4760,6 +4968,7 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    return kept;
+    const result = withBalls(kept);
+    return inspection?.finish(result, true) ?? result;
   }
 }

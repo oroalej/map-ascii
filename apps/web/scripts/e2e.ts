@@ -15,6 +15,10 @@ export async function runE2E(
     ),
 ): Promise<number> {
   const forwarded = args.filter((arg) => arg !== '--');
-  if (!forwarded.some((arg) => ['--list', '--help', '-h'].includes(arg))) await prepare();
+  if (launchesBrowsers(forwarded)) await prepare();
   return run(forwarded);
 }
+
+/** `--list` and `--help` neither build nor open a browser. */
+export const launchesBrowsers = (args: readonly string[]) =>
+  !args.some((arg) => ['--list', '--help', '-h'].includes(arg));

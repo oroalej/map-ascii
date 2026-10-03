@@ -19,6 +19,7 @@ export function useAtlasEvents() {
   const atlas = useAtlasInstance((s) => s.atlas);
 
   useEffect(() => {
+    useUiStore.setState({ lifeHover: null, hover: null });
     if (!atlas) return;
     atlas.setSelected(useAtlasStore.getState().selectedId);
     const offHover = atlas.on('hover', ({ feature, point }) => {
@@ -37,6 +38,9 @@ export function useAtlasEvents() {
       const [lng, lat] = lngLat;
       atlas.flyTo({ lng, lat, zoom: Math.max(atlas.getCamera().zoom, PLACE_ZOOM) });
     });
+    const offLifeHover = atlas.on('lifehover', (hover) => {
+      useUiStore.setState({ lifeHover: hover.label === null ? null : hover });
+    });
     const offSelection = useAtlasStore.subscribe((s, prev) => {
       if (s.selectedId === prev.selectedId) return;
       atlas.setSelected(s.selectedId);
@@ -45,6 +49,7 @@ export function useAtlasEvents() {
     });
     return () => {
       offHover();
+      offLifeHover();
       offClick();
       offSelection();
     };
@@ -57,6 +62,7 @@ export function useAtlasEvents() {
       // A non-animated camera update ends any flight where it is.
       if (current) current.setCamera(current.getCamera());
       useAtlasStore.getState().setSelected(null);
+      useUiStore.setState({ legendFocus: null });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

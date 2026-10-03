@@ -118,6 +118,7 @@ export function InfoPanel({ city, subdivisionLabel, landmarks, art }: InfoPanelP
 
   return (
     <aside
+      data-speech-obstacle
       className={styles.panel}
       data-expanded={expanded}
       data-touring={touring}

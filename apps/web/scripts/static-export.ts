@@ -1,9 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { acquire } from '../../../scripts/file-lock';
 import { runNodeCli } from './run-node-cli';
 
 type Snapshot = Record<string, string>;
@@ -231,88 +230,12 @@ async function cached(path: string): Promise<Manifest | undefined> {
   }
 }
 
-/** Only one waiter can reclaim an observed stale owner; never unlink a new owner's lock. */
-function reclaim(path: string, observed: string): void {
-  const guard = `${path}.reclaim`;
-  let fd: number;
-  try {
-    fd = openSync(guard, 'wx');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return;
-    throw error;
-  }
-  // Keep this critical section synchronous: there are no awaits between verifying and unlinking.
-  try {
-    if (readFileSync(path, 'utf8') === observed) unlinkSync(path);
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-  } finally {
-    closeSync(fd);
-    unlinkSync(guard);
-  }
-}
-
 /** A checkout-wide lock lives in Next's persistent cache, not in the export being replaced. */
-async function lock(cache: string, log: (message: string) => void): Promise<() => Promise<void>> {
-  await mkdir(cache, { recursive: true });
-  const path = join(cache, 'atlas-export.lock');
-  const owner = JSON.stringify({ pid: process.pid, token: randomUUID() });
-  // A cold build plus a tile download can take minutes; dead owners are reclaimed by pid below.
-  const deadline = Date.now() + 15 * 60_000;
-  let announced = false;
-  for (;;) {
-    try {
-      const fd = openSync(path, 'wx');
-      try {
-        writeFileSync(fd, owner);
-      } finally {
-        closeSync(fd);
-      }
-      return async () => {
-        if ((await readFile(path, 'utf8').catch(() => '')) === owner)
-          await rm(path, { force: true });
-      };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-    let observed = '';
-    try {
-      observed = await readFile(path, 'utf8');
-      const value: unknown = JSON.parse(observed);
-      if (
-        record(value) &&
-        typeof value.pid === 'number' &&
-        Number.isInteger(value.pid) &&
-        value.pid > 0
-      ) {
-        try {
-          process.kill(value.pid, 0);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-            reclaim(path, observed);
-            continue;
-          }
-        }
-      } else if (Date.now() - (await stat(path)).mtimeMs > 30_000) {
-        reclaim(path, observed);
-        continue;
-      }
-    } catch (error) {
-      if (isMissing(error)) continue;
-      if (!(error instanceof SyntaxError)) throw error;
-      if (Date.now() - (await stat(path)).mtimeMs > 30_000) {
-        reclaim(path, observed);
-        continue;
-      }
-    }
-    if (Date.now() > deadline) throw new Error('Timed out waiting for another export preparation.');
-    if (!announced) {
-      log('waiting for another export preparation');
-      announced = true;
-    }
-    await delay(100);
-  }
-}
+const lock = (cache: string, log: (message: string) => void) =>
+  acquire([join(cache, 'atlas-export.lock')], {
+    onWait: () => log('waiting for another export preparation'),
+    timeoutMessage: 'Timed out waiting for another export preparation.',
+  });
 
 /** Return true only when a build ran. A successful unchanged export is reused across invocations. */
 export async function prepareExport(options: PrepareOptions = {}): Promise<boolean> {

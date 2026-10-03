@@ -54,6 +54,74 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('lets a bus leave a held boarding visitor and safely returns the visitor on release', () => {
+    const scene = setup(),
+      p = person(),
+      bus = { ...person(50, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    visit.state = 'board';
+    visit.time = 20;
+    scene.services.set(bus, {
+      site: visit.site,
+      time: 0.05,
+      arriving: false,
+      boarded: 1,
+      passenger: p,
+    });
+    const before = structuredClone({ ...visit, site: undefined });
+    scene.step(
+      0.1,
+      [p, bus],
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      p,
+    );
+    expect(scene.services.has(bus)).toBe(false);
+    expect({ ...visit, site: undefined }).toEqual(before);
+    expect([p.x, p.y]).toEqual([40, 30]);
+    scene.step(0.1, [p, bus], {});
+    expect(visit.state).toBe('return');
+    run(scene, [p], 3);
+    expect(scene.visits.has(p)).toBe(false);
+    expect(scene.sites[0]!.queue).not.toContain(p);
+  });
+
+  it('keeps a held visit and its timers unchanged while another visitor continues', () => {
+    const scene = setup(),
+      a = person(40),
+      b = person(35);
+    expect(scene.reserve(a, 0)).toBe(true);
+    expect(scene.reserve(b, 0)).toBe(true);
+    const before = structuredClone({ ...scene.visits.get(a), site: undefined });
+    const position = [a.x, a.y];
+    for (let frame = 0; frame < 60; frame++)
+      scene.step(
+        0.1,
+        [a, b],
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        a,
+      );
+    expect([a.x, a.y]).toEqual(position);
+    expect({ ...scene.visits.get(a), site: undefined }).toEqual(before);
+    expect([b.x, b.y]).not.toEqual([35, 30]);
+    scene.step(0.1, [a, b], {});
+    expect(Math.hypot(a.x - position[0]!, a.y - position[1]!)).toBeLessThanOrEqual(
+      a.speed * 0.1 + 1e-6,
+    );
+  });
+
   it('keeps a covered customer frozen while an owned customer can buy at the queue front', () => {
     const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
     const scene = setup(0, [stall]);

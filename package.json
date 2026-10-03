@@ -7,23 +7,28 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "perf:life": "tsx packages/renderer/scripts/perf-life.ts",
-    "perf:world": "tsx packages/renderer/scripts/perf-world.ts",
-    "perf:tiles": "tsx packages/renderer/scripts/perf-tiles.ts",
+    "perf:life": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-life.ts",
+    "perf:world": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-world.ts",
+    "perf:tiles": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-tiles.ts",
     "perf:browser": "pnpm --filter @atlas/web perf:browser",
+    "perf:inspection": "tsx packages/renderer/scripts/perf-inspection.ts",
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",
     "build:force": "pnpm --filter @atlas/web build:force",
     "check:budgets": "pnpm --filter @atlas/web check:budgets",
+    "check:e2e-budget": "tsx apps/web/scripts/check-e2e-budget.ts",
     "data:build": "pnpm --filter @atlas/data build",
     "data:fetch": "pnpm --filter @atlas/data fetch-tiles",
     "data:publish": "pnpm --filter @atlas/data publish-tiles",
     "test": "vitest run",
+    "test:related": "vitest related --run",
     "test:e2e": "pnpm --filter @atlas/web test:e2e",
     "lint": "eslint .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p scripts --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "worktree:new": "tsx scripts/worktree-new.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

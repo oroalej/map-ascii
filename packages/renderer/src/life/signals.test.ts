@@ -151,6 +151,7 @@ describe('signals', () => {
     expect(life.signals.walkDistance(from, target, 10 * pm, red) / pm).toBeCloseTo(1.5);
     expect(life.signals.walkDistance(target, { x: 2100, y: 2048 }, pm, red)).toBe(pm);
   });
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('shares phases across buffered tiles and replays exactly independently at 30 and 60 Hz', () => {
     const g = geography(),
       other = { ...g, signals: Float32Array.from([-2048, 2048, 8, 90, 0, 1]) };

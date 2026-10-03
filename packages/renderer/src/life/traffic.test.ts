@@ -246,6 +246,7 @@ describe('curved traffic', () => {
 });
 
 describe('crossroads traffic', () => {
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('clears every arm with compatible holds, safe stops and bounded waits over 180 seconds', () => {
     const b = new LifeBuilder();
     const center = { x: 2048, y: 2048 };

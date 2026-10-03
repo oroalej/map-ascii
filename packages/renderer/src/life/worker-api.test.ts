@@ -1,15 +1,110 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as MomentsModule from './moments';
+import { continuityTile, left, parent, right } from './testing/continuity';
+import { createInlineHost } from './host';
+import { LifePreparation } from './preparation';
 import { LifeWorld } from './simulate';
 import { makeScenario } from './testing/scenarios';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
-import { continuityTile, left, parent, right } from './testing/continuity';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
-import type { ProcessionRoute } from '@atlas/shared';
-import { createInlineHost } from './host';
-import { LifePreparation } from './preparation';
+import type { DialogueChoice, ProcessionRoute } from '@atlas/shared';
+import { LifeBuilder } from './geometry';
+import { activityLevels } from './config';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
+
+vi.mock('./moments', async (load) => {
+  const actual = await load<typeof MomentsModule>();
+  return {
+    ...actual,
+    Moments: class extends actual.Moments {
+      constructor(...args: ConstructorParameters<typeof actual.Moments>) {
+        args[2] = () => 0;
+        super(...args);
+      }
+    },
+  };
+});
 
 describe('life worker protocol', () => {
+  it.each([false, true])(
+    'transfers speech, poses and balls with inline parity (profiles=%s)',
+    (profiles) => {
+      const tile = { z: 16, x: 55192, y: 30266 };
+      const geometry = new LifeBuilder();
+      geometry.place({ x: 2000, y: 2000 }, 'monument', 2 / metersPerUnit(tile));
+      geometry.place({ x: 2500, y: 2000 }, 'school', 8 / metersPerUnit(tile));
+      geometry.place({ x: 2000, y: 2500 }, 'pitch', 14 / metersPerUnit(tile));
+      const tiles = [{ key: 'speech-fixture', tile, life: geometry.finish() }];
+      const center = tileToLngLat(tile, { x: 2000, y: 2000 });
+      const dialogue: DialogueChoice[] = [
+        { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2 },
+        { id: 'chat', kind: 'talk', turns: 3 },
+        { id: 'play', kind: 'ball', turns: 2 },
+        { id: 'look', kind: 'look', turns: 1 },
+      ];
+      if (profiles)
+        for (const entry of dialogue) {
+          entry.profile =
+            entry.kind === 'greet'
+              ? 'greeting'
+              : entry.kind === 'talk'
+                ? 'reunion'
+                : entry.kind === 'ball'
+                  ? 'play'
+                  : 'place-reaction';
+          entry.speakers = entry.turns === 1 ? [0] : entry.turns === 2 ? [0, 1] : [0, 1, 0];
+        }
+      const direct = new LifeWorld(undefined, undefined, { dialogue });
+      direct.sync(tiles);
+      const api = createLifeWorkerApi();
+      api.init({ processions: [], dialogue });
+      api.sync(structuredClone(tiles));
+      let spoken = 0,
+        posed = false,
+        ball = false;
+      for (let frame = 0; frame < 120; frame++) {
+        if (frame === 80) {
+          direct.sync([]);
+          api.sync([]);
+        }
+        if (frame === 81) {
+          direct.sync(tiles);
+          api.sync(structuredClone(tiles));
+        }
+        const input: FrameInput = {
+          gust: {
+            camera: { lng: center[0], lat: center[1], zoom: 21 },
+            size: { width: 800, height: 600 },
+            cssCell: { w: 5, h: 7.5 },
+            time: frame / 10,
+            wind: { dir: [1, 0], strength: 0 },
+          },
+          step: {
+            dt: 0.1,
+            zoom: 21,
+            bounds: undefined,
+            wind: undefined,
+            weather: { rain: frame >= 40 && frame < 50 ? 1 : 0, minutes: 720 },
+            cellMeters: 0.2,
+          },
+          visible: [21, activityLevels(1), center],
+        };
+        const inline = runLifeFrame(direct, input),
+          remote = api.frame(input);
+        expect(remote.agents).toEqual(inline.agents);
+        spoken += remote.agents.filter((agent) => agent.speech).length;
+        posed ||= remote.agents.some((agent) => agent.people?.some((person) => person.pose));
+        ball ||= remote.agents.some((agent) => agent.prop === 'ball');
+        if (frame === 40 || frame === 80)
+          expect(remote.agents.some((agent) => agent.speech || agent.prop)).toBe(false);
+        expect(structuredClone(remote.agents)).toEqual(remote.agents);
+      }
+      expect(spoken).toBeGreaterThan(0);
+      expect(posed).toBe(true);
+      expect(ball).toBe(true);
+    },
+  );
   afterEach(() => vi.useRealTimers());
   it('publishes identical complete staged worker and inline frames through camera changes and cancellation', async () => {
     vi.useFakeTimers();
@@ -66,6 +161,7 @@ describe('life worker protocol', () => {
     expect(inline.latest()!.agents).toEqual([]);
     inline.dispose();
   });
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('matches a direct world over 120 frames, weather changes, eviction and reload', () => {
     const scenario = makeScenario('rain', 2, false);
     // Buffered commerce must survive cloning, repeated sync and eviction on both paths.

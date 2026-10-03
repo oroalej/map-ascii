@@ -7,6 +7,8 @@ import { agentBit, CellBit, LIFE_SHADOW } from './config';
 import { catGlyphs } from './cats';
 import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
 import { Heading } from './masters';
+import { LIFE_FOCUS_BIT } from '../focus';
+import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT } from './turn-signals';
 import { buildLifeGlyphs, packLife, vehicleByte, type LifeGrid } from './draw';
 import {
   CANDLE_BIT,
@@ -43,6 +45,7 @@ const glyphs = [
   ...sextantGlyphs.slice(1),
 ];
 const glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
+const packedGlyph = (texel: readonly number[]) => unpackGlyph(texel[0]!, texel[1]!).glyph;
 /** lng → column and lat → row, one cell per degree. */
 const grid: LifeGrid = {
   cols: 10,
@@ -55,6 +58,106 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it('marks complete detailed stamps while preserving ownership, permissions and indicators', () => {
+    const big = { ...grid, cols: 40, rows: 30 };
+    const agents: VisibleAgent[] = [
+      {
+        kind: 'vehicle',
+        vehicle: 'car',
+        lng: 20,
+        lat: 15,
+        ahead: [22, 15],
+        side: [20, 17],
+        flap: 0,
+        turnSignal: { side: 'left', on: true },
+      },
+    ];
+    const ordinary = new Uint8Array(big.cols * big.rows * 4),
+      focused = ordinary.slice();
+    const owners = new Uint32Array(big.cols * big.rows);
+    packLife(ordinary, big, agents, themes.dark, glyphIndex);
+    packLife(focused, big, agents, themes.dark, glyphIndex, null, undefined, {
+      owners,
+      focus: new Set(['traffic']),
+    });
+    let count = 0,
+      indicators = 0;
+    for (let at = 0; at < ordinary.length; at += 4) {
+      if ((ordinary[at + 2]! & LIFE_AGENT_MASK) === 0) {
+        expect(owners[at / 4]).toBe(0);
+        continue;
+      }
+      count++;
+      expect(owners[at / 4]).toBe(1);
+      expect(focused[at + 2]).toBe(ordinary[at + 2]! | LIFE_FOCUS_BIT);
+      if (focused[at + 2]! & TURN_SIGNAL_BIT) indicators++;
+      focused[at + 2]! &= ~LIFE_FOCUS_BIT;
+    }
+    expect(count).toBeGreaterThan(4);
+    expect(indicators).toBeGreaterThan(0);
+    expect(focused).toEqual(ordinary);
+  });
+  it('keeps original array ownership through parked-first writes and rollback', () => {
+    const agents: VisibleAgent[] = [
+      { kind: 'person', lng: 2.5, lat: 1.5, flap: 0 },
+      { kind: 'vehicle', lng: 7.5, lat: 1.5, flap: 0, parked: true },
+      { kind: 'person', lng: 2.5, lat: 1.5, flap: 0 },
+    ];
+    const out = new Uint8Array(200),
+      owners = new Uint32Array(50);
+    const plain = new Uint8Array(200);
+    packLife(plain, grid, agents, themes.dark, glyphIndex);
+    packLife(out, grid, agents, themes.dark, glyphIndex, null, undefined, { owners });
+    expect(out).toEqual(plain);
+    expect(owners[12]).toBe(1);
+    expect(owners[17]).toBe(2);
+    expect([...owners]).not.toContain(3);
+    expect(out[12 * 4 + 4]).toBe(0); // rollback never writes a fifth byte into the next cell
+    packLife(out, grid, [], themes.dark, glyphIndex, null, undefined, { owners });
+    expect(owners.every((owner) => owner === 0)).toBe(true);
+    expect(out.every((byte) => byte === 0)).toBe(true);
+  });
+  it('tracks pets, birds, lines and detailed stamps without leaking metadata between buffers', () => {
+    const agents: VisibleAgent[] = [
+      { kind: 'dog', lng: 1.5, lat: 1.5, flap: 0 },
+      { kind: 'cat', lng: 3.5, lat: 1.5, flap: 0 },
+      { kind: 'bird', lng: 5.5, lat: 1.5, flap: 0 },
+      {
+        kind: 'boat',
+        lng: 7.5,
+        lat: 1.5,
+        flap: 0,
+        line: {
+          points: [
+            [7, 1],
+            [9, 1],
+          ],
+          paints: [0],
+        },
+      },
+    ];
+    const out = new Uint8Array(200),
+      owners = new Uint32Array(50);
+    packLife(
+      out,
+      grid,
+      agents,
+      themes.dark,
+      (glyph) => Math.max(1, glyphIndex(glyph)),
+      null,
+      undefined,
+      { owners },
+    );
+    for (const owner of [1, 2, 3, 4]) expect([...owners]).toContain(owner);
+    const saved = owners.slice();
+    packLife(new Uint8Array(200), grid, [], themes.dark, glyphIndex);
+    expect(owners).toEqual(saved);
+    expect(() =>
+      packLife(out, grid, agents, themes.dark, glyphIndex, null, undefined, {
+        owners: new Uint32Array(1),
+      }),
+    ).toThrow(RangeError);
+  });
   it('packs high glyph indices with the class without changing agent attributes', () => {
     for (const glyph of [255, 256, 1023]) {
       const out = new Uint8Array(grid.cols * grid.rows * 4);
@@ -220,7 +323,7 @@ describe('packLife birds', () => {
     for (let i = 0; i < egret.out.length; i += 4) {
       if (egret.out[i + 2]) texels.push(Array.from(egret.out.subarray(i, i + 4)));
     }
-    expect(texels.every(([g]) => sextantGlyphs.includes(glyphs[g!]!))).toBe(true);
+    expect(texels.every((t) => sextantGlyphs.includes(glyphs[packedGlyph(t)]!))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret', true))).toBe(true);
     expect(texels.some(([, , , byte]) => byte === birdByte('egret'))).toBe(true);
   });
@@ -299,7 +402,12 @@ describe('packLife dogs and shadows', () => {
     const out = new Uint8Array(big.cols * big.rows * 4);
     // The sun due south, 45° up: the shadow falls 8 m north (4 cells up the grid).
     const sun = { azimuth: 180, altitude: 45 };
-    packLife(out, metric, [flying(BirdPose.spread)], themes.dark, glyphIndex, sun);
+    const owners = new Uint32Array(big.cols * big.rows);
+    packLife(out, metric, [flying(BirdPose.spread)], themes.dark, glyphIndex, sun, undefined, {
+      owners,
+    });
+    expect(owners[11 * big.cols + 20]).toBe(0);
+    expect(owners[15 * big.cols + 20]).toBe(1);
     expect(cellOf(out, 20, 11)).toEqual([0, 0, 0, LIFE_SHADOW]);
     expect(cellOf(out, 20, 15)[2]).toBe(agentBit.bird);
     // A bird sitting, the sun down, or none given: no shadow.
@@ -537,20 +645,21 @@ describe('packLife lines', () => {
       { glyph: '¶', paint: Paint.white },
     );
     expect(cells.map((c) => c.col)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(cells.slice(0, -1).every((c) => c.texel[0] === index('─'))).toBe(true);
-    expect(cells.at(-1)!.texel[0]).toBe(index('¶'));
+    expect(cells.slice(0, -1).every((c) => packedGlyph(c.texel) === index('─'))).toBe(true);
+    expect(packedGlyph(cells.at(-1)!.texel)).toBe(index('¶'));
     expect(cells.at(-1)!.texel[3]).toBe(vehicleByte(Paint.white, VehiclePart.body));
     expect(cells[0]!.texel[3]).toBe(vehicleByte(Paint.yellow, VehiclePart.body));
     expect(cells[1]!.texel[3]).toBe(vehicleByte(Paint.graphite, VehiclePart.body));
     // Over the water only.
     for (const { texel } of cells) {
-      expect(texel[1]).toBe(classId('life_boat'));
+      expect(unpackGlyph(texel[0]!, texel[1]!).cls).toBe(classId('life_boat'));
       expect(texel[2]).toBe(CellBit.boat);
     }
   });
 
   it('turns with its direction on screen, and skips lines under a cell', () => {
-    const glyphs = (points: [number, number][]) => new Set(draw(points).map((c) => c.texel[0]));
+    const glyphs = (points: [number, number][]) =>
+      new Set(draw(points).map((c) => packedGlyph(c.texel)));
     expect(
       glyphs([
         [5.5, 5.5],
@@ -729,8 +838,9 @@ describe('packLife people', () => {
     // 0.6 m at 6 cells per meter: over 3 columns, each cell a sextant of the figure.
     expect(new Set(near.cells.map((c) => c.col)).size).toBeGreaterThanOrEqual(3);
     for (const c of near.cells) {
-      expect(sextantGlyphs.map(glyphIndex)).toContain(c.texel[0]);
-      expect(c.texel.slice(1, 3)).toEqual([classId('life_person'), CellBit.person]);
+      expect(sextantGlyphs.map(glyphIndex)).toContain(packedGlyph(c.texel));
+      expect(unpackGlyph(c.texel[0]!, c.texel[1]!).cls).toBe(classId('life_person'));
+      expect(c.texel[2]).toBe(CellBit.person);
     }
     // Shirt around, skin in its middle.
     const parts = new Set(near.cells.map((c) => (c.texel[3]! >> 4) & 7));

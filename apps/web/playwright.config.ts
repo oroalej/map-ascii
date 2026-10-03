@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { e2ePort } from './scripts/e2e-port';
 
-// Override with E2E_PORT when 3100 is taken (e.g. by another local project).
-const port = Number(process.env.E2E_PORT ?? 3100);
+// Each worktree has its own port locally (scripts/e2e-port.ts); E2E_PORT overrides it.
+const port = e2ePort();
 const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({
@@ -9,11 +10,15 @@ export default defineConfig({
   fullyParallel: true,
   // WebGL runs in software in headless Chromium; phone-sized DPRs make that slow.
   timeout: 60_000,
+  // End a stuck shard with a useful report before CI's six-minute job deadline.
+  globalTimeout: process.env.CI ? 240_000 : 0,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   // Each worker is a browser rendering WebGL in software; more than a couple pins the CPU locally.
   workers: process.env.CI ? undefined : 2,
-  reporter: process.env.CI ? 'github' : 'list',
+  reporter: process.env.CI
+    ? [['github'], ['json', { outputFile: 'test-results/shard-duration.json' }]]
+    : 'list',
   // Name tests that dominate the run so they get moved to unit tests before CI's job limit hits.
   reportSlowTests: { max: 5, threshold: 30_000 },
   use: {

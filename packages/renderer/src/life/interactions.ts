@@ -66,12 +66,27 @@ const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.h
 
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
+  /** Bounded, frame-local entry notifications; observers cannot mutate service ownership. */
+  readonly speechEvents: {
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival';
+    mover: Mover;
+    visit: Visit;
+    key: object;
+  }[] = [];
+  private speechEvent(
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival',
+    mover: Mover,
+    visit: Visit,
+  ) {
+    if (this.speechEvents.length < 8) this.speechEvents.push({ kind, mover, visit, key: {} });
+  }
   readonly visits = new Map<Mover, Visit>();
   readonly sites: Site[] = [];
   readonly services = new Map<Mover, Service>();
   private readonly graph: WalkingGraph;
   private readonly rng: () => number;
   private readonly cooldown = new Map<Mover, number>();
+  private returnAfterInspection?: WeakSet<Mover>;
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
   private scan = 0;
@@ -86,6 +101,7 @@ export class LocalScenes {
     seed: number,
     stalls: readonly Stall[],
     private readonly idleGuard?: (mover: Mover) => boolean,
+    private readonly busy?: (mover: Mover) => boolean,
     deferred = false,
   ) {
     this.graph = new WalkingGraph(geo, perMeter, true);
@@ -167,7 +183,7 @@ export class LocalScenes {
 
   /** Service/passenger relationships cannot be separated by a tile transfer. */
   transferable(m: Mover): boolean {
-    if (this.services.has(m) || this.visits.has(m)) return false;
+    if (this.busy?.(m) || this.services.has(m) || this.visits.has(m)) return false;
     for (const service of this.services.values()) if (service.passenger === m) return false;
     return true;
   }
@@ -225,7 +241,8 @@ export class LocalScenes {
   /** Explicit entry point also used by deterministic scene tests. */
   reserve(m: Mover, index: number): boolean {
     const site = this.sites[index];
-    if (!site || this.visits.has(m) || (isWalker(m.kind) && !this.canIdle(m))) return false;
+    if (!site || this.visits.has(m) || this.busy?.(m) || (isWalker(m.kind) && !this.canIdle(m)))
+      return false;
     const size = m.group?.length ?? 1;
     const occupied = new Set(
       site.queue.flatMap((p) => {
@@ -360,8 +377,10 @@ export class LocalScenes {
     vehicleOffset?: (mover: Mover) => number,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
     owns?: (p: { x: number; y: number }) => boolean,
+    inspecting?: object,
   ) {
     const rain = env.rain ?? 0;
+    this.speechEvents.length = 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
     const hoursChanged =
@@ -385,11 +404,14 @@ export class LocalScenes {
             );
       }
     for (const [m, seconds] of this.cooldown) {
+      if (inspecting === m) continue;
       if (owns && !owns(m)) continue;
       if (seconds <= dt) this.cooldown.delete(m);
       else this.cooldown.set(m, seconds - dt);
     }
     for (const [m, visit] of this.visits) {
+      if (inspecting === m) continue;
+      if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
       if (owns && (!owns(m) || !owns(visit.site))) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
       const { kind } = visit.site;
@@ -427,6 +449,8 @@ export class LocalScenes {
             Object.assign(m, before);
             this.returning(m, visit);
           }
+          if (visit.state === 'wait' || visit.state === 'shelter')
+            this.speechEvent(visit.state, m, visit);
         }
         continue;
       }
@@ -438,12 +462,14 @@ export class LocalScenes {
       ) {
         visit.state = 'purchase';
         visit.time = between(this.rng, INTERACTIONS.purchase);
+        this.speechEvent('purchase', m, visit);
       } else if (visit.time <= 0 && visit.state !== 'shelter') {
         // Shelter lasts until the rain stops; everything else has its time.
         this.returning(m, visit);
       }
     }
     for (const [m, service] of this.services) {
+      if (inspecting === m) continue;
       if (owns && (!owns(m) || !owns(service.site))) continue;
       if ((shows && !shows('vehicle')) || (near && !near(m.x, m.y))) continue;
       if (service.arriving) {
@@ -462,6 +488,10 @@ export class LocalScenes {
           continue;
         if (Math.abs(ahead(service.site, m)) > 0.8 * this.perMeter) continue;
         service.arriving = false;
+        for (const person of service.site.queue) {
+          const visit = this.visits.get(person);
+          if (visit?.state === 'wait') this.speechEvent('arrival', person, visit);
+        }
         m.pause = service.time;
       }
       service.time -= dt;
@@ -469,7 +499,9 @@ export class LocalScenes {
         service.passenger = undefined;
       const person =
         !service.passenger &&
-        service.site.queue.find((p) => (!owns || owns(p)) && this.visits.get(p)?.state === 'wait');
+        service.site.queue.find(
+          (p) => inspecting !== p && (!owns || owns(p)) && this.visits.get(p)?.state === 'wait',
+        );
       if (person && service.time < 12 - service.boarded * 2) {
         const visit = this.visits.get(person)!;
         const width = VEHICLES[m.vehicle!].width;
@@ -495,7 +527,11 @@ export class LocalScenes {
       }
       if (service.time <= 0) {
         const passenger = service.passenger && this.visits.get(service.passenger);
-        if (passenger?.state === 'board') this.returning(service.passenger!, passenger);
+        if (passenger?.state === 'board') {
+          if (inspecting === service.passenger)
+            (this.returnAfterInspection ??= new WeakSet()).add(service.passenger!);
+          else this.returning(service.passenger!, passenger);
+        }
         this.services.delete(m);
         this.stopCooldown.set(m, service.site);
         m.pause = 0;
@@ -508,6 +544,7 @@ export class LocalScenes {
     for (let i = 0; i < batch && movers.length; i++) {
       const m = movers[this.cursor++ % movers.length]!;
       if (
+        inspecting === m ||
         (owns && !owns(m)) ||
         (shows && !shows(m.kind)) ||
         (near && !near(m.x, m.y)) ||
