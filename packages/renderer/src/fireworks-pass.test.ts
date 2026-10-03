@@ -4,12 +4,11 @@ import type { GL, CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass, deleteFireworks } from './fireworks-pass';
-import { FIREWORKS, fireworkShellCount } from './fireworks-layout';
+import { FIREWORKS, fireworkRadius, fireworkShellCount } from './fireworks-layout';
 
 const setters = vi.hoisted(() => ({
   u_shells: vi.fn(),
-  u_time: vi.fn(),
-  u_still: vi.fn(),
+  u_flights: vi.fn(),
   u_wind: vi.fn(),
   u_variants: vi.fn(),
   u_variantCount: vi.fn(),
@@ -96,15 +95,15 @@ describe('seasonal GPU fireworks', () => {
       );
       const scale = 2 ** (zoom - 19);
       for (let i = 0; i < fireworkShellCount(zoom) * 4; i += 4) {
-        const seed = programs.fireworks!.shells[i + 2]!;
+        const launch = programs.fireworks!.display.launches[i / 4]!;
         expect(programs.fireworks!.shells[i + 3]).toBeCloseTo(
-          (FIREWORKS.radius + (seed % FIREWORKS.radiusVariation)) * dpr * scale,
+          fireworkRadius(launch.height, zoom) * dpr,
           3,
         );
       }
       expect(setters.u_wind).toHaveBeenLastCalledWith([0.5 * dpr * scale, 0]);
-      expect(setters.u_time.mock.calls.at(-1)?.[0]).toBeCloseTo(2.6);
-      expect(setters.u_still).toHaveBeenLastCalledWith(false);
+      expect(setters.u_flights).toHaveBeenLastCalledWith(programs.fireworks!.display.flights);
+      expect(programs.fireworks!.display.lastTime).toBe(2.6);
     }
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
     expect(gl.createBuffer).toHaveBeenCalledTimes(1);
@@ -235,20 +234,25 @@ describe('seasonal GPU fireworks', () => {
       );
     draw(2);
     const shells = programs.fireworks!.shells;
+    const flights = programs.fireworks!.display.flights;
+    const initialFlights = flights.slice();
     const particles: unknown = gl.bufferData.mock.calls[0]![1];
-    draw(5);
-    expect(setters.u_time).toHaveBeenLastCalledWith(5);
+    const elapsed = Math.min(0.1, (programs.fireworks!.display.launches[0]!.next - 2) / 2);
+    draw(2 + elapsed);
+    expect(flights[0]).toBeCloseTo(initialFlights[0]! + elapsed);
     expect(setters.u_wind).toHaveBeenLastCalledWith([0.5, 0]);
     draw(8, true);
-    expect(setters.u_time).toHaveBeenLastCalledWith(0);
-    expect(setters.u_still).toHaveBeenLastCalledWith(true);
+    const stillFlights = flights.slice(),
+      stillShells = shells.slice();
     expect(setters.u_wind).toHaveBeenLastCalledWith([0, 0]);
     draw(500, true);
-    expect(setters.u_time).toHaveBeenLastCalledWith(0);
+    expect(flights).toEqual(stillFlights);
+    expect(shells).toEqual(stillShells);
     draw(6, false, { label: 'Ring', variants: ['ring'] });
     expect([...programs.fireworks!.variants]).toEqual([2, 0, 0, 0]);
     expect(setters.u_variantCount).toHaveBeenLastCalledWith(1);
     expect(programs.fireworks!.shells).toBe(shells);
+    expect(programs.fireworks!.display.flights).toBe(flights);
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
     expect(gl.bufferData.mock.calls[0]![1]).toBe(particles);
     expect(gl.drawArraysInstanced).toHaveBeenLastCalledWith(

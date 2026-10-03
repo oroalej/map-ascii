@@ -2,8 +2,9 @@ import type { FireworksConfig } from '@atlas/shared';
 import { FIREWORK_VARIANTS } from '@atlas/shared';
 import { MAX_ZOOM, MIN_ZOOM } from './camera';
 import type { Grid, View } from './grid';
+import { random } from './life/random';
 
-const FIREWORK_COLUMNS = 7;
+const REGULAR_SHELLS = 49;
 
 /** A dense, overlapping display with bounded, immutable particle geometry. */
 export const FIREWORKS = Object.freeze({
@@ -12,18 +13,17 @@ export const FIREWORKS = Object.freeze({
   largeZoom: 16,
   sparseZoom: 20,
   referenceZoom: 19,
-  shells: FIREWORK_COLUMNS ** 2 + 1,
-  columns: FIREWORK_COLUMNS,
+  shells: REGULAR_SHELLS + 1,
+  regularShells: REGULAR_SHELLS,
   sparseShells: 4,
-  worldGap: 48,
-  radius: 120,
-  radiusVariation: 80,
+  minHeight: 80,
+  maxHeight: 220,
+  largeHeight: 460,
+  largeHeightVariation: 100,
   distantScale: 0.6,
   stars: 40,
   tails: 4,
   smoke: 12,
-  cycle: 6,
-  burst: 1.1,
   sparkLife: 4.4,
   smokeLife: 4.8,
 });
@@ -34,7 +34,7 @@ export const FIREWORK_INSTANCE_COUNT =
 export function fireworkShellCount(zoom: number): number {
   if (!Number.isFinite(zoom) || zoom < FIREWORKS.minZoom || zoom >= FIREWORKS.hideZoom) return 0;
   if (zoom >= FIREWORKS.sparseZoom) return FIREWORKS.sparseShells;
-  return FIREWORKS.columns ** 2 + (zoom <= FIREWORKS.largeZoom ? 1 : 0);
+  return FIREWORKS.regularShells + (zoom <= FIREWORKS.largeZoom ? 1 : 0);
 }
 
 /** Reference-world projection follows map magnification at every supported zoom. */
@@ -45,12 +45,43 @@ export function fireworkScale(zoom: number): number {
   );
 }
 
-/** Distant bursts stay legible; approaching still doubles their extent above the floor. */
-export function fireworkRadius(seed: number, zoom: number): number {
-  return (
-    (FIREWORKS.radius + (seed % FIREWORKS.radiusVariation)) *
-    Math.max(FIREWORKS.distantScale, fireworkScale(zoom))
-  );
+/** Higher breaks look closer to the overhead camera; zoom magnifies that height cue. */
+export function fireworkRadius(height: number, zoom: number): number {
+  return height * 0.95 * Math.max(FIREWORKS.distantScale, fireworkScale(zoom));
+}
+
+/** Illustrative rise time: taller launches take longer to reach their break height. */
+export const fireworkRise = (height: number): number => 0.55 + height * 0.005;
+
+type FireworkLaunch = {
+  x: number;
+  y: number;
+  seed: number;
+  height: number;
+  rise: number;
+  start: number;
+  next: number;
+};
+
+export type FireworkDisplay = {
+  rng: () => number;
+  launches: (FireworkLaunch | undefined)[];
+  /** Small per-shell ages and rise times keep shader clocks precise indefinitely. */
+  flights: Float32Array;
+  lastTime: number;
+  reduced?: boolean;
+};
+
+/** Seed once per context, never per frame. An explicit seed makes behavior testable. */
+export function createFireworkDisplay(
+  seed = Math.floor(Math.random() * 4294967296),
+): FireworkDisplay {
+  return {
+    rng: random(seed),
+    launches: new Array<FireworkLaunch | undefined>(FIREWORKS.shells),
+    flights: new Float32Array(FIREWORKS.shells * 2),
+    lastTime: 0,
+  };
 }
 
 /** Smoke goes first, then spark tails and tips, so clouds cannot dim a burst. */
@@ -72,84 +103,103 @@ export function fireworkInstances(): Float32Array {
   return out;
 }
 
-function seedAt(x: number, y: number) {
-  let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  // Power-of-two strides preserve three staggered phases, two seconds apart.
-  return ((h ^ (h >>> 16)) & 65532) | ((((x + 2 * y) % 3) + 3) % 3);
-}
-
 /**
- * Refill fixed uniforms from a reference-world lattice. Zoom projects the same sites and
- * enlarges their radii; resize never moves a shared site. Coarser power-of-two strides bound
- * the number of sites in a large/distant view without changing their seeds or world positions.
+ * Sample a new visible world location, height and timing only after a shell's smoke expires.
+ * In-flight launches retain their world anchors through pan, zoom and resize. Independent
+ * random pauses remove synchronized waves; no lattice or repeating viewport center remains.
  */
-export function fireworkShells(view: View, grid: Grid, out: Float32Array): number {
+export function fireworkShells(
+  view: View,
+  grid: Grid,
+  out: Float32Array,
+  display: FireworkDisplay,
+  time: number,
+  reduced: boolean,
+): number {
   const count = fireworkShellCount(view.camera.zoom);
   out.fill(0);
+  display.flights.fill(0);
   if (!count) return 0;
+  const clock = reduced || !Number.isFinite(time) ? 0 : Math.max(0, time);
+  if (display.reduced !== reduced || clock < display.lastTime) display.launches.fill(undefined);
+  display.reduced = reduced;
+  display.lastTime = clock;
   const scale = fireworkScale(view.camera.zoom);
   const left = grid.originCol * view.cellDev.w + grid.shiftX;
   const top = grid.originRow * view.cellDev.h + grid.shiftY;
   const worldToDevice = view.dpr * scale;
-  const targetGap = Math.max(
-    100,
-    Math.max(view.width, view.height) / view.dpr / (FIREWORKS.columns - 1),
-  );
-  const stride = 2 ** Math.max(0, Math.ceil(Math.log2(targetGap / (FIREWORKS.worldGap * scale))));
-  const gap = FIREWORKS.worldGap * stride;
-  const x0 = Math.floor(left / worldToDevice / gap),
-    y0 = Math.floor(top / worldToDevice / gap);
-  for (let row = 0; row < FIREWORKS.columns; row++)
-    for (let col = 0; col < FIREWORKS.columns; col++) {
-      const x = (x0 + col) * stride,
-        y = (y0 + row) * stride,
-        seed = seedAt(x, y);
-      const at = (row * FIREWORKS.columns + col) * 4;
-      // Jitter belongs to the finest world lattice, never to the selected stride.
-      out[at] = (x + 0.2 + ((seed % 997) / 997) * 0.6) * FIREWORKS.worldGap * worldToDevice - left;
-      out[at + 1] =
-        (y + 0.2 + ((seed % 991) / 991) * 0.6) * FIREWORKS.worldGap * worldToDevice - top;
-      out[at + 2] = seed;
-      out[at + 3] = fireworkRadius(seed, view.camera.zoom) * view.dpr;
-    }
-  if (count === FIREWORKS.sparseShells) {
-    // Keep only the four closest existing sites, rather than relocating bursts on zoom.
+  if (reduced) {
+    let visible = false;
     for (let slot = 0; slot < count; slot++) {
-      let nearest = slot,
-        distance = Infinity;
-      for (let site = slot; site < FIREWORKS.columns ** 2; site++) {
-        const dx = out[site * 4]! - view.width / 2,
-          dy = out[site * 4 + 1]! - view.height / 2;
-        const next = dx * dx + dy * dy;
-        if (next < distance) {
-          nearest = site;
-          distance = next;
-        }
+      const launch = display.launches[slot];
+      if (!launch) {
+        visible = true;
+        break;
       }
-      for (let dimension = 0; dimension < 4; dimension++) {
-        const previous = out[slot * 4 + dimension]!;
-        out[slot * 4 + dimension] = out[nearest * 4 + dimension]!;
-        out[nearest * 4 + dimension] = previous;
+      const x = launch.x * worldToDevice - left,
+        y = launch.y * worldToDevice - top;
+      const radius = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
+      if (
+        x + radius >= 0 &&
+        x - radius <= view.width &&
+        y + radius >= 0 &&
+        y - radius <= view.height
+      ) {
+        visible = true;
+        break;
       }
     }
-    out.fill(0, count * 4);
-  } else if (view.camera.zoom <= FIREWORKS.largeZoom) {
-    const at = FIREWORKS.columns ** 2 * 4;
-    out[at] = view.width / 2;
-    out[at + 1] = view.height / 2;
-    out[at + 2] = 65532;
-    out[at + 3] = Math.min(320 * view.dpr, Math.min(view.width, view.height) * 0.45);
+    // A still show has no future launches to fill a completely new area after a long pan.
+    if (!visible) display.launches.fill(undefined);
+  }
+  for (let slot = 0; slot < count; slot++) {
+    const large = slot === FIREWORKS.regularShells;
+    let launch = display.launches[slot];
+    if (!launch || clock >= launch.next) {
+      // Prewarm on entry/long tab suspension, so opening a preview never waits for a show.
+      const prewarm = !launch || clock - launch.next > FIREWORKS.smokeLife;
+      const rng = display.rng;
+      const height = large
+        ? FIREWORKS.largeHeight + rng() * FIREWORKS.largeHeightVariation
+        : FIREWORKS.minHeight + rng() * (FIREWORKS.maxHeight - FIREWORKS.minHeight);
+      const rise = fireworkRise(height);
+      const radius = large
+        ? Math.min(
+            fireworkRadius(height, view.camera.zoom) * view.dpr,
+            Math.min(view.width, view.height) * 0.45,
+          )
+        : 0;
+      const marginX = large ? radius / view.width : 0.08;
+      const marginY = large ? radius / view.height : 0.08;
+      const interval = rise + FIREWORKS.smokeLife + 0.25 + rng() * 2.75;
+      // Sample the whole interval on entry, rather than starting every shell in a burst
+      // and creating a synchronized lull a few seconds later. Still poses show a break.
+      const start = clock - (reduced ? rise + 0.2 + rng() * 3.2 : prewarm ? rng() * interval : 0);
+      launch = {
+        x: (left + (marginX + rng() * (1 - marginX * 2)) * view.width) / worldToDevice,
+        y: (top + (marginY + rng() * (1 - marginY * 2)) * view.height) / worldToDevice,
+        seed: Math.floor(rng() * 65536),
+        height,
+        rise,
+        start,
+        next: start + interval,
+      };
+      display.launches[slot] = launch;
+    }
+    const at = slot * 4;
+    out[at] = launch.x * worldToDevice - left;
+    out[at + 1] = launch.y * worldToDevice - top;
+    out[at + 2] = launch.seed;
+    const radius = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
+    out[at + 3] = large ? Math.min(radius, Math.min(view.width, view.height) * 0.45) : radius;
+    display.flights[slot * 2] = Math.min(
+      clock - launch.start,
+      launch.rise + FIREWORKS.smokeLife + 3,
+    );
+    display.flights[slot * 2 + 1] = launch.rise;
   }
   return count;
 }
 
 export const fireworkVariantCodes = (config: FireworksConfig): number[] =>
   config.variants.map((v) => FIREWORK_VARIANTS.indexOf(v));
-
-/** Small time values retain GPU precision even in a long-running tab. */
-export function fireworkTime(time: number, reduced: boolean): number {
-  return reduced || !Number.isFinite(time)
-    ? 0
-    : ((time % (FIREWORKS.cycle * 256)) + FIREWORKS.cycle * 256) % (FIREWORKS.cycle * 256);
-}

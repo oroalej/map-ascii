@@ -6,11 +6,10 @@ precision highp float;
 precision highp int;
 layout(location = 0) in vec4 a_particle; // shell, star/puff, tail, smoke
 uniform vec4 u_shells[${FIREWORKS.shells}]; // screen center, seed, radius
+uniform vec2 u_flights[${FIREWORKS.shells}]; // age, time to reach break height
 uniform vec2 u_size;
 uniform vec2 u_cell;
 uniform vec2 u_shift;
-uniform float u_time;
-uniform bool u_still;
 uniform vec2 u_wind;
 uniform int u_variants[4];
 uniform int u_variantCount;
@@ -36,11 +35,10 @@ void main() {
   bool smoke = a_particle.w > 0.5;
   vec4 launch = u_shells[shell];
   float seed = launch.z;
-  float clock = u_time + mod(seed, 4.0) / 3.0 * ${FIREWORKS.cycle.toFixed(1)};
-  float cycle = floor(clock / ${FIREWORKS.cycle.toFixed(1)});
-  float age = u_still ? 2.4 : mod(clock, ${FIREWORKS.cycle.toFixed(1)});
-  int variant = u_variants[int(mod(seed + cycle, float(u_variantCount)))];
-  float t = age - ${FIREWORKS.burst.toFixed(1)};
+  float age = u_flights[shell].x;
+  float rise = u_flights[shell].y;
+  int variant = u_variants[int(mod(seed, float(u_variantCount)))];
+  float t = age - rise;
   float r = launch.w;
   float angle = star / ${FIREWORKS.stars.toFixed(1)} * 6.2831853 + rand(seed) * 6.2831853;
   float speed = variant == 2 ? 1.0 : 0.45 + rand(seed + star * 13.0) * 0.55;
@@ -57,7 +55,7 @@ void main() {
   if (variant == 0 && tail > 1.0) opacity = 0.0;
   if (variant == 2 && tail > 0.0) opacity = 0.0;
   if (variant == 3) opacity *= 0.8 + 0.2 * sin(star * 1.9 + dt * 5.0);
-  vec3 color = variant == 3 ? vec3(1.0, 0.78, 0.28) : paint(seed + cycle + floor(star / 8.0));
+  vec3 color = variant == 3 ? vec3(1.0, 0.78, 0.28) : paint(seed + floor(star / 8.0));
   color = mix(color, vec3(1.0, 0.95, 0.78), (1.0 - smoothstep(0.0, 0.6, t)) * 0.5);
   int code = u_codes[tail > 0.0 ? 0 : 1];
   if (tail > 0.0) {
@@ -77,14 +75,19 @@ void main() {
     color = mix(vec3(0.53, 0.58, 0.65), color, 0.14);
     code = u_codes[0];
   } else {
-    // Every spark remains an ASCII cell, aligned with the map even during a fractional pan.
-    p = floor((p + u_shift) / u_cell) * u_cell - u_shift + u_cell * 0.5;
-    if (age < ${FIREWORKS.burst.toFixed(1)}) {
-      p = launch.xy;
-      opacity = star < 1.0 && tail < 1.0 ? sin(age / ${FIREWORKS.burst.toFixed(1)} * 3.1415927) * 0.8 : 0.0;
+    if (age < rise) {
+      // Seen from above, a rising shell approaches us: its glow grows at its world site,
+      // with slight horizontal drift rather than a side-view rocket crossing the map.
+      float progress = clamp(age / rise, 0.0, 1.0);
+      p = launch.xy - u_wind * (1.0 - progress) * rise * 4.0;
+      scale = mix(0.65, 3.0 + rise * 0.35, progress * progress);
+      quad = u_cell * scale;
+      opacity = star < 1.0 && tail < 1.0 ? mix(0.3, 0.95, progress) : 0.0;
       color = vec3(1.0, 0.88, 0.52);
       code = u_codes[2];
     }
+    // Every spark remains an ASCII cell, aligned with the map even during a fractional pan.
+    p = floor((p + u_shift) / u_cell) * u_cell - u_shift + u_cell * 0.5;
   }
   vec2 corner = vec2(float((gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4) ? 1 : 0),
                      float((gl_VertexID == 2 || gl_VertexID == 4 || gl_VertexID == 5) ? 1 : 0));

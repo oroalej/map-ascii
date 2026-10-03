@@ -6,12 +6,13 @@ import type { Grid, View } from './grid';
 import type { WindNow } from './life/wind';
 import {
   FIREWORKS,
+  createFireworkDisplay,
   fireworkInstances,
   fireworkScale,
   fireworkShellCount,
   fireworkShells,
-  fireworkTime,
   fireworkVariantCodes,
+  type FireworkDisplay,
 } from './fireworks-layout';
 import { fireworksFragment, fireworksVertex } from './shaders/fireworks';
 
@@ -20,6 +21,7 @@ export type FireworksResources = {
   vao: WebGLVertexArrayObject | null;
   buffer: WebGLBuffer | null;
   shells: Float32Array;
+  display: FireworkDisplay;
   variants: Int32Array;
   config?: FireworksConfig;
 };
@@ -41,6 +43,7 @@ function createFireworks(gl: GL): FireworksResources {
     vao,
     buffer,
     shells: new Float32Array(FIREWORKS.shells * 4),
+    display: createFireworkDisplay(),
     variants: new Int32Array(4),
   };
 }
@@ -73,7 +76,7 @@ export function fireworksPass(
     resources.variants.set(fireworkVariantCodes(config));
     resources.config = config;
   }
-  const count = fireworkShells(view, grid, resources.shells);
+  const count = fireworkShells(view, grid, resources.shells, resources.display, time, reduced);
   const windScale = view.dpr * fireworkScale(view.camera.zoom);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
@@ -84,8 +87,7 @@ export function fireworksPass(
     u_size: [view.width, view.height],
     u_cell: [view.cellDev.w, view.cellDev.h],
     u_shift: [grid.shiftX, grid.shiftY],
-    u_time: fireworkTime(time, reduced),
-    u_still: reduced,
+    u_flights: resources.display.flights,
     u_wind: reduced
       ? [0, 0]
       : [wind.dir[0] * wind.strength * windScale, wind.dir[1] * wind.strength * windScale],
