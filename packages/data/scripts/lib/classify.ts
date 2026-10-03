@@ -19,11 +19,13 @@ const highwayClass = (highway: string | undefined): AtlasClass | null => {
   return null;
 };
 
-/** The specific building class a feature's tags imply, if any (ignoring `building=*`). */
+/** The specific building class a feature's tags imply, if any. */
 const buildingKind = (tags: Tags): AtlasClass | null => {
   if (oneOf(tags.building, 'church', 'cathedral', 'chapel')) return 'building_religious';
   if (tags.amenity === 'place_of_worship') return 'building_religious';
   if (oneOf(tags.amenity, 'school', 'university', 'college')) return 'building_school';
+  if (tags.building === 'hospital' || tags.amenity === 'hospital' || tags.healthcare === 'hospital')
+    return 'building_hospital';
   if (tags.amenity === 'marketplace' || oneOf(tags.shop, 'mall', 'supermarket')) {
     return 'building_market';
   }
@@ -295,6 +297,7 @@ const defaultHeights: Partial<Record<AtlasClass, number>> = {
   building: 6,
   building_religious: 15,
   building_school: 9,
+  building_hospital: 6,
   building_market: 8,
   building_station: 8,
 };
@@ -318,6 +321,7 @@ export function buildingHeight(tags: Tags, atlasClass: AtlasClass): number | und
 /** Tags whose value says what a feature is, most telling first. */
 const kindKeys = [
   'amenity',
+  'healthcare',
   'shop',
   'leisure',
   'historic',

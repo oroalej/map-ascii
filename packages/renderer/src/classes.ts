@@ -14,6 +14,7 @@ export const markerClasses = [
   'marker_market',
   'marker_station',
   'marker_landmark',
+  'marker_hospital',
 ] as const;
 export type MarkerClass = (typeof markerClasses)[number];
 
@@ -85,6 +86,7 @@ export function classesIn(texels: Uint8Array): RenderClass[] {
 export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
   building_religious: 'marker_religious',
   building_school: 'marker_school',
+  building_hospital: 'marker_hospital',
   building_market: 'marker_market',
   building_station: 'marker_station',
 };
@@ -98,7 +100,14 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
  */
 export const priority: readonly (readonly RenderClass[])[] = [
   ['marker_landmark'],
-  ['marker_religious', 'marker_school', 'marker_market', 'marker_station', 'monument'],
+  [
+    'marker_religious',
+    'marker_school',
+    'marker_market',
+    'marker_station',
+    'marker_hospital',
+    'monument',
+  ],
   ['tree', 'furniture', 'entrance'],
   ['road_major'],
   ['road_mid'],
@@ -110,6 +119,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
     'building',
     'building_religious',
     'building_school',
+    'building_hospital',
     'building_market',
     'building_station',
     'building_part',
@@ -139,6 +149,7 @@ export const groundClasses: readonly RenderClass[] = [
   'building',
   'building_religious',
   'building_school',
+  'building_hospital',
   'building_market',
   'building_station',
 ];

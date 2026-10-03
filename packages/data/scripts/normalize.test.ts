@@ -41,6 +41,31 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   features,
 });
 
+it('preserves hospital footprints, identity and roof metadata while distinguishing heightless grounds', () => {
+  const roof: Feature = {
+    type: 'Feature',
+    id: 'way/hospital',
+    properties: { building: 'hospital', name: 'Hospital', height: '12', 'roof:shape': 'flat' },
+    geometry: square(0.003, 0.003, 0.004, 0.004),
+  };
+  const grounds: Feature = {
+    type: 'Feature',
+    id: 'way/grounds',
+    properties: { amenity: 'hospital' },
+    geometry: square(0.002, 0.002, 0.005, 0.005),
+  };
+  const features = normalize(collection(roof, grounds), boundary, 10).features;
+  expect(features.find((f) => f.properties.id === 'osm:way/hospital')).toMatchObject({
+    geometry: roof.geometry,
+    properties: { class: 'building_hospital', name: 'Hospital', height: 12, variant: 'flat' },
+    tippecanoe: { layer: 'buildings', minzoom: 12, maxzoom: 16 },
+  });
+  const ground = features.find((f) => f.properties.id === 'osm:way/grounds')!;
+  expect(ground.geometry).toEqual(grounds.geometry);
+  expect(ground.properties.class).toBe('building_hospital');
+  expect(ground.properties.height).toBeUndefined();
+});
+
 it('retains shop areas as anchored markers and ignores raw frontage annotations', () => {
   const shop: Feature = {
     type: 'Feature',

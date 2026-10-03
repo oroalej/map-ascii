@@ -207,6 +207,7 @@ type Palette = Record<
   | 'building'
   | 'religious'
   | 'school'
+  | 'hospital'
   | 'market'
   | 'rail'
   | 'station'
@@ -284,6 +285,7 @@ function makeTheme(background: number, c: Palette): Theme {
         fill: 0.22,
       },
       building_school: { kind: 'building', glyphs: buildingRamp, color: c.school, fill: 0.22 },
+      building_hospital: { kind: 'building', glyphs: buildingRamp, color: c.hospital, fill: 0.22 },
       building_market: { kind: 'building', glyphs: buildingRamp, color: c.market, fill: 0.22 },
       building_station: { kind: 'building', glyphs: buildingRamp, color: c.station, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
@@ -329,6 +331,7 @@ function makeTheme(background: number, c: Palette): Theme {
       farmland: { kind: 'crop', glyphs: ['≡', "'", '/', '\\', '~'], color: c.farmland, fill: 0.08 },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
       marker_school: { kind: 'single', glyphs: ['⌂'], color: c.school },
+      marker_hospital: { kind: 'single', glyphs: ['+'], color: c.hospital },
       marker_market: { kind: 'single', glyphs: ['$'], color: c.market },
       marker_station: { kind: 'single', glyphs: ['Ħ'], color: c.station },
       marker_landmark: { kind: 'single', glyphs: ['◆'], color: c.landmark },
@@ -375,6 +378,7 @@ export const themes: Record<ThemeName, Theme> = {
     building: 0xa38d74,
     religious: 0xe2b845,
     school: 0x7ea8e0,
+    hospital: 0xe57c94,
     market: 0xe98a45,
     rail: 0x9a8f86,
     station: 0xc8685a,
@@ -429,6 +433,7 @@ export const themes: Record<ThemeName, Theme> = {
     building: 0x8a6e52,
     religious: 0xa87a00,
     school: 0x2f5f9e,
+    hospital: 0xb23b60,
     market: 0xb85418,
     rail: 0x5e5048,
     station: 0x9a3a2c,
@@ -488,6 +493,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building: 'Building',
   building_religious: 'Place of worship',
   building_school: 'School',
+  building_hospital: 'Hospital',
   building_market: 'Market or shop',
   building_station: 'Train station',
   building_part: 'Landmark part',
@@ -513,6 +519,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   place_label: 'Place',
   marker_religious: 'Place of worship',
   marker_school: 'School',
+  marker_hospital: 'Hospital',
   marker_market: 'Market',
   marker_station: 'Train station',
   marker_landmark: 'Landmark',

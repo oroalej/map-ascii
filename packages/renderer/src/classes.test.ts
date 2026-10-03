@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { CellBit, cellBits } from './life/config';
+import { seeThroughMask, subcellAreas } from './glyphs/select';
 import {
   classDepths,
   classesIn,
@@ -10,6 +12,17 @@ import {
   pavingOverrideDepth,
   renderClasses,
 } from './classes';
+
+it('treats hospital roofs as buildings and keeps their marker within the connectivity mask', () => {
+  const roof = classId('building_hospital');
+  expect(classDepths()[roof]).toBe(classDepths()[classId('building')]);
+  expect(crownSurfaces()[roof]).toBe(2);
+  expect(subcellAreas()[roof]).toBe(1);
+  expect(cellBits()[roof]! & CellBit.person).toBe(0);
+  expect(cellBits()[roof]! & CellBit.grounds).toBeTruthy();
+  expect(cellBits()[roof]! & CellBit.window).toBeTruthy();
+  expect((seeThroughMask() >>> classId('marker_hospital')) & 1).toBe(1);
+});
 
 it('limits paving overrides to surfaces below the planting tier', () => {
   const depths = classDepths();
@@ -103,6 +116,7 @@ it('allows crown overlap on roads and compares every roof class, including ids a
     'building',
     'building_religious',
     'building_school',
+    'building_hospital',
     'building_market',
     'building_station',
     'building_part',

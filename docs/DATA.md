@@ -79,6 +79,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 | `building` | `building=*` |
 | `building_religious` | `building=church|cathedral|chapel` or `amenity=place_of_worship`; `landuse=religious` grounds (no height) |
 | `building_school` | `amenity=school|university|college` (area or building) |
+| `building_hospital` | `building=hospital`, `amenity=hospital`, or `healthcare=hospital` (area or point; grounds have no height) |
 | `building_market` | `amenity=marketplace`, `shop=mall|supermarket` |
 | `building_station` | `building=train_station`, `railway=station|halt`, or `public_transport=station` with `train=yes` or a `railway` tag (area or point) |
 | `park` | `leisure=park|garden|playground`, `place=square` |

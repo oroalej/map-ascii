@@ -45,6 +45,7 @@ export const CLASS_ZOOM: Readonly<Record<AtlasClass, ZoomBand>> = {
   building: { min: 13 },
   building_religious: { min: 13 },
   building_school: { min: 13 },
+  building_hospital: { min: 13 },
   building_market: { min: 13 },
   building_station: { min: 13 },
   // Street

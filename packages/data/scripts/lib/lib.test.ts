@@ -102,6 +102,27 @@ describe('classify', () => {
     expect(variantOf({ railway: 'rail', usage: 'main' }, 'rail')).toBeUndefined();
   });
 
+  it('recognizes hospital roofs, grounds and point POIs without including other healthcare', () => {
+    const roofs: Record<string, string>[] = [
+      { building: 'hospital' },
+      { building: 'yes', amenity: 'hospital' },
+      { building: 'yes', healthcare: 'hospital' },
+    ];
+    for (const tags of roofs) {
+      expect(area(tags)).toBe('building_hospital');
+      expect(buildingHeight(tags, 'building_hospital')).toBe(6);
+    }
+    const sites: Record<string, string>[] = [{ amenity: 'hospital' }, { healthcare: 'hospital' }];
+    for (const tags of sites) {
+      expect(area(tags)).toBe('building_hospital');
+      expect(classify(tags, 'point', 10)).toBe('building_hospital');
+      expect(buildingHeight(tags, 'building_hospital')).toBeUndefined();
+    }
+    expect(kindOf({ healthcare: 'hospital' })).toBe('healthcare=hospital');
+    expect(area({ building: 'yes', healthcare: 'clinic' })).toBe('building');
+    expect(classify({ amenity: 'pharmacy' }, 'point', 10)).not.toBe('building_hospital');
+  });
+
   it('keeps only the configured subdivision level of admin boundaries', () => {
     expect(area({ boundary: 'administrative', admin_level: '10' })).toBe('admin_subdivision');
     expect(area({ boundary: 'administrative', admin_level: '11' })).toBeNull();

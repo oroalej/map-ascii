@@ -28,7 +28,6 @@ export const ATLAS_CLASSES = [
   'water_area',
   'water_sea',
   'coastline',
-  'terrain',
   'road_major',
   'road_mid',
   'road_minor',
@@ -64,6 +63,9 @@ export const ATLAS_CLASSES = [
   'shrubs',
   'planting',
   'building_woodwork',
+  // Terrain has no connectivity mask; moving it here leaves room for the hospital marker.
+  'terrain',
+  'building_hospital',
 ] as const;
 
 /** The valid range of each camera field (the `CameraState` schema). */

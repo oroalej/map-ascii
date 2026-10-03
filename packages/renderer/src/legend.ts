@@ -215,6 +215,7 @@ const classAliases: Partial<Record<RenderClass, RenderClass>> = {
   tree_crown: 'tree',
   marker_religious: 'building_religious',
   marker_school: 'building_school',
+  marker_hospital: 'building_hospital',
   marker_station: 'building_station',
 };
 const lifeGroups: Partial<Record<RenderClass, LifeFocus>> = {
