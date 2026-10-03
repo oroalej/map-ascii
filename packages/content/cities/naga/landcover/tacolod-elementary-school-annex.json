@@ -1,0 +1,112 @@
+{
+  "id": "landcover/tacolod-elementary-school-annex",
+  "title": "Tacolod Elementary School – Annex landscaping",
+  "trees": [
+    {
+      "at": [123.173867006, 13.635730541],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.173910469, 13.635640759],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.173965811, 13.635440463],
+      "crown_m": 3.5,
+      "height_m": 5
+    },
+    {
+      "at": [123.174202606, 13.635858806],
+      "crown_m": 3,
+      "height_m": 5
+    },
+    {
+      "at": [123.174310864, 13.635648548],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.174309299, 13.635600197],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.174233486, 13.6355925],
+      "crown_m": 4,
+      "height_m": 5
+    }
+  ],
+  "tree_overrides": [],
+  "rows": [],
+  "areas": [
+    {
+      "ring": [
+        [123.174025002, 13.635571335],
+        [123.174175273, 13.635624487],
+        [123.174140496, 13.635717342],
+        [123.173990225, 13.63566419],
+        [123.174025002, 13.635571335]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.174153746, 13.635516497],
+        [123.174197177, 13.635531859],
+        [123.174175046, 13.635590948],
+        [123.174131615, 13.635575586],
+        [123.174153746, 13.635516497]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.173883612, 13.635659938],
+        [123.173935729, 13.635678372],
+        [123.173927825, 13.635699476],
+        [123.173875708, 13.635681041],
+        [123.173883612, 13.635659938]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.174300779, 13.635570416],
+        [123.174335523, 13.635582706],
+        [123.174318767, 13.635627445],
+        [123.174284023, 13.635615155],
+        [123.174300779, 13.635570416]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.174305355, 13.635584462],
+        [123.174322727, 13.635590607],
+        [123.174314823, 13.63561171],
+        [123.174297451, 13.635605566],
+        [123.174305355, 13.635584462]
+      ],
+      "cover": "shrubs"
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: mapped school grounds",
+      "url": "https://www.openstreetmap.org/way/880725922",
+      "note": "ODbL. Complete mapped grounds, standing roofs and neighboring road geometry are retained."
+    },
+    {
+      "title": "Owner-supplied Google Maps school reference",
+      "note": "Image #1: owner-supplied Google Maps overhead of the Annex on Fourth Street, inspected 2026-10-04. The owner explicitly instructed proceeding with this reference. The central lawn, eastern foliage and edge approaches guide a restrained fit to the complete mapped grounds and five standing classroom roofs. The imagery is rotated relative to north-up OSM; alignment and dimensions remain approximate. No Google reuse rights are asserted; the reference raster is not distributed."
+    },
+    {
+      "title": "Draft layout limits",
+      "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
+    }
+  ]
+}

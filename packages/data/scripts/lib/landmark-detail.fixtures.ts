@@ -72,6 +72,9 @@ const tarosananSource = JSON.parse(
 const balatasSchoolSource = JSON.parse(
   readFileSync(new URL('../__fixtures__/balatas-school-parents.json', import.meta.url), 'utf8'),
 ) as AtlasFeature[];
+const tacolodHospitalSource = JSON.parse(
+  readFileSync(new URL('../__fixtures__/tacolod-st-john-parents.json', import.meta.url), 'utf8'),
+) as AtlasFeature[];
 export const source = [
   ...new Map(
     [
@@ -90,6 +93,7 @@ export const source = [
       ...sanRoqueMaboloSource,
       ...tarosananSource,
       ...balatasSchoolSource,
+      ...tacolodHospitalSource,
     ].map((f) => [f.properties.id, f]),
   ).values(),
 ];

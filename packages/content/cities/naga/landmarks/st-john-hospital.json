@@ -1,0 +1,29 @@
+{
+  "id": "landmark/st-john-hospital",
+  "osm_id": "osm:way/23673116",
+  "name": {
+    "en": "St. John Hospital"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing hospital footprint",
+      "url": "https://www.openstreetmap.org/way/23673116",
+      "note": "ODbL. Complete mapped grounds, standing roofs and neighboring road geometry are retained."
+    },
+    {
+      "title": "Source-relative hospital landscaping estimate",
+      "note": "No hospital image was supplied. The small front and east-side visual envelope, lawns, planting and connecting walks are schematic estimates derived from open space around the complete saved OSM hospital roof and neighboring footprints. It is not a surveyed hospital parcel, tree inventory or verified entrance layout. Adjacent buildings and the full Panganiban Drive carriageway remain clear and retain geometry."
+    },
+    {
+      "title": "Draft layout limits",
+      "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
+    },
+    {
+      "title": "City of Naga emergency directory",
+      "url": "https://www2.naga.gov.ph/emergency-hotline/",
+      "note": "Lists St. John Hospital, Inc. on Panganiban Drive, Tinago. It establishes site identity, not this landscaping layout."
+    }
+  ]
+}
