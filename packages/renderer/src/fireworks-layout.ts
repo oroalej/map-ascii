@@ -78,7 +78,7 @@ export function fireworkRadius(height: number, zoom: number): number {
   const perspective = fireworkPerspective(height, zoom);
   return perspective
     ? Math.max(
-        distantRadius(height),
+        distantRadius(height) * 2 ** ((zoom - FIREWORKS.denseZoom) * 0.5),
         Math.min(FIREWORKS.maxRadius, height * 0.35 * fireworkScale(zoom) * perspective),
       )
     : 0;
@@ -87,7 +87,7 @@ export function fireworkRadius(height: number, zoom: number): number {
 /** Spark ink grows with the burst and never shrinks when the map changes cell size. */
 export function fireworkSparkWidth(height: number, zoom: number): number {
   const radius = fireworkRadius(height, zoom);
-  return radius ? 5 * Math.min(2.4, Math.max(1, Math.sqrt(radius / distantRadius(height)))) : 0;
+  return radius ? Math.min(12, 2 + Math.sqrt(radius) * 0.6) : 0;
 }
 
 /** Illustrative rise time: taller launches take longer to reach their break height. */
@@ -111,6 +111,8 @@ export type FireworkDisplay = {
   /** Packed height visibility and device-pixel spark width for each admitted launch. */
   appearance: Float32Array;
   admitted: Int16Array;
+  /** Previously visible source identities, independent of their packed GPU indices. */
+  retained: Uint8Array;
   lastTime: number;
   reduced?: boolean;
 };
@@ -125,6 +127,7 @@ export function createFireworkDisplay(
     flights: new Float32Array(FIREWORKS.shells * 2),
     appearance: new Float32Array(FIREWORKS.shells * 2),
     admitted: new Int16Array(FIREWORKS.shells),
+    retained: new Uint8Array(FIREWORKS.shells),
     lastTime: 0,
   };
 }
@@ -179,7 +182,10 @@ export function fireworkShells(
     FIREWORKS.regularShells +
     (fireworkCameraHeight(view.camera.zoom) > FIREWORKS.largeHeight ? 1 : 0);
   const clock = reduced || !Number.isFinite(time) ? 0 : Math.max(0, time);
-  if (display.reduced !== reduced || clock < display.lastTime) display.launches.fill(undefined);
+  if (display.reduced !== reduced || clock < display.lastTime) {
+    display.launches.fill(undefined);
+    display.retained.fill(0);
+  }
   display.reduced = reduced;
   display.lastTime = clock;
   const scale = fireworkScale(view.camera.zoom);
@@ -213,7 +219,10 @@ export function fireworkShells(
     }
     // A still show has no future launches to fill a completely new area after a long pan.
     // Being below every burst is altitude culling, not a pan that needs new still poses.
-    if (!visible && surviving) display.launches.fill(undefined);
+    if (!visible && surviving) {
+      display.launches.fill(undefined);
+      display.retained.fill(0);
+    }
   }
   let count = 0;
   for (let slot = 0; slot < slots; slot++) {
@@ -227,7 +236,22 @@ export function fireworkShells(
         ? FIREWORKS.largeHeight + rng() * FIREWORKS.largeHeightVariation
         : FIREWORKS.minHeight + rng() * (FIREWORKS.maxHeight - FIREWORKS.minHeight);
       const rise = fireworkRise(height);
-      const perspective = fireworkPerspective(height, view.camera.zoom);
+      // Hidden high-density slots cover wider ground footprints instead of all spawning
+      // inside the close viewport and collapsing into one patch when zooming back out.
+      // Invert the regular density curve to assign each rank its own coverage scale.
+      const coverageZoom = Math.min(
+        view.camera.zoom,
+        large || slot < FIREWORKS.sparseShells
+          ? view.camera.zoom
+          : FIREWORKS.sparseZoom -
+              (FIREWORKS.sparseZoom - FIREWORKS.denseZoom) *
+                Math.sqrt(
+                  (slot + 1 - FIREWORKS.sparseShells) /
+                    (FIREWORKS.regularShells - FIREWORKS.sparseShells),
+                ),
+      );
+      const perspective = fireworkPerspective(height, coverageZoom);
+      const coverage = scale / fireworkScale(coverageZoom);
       const radius = large ? fireworkRadius(height, view.camera.zoom) * view.dpr : 0;
       const marginX = large ? Math.min(0.45, radius / view.width) : 0.08;
       const marginY = large ? Math.min(0.45, radius / view.height) : 0.08;
@@ -239,12 +263,14 @@ export function fireworkShells(
         x:
           (left +
             view.width / 2 +
-            ((marginX + rng() * (1 - marginX * 2) - 0.5) * view.width) / (perspective || 1)) /
+            ((marginX + rng() * (1 - marginX * 2) - 0.5) * view.width * coverage) /
+              (perspective || 1)) /
           worldToDevice,
         y:
           (top +
             view.height / 2 +
-            ((marginY + rng() * (1 - marginY * 2) - 0.5) * view.height) / (perspective || 1)) /
+            ((marginY + rng() * (1 - marginY * 2) - 0.5) * view.height * coverage) /
+              (perspective || 1)) /
           worldToDevice,
         seed: Math.floor(rng() * 65536),
         height,
@@ -253,6 +279,7 @@ export function fireworkShells(
         next: start + interval,
       };
       display.launches[slot] = launch;
+      display.retained[slot] = 0;
     }
     const perspective = fireworkPerspective(launch.height, view.camera.zoom);
     if (!perspective) continue;
@@ -276,17 +303,25 @@ export function fireworkShells(
   const candidates = count - high;
   const regularLimit = limit - (slots - FIREWORKS.regularShells);
   if (regularLimit < candidates) {
+    // Keep still-visible identities before admitting nearer replacements. This prevents
+    // incremental zoom/pan from swapping a followed burst for a smaller nearby launch.
     // Thin regular launches by proximity; the high burst still leaves by altitude alone.
     // Never substitute lower heights or restart flights to fill a closer view.
     for (let slot = 0; slot < regularLimit; slot++) {
       let nearest = slot,
+        retained = -1,
         distance = Infinity;
       for (let candidate = slot; candidate < candidates; candidate++) {
         const dx = out[candidate * 4]! - view.width / 2,
           dy = out[candidate * 4 + 1]! - view.height / 2;
+        const radius = out[candidate * 4 + 3]!;
+        const visible =
+          Math.abs(dx) <= view.width / 2 + radius && Math.abs(dy) <= view.height / 2 + radius;
+        const keep = visible && display.retained[display.admitted[candidate]!] ? 1 : 0;
         const next = dx * dx + dy * dy;
-        if (next < distance) {
+        if (keep > retained || (keep === retained && next < distance)) {
           nearest = candidate;
+          retained = keep;
           distance = next;
         }
       }
@@ -307,6 +342,8 @@ export function fireworkShells(
     display.appearance.fill(0, count * 2);
     display.admitted.fill(-1, count);
   }
+  display.retained.fill(0);
+  for (let packed = 0; packed < count; packed++) display.retained[display.admitted[packed]!] = 1;
   return count;
 }
 

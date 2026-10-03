@@ -105,6 +105,77 @@ describe('bounded New Year shells', () => {
     expect(fireworkCameraHeight(21)).toBe(FIREWORKS.minHeight);
   });
 
+  it('magnifies distant burst extent and spark ink at each closer zoom instead of holding a flat screen size', () => {
+    for (const height of [100, 200, 500]) {
+      for (const zoom of [7, 12, 15, 16, 17]) {
+        expect(fireworkRadius(height, zoom + 0.25)).toBeGreaterThan(fireworkRadius(height, zoom));
+        expect(fireworkSparkWidth(height, zoom + 0.25)).toBeGreaterThan(
+          fireworkSparkWidth(height, zoom),
+        );
+      }
+    }
+  });
+
+  it('spreads the distant display after entering or spending time in a close view', () => {
+    for (const time of [0, 60]) {
+      const display = createFireworkDisplay(123),
+        out = shells();
+      const close = { ...view, camera: { ...view.camera, zoom: 20 } },
+        distant = { ...view, camera: { ...view.camera, zoom: 16 } };
+      fireworkShells(close, grid(close), out, display, 0, false);
+      if (time) fireworkShells(close, grid(close), out, display, time, false);
+      const launches = display.launches.slice();
+      fireworkShells(distant, grid(distant), out, display, time, false);
+      let outsideCore = 0;
+      for (let packed = 0; packed < 49; packed++) {
+        if (Math.abs(out[packed * 4]! - 500) > 100 || Math.abs(out[packed * 4 + 1]! - 400) > 80)
+          outsideCore++;
+        const source = display.admitted[packed]!;
+        expect(display.launches[source]).toBe(launches[source]);
+      }
+      expect(outsideCore).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('keeps the same still-visible bursts during incremental camera motion instead of swapping to nearer ones', () => {
+    const display = createFireworkDisplay(123),
+      out = shells(),
+      original = grid();
+    const count = fireworkShells(view, original, out, display, 0, false);
+    const sources = [...display.admitted.slice(0, count)].sort(),
+      launches = display.launches.slice();
+    fireworkShells(view, { ...original, shiftX: original.shiftX + 70 }, out, display, 0, false);
+    expect([...display.admitted.slice(0, count)].sort()).toEqual(sources);
+    expect(display.launches).toEqual(launches);
+  });
+
+  it('keeps a followed central launch and magnifies its radius and ink through an actual zoom round trip', () => {
+    const display = createFireworkDisplay(123),
+      out = shells();
+    fireworkShells(view, grid(), out, display, 0, false);
+    const source = display.admitted[0]!,
+      launch = display.launches[source]!;
+    let radius = out[3]!,
+      ink = display.appearance[1]!;
+    for (const zoom of [19.1, 19.2, 19.4, 19.5]) {
+      const closer = { ...view, camera: { ...view.camera, zoom } };
+      fireworkShells(closer, grid(closer), out, display, 0, false);
+      const packed = display.admitted.indexOf(source);
+      expect(packed).toBeGreaterThanOrEqual(0);
+      expect(display.launches[source]).toBe(launch);
+      expect(out[packed * 4 + 3]).toBeGreaterThanOrEqual(radius);
+      if (radius < FIREWORKS.maxRadius) expect(out[packed * 4 + 3]).toBeGreaterThan(radius);
+      expect(display.appearance[packed * 2 + 1]).toBeGreaterThanOrEqual(ink);
+      radius = out[packed * 4 + 3]!;
+      ink = display.appearance[packed * 2 + 1]!;
+    }
+    fireworkShells(view, grid(), out, display, 0, false);
+    const packed = display.admitted.indexOf(source);
+    expect(packed).toBeGreaterThanOrEqual(0);
+    expect(out[packed * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, 19), 3);
+    expect(display.flights[packed * 2]).toBe(Math.fround(-launch.start));
+  });
+
   it('keeps the high launch across z16 and removes it according to altitude without lowering its height', () => {
     const display = createFireworkDisplay(123),
       out = shells();

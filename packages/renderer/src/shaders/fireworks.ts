@@ -10,7 +10,6 @@ uniform vec2 u_flights[${FIREWORKS.shells}]; // age, time to reach break height
 uniform vec2 u_appearance[${FIREWORKS.shells}]; // visibility below camera, spark ink width
 uniform vec2 u_size;
 uniform vec2 u_cell;
-uniform vec2 u_shift;
 uniform vec2 u_wind;
 uniform int u_variants[4];
 uniform int u_variantCount;
@@ -88,8 +87,7 @@ void main() {
       color = vec3(1.0, 0.88, 0.52);
       code = u_codes[2];
     }
-    // Every spark remains an ASCII cell, aligned with the map even during a fractional pan.
-    p = floor((p + u_shift) / u_cell) * u_cell - u_shift + u_cell * 0.5;
+    // Aerial glyph centers follow their continuous projection, independent of the ground grid.
   }
   opacity *= u_appearance[shell].x;
   vec2 corner = vec2(float((gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4) ? 1 : 0),

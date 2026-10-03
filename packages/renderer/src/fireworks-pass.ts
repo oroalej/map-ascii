@@ -87,7 +87,6 @@ export function fireworksPass(
     u_shells: resources.shells,
     u_size: [view.width, view.height],
     u_cell: [view.cellDev.w, view.cellDev.h],
-    u_shift: [grid.shiftX, grid.shiftY],
     u_flights: resources.display.flights,
     u_appearance: resources.display.appearance,
     u_wind: reduced
