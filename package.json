@@ -29,7 +29,8 @@
     "format:check": "prettier --check .",
     "prepare": "git config core.hooksPath .githooks || true",
     "worktree:new": "tsx scripts/worktree-new.ts",
-    "plans:clean": "tsx scripts/plans-clean.ts"
+    "plans:clean": "tsx scripts/plans-clean.ts",
+    "worktree:remove": "tsx scripts/worktree-remove.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

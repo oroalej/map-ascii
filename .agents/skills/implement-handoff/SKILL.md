@@ -132,4 +132,4 @@ Then, per `AGENTS.md`:
 - **Task status:**
   - `clean`: move `<task-dir>` to `.plans/done/`, and set its row to Complete, with the PR # and the final commit.
   - Paused or not clean: leave the folder where step 2–5 put it, with the row's Next step saying why.
-- **Cleanup:** delete everything in `<task-dir>` except `handoff.md` and the files the handoff marks **keep**. That includes `handoff-review.md`, `review.md`, `review.json` and `status-baseline.txt`. List what was deleted and what was kept.
+- **Scratch:** leave it in `<task-dir>`. `$merge-pr` deletes it with `pnpm plans:clean` when the PR merges, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands: Codex rejects recursive deletes as "blocked by policy".

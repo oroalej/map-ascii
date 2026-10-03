@@ -172,4 +172,4 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   - `error`: no PR, Claude or Codex #1 failed, or a `git status` check found unexpected changes.
 - If a `Result file` was given, also write the same JSON object to that path. Write only the object, without the fence.
 
-Then delete `<scratch>` and everything in it. The `Result file` lives outside `<scratch>`, so it stays.
+Leave `<scratch>` in place. `$merge-pr` deletes it with `pnpm plans:clean` after the PR merges. Never delete it with shell commands: Codex rejects recursive deletes as "blocked by policy".

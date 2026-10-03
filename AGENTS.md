@@ -33,7 +33,8 @@ Read these before doing substantial work:
 - `pnpm test:related <files>` — only the Vitest files that depend on the given files (what you work with). `pnpm test` runs every unit test; CI does that.
 - `pnpm test:e2e` — prepares the static export (rebuilding only when needed) and serves it on this checkout's own port (`apps/web/scripts/e2e-port.ts`; `E2E_PORT` overrides it). Takes filters: `pnpm test:e2e smoke.spec.ts --project=chromium -g "<test name>"`.
 - `pnpm worktree:new <short> <topic>` — create a task worktree `../naga-ascii-<short>` on `codex/<topic>` from `main`, with dependencies and tiles.
-- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a handoff task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` entry. Works from any worktree.
+- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` entry (a folder that keeps nothing goes too). Works from any worktree.
+- `pnpm worktree:remove <branch>` — after its PR merges, delete a task's worktree folder and local branch (the remote branch stays). Run it from the main checkout; it refuses an unmerged branch or a worktree with uncommitted changes.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
@@ -83,6 +84,7 @@ If one fails, fix it and rerun only that check.
 ## Git
 
 - **One worktree per task.** Start a new task with `pnpm worktree:new <short> <topic>` (a worktree `../naga-ascii-<short>` on `codex/<topic>` from `main`). The main checkout stays on `main` and is only for planning and `.plans/`; a pre-commit hook (`.githooks/`, enabled on install) refuses commits there on any other branch.
+- **Merge with `$merge-pr`.** After the merge it deletes the task's scratch, its local branch and its worktree folder. The remote branch stays.
 - A follow-up to an existing task (an adjustment, fix, review fix, or next phase) continues in that task's worktree and branch. Find them with `git worktree list` and the task's row in `.plans/README.md`. Don't create a new worktree or branch for a follow-up, and don't add suffixes like `-ii`, `-hardening` or `-pause`.
 - Before each commit, run `git status` and `git branch`.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`.
@@ -96,7 +98,7 @@ Implementation plans live in the gitignored `.plans/` folder of the main checkou
 - Put every scratch file for the task in its folder: logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
 - Confirm each step with targeted tests only; the end-of-task checks run once (see "Verifying changes"). No screenshots or evidence sets.
 - When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
-- Before ending the session, run `pnpm plans:clean <task>` with one `--keep <name>` per entry the handoff marks **keep**. It deletes everything else in the task folder except `handoff.md`. Don't delete scratch with shell commands (`Remove-Item -Recurse`, `rm -rf`): Codex rejects them as "blocked by policy". In your report, list what the command deleted and kept.
+- Don't delete scratch yourself. When the PR merges, `$merge-pr` runs `pnpm plans:clean`, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands (`Remove-Item -Recurse`, `rm -rf`): Codex rejects them as "blocked by policy".
 
 ## Don'ts
 

@@ -15,6 +15,8 @@ export interface CleanupResult {
   folder: string;
   deleted: string[];
   kept: string[];
+  /** True when nothing was kept, so the folder itself went too (e.g. a `pr<N>-review-fixes/` scratch folder). */
+  removedFolder: boolean;
 }
 
 /** Finds the one `<plansRoot>/<status>/<task>/` folder, failing on a bad slug or no/several matches. */
@@ -35,7 +37,10 @@ export function findTaskFolder(plansRoot: string, task: string): string {
   return matches[0]!;
 }
 
-/** Deletes every entry of the task folder except `handoff.md` and `keep` (top-level names). */
+/**
+ * Deletes every entry of the task folder except `handoff.md` and `keep` (top-level names),
+ * and the folder itself when nothing is kept.
+ */
 export function cleanTask(
   plansRoot: string,
   task: string,
@@ -60,5 +65,7 @@ export function cleanTask(
     if (!dryRun) rmSync(target, { recursive: true, force: true });
     deleted.push(name);
   }
-  return { folder, deleted, kept };
+  const removedFolder = kept.length === 0;
+  if (removedFolder && !dryRun) rmSync(folder, { recursive: true, force: true });
+  return { folder, deleted, kept, removedFolder };
 }

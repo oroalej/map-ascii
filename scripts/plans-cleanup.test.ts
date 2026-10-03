@@ -33,8 +33,17 @@ describe('cleanTask', () => {
       folder,
       deleted: ['e2e-results', 'log.txt'],
       kept: ['handoff.md', 'report.json'],
+      removedFolder: false,
     });
     expect(readdirSync(folder).sort()).toEqual(['handoff.md', 'report.json']);
+  });
+
+  it('removes a folder that keeps nothing, such as review scratch', () => {
+    task('active', 'pr8-review-fixes', ['claude-review.md', 'round1/result.json']);
+    const result = cleanTask(root, 'pr8-review-fixes');
+    expect(result.deleted).toEqual(['claude-review.md', 'round1']);
+    expect(result.removedFolder).toBe(true);
+    expect(readdirSync(join(root, 'active'))).toEqual([]);
   });
 
   it('changes nothing on a dry run', () => {

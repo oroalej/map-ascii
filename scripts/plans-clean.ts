@@ -1,7 +1,8 @@
 /**
  * Delete a handoff task's scratch from the main checkout's `.plans/` (scripts/plans-cleanup.ts):
  *   pnpm plans:clean <task> [--keep <name>]... [--dry-run]
- * keeps `handoff.md` and each `--keep` entry, and works from any worktree.
+ * keeps `handoff.md` and each `--keep` entry (removing the folder when nothing is kept), and works
+ * from any worktree.
  */
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -34,7 +35,7 @@ const common = resolve(
   execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim(),
 );
 try {
-  const { folder, deleted, kept } = cleanTask(
+  const { folder, deleted, kept, removedFolder } = cleanTask(
     join(dirname(common), '.plans'),
     tasks[0]!,
     keep,
@@ -45,6 +46,7 @@ try {
     `${dryRun ? 'would delete' : 'deleted'} ${deleted.length}: ${deleted.join(', ') || '-'}`,
   );
   console.log(`kept ${kept.length}: ${kept.join(', ') || '-'}`);
+  if (removedFolder) console.log(`${dryRun ? 'would remove' : 'removed'} the empty folder`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);

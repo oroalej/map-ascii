@@ -1,6 +1,6 @@
 ---
 name: sync-review
-description: For each comma-separated branch, in order, commit and push its worktree, merge origin/main, open a PR to main, review it until clean (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it. Stops at the first branch that doesn't merge. Use when the user invokes $sync-review [--fast] <branches>.
+description: For each comma-separated branch, in order, commit and push its worktree, merge origin/main, open a PR to main, review it until clean (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it with $merge-pr, which also deletes the task's scratch, local branch and worktree (the remote branch stays). Stops at the first branch that doesn't merge. Use when the user invokes $sync-review [--fast] <branches>.
 ---
 
 # Sync, review and merge branches
@@ -15,6 +15,7 @@ The user lists only branches that are safe to process. Invoking `$sync-review` a
 - running `$review-pr`, which commits and pushes fixes
 - fixing CI
 - merging the PRs into `main`, which deploys to production through Vercel
+- after each merge, deleting the task's `.plans` scratch, its local branch and its worktree folder (`$merge-pr`). Remote branches stay.
 
 Don't ask for confirmation between steps or branches. Stop only where this skill says to stop.
 
@@ -57,7 +58,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    - No worktree → `skipped: no worktree`. Never create one.
    - Checked out in the first entry (the main checkout) → `skipped: main checkout`.
 4. Create `<run>` = `$env:TEMP/sync-review-<yyyyMMdd-HHmmss>/`. It lives outside `.plans/` on purpose. `<main-checkout>` is the first worktree entry.
-5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md`. Confirm that file exists. If it doesn't, stop.
+5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, stop.
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
 
@@ -123,25 +124,17 @@ codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o
    - step 5 passed on the PR's current head SHA
    - `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`
 2. If `main` moved and the PR is behind or conflicting, repeat step 2 (merge `origin/main` and push), at most twice. After each repeat, run the "CI gate" section (step 6) of `<review-pr-skill>` yourself in `<wt>`. If its rule calls for another review round (a CI fix touched non-test source code), run step 4 again instead. Then check again.
-3. `gh pr merge <N> --merge`. Never use `--delete-branch` (the worktree still uses the branch), `--squash`, `--rebase`, `--admin` or `--auto`. GitHub doesn't enforce CI on this repo, so this checklist is the only gate.
-4. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED`, stop.
+3. Follow `<merge-pr-skill>` exactly for `<branch>`, with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges with `gh pr merge <N> --merge`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+4. Read its `merge-pr-result`. `status` other than `merged` → stop with its `stopReason`. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
 
-## 7. Update the task's `.plans` row
+## 7. Note a stopped branch in `.plans`
 
-In `<main-checkout>/.plans/README.md`, find the rows that aren't in `done/` and whose Evidence names the branch.
-
-- **Merged, exactly one row:**
-  - Move that task folder to `<main-checkout>/.plans/done/`.
-  - Set its Status to `Complete; merged via sync-review`.
-  - Add `PR #N, merge <sha>` to Evidence.
-- **Merged, several rows:** only set their Next step to `branch merged via sync-review (PR #N)`, and list them in the report.
-- **Stopped:** don't move anything. Set the Next step to the stop reason and what needs a human.
-- **No row:** nothing to do.
+Only when a branch stopped before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
 
 ## 8. Report and clean up
 
 After each branch, print one line:
 
-`<branch>: commit <sha|none> · main <clean|resolved n files|aborted> · PR #N · review <rounds> rounds, <status> · CI <ci.status> · <merged <sha> | stopped: <reason>>`
+`<branch>: commit <sha|none> · main <clean|resolved n files|aborted> · PR #N · review <rounds> rounds, <status> · CI <ci.status> · <merged <sha>, cleanup <done|failed: what> | stopped: <reason>>`
 
-At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, held-back files, aborted merges with their conflicting files, and errors. Then delete `<run>`.
+At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, held-back files, aborted merges with their conflicting files, cleanup failures, and errors. Leave `<run>` in the OS temp folder and print its path: Codex rejects recursive shell deletes as "blocked by policy".
