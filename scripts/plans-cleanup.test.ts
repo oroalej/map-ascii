@@ -35,24 +35,24 @@ function task(status: string, name: string, files: string[]): string {
 }
 
 describe('cleanTask', () => {
-  it.runIf(process.platform === 'win32')(
-    'preserves the actual spelling of Windows keep paths and handoff',
-    () => {
-      const folder = task('done', 'case-keeps', [
-        'Handoff.md',
-        'Notes.md',
-        'logs/final.txt',
-        'scratch.txt',
-      ]);
-      const preview = cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'], true);
-      expect(preview.kept).toEqual(['Handoff.md', 'Notes.md', 'logs/final.txt']);
-      expect(cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'])).toEqual(preview);
-      expect(readdirSync(folder).sort()).toEqual(['Handoff.md', 'Notes.md', 'logs']);
-      const handoffOnly = task('done', 'handoff-only', ['Handoff.md']);
-      expect(cleanTask(root, 'handoff-only').removedFolder).toBe(false);
-      expect(existsSync(join(handoffOnly, 'Handoff.md'))).toBe(true);
-    },
-  );
+  it('preserves the actual spelling of Windows keep paths and handoff', () => {
+    const folder = task('done', 'case-keeps', [
+      'Handoff.md',
+      'Notes.md',
+      'logs/final.txt',
+      'scratch.txt',
+    ]);
+    const options = { caseInsensitive: true };
+    const preview = cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'], true, options);
+    expect(preview.kept).toEqual(['Handoff.md', 'Notes.md', 'logs/final.txt']);
+    expect(cleanTask(root, 'case-keeps', ['notes.md', 'LOGS/FINAL.txt'], false, options)).toEqual(
+      preview,
+    );
+    expect(readdirSync(folder).sort()).toEqual(['Handoff.md', 'Notes.md', 'logs']);
+    const handoffOnly = task('done', 'handoff-only', ['Handoff.md']);
+    expect(cleanTask(root, 'handoff-only', [], false, options).removedFolder).toBe(false);
+    expect(existsSync(join(handoffOnly, 'Handoff.md'))).toBe(true);
+  });
 
   it.runIf(process.platform !== 'win32')(
     'keeps distinct casing on case-sensitive filesystems',

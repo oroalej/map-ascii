@@ -18,8 +18,8 @@ export function listWorktrees(repo: string): { path: string; branch: string | nu
     });
 }
 
-export function mainCheckout(repo: string): string {
-  const main = listWorktrees(repo)[0];
+export function mainCheckout(repo: string, worktrees = listWorktrees(repo)): string {
+  const main = worktrees[0];
   if (!main) throw new Error(`No main checkout for ${repo}`);
   return main.path;
 }

@@ -19,13 +19,18 @@ try {
   execFileSync('git', ['fetch', 'origin', 'main'], { stdio: 'inherit' });
   // pnpm runs scripts from the package root; INIT_CWD is where the user ran pnpm.
   const cwd = process.env.INIT_CWD ?? process.cwd();
-  const { worktree, removedWorktree, deletedBranch, resumed } = removeWorktree({
+  const { worktree, removedWorktree, deletedBranch, resumed, alreadyRemoved } = removeWorktree({
     repo: process.cwd(),
     branch,
     mergedInto: 'origin/main',
     cwd,
     dryRun,
   });
+  if (alreadyRemoved) {
+    console.log(`already removed: ${branch}`);
+    console.log(`remote branch: kept origin/${branch}`);
+    process.exit(0);
+  }
   const verb = (done: string) => (dryRun ? `would ${done.replace(/d$/, '')}` : done);
   if (resumed) console.log('finishing an interrupted removal');
   console.log(

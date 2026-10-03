@@ -1,6 +1,6 @@
 ---
 name: sync-review
-description: For each comma-separated branch, in order, commit and push its worktree, merge origin/main, open a PR to main, review it until clean (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it with $merge-pr, which also deletes the task's scratch, local branch and worktree (the remote branch stays). Stops at the first branch that doesn't merge. Use when the user invokes $sync-review [--fast] <branches>.
+description: For each comma-separated branch, in order, commit and push its worktree, open a PR to main, delegate origin/main synchronization and review to $review-pr (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it with $merge-pr, which also deletes the task's scratch, local branch and worktree (the remote branch stays). Stops at the first branch that doesn't merge. Use when the user invokes $sync-review [--fast] <branches>.
 ---
 
 # Sync, review and merge branches
@@ -109,7 +109,7 @@ codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o
    - step 5 passed on the PR's current head SHA
    - `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`
 2. If `main` moved and the PR is behind or conflicting, merge it again by following `<review-pr-skill>` step 1.7 yourself in `<wt>` (it pushes), at most twice. After each repeat, run the "CI gate" section (step 6) of `<review-pr-skill>` yourself in `<wt>`. If its rule calls for another review round (a CI fix touched non-test source code), run step 4 again instead. Then check again.
-3. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha`, or, after a step-6.2 repeat, the new head once its CI gate passed, with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges with `gh pr merge <N> --merge`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+3. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha`, or, after a step-6.2 repeat, the new head once its CI gate passed, with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
 4. Read its `merge-pr-result`. `status` other than `merged` → stop with its `stopReason`. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
 
 ## 7. Note a stopped branch in `.plans`

@@ -67,7 +67,7 @@ pnpm worktree:remove <branch> --dry-run
 
 It runs every check of step 6 without deleting: the branch is merged into `origin/main` (no local commits after the merge), and the worktree has no new uncommitted work or protected ignored files. Refusals saying `is not merged into`, `uncommitted changes`, or `protected ignored files` preserve the branch's scratch: skip steps 5–6 and report the safety refusal. Report other failures (missing scripts, Git errors, inaccessible metadata) as cleanup errors and also skip steps 5–6. A reported `finishing an interrupted removal` is fine: go on; dry-run must still establish current safety.
 
-Exception for an **already-merged rerun**: if the exact refusal is `No local branch or worktree for <branch>`, confirm both the `refs/heads/<branch>` ref and its `git worktree list --porcelain` entry are absent. Inspect any branch removal marker in the common Git directory's `atlas-worktree-removal/` (the filename is the URI-encoded branch). Confirm no folder recorded by it still needs removal; an unreadable or ambiguous marker is a cleanup error. Only then record `already removed`, continue step 5 to finish plans cleanup, and skip step 6. Never treat a missing branch as success for an open PR or bypass another safety refusal.
+Exception for an **already-merged rerun**: if the command succeeds and reports `already removed: <branch>`, it has confirmed the local branch and worktree are absent and no recorded folder needs recovery. Record `already removed`, continue step 5 to finish plans cleanup, and skip step 6. A `Removal marker pending` or inaccessible-metadata refusal is a cleanup error; skip steps 5–6. Consume the command's result rather than inspecting its private marker files. Never treat a missing branch as success for an open PR or bypass another safety refusal.
 
 ## 5. Plans: rows and scratch
 
@@ -107,10 +107,10 @@ Otherwise, from `<main-checkout>`:
 pnpm worktree:remove <branch>
 ```
 
-It repeats step 4's checks, deletes the worktree folder, prunes it from git, and deletes the local branch. The remote branch stays.
+It repeats step 4's checks, deletes the worktree folder, removes only its Git registration, and deletes the local branch. The remote branch stays.
 
 - If it reports `Partially deleted`, a process (dev server, terminal or editor) is using the folder. Don't retry. Report it, so the user can close that process and run `$merge-pr <branch>` again: the rerun finishes the removal.
-- If there's no worktree (step 1 found none), it deletes only the local branch.
+- If an already-merged rerun has no worktree (step 1 found none), it deletes only the local branch. An open PR still requires a worktree at gate 2.1.
 
 ## 7. Report
 

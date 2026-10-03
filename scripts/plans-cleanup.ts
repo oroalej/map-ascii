@@ -7,6 +7,7 @@
  */
 import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
+import { withCleanupError } from './fs-cleanup';
 
 export const PLAN_STATUSES = ['todo', 'active', 'paused', 'done'] as const;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -28,7 +29,7 @@ const lstatOrNull = (path: string) => {
     return null;
   }
 };
-const inside = (path: string, folder: string) => {
+const isDescendant = (path: string, folder: string) => {
   const rel = relative(folder, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
@@ -55,7 +56,7 @@ export function findTaskFolder(plansRoot: string, task: string): string {
   if (lstatSync(folder).isSymbolicLink())
     throw new Error(`Refusing a linked task folder: ${folder}`);
   // A linked status folder would put the real task folder outside .plans.
-  if (!inside(realpathSync(folder), realpathSync(plansRoot))) {
+  if (!isDescendant(realpathSync(folder), realpathSync(plansRoot))) {
     throw new Error(`Refusing ${folder}: it resolves outside ${plansRoot}`);
   }
   return folder;
@@ -74,7 +75,7 @@ function keepPath(path: string): string {
 }
 
 /** Use directory-entry spelling so Windows lookup and preservation agree. */
-function existingKeepPath(folder: string, path: string): string | null {
+function existingKeepPath(folder: string, path: string, caseInsensitive: boolean): string | null {
   const parts = path.split('/');
   const actual: string[] = [];
   for (let i = 0; i < parts.length; i++) {
@@ -82,9 +83,7 @@ function existingKeepPath(folder: string, path: string): string | null {
     const entries = readdirSync(parent);
     const part = parts[i]!;
     const matches = entries.filter(
-      (entry) =>
-        entry === part ||
-        (process.platform === 'win32' && entry.toLowerCase() === part.toLowerCase()),
+      (entry) => entry === part || (caseInsensitive && entry.toLowerCase() === part.toLowerCase()),
     );
     if (matches.length > 1) throw new Error(`Ambiguous keep path ${path} in ${folder}`);
     const name = matches[0];
@@ -104,17 +103,9 @@ function existingKeepPath(folder: string, path: string): string | null {
 }
 
 function deleteScratch(path: string): void {
-  try {
+  withCleanupError(path, 'cleaned', () => {
     rmSync(path, { recursive: true, force: true, maxRetries: 3 });
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY') {
-      throw new Error(
-        `Partially cleaned ${path}: a process is using it. Close it and rerun to finish. (${code})`,
-      );
-    }
-    throw error;
-  }
+  });
 }
 
 /**
@@ -126,14 +117,15 @@ export function cleanTask(
   task: string,
   keep: readonly string[] = [],
   dryRun = false,
+  { caseInsensitive = process.platform === 'win32' }: { caseInsensitive?: boolean } = {},
 ): CleanupResult {
   const folder = findTaskFolder(plansRoot, task);
   // Resolve and validate every keep before the first deletion, including the implicit handoff.
   const normalized = keep.map(keepPath);
-  const resolved = normalized.map((path) => existingKeepPath(folder, path));
+  const resolved = normalized.map((path) => existingKeepPath(folder, path, caseInsensitive));
   const missing = normalized.filter((_, i) => resolved[i] === null);
   if (missing.length > 0) throw new Error(`Keep paths not in ${folder}: ${missing.join(', ')}`);
-  const handoff = existingKeepPath(folder, 'handoff.md');
+  const handoff = existingKeepPath(folder, 'handoff.md', caseInsensitive);
   const keepSet = new Set(resolved.filter((path): path is string => path !== null));
   if (handoff) keepSet.add(handoff);
   // Folders holding a kept path are cleaned inside instead of deleted whole.
