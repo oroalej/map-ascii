@@ -1,12 +1,12 @@
 /**
  * Create a task worktree ready to work in (AGENTS.md "Git"):
  *   pnpm worktree:new <short> <topic>
- * adds ../naga-ascii-<short> on a new branch codex/<topic> from main, installs dependencies and
+ * adds worktrees/<short> (gitignored, inside the main checkout) on a new branch codex/<topic> from main, installs dependencies and
  * fetches the pinned tiles.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 const [short, topic] = process.argv.slice(2).filter((arg) => arg !== '--');
 const slug = /^[a-z0-9][a-z0-9-]*$/;
@@ -19,7 +19,7 @@ const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' 
 // The main checkout is the common directory's parent, whichever worktree this runs from.
 const common = resolve(git('rev-parse', '--git-common-dir'));
 const main = dirname(common);
-const path = resolve(dirname(main), `${basename(main)}-${short}`);
+const path = resolve(main, 'worktrees', short);
 const branch = `codex/${topic}`;
 
 if (existsSync(path)) {
