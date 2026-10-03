@@ -286,8 +286,9 @@ for (const city of cities) {
       test('follows the Life toggle and changed motion preference with GPU timing', async ({
         page,
       }) => {
-        // Bound animated software-WebGL work while exercising startup and motion toggles.
-        await page.setViewportSize({ width: 640, height: 480 });
+        // Use the smallest desktop width to bound animated software-WebGL work.
+        await page.setViewportSize({ width: 641, height: 480 });
+        expect(await page.evaluate(() => matchMedia('(max-width: 640px)').matches)).toBe(false);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });

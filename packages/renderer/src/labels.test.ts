@@ -1,3 +1,4 @@
+import { wrapText } from './label-layout';
 import { describe, expect, it } from 'vitest';
 import {
   packOverlay,
@@ -10,7 +11,6 @@ import {
   labelText,
   labelVisibility,
   placeLabels,
-  wrapText,
   overlayCoversPoint,
 } from './labels';
 
@@ -164,7 +164,15 @@ describe('wrapText', () => {
 describe('placeLabels on streets', () => {
   it('places one name per street nearby, and again far away', () => {
     const ways = [1, 2, 3].map((id, i) =>
-      label({ id, text: 'Elias', col: [5, 20, 50][i]!, row: 3, mode: 'rotated', angle: 0 }),
+      label({
+        id,
+        text: 'Elias',
+        rank: LabelRank.street,
+        col: [5, 20, 50][i]!,
+        row: 3,
+        mode: 'rotated',
+        angle: 0,
+      }),
     );
     const placed = placeLabels(createOverlay(60, 7), ways, index);
     expect(placed.map((l) => l.id)).toEqual([1, 3]);
@@ -263,7 +271,7 @@ describe('placeLabels by taken cells', () => {
     const modes = ['beside', 'rotated'] as const;
     const labels: LabelCandidate[] = Array.from({ length: 400 }, (_, id) => ({
       id,
-      text: words[Math.floor(rng() * words.length)]!,
+      text: `${words[Math.floor(rng() * words.length)]!} ${id}`,
       rank: Math.floor(rng() * 4),
       col: Math.floor(rng() * 70) - 5,
       row: Math.floor(rng() * 30) - 5,

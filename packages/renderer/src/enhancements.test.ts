@@ -1,11 +1,6 @@
+import { uprightStreetAngle } from './label-layout';
 import { describe, expect, it } from 'vitest';
-import {
-  createOverlay,
-  placeLabels,
-  rotatedLabelVertices,
-  uprightStreetAngle,
-  resetOverlay,
-} from './labels';
+import { createOverlay, placeLabels, rotatedLabelVertices, resetOverlay } from './labels';
 import { crownLight } from './glyphs/select';
 import { legendEntries } from './legend';
 
