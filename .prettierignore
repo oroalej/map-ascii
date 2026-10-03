@@ -12,4 +12,4 @@ apps/web/public/tiles
 *.md
 
 # nested agent worktrees (see AGENTS.md "Git")
-worktrees
+/worktrees

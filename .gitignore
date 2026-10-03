@@ -55,4 +55,4 @@ apps/web/public/tiles/imagery/
 .plans/
 
 # nested agent worktrees (see AGENTS.md "Git")
-worktrees/
+/worktrees/
