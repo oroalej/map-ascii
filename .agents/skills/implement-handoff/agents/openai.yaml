@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Implement Handoff'
+  short_description: 'Review a handoff, implement it, open a PR and run $review-pr.'
+  default_prompt: 'Use $implement-handoff on this task: '
