@@ -1,6 +1,6 @@
 ---
 name: implement-handoff
-description: Take a handoff plan (.plans/<status>/<task>/handoff.md) from review to PR. A separate Sol 6.1 max-effort run reviews the handoff for gaps and wrong assumptions, every proposed amendment is applied, then this session implements it, commits and pushes, merges origin/main, opens a PR to main, and runs $review-pr (review loop and CI gate). Never merges. Use when the user invokes $implement-handoff [--fast] <task or handoff path>.
+description: Take a handoff plan (.plans/<status>/<task>/handoff.md) from review to PR. A separate Sol 6.1 max-effort run reviews the handoff for gaps and wrong assumptions, every proposed amendment is applied, then this session implements it, commits and pushes, opens a PR to main, and runs $review-pr (main synchronization, review loop and CI gate). Never merges the PR. Use when the user invokes $implement-handoff [--fast] <task or handoff path>.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
@@ -12,8 +12,8 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - editing its `handoff.md` with review amendments
 - creating its worktree if the handoff says it's a new task
 - implementing it, committing and pushing
-- merging `main` into its branch and opening a PR to `main`
-- running `$review-pr`, which commits and pushes fixes and CI fixes
+- opening a PR to `main`
+- running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
 Don't ask for confirmation between steps. Stop only where this skill or the handoff says to stop. Never merge the PR.
 
@@ -23,9 +23,9 @@ Always pass these explicitly. Never change them or fall back to another model.
 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
-| This session: amends the handoff, implements, commits, merges `main`, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+| This session: amends the handoff, implements, commits, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 | Codex #1: reviews the handoff (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
-| Codex #2: runs `$review-pr` | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
+| Codex #2: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
 | Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
 
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$implement-handoff` again from a session with those settings.

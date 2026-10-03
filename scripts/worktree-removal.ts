@@ -6,8 +6,18 @@
  * (`Remove-Item -Recurse`, `rm -rf`) as "blocked by policy" when it can't ask for approval.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { TilesLock } from '../packages/shared/src/schemas';
 import { listWorktrees } from './git';
 
 export { listWorktrees } from './git';
@@ -45,8 +55,16 @@ const inside = (path: string, folder: string) => {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 };
 
-const removeFolder = (path: string) =>
-  rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+function removeFolder(path: string): void {
+  const options = { recursive: true, force: true, maxRetries: 3 };
+  // Keep Git access and ignore rules intact until all ordinary subtrees were removed.
+  for (const name of readdirSync(path).filter((name) => name !== '.git' && name !== '.gitignore')) {
+    rmSync(join(path, name), options);
+  }
+  rmSync(join(path, '.gitignore'), options);
+  rmSync(join(path, '.git'), options);
+  rmSync(path, options);
+}
 
 interface RemovalMarker {
   worktree: string;
@@ -73,6 +91,52 @@ function disposableIgnored(path: string): boolean {
       path,
     ) || /^(?:(?:apps|packages)\/[^/]+\/)?(?:\.eslintcache|tsconfig\.tsbuildinfo)$/.test(path)
   );
+}
+
+/** Published artifacts are reproducible only when they match the captured commit's lock. */
+function generatedFiles(main: string, worktree: string, head: string): (path: string) => boolean {
+  const locks = new Map<string, TilesLock | null>();
+  const pinnedTile = (path: string): boolean => {
+    const match = /^apps\/web\/public\/tiles\/([a-z0-9][a-z0-9-]*)\.[^/]+$/.exec(path);
+    if (!match) return false;
+    try {
+      if (!lstatSync(join(worktree, path)).isFile()) return false;
+      const city = match[1]!;
+      if (!locks.has(city)) {
+        try {
+          locks.set(
+            city,
+            TilesLock.parse(
+              JSON.parse(
+                git(main, 'show', `${head}:packages/content/cities/${city}/tiles.lock.json`),
+              ),
+            ),
+          );
+        } catch {
+          locks.set(city, null);
+        }
+      }
+      const name = path.slice('apps/web/public/tiles/'.length);
+      const expected = locks.get(city)?.files[name];
+      return (
+        expected !== undefined &&
+        createHash('sha256')
+          .update(readFileSync(join(worktree, path)))
+          .digest('hex') === expected
+      );
+    } catch {
+      return false;
+    }
+  };
+  return (path) => {
+    if (path === 'apps/web/next-env.d.ts') {
+      return lstatSync(join(worktree, path)).isFile();
+    }
+    if (path === 'apps/web/public/tiles/') {
+      return readdirSync(join(worktree, path)).every((name) => pinnedTile(`${path}${name}`));
+    }
+    return pinnedTile(path);
+  };
 }
 
 function worktreeStatus(main: string, common: string, worktree: string): string[] {
@@ -158,16 +222,18 @@ export function removeWorktree({
     previous.head === head;
   if (!dryRun && !resumed) rmSync(marker, { force: true });
   if (!worktree && !branchExists) throw new Error(`No local branch or worktree for ${branch}`);
-  if (!branchExists || !succeeds(main, 'merge-base', '--is-ancestor', branch, mergedInto)) {
+  if (!head || !succeeds(main, 'merge-base', '--is-ancestor', head, mergedInto)) {
     throw new Error(`${branch} is not merged into ${mergedInto}; nothing was removed`);
   }
   const folderExists = worktree !== null && existsSync(worktree);
   if (folderExists) {
-    const changes = worktreeStatus(main, common, worktree).filter((entry) =>
-      entry.startsWith('!! ')
-        ? !disposableIgnored(entry.slice(3))
-        : !(resumed && entry.slice(0, 2) === ' D'),
-    );
+    const generated = generatedFiles(main, worktree, head);
+    const changes = worktreeStatus(main, common, worktree).filter((entry) => {
+      if (entry.startsWith('!! '))
+        return !disposableIgnored(entry.slice(3)) && !generated(entry.slice(3));
+      if (entry.startsWith('?? ')) return !generated(entry.slice(3));
+      return !(resumed && entry.slice(0, 2) === ' D');
+    });
     if (changes.length)
       throw new Error(
         `${worktree} has uncommitted changes or protected ignored files:\n${changes.join('\n')}`,
@@ -196,9 +262,8 @@ export function removeWorktree({
     }
   }
   if (worktree) git(main, 'worktree', 'prune');
-  // -D, not -d: -d compares against the possibly stale local main; the merge into
-  // `mergedInto` was verified above.
-  if (branchExists) git(main, 'branch', '-D', branch);
+  // Compare-and-delete preserves any newer branch head another session created meanwhile.
+  if (branchExists) git(main, 'update-ref', '-d', `refs/heads/${branch}`, head);
   rmSync(marker, { force: true });
   return result;
 }

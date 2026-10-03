@@ -45,7 +45,7 @@ The PR is always the current branch's PR. No input selects a different one.
 5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
 6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. This is the only place the review flows merge `main`; `$sync-review` and `$implement-handoff` rely on it. Work in `<pr-checkout>`.
-   1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current` and go to step 2.
+   1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
    2. If the merge would touch a file listed in the baseline (another session's uncommitted edits), stop with `stopped` (`merge blocked by uncommitted <files>`) without merging.
    3. `git merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
       - `<scope>` is the most common scope among the branch's recent commits.
