@@ -13,12 +13,8 @@
       "note": "ODbL. Complete mapped grounds, standing roofs and neighboring road geometry are retained."
     },
     {
-      "title": "Source-relative hospital landscaping estimate",
-      "note": "No hospital image was supplied. The small front and east-side visual envelope, lawns, planting and connecting walks are schematic estimates derived from open space around the complete saved OSM hospital roof and neighboring footprints. It is not a surveyed hospital parcel, tree inventory or verified entrance layout. Adjacent buildings and the full Panganiban Drive carriageway remain clear and retain geometry."
-    },
-    {
-      "title": "Draft layout limits",
-      "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
+      "title": "Owner-requested detail removal",
+      "note": "The owner's October 4, 2026 close-up reference supersedes the earlier schematic landscaping. All added hospital grounds, trees, lawns, planting and walking/paving routes are removed. The mapped standing roof, hospital classification and canonical landmark identity remain. No new geometry is inferred from the reference and no reference bitmap ships."
     },
     {
       "title": "City of Naga emergency directory",

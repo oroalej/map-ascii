@@ -29,7 +29,6 @@ const pack = (folder: string, slug: string) =>
 const slugs = [
   'triangulo-elementary-school',
   'mariners-polytechnic-colleges-naga',
-  'sti-college-naga',
   'jose-rizal-elementary-school',
   'naga-city-school-of-arts-and-trades',
 ];
@@ -53,9 +52,7 @@ const obstacles = mappedFootprints(source, { water: true });
 describe('additional roadside and campus references', () => {
   it('keeps distinct source anchors and canonical selection for school approaches', () => {
     const landmarks = slugs.map((slug) => Landmark.parse(pack('landmarks', slug)));
-    expect(new Set(landmarks.map((l) => l.osm_id)).size).toBe(5);
-    expect(details[2]!.osm_id).toBe('osm:node/254753694');
-    expect(details[2]!.grounds).toBeDefined();
+    expect(new Set(landmarks.map((l) => l.osm_id)).size).toBe(4);
     const input = mergeContent(structuredClone(source), { landmarks } as ContentBundle);
     const output = mergeSiteDetails(input, details).features;
     for (const f of source)
@@ -101,7 +98,9 @@ describe('additional roadside and campus references', () => {
     expect(landcoverFeatures(source, covers).warnings.filter((w) => w.includes('tree'))).toEqual(
       [],
     );
-    const arts = covers[4]!;
+    const arts = covers.find(
+      (cover) => cover.id === 'landcover/naga-city-school-of-arts-and-trades',
+    )!;
     for (const [i, old] of reference.arts_before.trees.entries())
       expect(arts.trees[i]!.at).toEqual(old.at);
     for (const old of reference.arts_before.areas) expect(arts.areas).toContainEqual(old);

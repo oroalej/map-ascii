@@ -12,12 +12,11 @@ import { mergeSiteDetails, seatingFootprint } from './site-detail';
 const sites = [
   ['tacolod-elementary-school-annex', 'osm:way/880725922'],
   ['tacolod-elementary-school-main', 'osm:way/880722105'],
-  ['st-john-hospital', 'osm:way/23673116'],
 ] as const;
 
 import.meta.glob('../../../content/cities/naga/city.json');
 
-describe('Tacolod schools and St. John Hospital grounds', () => {
+describe('Tacolod school grounds', () => {
   it('includes both complete school grounds within the configured map region', () => {
     const city = City.parse(
       JSON.parse(
@@ -25,7 +24,7 @@ describe('Tacolod schools and St. John Hospital grounds', () => {
       ),
     );
     if (!('bbox' in city.region)) throw Error('expected the Naga region bbox');
-    for (const [slug] of sites.slice(0, 2)) {
+    for (const [slug] of sites) {
       const detail = details.find((d) => d.id === `detail/${slug}`)!;
       const [west, south, east, north] = bbox(areaFor(detail));
       expect(west).toBeGreaterThanOrEqual(city.region.bbox[0]);
