@@ -28,7 +28,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "git config core.hooksPath .githooks || true",
-    "worktree:new": "tsx scripts/worktree-new.ts"
+    "worktree:new": "tsx scripts/worktree-new.ts",
+    "plans:clean": "tsx scripts/plans-clean.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

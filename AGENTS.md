@@ -33,6 +33,7 @@ Read these before doing substantial work:
 - `pnpm test:related <files>` — only the Vitest files that depend on the given files (what you work with). `pnpm test` runs every unit test; CI does that.
 - `pnpm test:e2e` — prepares the static export (rebuilding only when needed) and serves it on this checkout's own port (`apps/web/scripts/e2e-port.ts`; `E2E_PORT` overrides it). Takes filters: `pnpm test:e2e smoke.spec.ts --project=chromium -g "<test name>"`.
 - `pnpm worktree:new <short> <topic>` — create a task worktree `../naga-ascii-<short>` on `codex/<topic>` from `main`, with dependencies and tiles.
+- `pnpm plans:clean <task> [--keep <name>]... [--dry-run]` — delete a handoff task's scratch from the main checkout's `.plans/`, keeping `handoff.md` and each `--keep` entry. Works from any worktree.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
@@ -95,7 +96,7 @@ Implementation plans live in the gitignored `.plans/` folder of the main checkou
 - Put every scratch file for the task in its folder: logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
 - Confirm each step with targeted tests only; the end-of-task checks run once (see "Verifying changes"). No screenshots or evidence sets.
 - When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
-- Before ending the session, delete every file in the task folder except `handoff.md` and files the handoff marks **keep**. In your report, list what you deleted and what you kept.
+- Before ending the session, run `pnpm plans:clean <task>` with one `--keep <name>` per entry the handoff marks **keep**. It deletes everything else in the task folder except `handoff.md`. Don't delete scratch with shell commands (`Remove-Item -Recurse`, `rm -rf`): Codex rejects them as "blocked by policy". In your report, list what the command deleted and kept.
 
 ## Don'ts
 
