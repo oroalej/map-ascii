@@ -27,7 +27,7 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Loop session (this session): commits, conflicts, PRs, CI fixes, merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
 | PR review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal | started by `$review-pr` |
 | Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
-| Codex #2: runs `$review-pr` and fixes and pushes the valid entries | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
+| Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
 
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$sync-review` again from a session with those settings.
 
@@ -36,14 +36,14 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 - with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
 - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
-`--fast` also gets forwarded to `$review-pr`, so Codex #1 uses the same speed. It doesn't change Claude, or this session's own speed.
+`--fast` also gets forwarded to `$review-pr`, so Codex #1 uses the same speed in every round. It doesn't change Claude, or this session's own speed.
 
 ## Rules for every branch
 
 - **Fail-fast:** if any branch that steps 1–6 process ends without its PR merged, stop the whole loop. Report the remaining branches as `not processed: stopped after <branch>`. Branches skipped in step 0 don't trigger this.
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`. Run every command against the branch's worktree (`git -C <wt> …`, or with `<wt>` as the working directory).
 - **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
-- **Long commands:** `codex exec` rounds can run for 90+ minutes, and `gh pr checks --watch` for 10+. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<run>`, and poll until it exits.
+- **Long commands:** the `$review-pr` run can take several hours, and `gh pr checks --watch` 10+ minutes. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<run>`, and poll until it exits.
 
 ## 0. Prepare (once)
 
@@ -96,45 +96,33 @@ Then process the branches one at a time, in the order given. `<slug>` is the bra
    - Title: a gitmoji + conventional header summarizing the branch's commits since `main`.
    - Body: what the branch does, taken from its commits and its handoff, plus a test plan listing the checks the handoff names. Don't invent claims about tests that weren't run.
 
-## 4. Review loop (at most 3 rounds)
+## 4. Review until clean, with the CI gate ($review-pr)
 
-Each round k (starting at 1) starts a fresh Codex #2:
+`$review-pr` runs the review loop (up to 3 rounds, with stall detection) and the CI gate (up to 3 fix attempts) itself. Start it once, in a fresh Codex #2:
 
 ```
-codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-round<k>.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Round: <k>. Rejected entries file: <run>/<slug>-rejected.md. Previous result file: <run>/<slug>-round<k-1>.json. Result file: <run>/<slug>-round<k>.json.'
+codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-review.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <run>/<slug>-review.json.'
 ```
 
-- In round 1, leave out the rejected entries file and the previous result file.
-- After every round, append that round's `invalid` entries to `<run>/<slug>-rejected.md`, one per line: `path:line — claim`. When creating the file, start it with the exact header line that `review-pr` specifies.
+- Shell timeout: at least 4 hours (three review rounds plus CI). Background-and-poll as needed.
+- Read `<run>/<slug>-review.json`. If it's missing, use the `review-pr-result` block at the end of the `-o` file.
+- `status` is `clean` → go to step 5.
+- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), or no result → stop, with the result's `status` and `stopReason`.
 
-Read `<run>/<slug>-round<k>.json`. If it's missing, use the `review-pr-result` block at the end of the `-o` file.
+## 5. Confirm CI
 
-- `clean` → go to step 5.
-- `fixed` → if k < 3, run round k+1. Otherwise the loop is capped: stop and report the open entries.
-- `stalled`, `stopped`, `error`, or no result → stop, with the result's `stopReason`.
-
-Nits are fixed when they come up. New nits alone never start another round, because a round whose only valid entries are nits returns `clean`.
-
-## 5. CI gate (at most 3 fix attempts)
-
-1. Wait until the PR has checks for its current head SHA (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch`. If everything passes, go to step 6.
-2. If a check fails, find its run and read it: `gh run view <run-id> --log-failed`. For e2e failures, also download the Playwright artifact: `gh run download <run-id> -n playwright-results-<shard> -D <run>/<slug>-ci`.
-   - **Infrastructure flake** (runner, network or dependency-download error, or a timeout with no failing test): rerun once with `gh run rerun <run-id> --failed`, then go back to 1. If the same failure comes back, treat it as real.
-   - **Real failure:**
-     - Reproduce it locally in `<wt>` with the narrowest command: the failing Vitest file, or `pnpm test:e2e --project=chromium -g "<test>"`. A run may wait for a heavy slot; let it wait.
-     - Fix the cause. Change the test only if the test itself is wrong.
-     - Once it passes locally, commit (`🐛 fix(<scope>): …` or `💚 ci(<scope>): …`), push, and go back to 1. This counts as one fix attempt.
-3. If any CI fix touched non-test source code, run one more review round once CI is green. It follows the step 4 rules and counts toward the 3-round cap. If that round's result isn't `clean`, stop. Otherwise repeat this step from 1 for its pushes.
-4. Still red after 3 fix attempts → stop. Report the failing check and what was tried.
+1. Confirm the result's `ci.status` is `green` or `fixed`.
+2. Confirm `gh pr checks <N>` passes on the PR's current head SHA (`gh pr view <N> --json headRefOid`). If checks are still running, wait with `gh pr checks <N> --watch`.
+3. If either check fails, stop.
 
 ## 6. Merge into main
 
 1. Check every condition:
-   - the review loop ended `clean`
+   - `$review-pr` ended `clean`
    - nothing was held back in step 1
-   - the CI gate passed on the PR's current head SHA
+   - step 5 passed on the PR's current head SHA
    - `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`
-2. If `main` moved and the PR is behind or conflicting, repeat step 2 and then step 5, at most twice, then check again.
+2. If `main` moved and the PR is behind or conflicting, repeat step 2 (merge `origin/main` and push), at most twice. After each repeat, run the "CI gate" section (step 6) of `<review-pr-skill>` yourself in `<wt>`. If its rule calls for another review round (a CI fix touched non-test source code), run step 4 again instead. Then check again.
 3. `gh pr merge <N> --merge`. Never use `--delete-branch` (the worktree still uses the branch), `--squash`, `--rebase`, `--admin` or `--auto`. GitHub doesn't enforce CI on this repo, so this checklist is the only gate.
 4. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED`, stop.
 
@@ -154,6 +142,6 @@ In `<main-checkout>/.plans/README.md`, find the rows that aren't in `done/` and 
 
 After each branch, print one line:
 
-`<branch>: commit <sha|none> · main <clean|resolved n files|aborted> · PR #N · review <k> rounds, <status> · CI <green|fixed n|red> · <merged <sha> | stopped: <reason>>`
+`<branch>: commit <sha|none> · main <clean|resolved n files|aborted> · PR #N · review <rounds> rounds, <status> · CI <ci.status> · <merged <sha> | stopped: <reason>>`
 
 At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, held-back files, aborted merges with their conflicting files, and errors. Then delete `<run>`.
