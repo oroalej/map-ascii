@@ -10,9 +10,9 @@ const REGULAR_SHELLS = 49;
 export const FIREWORKS = Object.freeze({
   minZoom: MIN_ZOOM,
   hideZoom: MAX_ZOOM,
-  largeZoom: 16,
   sparseZoom: 20,
   referenceZoom: 19,
+  cameraHeight: 320,
   shells: REGULAR_SHELLS + 1,
   regularShells: REGULAR_SHELLS,
   sparseShells: 4,
@@ -20,7 +20,7 @@ export const FIREWORKS = Object.freeze({
   maxHeight: 220,
   largeHeight: 460,
   largeHeightVariation: 100,
-  distantScale: 0.6,
+  maxRadius: 520,
   stars: 40,
   tails: 4,
   smoke: 12,
@@ -34,7 +34,7 @@ export const FIREWORK_INSTANCE_COUNT =
 export function fireworkShellCount(zoom: number): number {
   if (!Number.isFinite(zoom) || zoom < FIREWORKS.minZoom || zoom >= FIREWORKS.hideZoom) return 0;
   if (zoom >= FIREWORKS.sparseZoom) return FIREWORKS.sparseShells;
-  return FIREWORKS.regularShells + (zoom <= FIREWORKS.largeZoom ? 1 : 0);
+  return FIREWORKS.regularShells + (fireworkCameraHeight(zoom) > FIREWORKS.largeHeight ? 1 : 0);
 }
 
 /** Reference-world projection follows map magnification at every supported zoom. */
@@ -45,9 +45,40 @@ export function fireworkScale(zoom: number): number {
   );
 }
 
-/** Higher breaks look closer to the overhead camera; zoom magnifies that height cue. */
+/** Illustrative camera altitude: zooming in descends toward the ground. */
+export const fireworkCameraHeight = (zoom: number): number =>
+  FIREWORKS.cameraHeight / fireworkScale(zoom);
+
+/** A near plane bounds magnification before the overhead viewpoint passes the burst. */
+export function fireworkPerspective(height: number, zoom: number): number {
+  const eye = fireworkCameraHeight(zoom);
+  return eye > height ? eye / Math.max(eye - height, height * 0.15) : 0;
+}
+
+/** Higher fireworks leave the overhead view first as the eye descends below them. */
+export function fireworkVisibility(height: number, zoom: number): number {
+  const gap = fireworkCameraHeight(zoom) - height;
+  const t = Math.min(1, Math.max(0, gap / (height * 0.35)));
+  return t * t * (3 - 2 * t);
+}
+
+const distantRadius = (height: number) => 30 + height * 0.1;
+
+/** A fixed burst grows on approach, then is culled above the eye rather than shrinking. */
 export function fireworkRadius(height: number, zoom: number): number {
-  return height * 0.95 * Math.max(FIREWORKS.distantScale, fireworkScale(zoom));
+  const perspective = fireworkPerspective(height, zoom);
+  return perspective
+    ? Math.max(
+        distantRadius(height),
+        Math.min(FIREWORKS.maxRadius, height * 0.35 * fireworkScale(zoom) * perspective),
+      )
+    : 0;
+}
+
+/** Spark ink grows with the burst and never shrinks when the map changes cell size. */
+export function fireworkSparkWidth(height: number, zoom: number): number {
+  const radius = fireworkRadius(height, zoom);
+  return radius ? 5 * Math.min(2.4, Math.max(1, Math.sqrt(radius / distantRadius(height)))) : 0;
 }
 
 /** Illustrative rise time: taller launches take longer to reach their break height. */
@@ -68,6 +99,9 @@ export type FireworkDisplay = {
   launches: (FireworkLaunch | undefined)[];
   /** Small per-shell ages and rise times keep shader clocks precise indefinitely. */
   flights: Float32Array;
+  /** Packed height visibility and device-pixel spark width for each admitted launch. */
+  appearance: Float32Array;
+  admitted: Int16Array;
   lastTime: number;
   reduced?: boolean;
 };
@@ -80,6 +114,8 @@ export function createFireworkDisplay(
     rng: random(seed),
     launches: new Array<FireworkLaunch | undefined>(FIREWORKS.shells),
     flights: new Float32Array(FIREWORKS.shells * 2),
+    appearance: new Float32Array(FIREWORKS.shells * 2),
+    admitted: new Int16Array(FIREWORKS.shells),
     lastTime: 0,
   };
 }
@@ -103,6 +139,14 @@ export function fireworkInstances(): Float32Array {
   return out;
 }
 
+function swapSlots(buffer: Float32Array | Int16Array, width: number, a: number, b: number) {
+  for (let dimension = 0; dimension < width; dimension++) {
+    const previous = buffer[a * width + dimension]!;
+    buffer[a * width + dimension] = buffer[b * width + dimension]!;
+    buffer[b * width + dimension] = previous;
+  }
+}
+
 /**
  * Sample a new visible world location, height and timing only after a shell's smoke expires.
  * In-flight launches retain their world anchors through pan, zoom and resize. Independent
@@ -116,10 +160,15 @@ export function fireworkShells(
   time: number,
   reduced: boolean,
 ): number {
-  const count = fireworkShellCount(view.camera.zoom);
+  const limit = fireworkShellCount(view.camera.zoom);
   out.fill(0);
   display.flights.fill(0);
-  if (!count) return 0;
+  display.appearance.fill(0);
+  display.admitted.fill(-1);
+  if (!limit) return 0;
+  const slots =
+    FIREWORKS.regularShells +
+    (fireworkCameraHeight(view.camera.zoom) > FIREWORKS.largeHeight ? 1 : 0);
   const clock = reduced || !Number.isFinite(time) ? 0 : Math.max(0, time);
   if (display.reduced !== reduced || clock < display.lastTime) display.launches.fill(undefined);
   display.reduced = reduced;
@@ -129,15 +178,19 @@ export function fireworkShells(
   const top = grid.originRow * view.cellDev.h + grid.shiftY;
   const worldToDevice = view.dpr * scale;
   if (reduced) {
-    let visible = false;
-    for (let slot = 0; slot < count; slot++) {
+    let visible = false,
+      surviving = false;
+    for (let slot = 0; slot < slots; slot++) {
       const launch = display.launches[slot];
       if (!launch) {
         visible = true;
         break;
       }
-      const x = launch.x * worldToDevice - left,
-        y = launch.y * worldToDevice - top;
+      const perspective = fireworkPerspective(launch.height, view.camera.zoom);
+      if (!perspective) continue;
+      surviving = true;
+      const x = view.width / 2 + (launch.x * worldToDevice - left - view.width / 2) * perspective,
+        y = view.height / 2 + (launch.y * worldToDevice - top - view.height / 2) * perspective;
       const radius = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
       if (
         x + radius >= 0 &&
@@ -150,9 +203,11 @@ export function fireworkShells(
       }
     }
     // A still show has no future launches to fill a completely new area after a long pan.
-    if (!visible) display.launches.fill(undefined);
+    // Being below every burst is altitude culling, not a pan that needs new still poses.
+    if (!visible && surviving) display.launches.fill(undefined);
   }
-  for (let slot = 0; slot < count; slot++) {
+  let count = 0;
+  for (let slot = 0; slot < slots; slot++) {
     const large = slot === FIREWORKS.regularShells;
     let launch = display.launches[slot];
     if (!launch || clock >= launch.next) {
@@ -163,21 +218,25 @@ export function fireworkShells(
         ? FIREWORKS.largeHeight + rng() * FIREWORKS.largeHeightVariation
         : FIREWORKS.minHeight + rng() * (FIREWORKS.maxHeight - FIREWORKS.minHeight);
       const rise = fireworkRise(height);
-      const radius = large
-        ? Math.min(
-            fireworkRadius(height, view.camera.zoom) * view.dpr,
-            Math.min(view.width, view.height) * 0.45,
-          )
-        : 0;
-      const marginX = large ? radius / view.width : 0.08;
-      const marginY = large ? radius / view.height : 0.08;
+      const perspective = fireworkPerspective(height, view.camera.zoom);
+      const radius = large ? fireworkRadius(height, view.camera.zoom) * view.dpr : 0;
+      const marginX = large ? Math.min(0.45, radius / view.width) : 0.08;
+      const marginY = large ? Math.min(0.45, radius / view.height) : 0.08;
       const interval = rise + FIREWORKS.smokeLife + 0.25 + rng() * 2.75;
       // Sample the whole interval on entry, rather than starting every shell in a burst
       // and creating a synchronized lull a few seconds later. Still poses show a break.
       const start = clock - (reduced ? rise + 0.2 + rng() * 3.2 : prewarm ? rng() * interval : 0);
       launch = {
-        x: (left + (marginX + rng() * (1 - marginX * 2)) * view.width) / worldToDevice,
-        y: (top + (marginY + rng() * (1 - marginY * 2)) * view.height) / worldToDevice,
+        x:
+          (left +
+            view.width / 2 +
+            ((marginX + rng() * (1 - marginX * 2) - 0.5) * view.width) / (perspective || 1)) /
+          worldToDevice,
+        y:
+          (top +
+            view.height / 2 +
+            ((marginY + rng() * (1 - marginY * 2) - 0.5) * view.height) / (perspective || 1)) /
+          worldToDevice,
         seed: Math.floor(rng() * 65536),
         height,
         rise,
@@ -186,17 +245,48 @@ export function fireworkShells(
       };
       display.launches[slot] = launch;
     }
-    const at = slot * 4;
-    out[at] = launch.x * worldToDevice - left;
-    out[at + 1] = launch.y * worldToDevice - top;
+    const perspective = fireworkPerspective(launch.height, view.camera.zoom);
+    if (!perspective) continue;
+    const at = count * 4;
+    out[at] = view.width / 2 + (launch.x * worldToDevice - left - view.width / 2) * perspective;
+    out[at + 1] =
+      view.height / 2 + (launch.y * worldToDevice - top - view.height / 2) * perspective;
     out[at + 2] = launch.seed;
-    const radius = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
-    out[at + 3] = large ? Math.min(radius, Math.min(view.width, view.height) * 0.45) : radius;
-    display.flights[slot * 2] = Math.min(
+    out[at + 3] = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
+    display.flights[count * 2] = Math.min(
       clock - launch.start,
       launch.rise + FIREWORKS.smokeLife + 3,
     );
-    display.flights[slot * 2 + 1] = launch.rise;
+    display.flights[count * 2 + 1] = launch.rise;
+    display.appearance[count * 2] = fireworkVisibility(launch.height, view.camera.zoom);
+    display.appearance[count * 2 + 1] =
+      fireworkSparkWidth(launch.height, view.camera.zoom) * view.dpr;
+    display.admitted[count++] = slot;
+  }
+  if (limit < count) {
+    // Keep the nearest surviving launches, never substitute lower heights to fill close views.
+    for (let slot = 0; slot < limit; slot++) {
+      let nearest = slot,
+        distance = Infinity;
+      for (let candidate = slot; candidate < count; candidate++) {
+        const dx = out[candidate * 4]! - view.width / 2,
+          dy = out[candidate * 4 + 1]! - view.height / 2;
+        const next = dx * dx + dy * dy;
+        if (next < distance) {
+          nearest = candidate;
+          distance = next;
+        }
+      }
+      swapSlots(out, 4, slot, nearest);
+      swapSlots(display.flights, 2, slot, nearest);
+      swapSlots(display.appearance, 2, slot, nearest);
+      swapSlots(display.admitted, 1, slot, nearest);
+    }
+    count = limit;
+    out.fill(0, count * 4);
+    display.flights.fill(0, count * 2);
+    display.appearance.fill(0, count * 2);
+    display.admitted.fill(-1, count);
   }
   return count;
 }

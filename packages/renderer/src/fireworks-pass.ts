@@ -77,6 +77,7 @@ export function fireworksPass(
     resources.config = config;
   }
   const count = fireworkShells(view, grid, resources.shells, resources.display, time, reduced);
+  if (!count) return;
   const windScale = view.dpr * fireworkScale(view.camera.zoom);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
@@ -88,6 +89,7 @@ export function fireworksPass(
     u_cell: [view.cellDev.w, view.cellDev.h],
     u_shift: [grid.shiftX, grid.shiftY],
     u_flights: resources.display.flights,
+    u_appearance: resources.display.appearance,
     u_wind: reduced
       ? [0, 0]
       : [wind.dir[0] * wind.strength * windScale, wind.dir[1] * wind.strength * windScale],

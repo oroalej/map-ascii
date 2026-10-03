@@ -4,11 +4,18 @@ import type { GL, CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass, deleteFireworks } from './fireworks-pass';
-import { FIREWORKS, fireworkRadius, fireworkShellCount } from './fireworks-layout';
+import {
+  FIREWORKS,
+  fireworkRadius,
+  fireworkShellCount,
+  fireworkCameraHeight,
+  fireworkSparkWidth,
+} from './fireworks-layout';
 
 const setters = vi.hoisted(() => ({
   u_shells: vi.fn(),
   u_flights: vi.fn(),
+  u_appearance: vi.fn(),
   u_wind: vi.fn(),
   u_variants: vi.fn(),
   u_variantCount: vi.fn(),
@@ -94,15 +101,23 @@ describe('seasonal GPU fireworks', () => {
         0,
       );
       const scale = 2 ** (zoom - 19);
-      for (let i = 0; i < fireworkShellCount(zoom) * 4; i += 4) {
-        const launch = programs.fireworks!.display.launches[i / 4]!;
+      const display = programs.fireworks!.display;
+      const count = [...display.admitted].filter((id) => id >= 0).length;
+      for (let i = 0; i < count * 4; i += 4) {
+        const launch = display.launches[display.admitted[i / 4]!]!;
         expect(programs.fireworks!.shells[i + 3]).toBeCloseTo(
           fireworkRadius(launch.height, zoom) * dpr,
+          3,
+        );
+        expect(launch.height).toBeLessThan(fireworkCameraHeight(zoom));
+        expect(display.appearance[i / 2 + 1]).toBeCloseTo(
+          fireworkSparkWidth(launch.height, zoom) * dpr,
           3,
         );
       }
       expect(setters.u_wind).toHaveBeenLastCalledWith([0.5 * dpr * scale, 0]);
       expect(setters.u_flights).toHaveBeenLastCalledWith(programs.fireworks!.display.flights);
+      expect(setters.u_appearance).toHaveBeenLastCalledWith(display.appearance);
       expect(programs.fireworks!.display.lastTime).toBe(2.6);
     }
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
@@ -165,6 +180,36 @@ describe('seasonal GPU fireworks', () => {
       0,
     );
     expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(drawn);
+  });
+
+  it('submits no particles when the viewpoint is below every cached burst', () => {
+    const gl = gpu(),
+      programs = {} as Programs;
+    const draw = (v: View) => {
+      const grid = placeGrid(v, v.cellDev, 202, 92).grid;
+      fireworksPass(
+        gl as unknown as GL,
+        programs,
+        {} as CellTargets,
+        resources,
+        v,
+        grid,
+        grid,
+        config,
+        2,
+        false,
+        wind,
+        0,
+      );
+    };
+    draw(view);
+    const calls = gl.drawArraysInstanced.mock.calls.length;
+    for (const launch of programs.fireworks!.display.launches) if (launch) launch.height = 200;
+    draw({ ...view, camera: { ...view.camera, zoom: 20 } });
+    expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(calls);
+    expect(programs.fireworks!.shells.every((value) => value === 0)).toBe(true);
+    expect(programs.fireworks!.display.appearance.every((value) => value === 0)).toBe(true);
+    expect(gl.bufferData).toHaveBeenCalledTimes(1);
   });
   it('draws only the admitted particle prefixes and clears all fireworks at close zoom', () => {
     const gl = gpu(),

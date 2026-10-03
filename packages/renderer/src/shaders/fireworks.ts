@@ -7,6 +7,7 @@ precision highp int;
 layout(location = 0) in vec4 a_particle; // shell, star/puff, tail, smoke
 uniform vec4 u_shells[${FIREWORKS.shells}]; // screen center, seed, radius
 uniform vec2 u_flights[${FIREWORKS.shells}]; // age, time to reach break height
+uniform vec2 u_appearance[${FIREWORKS.shells}]; // visibility below camera, spark ink width
 uniform vec2 u_size;
 uniform vec2 u_cell;
 uniform vec2 u_shift;
@@ -64,7 +65,8 @@ void main() {
   }
   if (variant == 1 && tail == 0.0) code = u_codes[2];
   float scale = tail > 0.0 ? 1.5 : 2.6;
-  vec2 quad = u_cell * scale;
+  vec2 inkCell = vec2(u_appearance[shell].y, u_appearance[shell].y * 1.8);
+  vec2 quad = inkCell * scale;
   if (smoke) {
     float puffAngle = star / ${FIREWORKS.smoke.toFixed(1)} * 6.2831853 + rand(seed) * 6.2831853;
     float spread = max(0.0, t) * r * 0.095 + r * 0.11;
@@ -81,7 +83,7 @@ void main() {
       float progress = clamp(age / rise, 0.0, 1.0);
       p = launch.xy - u_wind * (1.0 - progress) * rise * 4.0;
       scale = mix(0.65, 3.0 + rise * 0.35, progress * progress);
-      quad = u_cell * scale;
+      quad = inkCell * scale;
       opacity = star < 1.0 && tail < 1.0 ? mix(0.3, 0.95, progress) : 0.0;
       color = vec3(1.0, 0.88, 0.52);
       code = u_codes[2];
@@ -89,6 +91,7 @@ void main() {
     // Every spark remains an ASCII cell, aligned with the map even during a fractional pan.
     p = floor((p + u_shift) / u_cell) * u_cell - u_shift + u_cell * 0.5;
   }
+  opacity *= u_appearance[shell].x;
   vec2 corner = vec2(float((gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4) ? 1 : 0),
                      float((gl_VertexID == 2 || gl_VertexID == 4 || gl_VertexID == 5) ? 1 : 0));
   vec2 screen = p + (corner - 0.5) * quad;

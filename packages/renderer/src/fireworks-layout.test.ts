@@ -5,12 +5,16 @@ import {
   FIREWORKS,
   FIREWORK_INSTANCE_COUNT,
   createFireworkDisplay,
+  fireworkCameraHeight,
   fireworkInstances,
   fireworkRadius,
+  fireworkPerspective,
   fireworkRise,
   fireworkScale,
   fireworkShellCount,
   fireworkShells,
+  fireworkSparkWidth,
+  fireworkVisibility,
   fireworkVariantCodes,
 } from './fireworks-layout';
 import { placeGrid, type View } from './grid';
@@ -54,9 +58,8 @@ describe('bounded New Year shells', () => {
   });
 
   it('ties larger overhead bursts and longer rises to higher launches', () => {
-    for (const zoom of [7, 16, 19, 19.5, 20]) {
+    for (const zoom of [7, 16, 19, 19.5]) {
       expect(fireworkRadius(200, zoom)).toBeGreaterThan(fireworkRadius(100, zoom));
-      expect(fireworkRadius(200, zoom) / fireworkRadius(100, zoom)).toBeCloseTo(2);
     }
     expect(fireworkRise(200)).toBeGreaterThan(fireworkRise(100));
     const display = createFireworkDisplay(123),
@@ -71,6 +74,81 @@ describe('bounded New Year shells', () => {
     }
   });
 
+  it('grows each fixed launch on approach, then hides it when the viewpoint passes below its height', () => {
+    for (const height of [80, 100, 150, 220, 500]) {
+      let radius = 0,
+        ink = 0;
+      for (let zoom = 7; zoom < 21; zoom += 0.02) {
+        const visible = fireworkVisibility(height, zoom);
+        const nextRadius = fireworkRadius(height, zoom),
+          nextInk = fireworkSparkWidth(height, zoom);
+        expect(Number.isFinite(nextRadius)).toBe(true);
+        expect(nextRadius).toBeLessThanOrEqual(FIREWORKS.maxRadius);
+        if (visible > 0) {
+          expect(nextRadius).toBeGreaterThanOrEqual(radius - 1e-6);
+          expect(nextInk).toBeGreaterThanOrEqual(ink - 1e-6);
+          radius = nextRadius;
+          ink = nextInk;
+        } else {
+          expect(nextRadius).toBe(0);
+          expect(nextInk).toBe(0);
+        }
+      }
+      const crossing = 19 + Math.log2(FIREWORKS.cameraHeight / height);
+      expect(fireworkVisibility(height, crossing - 0.3)).toBeGreaterThan(0);
+      expect(fireworkVisibility(height, crossing - 0.3)).toBeLessThan(1);
+      expect(fireworkVisibility(height, crossing + 0.001)).toBe(0);
+      expect(fireworkRadius(height, crossing + 0.001)).toBe(0);
+    }
+    expect(fireworkVisibility(220, 20)).toBe(0);
+    expect(fireworkVisibility(100, 20)).toBe(1);
+    expect(fireworkCameraHeight(21)).toBe(FIREWORKS.minHeight);
+  });
+
+  it('keeps the high launch across z16 and removes it according to altitude without lowering its height', () => {
+    const display = createFireworkDisplay(123),
+      out = shells();
+    const distant = { ...view, camera: { ...view.camera, zoom: 16 } };
+    fireworkShells(distant, grid(distant), out, display, 0, false);
+    const high = display.launches[49]!;
+    const crossing = 19 + Math.log2(FIREWORKS.cameraHeight / high.height);
+    let previousRadius = out[199]!;
+    for (const zoom of [16.001, 17, 17.5, crossing - 0.001]) {
+      const next = { ...view, camera: { ...view.camera, zoom } };
+      fireworkShells(next, grid(next), out, display, 0, false);
+      const packed = display.admitted.indexOf(49);
+      expect(packed).toBeGreaterThanOrEqual(0);
+      expect(display.launches[49]).toBe(high);
+      expect(out[packed * 4 + 3]).toBeGreaterThanOrEqual(previousRadius);
+      expect(display.flights[packed * 2]).toBeCloseTo(-high.start);
+      previousRadius = out[packed * 4 + 3]!;
+    }
+    const below = { ...view, camera: { ...view.camera, zoom: crossing + 0.001 } };
+    fireworkShells(below, grid(below), out, display, 0, false);
+    expect(display.admitted).not.toContain(49);
+    expect(display.launches[49]).toBe(high);
+  });
+
+  it('packs only below-camera launches and preserves heights when nothing survives, including reduced motion', () => {
+    for (const reduced of [false, true]) {
+      const display = createFireworkDisplay(123),
+        out = shells();
+      fireworkShells(view, grid(), out, display, 0, reduced);
+      for (const launch of display.launches) if (launch) launch.height = 200;
+      const launches = display.launches.slice();
+      const close = { ...view, camera: { ...view.camera, zoom: 20 } };
+      for (let frame = 0; frame < 3; frame++) {
+        expect(fireworkShells(close, grid(close), out, display, 0, reduced)).toBe(0);
+        expect(out.every((value) => value === 0)).toBe(true);
+        expect(display.flights.every((value) => value === 0)).toBe(true);
+        expect(display.appearance.every((value) => value === 0)).toBe(true);
+        expect(display.admitted.every((value) => value === -1)).toBe(true);
+        expect(display.launches).toEqual(launches);
+      }
+      expect(fireworkShells(view, grid(), out, display, 0, reduced)).toBe(49);
+      expect(display.launches).toEqual(launches);
+    }
+  });
   it('keeps active anchors, heights and phases stable through fractional pans, zoom and resize', () => {
     const display = createFireworkDisplay(123),
       a = shells(),
@@ -88,8 +166,9 @@ describe('bounded New Year shells', () => {
       false,
     );
     for (let slot = 0; slot < 49; slot++) {
-      expect(b[slot * 4]).toBeCloseTo(a[slot * 4]! - 0.5, 3);
-      expect(b[slot * 4 + 1]).toBeCloseTo(a[slot * 4 + 1]! - 0.25, 3);
+      const perspective = fireworkPerspective(launches[slot]!.height, view.camera.zoom);
+      expect(b[slot * 4]).toBeCloseTo(a[slot * 4]! - 0.5 * perspective, 3);
+      expect(b[slot * 4 + 1]).toBeCloseTo(a[slot * 4 + 1]! - 0.25 * perspective, 3);
       expect(b[slot * 4 + 2]).toBe(a[slot * 4 + 2]);
     }
     for (const [zoom, width, height, dpr] of [
@@ -109,18 +188,24 @@ describe('bounded New Year shells', () => {
         scale = dpr * fireworkScale(zoom);
       const count = fireworkShells(v, next, b, display, 0, false);
       for (let slot = 0; slot < count; slot++) {
-        const launch = launches[slot]!;
-        expect(display.launches[slot]).toBe(launch);
+        const source = display.admitted[slot]!,
+          launch = launches[source]!;
+        const perspective = fireworkPerspective(launch.height, zoom);
+        expect(display.launches[source]).toBe(launch);
         expect(b[slot * 4]).toBeCloseTo(
-          launch.x * scale - (next.originCol * v.cellDev.w + next.shiftX),
+          width / 2 +
+            (launch.x * scale - (next.originCol * v.cellDev.w + next.shiftX) - width / 2) *
+              perspective,
           3,
         );
         expect(b[slot * 4 + 1]).toBeCloseTo(
-          launch.y * scale - (next.originRow * v.cellDev.h + next.shiftY),
+          height / 2 +
+            (launch.y * scale - (next.originRow * v.cellDev.h + next.shiftY) - height / 2) *
+              perspective,
           3,
         );
         expect(b[slot * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, zoom) * dpr, 3);
-        expect(display.flights[slot * 2]).toBe(flights[slot * 2]);
+        expect(display.flights[slot * 2]).toBe(flights[source * 2]);
       }
     }
   });
@@ -203,7 +288,8 @@ describe('bounded New Year shells', () => {
       [7, 50],
       [15.99, 50],
       [16, 50],
-      [16.001, 49],
+      [16.001, 50],
+      [18.5, 49],
       [19.999, 49],
       [20, 4],
       [20.999, 4],
@@ -217,9 +303,19 @@ describe('bounded New Year shells', () => {
       const display = createFireworkDisplay(123),
         out = shells();
       expect(fireworkShellCount(zoom)).toBe(count);
-      expect(fireworkShells(v, grid(v), out, display, 0, false)).toBe(count);
-      expect(out.slice(count * 4).every((value) => value === 0)).toBe(true);
-      expect(display.flights.slice(count * 2).every((value) => value === 0)).toBe(true);
+      const admitted = fireworkShells(v, grid(v), out, display, 0, false);
+      expect(admitted).toBeLessThanOrEqual(count);
+      if (zoom <= 19 && zoom >= 7) expect(admitted).toBe(count);
+      expect(out.slice(admitted * 4).every((value) => value === 0)).toBe(true);
+      expect(display.flights.slice(admitted * 2).every((value) => value === 0)).toBe(true);
+      expect(display.appearance.slice(admitted * 2).every((value) => value === 0)).toBe(true);
+      expect(display.admitted.slice(admitted).every((value) => value === -1)).toBe(true);
+      for (let slot = 0; slot < admitted; slot++) {
+        expect(display.launches[display.admitted[slot]!]!.height).toBeLessThan(
+          fireworkCameraHeight(zoom),
+        );
+        expect(display.appearance[slot * 2]).toBeGreaterThan(0);
+      }
       if (zoom >= 7 && zoom <= 16) {
         const high = display.launches[49]!;
         expect(high.height).toBeGreaterThan(FIREWORKS.maxHeight);
@@ -245,7 +341,7 @@ describe('bounded New Year shells', () => {
       };
       const out = shells();
       fireworkShells(v, grid(v), out, createFireworkDisplay(123), 0, false);
-      expect(out[199]! / dpr).toBeCloseTo(390 * 0.45, 3);
+      expect(out[199]! / dpr).toBeLessThanOrEqual(390 * 0.45);
       expect(out[196]! - out[199]!).toBeGreaterThanOrEqual(0);
       expect(out[196]! + out[199]!).toBeLessThanOrEqual(v.width);
     }
@@ -288,14 +384,17 @@ describe('bounded New Year shells', () => {
           const display = createFireworkDisplay(123),
             out = shells();
           const count = fireworkShells(v, grid(v), out, display, 0, false);
-          for (let slot = 0; slot < Math.min(count, 49); slot++)
-            expect(out[slot * 4 + 3]! / dpr).toBeCloseTo(
-              display.launches[slot]!.height * 0.95 * Math.max(0.6, 2 ** (zoom - 19)),
+          for (let slot = 0; slot < count; slot++) {
+            const launch = display.launches[display.admitted[slot]!]!;
+            expect(out[slot * 4 + 3]! / dpr).toBeCloseTo(fireworkRadius(launch.height, zoom), 3);
+            expect(display.appearance[slot * 2 + 1]! / dpr).toBeCloseTo(
+              fireworkSparkWidth(launch.height, zoom),
               3,
             );
+          }
         }
     }
-    expect(fireworkRadius(150, 20) / fireworkRadius(150, 19)).toBe(2);
+    expect(fireworkRadius(150, 20) / fireworkRadius(150, 19)).toBeGreaterThan(2);
     for (const zoom of [-1000, 1000, NaN, Infinity]) {
       expect(Number.isFinite(fireworkScale(zoom))).toBe(true);
       expect(fireworkScale(zoom)).toBeGreaterThanOrEqual(1 / 4096);
