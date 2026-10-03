@@ -3,7 +3,8 @@ import type { FireworksConfig } from '@atlas/shared';
 import type { GL, CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
-import { fireworksPass, deleteFireworks } from './fireworks-pass';
+import { fireworksPass as drawFireworks, deleteFireworks } from './fireworks-pass';
+import type { FireworkSiteSampler } from './fireworks-sites';
 import {
   FIREWORKS,
   fireworkRadius,
@@ -11,6 +12,16 @@ import {
   fireworkCameraHeight,
   fireworkSparkWidth,
 } from './fireworks-layout';
+
+const testSites: FireworkSiteSampler = (bounds, rng) => {
+  const x = bounds.left + rng() * (bounds.right - bounds.left);
+  const y = bounds.top + rng() * (bounds.bottom - bounds.top);
+  return { x, y, id: Math.floor(x * 1000 + y * 100) };
+};
+const fireworksPass: typeof drawFireworks = (...args) => {
+  args[12] ??= testSites;
+  return drawFireworks(...args);
+};
 
 const setters = vi.hoisted(() => ({
   u_shells: vi.fn(),
@@ -70,6 +81,26 @@ function gpu() {
 }
 beforeEach(() => vi.clearAllMocks());
 describe('seasonal GPU fireworks', () => {
+  it('draws no fireworks without mapped residential sites', () => {
+    const gl = gpu(),
+      programs = {} as Programs;
+    const grid = placeGrid(view, view.cellDev, 202, 92).grid;
+    drawFireworks(
+      gl as unknown as GL,
+      programs,
+      {} as CellTargets,
+      resources,
+      view,
+      grid,
+      grid,
+      config,
+      0,
+      false,
+      wind,
+      0,
+    );
+    expect(gl.drawArraysInstanced).not.toHaveBeenCalled();
+  });
   it('scales bursts and wind drift on zoom without uploading particles or resetting their clock', () => {
     const gl = gpu(),
       programs = {} as Programs;

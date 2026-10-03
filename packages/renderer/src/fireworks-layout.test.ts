@@ -8,17 +8,28 @@ import {
   fireworkCameraHeight,
   fireworkInstances,
   fireworkRadius,
-  fireworkPerspective,
   fireworkRise,
   fireworkScale,
   fireworkShellCount,
-  fireworkShells,
+  fireworkShells as packShells,
   fireworkSparkWidth,
   fireworkVisibility,
   fireworkVariantCodes,
 } from './fireworks-layout';
 import { placeGrid, type View } from './grid';
 import { mapGlyphs, themes } from './theme';
+import type { FireworkSiteSampler } from './fireworks-sites';
+
+// Synthetic dense mapped coverage keeps altitude/animation tests independent of OSM coverage.
+const testSites: FireworkSiteSampler = (bounds, rng) => {
+  const x = bounds.left + rng() * (bounds.right - bounds.left);
+  const y = bounds.top + rng() * (bounds.bottom - bounds.top);
+  return { x, y, id: Math.floor(x * 1000 + y * 100) };
+};
+const fireworkShells: typeof packShells = (...args) => {
+  args[6] ??= testSites;
+  return packShells(...args);
+};
 
 const view: View = {
   camera: { lng: 123.185, lat: 13.625, zoom: 19 },
@@ -240,9 +251,8 @@ describe('bounded New Year shells', () => {
       const source = display.admitted[slot]!,
         previous = sources.indexOf(source);
       expect(previous).toBeGreaterThanOrEqual(0);
-      const perspective = fireworkPerspective(launches[source]!.height, view.camera.zoom);
-      expect(b[slot * 4]).toBeCloseTo(a[previous * 4]! - 0.5 * perspective, 3);
-      expect(b[slot * 4 + 1]).toBeCloseTo(a[previous * 4 + 1]! - 0.25 * perspective, 3);
+      expect(b[slot * 4]).toBeCloseTo(a[previous * 4]! - 0.5, 3);
+      expect(b[slot * 4 + 1]).toBeCloseTo(a[previous * 4 + 1]! - 0.25, 3);
       expect(b[slot * 4 + 2]).toBe(a[previous * 4 + 2]);
     }
     for (const [zoom, width, height, dpr] of [
@@ -264,18 +274,13 @@ describe('bounded New Year shells', () => {
       for (let slot = 0; slot < count; slot++) {
         const source = display.admitted[slot]!,
           launch = launches[source]!;
-        const perspective = fireworkPerspective(launch.height, zoom);
         expect(display.launches[source]).toBe(launch);
         expect(b[slot * 4]).toBeCloseTo(
-          width / 2 +
-            (launch.x * scale - (next.originCol * v.cellDev.w + next.shiftX) - width / 2) *
-              perspective,
+          launch.x * scale - (next.originCol * v.cellDev.w + next.shiftX),
           3,
         );
         expect(b[slot * 4 + 1]).toBeCloseTo(
-          height / 2 +
-            (launch.y * scale - (next.originRow * v.cellDev.h + next.shiftY) - height / 2) *
-              perspective,
+          launch.y * scale - (next.originRow * v.cellDev.h + next.shiftY),
           3,
         );
         expect(b[slot * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, zoom) * dpr, 3);

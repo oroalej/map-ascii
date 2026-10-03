@@ -4,6 +4,7 @@ import { createProgram, type CellTargets, type GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import type { Grid, View } from './grid';
 import type { WindNow } from './life/wind';
+import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
 import {
   FIREWORKS,
   createFireworkDisplay,
@@ -68,6 +69,7 @@ export function fireworksPass(
   reduced: boolean,
   wind: WindNow,
   daylight: number,
+  sites: FireworkSiteSampler = NO_FIREWORK_SITES,
 ) {
   if (!config?.variants.length || !fireworkShellCount(view.camera.zoom)) return;
   const resources = (programs.fireworks ??= createFireworks(gl));
@@ -76,7 +78,15 @@ export function fireworksPass(
     resources.variants.set(fireworkVariantCodes(config));
     resources.config = config;
   }
-  const count = fireworkShells(view, grid, resources.shells, resources.display, time, reduced);
+  const count = fireworkShells(
+    view,
+    grid,
+    resources.shells,
+    resources.display,
+    time,
+    reduced,
+    sites,
+  );
   if (!count) return;
   const windScale = view.dpr * fireworkScale(view.camera.zoom);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);

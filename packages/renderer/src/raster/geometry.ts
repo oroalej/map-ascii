@@ -26,6 +26,13 @@ import {
   type FrontageKind,
 } from '@atlas/shared';
 import earcut from 'earcut';
+import {
+  isResidentialBuilding,
+  isCompactRoof,
+  neighborhoodSites,
+  residentialSite,
+  type ResidentialSite,
+} from '../fireworks-sites';
 import { isRoofBuilding, parseRoofPlan, roofFrame } from '@atlas/shared';
 import {
   foldRoofAngle,
@@ -200,6 +207,8 @@ export type GroundGeometry = {
 };
 
 export type TileGeometry = GroundGeometry & {
+  /** Mapped home anchors for atmospheric fireworks, independent of Life simulation. */
+  residential?: readonly ResidentialSite[];
   /** Static hardware stays outside Life so it is never cloned to the simulation worker. */
   utilities?: readonly UtilityRecord[];
   seasonal?: readonly SeasonalRecord[];
@@ -768,6 +777,9 @@ export function buildTileGeometry(
   const litLines: LitLine[] = [];
   const utilities: UtilityRecord[] = [];
   const seasonal: SeasonalRecord[] = [];
+  const residential: ResidentialSite[] = [];
+  const compactRoofs: ResidentialSite[] = [];
+  const residentialStreets: TilePoint[][] = [];
 
   for (const [name, layer] of Object.entries(layers)) {
     if (name === 'seasons') {
@@ -1103,6 +1115,13 @@ export function buildTileGeometry(
           }
         }
       } else if (feature.type === 2) {
+        if (
+          !isRegion &&
+          className === 'road_minor' &&
+          (feature.properties.kind === 'highway=residential' ||
+            feature.properties.kind === 'highway=living_street')
+        )
+          residentialStreets.push(...rings);
         const street = streetLabel(className, feature.properties.kind);
         if (street && tile && typeof text === 'string' && text.trim()) {
           const run = rings
@@ -1271,6 +1290,26 @@ export function buildTileGeometry(
         // One corrupt/degenerate fragment falls back for the entire feature, before emitting buffers.
         const usePlan = !!plan && polygons.every((p) => p.pieces !== undefined);
         for (const { polygon, points, triangles, pieces: partition } of polygons) {
+          if (
+            !isRegion &&
+            className === 'building' &&
+            isResidentialBuilding(feature.properties.kind)
+          ) {
+            const site = residentialSite(id, points, triangles, EXTENT);
+            if (site) residential.push(site);
+          }
+          if (
+            !isRegion &&
+            unitMeters &&
+            height > 0 &&
+            !landmark &&
+            className === 'building' &&
+            feature.properties.kind === 'building=yes' &&
+            isCompactRoof(points, triangles, unitMeters)
+          ) {
+            const site = residentialSite(id, points, triangles, EXTENT);
+            if (site) compactRoofs.push(site);
+          }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
             else if (solid || standingWater || feature.properties.detail_blocked)
@@ -1380,6 +1419,9 @@ export function buildTileGeometry(
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
 
   if (unitMeters && tile) {
+    residential.push(
+      ...neighborhoodSites(compactRoofs, residential, residentialStreets, unitMeters),
+    );
     const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };
     life.addLamps(placeTileLamps(litLines, unitMeters, EXTENT, origin));
   }
@@ -1418,6 +1460,7 @@ export function buildTileGeometry(
     },
     ...(utilities.length ? { utilities } : {}),
     ...(seasonal.length ? { seasonal } : {}),
+    ...(residential.length ? { residential } : {}),
   };
 }
 

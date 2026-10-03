@@ -48,6 +48,13 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('retains decoded residential anchors separately from the GPU and Life data', () => {
+    const { cache, source } = setup();
+    const tile = { z: 16, x: 55193, y: 30261 };
+    const residential = [{ id: 1, x: 1500, y: 2000 }];
+    source.handlers.tile(tileKey(tile), { labels: [], residential } as never);
+    expect(cache.get(tile)?.residential).toBe(residential);
+  });
   it('retains upload timings between callbacks, including context restoration', () => {
     let now = 0;
     const profiler = new FrameProfiler(() => now++);

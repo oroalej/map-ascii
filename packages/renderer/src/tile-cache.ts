@@ -10,6 +10,7 @@ import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
 import type { UtilityRecord, SeasonalRecord } from '@atlas/shared';
 import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
+import type { ResidentialSite } from './fireworks-sites';
 import {
   ancestorAt,
   findAncestor,
@@ -28,6 +29,7 @@ export const RETRY_MAX_MS = 60_000;
 
 /** A loaded tile: its GPU mesh and label candidates. */
 export type LoadedTile = {
+  residential?: readonly ResidentialSite[];
   mesh: TileMesh;
   labels: TileLabel[];
   life: LifeGeometry;
@@ -71,6 +73,7 @@ export class TileCache {
             mesh,
             labels: geometry.labels,
             life: geometry.life,
+            ...(geometry.residential ? { residential: geometry.residential } : {}),
             ...(geometry.utilities ? { utilities: geometry.utilities } : {}),
             ...(geometry.seasonal ? { seasonal: geometry.seasonal } : {}),
           });

@@ -2,6 +2,7 @@ import type { FireworksConfig } from '@atlas/shared';
 import { FIREWORK_VARIANTS } from '@atlas/shared';
 import { MAX_ZOOM, MIN_ZOOM } from './camera';
 import type { Grid, View } from './grid';
+import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
 import { random } from './life/random';
 
 const REGULAR_SHELLS = 49;
@@ -94,6 +95,7 @@ export function fireworkSparkWidth(height: number, zoom: number): number {
 export const fireworkRise = (height: number): number => 0.55 + height * 0.005;
 
 type FireworkLaunch = {
+  site: number;
   x: number;
   y: number;
   seed: number;
@@ -114,6 +116,10 @@ export type FireworkDisplay = {
   /** Previously visible source identities, independent of their packed GPU indices. */
   retained: Uint8Array;
   lastTime: number;
+  occupied: Set<number>;
+  retryAt: Float64Array;
+  siteView: Float64Array;
+  sites?: FireworkSiteSampler;
   reduced?: boolean;
 };
 
@@ -129,6 +135,9 @@ export function createFireworkDisplay(
     admitted: new Int16Array(FIREWORKS.shells),
     retained: new Uint8Array(FIREWORKS.shells),
     lastTime: 0,
+    occupied: new Set<number>(),
+    retryAt: new Float64Array(FIREWORKS.shells),
+    siteView: new Float64Array(5),
   };
 }
 
@@ -171,6 +180,7 @@ export function fireworkShells(
   display: FireworkDisplay,
   time: number,
   reduced: boolean,
+  sites: FireworkSiteSampler = NO_FIREWORK_SITES,
 ): number {
   const limit = fireworkShellCount(view.camera.zoom);
   out.fill(0);
@@ -185,6 +195,12 @@ export function fireworkShells(
   if (display.reduced !== reduced || clock < display.lastTime) {
     display.launches.fill(undefined);
     display.retained.fill(0);
+    display.retryAt.fill(0);
+    display.occupied.clear();
+  }
+  if (display.sites !== sites) {
+    display.sites = sites;
+    display.retryAt.fill(0);
   }
   display.reduced = reduced;
   display.lastTime = clock;
@@ -192,20 +208,33 @@ export function fireworkShells(
   const left = grid.originCol * view.cellDev.w + grid.shiftX;
   const top = grid.originRow * view.cellDev.h + grid.shiftY;
   const worldToDevice = view.dpr * scale;
+  if (
+    reduced &&
+    (display.siteView[0] !== left ||
+      display.siteView[1] !== top ||
+      display.siteView[2] !== view.width ||
+      display.siteView[3] !== view.height ||
+      display.siteView[4] !== worldToDevice)
+  )
+    display.retryAt.fill(0);
+  display.siteView[0] = left;
+  display.siteView[1] = top;
+  display.siteView[2] = view.width;
+  display.siteView[3] = view.height;
+  display.siteView[4] = worldToDevice;
   if (reduced) {
     let visible = false,
       surviving = false;
     for (let slot = 0; slot < slots; slot++) {
       const launch = display.launches[slot];
       if (!launch) {
-        visible = true;
-        break;
+        continue;
       }
       const perspective = fireworkPerspective(launch.height, view.camera.zoom);
       if (!perspective) continue;
       surviving = true;
-      const x = view.width / 2 + (launch.x * worldToDevice - left - view.width / 2) * perspective,
-        y = view.height / 2 + (launch.y * worldToDevice - top - view.height / 2) * perspective;
+      const x = launch.x * worldToDevice - left,
+        y = launch.y * worldToDevice - top;
       const radius = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
       if (
         x + radius >= 0 &&
@@ -222,13 +251,18 @@ export function fireworkShells(
     if (!visible && surviving) {
       display.launches.fill(undefined);
       display.retained.fill(0);
+      display.retryAt.fill(0);
+      display.occupied.clear();
     }
   }
+  for (const launch of display.launches)
+    if (launch && clock >= launch.next) display.occupied.delete(launch.site);
   let count = 0;
   for (let slot = 0; slot < slots; slot++) {
     const large = slot === FIREWORKS.regularShells;
     let launch = display.launches[slot];
     if (!launch || clock >= launch.next) {
+      if (clock < display.retryAt[slot]!) continue;
       // Prewarm on entry/long tab suspension, so opening a preview never waits for a show.
       const prewarm = !launch || clock - launch.next > FIREWORKS.smokeLife;
       const rng = display.rng;
@@ -250,28 +284,40 @@ export function fireworkShells(
                     (FIREWORKS.regularShells - FIREWORKS.sparseShells),
                 ),
       );
-      const perspective = fireworkPerspective(height, coverageZoom);
       const coverage = scale / fireworkScale(coverageZoom);
       const radius = large ? fireworkRadius(height, view.camera.zoom) * view.dpr : 0;
       const marginX = large ? Math.min(0.45, radius / view.width) : 0.08;
       const marginY = large ? Math.min(0.45, radius / view.height) : 0.08;
+      const centerX = (left + view.width / 2) / worldToDevice;
+      const centerY = (top + view.height / 2) / worldToDevice;
+      const halfWidth = ((0.5 - marginX) * view.width * coverage) / worldToDevice;
+      const halfHeight = ((0.5 - marginY) * view.height * coverage) / worldToDevice;
+      const site = sites(
+        {
+          left: centerX - halfWidth,
+          right: centerX + halfWidth,
+          top: centerY - halfHeight,
+          bottom: centerY + halfHeight,
+        },
+        rng,
+        display.occupied,
+      );
+      if (!site) {
+        display.launches[slot] = undefined;
+        display.retained[slot] = 0;
+        // Retry boundedly while waiting for geography; a new tile set retries immediately.
+        display.retryAt[slot] = clock + 0.5;
+        continue;
+      }
+      display.occupied.add(site.id);
       const interval = rise + FIREWORKS.smokeLife + 0.25 + rng() * 2.75;
       // Sample the whole interval on entry, rather than starting every shell in a burst
       // and creating a synchronized lull a few seconds later. Still poses show a break.
       const start = clock - (reduced ? rise + 0.2 + rng() * 3.2 : prewarm ? rng() * interval : 0);
       launch = {
-        x:
-          (left +
-            view.width / 2 +
-            ((marginX + rng() * (1 - marginX * 2) - 0.5) * view.width * coverage) /
-              (perspective || 1)) /
-          worldToDevice,
-        y:
-          (top +
-            view.height / 2 +
-            ((marginY + rng() * (1 - marginY * 2) - 0.5) * view.height * coverage) /
-              (perspective || 1)) /
-          worldToDevice,
+        site: site.id,
+        x: site.x,
+        y: site.y,
         seed: Math.floor(rng() * 65536),
         height,
         rise,
@@ -284,9 +330,10 @@ export function fireworkShells(
     const perspective = fireworkPerspective(launch.height, view.camera.zoom);
     if (!perspective) continue;
     const at = count * 4;
-    out[at] = view.width / 2 + (launch.x * worldToDevice - left - view.width / 2) * perspective;
-    out[at + 1] =
-      view.height / 2 + (launch.y * worldToDevice - top - view.height / 2) * perspective;
+    // Orthographic ground anchors keep the burst over its mapped residential footprint.
+    // Altitude magnifies its extent, not its geographic position into adjacent fields.
+    out[at] = launch.x * worldToDevice - left;
+    out[at + 1] = launch.y * worldToDevice - top;
     out[at + 2] = launch.seed;
     out[at + 3] = fireworkRadius(launch.height, view.camera.zoom) * view.dpr;
     display.flights[count * 2] = Math.min(

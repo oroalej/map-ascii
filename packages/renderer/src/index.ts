@@ -115,6 +115,8 @@ import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { simulationSeasons } from './life/seasonal-simulation';
 import { fireworksPass } from './fireworks-pass';
+import { FIREWORKS } from './fireworks-layout';
+import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
@@ -750,6 +752,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
+    syncResidentialSites(tiles);
     const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -1188,6 +1191,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let fixtureInputs: readonly LoadedTile[] = [];
   let hadUtilities = false;
   let fixtureDisplaysShown = false;
+  let fireworkSites = NO_FIREWORK_SITES;
+  let residentialInputs: readonly LoadedTile[] = [];
+  const syncResidentialSites = (tiles: readonly TileId[]) => {
+    const groups = tiles.flatMap((tile) => {
+      const loaded = tileCache.get(tile);
+      return loaded?.residential ? [{ tile, loaded }] : [];
+    });
+    const inputs = groups.map((group) => group.loaded);
+    if (sameReferenceMembers(inputs, residentialInputs)) return;
+    residentialInputs = inputs;
+    fireworkSites = residentialFireworkSites(
+      groups.map(({ tile, loaded }) => ({ tile, sites: loaded.residential! })),
+      FIREWORKS.referenceZoom,
+    );
+  };
   const syncFixtures = (tiles: readonly TileId[]) => {
     if (camera.zoom < 15) {
       fixtures = [];
@@ -1635,6 +1653,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         reducedMotion,
         wind,
         daylight,
+        fireworkSites,
       );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
