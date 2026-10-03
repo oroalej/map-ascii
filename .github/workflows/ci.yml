@@ -1,8 +1,7 @@
 name: CI
 
+# PRs only: a run on main after merging would repeat what the PR already checked.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -43,8 +42,10 @@ jobs:
 
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
-  # across two runners: each test renders WebGL in software on a single worker.
+  # across two runners: each test renders WebGL in software on a single worker. It waits for
+  # `check`, so a lint, typecheck or unit failure doesn't also spend two e2e runners.
   e2e:
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 6
     strategy:
@@ -52,7 +53,7 @@ jobs:
       matrix:
         shard: [1, 2]
     env:
-      # Release assets of a private repository download through the API with this token.
+      # Release assets download through the API with this token (authenticated rate limits).
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
