@@ -115,7 +115,7 @@ End with one line offering to fix the blockers and should-fix items, or a subset
 
 If the user accepts:
 
-1. Work on the PR's head branch. If another worktree already has it checked out (`git worktree list`), work there. Only if no worktree has it, add one with `git worktree add worktrees/<short> <headRef>` and work there.
+1. Work on the PR's head branch. If another worktree already has it checked out (`git worktree list`), work there. `<main-checkout>` is the first entry of `git worktree list`. Only if no worktree has it, add one with `git worktree add "<main-checkout>/worktrees/<short>" <headRef>` and work there.
 2. Make the fixes, scoped to the findings.
 3. Run the smallest checks from the AGENTS.md "Verifying changes" table that cover the changes. Leave the full suite to CI.
 4. Before committing, run `git status` and `git branch`. Stage files by explicit path. Use a gitmoji + conventional commit message that matches `git log`.

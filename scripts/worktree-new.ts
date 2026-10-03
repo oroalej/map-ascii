@@ -1,8 +1,8 @@
 /**
  * Create a task worktree ready to work in (AGENTS.md "Git"):
  *   pnpm worktree:new <short> <topic>
- * adds worktrees/<short> (gitignored, inside the main checkout) on a new branch codex/<topic> from main, installs dependencies and
- * fetches the pinned tiles.
+ * adds worktrees/<short> (gitignored, inside the main checkout) on a new branch
+ * codex/<topic> from main, installs dependencies and fetches the pinned tiles.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
