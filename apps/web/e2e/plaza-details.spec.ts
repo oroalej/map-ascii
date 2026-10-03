@@ -64,6 +64,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const box = (await canvas.boundingBox())!;
       const position = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
       const life = page.getByRole('button', { name: 'Life', exact: true });
+      const lifeBox = (await life.boundingBox({ timeout: 5000 }))!;
       const panel = page.getByRole('complementary', { name: 'Selected place' });
       const selectedId = detail.selection_osm_id ?? detail.osm_id;
       await expect(life).toHaveAttribute('aria-pressed', 'false');
@@ -71,7 +72,7 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         if (enabled) {
           await page.emulateMedia({ reducedMotion: 'no-preference' });
           await expect(life).toBeEnabled();
-          await life.click({ timeout: 5000 });
+          await page.mouse.click(lifeBox.x + lifeBox.width / 2, lifeBox.y + lifeBox.height / 2);
           await expect(life).toHaveAttribute('aria-pressed', 'true');
         }
         let attempt = 0;
