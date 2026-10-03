@@ -72,7 +72,7 @@ export type SeasonInstallation = {
   | {
       kind: 'access-path';
       grounds: string;
-      style: 'walkway' | 'driveway';
+      style: 'walkway' | 'driveway' | 'parking';
       points: SeasonalPoint[];
       width_m: number;
     }

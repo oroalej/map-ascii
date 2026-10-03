@@ -90,7 +90,7 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
     ),
   ).toEqual(result);
 });
-it('adds two walks and a wider driveway, with Christmas displays clear of full access footprints', () => {
+it('adds narrow walks and a parking apron, with Christmas displays clear of full access footprints', () => {
   const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
   const config = {
     ...season,
@@ -99,18 +99,20 @@ it('adds two walks and a wider driveway, with Christmas displays clear of full a
   const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
   const result = generateSeasonalInstallations(features, [config]);
   const paths = result.records.filter((r) => r.kind === 'access-path');
-  expect(paths).toHaveLength(11);
+  expect(paths).toHaveLength(8);
   expect(new Set(paths.map((r) => r.installation))).toEqual(
     new Set(['magsaysay-walk-west', 'magsaysay-walk-east', 'magsaysay-driveway']),
   );
-  expect(paths.filter((r) => r.style === 'driveway').every((r) => r.width_m === 3.4)).toBe(true);
+  expect(paths.filter((r) => r.style === 'parking')).toHaveLength(1);
+  expect(paths.find((r) => r.style === 'parking')!.width_m).toBe(6);
+  expect(paths.filter((r) => r.style === 'walkway').every((r) => r.width_m === 1.2)).toBe(true);
   const full = polygon([config.grounds!.find((g) => g.id === 'magsaysay-access-forecourt')!.ring]);
   for (const path of paths)
     for (const p of seasonalAccessRing(path)) expect(booleanPointInPolygon(p, full)).toBe(true);
   const trees = result.records.filter(
     (r): r is SeasonalDisplayRecord => r.kind === 'christmas-tree',
   );
-  expect(trees).toHaveLength(2);
+  expect(trees).toHaveLength(1);
   for (const tree of trees) {
     const projection = localMetricProjection(tree.at);
     for (const path of paths) {
@@ -128,7 +130,7 @@ it('adds two walks and a wider driveway, with Christmas displays clear of full a
     (r): r is SeasonalLightStringRecord =>
       r.kind === 'light-string' && r.installation.includes('-island-'),
   );
-  expect(lights.length).toBeGreaterThan(5);
+  expect(lights.length).toBeGreaterThanOrEqual(5);
   for (const light of lights)
     for (let i = 0; i <= 100; i++) {
       const p: SeasonalPoint = [

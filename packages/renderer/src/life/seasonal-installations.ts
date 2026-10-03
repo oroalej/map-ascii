@@ -1,9 +1,4 @@
-import {
-  offsetUtility as metric,
-  METERS_PER_DEGREE,
-  seasonalAccessRing,
-  pointInPolygon,
-} from '@atlas/shared';
+import { offsetUtility as metric, METERS_PER_DEGREE } from '@atlas/shared';
 import type {
   SeasonalDisplayRecord,
   SeasonalLightStringRecord,
@@ -11,6 +6,7 @@ import type {
   SeasonalAccessRecord,
 } from '@atlas/shared';
 import { packCarnival } from './carnival';
+import { packAccess } from './seasonal-access';
 import type { FixtureGrid } from './fixtures';
 import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 import { LampState, type VisibleLamp } from './lights';
@@ -103,28 +99,7 @@ export function packInstallation(
   write: Write,
 ): boolean {
   if (record.kind === 'carnival') return packCarnival(record, grid, write);
-  if (record.kind === 'access-path') {
-    const ring = seasonalAccessRing(record).map((p) => grid.toCell(...p));
-    const x0 = Math.max(0, Math.floor(Math.min(...ring.map((p) => p[0])))),
-      x1 = Math.min(grid.cols - 1, Math.ceil(Math.max(...ring.map((p) => p[0])))),
-      y0 = Math.max(0, Math.floor(Math.min(...ring.map((p) => p[1])))),
-      y1 = Math.min(grid.rows - 1, Math.ceil(Math.max(...ring.map((p) => p[1]))));
-    if (!Number.isFinite(x0 + x1 + y0 + y1) || (x1 - x0 + 1) * (y1 - y0 + 1) > 200000) return false;
-    let visible = false;
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++)
-        if (pointInPolygon([x + 0.5, y + 0.5], [ring]))
-          visible =
-            write(
-              x,
-              y,
-              '░',
-              SeasonalPart.accessSurface,
-              record.style === 'driveway' ? 1 : 0,
-              true,
-            ) || visible;
-    return visible;
-  }
+  if (record.kind === 'access-path') return packAccess(record, grid, write);
   let visible = false;
   const put = (
     x: number,

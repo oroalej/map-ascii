@@ -463,9 +463,14 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     under = mix(under, color * 0.34, fixture.a);
   }
   if (part == ${FixturePart.accessSurface}) {
-    vec3 paint = info == 1 ? vec3(0.40, 0.44, 0.47) : vec3(0.67, 0.61, 0.49);
-    color = max(lampLit(daylit(paint), rainLight), paint * 0.55);
-    under = mix(under, color * 0.32, fixture.a);
+    int style = info & 3, role = info >> 2;
+    vec3 paint = style == 0 ? vec3(0.38, 0.36, 0.31) : vec3(0.14, 0.16, 0.18);
+    vec3 ground = max(lampLit(daylit(paint), rainLight), paint * 0.28);
+    under = mix(under, ground * 0.22, fixture.a);
+    if (role == 1) paint = vec3(0.49, 0.48, 0.43);
+    if (role == 2) paint = vec3(0.24, 0.23, 0.20);
+    if (role == 3) paint = vec3(0.78, 0.80, 0.77);
+    color = max(lampLit(daylit(paint), rainLight), paint * (role == 3 ? 0.65 : 0.35));
   }
   if (part == ${FixturePart.carnivalFrame}) color = max(lampLit(daylit(vec3(0.61, 0.76, 0.78)), rainLight), vec3(0.43, 0.54, 0.55));
   if (rideMotion) {

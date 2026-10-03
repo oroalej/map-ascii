@@ -40,7 +40,7 @@ export type SeasonalLightStringRecord = SeasonalInstallationRecord & {
 /** Walkable seasonal paving; each complete segment keeps its real metric width. */
 export type SeasonalAccessRecord = SeasonalInstallationRecord & {
   kind: 'access-path';
-  style: 'walkway' | 'driveway';
+  style: 'walkway' | 'driveway' | 'parking';
   from: SeasonalPoint;
   to: SeasonalPoint;
   width_m: number;
@@ -167,10 +167,10 @@ export function isSeasonalRecord(value: unknown): value is SeasonalRecord {
     return (
       (display || access || v.kind === 'light-string') &&
       (!access ||
-        ((v.style === 'walkway' || v.style === 'driveway') &&
+        ((v.style === 'walkway' || v.style === 'driveway' || v.style === 'parking') &&
           typeof v.width_m === 'number' &&
           Number.isFinite(v.width_m) &&
-          v.width_m >= 1 &&
+          v.width_m >= (v.style === 'parking' ? 5.5 : 1) &&
           v.width_m <= 12 &&
           !Object.hasOwn(v, 'mount') &&
           !Object.hasOwn(v, 'bulb_spacing_m') &&

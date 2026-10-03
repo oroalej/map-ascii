@@ -167,7 +167,12 @@ export function generateSeasonalInstallations(
         for (let i = 1; i < config.points.length; i++) {
           const from = config.points[i - 1]!,
             to = config.points[i]!;
-          const ring = seasonalAccessRing({ from, to, width_m: config.width_m }).map(project);
+          const ring = seasonalAccessRing({
+            from,
+            to,
+            width_m: config.width_m,
+            style: config.style,
+          }).map(project);
           const edges = ring.slice(1).map((b, n) => [ring[n]!, b] as const);
           if (
             ring.some((p) => !inside(p, polygon)) ||
@@ -202,13 +207,13 @@ export function generateSeasonalInstallations(
                     .slice(1)
                     .some(
                       (b, n) =>
-                        segmentDistance(
-                          project(from),
-                          project(to),
-                          project(l[n] as Point),
-                          project(b),
-                        ) <
-                        (Number(f.properties.width ?? 6) + config.width_m) / 2,
+                        inside(project(l[n] as Point), [ring]) ||
+                        inside(project(b), [ring]) ||
+                        edges.some(
+                          ([c, d]) =>
+                            segmentDistance(c, d, project(l[n] as Point), project(b)) <
+                            Number(f.properties.width ?? 6) / 2,
+                        ),
                     ),
                 )
               );

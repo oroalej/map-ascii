@@ -25,6 +25,14 @@ it('validates seasonal access widths and preserves complete metric envelopes', (
   const ring = seasonalAccessRing(parsed).map(projection.to);
   expect(Math.max(...ring.map((p) => p[1])) - Math.min(...ring.map((p) => p[1]))).toBeCloseTo(4);
   expect(ring[0]).toEqual(ring.at(-1));
+  const parking = { ...record, style: 'parking', width_m: 6 };
+  const parsedParking = SeasonalRecordSchema.parse(parking);
+  expect(isSeasonalRecord(parking)).toBe(true);
+  if (parsedParking.kind !== 'access-path') throw new Error('expected parking access');
+  expect(seasonalAccessRing(parsedParking)).toHaveLength(5);
+  const tooNarrow = { ...parking, width_m: 5.49 };
+  expect(isSeasonalRecord(tooNarrow)).toBe(false);
+  expect(SeasonalRecordSchema.safeParse(tooNarrow).success).toBe(false);
   for (const change of [
     { width_m: 0.99 },
     { width_m: 12.01 },

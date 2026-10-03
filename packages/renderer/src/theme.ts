@@ -4,7 +4,7 @@ import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
 import { figureOf, personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
-import { SEASONAL_GLYPHS } from './life/seasonal-glyphs';
+import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
 
@@ -562,6 +562,8 @@ export function mapGlyphs(theme: Theme): string[] {
     ...SEASONAL_GLYPHS,
     // New social poses follow all existing map glyphs, preserving hardware and season indices.
     ...personGlyphs().filter((glyph) => figureOf(glyph)?.pose),
+    // Parking labels follow all existing glyphs so legacy atlas indices stay unchanged.
+    ...ACCESS_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];

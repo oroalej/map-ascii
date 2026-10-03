@@ -959,27 +959,37 @@ export const Season = z
     installations: z
       .array(
         z.discriminatedUnion('kind', [
-          z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            kind: z.literal('access-path'),
-            style: z.enum(['walkway', 'driveway']),
-            width_m: z.number().min(1).max(12),
-            points: z
-              .array(
-                z.tuple([z.number().min(-180).max(180), z.number().min(-85.051129).max(85.051129)]),
-              )
-              .min(2)
-              .max(32)
-              .refine(
-                (points) =>
-                  points.slice(1).every((p, i) => p[0] !== points[i]![0] || p[1] !== points[i]![1]),
-                'empty access segment',
-              ),
-          }),
+          z
+            .strictObject({
+              id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+              anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
+              label: z.string().trim().min(1),
+              sources: Sources,
+              grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+              kind: z.literal('access-path'),
+              style: z.enum(['walkway', 'driveway', 'parking']),
+              width_m: z.number().min(1).max(12),
+              points: z
+                .array(
+                  z.tuple([
+                    z.number().min(-180).max(180),
+                    z.number().min(-85.051129).max(85.051129),
+                  ]),
+                )
+                .min(2)
+                .max(32)
+                .refine(
+                  (points) =>
+                    points
+                      .slice(1)
+                      .every((p, i) => p[0] !== points[i]![0] || p[1] !== points[i]![1]),
+                  'empty access segment',
+                ),
+            })
+            .refine(
+              (v) => v.style !== 'parking' || v.width_m >= 5.5,
+              'parking requires bays and access',
+            ),
           z.strictObject({
             id: z.string().regex(/^[a-z][a-z0-9-]*$/),
             anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),

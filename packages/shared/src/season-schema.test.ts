@@ -41,6 +41,16 @@ describe('season content validation', () => {
     };
     const config = { ...season, grounds: [grounds], installations: [access] };
     expect(Season.safeParse(config).success).toBe(true);
+    expect(
+      Season.safeParse({ ...config, installations: [{ ...access, style: 'parking', width_m: 6 }] })
+        .success,
+    ).toBe(true);
+    expect(
+      Season.safeParse({
+        ...config,
+        installations: [{ ...access, style: 'parking', width_m: 5.49 }],
+      }).success,
+    ).toBe(false);
     for (const change of [
       { grounds: 'missing' },
       { sources: [] },

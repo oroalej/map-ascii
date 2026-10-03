@@ -70,12 +70,13 @@ export const SeasonalRecordSchema = z.union([
     .strictObject({
       ...installation,
       kind: z.literal('access-path'),
-      style: z.enum(['walkway', 'driveway']),
+      style: z.enum(['walkway', 'driveway', 'parking']),
       from: point,
       to: point,
       width_m: z.number().min(1).max(12),
     })
-    .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty access segment'),
+    .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty access segment')
+    .refine((v) => v.style !== 'parking' || v.width_m >= 5.5, 'parking requires bays and access'),
   z
     .strictObject({ ...installation, kind: z.literal('carnival'), ...carnival })
     .refine(validCarnival, 'invalid carnival footprint'),
