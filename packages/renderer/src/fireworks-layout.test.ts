@@ -64,11 +64,11 @@ describe('bounded New Year shells', () => {
     expect(fireworkRise(200)).toBeGreaterThan(fireworkRise(100));
     const display = createFireworkDisplay(123),
       out = shells();
-    fireworkShells(view, grid(), out, display, 0, false);
+    const count = fireworkShells(view, grid(), out, display, 0, false);
     const heights = display.launches.slice(0, 49).map((launch) => launch!.height);
     expect(Math.max(...heights) - Math.min(...heights)).toBeGreaterThan(100);
-    for (let slot = 0; slot < 49; slot++) {
-      const launch = display.launches[slot]!;
+    for (let slot = 0; slot < count; slot++) {
+      const launch = display.launches[display.admitted[slot]!]!;
       expect(out[slot * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, 19), 3);
       expect(display.flights[slot * 2 + 1]).toBeCloseTo(fireworkRise(launch.height));
     }
@@ -145,7 +145,7 @@ describe('bounded New Year shells', () => {
         expect(display.admitted.every((value) => value === -1)).toBe(true);
         expect(display.launches).toEqual(launches);
       }
-      expect(fireworkShells(view, grid(), out, display, 0, reduced)).toBe(49);
+      expect(fireworkShells(view, grid(), out, display, 0, reduced)).toBe(fireworkShellCount(19));
       expect(display.launches).toEqual(launches);
     }
   });
@@ -154,7 +154,7 @@ describe('bounded New Year shells', () => {
       a = shells(),
       b = shells();
     fireworkShells(view, grid(), a, display, 0, false);
-    const flights = display.flights.slice();
+    const sources = display.admitted.slice();
     const launches = display.launches.slice();
     const original = grid();
     fireworkShells(
@@ -165,11 +165,14 @@ describe('bounded New Year shells', () => {
       0,
       false,
     );
-    for (let slot = 0; slot < 49; slot++) {
-      const perspective = fireworkPerspective(launches[slot]!.height, view.camera.zoom);
-      expect(b[slot * 4]).toBeCloseTo(a[slot * 4]! - 0.5 * perspective, 3);
-      expect(b[slot * 4 + 1]).toBeCloseTo(a[slot * 4 + 1]! - 0.25 * perspective, 3);
-      expect(b[slot * 4 + 2]).toBe(a[slot * 4 + 2]);
+    for (let slot = 0; display.admitted[slot]! >= 0; slot++) {
+      const source = display.admitted[slot]!,
+        previous = sources.indexOf(source);
+      expect(previous).toBeGreaterThanOrEqual(0);
+      const perspective = fireworkPerspective(launches[source]!.height, view.camera.zoom);
+      expect(b[slot * 4]).toBeCloseTo(a[previous * 4]! - 0.5 * perspective, 3);
+      expect(b[slot * 4 + 1]).toBeCloseTo(a[previous * 4 + 1]! - 0.25 * perspective, 3);
+      expect(b[slot * 4 + 2]).toBe(a[previous * 4 + 2]);
     }
     for (const [zoom, width, height, dpr] of [
       [19.01, 1000, 800, 1],
@@ -205,7 +208,7 @@ describe('bounded New Year shells', () => {
           3,
         );
         expect(b[slot * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, zoom) * dpr, 3);
-        expect(display.flights[slot * 2]).toBe(flights[source * 2]);
+        expect(display.flights[slot * 2]).toBe(Math.fround(-launch.start));
       }
     }
   });
@@ -213,7 +216,8 @@ describe('bounded New Year shells', () => {
   it('chooses irregular positions and independent times, relocating only after smoke has faded', () => {
     const display = createFireworkDisplay(456),
       out = shells();
-    fireworkShells(view, grid(), out, display, 0, false);
+    const distant = { ...view, camera: { ...view.camera, zoom: 16 } };
+    fireworkShells(distant, grid(distant), out, display, 0, false);
     const initial = display.launches.slice(0, 49);
     const nextTimes = initial.map((launch) => launch!.next);
     expect(new Set(nextTimes.map((time) => Math.round(time * 100))).size).toBeGreaterThan(35);
@@ -229,7 +233,7 @@ describe('bounded New Year shells', () => {
     expect(quadrants.size).toBe(4);
     for (let time = 0.1; time <= 12; time += 0.1) {
       const before = display.launches.slice();
-      fireworkShells(view, grid(), out, display, time, false);
+      fireworkShells(distant, grid(distant), out, display, time, false);
       for (let slot = 0; slot < 49; slot++) {
         if (display.launches[slot] === before[slot]) continue;
         const previous = before[slot]!,
@@ -269,9 +273,10 @@ describe('bounded New Year shells', () => {
   it('keeps a dense overlapping display across many independently scheduled launches', () => {
     const display = createFireworkDisplay(123),
       out = shells();
+    const distant = { ...view, camera: { ...view.camera, zoom: 16 } };
     let peak = 0;
     for (let time = 0; time < 60; time += 0.1) {
-      fireworkShells(view, grid(), out, display, time, false);
+      fireworkShells(distant, grid(distant), out, display, time, false);
       let active = 0;
       for (let slot = 0; slot < 49; slot++) {
         const age = display.flights[slot * 2]! - display.flights[slot * 2 + 1]!;
@@ -283,16 +288,22 @@ describe('bounded New Year shells', () => {
     expect(peak).toBeGreaterThanOrEqual(30);
   });
 
-  it('retains zoom bands with one higher-altitude distant shell at a changing location', () => {
+  it('progressively thins the display with one higher-altitude shell at a changing location', () => {
     for (const [zoom, count] of [
       [7, 50],
       [15.99, 50],
       [16, 50],
       [16.001, 50],
-      [18.5, 49],
-      [19.999, 49],
+      [17, 31],
+      [18, 17],
+      [18.5, 11],
+      [19, 7],
+      [19.999, 5],
       [20, 4],
-      [20.999, 4],
+      [20.25, 3],
+      [20.5, 2],
+      [20.75, 1],
+      [20.999, 1],
       [21, 0],
       [22, 0],
       [6, 0],
@@ -345,6 +356,49 @@ describe('bounded New Year shells', () => {
       expect(out[196]! - out[199]!).toBeGreaterThanOrEqual(0);
       expect(out[196]! + out[199]!).toBeLessThanOrEqual(v.width);
     }
+  });
+
+  it('never increases the density ceiling or packed count on zoom, without restarting fixed launches', () => {
+    const display = createFireworkDisplay(123),
+      out = shells();
+    const distant = { ...view, camera: { ...view.camera, zoom: 16 } };
+    fireworkShells(distant, grid(distant), out, display, 0, false);
+    const launches = display.launches.slice();
+    let previousLimit = FIREWORKS.shells,
+      previousCount = FIREWORKS.shells;
+    for (let step = 0; step <= 200; step++) {
+      const zoom = 16 + step / 40,
+        v = { ...view, camera: { ...view.camera, zoom } };
+      const limit = fireworkShellCount(zoom),
+        count = fireworkShells(v, grid(v), out, display, 0, false);
+      expect(limit).toBeLessThanOrEqual(previousLimit);
+      expect(count).toBeLessThanOrEqual(previousCount);
+      expect(count).toBeLessThanOrEqual(limit);
+      for (let packed = 0; packed < count; packed++) {
+        const source = display.admitted[packed]!,
+          launch = launches[source]!;
+        expect(display.launches[source]).toBe(launch);
+        expect(out[packed * 4 + 2]).toBe(launch.seed);
+        expect(out[packed * 4 + 3]).toBeCloseTo(fireworkRadius(launch.height, zoom), 3);
+        expect(display.flights[packed * 2]).toBe(Math.fround(-launch.start));
+        expect(display.appearance[packed * 2]).toBeCloseTo(fireworkVisibility(launch.height, zoom));
+      }
+      expect(out.slice(count * 4).every((value) => value === 0)).toBe(true);
+      expect(display.admitted.slice(count).every((value) => value === -1)).toBe(true);
+      previousLimit = limit;
+      previousCount = count;
+    }
+    expect(previousCount).toBe(0);
+    fireworkShells(distant, grid(distant), out, display, 0, false);
+    expect(display.launches).toEqual(launches);
+
+    const high = display.launches[49]!;
+    high.height = 560;
+    const underHigh = { ...view, camera: { ...view.camera, zoom: 18.3 } };
+    expect(fireworkShells(underHigh, grid(underHigh), out, display, 0, false)).toBe(
+      fireworkShellCount(18.3) - 1,
+    );
+    expect(display.admitted).not.toContain(49);
   });
 
   it('freezes reduced-motion launches, safely resumes and bounds ages after long/invalid clocks', () => {
@@ -414,9 +468,9 @@ describe('bounded New Year shells', () => {
     fireworkShells(view, grid(), out, display, 0, true);
     const launch = display.launches[0];
     const panned = { ...view, camera: { ...view.camera, lng: view.camera.lng + 0.1 } };
-    fireworkShells(panned, grid(panned), out, display, 10, true);
+    const count = fireworkShells(panned, grid(panned), out, display, 10, true);
     expect(display.launches[0]).not.toBe(launch);
-    for (let slot = 0; slot < 49; slot++) {
+    for (let slot = 0; slot < count; slot++) {
       expect(out[slot * 4]).toBeGreaterThan(0);
       expect(out[slot * 4]).toBeLessThan(view.width);
     }

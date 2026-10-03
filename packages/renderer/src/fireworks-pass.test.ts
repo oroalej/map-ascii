@@ -216,7 +216,9 @@ describe('seasonal GPU fireworks', () => {
       programs = {} as Programs;
     for (const [zoom, count] of [
       [16, 50],
-      [19, 49],
+      [17, 31],
+      [18, 17],
+      [19, 7],
       [20, 4],
       [21, 0],
       [20, 4],
@@ -282,7 +284,9 @@ describe('seasonal GPU fireworks', () => {
     const flights = programs.fireworks!.display.flights;
     const initialFlights = flights.slice();
     const particles: unknown = gl.bufferData.mock.calls[0]![1];
-    const elapsed = Math.min(0.1, (programs.fireworks!.display.launches[0]!.next - 2) / 2);
+    const display = programs.fireworks!.display;
+    const launch = display.launches[display.admitted[0]!]!;
+    const elapsed = Math.min(0.1, (launch.next - 2) / 2);
     draw(2 + elapsed);
     expect(flights[0]).toBeCloseTo(initialFlights[0]! + elapsed);
     expect(setters.u_wind).toHaveBeenLastCalledWith([0.5, 0]);

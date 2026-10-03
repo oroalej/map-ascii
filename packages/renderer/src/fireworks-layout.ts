@@ -10,6 +10,7 @@ const REGULAR_SHELLS = 49;
 export const FIREWORKS = Object.freeze({
   minZoom: MIN_ZOOM,
   hideZoom: MAX_ZOOM,
+  denseZoom: 16,
   sparseZoom: 20,
   referenceZoom: 19,
   cameraHeight: 320,
@@ -30,11 +31,19 @@ export const FIREWORKS = Object.freeze({
 export const FIREWORK_INSTANCE_COUNT =
   FIREWORKS.shells * (FIREWORKS.stars * FIREWORKS.tails + FIREWORKS.smoke);
 
-/** Zoom bands share one visibility rule between the GPU pass and legend. */
+/** Density decreases on approach; keep the high burst until its altitude cutoff. */
 export function fireworkShellCount(zoom: number): number {
   if (!Number.isFinite(zoom) || zoom < FIREWORKS.minZoom || zoom >= FIREWORKS.hideZoom) return 0;
-  if (zoom >= FIREWORKS.sparseZoom) return FIREWORKS.sparseShells;
-  return FIREWORKS.regularShells + (fireworkCameraHeight(zoom) > FIREWORKS.largeHeight ? 1 : 0);
+  const distant = Math.min(
+    1,
+    (FIREWORKS.sparseZoom - zoom) / (FIREWORKS.sparseZoom - FIREWORKS.denseZoom),
+  );
+  const regular = Math.ceil(
+    zoom >= FIREWORKS.sparseZoom
+      ? FIREWORKS.sparseShells * (FIREWORKS.hideZoom - zoom)
+      : FIREWORKS.sparseShells + (FIREWORKS.regularShells - FIREWORKS.sparseShells) * distant ** 2,
+  );
+  return regular + (fireworkCameraHeight(zoom) > FIREWORKS.largeHeight ? 1 : 0);
 }
 
 /** Reference-world projection follows map magnification at every supported zoom. */
@@ -263,12 +272,16 @@ export function fireworkShells(
       fireworkSparkWidth(launch.height, view.camera.zoom) * view.dpr;
     display.admitted[count++] = slot;
   }
-  if (limit < count) {
-    // Keep the nearest surviving launches, never substitute lower heights to fill close views.
-    for (let slot = 0; slot < limit; slot++) {
+  const high = count > 0 && display.admitted[count - 1] === FIREWORKS.regularShells ? 1 : 0;
+  const candidates = count - high;
+  const regularLimit = limit - (slots - FIREWORKS.regularShells);
+  if (regularLimit < candidates) {
+    // Thin regular launches by proximity; the high burst still leaves by altitude alone.
+    // Never substitute lower heights or restart flights to fill a closer view.
+    for (let slot = 0; slot < regularLimit; slot++) {
       let nearest = slot,
         distance = Infinity;
-      for (let candidate = slot; candidate < count; candidate++) {
+      for (let candidate = slot; candidate < candidates; candidate++) {
         const dx = out[candidate * 4]! - view.width / 2,
           dy = out[candidate * 4 + 1]! - view.height / 2;
         const next = dx * dx + dy * dy;
@@ -282,7 +295,13 @@ export function fireworkShells(
       swapSlots(display.appearance, 2, slot, nearest);
       swapSlots(display.admitted, 1, slot, nearest);
     }
-    count = limit;
+    if (high) {
+      swapSlots(out, 4, regularLimit, candidates);
+      swapSlots(display.flights, 2, regularLimit, candidates);
+      swapSlots(display.appearance, 2, regularLimit, candidates);
+      swapSlots(display.admitted, 1, regularLimit, candidates);
+    }
+    count = regularLimit + high;
     out.fill(0, count * 4);
     display.flights.fill(0, count * 2);
     display.appearance.fill(0, count * 2);
