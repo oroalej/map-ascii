@@ -10,3 +10,28 @@ apps/web/public/tiles
 
 # Hand-authored prose; keep as written
 *.md
+
+# Generated PR #14 fixtures; retain compact JSON
+packages/data/scripts/__fixtures__/additional-site-parents.json
+packages/data/scripts/__fixtures__/ateneo-vegetation.json
+packages/data/scripts/__fixtures__/balatas-school-parents.json
+packages/data/scripts/__fixtures__/basilica-vegetation.json
+packages/data/scripts/__fixtures__/bridge-floodworks-parents.json
+packages/data/scripts/__fixtures__/cemetery-parents.json
+packages/data/scripts/__fixtures__/cemetery-sections.json
+packages/data/scripts/__fixtures__/civic-ground-parents.json
+packages/data/scripts/__fixtures__/concepcion-science-parents.json
+packages/data/scripts/__fixtures__/five-landscaped-grounds.json
+packages/data/scripts/__fixtures__/five-site-reference.json
+packages/data/scripts/__fixtures__/landmark-parents.json
+packages/data/scripts/__fixtures__/lcc-terminal-church-parents.json
+packages/data/scripts/__fixtures__/memorial-school-parents.json
+packages/data/scripts/__fixtures__/memorial-school-reference.json
+packages/data/scripts/__fixtures__/placement-correction-parents.json
+packages/data/scripts/__fixtures__/roadside-campus-parents.json
+packages/data/scripts/__fixtures__/roadside-campus-reference.json
+packages/data/scripts/__fixtures__/san-roque-mabolo-parents.json
+packages/data/scripts/__fixtures__/school-hospital-parents.json
+packages/data/scripts/__fixtures__/seven-site-parents.json
+packages/data/scripts/__fixtures__/shrine-concepcion-sabang-parents.json
+packages/data/scripts/__fixtures__/tarosanan-parents.json

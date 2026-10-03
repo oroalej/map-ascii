@@ -1,3 +1,4 @@
+import { distanceMeters as distance } from './landmark-detail.geometry';
 import { readFileSync } from 'node:fs';
 import { Landcover, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
@@ -8,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { landcoverFeatures, SAME_TREE_M } from './landcover';
 import { seatingFootprint } from './site-detail';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, clearanceWidth, localFrame } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob('../../../content/cities/naga/landcover/penafrancia-basilica.json');
@@ -27,13 +28,8 @@ const reference = read('../__fixtures__/basilica-vegetation.json') as {
   open_ground: { id: string; ring: LngLat[] }[];
 };
 const grounds = source.find((f) => f.properties.id === 'osm:way/838935827')!.geometry as Polygon;
-const MX = 111_320 * Math.cos((13.632 * Math.PI) / 180);
-const project = ([lng, lat]: LngLat): LngLat => [(lng - 123.2) * MX, (lat - 13.632) * 111_320];
-const distance = (a: LngLat, b: LngLat) => {
-  const [ax, ay] = project(a);
-  const [bx, by] = project(b);
-  return Math.hypot(ax - bx, ay - by);
-};
+const project = localFrame([123.2, 13.632]).toMeters;
+
 const merged = landcoverFeatures(source, [pack]);
 const crowns = pack.trees.map((t) => ({ at: project(t.at), radius: t.crown_m! / 2 }));
 
@@ -173,7 +169,10 @@ describe('Basilica owner-reference vegetation', () => {
         return [
           {
             id: f.properties.id,
-            shape: seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6),
+            shape: seatingFootprint(
+              f.geometry.coordinates as LngLat[],
+              clearanceWidth(f.properties),
+            ),
           },
         ];
       return [];

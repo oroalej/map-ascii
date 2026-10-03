@@ -6,6 +6,12 @@ import { bboxesOverlap, localFrame } from './geo';
 
 type Area = Polygon | MultiPolygon;
 
+/** Enumerate disconnected footprints without joining them or changing their rings. */
+export const polygonComponents = (area: Area): Polygon[] =>
+  area.type === 'Polygon'
+    ? [area]
+    : area.coordinates.map((coordinates) => ({ type: 'Polygon', coordinates }));
+
 /** Reuse immutable footprints and clip only overlapping shapes, in local meters. */
 export function geometryAudit(area: Area) {
   const bounds = bbox(area) as BBox;
@@ -16,8 +22,8 @@ export function geometryAudit(area: Area) {
     if (!result) {
       result = {
         bounds: bbox(shape) as BBox,
-        coordinates: (shape.type === 'Polygon' ? [shape.coordinates] : shape.coordinates).map((p) =>
-          p.map((r) =>
+        coordinates: polygonComponents(shape).map((p) =>
+          p.coordinates.map((r) =>
             r.map((point) => {
               const [x, y] = frame.toMeters(point);
               return [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6] as LngLat;

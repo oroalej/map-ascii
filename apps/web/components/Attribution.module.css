@@ -14,6 +14,10 @@
   font-size: 10px;
 }
 
+.extra + .extra::before {
+  content: ' · ';
+}
+
 /* A city's sourced detail can grow independently of the viewport. Keep OSM outside
    the scroll area, and leave the map and the controls above the footer accessible. */
 .sources {
@@ -22,6 +26,8 @@
   overscroll-behavior: contain;
   padding: 2px 4px;
   background: rgb(4 5 10 / 88%);
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .sources:focus-visible {

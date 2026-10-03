@@ -1,3 +1,4 @@
+import { distanceMeters as distance } from './landmark-detail.geometry';
 import { readFileSync } from 'node:fs';
 import { Landcover, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
@@ -8,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { landcoverFeatures, SAME_TREE_M } from './landcover';
 import { seatingFootprint } from './site-detail';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, clearanceWidth, localFrame } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -36,17 +37,11 @@ const osmTrees = source.filter(
 );
 const merged = landcoverFeatures(source, packs);
 const trees = [...osmTrees, ...merged.features.filter((f) => f.properties.class === 'tree')];
-const METERS = 111_320;
-const MX = METERS * Math.cos((13.631 * Math.PI) / 180);
-const project = ([lng, lat]: LngLat): LngLat => [(lng - 123.1845) * MX, (lat - 13.631) * METERS];
-const distance = (a: LngLat, b: LngLat) => {
-  const [ax, ay] = project(a);
-  const [bx, by] = project(b);
-  return Math.hypot(ax - bx, ay - by);
-};
+const project = localFrame([123.1845, 13.631]).toMeters;
+
 const crowns = trees.map((f) => {
   if (f.geometry.type !== 'Point') throw Error('expected individual tree points');
-  return { at: project(f.geometry.coordinates as LngLat), radius: f.properties.crown! / 2 };
+  return { at: project(f.geometry.coordinates), radius: f.properties.crown! / 2 };
 });
 const patches = packs
   .flatMap((p) => p.areas)
@@ -179,7 +174,10 @@ describe('Ateneo owner-reference vegetation coverage', () => {
         return [
           {
             id: f.properties.id,
-            shape: seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6),
+            shape: seatingFootprint(
+              f.geometry.coordinates as LngLat[],
+              clearanceWidth(f.properties),
+            ),
           },
         ];
       return [];

@@ -21,7 +21,7 @@
     {
       "title": "Independent facility reference",
       "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
-      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. No satellite or Google Maps imagery was used. No timeline dates are inferred."
+      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Pool outline/dimensions not established by OSM or independent imagery: omit the proposed rim. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
     }
   ]
 }

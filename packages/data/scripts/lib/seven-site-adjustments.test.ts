@@ -1,14 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { Landcover, Landmark, SiteDetail, DetailSelectionSchema, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
-import type { Polygon, MultiPolygon, Point, LineString } from 'geojson';
+import type { Polygon, MultiPolygon, Point } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
 import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { mergeSiteDetails } from './site-detail';
+import {
+  assertPointClear,
+  distanceMeters as distance,
+  mappedFootprints,
+} from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -36,29 +41,13 @@ const covers = [...campusSlugs, 'naga-city-hall', 'naga-city-civic-center', 'mag
   (slug) => Landcover.parse(pack('landcover', slug)),
 );
 const details = campusSlugs.slice(1).map((slug) => SiteDetail.parse(pack('details', slug)));
-const distance = (a: readonly number[], b: readonly number[]) =>
-  Math.hypot(
-    (a[0]! - b[0]!) * 111320 * Math.cos((b[1]! * Math.PI) / 180),
-    (a[1]! - b[1]!) * 111320,
-  );
 const roofs = source.filter(
   (f) =>
     f.properties.class.startsWith('building') &&
     (f.properties.height ?? 0) > 0 &&
     ['Polygon', 'MultiPolygon'].includes(f.geometry.type),
 );
-const roads = source
-  .filter(
-    (f) =>
-      (f.properties.class.startsWith('road') || f.properties.class === 'path') &&
-      f.geometry.type === 'LineString',
-  )
-  .map((f) =>
-    seatingFootprint(
-      (f.geometry as LineString).coordinates as LngLat[],
-      f.properties.width ?? (f.properties.class === 'path' ? 2 : 6),
-    ),
-  );
+const obstacles = mappedFootprints(source);
 
 describe('seven-site planting adjustments', () => {
   it('bounds Civic Center canopy while preserving every mapped tree and sports facility', () => {
@@ -85,13 +74,7 @@ describe('seven-site planting adjustments', () => {
     for (const cover of covers) {
       expect(cover.trees.length, cover.id).toBeGreaterThanOrEqual(10);
       for (const [i, tree] of cover.trees.entries()) {
-        for (const roof of roofs)
-          expect(
-            inside(tree.at, roof.geometry as Polygon | MultiPolygon),
-            `${cover.id} tree ${i + 1}`,
-          ).toBe(false);
-        for (const road of roads)
-          expect(inside(tree.at, road), `${cover.id} carriageway`).toBe(false);
+        assertPointClear(tree.at, obstacles, `${cover.id} tree ${i + 1}`);
         for (const mapped of source.filter(
           (f) => f.properties.class === 'tree' && f.geometry.type === 'Point',
         ))

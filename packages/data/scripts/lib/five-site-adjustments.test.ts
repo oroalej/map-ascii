@@ -2,12 +2,17 @@ import { readFileSync } from 'node:fs';
 import { Landcover, SiteDetail, Landmark, DetailSelectionSchema, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
-import type { Polygon, MultiPolygon, Point } from 'geojson';
+import type { Polygon, Point } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import type { ContentBundle } from '@atlas/content';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 import { mergeSiteDetails } from './site-detail';
+import {
+  assertPointClear,
+  distanceMeters as metres,
+  mappedFootprints,
+} from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -41,8 +46,6 @@ mergeContent(source, {
 const adjusted = applyLandcoverTreeOverrides(source, covers);
 const authored = landcoverFeatures(adjusted, covers);
 const input = [...adjusted, ...authored.features];
-const metres = ([x, y]: readonly number[], [lng, lat]: readonly number[]) =>
-  Math.hypot((x! - lng!) * 111320 * Math.cos((lat! * Math.PI) / 180), (y! - lat!) * 111320);
 
 describe('five owner-referenced landmark adjustments', () => {
   it('restrains mapped Civic Center crowns without moving or duplicating trunks or changing the pool', () => {
@@ -96,41 +99,9 @@ describe('five owner-referenced landmark adjustments', () => {
   });
 
   it('keeps new trunks clear of mapped roofs and full-width carriageways', () => {
-    const buildings = source.filter(
-      (f) =>
-        f.properties.class.startsWith('building') &&
-        (f.properties.height ?? 0) > 0 &&
-        ['Polygon', 'MultiPolygon'].includes(f.geometry.type),
-    );
-    const roads = source.filter(
-      (f) => f.properties.class.startsWith('road') && f.geometry.type === 'LineString',
-    );
+    const obstacles = mappedFootprints(source, { paths: false });
     for (const cover of covers)
-      for (const tree of cover.trees) {
-        for (const building of buildings)
-          expect(inside(tree.at, building.geometry as Polygon | MultiPolygon), cover.id).toBe(
-            false,
-          );
-        const mx = 111320 * Math.cos((tree.at[1] * Math.PI) / 180);
-        const local = (p: readonly number[]) =>
-          [(p[0]! - tree.at[0]) * mx, (p[1]! - tree.at[1]) * 111320] as const;
-        for (const road of roads) {
-          if (road.geometry.type !== 'LineString') continue;
-          const points = road.geometry.coordinates.map(local);
-          for (let i = 1; i < points.length; i++) {
-            const [ax, ay] = points[i - 1]!,
-              [bx, by] = points[i]!;
-            const dx = bx - ax,
-              dy = by - ay;
-            const length = dx * dx + dy * dy;
-            const t = length ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / length)) : 0;
-            expect(
-              Math.hypot(ax + t * dx, ay + t * dy),
-              `${cover.id} / ${road.properties.id}`,
-            ).toBeGreaterThan((road.properties.width ?? 6) / 2);
-          }
-        }
-      }
+      for (const tree of cover.trees) assertPointClear(tree.at, obstacles, cover.id);
   });
 
   it('adds market roof rows and both curved features above a flat source roof, preserving its footprint', () => {

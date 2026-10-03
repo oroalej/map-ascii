@@ -52,7 +52,8 @@ ascii-atlas/
 │  │     ├─ tours/*.json
 │  │     ├─ plans/*.json, art/*.json   landmark plan-view parts, front-view art
 │  │     ├─ landcover/*.json   trees, grass, parking OSM doesn't map yet, traced from imagery (dropped as OSM catches up)
-│  │     ├─ details/*.json     sourced outdoor paving, walking routes, curved seating, and lamps
+│  │     ├─ details/*.json     sourced paving, walks, seating, lamps, structures, building/roof overrides, and parked vehicles
+│  │     ├─ cemeteries/*.json  sourced burial rows and sections with individual-marker clearance
 │  │     ├─ historic-maps/*.json
 │  │     └─ media/            photos (or references to external hosting)
 │  └─ shared/                 zod schemas + TS types

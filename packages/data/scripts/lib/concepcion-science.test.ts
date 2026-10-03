@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { Landcover, SiteDetail, type LngLat } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import type { LineString } from 'geojson';
-import { intersection } from 'polyclip-ts';
 import type { AtlasFeature } from '../03-normalize';
-import { seatingFootprint } from './site-detail';
+import { clearanceAssertions, mappedFootprints } from './landmark-detail.geometry';
+import { clearanceWidth, localFrame } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -24,19 +24,10 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
       const cover = Landcover.parse(read(`landcover/${slug}.json`));
       const parking = cover.areas.filter((area) => area.cover === 'parking');
       expect(parking).toHaveLength(2);
-      const obstacles = source.flatMap((f) =>
-        f.geometry.type === 'Polygon' &&
-        f.properties.class.startsWith('building') &&
-        (f.properties.height ?? 0) > 0
-          ? [f.geometry.coordinates as LngLat[][]]
-          : f.geometry.type === 'LineString' && f.properties.class.startsWith('road')
-            ? (seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)
-                .coordinates as LngLat[][][])
-            : [],
-      );
+      const obstacles = mappedFootprints(source, { paths: false });
+      const audit = clearanceAssertions(obstacles[0]!);
       for (const area of parking)
-        for (const obstacle of obstacles)
-          expect(intersection([area.ring], obstacle), slug).toEqual([]);
+        audit.clear({ type: 'Polygon', coordinates: [area.ring] }, obstacles, slug);
       expect(cover.areas.some((area) => area.cover === 'grass')).toBe(true);
       expect(cover.areas.some((area) => area.cover === 'planting')).toBe(true);
       const detail = SiteDetail.parse(read(`details/${slug}.json`));
@@ -52,8 +43,7 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
     const end = line.findIndex((p) => p[0] === 123.2000138 && p[1] === 13.6334885);
     const section = line.slice(end).reverse();
     const origin = section[0]!;
-    const scale = 111320 * Math.cos((origin[1] * Math.PI) / 180);
-    const local = (p: LngLat): LngLat => [(p[0] - origin[0]) * scale, (p[1] - origin[1]) * 111320];
+    const local = localFrame(origin).toMeters;
     const segments = section.slice(1).map((p, i) => [local(section[i]!), local(p)] as const);
     const sides = new Set<number>();
     const rows = new Map<number, LngLat[]>();
@@ -77,7 +67,7 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
       const row = rows.get(nearest.side) ?? [];
       row.push(p);
       rows.set(nearest.side, row);
-      expect(nearest.distance).toBeGreaterThan((road.properties.width ?? 6) / 2);
+      expect(nearest.distance).toBeGreaterThan(clearanceWidth(road.properties) / 2);
       expect(nearest.distance).toBeLessThanOrEqual(8.6);
       expect(tree.crown_m).toBeGreaterThanOrEqual(11);
       expect(tree.crown_m).toBeLessThanOrEqual(14);

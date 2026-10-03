@@ -9,6 +9,7 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
+import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -486,6 +487,7 @@ export function selectPass(
     u_windDir: wind.dir,
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
+    u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
     u_roadMask: roads,
     u_cellAspect: view.cellDev.h / view.cellDev.w,
     u_hover: highlights.hover,

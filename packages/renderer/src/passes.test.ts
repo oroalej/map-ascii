@@ -1,6 +1,15 @@
 import { labelCandidate } from './label-candidates';
 import { expect, it, vi } from 'vitest';
-import { overlayPass, placeGrid, prepareCrowns, type TileDraw, type View } from './passes';
+import {
+  overlayPass,
+  placeGrid,
+  prepareCrowns,
+  selectPass,
+  type TileDraw,
+  type View,
+} from './passes';
+import * as twgl from 'twgl.js';
+import { classId, classVisibility } from './classes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import type { TileLabel } from './raster/geometry';
@@ -17,6 +26,43 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('allows paving edge sampling only where the cell pass can rasterize paving', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const targets = { cols: 83, rows: 37, base: {}, sub: {} } as CellTargets;
+  const programs = { select: { program: {} } } as unknown as Programs;
+  const resources = { map: { tables: {} } } as unknown as ThemeResources;
+  try {
+    for (const zoom of [10, 12, 12.25, 12.5, 18]) {
+      // Quality changes glyph detail zoom; class admission follows the camera.
+      const changed = { ...view, camera: { ...view.camera, zoom }, detailZoom: 18 };
+      const { grid } = placeGrid(changed, changed.cellDev, 83, 37);
+      selectPass(
+        gl,
+        programs,
+        targets,
+        resources,
+        changed,
+        grid,
+        0,
+        { hover: 0, selected: 0, highlight: new Uint32Array(64), highlightCount: 0 },
+        { from: 0, strength: 0, dir: [1, 0] },
+      );
+      expect(uniforms.mock.calls.at(-1)![1]).toMatchObject({
+        u_pavingVisible: classVisibility(zoom)[classId('paving')]! > 0,
+      });
+    }
+  } finally {
+    uniforms.mockRestore();
+  }
+});
 
 it('reuses crown matrices through sub-cell shifts and invalidates every matrix input', () => {
   const tiles = [

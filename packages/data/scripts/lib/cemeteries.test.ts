@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DetailSelectionSchema, type Cemetery, type LngLat } from '@atlas/shared';
-import type { Polygon } from 'geojson';
+import type { Polygon, MultiPolygon } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { burialRow, cemeteryCredits, mergeCemeteries } from './cemeteries';
+import { polygonComponents } from './geometry-audit';
 
 const at = (x: number, y: number): LngLat => [x / 111_320, y / 111_320];
 const rectangle = (x: number, y: number, w: number, h: number): Polygon => ({
@@ -70,6 +71,13 @@ describe('burial geometry', () => {
       osm_name: 'Memorial Park',
       kind: 'landuse=cemetery',
     });
+    expect(parts(merged.features)).toHaveLength(1);
+    expect(parts(merged.features)[0]!.properties.id).toBe('cemetery:fixture/north');
+    expect(parts(merged.features)[0]!.geometry).toEqual({
+      type: 'MultiPolygon',
+      coordinates: burialRow(row).map((shape) => shape.coordinates),
+    });
+    expect(merged.stats[0]).toMatchObject({ added: 9, outside: 0, blocked: 0 });
     for (const f of parts(merged.features)) {
       expect(f.properties).toMatchObject({
         class: 'building_part',
@@ -91,6 +99,29 @@ describe('burial geometry', () => {
       expect(f.tippecanoe).toMatchObject({ layer: 'buildings', minzoom: 16 });
     }
     expect(cemeteryCredits([pack, pack])).toEqual(['Fixture credit']);
+  });
+  it('uses the updated cemetery title and positive source height with absent optional metadata', () => {
+    const input: AtlasFeature = {
+      ...parent,
+      properties: {
+        id: parent.properties.id,
+        class: 'grass',
+        name: 'Old title',
+        kind: 'landuse=cemetery',
+        height: 4,
+      },
+    };
+    const result = mergeCemeteries([input], [pack]);
+    const selection = JSON.parse(
+      parts(result.features)[0]!.properties.detail_selection!,
+    ) as unknown;
+    expect(selection).toEqual({
+      id: pack.osm_id,
+      class: 'grass',
+      name: pack.title,
+      kind: 'landuse=cemetery',
+      height: 4,
+    });
   });
   it('omits whole markers crossing boundaries and holes', () => {
     const holed = structuredClone(parent);
@@ -134,6 +165,31 @@ describe('burial geometry', () => {
     expect(merged.stats[0]).toMatchObject({ added: 8, blocked: 1 });
     expect(merged.features[1]).toEqual(obstacle);
   });
+  it.each(['paving', 'pitch'] as const)(
+    'clears owned %s aisles while retaining marker statistics',
+    (cls) => {
+      const aisle: AtlasFeature = {
+        ...parent,
+        geometry: rectangle(48, 40, 4, 20),
+        properties: { id: 'detail:fixture/north-aisle', class: cls, detail_parent: pack.osm_id },
+      };
+      const merged = mergeCemeteries([parent, aisle], [pack]);
+      expect(merged.stats[0]).toMatchObject({ added: 8, blocked: 1 });
+      expect(parts(merged.features)).toHaveLength(1);
+      expect(polygonComponents(parts(merged.features)[0]!.geometry as MultiPolygon)).toEqual(
+        burialRow(row).filter((_, i) => i !== 4),
+      );
+      expect(merged.features[1]).toEqual(aisle);
+      for (const properties of [
+        { ...aisle.properties, detail_overhead: true },
+        { ...aisle.properties, detail_parent: 'osm:way/another-cemetery' },
+      ])
+        expect(mergeCemeteries([parent, { ...aisle, properties }], [pack]).stats[0]).toMatchObject({
+          added: 9,
+          blocked: 0,
+        });
+    },
+  );
   it('clears full road width, curved joints, end caps and tree trunks', () => {
     const road: AtlasFeature = {
       ...parent,
@@ -147,7 +203,9 @@ describe('burial geometry', () => {
     };
     const merged = mergeCemeteries([parent, road, tree], [pack]);
     expect(merged.stats[0]).toMatchObject({ added: 7, blocked: 2 });
-    expect(parts(merged.features).some((f) => f.properties.id.endsWith('north-5'))).toBe(false);
+    expect(
+      polygonComponents(parts(merged.features)[0]!.geometry as MultiPolygon),
+    ).not.toContainEqual(burialRow(row)[4]);
   });
   it('retains zero-height flush plaques and supports graveyard/multipolygon parents', () => {
     const g = parent.geometry as Polygon;

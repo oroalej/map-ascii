@@ -31,7 +31,8 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(() => {
-        localStorage.setItem('atlas.quality', JSON.stringify('high'));
+        // Software WebGL needs selection coverage, not animated high-quality effects.
+        localStorage.setItem('atlas.quality', JSON.stringify('low'));
         localStorage.setItem(
           'atlas.life',
           JSON.stringify({ enabled: false, time: 'noon', wind: 'calm' }),
@@ -61,27 +62,37 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const footer = await page.locator('footer').boundingBox();
       expect(footer!.height).toBeLessThan(200);
       const box = (await canvas.boundingBox())!;
-      const position = { x: box.width / 2, y: box.height / 2 };
+      const position = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
       const life = page.getByRole('button', { name: 'Life', exact: true });
+      const panel = page.getByRole('complementary', { name: 'Selected place' });
+      const selectedId = detail.selection_osm_id ?? detail.osm_id;
       await expect(life).toHaveAttribute('aria-pressed', 'false');
       for (const enabled of [false, true]) {
         if (enabled) {
           await page.emulateMedia({ reducedMotion: 'no-preference' });
-          await life.click();
+          await expect(life).toBeEnabled();
+          await life.click({ timeout: 5000 });
           await expect(life).toHaveAttribute('aria-pressed', 'true');
         }
+        let attempt = 0;
         await expect(async () => {
           // Reissue pointer input as tiles arrive; reduced motion does not continuously pick.
-          await canvas.hover({ position: { x: position.x + 1, y: position.y } });
-          await canvas.hover({ position });
-          await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 1500 });
-          await canvas.click({ position });
-          await expect
-            .poll(() => new URL(page.url()).searchParams.get('sel'), { timeout: 1500 })
-            .toBe(detail.selection_osm_id ?? detail.osm_id);
-        }).toPass({ timeout: 20_000 });
-        await expect(page.getByRole('complementary', { name: 'Selected place' })).toBeVisible();
+          // The viewport is fixed; direct pointer input avoids waiting for animation frames
+          // in locator actionability checks on an otherwise stationary canvas.
+          await page.mouse.move(position.x + (attempt++ % 2), position.y);
+          await expect(canvas).toHaveCSS('cursor', 'pointer', { timeout: 500 });
+        }).toPass({ timeout: 5000 });
+        await page.mouse.move(-10, -10);
+        await expect(canvas).not.toHaveCSS('cursor', 'pointer');
+        // One click, awaited separately, leaves no retry click to reopen the panel after Escape.
+        await page.mouse.click(position.x, position.y);
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('sel'), { timeout: 5000 })
+          .toBe(selectedId);
+        await expect(panel).toBeVisible();
         await page.keyboard.press('Escape');
+        await expect(panel).toBeHidden();
+        await expect.poll(() => new URL(page.url()).searchParams.get('sel')).toBeNull();
       }
       await page.emulateMedia({ reducedMotion: 'reduce' });
       expect(errors).toEqual([]);

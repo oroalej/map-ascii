@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { mergeCemeteries } from './cemeteries';
+import { polygonComponents } from './geometry-audit';
 import { landcoverFeatures } from './landcover';
 import { planParts } from './plan';
 import { mergeSiteDetails } from './site-detail';
@@ -125,9 +126,14 @@ describe('owner-reference civic grounds', () => {
       expect(stat.added).toBeGreaterThan(500);
       const parent = source.find((f) => f.properties.id === pack.osm_id)!.geometry as
         Polygon | MultiPolygon;
-      const plots = result.features.filter((f) =>
-        f.properties.id.startsWith(`${pack.id.replace('cemetery/', 'cemetery:')}/`),
-      );
+      const plots = result.features
+        .filter((f) => f.properties.id.startsWith(`${pack.id.replace('cemetery/', 'cemetery:')}/`))
+        .flatMap((f) =>
+          polygonComponents(f.geometry as Polygon | MultiPolygon).map((geometry) => ({
+            ...f,
+            geometry,
+          })),
+        );
       expect(plots.some((f) => f.properties.kind === 'burial=vault')).toBe(i === 0);
       const patches = covers
         .find((c) => c.id === `landcover/${pack.id.slice(9)}`)!
@@ -141,7 +147,7 @@ describe('owner-reference civic grounds', () => {
           ],
         }));
       for (const [index, plot] of plots.entries()) {
-        const shape = plot.geometry as Polygon;
+        const shape = plot.geometry;
         expect(
           shape.coordinates[0]!.every((p) => inside(p, parent)),
           plot.properties.id,

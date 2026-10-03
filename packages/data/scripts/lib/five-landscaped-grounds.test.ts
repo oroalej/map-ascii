@@ -1,3 +1,4 @@
+import { assertPointClear, distanceMeters as distance } from './landmark-detail.geometry';
 import { readFileSync } from 'node:fs';
 import { DetailSelectionSchema, Landcover, Landmark, SiteDetail, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
@@ -10,6 +11,7 @@ import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { landcoverFeatures } from './landcover';
 import { geometryAudit } from './geometry-audit';
+import { clearanceWidth } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -33,11 +35,7 @@ const covers = slugs.map((slug) => Landcover.parse(pack('landcover', slug)));
 const landmarks = slugs.map((slug) => Landmark.parse(pack('landmarks', slug)));
 const area = (i: number) =>
   source.find((f) => f.properties.id === details[i]!.osm_id)!.geometry as Polygon;
-const distance = (a: readonly number[], b: readonly number[]) =>
-  Math.hypot(
-    (a[0]! - b[0]!) * 111320 * Math.cos((13.62 * Math.PI) / 180),
-    (a[1]! - b[1]!) * 111320,
-  );
+
 const intersects = geometryAudit(area(0)).overlaps;
 const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
   const p = f.properties,
@@ -56,7 +54,7 @@ const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
     return [
       seatingFootprint(
         g.coordinates as LngLat[],
-        p.width ?? (p.class === 'path' ? 2 : p.class.startsWith('water') ? 4 : 6),
+        p.class.startsWith('water') ? (p.width ?? 4) : clearanceWidth(p),
       ),
     ];
   return [];
@@ -104,8 +102,7 @@ describe('five landscaped grounds', () => {
       const paths = approaches(detail);
       for (const [j, tree] of cover.trees.entries()) {
         expect(inside(tree.at, parent)).toBe(true);
-        for (const obstacle of [...obstacles, ...paths])
-          expect(inside(tree.at, obstacle), cover.id).toBe(false);
+        assertPointClear(tree.at, [...obstacles, ...paths], cover.id);
         for (const other of cover.trees.slice(j + 1))
           expect(distance(tree.at, other.at)).toBeGreaterThan(7.5);
         for (const mapped of source.filter(

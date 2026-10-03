@@ -3,7 +3,7 @@ import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import type { Polygon } from 'geojson';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { detailSelectionOf, mergeSiteDetails, seatingFootprint } from './site-detail';
 
 const m = 111_320;
 const p = (x: number, y: number): [number, number] => [x / m, y / m];
@@ -42,6 +42,30 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('builds shared selection metadata with optional fields and only finite positive heights', () => {
+    const bare = { id: 'osm:way/2', class: 'grass' as const };
+    for (const height of [undefined, 0, -1, Infinity, NaN])
+      expect(detailSelectionOf({ ...bare, height })).toEqual(bare);
+    expect(
+      detailSelectionOf({
+        ...bare,
+        name: 'Updated cemetery title',
+        landmark_id: 'landmark/cemetery',
+        subdivision: 'Ward',
+        subdivision_approx: true,
+        kind: 'landuse=cemetery',
+        height: 4,
+      }),
+    ).toEqual({
+      ...bare,
+      name: 'Updated cemetery title',
+      landmarkId: 'landmark/cemetery',
+      subdivision: 'Ward',
+      subdivisionApprox: true,
+      kind: 'landuse=cemetery',
+      height: 4,
+    });
+  });
   it('accepts normalized paths with repeated vertices without losing endpoint caps', () => {
     const path: AtlasFeature = {
       ...parent,

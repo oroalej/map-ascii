@@ -1,21 +1,12 @@
-import {
-  DetailSelectionSchema,
-  featureZoomBand,
-  tileZoomRange,
-  type Cemetery,
-  type LngLat,
-} from '@atlas/shared';
+import { featureZoomBand, tileZoomRange, type Cemetery, type LngLat } from '@atlas/shared';
 import bbox from '@turf/bbox';
 import centroid from '@turf/centroid';
 import inside from '@turf/boolean-point-in-polygon';
 import type { Polygon, MultiPolygon } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature } from '../03-normalize';
-import { bboxesOverlap, clearanceWidth, localFrame, METERS_PER_DEGREE as METERS } from './geo';
-import { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
-import { seatingFootprint } from './site-detail';
+import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
+import { detailSelectionOf, seatingFootprint } from './site-detail';
 import { interiorPoint } from './frontage';
-
-const latForBounds = (bounds: [number, number, number, number]) => (bounds[1] + bounds[3]) / 2;
 
 type Segment = { a: LngLat; b: LngLat; bounds: [number, number, number, number] };
 const segments = (g: MultiPolygon): Segment[] =>
@@ -141,22 +132,16 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
       const g = f.geometry,
         p = f.properties;
       const near = bbox(f) as [number, number, number, number];
-      const margin = (p.width ?? DEFAULT_ROAD_WIDTH_M) / METERS;
-      const longitudeMargin = margin / Math.cos((latForBounds(bounds) * Math.PI) / 180);
-      if (
-        !bboxesOverlap(bounds, [
-          near[0] - longitudeMargin,
-          near[1] - margin,
-          near[2] + longitudeMargin,
-          near[3] + margin,
-        ])
-      )
-        return [];
+      const padding = clearanceWidth(p, 0.1) / 1000;
+      if (!bboxesOverlap(bounds, bufferBbox(near, padding))) return [];
       let shape: Polygon | MultiPolygon;
       if (
         (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
         ((p.class.startsWith('building') && (p.height ?? 0) > 0 && !p.detail_overhead) ||
-          p.class.startsWith('water'))
+          p.class.startsWith('water') ||
+          (p.detail_parent === pack.osm_id &&
+            !p.detail_overhead &&
+            (p.class === 'paving' || p.class === 'pitch')))
       )
         shape = g;
       else if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path')) {
@@ -165,12 +150,15 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
         return g.coordinates.slice(1).flatMap((end, i) => {
           const start = g.coordinates[i]!;
           if (start[0] === end[0] && start[1] === end[1]) return [];
-          const segmentBounds: [number, number, number, number] = [
-            Math.min(start[0]!, end[0]!) - longitudeMargin,
-            Math.min(start[1]!, end[1]!) - margin,
-            Math.max(start[0]!, end[0]!) + longitudeMargin,
-            Math.max(start[1]!, end[1]!) + margin,
-          ];
+          const segmentBounds = bufferBbox(
+            [
+              Math.min(start[0]!, end[0]!),
+              Math.min(start[1]!, end[1]!),
+              Math.max(start[0]!, end[0]!),
+              Math.max(start[1]!, end[1]!),
+            ],
+            padding,
+          );
           if (!bboxesOverlap(bounds, segmentBounds)) return [];
           const shape = seatingFootprint([start, end] as LngLat[], clearanceWidth(p, 0.1));
           return [
@@ -195,15 +183,7 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
     parent.properties.label_lng = anchor[0];
     parent.properties.label_lat = anchor[1];
     features[parentIndex] = parent;
-    const selection = DetailSelectionSchema.parse({
-      id: pack.osm_id,
-      class: parent.properties.class,
-      name: pack.title,
-      kind: parent.properties.kind,
-      landmarkId: parent.properties.landmark_id,
-      subdivision: parent.properties.subdivision,
-      subdivisionApprox: parent.properties.subdivision_approx,
-    });
+    const selection = detailSelectionOf(parent.properties);
     const result = { id: pack.id, added: 0, outside: 0, blocked: 0 };
     const prefix = pack.id.replace('cemetery/', 'cemetery:');
     // A small spatial grid catches overlaps between authored rows without a quadratic scan.
@@ -218,7 +198,8 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
       return out;
     };
     for (const row of pack.rows) {
-      for (const [i, shape] of burialRow(row).entries()) {
+      const accepted: Polygon[] = [];
+      for (const shape of burialRow(row)) {
         const shapeClip = clip(shape);
         const ring = shapeClip[0]![0]!;
         if (
@@ -248,11 +229,18 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
           throw new Error(`${pack.id} ${row.id}: burial rows overlap`);
         const prepared = prepare(shapeClip);
         for (const key of occupied) cells.set(key, [...(cells.get(key) ?? []), prepared]);
+        accepted.push(shape);
+        result.added++;
+      }
+      if (accepted.length)
         features.push({
           type: 'Feature',
-          geometry: shape,
+          geometry: {
+            type: 'MultiPolygon',
+            coordinates: accepted.map((shape) => shape.coordinates),
+          },
           properties: {
-            id: `${prefix}/${row.id}-${i + 1}`,
+            id: `${prefix}/${row.id}`,
             class: 'building_part',
             variant: 'flat',
             kind: `burial=${row.kind}`,
@@ -266,8 +254,6 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
             ...tileZoomRange(featureZoomBand('building_part'), TILE_ZOOMS),
           },
         });
-        result.added++;
-      }
     }
     if (!result.added) throw new Error(`${pack.id}: no burial markers fit the cemetery`);
     stats.push(result);

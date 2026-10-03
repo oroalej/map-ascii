@@ -11,6 +11,17 @@ const NONE: readonly string[] = [];
 /** The footer's height, for the panels that sit above it (the tour card, the HUD). */
 const HEIGHT_VAR = '--attribution-height';
 
+const linkedCredit = (credit: string) =>
+  credit.split(/(https?:\/\/[^\s()<>,;]*[^\s()<>,;.!?])/g).map((part, index) =>
+    /^https?:\/\//.test(part) ? (
+      <a key={index} href={part} target="_blank" rel="noreferrer">
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+
 /**
  * Always-visible source attribution (DATA.md §6): OpenStreetMap, plus the credits the city's
  * other layers need (e.g. the DEM behind the terrain), from its meta.
@@ -51,8 +62,7 @@ export function Attribution() {
         >
           {extra.map((credit) => (
             <span key={credit} className={styles.extra}>
-              {' · '}
-              {credit}
+              {linkedCredit(credit)}
             </span>
           ))}
         </div>

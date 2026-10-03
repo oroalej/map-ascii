@@ -9,7 +9,7 @@ import {
 } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
-import { difference, intersection, union } from 'polyclip-ts';
+import { union } from 'polyclip-ts';
 import type { Polygon, MultiPolygon, LineString, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
@@ -134,18 +134,26 @@ function lineContained(line: LineString, area: Polygon | MultiPolygon): boolean 
   });
 }
 
-const contained = (g: AtlasFeature['geometry'], area: Polygon | MultiPolygon) =>
+const contained = (
+  g: AtlasFeature['geometry'],
+  area: Polygon | MultiPolygon,
+  audit: ReturnType<typeof geometryAudit>,
+) =>
   g.type === 'Point'
     ? inside(g.coordinates, area)
     : g.type === 'LineString'
       ? lineContained(g, area)
-      : isArea(g) && difference(clip(g), clip(area)).length === 0;
+      : isArea(g) && audit.contains(g);
 
 /** OSM grounds can stop at a church's facade; allow a small boundary gap, not a remote alias. */
-function selectionNear(g: AtlasFeature['geometry'], area: Polygon | MultiPolygon): boolean {
-  if (contained(g, area)) return true;
+function selectionNear(
+  g: AtlasFeature['geometry'],
+  area: Polygon | MultiPolygon,
+  audit: ReturnType<typeof geometryAudit>,
+): boolean {
+  if (contained(g, area, audit)) return true;
   if (!isArea(g)) return false;
-  if (intersection(clip(g), clip(area)).length) return true;
+  if (audit.overlaps(g, area)) return true;
   const rings = clip(area).flat();
   return clip(g)
     .flat()
@@ -166,6 +174,22 @@ function selectionNear(g: AtlasFeature['geometry'], area: Polygon | MultiPolygon
     );
 }
 
+/** Canonical metadata shared by authored grounds and disconnected cemetery rows. */
+export function detailSelectionOf(p: AtlasProperties) {
+  return DetailSelectionSchema.parse({
+    id: p.id,
+    class: p.class,
+    ...(p.name !== undefined && { name: p.name }),
+    ...(p.landmark_id !== undefined && { landmarkId: p.landmark_id }),
+    ...(p.subdivision !== undefined && { subdivision: p.subdivision }),
+    ...(p.subdivision_approx !== undefined && { subdivisionApprox: p.subdivision_approx }),
+    ...(p.kind !== undefined && { kind: p.kind }),
+    ...(p.height !== undefined &&
+      p.height > 0 &&
+      Number.isFinite(p.height) && { height: p.height }),
+  });
+}
+
 /** Enrich a site's ground without replacing its buildings or canonical landmark identity. */
 export function mergeSiteDetails(
   input: AtlasFeature[],
@@ -173,6 +197,29 @@ export function mergeSiteDetails(
   subdivisions: readonly SubdivisionArea[] = [],
 ) {
   const features = input.map((f) => ({ ...f, properties: { ...f.properties } }));
+  const byId = new Map<string, AtlasFeature>();
+  for (const feature of features)
+    if (!byId.has(feature.properties.id)) byId.set(feature.properties.id, feature);
+  const audits = new Map<Polygon | MultiPolygon, ReturnType<typeof geometryAudit>>();
+  const auditFor = (area: Polygon | MultiPolygon) => {
+    let audit = audits.get(area);
+    if (!audit) {
+      audit = geometryAudit(area);
+      audits.set(area, audit);
+    }
+    return audit;
+  };
+  const fits = (g: AtlasFeature['geometry'], area: Polygon | MultiPolygon) =>
+    contained(g, area, auditFor(area));
+  const standingTarget = (id: string) => {
+    const target = byId.get(id);
+    return target &&
+      isRoofBuilding(target.properties.class) &&
+      (target.properties.height ?? 0) > 0 &&
+      isArea(target.geometry)
+      ? { target, shape: target.geometry, height: target.properties.height! }
+      : undefined;
+  };
   const warnings: string[] = [];
   const parents = new Set<string>();
   const relocated = new Set<string>();
@@ -181,7 +228,7 @@ export function mergeSiteDetails(
   const roadFootprints = new Map<AtlasFeature, MultiPolygon>();
   // Validate every anchor before mutation; overlap decisions must not depend on pack order.
   const sites = packs.map((pack) => {
-    const parent = features.find((f) => f.properties.id === pack.osm_id);
+    const parent = byId.get(pack.osm_id);
     if (
       !parent ||
       (!isArea(parent.geometry) &&
@@ -199,16 +246,16 @@ export function mergeSiteDetails(
       pack.extent || pack.grounds
         ? { type: 'Polygon' as const, coordinates: [pack.extent ?? pack.grounds!] }
         : (parent.geometry as Polygon | MultiPolygon);
-    if (pack.extent && (!isArea(parent.geometry) || !contained(area, parent.geometry)))
+    if (pack.extent && (!isArea(parent.geometry) || !fits(area, parent.geometry)))
       throw new Error(`${pack.id}: extent must fit inside parent ${pack.osm_id}`);
-    if (pack.grounds && !contained(parent.geometry, area))
+    if (pack.grounds && !fits(parent.geometry, area))
       throw new Error(`${pack.id}: grounds must contain parent ${pack.osm_id}`);
     const selectionId = pack.selection_osm_id ?? pack.osm_id;
-    const target = features.find((f) => f.properties.id === selectionId);
+    const target = byId.get(selectionId);
     if (
       !target ||
       (pack.selection_osm_id &&
-        (!target.properties.landmark_id || !selectionNear(target.geometry, area)))
+        (!target.properties.landmark_id || !selectionNear(target.geometry, area, auditFor(area))))
     )
       throw new Error(
         `${pack.id}: selection target must be an existing curated landmark inside or adjacent to the site`,
@@ -223,20 +270,7 @@ export function mergeSiteDetails(
     const p = target.properties;
     const metadata =
       pack.surface === 'keep' || pack.grounds || pack.extent || pack.selection_osm_id
-        ? JSON.stringify(
-            DetailSelectionSchema.parse({
-              id: selectionId,
-              class: p.class,
-              ...(p.name !== undefined && { name: p.name }),
-              ...(p.landmark_id !== undefined && { landmarkId: p.landmark_id }),
-              ...(p.subdivision !== undefined && { subdivision: p.subdivision }),
-              ...(p.subdivision_approx !== undefined && {
-                subdivisionApprox: p.subdivision_approx,
-              }),
-              ...(p.kind !== undefined && { kind: p.kind }),
-              ...(p.height && { height: p.height }),
-            }),
-          )
+        ? JSON.stringify(detailSelectionOf(p))
         : undefined;
     return { pack, parent, area, selectionId, metadata };
   });
@@ -245,7 +279,7 @@ export function mergeSiteDetails(
     for (const b of sites.slice(i + 1))
       if (
         (a.pack.grounds || b.pack.grounds || a.pack.extent || b.pack.extent) &&
-        intersection(clip(a.area), clip(b.area)).length
+        auditFor(a.area).overlaps(a.area, b.area)
       )
         throw new Error(`${a.pack.id}: grounds overlap ${b.pack.id}`);
   }
@@ -260,7 +294,7 @@ export function mergeSiteDetails(
     )
     .map((f) => ({ feature: f, bounds: bbox(f) as [number, number, number, number] }));
   for (const { pack, parent, area, selectionId, metadata } of sites) {
-    const audit = geometryAudit(area);
+    const audit = auditFor(area);
     const siteBounds = bbox(area) as [number, number, number, number];
     const roads = pack.structures.some((part) => part.ground_override)
       ? input.filter(
@@ -286,38 +320,26 @@ export function mergeSiteDetails(
       ...(metadata && { detail_selection: metadata }),
     };
     for (const building of pack.building_overrides) {
-      const target = features.find((f) => f.properties.id === building.osm_id);
+      const standing = standingTarget(building.osm_id);
       if (buildingTargets.has(building.osm_id))
         throw new Error(`${pack.id}: duplicate building override ${building.osm_id}`);
-      if (
-        !target ||
-        !isRoofBuilding(target.properties.class) ||
-        !target.properties.height ||
-        !isArea(target.geometry) ||
-        !contained(target.geometry, area)
-      )
+      if (!standing || !audit.contains(standing.shape))
         throw new Error(
           `${pack.id}: building override ${building.osm_id} must be a standing building inside the site`,
         );
       buildingTargets.add(building.osm_id);
-      target.properties.height = building.height_m;
+      standing.target.properties.height = building.height_m;
     }
     for (const roof of pack.roof_overrides) {
-      const target = features.find((f) => f.properties.id === roof.osm_id);
+      const standing = standingTarget(roof.osm_id);
       if (roofTargets.has(roof.osm_id))
         throw new Error(`${pack.id}: duplicate roof override ${roof.osm_id}`);
-      if (
-        !target ||
-        !isRoofBuilding(target.properties.class) ||
-        !target.properties.height ||
-        !isArea(target.geometry) ||
-        !contained(target.geometry, area)
-      )
+      if (!standing || !audit.contains(standing.shape))
         throw new Error(
           `${pack.id}: roof override ${roof.osm_id} must be a standing building inside the site`,
         );
       roofTargets.add(roof.osm_id);
-      target.properties.variant = roof.shape;
+      standing.target.properties.variant = roof.shape;
     }
     if (pack.surface === 'paving') {
       if (pack.grounds || pack.extent)
@@ -340,6 +362,15 @@ export function mergeSiteDetails(
       parts: parkedVehicleParts(vehicle),
     }));
     const vehicleParts = inventory.flatMap(({ parts }) => parts);
+    const partShapes = new Map(
+      [...pack.structures, ...vehicleParts].map(
+        (part): [SiteDetail['structures'][number], Polygon] => [
+          part,
+          { type: 'Polygon', coordinates: [part.ring, ...(part.holes ?? [])] },
+        ],
+      ),
+    );
+    const shapeOf = (part: SiteDetail['structures'][number]) => partShapes.get(part)!;
     const vehicleIds = new Set(vehicleParts.map((part) => part.id));
     const vehicleKinds = new Map(
       inventory.flatMap(({ vehicle, parts }) =>
@@ -348,9 +379,7 @@ export function mergeSiteDetails(
     );
     if (pack.structures.some((part) => vehicleIds.has(part.id)))
       throw new Error(`${pack.id}: duplicate parked vehicle structure id`);
-    const vehicleFootprints = inventory.map(({ parts }) =>
-      audit.union(parts.map((part) => ({ type: 'Polygon', coordinates: [part.ring] }))),
-    );
+    const vehicleFootprints = inventory.map(({ parts }) => audit.union(parts.map(shapeOf)));
     const vehicleBounds = vehicleFootprints.map(
       (shape) => bbox(shape) as [number, number, number, number],
     );
@@ -379,31 +408,33 @@ export function mergeSiteDetails(
     });
     for (const part of vehicleParts) {
       for (const obstacle of parkingObstacles)
-        if (audit.overlaps({ type: 'Polygon', coordinates: [part.ring] }, obstacle.geometry))
+        if (audit.overlaps(shapeOf(part), obstacle.geometry))
           throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
       for (const roof of pack.structures.filter((part) => part.material === 'roof'))
-        if (intersection([part.ring], [roof.ring, ...(roof.holes ?? [])]).length)
+        if (audit.overlaps(shapeOf(part), shapeOf(roof)))
           throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
     }
     for (const [i, footprint] of vehicleFootprints.entries()) {
       // A contained union proves all seven parts fit, including wheels and parent holes.
       if (!audit.contains(footprint)) {
-        const part = inventory[i]!.parts.find(
-          (part) => !audit.contains({ type: 'Polygon', coordinates: [part.ring] }),
-        )!;
+        const part = inventory[i]!.parts.find((part) => !audit.contains(shapeOf(part)))!;
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
       }
       if (vehicleFootprints.slice(0, i).some((other) => audit.overlaps(footprint, other)))
         throw new Error(`${pack.id}: overlapping parked vehicles`);
     }
     const structures = [...pack.structures, ...vehicleParts].map((part) => {
-      const rings = [part.ring, ...(part.holes ?? [])];
-      const shape: Polygon = { type: 'Polygon', coordinates: rings };
-      for (const [i, hole] of (part.holes ?? []).entries()) {
+      const shape = shapeOf(part);
+      const outer: Polygon = { type: 'Polygon', coordinates: [part.ring] };
+      const holes = (part.holes ?? []).map((ring): Polygon => ({
+        type: 'Polygon',
+        coordinates: [ring],
+      }));
+      for (const [i, hole] of holes.entries()) {
         if (
-          difference([hole], [part.ring]).length ||
-          (part.holes ?? []).slice(0, i).some((other) => intersection([hole], [other]).length) ||
-          difference([part.ring], [hole]).length === 0
+          !auditFor(outer).contains(hole) ||
+          holes.slice(0, i).some((other) => audit.overlaps(hole, other)) ||
+          auditFor(hole).contains(outer)
         )
           throw new Error(`${pack.id} structure ${part.id}: invalid or overlapping interior`);
       }
@@ -426,15 +457,8 @@ export function mergeSiteDetails(
             throw new Error(`${pack.id} structure ${part.id}: crosses ${road.properties.id}`);
         }
       if (part.roof_osm_id) {
-        const roof = features.find((f) => f.properties.id === part.roof_osm_id);
-        if (
-          !roof ||
-          !isRoofBuilding(roof.properties.class) ||
-          !roof.properties.height ||
-          !isArea(roof.geometry) ||
-          !contained(shape, roof.geometry) ||
-          part.height_m <= roof.properties.height
-        )
+        const roof = standingTarget(part.roof_osm_id);
+        if (!roof || !auditFor(roof.shape).contains(shape) || part.height_m <= roof.height)
           throw new Error(
             `${pack.id} structure ${part.id}: roof wing must fit above ${part.roof_osm_id}`,
           );
@@ -455,7 +479,7 @@ export function mergeSiteDetails(
         for (const water of input.filter(
           (f) => f.properties.class === 'water_area' && isArea(f.geometry),
         ))
-          if (intersection(rings, clip(water.geometry as Polygon | MultiPolygon)).length)
+          if (audit.overlaps(shape, water.geometry as Polygon | MultiPolygon))
             throw new Error(`${pack.id} structure ${part.id}: duplicates ${water.properties.id}`);
       return feature(`${prefix}/structure-${part.id}`, shape, {
         class: part.roof_shape
@@ -511,7 +535,7 @@ export function mergeSiteDetails(
     for (const pole of pack.flagpoles) {
       if (relocated.has(pole.osm_id))
         throw new Error(`${pack.id}: duplicate flagpole target ${pole.osm_id}`);
-      const target = features.find((f) => f.properties.id === pole.osm_id);
+      const target = byId.get(pole.osm_id);
       if (
         !target ||
         target.geometry.type !== 'Point' ||

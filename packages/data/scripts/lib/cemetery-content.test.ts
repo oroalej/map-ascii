@@ -1,3 +1,4 @@
+import { distanceMeters as distance } from './landmark-detail.geometry';
 import { readFileSync } from 'node:fs';
 import { Cemetery, DetailSelectionSchema, Landmark, Landcover, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
@@ -10,8 +11,9 @@ import type { AtlasFeature } from '../03-normalize';
 import { mergeCemeteries } from './cemeteries';
 import { landcoverFeatures, SAME_TREE_M } from './landcover';
 import { seatingFootprint } from './site-detail';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, clearanceWidth } from './geo';
 import { mergeContent } from '../04-merge-content';
+import { polygonComponents } from './geometry-audit';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -41,7 +43,11 @@ const reference = read('../__fixtures__/cemetery-sections.json') as {
 };
 const cover = landcoverFeatures(source, [trees]);
 const result = mergeCemeteries([...namedSource, ...cover.features], packs);
-const plots = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
+const plots = result.features
+  .filter((f) => f.properties.id.startsWith('cemetery:'))
+  .flatMap((f) =>
+    polygonComponents(f.geometry as Polygon | MultiPolygon).map((geometry) => ({ ...f, geometry })),
+  );
 const centre = (f: AtlasFeature): LngLat => {
   const ring = (f.geometry as Polygon).coordinates[0]!;
   return [
@@ -49,8 +55,7 @@ const centre = (f: AtlasFeature): LngLat => {
     ring.slice(0, 4).reduce((v, p) => v + p[1]!, 0) / 4,
   ];
 };
-const distance = (a: LngLat, b: LngLat) =>
-  Math.hypot((a[0] - b[0]) * 108185, (a[1] - b[1]) * 111320);
+
 const obstacles = source.flatMap<{
   shape: Polygon | MultiPolygon;
   bounds: [number, number, number, number];
@@ -64,7 +69,7 @@ const obstacles = source.flatMap<{
   )
     shape = g;
   else if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path'))
-    shape = seatingFootprint(g.coordinates as LngLat[], p.width ?? (p.class === 'path' ? 2 : 6));
+    shape = seatingFootprint(g.coordinates as LngLat[], clearanceWidth(p));
   else return [];
   return [{ shape, bounds: bbox(shape) as [number, number, number, number] }];
 });
@@ -97,7 +102,7 @@ describe('Basilica cemetery reference correction', () => {
       const children = plots.filter((f) => f.properties.detail_parent === pack.osm_id);
       expect(children.length).toBeGreaterThan(1500);
       for (const [i, f] of children.entries()) {
-        const g = f.geometry as Polygon;
+        const g = f.geometry;
         expect(
           g.coordinates[0]!.every((p) => inside(p, parent)),
           f.properties.id,

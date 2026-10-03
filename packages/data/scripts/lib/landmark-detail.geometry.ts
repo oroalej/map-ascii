@@ -1,16 +1,97 @@
-import type { LngLat } from '@atlas/shared';
+import type { BBox, LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import type { Polygon, MultiPolygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
-import { bboxesOverlap } from './geo';
+import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
 import { geometryAudit } from './geometry-audit';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
-import { covers, source, areaFor, newDetails, nearby } from './landmark-detail.fixtures';
+import type * as LandmarkFixtures from './landmark-detail.fixtures';
+
+type Area = Polygon | MultiPolygon;
+type Fixtures = Pick<
+  typeof LandmarkFixtures,
+  'covers' | 'source' | 'areaFor' | 'newDetails' | 'nearby'
+>;
+
+export const distanceMeters = (a: readonly number[], b: readonly number[]) =>
+  Math.hypot(...localFrame([a[0]!, a[1]!], (a[1]! + b[1]!) / 2).toMeters([b[0]!, b[1]!]));
+
+/** Nearest segment distance, with the same signed side convention as the placement guards. */
+export function lineDistance(at: LngLat, line: number[][], signed = false) {
+  const frame = localFrame(at);
+  let nearest = Infinity;
+  let side = 0;
+  for (let i = 1; i < line.length; i++) {
+    const [ax, ay] = frame.toMeters(line[i - 1]!);
+    const [bx, by] = frame.toMeters(line[i]!);
+    const dx = bx - ax,
+      dy = by - ay,
+      length = dx * dx + dy * dy;
+    const t = length ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / length)) : 0;
+    const distance = Math.hypot(ax + t * dx, ay + t * dy);
+    if (distance < nearest) {
+      nearest = distance;
+      side = length ? (-dx * ay + dy * ax) / Math.sqrt(length) : 0;
+    }
+  }
+  return signed ? side : nearest;
+}
+
+/** Shared source clearance; callers choose whether their invariant also covers paths/water. */
+export function mappedFootprints(
+  source: readonly AtlasFeature[],
+  { paths = true, water = false } = {},
+): Area[] {
+  return source.flatMap<Area>((feature) => {
+    const g = feature.geometry,
+      p = feature.properties;
+    if (
+      (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
+      ((p.class.startsWith('building') && (p.height ?? 0) > 0 && !p.detail_overhead) ||
+        (water && p.class.startsWith('water')))
+    )
+      return [g];
+    if (g.type === 'LineString' && (p.class.startsWith('road') || (paths && p.class === 'path')))
+      return [seatingFootprint(g.coordinates as LngLat[], clearanceWidth(p))];
+    return [];
+  });
+}
+
+const obstacleBounds = new WeakMap<Area, BBox>();
+export const assertPointClear = (at: LngLat, obstacles: readonly Area[], context: string) => {
+  for (const obstacle of obstacles) {
+    let bounds = obstacleBounds.get(obstacle);
+    if (!bounds) {
+      bounds = bbox(obstacle) as BBox;
+      obstacleBounds.set(obstacle, bounds);
+    }
+    if (at[0] >= bounds[0] && at[0] <= bounds[2] && at[1] >= bounds[1] && at[1] <= bounds[3])
+      expect(inside(at, obstacle), context).toBe(false);
+  }
+};
+
+/** One meter preparation per site, reused across all of its generic footprint assertions. */
+export function clearanceAssertions(area: Area) {
+  const audit = geometryAudit(area);
+  return {
+    ...audit,
+    clear: (shape: Area, obstacles: readonly (Area | AtlasFeature)[], context: string) => {
+      for (const obstacle of obstacles) {
+        const g = 'geometry' in obstacle ? obstacle.geometry : obstacle;
+        if (g.type !== 'Polygon' && g.type !== 'MultiPolygon')
+          throw Error('expected area obstacle');
+        const id = 'properties' in obstacle ? obstacle.properties.id : 'footprint';
+        expect(audit.overlaps(shape, g), `${context} / ${id}`).toBe(false);
+      }
+    },
+  };
+}
 
 /** Register each site's unchanged geometry assertions in exactly one deterministic shard. */
-export function geometrySuite(shard: number, of: number) {
+export function geometrySuite(shard: number, of: number, fixtures: Fixtures) {
+  const { covers, source, areaFor, newDetails, nearby } = fixtures;
   // The source roads are immutable; reuse their exact footprints across ground-surface checks.
   const roadFootprints = new Map<AtlasFeature, MultiPolygon>();
   const roadFootprint = (feature: AtlasFeature) => {
@@ -19,7 +100,7 @@ export function geometrySuite(shard: number, of: number) {
       if (feature.geometry.type !== 'LineString') throw Error('expected a mapped road');
       shape = seatingFootprint(
         feature.geometry.coordinates as LngLat[],
-        feature.properties.width ?? 6,
+        clearanceWidth(feature.properties),
       );
       roadFootprints.set(feature, shape);
     }
@@ -32,17 +113,10 @@ export function geometrySuite(shard: number, of: number) {
     for (const detail of selected) {
       const area = areaFor(detail);
       const siteBounds = bbox(area) as [number, number, number, number];
-      const audit = geometryAudit(area);
+      const audit = clearanceAssertions(area);
       // Keep complete nearby features, including adjacent selection targets and crowns.
       // Growing city fixtures should not make each site merge unrelated distant content.
-      const margin = 15 / 111320;
-      const longitudeMargin = margin / Math.cos(((siteBounds[1] + siteBounds[3]) * Math.PI) / 360);
-      const neighborhood: [number, number, number, number] = [
-        siteBounds[0] - longitudeMargin,
-        siteBounds[1] - margin,
-        siteBounds[2] + longitudeMargin,
-        siteBounds[3] + margin,
-      ];
+      const neighborhood = bufferBbox(siteBounds, 0.015);
       const input = nearby(neighborhood);
       let result: ReturnType<typeof mergeSiteDetails> | undefined;
       const merged = () => (result ??= mergeSiteDetails(input, [detail]));
@@ -68,17 +142,17 @@ export function geometrySuite(shard: number, of: number) {
         );
         const check = (shape: MultiPolygon, id: string, ownSeat = false) => {
           expect(audit.contains(shape), id).toBe(true);
-          for (const obstacle of obstacles) {
-            if (
-              ownSeat &&
-              obstacle.properties.id.startsWith(`detail:${detail.id.slice(7)}/seating-`)
-            )
-              continue;
-            expect(
-              audit.overlaps(shape, obstacle.geometry as Polygon | MultiPolygon),
-              `${id} / ${obstacle.properties.id}`,
-            ).toBe(false);
-          }
+          audit.clear(
+            shape,
+            obstacles.filter(
+              (obstacle) =>
+                !(
+                  ownSeat &&
+                  obstacle.properties.id.startsWith(`detail:${detail.id.slice(7)}/seating-`)
+                ),
+            ),
+            id,
+          );
         };
         for (const walk of detail.walks) check(seatingFootprint(walk.line, walk.width_m), walk.id);
         for (const seat of detail.seating)

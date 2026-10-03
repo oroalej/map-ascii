@@ -15,7 +15,7 @@ The pipeline and schemas are city-agnostic. Each city gives its inputs through a
 | Mapillary / KartaView | Street-level photos in the info panel | CC BY-SA | Link out or embed per their terms |
 | Archival maps, photos, records (local libraries, universities, parish archives, private collections) | Historical layers, stories, then/now photos | Per item — record permission in content | Must have written permission for anything not public domain |
 
-Do not embed or serve Google Maps or Street View tiles or imagery. The owner-authorized `landmark-details` references are used to author draft geographic content; their bitmaps remain in ignored handoff evidence, with sources and uncertainty recorded in the city packs.
+Do not use Google Maps or Street View imagery or tiles to author new geographic content, or embed or serve them. At the owner's request, the existing `landmark-details` draft content and source records are retained. Their recorded Google references leave the provenance finding unresolved; preservation does not grant permission for new imagery use. Reference bitmaps remain in ignored handoff material and are not distributed. Keep truthful provider credits and distinguish the initial independent-reference authoring from later owner-reference adjustments in source notes.
 
 ## 2. Pipeline (`pnpm data:build`)
 

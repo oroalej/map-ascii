@@ -1,16 +1,20 @@
 import { readFileSync } from 'node:fs';
-import { Landcover, Landmark, SiteDetail, DetailSelectionSchema, type LngLat } from '@atlas/shared';
+import { Landcover, Landmark, SiteDetail, DetailSelectionSchema } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon, LineString } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
-import bbox from '@turf/bbox';
-import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { localFrame } from './geo';
+import { mergeSiteDetails } from './site-detail';
+import {
+  assertPointClear,
+  clearanceAssertions,
+  mappedFootprints,
+  distanceMeters as distance,
+} from './landmark-detail.geometry';
 import { landcoverFeatures } from './landcover';
-import { bboxesOverlap } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -36,31 +40,15 @@ const reference = read('../__fixtures__/roadside-campus-reference.json') as {
 };
 const details = slugs.map((slug) => SiteDetail.parse(pack('details', slug)));
 const covers = slugs.map((slug) => Landcover.parse(pack('landcover', slug)));
-const xy = ([lng, lat]: readonly number[]) =>
-  [lng! * 111320 * Math.cos((13.628 * Math.PI) / 180), lat! * 111320] as const;
-const distance = (a: readonly number[], b: readonly number[]) => {
-  const x = xy(a),
-    y = xy(b);
-  return Math.hypot(x[0] - y[0], x[1] - y[1]);
-};
-const coords = (g: Polygon | MultiPolygon) => g.coordinates as LngLat[][] | LngLat[][][];
-const intersects = (a: Polygon | MultiPolygon, b: Polygon | MultiPolygon) =>
-  bboxesOverlap(
-    bbox(a) as [number, number, number, number],
-    bbox(b) as [number, number, number, number],
-  ) && intersection(coords(a), coords(b)).length > 0;
-const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
-  const p = f.properties,
-    g = f.geometry;
-  if (
-    (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
-    ((p.class.startsWith('building') && (p.height ?? 0) > 0) || p.class.startsWith('water'))
-  )
-    return [g];
-  if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path'))
-    return [seatingFootprint(g.coordinates as LngLat[], p.width ?? (p.class === 'path' ? 2 : 6))];
-  return [];
-});
+const projection = localFrame([0, 0], 13.628);
+const xy = (point: readonly number[]) => projection.toMeters([point[0]!, point[1]!]);
+
+const audit = clearanceAssertions(
+  source.find((f) => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')!
+    .geometry as Polygon | MultiPolygon,
+);
+const intersects = audit.overlaps;
+const obstacles = mappedFootprints(source, { water: true });
 
 describe('additional roadside and campus references', () => {
   it('keeps distinct source anchors and canonical selection for school approaches', () => {
@@ -99,7 +87,7 @@ describe('additional roadside and campus references', () => {
       expect(cover.areas.some((a) => a.cover === 'planting')).toBe(true);
       for (const [j, tree] of cover.trees.entries()) {
         expect(inside(tree.at, area)).toBe(true);
-        for (const obstacle of obstacles) expect(inside(tree.at, obstacle), cover.id).toBe(false);
+        assertPointClear(tree.at, obstacles, cover.id);
         for (const other of cover.trees.slice(j + 1))
           expect(distance(tree.at, other.at)).toBeGreaterThan(4);
       }
@@ -190,7 +178,6 @@ describe('additional roadside and campus references', () => {
           expect(distance(tree.tree.at, other.tree.at)).toBeGreaterThan(23.9);
       }
     }
-    for (const tree of cover.trees)
-      for (const obstacle of obstacles) expect(inside(tree.at, obstacle)).toBe(false);
+    for (const tree of cover.trees) assertPointClear(tree.at, obstacles, tree.at.join(', '));
   });
 });

@@ -16,7 +16,9 @@ import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
-import { geometryAudit } from './geometry-audit';
+import { geometryAudit, polygonComponents } from './geometry-audit';
+import { clearanceWidth } from './geo';
+import { lineDistance as distances } from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -38,25 +40,6 @@ const hope = SiteDetail.parse(pack('details', 'naga-hope-christian-school'));
 const trees = Landcover.parse(pack('landcover', 'naga-hope-christian-school'));
 const palms = Landcover.parse(pack('landcover', 'penafrancia-basilica'));
 const cemetery = Cemetery.parse(pack('cemeteries', 'penafrancia-catholic-cemetery'));
-const distances = (p: LngLat, line: number[][], signed = false): number => {
-  const mx = 111320 * Math.cos((p[1] * Math.PI) / 180);
-  const samples = line
-    .slice(1)
-    .map((end, i) => {
-      const start = line[i]!;
-      const a = [(start[0]! - p[0]) * mx, (start[1]! - p[1]) * 111320];
-      const b = [(end[0]! - p[0]) * mx, (end[1]! - p[1]) * 111320];
-      const dx = b[0]! - a[0]!,
-        dy = b[1]! - a[1]!;
-      const t = Math.max(0, Math.min(1, -(a[0]! * dx + a[1]! * dy) / (dx * dx + dy * dy)));
-      return {
-        distance: Math.hypot(a[0]! + t * dx, a[1]! + t * dy),
-        side: (-dx * a[1]! + dy * a[0]!) / Math.hypot(dx, dy),
-      };
-    })
-    .sort((a, b) => a.distance - b.distance);
-  return signed ? samples[0]!.side : samples[0]!.distance;
-};
 
 describe('owner placement corrections', () => {
   it('places Basilica tree columns on opposite sides of the marked roads, preserving the roads', () => {
@@ -154,12 +137,19 @@ describe('owner placement corrections', () => {
   const input = structuredClone(source.cemetery);
   mergeContent(input, { landmarks: [landmark] } as ContentBundle);
   const result = mergeCemeteries(input, [cemetery]);
-  const parts = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
+  const parts = result.features
+    .filter((f) => f.properties.id.startsWith('cemetery:'))
+    .flatMap((f) =>
+      polygonComponents(f.geometry as Polygon | MultiPolygon).map((geometry) => ({
+        ...f,
+        geometry,
+      })),
+    );
   const parent = input.find((f) => f.properties.id === cemetery.osm_id)!;
   const audit = geometryAudit(parent.geometry as Polygon | MultiPolygon);
   const obstacles = input.flatMap((f) => {
     if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
-      return [seatingFootprint(f.geometry.coordinates as LngLat[], f.properties.width ?? 6)];
+      return [seatingFootprint(f.geometry.coordinates as LngLat[], clearanceWidth(f.properties))];
     if (
       ['Polygon', 'MultiPolygon'].includes(f.geometry.type) &&
       f.properties.class.startsWith('building') &&
@@ -183,7 +173,7 @@ describe('owner placement corrections', () => {
   for (let start = 0; start < parts.length; start += 250) {
     it(`keeps Catholic cemetery burials ${start + 1}-${Math.min(start + 250, parts.length)} clear and selectable`, () => {
       for (const part of parts.slice(start, start + 250)) {
-        const shape = part.geometry as Polygon;
+        const shape = part.geometry;
         expect(audit.contains(shape)).toBe(true);
         for (const obstacle of obstacles) expect(audit.overlaps(shape, obstacle)).toBe(false);
         expect(

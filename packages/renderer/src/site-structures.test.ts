@@ -39,6 +39,55 @@ const rectangle = (
 });
 
 describe('outdoor structure rendering', () => {
+  it('decodes disconnected burial markers as one row without joining geometry or obstacles', () => {
+    const target = { id: 'osm:way/7', class: 'grass', name: 'Cemetery' };
+    const markers = [
+      rectangle('north-1', 100, 100, 40, 80, false),
+      rectangle('north-2', 900, 100, 40, 80, false),
+    ];
+    for (const marker of markers)
+      marker.properties = {
+        id: marker.properties.id!,
+        class: 'building_part',
+        height: 0.3,
+        variant: 'flat',
+        kind: 'burial=slab',
+        detail_blocked: true,
+        detail_parent: target.id,
+        detail_selection: JSON.stringify(target),
+      };
+    const row: TileFeatureLike = {
+      ...markers[0]!,
+      properties: { ...markers[0]!.properties, id: 'cemetery:fixture/north' },
+      loadGeometry: () => markers.flatMap((marker) => marker.loadGeometry()),
+    };
+    const decode = (features: TileFeatureLike[], registry = createIdRegistry()) => ({
+      registry,
+      geometry: buildTileGeometry(
+        { buildings: { extent: EXTENT, length: features.length, feature: (i) => features[i]! } },
+        registry,
+        { z: 16, x: 55209, y: 30264 },
+      ),
+    });
+    const separate = decode(markers);
+    const grouped = decode([row]);
+    expect(grouped.geometry.fills.positions).toEqual(separate.geometry.fills.positions);
+    expect(grouped.geometry.fills.indices).toEqual(separate.geometry.fills.indices);
+    expect(grouped.geometry.life).toEqual(separate.geometry.life);
+    expect(grouped.geometry.life.obstacleClosed).toHaveLength(2);
+    expect(new Set(grouped.geometry.fills.ids).size).toBe(1);
+    expect(grouped.registry.takeNew()).toEqual([
+      target,
+      {
+        id: 'cemetery:fixture/north',
+        class: 'building_part',
+        height: 0.3,
+        kind: 'burial=slab',
+        parentId: target.id,
+      },
+    ]);
+    expect(separate.registry.takeNew()).toHaveLength(3);
+  });
   it('parses each descriptor once per tile, caches invalid input and still checks each parent', () => {
     const target = { id: 'osm:way/7', class: 'building_religious', name: 'Church' };
     const descriptor = JSON.stringify(target);

@@ -10,15 +10,18 @@ import {
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
-import bbox from '@turf/bbox';
-import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { mergeCemeteries } from './cemeteries';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { polygonComponents } from './geometry-audit';
+import { mergeSiteDetails } from './site-detail';
+import {
+  assertPointClear,
+  clearanceAssertions,
+  mappedFootprints,
+} from './landmark-detail.geometry';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
-import { bboxesOverlap } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -50,24 +53,12 @@ const reference = read('../__fixtures__/memorial-school-reference.json') as {
   grandstand_interior: LngLat[];
   memorial_centre: LngLat;
 };
-const coords = (g: Polygon | MultiPolygon) => g.coordinates as LngLat[][] | LngLat[][][];
-const intersects = (a: Polygon | MultiPolygon, b: Polygon | MultiPolygon) =>
-  bboxesOverlap(
-    bbox(a) as [number, number, number, number],
-    bbox(b) as [number, number, number, number],
-  ) && intersection(coords(a), coords(b)).length > 0;
-const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
-  const g = f.geometry,
-    p = f.properties;
-  if (
-    ['Polygon', 'MultiPolygon'].includes(g.type) &&
-    ((p.class.startsWith('building') && (p.height ?? 0) > 0) || p.class.startsWith('water'))
-  )
-    return [g as Polygon | MultiPolygon];
-  if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path'))
-    return [seatingFootprint(g.coordinates as LngLat[], p.width ?? (p.class === 'path' ? 2 : 6))];
-  return [];
-});
+const audit = clearanceAssertions(
+  source.find((f) => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')!
+    .geometry as Polygon | MultiPolygon,
+);
+const intersects = audit.overlaps;
+const obstacles = mappedFootprints(source, { water: true });
 
 describe('owner memorial and school enhancements', () => {
   it('keeps distinct school identities, complete source geometry and clear open yards', () => {
@@ -91,7 +82,7 @@ describe('owner memorial and school enhancements', () => {
       expect(cover.areas.some((a) => a.cover === 'planting')).toBe(true);
       for (const tree of cover.trees) {
         expect(inside(tree.at, area)).toBe(true);
-        for (const obstacle of obstacles) expect(inside(tree.at, obstacle)).toBe(false);
+        assertPointClear(tree.at, obstacles, cover.id);
       }
       for (const patch of cover.areas)
         for (const obstacle of obstacles)
@@ -174,20 +165,31 @@ describe('owner memorial and school enhancements', () => {
     );
     expect(memorial).toHaveLength(9);
     expect(details[3]!.structures.find((p) => p.id === 'marian-halo-plan')!.holes).toHaveLength(1);
-    const plots = result.features.filter((f) => f.properties.id.startsWith('cemetery:'));
+    const plots = result.features
+      .filter((f) => f.properties.id.startsWith('cemetery:'))
+      .flatMap((f) =>
+        polygonComponents(f.geometry as Polygon | MultiPolygon).map((geometry) => ({
+          ...f,
+          geometry,
+        })),
+      );
     expect(plots.length).toBeGreaterThan(1600);
     for (const plot of plots)
       for (const part of memorial)
-        expect(intersects(plot.geometry as Polygon, part.geometry as Polygon)).toBe(false);
-    const ids = new Set(plots.map((f) => f.properties.id));
-    for (const old of previous.features.filter((f) => f.properties.id.startsWith('cemetery:'))) {
-      if (!ids.has(old.properties.id))
-        expect(
-          memorial.some((part) => intersects(old.geometry as Polygon, part.geometry as Polygon)),
-        ).toBe(true);
-      else
-        expect(plots.find((f) => f.properties.id === old.properties.id)!.geometry).toEqual(
-          old.geometry,
+        expect(intersects(plot.geometry, part.geometry as Polygon)).toBe(false);
+    const shapes = new Set(plots.map((f) => JSON.stringify(f.geometry)));
+    const oldPlots = previous.features
+      .filter((f) => f.properties.id.startsWith('cemetery:'))
+      .flatMap((f) =>
+        polygonComponents(f.geometry as Polygon | MultiPolygon).map((geometry) => ({
+          ...f,
+          geometry,
+        })),
+      );
+    for (const old of oldPlots) {
+      if (!shapes.has(JSON.stringify(old.geometry)))
+        expect(memorial.some((part) => intersects(old.geometry, part.geometry as Polygon))).toBe(
+          true,
         );
     }
     const id = 'osm:node/13990479932';
