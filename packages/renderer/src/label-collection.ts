@@ -10,11 +10,6 @@ const runLength = (label: TileLabel) =>
       )
     : -1;
 
-function coordinates(label: TileLabel): number[] {
-  const ends = label.run ? [...label.run].sort((a, b) => a[0] - b[0] || a[1] - b[1]).flat() : [];
-  return [label.lng, label.lat, ...ends, uprightStreetAngle(label.angle ?? 0)];
-}
-
 function compareCoordinates(a: TileLabel, b: TileLabel): number {
   if (a === b) return 0;
   const anchor = a.lng - b.lng || a.lat - b.lat;
@@ -39,14 +34,8 @@ function compareCoordinates(a: TileLabel, b: TileLabel): number {
     );
   }
   if (!ar && !br) return uprightStreetAngle(a.angle ?? 0) - uprightStreetAngle(b.angle ?? 0);
-  // Mixed run/no-run keys have different lengths; retain their original total ordering.
-  const aa = coordinates(a),
-    bb = coordinates(b);
-  for (let i = 0; i < Math.min(aa.length, bb.length); i++) {
-    const difference = aa[i]! - bb[i]!;
-    if (difference) return difference;
-  }
-  return aa.length - bb.length;
+  // Mixed copies cannot tie on run length or represent the same retained copy.
+  return ar ? 1 : -1;
 }
 
 const sameCopy = (a: TileLabel, b: TileLabel) =>
@@ -56,12 +45,13 @@ const sameCopy = (a: TileLabel, b: TileLabel) =>
   a.band.max === b.band.max &&
   compareCoordinates(a, b) === 0;
 
-/** Collect eligible copies, retaining an accepted copy before choosing the longest run. */
+/** Eligible copies prefer visible text, deeper geometry, retention, then run length. */
 export function collectLabel(
   labels: Map<number, TileLabel>,
   label: TileLabel,
   previous?: TileLabel,
   onScreen: (label: TileLabel) => boolean = () => true,
+  sourceZoom: (label: TileLabel) => number = () => 0,
 ): void {
   const old = labels.get(label.id);
   if (!old) {
@@ -72,6 +62,11 @@ export function collectLabel(
     oldVisible = onScreen(old);
   if (visible !== oldVisible) {
     if (visible) labels.set(label.id, label);
+    return;
+  }
+  const depth = sourceZoom(label) - sourceZoom(old);
+  if (depth) {
+    if (depth > 0) labels.set(label.id, label);
     return;
   }
   if (previous) {
@@ -92,11 +87,12 @@ export function collectLabels(
   previous: ReadonlyMap<number, TileLabel>,
   eligible: (label: TileLabel, kept: boolean) => boolean,
   onScreen?: (label: TileLabel) => boolean,
+  sourceZoom?: (label: TileLabel) => number,
 ): Map<number, TileLabel> {
   const collected = new Map<number, TileLabel>();
   for (const label of labels) {
     if (eligible(label, previous.has(label.id)))
-      collectLabel(collected, label, previous.get(label.id), onScreen);
+      collectLabel(collected, label, previous.get(label.id), onScreen, sourceZoom);
   }
   return collected;
 }

@@ -52,7 +52,7 @@ function fixture(atView = view) {
   const programs = { streetText: { buffer: null, count: 0 } } as unknown as Programs;
   const draw = (labels: TileLabel[], pan = 0, horizontal = 0) => {
     const at = placement(pan, horizontal);
-    names.collect(targets, atView, at, labels);
+    names.collect(targets, atView, at, [{ labels, zoom: 16 }]);
     return names.draw(gl, targets, theme, atView, at, programs, 0, 0);
   };
   return { names, targets, draw, gl, theme, programs };
@@ -61,6 +61,45 @@ function fixture(atView = view) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('cached atlas labels', () => {
+  it('replaces a remembered coarse run when eligible detail arrives in either source order', () => {
+    const coarse = street(3, 20),
+      detail = street(7, 6);
+    const sources = [
+      { labels: [coarse], zoom: 11 },
+      { labels: [detail], zoom: 16 },
+    ];
+    for (const ordered of [sources, [...sources].reverse()]) {
+      const { names, targets, gl, theme, programs } = fixture();
+      const at = placement();
+      names.collect(targets, view, at, [sources[0]!]);
+      expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(coarse);
+      names.collect(targets, view, at, ordered);
+      expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(detail);
+    }
+  });
+  it('keeps coarse fallback when detail is ineligible or retained wholly offscreen', () => {
+    const coarse = street(3, 6),
+      outside = street(100, 30);
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    const at = placement();
+    const sources = [
+      { labels: [coarse], zoom: 11 },
+      { labels: [outside], zoom: 16 },
+    ];
+    for (const ordered of [sources, [...sources].reverse()]) {
+      names.collect(targets, view, at, ordered);
+      expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(coarse);
+    }
+    const ghost = street(3, 20),
+      visible = street(7, 6, 10);
+    expect(draw([ghost])[0]).toBe(ghost);
+    const shifted = placement(6);
+    names.collect(targets, view, shifted, [
+      { labels: [ghost], zoom: 16 },
+      { labels: [visible], zoom: 11 },
+    ]);
+    expect(names.draw(gl, targets, theme, view, shifted, programs, 0, 0)[0]).toBe(visible);
+  });
   it('reports rank/id order independently of selection, hover, memory and fractional shifts', () => {
     const { names, targets, gl, theme, programs, draw } = fixture();
     const labels = [1, 2, 3].map((id): TileLabel => ({
@@ -80,11 +119,8 @@ describe('cached atlas labels', () => {
       [0, 2],
       [0, 0],
     ]) {
-      expect(
-        names
-          .relabel(gl, targets, theme, view, programs, selected!, hover!, at)
-          ?.map(({ id }) => id),
-      ).toEqual([3, 1, 2]);
+      names.relabel(gl, targets, theme, view, programs, selected!, hover!, at);
+      expect(names.inView(targets, view, at).map(({ id }) => id)).toEqual([3, 1, 2]);
       expect([...labelMemory(targets)!]).toEqual(baseline);
     }
     expect(names.inView(targets, view, { ...at, shiftX: 1 }).map(({ id }) => id)).toEqual([
@@ -92,6 +128,28 @@ describe('cached atlas labels', () => {
     ]);
     expect(draw([...labels].reverse()).map(({ id }) => id)).toEqual([3, 1, 2]);
     expect(first.map(({ id }) => id)).toEqual([3, 1, 2]);
+  });
+  it('skips uploads for already placed hover, selection and leave without committing focus', () => {
+    const { names, targets, gl, theme, programs, draw } = fixture();
+    draw([street(3, 6)]);
+    const memory = [...labelMemory(targets)!];
+    const texture = vi.spyOn(gl, 'texSubImage2D');
+    const buffer = vi.spyOn(gl, 'bufferData');
+    const uploads = texture.mock.calls.length;
+    const streets = buffer.mock.calls.length;
+    for (const [selected, hover] of [
+      [0, 1],
+      [1, 0],
+      [0, 0],
+      [0, 1],
+    ]) {
+      expect(
+        names.relabel(gl, targets, theme, view, programs, selected!, hover!, placement().grid),
+      ).toBeUndefined();
+      expect([...labelMemory(targets)!]).toEqual(memory);
+    }
+    expect(texture).toHaveBeenCalledTimes(uploads);
+    expect(buffer).toHaveBeenCalledTimes(streets);
   });
   it('does no focus geometry when both selected and hovered ids are absent, even during shifts', () => {
     const { names, targets, gl, theme, programs, draw } = fixture();
@@ -111,7 +169,7 @@ describe('cached atlas labels', () => {
   it('returns an empty array for a redraw that clears visible text, then skips unchanged frames', () => {
     const { names, targets, gl, theme, programs } = fixture();
     const at = placement();
-    names.collect(targets, view, at, [street(3, 6)]);
+    names.collect(targets, view, at, [{ labels: [street(3, 6)], zoom: 16 }]);
     names.draw(gl, targets, theme, view, at, programs, 1, 0);
     const baseline = [...labelMemory(targets)!];
     const shifted = { ...at.grid, shiftX: 100 };
@@ -123,7 +181,7 @@ describe('cached atlas labels', () => {
     const { names, targets, gl, theme, programs } = fixture();
     const at = placement();
     const project = vi.spyOn(at, 'toCell');
-    names.collect(targets, view, at, [street(3, 6), street(7, 6)]);
+    names.collect(targets, view, at, [{ labels: [street(3, 6), street(7, 6)], zoom: 16 }]);
     expect(project).toHaveBeenCalledTimes(6);
     names.draw(gl, targets, theme, view, at, programs, 1, 0);
     names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid);
@@ -161,7 +219,7 @@ describe('cached atlas labels', () => {
     expect(
       names.relabel(gl, targets, theme, view, programs, 0, 0, at.grid)?.map(({ id }) => id),
     ).toEqual([1]);
-    names.collect(targets, view, at, candidates);
+    names.collect(targets, view, at, [{ labels: candidates, zoom: 16 }]);
     names.draw(gl, targets, theme, view, at, programs, 5, 0);
     expect([...labelMemory(targets)!.keys()]).toEqual([5]);
   });

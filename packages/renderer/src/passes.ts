@@ -46,8 +46,8 @@ import {
   type Overlay,
 } from './labels';
 import { labelScreenArea } from './label-candidates';
-import { labelIntersectsArea } from './label-layout';
-import type { LabelMemory, LabelMemoryEntry } from './label-stability';
+import { labelIntersectsArea, type Box, type LabelLayout } from './label-layout';
+import type { LabelMemory, LabelMemoryEntry, LabelOrderKey } from './label-stability';
 import { cellBits } from './life/config';
 import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
@@ -125,13 +125,29 @@ export function prepareCrowns(
 
 const overlays = new WeakMap<
   CellTargets,
-  { overlay: Overlay; packed: Uint8Array; memory: LabelMemory }
+  {
+    overlay: Overlay;
+    packed: Uint8Array;
+    memory: LabelMemory;
+    rendered: Map<number, LabelLayout>;
+    next: Map<number, LabelLayout>;
+    changed: boolean;
+    order: LabelOrderKey[];
+  }
 >();
 function overlayBuffers(targets: CellTargets) {
   let buffers = overlays.get(targets);
   if (!buffers) {
     const overlay = createOverlay(targets.labelCols, targets.labelRows);
-    buffers = { overlay, packed: new Uint8Array(overlay.glyphs.length * 4), memory: new Map() };
+    buffers = {
+      overlay,
+      packed: new Uint8Array(overlay.glyphs.length * 4),
+      memory: new Map(),
+      rendered: new Map(),
+      next: new Map(),
+      changed: true,
+      order: [],
+    };
     overlays.set(targets, buffers);
   }
   resetOverlay(buffers.overlay);
@@ -146,6 +162,27 @@ export const labelMemory = (
 export const forgetLabelPlacement = (targets: CellTargets): void => {
   overlays.delete(targets);
 };
+
+/** Whether the latest overlay pass uploaded label geometry. */
+export const labelOverlayChanged = (targets: CellTargets): boolean =>
+  overlays.get(targets)?.changed ?? false;
+
+const sameBox = (a: Box, b: Box) =>
+  a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+
+function sameLayout(a: LabelLayout, b: LabelLayout): boolean {
+  return (
+    a.slot === b.slot &&
+    a.label.text === b.label.text &&
+    a.label.col === b.label.col &&
+    a.label.row === b.label.row &&
+    a.label.vis === b.label.vis &&
+    (a.slot !== -1 || (b.slot === -1 && a.angle === b.angle)) &&
+    sameBox(a.box, b.box) &&
+    sameBox(a.collision, b.collision) &&
+    sameBox(a.textBounds, b.textBounds)
+  );
+}
 
 /** Retained placements outside the viewport stay in memory but not the accessible list. */
 export function labelsInView(
@@ -326,6 +363,7 @@ export const hasCrowns = (tiles: readonly TileDraw[]): boolean =>
 /**
  * Place the names whose zoom band reaches the camera zoom (labels.ts) on the label grid
  * (`placement`) and upload them to the overlay texture. Returns the labels placed.
+ * Focus-only passes skip uploads when rendered IDs, slots and text geometry stay the same.
  */
 export function overlayPass(
   gl: GL,
@@ -339,7 +377,8 @@ export function overlayPass(
   commitMemory = true,
 ): LabelCandidate[] {
   const { labelDev } = view;
-  const { overlay, packed, memory } = overlayBuffers(targets);
+  const buffers = overlayBuffers(targets);
+  const { overlay, packed, memory, rendered, next } = buffers;
   const area = screenArea(view, placement.grid, view.labelDev);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
@@ -347,12 +386,36 @@ export function overlayPass(
     return index === 0 ? undefined : index;
   };
 
-  const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w, {
-    memory,
-    focus,
-    commitMemory,
-    screen: labelScreenArea(view, placement.grid),
-  });
+  const placed = placeLabels(
+    overlay,
+    candidates,
+    glyphIndex,
+    area,
+    labelDev.h / labelDev.w,
+    {
+      memory,
+      focus,
+      commitMemory,
+      screen: labelScreenArea(view, placement.grid),
+      order: buffers.order,
+    },
+    next,
+  );
+  // Focus priority may change the iteration order while every rendered label stays put.
+  // Keep this snapshot separate from durable memory, which focus never commits.
+  buffers.changed = commitMemory || next.size !== rendered.size;
+  if (!buffers.changed) {
+    for (const [id, layout] of next) {
+      const previous = rendered.get(id);
+      if (!previous || !sameLayout(layout, previous)) {
+        buffers.changed = true;
+        break;
+      }
+    }
+  }
+  if (!buffers.changed) return placed;
+  buffers.rendered = next;
+  buffers.next = rendered;
   uploadOverlay(gl, targets, packOverlay(overlay, packed));
   // Most views have no rotated names, before or after: nothing to upload.
   if (overlay.rotated.length > 0 || streetText.count > 0) {

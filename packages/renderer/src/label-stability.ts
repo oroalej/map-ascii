@@ -4,6 +4,7 @@ import type { LabelArea, LabelCandidate, LabelMode } from './labels';
 export type LabelSlot = 0 | 1 | 2 | 3 | -1;
 export type LabelMemoryEntry = { slot: LabelSlot; visible: boolean };
 export type LabelMemory = Map<number, LabelMemoryEntry>;
+export type LabelOrderKey = { label: LabelCandidate; focus: number; retained: number };
 export type PlaceStability = {
   memory?: LabelMemory;
   focus?: readonly number[];
@@ -11,6 +12,8 @@ export type PlaceStability = {
   commitMemory?: boolean;
   /** Physical viewport, including partial cells; defaults to the admission area. */
   screen?: LabelArea;
+  /** Per-target sorting storage; keys are recalculated once per candidate. */
+  order?: LabelOrderKey[];
 };
 
 /** Retained layouts may extend this many cells beyond the fully visible cell bounds. */
@@ -35,18 +38,24 @@ export function orderLabels(
   stability.focus?.forEach((id, i) => {
     if (!focus.has(id)) focus.set(id, i);
   });
-  const priority = (id: number) => focus.get(id) ?? Infinity;
-  const retained = (id: number) => {
-    const previous = stability.memory?.get(id);
-    return previous ? (previous.visible ? 0 : 1) : 2;
-  };
-  return [...candidates].sort(
+  const keys = stability.order ?? [];
+  keys.length = candidates.length;
+  for (let i = 0; i < candidates.length; i++) {
+    const label = candidates[i]!;
+    const previous = stability.memory?.get(label.id);
+    const key = (keys[i] ??= { label, focus: Infinity, retained: 2 });
+    key.label = label;
+    key.focus = focus.get(label.id) ?? Infinity;
+    key.retained = previous ? (previous.visible ? 0 : 1) : 2;
+  }
+  keys.sort(
     (a, b) =>
-      priority(a.id) - priority(b.id) ||
-      a.rank - b.rank ||
-      retained(a.id) - retained(b.id) ||
-      a.id - b.id,
+      a.focus - b.focus ||
+      a.label.rank - b.label.rank ||
+      a.retained - b.retained ||
+      a.label.id - b.label.id,
   );
+  return keys.map(({ label }) => label);
 }
 
 const besideSlots: readonly (readonly LabelSlot[])[] = [
@@ -66,13 +75,15 @@ export function labelSlots(
   return (mode === 'rotated' ? rotatedSlots : besideSlots)[beside]!;
 }
 
-export function retentionArea(area: LabelArea, kept: boolean): LabelArea {
-  return kept
-    ? {
-        left: area.left - KEEP_OVERHANG,
-        top: area.top - KEEP_OVERHANG,
-        right: area.right + KEEP_OVERHANG,
-        bottom: area.bottom + KEEP_OVERHANG,
-      }
-    : area;
+export function retentionArea(area: LabelArea): LabelArea {
+  return {
+    left: area.left - KEEP_OVERHANG,
+    top: area.top - KEEP_OVERHANG,
+    right: area.right + KEEP_OVERHANG,
+    bottom: area.bottom + KEEP_OVERHANG,
+  };
 }
+
+/** Shared admission policy; eligibility and individual-slot collision checks stay separate. */
+export const placementArea = (area: LabelArea, retained: LabelArea, kept: boolean): LabelArea =>
+  kept ? retained : area;

@@ -3,6 +3,7 @@ import {
   KEEP_OVERHANG,
   labelSlots,
   orderLabels,
+  placementArea,
   retentionArea,
   type LabelSlot,
   type PlaceStability,
@@ -254,7 +255,7 @@ export function layoutLabels(
   const textBounds = { ...box },
     collision = { ...box };
   const names = new Map<string, { col: number; row: number }[]>();
-  const retained = retentionArea(area, true);
+  const retained = retentionArea(area);
   const screen = stability.screen ?? area;
   for (const label of orderLabels(candidates, stability)) {
     const nearby = names.get(label.text) ?? [];
@@ -266,7 +267,7 @@ export function layoutLabels(
     )
       continue;
     const previous = stability.memory?.get(label.id);
-    const allowed = previous ? retained : area;
+    const allowed = placementArea(area, retained, previous !== undefined);
     for (const slot of labelSlots(label.mode, previous?.slot)) {
       if (!measureSlot(label, slot, aspect, box, textBounds) || !inside(box, allowed)) continue;
       copyBox(collision, box);

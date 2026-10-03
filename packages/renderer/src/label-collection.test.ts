@@ -23,6 +23,48 @@ const collect = (labels: TileLabel[], previous = new Map<number, TileLabel>()) =
 };
 
 describe('street copy collection', () => {
+  it('prefers eligible detail over a longer remembered coarse run in either order', () => {
+    const coarse = street(0, 3),
+      detail = street(2, 1);
+    const depths = new Map([
+      [coarse, 11],
+      [detail, 16],
+    ]);
+    for (const labels of [
+      [coarse, detail],
+      [detail, coarse],
+    ]) {
+      for (const previous of [new Map<number, TileLabel>(), new Map([[1, coarse]])]) {
+        expect(
+          collectLabels(
+            labels,
+            previous,
+            () => true,
+            () => true,
+            (label) => depths.get(label)!,
+          ).get(1),
+        ).toBe(detail);
+      }
+      expect(
+        collectLabels(
+          labels,
+          new Map(),
+          (label) => label !== detail,
+          () => true,
+          (label) => depths.get(label)!,
+        ).get(1),
+      ).toBe(coarse);
+      expect(
+        collectLabels(
+          labels,
+          new Map([[1, detail]]),
+          () => true,
+          (label) => label === coarse,
+          (label) => depths.get(label)!,
+        ).get(1),
+      ).toBe(coarse);
+    }
+  });
   it('chooses the longer run in either insertion order', () => {
     const short = street(0, 1),
       long = street(3, 2);

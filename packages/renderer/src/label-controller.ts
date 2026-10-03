@@ -4,12 +4,19 @@ import { screenArea, type Grid, type GridPlacement, type View } from './grid';
 import { labelCandidate, labelScreenArea } from './label-candidates';
 import { collectLabels } from './label-collection';
 import { labelFitsArea, labelTouchesArea } from './label-layout';
-import { labelFocus, retentionArea } from './label-stability';
+import { labelFocus, placementArea, retentionArea } from './label-stability';
 import type { LabelCandidate } from './labels';
-import { forgetLabelPlacement, labelMemory, labelsInView, overlayPass } from './passes';
+import {
+  forgetLabelPlacement,
+  labelMemory,
+  labelOverlayChanged,
+  labelsInView,
+  overlayPass,
+} from './passes';
 import type { TileLabel } from './raster/geometry';
 
 const noFocus: readonly number[] = [];
+export type LabelSource = { labels: readonly TileLabel[]; zoom: number };
 
 /** The labels from the last tile draw, so focus can replace only the overlay. */
 export class AtlasLabels {
@@ -42,7 +49,7 @@ export class AtlasLabels {
     targets: CellTargets,
     view: View,
     placement: GridPlacement,
-    labels: Iterable<TileLabel>,
+    sources: Iterable<LabelSource>,
   ): void {
     if (this.targets !== targets) this.clear();
     this.targets = targets;
@@ -53,23 +60,40 @@ export class AtlasLabels {
     for (const [id, label] of this.labels) if (memory?.has(id)) previous.set(id, label);
     const area = screenArea(view, placement.grid, view.labelDev),
       screen = labelScreenArea(view, placement.grid),
-      retained = retentionArea(area, true);
+      retained = retentionArea(area);
     const aspect = view.labelDev.h / view.labelDev.w;
-    const candidates = new Map<TileLabel, LabelCandidate | undefined>();
-    const candidate = (label: TileLabel) => {
-      if (!candidates.has(label))
-        candidates.set(label, labelCandidate(label, view, placement, area));
-      return candidates.get(label);
-    };
+    const candidates = new Map<
+      TileLabel,
+      { candidate: LabelCandidate | undefined; zoom: number }
+    >();
+    function* copies() {
+      for (const { labels, zoom } of sources) {
+        for (const label of labels) {
+          const known = candidates.get(label);
+          if (known) known.zoom = Math.max(known.zoom, zoom);
+          else
+            candidates.set(label, {
+              candidate: labelCandidate(label, view, placement, area),
+              zoom,
+            });
+          yield label;
+        }
+      }
+    }
+    const candidate = (label: TileLabel) => candidates.get(label)?.candidate;
     const visible = new Map<TileLabel, boolean>();
     this.labels = collectLabels(
-      labels,
+      copies(),
       previous,
       (label) => {
         const prepared = candidate(label);
         return (
           prepared !== undefined &&
-          labelFitsArea(prepared, memory?.has(label.id) ? retained : area, aspect)
+          labelFitsArea(
+            prepared,
+            placementArea(area, retained, memory?.has(label.id) ?? false),
+            aspect,
+          )
         );
       },
       (label) => {
@@ -81,18 +105,19 @@ export class AtlasLabels {
           labelTouchesArea(
             prepared,
             screen,
-            memory?.has(label.id) ? retained : area,
+            placementArea(area, retained, memory?.has(label.id) ?? false),
             aspect,
             memory?.get(label.id)?.slot,
           );
         visible.set(label, onScreen);
         return onScreen;
       },
+      (label) => candidates.get(label)!.zoom,
     );
     this.candidates.clear();
     this.prepared = [];
     for (const [id, label] of this.labels) {
-      const prepared = candidates.get(label);
+      const prepared = candidate(label);
       if (prepared) {
         this.candidates.set(id, prepared);
         this.prepared.push(prepared);
@@ -112,14 +137,14 @@ export class AtlasLabels {
     if (selected <= 0 && hover <= 0) return noFocus;
     const memory = labelMemory(targets),
       area = screenArea(view, grid, view.labelDev),
-      retained = retentionArea(area, true);
+      retained = retentionArea(area);
     return labelFocus(selected, hover, (id) => {
       const candidate = this.candidates.get(id);
       return (
         candidate !== undefined &&
         labelFitsArea(
           candidate,
-          memory?.has(id) ? retained : area,
+          placementArea(area, retained, memory?.has(id) ?? false),
           view.labelDev.h / view.labelDev.w,
         )
       );
@@ -209,7 +234,19 @@ export class AtlasLabels {
     if (focus.length === this.focused.length && focus.every((id, i) => id === this.focused[i]))
       return;
     const placement = { ...this.placement, grid };
-    return this.draw(gl, targets, theme, view, placement, programs, selected, hover, false, focus);
+    const labels = this.draw(
+      gl,
+      targets,
+      theme,
+      view,
+      placement,
+      programs,
+      selected,
+      hover,
+      false,
+      focus,
+    );
+    return labelOverlayChanged(targets) ? labels : undefined;
   }
 
   inView(targets: CellTargets, view: View, grid: Grid): TileLabel[] {

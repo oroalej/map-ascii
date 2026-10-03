@@ -689,13 +689,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
-    const labels: TileLabel[] = [];
+    const labels: { labels: readonly TileLabel[]; zoom: number }[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
       for (const tile of ids) {
         const loaded = tileCache.get(tile);
         if (!loaded) continue;
-        for (const label of loaded.labels) labels.push(label);
+        labels.push({ labels: loaded.labels, zoom: tile.z });
         out.push({ tile, mesh: loaded.mesh });
       }
       return out;

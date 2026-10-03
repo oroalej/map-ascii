@@ -43,6 +43,27 @@ const place = (candidates: LabelCandidate[], stability: PlaceStability = {}, at 
   layoutLabels(createOverlay(at.right, at.bottom), candidates, at, 1.8, stability, repeat);
 
 describe('stable placement layouts', () => {
+  it.each([LabelRank.landmark, LabelRank.monument])(
+    'checks cross-kind repeats by the incoming rank, including reversed focus (other rank %s)',
+    (rank) => {
+      const at = { left: 0, top: 0, right: 100, bottom: 10 };
+      for (const distance of [30, 60]) {
+        const street = label({ id: 1, rank: LabelRank.roadMajor, col: 10, row: 4 });
+        const other = label({ id: 2, rank, col: 10 + distance, row: 4 });
+        for (const candidates of [
+          [street, other],
+          [other, street],
+        ]) {
+          const otherFirst = distance < STREET_REPEAT ? [2] : [2, 1];
+          expect(ids(place(candidates, {}, at))).toEqual(
+            rank < LabelRank.roadMajor ? otherFirst : [1],
+          );
+          expect(ids(place(candidates, { focus: [2] }, at))).toEqual(otherFirst);
+          expect(ids(place(candidates, { focus: [1] }, at))).toEqual([1]);
+        }
+      }
+    },
+  );
   it.each([
     { edge: 'left', col: -5, row: 0, outsideCol: -6, outsideRow: 0, bottom: 1, slot: 2 },
     { edge: 'right', col: 24, row: 0, outsideCol: 25, outsideRow: 0, bottom: 1, slot: 3 },
@@ -187,7 +208,7 @@ describe('stable placement layouts', () => {
   it('uses strict admission for new text and expanded admission for retained text', () => {
     const onlyRight = label({ col: -4 });
     expect(labelFitsArea(onlyRight, area)).toBe(false);
-    expect(labelFitsArea(onlyRight, retentionArea(area, true), 1.8)).toBe(true);
+    expect(labelFitsArea(onlyRight, retentionArea(area), 1.8)).toBe(true);
   });
   it('puts a focused landmark ahead of a city, and selection ahead of hover', () => {
     const landmark = label({ id: 5 }),

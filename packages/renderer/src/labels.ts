@@ -4,7 +4,13 @@
  * cities, subdivisions, smaller places), landmarks, and monuments.
  */
 import { bandVisibility, type ZoomBand } from '@atlas/shared';
-import { layoutLabels, ROTATED_HALO_HEIGHT, TAKEN_PAD, type Box } from './label-layout';
+import {
+  layoutLabels,
+  ROTATED_HALO_HEIGHT,
+  TAKEN_PAD,
+  type Box,
+  type LabelLayout,
+} from './label-layout';
 import { STREET_REPEAT, type PlaceStability } from './label-stability';
 
 /** Label priority: lower ranks are placed first. */
@@ -255,13 +261,16 @@ export function placeLabels(
   area: LabelArea = fullArea(overlay),
   aspect = 1.8,
   stability: PlaceStability = {},
+  out?: Map<number, LabelLayout>,
 ): LabelCandidate[] {
   const layouts = layoutLabels(overlay, candidates, area, aspect, stability, repeatDistance);
+  out?.clear();
   const question = glyphIndex('?') ?? 0;
   const glyphOf = (char: string) =>
     char === ' ' ? OVERLAY_BLANK : (glyphIndex(char) ?? question) + 1;
   for (const layout of layouts) {
     const { label } = layout;
+    out?.set(label.id, layout);
     overlay.placements?.set(label.id, layout.textBounds);
     if (layout.slot === -1) {
       overlay.rotated.push({
