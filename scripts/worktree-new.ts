@@ -1,8 +1,8 @@
 /**
  * Create a task worktree ready to work in (AGENTS.md "Git"):
  *   pnpm worktree:new <short> <topic>
- * adds ../naga-ascii-<short> on a new branch codex/<topic> from main, installs dependencies and
- * fetches the pinned tiles.
+ * adds ../naga-ascii-<short> on a new branch codex/<topic> from the latest origin/main, installs
+ * dependencies and fetches the pinned tiles.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -46,7 +46,10 @@ const pnpm = (args: string[], cwd: string) => {
   run(process.execPath, [entry, ...args], cwd);
 };
 
-run('git', ['worktree', 'add', path, '-b', branch, 'main'], main);
+run('git', ['fetch', 'origin', 'main'], main);
+// From origin/main, not the main checkout's local main, which may be behind. --no-track: the
+// branch gets its own upstream on first push instead of tracking main.
+run('git', ['worktree', 'add', path, '-b', branch, '--no-track', 'origin/main'], main);
 pnpm(['install', '--frozen-lockfile', '--prefer-offline'], path);
 pnpm(['data:fetch'], path);
 console.log(`\nReady: ${path} on ${branch}`);

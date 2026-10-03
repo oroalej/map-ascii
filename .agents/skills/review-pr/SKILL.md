@@ -1,11 +1,11 @@
 ---
 name: review-pr
-description: Review the current branch's pull request until it's clean and CI is green. Each round, Claude Code (Opus 5.5, high effort) reviews with the repo's review-pr skill, a separate Sol 6.1 max-effort run validates every finding, and this session fixes, commits and pushes the valid ones; up to 3 rounds. Then failing CI is fixed. Never merges. Use when the user invokes $review-pr (optionally with --fast) or asks Codex to get a Claude review of this branch's PR and fix what holds up.
+description: Review the current branch's pull request until it's clean and CI is green. First merges origin/main into the branch, resolving conflicts. Each round, Claude Code (Opus 5.5, high effort) reviews with the repo's review-pr skill, a separate Sol 6.1 max-effort run validates every finding, and this session fixes, commits and pushes the valid ones; up to 3 rounds. Then failing CI is fixed. Never merges. Use when the user invokes $review-pr (optionally with --fast) or asks Codex to get a Claude review of this branch's PR and fix what holds up.
 ---
 
 # Claude review → Codex validation → fixes, until clean, then CI
 
-Treat invocation of `$review-pr` as authorization to run the whole flow: up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
+Treat invocation of `$review-pr` as authorization to run the whole flow: merging `origin/main` into the PR's branch (resolving conflicts) and pushing, up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
 
 ## Models
 
@@ -44,6 +44,24 @@ The PR is always the current branch's PR. No input selects a different one.
 4. The main checkout is the first entry of `git worktree list`. Set `<scratch>` to `<main-checkout>/.plans/active/pr<N>-review-fixes/` and create it. `.plans/` is gitignored. Put every file this skill writes there.
 5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
 6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used.
+7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. This is the only place the review flows merge `main`; `$sync-review` and `$implement-handoff` rely on it. Work in `<pr-checkout>`.
+   1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current` and go to step 2.
+   2. If the merge would touch a file listed in the baseline (another session's uncommitted edits), stop with `stopped` (`merge blocked by uncommitted <files>`) without merging.
+   3. `git merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
+      - `<scope>` is the most common scope among the branch's recent commits.
+      - `<topic>` is the branch name without `codex/`, written in words (e.g. `sync landmark details with main`).
+   4. Resolve conflicts one file at a time:
+      - Understand both sides first. Read `git log --oneline origin/main...HEAD -- <file>` and the commits behind each side. If `<main-checkout>/.plans/README.md` lists the branch, read that task's `handoff.md`.
+      - Combine both sides' intent. Take one side wholesale only when the other is clearly superseded, and name the commit that supersedes it.
+      - `pnpm-lock.yaml`: take `main`'s version, then run `pnpm install --lockfile-only`.
+      - Generated data (`apps/web/public/tiles/**`, `**/tiles.lock.json`, or anything the data pipeline writes): don't hand-merge it. Abort.
+      - If the right resolution is unclear (two incompatible behaviors and no clear winner), abort. Don't guess.
+   5. Before committing:
+      - Confirm no conflict markers remain: run `git diff --check`, and search the resolved files for `<<<<<<<`, `=======` and `>>>>>>>`.
+      - Run `pnpm run test --changed`, plus `pnpm --filter @atlas/<pkg> typecheck` for every package with a resolved file. If a failure comes from the resolution, fix it. If it still fails, abort.
+      - Commit the merge with the message from 3.
+   6. To abort: run `git merge --abort`, then stop with `stopped` and stopReason `merge conflict: <files> — <why>`. Set `mainMerge` to `aborted`.
+   7. `git push`. Set `mainMerge` to `merged` (or `resolved <n> files` when there were conflicts).
 
 ## 2. Round k: Claude reviews the PR
 
@@ -122,7 +140,8 @@ Nits are fixed when they come up. New nits alone never start another round, beca
 
 Report:
 
-- First line: `Review rounds: <k> of 3`, counting every round, including one run after a CI fix. Then one line per round with its outcome (`clean`, `fixed`, `stalled` or `stopped`)
+- `Main merge: <mainMerge>` (from step 1.7)
+- `Review rounds: <k> of 3`, counting every round, including one run after a CI fix. Then one line per round with its outcome (`clean`, `fixed`, `stalled` or `stopped`)
 - Each round: Claude's verdict, and the validation table (# / Claude's severity / verdict / evidence / final severity)
 - Fixed entries, with the commit hashes
 - Skipped entries, each with its reason
@@ -139,6 +158,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "pr": 12,
   "headSha": "def5678",
   "fast": false,
+  "mainMerge": "current",
   "roundCount": 1,
   "rounds": [
     {
@@ -171,6 +191,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
+- `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted`, or `not-run` (stopped before step 1.7).
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
 - `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity.
 - `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), `red`, or `not-run` (the run stopped before step 6).
