@@ -12,13 +12,18 @@ it('labels atmospheric fireworks independently of Life and removes them below th
     labels: { fireworks: 'Fireworks and smoke' },
   };
   for (const theme of ['dark', 'light'] as const) {
-    const entry = legendEntries(theme, 14, [], { life: false, season }).find(
+    const entry = legendEntries(theme, 7, [], { life: false, season }).find(
       (e) => e.id === 'info:season-fireworks',
     );
     expect(entry).toMatchObject({ classes: [], label: 'Fireworks and smoke (illustrative)' });
-    expect(
-      legendEntries(theme, 13, [], { season }).some((e) => e.id === 'info:season-fireworks'),
-    ).toBe(false);
+    for (const zoom of [7, 16, 19.99, 20, 20.999])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(true);
+    for (const zoom of [6, 21])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(false);
     expect(
       legendEntries(theme, 19, [], { season: null }).some((e) => e.id === 'info:season-fireworks'),
     ).toBe(false);

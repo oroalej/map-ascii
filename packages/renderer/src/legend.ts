@@ -24,7 +24,7 @@ import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
 import type { FixtureVisibility } from './life/fixtures';
 import type { SeasonState } from './index';
-import { FIREWORKS } from './fireworks-layout';
+import { fireworkShellCount } from './fireworks-layout';
 import { Paint, VEHICLES } from './life/vehicles';
 import {
   CLASS_LABELS,
@@ -391,7 +391,7 @@ export function legendEntries(
       glyphs: '★',
       color: css(theme.fixturePaints[9]!),
     });
-  if (season?.labels.fireworks && zoom >= FIREWORKS.minZoom)
+  if (season?.labels.fireworks && fireworkShellCount(zoom))
     entries.push({
       id: 'info:season-fireworks',
       classes: [],

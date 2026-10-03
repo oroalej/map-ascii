@@ -4,7 +4,7 @@ import type { GL, CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass, deleteFireworks } from './fireworks-pass';
-import { FIREWORKS, FIREWORK_INSTANCE_COUNT } from './fireworks-layout';
+import { FIREWORKS, fireworkShellCount } from './fireworks-layout';
 
 const setters = vi.hoisted(() => ({
   u_shells: vi.fn(),
@@ -57,6 +57,9 @@ function gpu() {
     deleteVertexArray: vi.fn(),
     BLEND: 1,
     TRIANGLES: 4,
+    FLOAT: 0x1406,
+    ARRAY_BUFFER: 0x8892,
+    STATIC_DRAW: 0x88e4,
   };
 }
 beforeEach(() => vi.clearAllMocks());
@@ -68,7 +71,7 @@ describe('seasonal GPU fireworks', () => {
       [19, 1],
       [19.5, 1],
       [20, 2],
-      [21, 3],
+      [20.75, 3],
     ] as const) {
       const v = {
         ...view,
@@ -92,7 +95,7 @@ describe('seasonal GPU fireworks', () => {
         0,
       );
       const scale = 2 ** (zoom - 19);
-      for (let i = 0; i < programs.fireworks!.shells.length; i += 4) {
+      for (let i = 0; i < fireworkShellCount(zoom) * 4; i += 4) {
         const seed = programs.fireworks!.shells[i + 2]!;
         expect(programs.fireworks!.shells[i + 3]).toBeCloseTo(
           (FIREWORKS.radius + (seed % FIREWORKS.radiusVariation)) * dpr * scale,
@@ -105,7 +108,7 @@ describe('seasonal GPU fireworks', () => {
     }
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
     expect(gl.createBuffer).toHaveBeenCalledTimes(1);
-    expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(4);
+    expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(8);
   });
   it('creates nothing for old packs, inactive seasons or low zoom, and does not leave a stale overlay', () => {
     const gl = gpu(),
@@ -113,7 +116,9 @@ describe('seasonal GPU fireworks', () => {
       grid = placeGrid(view, view.cellDev, 202, 92).grid;
     for (const [selected, zoom] of [
       [undefined, 19],
-      [config, 13],
+      [config, 6],
+      [config, 21],
+      [config, NaN],
     ] as const)
       fireworksPass(
         gl as unknown as GL,
@@ -162,6 +167,53 @@ describe('seasonal GPU fireworks', () => {
     );
     expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(drawn);
   });
+  it('draws only the admitted particle prefixes and clears all fireworks at close zoom', () => {
+    const gl = gpu(),
+      programs = {} as Programs;
+    for (const [zoom, count] of [
+      [16, 50],
+      [19, 49],
+      [20, 4],
+      [21, 0],
+      [20, 4],
+    ] as const) {
+      const v = { ...view, camera: { ...view.camera, zoom } };
+      const grid = placeGrid(v, v.cellDev, 202, 92).grid;
+      const before = gl.drawArraysInstanced.mock.calls.length;
+      fireworksPass(
+        gl as unknown as GL,
+        programs,
+        {} as CellTargets,
+        resources,
+        v,
+        grid,
+        grid,
+        config,
+        2.6,
+        false,
+        wind,
+        0,
+      );
+      if (!count) {
+        expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(before);
+        continue;
+      }
+      expect(gl.drawArraysInstanced.mock.calls.slice(before)).toEqual([
+        [gl.TRIANGLES, 0, 6, count * FIREWORKS.smoke],
+        [gl.TRIANGLES, 0, 6, count * FIREWORKS.stars * FIREWORKS.tails],
+      ]);
+      expect(gl.vertexAttribPointer).toHaveBeenLastCalledWith(
+        0,
+        4,
+        gl.FLOAT,
+        false,
+        16,
+        FIREWORKS.shells * FIREWORKS.smoke * 16,
+      );
+    }
+    expect(gl.createBuffer).toHaveBeenCalledTimes(1);
+    expect(gl.bufferData).toHaveBeenCalledTimes(1);
+  });
   it('uploads immutable geometry once, animates with uniforms, holds reduced motion and releases all GPU handles', () => {
     const gl = gpu(),
       programs = {} as Programs,
@@ -203,7 +255,7 @@ describe('seasonal GPU fireworks', () => {
       gl.TRIANGLES,
       0,
       6,
-      FIREWORK_INSTANCE_COUNT,
+      fireworkShellCount(view.camera.zoom) * FIREWORKS.stars * FIREWORKS.tails,
     );
     expect(gl.disable).toHaveBeenLastCalledWith(gl.BLEND);
     deleteFireworks(gl as unknown as GL, programs.fireworks!);

@@ -6,9 +6,9 @@ import type { Grid, View } from './grid';
 import type { WindNow } from './life/wind';
 import {
   FIREWORKS,
-  FIREWORK_INSTANCE_COUNT,
   fireworkInstances,
   fireworkScale,
+  fireworkShellCount,
   fireworkShells,
   fireworkTime,
   fireworkVariantCodes,
@@ -66,14 +66,14 @@ export function fireworksPass(
   wind: WindNow,
   daylight: number,
 ) {
-  if (!config?.variants.length || view.camera.zoom < FIREWORKS.minZoom) return;
+  if (!config?.variants.length || !fireworkShellCount(view.camera.zoom)) return;
   const resources = (programs.fireworks ??= createFireworks(gl));
   if (resources.config !== config) {
     resources.variants.fill(0);
     resources.variants.set(fireworkVariantCodes(config));
     resources.config = config;
   }
-  fireworkShells(view, grid, resources.shells);
+  const count = fireworkShells(view, grid, resources.shells);
   const windScale = view.dpr * fireworkScale(view.camera.zoom);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
@@ -103,7 +103,11 @@ export function fireworksPass(
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.bindVertexArray(resources.vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, FIREWORK_INSTANCE_COUNT);
+  gl.bindBuffer(gl.ARRAY_BUFFER, resources.buffer);
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count * FIREWORKS.smoke);
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, FIREWORKS.shells * FIREWORKS.smoke * 16);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count * FIREWORKS.stars * FIREWORKS.tails);
   gl.bindVertexArray(null);
   gl.disable(gl.BLEND);
 }
