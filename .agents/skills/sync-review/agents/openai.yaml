@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Sync & Review'
+  short_description: 'Commit, sync, review until clean, fix CI and merge listed branches.'
+  default_prompt: 'Use $sync-review on these branches: '
