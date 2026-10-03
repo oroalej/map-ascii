@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
-import { Season, type SeasonalPoint, type SeasonalLightStringRecord } from '@atlas/shared';
+import {
+  Season,
+  localMetricProjection,
+  type SeasonalPoint,
+  type SeasonalLightStringRecord,
+} from '@atlas/shared';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';
@@ -83,7 +88,7 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
     ),
   ).toEqual(result);
 });
-it('removes owner-rejected paths and parking while retaining Christmas forecourt and house decorations', () => {
+it('lights all three latest yellow patches and places the red Christmas tree without restoring paths or parking', () => {
   const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
   const config = {
     ...season,
@@ -93,7 +98,51 @@ it('removes owner-rejected paths and parking while retaining Christmas forecourt
   const result = generateSeasonalInstallations(features, [config]);
   expect(config.installations.some((i) => i.kind === 'access-path')).toBe(false);
   expect(result.records.some((r) => r.kind === 'access-path')).toBe(false);
-  expect(result.records.filter((r) => r.kind === 'christmas-tree')).toHaveLength(1);
+  expect(result.records.filter((r) => r.kind === 'christmas-tree')).toHaveLength(2);
+  const tree = result.records.find(
+    (r) => r.kind === 'christmas-tree' && r.installation === 'magsaysay-red-tree',
+  );
+  if (!tree || tree.kind !== 'christmas-tree') throw new Error('missing red tree');
+  expect(tree.radius_m).toBe(1.8);
+  const projection = localMetricProjection([123.19584784, 13.63244394]);
+  expect(Math.hypot(...projection.to(tree.at))).toBeLessThan(1.1);
+  const treeGrounds = polygon([config.grounds!.find((g) => g.id === 'magsaysay-red-tree')!.ring]);
+  for (let i = 0; i < 64; i++) {
+    const angle = (i * Math.PI) / 32;
+    const offset = projection.to(tree.at);
+    const footprint = projection.from([
+      offset[0] + Math.cos(angle) * (tree.radius_m + 1),
+      offset[1] + Math.sin(angle) * (tree.radius_m + 1),
+    ]);
+    expect(booleanPointInPolygon(footprint, treeGrounds)).toBe(true);
+  }
+  for (const patch of ['west', 'middle', 'east']) {
+    const id = `magsaysay-yellow-${patch}-lights`;
+    const installation = config.installations.find((i) => i.id === id)!;
+    expect(installation).toMatchObject({
+      kind: 'light-string',
+      spacing_m: 0.75,
+      bulb_spacing_m: 0.3,
+      palette: 'christmas',
+      mount: 'canopy',
+    });
+    const patchLights = result.records.filter(
+      (r): r is SeasonalLightStringRecord => r.kind === 'light-string' && r.installation === id,
+    );
+    expect(patchLights.length).toBeGreaterThanOrEqual(3);
+    const ground = polygon([config.grounds!.find((g) => g.id === installation.grounds)!.ring]);
+    for (const light of patchLights)
+      for (let n = 0; n <= 20; n++)
+        expect(
+          booleanPointInPolygon(
+            [
+              light.from[0] + ((light.to[0] - light.from[0]) * n) / 20,
+              light.from[1] + ((light.to[1] - light.from[1]) * n) / 20,
+            ],
+            ground,
+          ),
+        ).toBe(true);
+  }
   const lights = result.records.filter(
     (r): r is SeasonalLightStringRecord =>
       r.kind === 'light-string' && r.installation.includes('-island-'),
