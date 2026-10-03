@@ -121,7 +121,7 @@ describe('Basilica cemetery reference correction', () => {
         }
       }
     }
-  }, 60_000);
+  });
   it('preserves source facilities, trees and cemetery boundaries without duplicate features', () => {
     const input = structuredClone(source);
     expect(mergeCemeteries(input, []).features).toEqual(source);

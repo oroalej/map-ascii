@@ -70,7 +70,7 @@ describe('additional landmark references', () => {
           f.properties.id.startsWith(`detail:${detail.id.slice(7)}/`) && f.properties.detail_parent,
       ))
         expect(f.properties.detail_parent).toBe(detail.osm_id);
-  }, 30000);
+  });
   it('adds sparse crowns outside full roads, paths, standing roofs and mapped trunks', () => {
     const obstacles = source.flatMap((f) => {
       if (

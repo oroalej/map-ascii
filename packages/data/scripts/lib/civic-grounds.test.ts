@@ -153,5 +153,5 @@ describe('owner-reference civic grounds', () => {
           expect(difference(coords(shape), coords(parent)), plot.properties.id).toEqual([]);
       }
     }
-  }, 30_000);
+  });
 });

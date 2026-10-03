@@ -27,6 +27,21 @@ const car = { id: 'one', at: p(15, 15), bearing: 0, kind: 'car' as const };
 const bus = { id: 'bus', at: p(30, 30), bearing: 90, kind: 'bus' as const };
 
 describe('fixed plan-view parking', () => {
+  it('retains bend and endpoint clearance when distant road segments are skipped', () => {
+    const road: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/road', class: 'road_minor', width: 6 },
+      geometry: { type: 'LineString', coordinates: [p(-1000, 20), p(20, 20), p(20, 30)] },
+    };
+    const pack = (at: LngLat) => SiteDetail.parse({ ...base, parked_vehicles: [{ ...car, at }] });
+    expect(() => mergeSiteDetails([parent, road], [pack(p(35, 40))])).not.toThrow();
+    expect(() => mergeSiteDetails([parent, road], [pack(p(22, 22))])).toThrow('crosses');
+    expect(() => mergeSiteDetails([parent, road], [pack(p(20, 34))])).toThrow('crosses');
+    expect(road.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [p(-1000, 20), p(20, 20), p(20, 30)],
+    });
+  });
   it('validates unique bounded inventory and keeps legacy fingerprints when omitted', () => {
     const input = { ...base, parked_vehicles: [car, bus] };
     expect(SiteDetail.safeParse(input).success).toBe(true);

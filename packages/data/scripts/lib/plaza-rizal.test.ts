@@ -49,6 +49,7 @@ const pole: AtlasFeature = {
 
 describe('Plaza Rizal authored circulation', () => {
   // Full authored geometry needs headroom while the other test files run in parallel.
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('keeps every route connected and clear of stonework and raised planting at its full width', () => {
     const input = [parent, monument, pole];
     const merged = mergeSiteDetails(

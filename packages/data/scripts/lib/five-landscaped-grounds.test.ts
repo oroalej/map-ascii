@@ -4,13 +4,12 @@ import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
-import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { landcoverFeatures } from './landcover';
-import { bboxesOverlap } from './geo';
+import { geometryAudit } from './geometry-audit';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -39,12 +38,7 @@ const distance = (a: readonly number[], b: readonly number[]) =>
     (a[0]! - b[0]!) * 111320 * Math.cos((13.62 * Math.PI) / 180),
     (a[1]! - b[1]!) * 111320,
   );
-const coords = (g: Polygon | MultiPolygon) => g.coordinates as LngLat[][] | LngLat[][][];
-const intersects = (a: Polygon | MultiPolygon, b: Polygon | MultiPolygon) =>
-  bboxesOverlap(
-    bbox(a) as [number, number, number, number],
-    bbox(b) as [number, number, number, number],
-  ) && intersection(coords(a), coords(b)).length > 0;
+const intersects = geometryAudit(area(0)).overlaps;
 const obstacles = source.flatMap<Polygon | MultiPolygon>((f) => {
   const p = f.properties,
     g = f.geometry;
@@ -101,7 +95,7 @@ describe('five landscaped grounds', () => {
             .landmarkId,
         ).toBe(`landmark/${slugs[i]}`);
     }
-  }, 10000);
+  });
 
   it('keeps trunks and low planting off standing roofs, full access widths and new paving', () => {
     for (const [i, cover] of covers.entries()) {
@@ -137,7 +131,7 @@ describe('five landscaped grounds', () => {
     expect(landcoverFeatures(source, covers).warnings.filter((w) => w.includes('tree'))).toEqual(
       [],
     );
-  }, 10000);
+  });
 
   it('covers the whole monastery north and south while leaving Sta. Cruz lawn mostly open', () => {
     const monastery = covers[1]!,

@@ -109,7 +109,7 @@ describe('owner memorial and school enhancements', () => {
             .landmarkId,
         ).toBe(`landmark/${slugs[i]}`);
     }
-  }, 10000);
+  });
 
   it('enlarges only marked Civic crowns and adds three clear frontage trunks', () => {
     const civic = Landcover.parse(pack('landcover', 'naga-city-civic-center'));
@@ -199,5 +199,5 @@ describe('owner memorial and school enhancements', () => {
         DetailSelectionSchema.parse(JSON.parse(part.properties.detail_selection!) as unknown)
           .landmarkId,
       ).toBe('landmark/eternal-gardens');
-  }, 10000);
+  });
 });

@@ -85,7 +85,7 @@ describe('additional roadside and campus references', () => {
       expect(detail.building_overrides).toEqual([]);
       expect(detail.roof_overrides).toEqual([]);
     }
-  }, 10000);
+  });
 
   it('places trunks, grass and planting within the source sites and clear of roofs and full access widths', () => {
     for (const [i, cover] of covers.entries()) {
@@ -118,7 +118,7 @@ describe('additional roadside and campus references', () => {
       expect(arts.trees[i]!.at).toEqual(old.at);
     for (const old of reference.arts_before.areas) expect(arts.areas).toContainEqual(old);
     expect(arts.trees.length).toBeGreaterThan(reference.arts_before.trees.length);
-  }, 10000);
+  });
 
   it('keeps the southern Magsaysay segment clear while preserving northern canopies on both sides', () => {
     const cover = Landcover.parse(pack('landcover', 'magsaysay-avenue'));

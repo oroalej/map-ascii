@@ -351,6 +351,9 @@ export function mergeSiteDetails(
     const vehicleFootprints = inventory.map(({ parts }) =>
       audit.union(parts.map((part) => ({ type: 'Polygon', coordinates: [part.ring] }))),
     );
+    const vehicleBounds = vehicleFootprints.map(
+      (shape) => bbox(shape) as [number, number, number, number],
+    );
     const parkingObstacles = (vehicleParts.length ? input : []).flatMap((f) => {
       if (!bboxesOverlap(bbox(f) as [number, number, number, number], siteBounds)) return [];
       if (f.properties.class.startsWith('water') && isArea(f.geometry))
@@ -360,15 +363,19 @@ export function mergeSiteDetails(
         (!f.properties.class.startsWith('road') && f.properties.class !== 'path')
       )
         return [];
-      return [
-        {
-          id: f.properties.id,
-          geometry: seatingFootprint(
-            f.geometry.coordinates as LngLat[],
-            clearanceWidth(f.properties),
-          ),
-        },
-      ];
+      // Test nearby capsules rather than unioning an entire city-spanning road. Their
+      // union is the same carriageway, including bend/end caps and repeated vertices.
+      const coordinates = f.geometry.coordinates;
+      const width = clearanceWidth(f.properties);
+      return coordinates.slice(1).flatMap((end, i) => {
+        const line = [coordinates[i]!, end] as LngLat[];
+        const bounds = bufferBbox(
+          bbox({ type: 'LineString', coordinates: line }) as [number, number, number, number],
+          width / 1000,
+        );
+        if (!vehicleBounds.some((vehicle) => bboxesOverlap(vehicle, bounds))) return [];
+        return [{ id: f.properties.id, geometry: seatingFootprint(line, width) }];
+      });
     });
     for (const part of vehicleParts) {
       for (const obstacle of parkingObstacles)
@@ -379,6 +386,13 @@ export function mergeSiteDetails(
           throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
     }
     for (const [i, footprint] of vehicleFootprints.entries()) {
+      // A contained union proves all seven parts fit, including wheels and parent holes.
+      if (!audit.contains(footprint)) {
+        const part = inventory[i]!.parts.find(
+          (part) => !audit.contains({ type: 'Polygon', coordinates: [part.ring] }),
+        )!;
+        throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+      }
       if (vehicleFootprints.slice(0, i).some((other) => audit.overlaps(footprint, other)))
         throw new Error(`${pack.id}: overlapping parked vehicles`);
     }
@@ -395,7 +409,7 @@ export function mergeSiteDetails(
       }
       requireInside(part.ring, `structure ${part.id}`);
       // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
-      if (!audit.contains(shape))
+      if (!vehicleIds.has(part.id) && !audit.contains(shape))
         throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
       // Ground replacements must clear complete mapped carriageways in every city pack.
       if (part.ground_override)

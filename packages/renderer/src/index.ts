@@ -69,10 +69,8 @@ import {
   labelCovers,
   lightPass,
   metersPerCssPx,
-  overlayPass,
   streetTextPass,
   placeGrid,
-  screenArea,
   selectPass,
   type Grid,
   type GridPlacement,
@@ -80,6 +78,8 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { screenArea } from './grid';
+import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
@@ -534,6 +534,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     members: new Uint8Array(0),
     points: new Map<number, [number, number]>(),
   };
+  // Label-only redraws also invalidate speech and hover visibility evidence.
   let speechGeometry = 0;
   let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
@@ -636,6 +637,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
   const { source } = tileCache;
 
+  const names = new AtlasLabels();
+  let labelsForReport: TileLabel[] | undefined;
+  let labelVisibilityDirty = false;
+
   const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
     const a = screenArea(v, map.grid);
     const b = screenArea(v, labels.grid, v.labelDev);
@@ -665,6 +670,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     placement = next;
     grid = next.grid;
     labelGrid = nextLabels.grid;
+    labelVisibilityDirty = true;
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -683,13 +689,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
-    const labels = new Map<number, TileLabel>();
+    const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
       for (const tile of ids) {
         const loaded = tileCache.get(tile);
         if (!loaded) continue;
-        for (const label of loaded.labels) labels.set(label.id, label);
+        labels.push({ labels: loaded.labels, zoom: tile.z });
         out.push({ tile, mesh: loaded.mesh });
       }
       return out;
@@ -698,16 +704,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values(), programs);
+    names.collect(targets, v, labelPlacement, labels);
+    labelsForReport = names.draw(
+      gl,
+      targets,
+      themeRes,
+      v,
+      labelPlacement,
+      programs,
+      selectedIndex(),
+      hoverIndex,
+    );
     speechGeometry++;
-    reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
     classesStale = true;
   };
 
-  /** The last `labelschange` payload's feature ids, to send it only on change. */
-  let labelsKey = '';
+  /** Compare the whole visible-label payload, including changed names and source anchors. */
+  let reportedLabels: LabelInView[] | undefined;
   const reportLabels = (placed: readonly TileLabel[]) => {
-    const inView: LabelInView[] = [];
+    let changed: LabelInView[] | undefined;
+    let count = 0;
     for (const label of placed) {
       const kind =
         label.rank === LabelRank.landmark
@@ -719,14 +735,32 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
                 label.rank === LabelRank.roadMajor
               ? null
               : 'place';
+      if (!kind) continue;
       const featureId = source.feature(label.id)?.id;
-      if (!kind || !featureId) continue;
-      inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      if (!featureId) continue;
+      const old = reportedLabels?.[count];
+      if (
+        !changed &&
+        (!old ||
+          old.featureId !== featureId ||
+          old.name !== label.text ||
+          old.kind !== kind ||
+          old.lngLat[0] !== label.lng ||
+          old.lngLat[1] !== label.lat)
+      ) {
+        changed = reportedLabels?.slice(0, count) ?? [];
+      }
+      if (changed)
+        changed.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      count++;
     }
-    const key = inView.map((l) => l.featureId).join('|');
-    if (key === labelsKey) return;
-    labelsKey = key;
-    emit('labelschange', inView);
+    if (!changed && reportedLabels && count === reportedLabels.length) return;
+    reportedLabels = changed ?? reportedLabels?.slice(0, count) ?? [];
+    // Event consumers may mutate the public payload; retain an independent comparison snapshot.
+    emit(
+      'labelschange',
+      reportedLabels.map((label) => ({ ...label, lngLat: [...label.lngLat] })),
+    );
   };
 
   // Which classes are on screen (the `classeschange` event): the on-screen part of the class
@@ -1250,6 +1284,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hoverIndex = 0;
   const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
 
+  const selectedIndex = () => (selectedId ? source.indexOf(selectedId) : 0);
+
   const highlights = () => {
     let highlightCount = 0;
     for (const id of highlightedIds) {
@@ -1258,7 +1294,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     return {
       hover: hoverIndex,
-      selected: selectedId ? source.indexOf(selectedId) : 0,
+      selected: selectedIndex(),
       highlight: highlightIndices,
       highlightCount,
     };
@@ -1391,6 +1427,28 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
       const v = view();
+      if (!cellsDrawn) {
+        const relabeled = names.relabel(
+          gl,
+          targets,
+          themeRes,
+          v,
+          programs,
+          selectedIndex(),
+          hoverIndex,
+          labelGrid,
+        );
+        if (relabeled !== undefined) {
+          labelsForReport = relabeled;
+          speechGeometry++;
+        }
+      }
+      // Publish only the final overlay for this frame, including sub-cell visibility changes.
+      if (labelsForReport || labelVisibilityDirty) {
+        reportLabels(labelsForReport ?? names.inView(targets, v, labelGrid));
+        labelsForReport = undefined;
+        labelVisibilityDirty = false;
+      }
       const wind = worldWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
@@ -1399,7 +1457,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         wind.strength > 0 &&
         hasCrowns(crownTiles) &&
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
-      if (placement && (cellsDrawn || swaying)) {
+      if (placement && (cellsDrawn || (swaying && animating))) {
         const crownStart = performance.now();
         crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
@@ -1493,7 +1551,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               cellHeight: cellDev().h,
             },
             dpr,
-            geometry: `${targetsGeneration}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
             revision: raster.revision,
             owners: raster.owners,
             life: raster.life,
@@ -1520,6 +1578,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    names.clear();
+    reportLabels([]);
     lifeHover.pointer(null);
     lifePause.tick(performance.now(), false);
     speech.clear();
@@ -1735,6 +1795,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      names.clear();
       lifeHover.pointer(null);
       speech.clear();
       host.dispose();

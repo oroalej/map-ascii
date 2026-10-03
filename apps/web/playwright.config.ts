@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { e2ePort } from './scripts/e2e-port';
 
-// Override with E2E_PORT when 3100 is taken (e.g. by another local project).
-const port = Number(process.env.E2E_PORT ?? 3100);
+// Each worktree has its own port locally (scripts/e2e-port.ts); E2E_PORT overrides it.
+const port = e2ePort();
 const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({
