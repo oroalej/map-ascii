@@ -82,6 +82,7 @@ If one fails, fix it and rerun only that check.
 ## Git
 
 - **One worktree per task.** Start a new task with `pnpm worktree:new <short> <topic>` (a worktree `worktrees/<short>` inside the main checkout, on `codex/<topic>` from `main`; `worktrees/` is gitignored). The main checkout stays on `main` and is only for planning and `.plans/`; a pre-commit hook (`.githooks/`, enabled on install) refuses commits there on any other branch. Older worktrees may still sit beside the repo at `../naga-ascii-<short>`, so `git worktree list` is the source of truth.
+- Nested worktrees can resolve undeclared imports from the main checkout's `node_modules`; install dependencies in each worktree and keep dependency declarations accurate, with CI's clean install as the backstop.
 - A follow-up to an existing task (an adjustment, fix, review fix, or next phase) continues in that task's worktree and branch. Find them with `git worktree list` and the task's row in `.plans/README.md`. Don't create a new worktree or branch for a follow-up, and don't add suffixes like `-ii`, `-hardening` or `-pause`.
 - Before each commit, run `git status` and `git branch`.
 - Stage files by explicit path. Never use `git add -A`, `git add .`, or `git commit -a`.
