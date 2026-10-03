@@ -1,14 +1,7 @@
 import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
-import {
-  Season,
-  seasonalAccessRing,
-  localMetricProjection,
-  type SeasonalPoint,
-  type SeasonalDisplayRecord,
-  type SeasonalLightStringRecord,
-} from '@atlas/shared';
+import { Season, type SeasonalPoint, type SeasonalLightStringRecord } from '@atlas/shared';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';
@@ -90,7 +83,7 @@ it('keeps Magsaysay ground displays inside orange/red, outside access/parking, a
     ),
   ).toEqual(result);
 });
-it('adds narrow walks and a parking apron, with Christmas displays clear of full access footprints', () => {
+it('removes owner-rejected paths and parking while retaining Christmas forecourt and house decorations', () => {
   const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
   const config = {
     ...season,
@@ -98,34 +91,9 @@ it('adds narrow walks and a parking apron, with Christmas displays clear of full
   };
   const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
   const result = generateSeasonalInstallations(features, [config]);
-  const paths = result.records.filter((r) => r.kind === 'access-path');
-  expect(paths).toHaveLength(8);
-  expect(new Set(paths.map((r) => r.installation))).toEqual(
-    new Set(['magsaysay-walk-west', 'magsaysay-walk-east', 'magsaysay-driveway']),
-  );
-  expect(paths.filter((r) => r.style === 'parking')).toHaveLength(1);
-  expect(paths.find((r) => r.style === 'parking')!.width_m).toBe(6);
-  expect(paths.filter((r) => r.style === 'walkway').every((r) => r.width_m === 1.2)).toBe(true);
-  const full = polygon([config.grounds!.find((g) => g.id === 'magsaysay-access-forecourt')!.ring]);
-  for (const path of paths)
-    for (const p of seasonalAccessRing(path)) expect(booleanPointInPolygon(p, full)).toBe(true);
-  const trees = result.records.filter(
-    (r): r is SeasonalDisplayRecord => r.kind === 'christmas-tree',
-  );
-  expect(trees).toHaveLength(1);
-  for (const tree of trees) {
-    const projection = localMetricProjection(tree.at);
-    for (const path of paths) {
-      const a = projection.to(path.from),
-        b = projection.to(path.to),
-        dx = b[0] - a[0],
-        dy = b[1] - a[1],
-        t = Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / (dx * dx + dy * dy)));
-      expect(Math.hypot(a[0] + t * dx, a[1] + t * dy)).toBeGreaterThanOrEqual(
-        tree.radius_m + path.width_m / 2 + 0.99,
-      );
-    }
-  }
+  expect(config.installations.some((i) => i.kind === 'access-path')).toBe(false);
+  expect(result.records.some((r) => r.kind === 'access-path')).toBe(false);
+  expect(result.records.filter((r) => r.kind === 'christmas-tree')).toHaveLength(1);
   const lights = result.records.filter(
     (r): r is SeasonalLightStringRecord =>
       r.kind === 'light-string' && r.installation.includes('-island-'),
@@ -137,8 +105,19 @@ it('adds narrow walks and a parking apron, with Christmas displays clear of full
         light.from[0] + ((light.to[0] - light.from[0]) * i) / 100,
         light.from[1] + ((light.to[1] - light.from[1]) * i) / 100,
       ];
-      for (const path of paths)
-        expect(booleanPointInPolygon(p, polygon([seasonalAccessRing(path)]))).toBe(false);
+      const grounds = config.grounds!.find(
+        (g) =>
+          g.id === config.installations.find((item) => item.id === light.installation)!.grounds,
+      )!;
+      expect(booleanPointInPolygon(p, polygon([grounds.ring]))).toBe(true);
     }
+  for (const [id, count] of [
+    ['magsaysay-orange-garlands', 7],
+    ['magsaysay-orange-border', 9],
+    ['magsaysay-house-lights', 21],
+  ] as const)
+    expect(
+      result.records.filter((r) => r.kind !== 'bunting' && r.installation === id),
+    ).toHaveLength(count);
   expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
 });

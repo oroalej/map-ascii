@@ -237,7 +237,7 @@
             "day": 6
           }
         },
-        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot. The 2026-10-03 owner follow-up expands the forecourt display with Christmas-only walking paths, a driveway and lit displays between the access routes; these surfaces do not assert permanent site geography. The corrected owner reference rejects filled strips: narrow textured walks and a square parking apron with parallel bays and a separate access lane replace them. One small tree remains so parking stays clear.",
+        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot. The 2026-10-03 owner follow-up adds forecourt lights and one small tree. The later walking-path and parking additions were removed at the owner's request; only seasonal decorations remain.",
         "lanterns": {
           "label": "Parol lanterns",
           "shape": "star"
@@ -305,8 +305,8 @@
             "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
           },
           {
-            "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-            "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+            "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+            "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
           }
         ],
         "installations": [
@@ -634,68 +634,6 @@
             ]
           },
           {
-            "id": "magsaysay-walk-west",
-            "anchor": "osm:way/23664053",
-            "label": "Christmas forecourt access",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
-              }
-            ],
-            "grounds": "magsaysay-access-forecourt",
-            "kind": "access-path",
-            "style": "walkway",
-            "width_m": 1.2,
-            "points": [
-              [123.19579557, 13.63238513],
-              [123.19580923, 13.63239729],
-              [123.19582755, 13.63241654],
-              [123.19584761, 13.6324287],
-              [123.19587086, 13.63244172]
-            ]
-          },
-          {
-            "id": "magsaysay-walk-east",
-            "anchor": "osm:way/23664053",
-            "label": "Christmas forecourt access",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
-              }
-            ],
-            "grounds": "magsaysay-access-forecourt",
-            "kind": "access-path",
-            "style": "walkway",
-            "width_m": 1.2,
-            "points": [
-              [123.19583017, 13.63237041],
-              [123.19584993, 13.63238541],
-              [123.19587232, 13.63240182],
-              [123.19588889, 13.6324171]
-            ]
-          },
-          {
-            "id": "magsaysay-driveway",
-            "anchor": "osm:way/23664053",
-            "label": "Christmas forecourt parking access",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
-              }
-            ],
-            "grounds": "magsaysay-access-forecourt",
-            "kind": "access-path",
-            "style": "parking",
-            "width_m": 6,
-            "points": [
-              [123.19586543, 13.63232488],
-              [123.19596049, 13.63239449]
-            ]
-          },
-          {
             "id": "magsaysay-walk-island-canopy",
             "anchor": "osm:way/23664053",
             "grounds": "magsaysay-walk-island",
@@ -708,8 +646,8 @@
             "label": "Christmas lights and ornaments",
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -726,8 +664,8 @@
             "label": "Christmas lights and ornaments",
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -744,8 +682,8 @@
             "label": "Christmas lights and ornaments",
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -762,8 +700,8 @@
             "label": "Christmas lights and ornaments",
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -776,8 +714,8 @@
             "label": "Christmas trees and lights",
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           }
@@ -843,8 +781,8 @@
             ],
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -862,8 +800,8 @@
             ],
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -881,8 +819,8 @@
             ],
             "sources": [
               {
-                "title": "Project owner: Magsaysay Christmas pathways, driveway and displays (2026-10-03)",
-                "note": "The corrected owner references request narrow walking paths and a parking way instead of filled strips. The illustrative layout uses two parallel bays beside a clear access lane, with Christmas decorations outside all access widths. Surfaces and display geometry are schematic seasonal designs, not surveyed parcel lines or verified permanent access routes."
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           }
