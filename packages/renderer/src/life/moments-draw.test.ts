@@ -10,6 +10,7 @@ import {
   PAINT_NONE,
   PersonPart,
   personByte,
+  personGlyphs,
   type PersonLook,
 } from './people';
 import type { VisibleAgent } from './simulate';
@@ -118,6 +119,12 @@ function draw(
   const drawn = packLife(out, grid, [agent], themes.dark, index);
   return { out, agent, drawn, cells: cells(out) };
 }
+it('keeps canopy stages after all existing map glyphs in both themes', () => {
+  const stages = personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined);
+  expect(stages).toHaveLength(14);
+  for (const theme of Object.values(themes)) expect(mapGlyphs(theme).slice(-14)).toEqual(stages);
+});
+
 it('packs attentive and gesturing adults and children at one-cell, big and stamp sizes', () => {
   // Seasonal symbols, parking labels and fourteen canopy stages extend the original glyph set.
   expect(mapGlyphs(themes.dark)).toHaveLength(

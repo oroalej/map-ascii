@@ -893,6 +893,32 @@ describe('packLife people', () => {
         }
   });
 
+  it('chooses canopy tone from merged sixths without double-counting shared coverage', () => {
+    for (const [open, mask, part] of [
+      [0.2, 7, PersonPart.canopy],
+      [0.05, 3, PersonPart.rib],
+    ] as const) {
+      const packed = pack(
+        person(1, 0, 3.1, {
+          lng: 20.05,
+          lat: 15.05,
+          ahead: [21.05, 15.05],
+          people: [
+            look({
+              figure: 'umbrella',
+              paint: Paint.blue,
+              pose: 'attentive',
+              canopy: { open, figure: 'adult', paint: Paint.red },
+            }),
+          ],
+        }),
+      );
+      const overlap = packed.cells.find((c) => c.col === 20 && c.row === 15)!;
+      expect(glyphs[packedGlyph(overlap.texel)]).toBe(sextantGlyphs[mask]);
+      expect(overlap.texel[3]).toBe(personByte(Paint.blue, part));
+    }
+  });
+
   it('grows a stamped canopy over the underlying figure and preserves whole-agent rollback', () => {
     const packs = [0.2, 0.9].map((open) => {
       const [g, agent] = person(1, 0, 12, {

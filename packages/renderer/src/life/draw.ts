@@ -6,7 +6,7 @@
 import { classId } from '../classes';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
-import { drawProcedural } from '../glyphs/atlas';
+import { drawProcedural, sextantSplits } from '../glyphs/atlas';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
 import {
@@ -150,14 +150,12 @@ function figureCellMask(glyph: string, w: number, h: number): number {
   coveragePixels.fill(0);
   drawProcedural({ data: coveragePixels, stride: w, x0: 0, y0: 0, w, h }, glyph);
   let mask = 0;
-  const middle = Math.round(w / 2);
-  const top = Math.round(h / 3);
-  const bottom = Math.round((2 * h) / 3);
+  const { xs, ys } = sextantSplits(w, h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       if (!coveragePixels[y * w + x]) continue;
-      const row = y < top ? 0 : y < bottom ? 1 : 2;
-      mask |= 1 << (row * 2 + Number(x >= middle));
+      const row = y < ys[1] ? 0 : y < ys[2] ? 1 : 2;
+      mask |= 1 << (row * 2 + Number(x >= xs[1]));
     }
   figureMasks.set(glyph, mask);
   return mask;
@@ -500,9 +498,7 @@ function drawPeople(
         stroke,
         glyphIndex,
         (tone) => [cls, bits, byteOf(look, tone)],
-        undefined,
-        undefined,
-        coverage,
+        coverage ? { coverage } : undefined,
       );
     if (fit === 'big') return putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
     const glyph = figureGlyph(
@@ -557,9 +553,12 @@ function drawPeople(
           stroke,
           glyphIndex,
           (tone) => [cls, bits, byteOf(look, tone)],
-          (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
-            FIGURE_SIZE_M.umbrella,
-          figureCoverage,
+          {
+            size:
+              (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
+              FIGURE_SIZE_M.umbrella,
+            underneath: figureCoverage,
+          },
         );
         any = canopy || any;
       } else {
@@ -612,6 +611,12 @@ function drawPeople(
   return drawn;
 }
 
+type StampOptions = {
+  size?: number;
+  underneath?: ReadonlyMap<number, number>;
+  coverage?: Map<number, number>;
+};
+
 /**
  * Stamp a figure at its real size (life/people.ts `FIGURE_SIZE_M`), like a vehicle from its plan
  * (`stamp`), centered on `center` with `along` and `right` the screen vectors (in cells) of a
@@ -629,9 +634,7 @@ function stampFigure(
   stroke: 0 | 1,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
-  size = FIGURE_SIZE_M[look.figure],
-  underneath?: ReadonlyMap<number, number>,
-  coverage?: Map<number, number>,
+  options?: StampOptions,
 ): boolean {
   const frame = look.flap === 1 ? 1 : 0;
   // A canopy's thin ribs show in a cell where they are a third of its ink.
@@ -642,13 +645,12 @@ function stampFigure(
     center,
     along,
     right,
-    size,
+    options?.size ?? FIGURE_SIZE_M[look.figure],
     (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
     toneShare,
     glyphIndex,
     texel,
-    underneath,
-    coverage,
+    options,
   );
 }
 
@@ -671,8 +673,7 @@ function stampMaster(
   toneShare: number,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
-  underneath?: ReadonlyMap<number, number>,
-  coverage?: Map<number, number>,
+  options?: Pick<StampOptions, 'underneath' | 'coverage'>,
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
@@ -705,14 +706,21 @@ function stampMaster(
         if (mark === 'o') tone++;
       }
       if (mask === 0) continue;
-      const [cls, bits, byte] = texel(tone > inked * toneShare);
       const at = (r * cols + c) * 4;
-      mask |= underneath?.get(at) ?? 0;
+      const underMask = options?.underneath?.get(at) ?? 0;
+      // Count only newly covered sixths; retain the canopy's actual rib samples.
+      let added = underMask & ~mask;
+      while (added) {
+        inked++;
+        added &= added - 1;
+      }
+      mask |= underMask;
+      const [cls, bits, byte] = texel(tone > inked * toneShare);
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > MAX_GLYPHS) continue;
       rememberGroundCell(out, at);
       writeCell(out, at, index, cls, bits, byte);
-      coverage?.set(at, mask);
+      options?.coverage?.set(at, mask);
       any = true;
     }
   }

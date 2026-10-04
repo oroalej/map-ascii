@@ -456,6 +456,7 @@ export function personGlyphs(): string[] {
  * A figure's pixels in a `box` × `box` square: '#' paint, 'o' tone, '.' empty. The smallest
  * master at least `box` wide is sampled down to it (the largest, if none is), then turned and
  * mirrored for its heading and step.
+ * Staged canopies instead generate their pixels directly at the requested box size.
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
   if (g.figure === 'umbrella' && g.stage !== undefined) {
