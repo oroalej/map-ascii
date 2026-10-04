@@ -741,6 +741,7 @@ const fixturesOf = new WeakMap<
     lightScores: Float32Array;
     utilityScratch: UtilityPackingScratch;
     fixtureScratch: FixturePackingScratch;
+    seasonal: boolean;
     viewport: ReturnType<typeof screenArea>;
   }
 >();
@@ -820,6 +821,12 @@ export function fixturePass(
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
       fixtureScratch,
+      seasonal: fixtures.some(
+        (fixture) =>
+          fixture.kind === 'season-lantern' ||
+          fixture.kind === 'season-bunting' ||
+          fixture.kind === 'season-installation',
+      ),
       viewport,
     };
     fixturesOf.set(targets, cache);
@@ -892,7 +899,13 @@ export function glyphPass(
   const { cellDev } = view;
   const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
   const hasEffectClocks = targets.effectClockTex !== undefined;
-  const program = glyphProgram(gl, programs, focused, hasEffectClocks);
+  const program = glyphProgram(
+    gl,
+    programs,
+    focused,
+    hasEffectClocks,
+    fixturesOf.get(targets)?.seasonal === true,
+  );
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.useProgram(program.program);

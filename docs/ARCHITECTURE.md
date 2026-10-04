@@ -278,6 +278,8 @@ Background expressions are presentation-only `SceneSpeech` episodes, capped at t
 
 Speech packing adds an optional one-byte member grid and a map of current speaker centers beside the agent-owner grid. The draw loop records each person's actual position/slot; cart and prop cells carry member zero. Whole-agent rollback restores both grids, and packed GPU bytes stay unchanged. Visibility requires both owner and speaking member before the existing surface/readback checks. No new GPU target, pass or readback budget is introduced. Heavy rain no longer globally suppresses all speech: outdoor controllers cancel it, while valid sheltered scene speech still passes normal GPU visibility checks.
 
+Seasonal fixture code has a separate glyph-program variant, selected from cached fixture inputs. Ordinary shaders omit bunting motion, festive pulses, ride surfaces and mounted-light handling entirely. This keeps inactive calendars off the software-GPU compilation path. Focus and candle-clock combinations bring the cache to at most eight programs; idle warmup still prepares only ordinary variants, and seasonal variants compile on demand. Removing seasonal inputs returns to the ordinary variant; disposal and context recovery cover both.
+
 ## 4. Glyph selection rules
 
 The rules live in `glyphs/select.ts` and mirror the shader logic, so they can be unit-tested on the CPU.

@@ -61,7 +61,7 @@ const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
  * a fainter wash than open ground.
  */
 /** Compile inactive features away instead of branching through them at every pixel. */
-export function glyphFragmentFor({ focus = true, effectClocks = true } = {}) {
+export function glyphFragmentFor({ focus = true, effectClocks = true, seasonal = true } = {}) {
   return /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
@@ -383,15 +383,18 @@ vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
   return u_fixturePaints[3 + min(phase, 2)] * (beam + halo) * fixture.a;
 }
 
-${buntingMotionGlsl}
-${festivePulseGlsl}
-${carnivalMotionGlsl}
+${seasonal ? buntingMotionGlsl : ''}
+${seasonal ? festivePulseGlsl : ''}
+${seasonal ? carnivalMotionGlsl : ''}
 
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
 vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
   if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
+  ${
+    seasonal
+      ? /* glsl */ `
   bool roofMounted = part == ${FixturePart.buildingLight} || part == ${FixturePart.buildingWire};
   if (roofMounted) {
     // Only explicitly mounted strings may draw above a standing building.
@@ -402,14 +405,20 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
     bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
     if ((part != ${FixturePart.festiveLight} && part != ${FixturePart.carnivalLight}) || !foliage) return under + halo;
+  }`
+      : 'if (!allowed) return under + halo;'
   }
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
-  bool rideMotion = part >= ${FixturePart.carouselMotion} && part <= ${FixturePart.bumperMotion};
+  ${
+    seasonal
+      ? /* glsl */ `bool rideMotion = part >= ${FixturePart.carouselMotion} && part <= ${FixturePart.bumperMotion};
   float buntingFold = 1.0;
   float ink = part == ${FixturePart.bunting} ? buntingInk(at, inCell, cell, info >> 3, buntingFold) :
-    rideMotion ? 1.0 : texelFetch(u_atlas, at + inCell, 0).r;
+    rideMotion ? 1.0 : texelFetch(u_atlas, at + inCell, 0).r;`
+      : 'float ink = texelFetch(u_atlas, at + inCell, 0).r;'
+  }
   vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
   if (part >= ${FixturePart.flagBlue} && part <= ${FixturePart.flagGold}) {
     vec3 paint = part == ${FixturePart.flagBlue} ? vec3(0.04, 0.22, 0.70) :
@@ -439,7 +448,9 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     color = lampLit(daylit(u_fixturePaints[6]), rainLight);
   if (part == ${FixturePart.cable} || part == ${FixturePart.tangle})
     color = max(daylit(u_fixturePaints[7]), u_fixturePaints[7] * 0.5);
-  if (part == ${FixturePart.lantern}) {
+  ${
+    seasonal
+      ? /* glsl */ `if (part == ${FixturePart.lantern}) {
     float lit = lampOn(info, u_time) * switchedOn(info);
     color = mix(lampLit(daylit(u_fixturePaints[9]), rainLight), u_fixturePaints[2], lit);
   }
@@ -495,6 +506,9 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
       float glow = (1.0 - smoothstep(0.0, 0.65, length(local))) * darkness();
       under = max(under, vec3(0.04, 0.055, 0.06)) + paint * glow * 0.16;
     }
+  }
+  `
+      : ''
   }
   if (u_focus && !(part >= ${FixturePart.red} && part <= ${FixturePart.green}) && part != ${FixturePart.signal}) color *= ${float(FOCUS_DIM)};
   return mix(under, color, ink * fixture.a) + halo;

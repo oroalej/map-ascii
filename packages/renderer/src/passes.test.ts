@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 import { buntingWindResponse } from './life/bunting-motion';
 import {
   glyphPass,
+  fixturePass,
   overlayPass,
   cellPass,
   crownPass,
@@ -16,6 +17,7 @@ import * as twgl from 'twgl.js';
 import { classId, classVisibility, groundFlags } from './classes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
+import * as gpuContext from './gpu-context';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { themes } from './theme';
@@ -88,6 +90,75 @@ it('supplies wind-driven bunting independently of Life and stills it for Calm or
   draw(null);
   expect(strength).toHaveBeenLastCalledWith(0);
   expect(direction).toHaveBeenLastCalledWith([0, 0]);
+});
+
+it('selects the seasonal shader from cached fixture inputs and returns to the ordinary shader', () => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = placeGrid(view, view.cellDev, 80, 34);
+  const draw = () =>
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      view,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+  try {
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+    fixturePass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [{ kind: 'season-bunting', id: 'row', from: [123, 13], to: [123.001, 13], seed: 1 }],
+      0,
+      true,
+    );
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(true);
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+  } finally {
+    choose.mockRestore();
+  }
 });
 
 it('uploads the complete ground array to both base and crown draws', () => {

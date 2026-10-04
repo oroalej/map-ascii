@@ -101,6 +101,17 @@ for (const city of cities) {
           await expect(
             page.getByText(`${first.fireworks.label} (illustrative)`, { exact: true }),
           ).toBeVisible();
+        // Also exercise a fixture season: fireworks alone don't compile its glyph variant.
+        const decorated = city.seasons.findIndex((season) => !!season.lanterns);
+        if (decorated > 0) {
+          for (let i = 0; i < decorated; i++)
+            await page.getByRole('button', { name: /^Season:/ }).click();
+          const season = city.seasons[decorated]!;
+          await expect(
+            page.getByRole('button', { name: `Season: ${season.title.en}`, exact: true }),
+          ).toBeVisible();
+          await expect(page.getByText(season.lanterns!.label, { exact: true })).toBeVisible();
+        }
         expect(query(page)).toEqual(before);
         expect(errors).toEqual([]);
       });

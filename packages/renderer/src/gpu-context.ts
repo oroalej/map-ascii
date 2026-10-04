@@ -36,7 +36,7 @@ export type Programs = {
   cell: twgl.ProgramInfo;
   select: twgl.ProgramInfo;
   glyph: twgl.ProgramInfo;
-  /** At most four variants, compiled once when their features are first needed. */
+  /** At most eight variants; seasonal features compile only when their fixtures are needed. */
   glyphVariants?: Map<number, twgl.ProgramInfo>;
   glyphWarmup?: {
     clocks: boolean;
@@ -66,7 +66,7 @@ export function createPrograms(gl: GL): Programs {
   const glyph = createProgram(
     gl,
     fullscreenVertex,
-    glyphFragmentFor({ focus: false, effectClocks: false }),
+    glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
   );
   return {
     labels: createProgram(gl, labelVertex, labelFragment),
@@ -79,18 +79,29 @@ export function createPrograms(gl: GL): Programs {
   };
 }
 
-export function glyphProgram(gl: GL, programs: Programs, focus: boolean, effectClocks: boolean) {
+export function glyphProgram(
+  gl: GL,
+  programs: Programs,
+  focus: boolean,
+  effectClocks: boolean,
+  seasonal = false,
+) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
   if (!variants) return programs.glyph;
-  const key = Number(focus) | (Number(effectClocks) << 1);
+  const key = Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2);
   let program = variants.get(key);
   if (!program) {
     const pending = programs.glyphWarmup?.pending;
     if (pending?.key === key) {
       program = pending.program.finish();
       programs.glyphWarmup!.pending = undefined;
-    } else program = createProgram(gl, fullscreenVertex, glyphFragmentFor({ focus, effectClocks }));
+    } else
+      program = createProgram(
+        gl,
+        fullscreenVertex,
+        glyphFragmentFor({ focus, effectClocks, seasonal }),
+      );
     variants.set(key, program);
   }
   return program;
@@ -104,7 +115,8 @@ export function prewarmGlyphPrograms(
   effectClocks = true,
 ) {
   const variants = programs.glyphVariants;
-  if (!variants || variants.size === 4 || programs.glyphWarmupFailed) return;
+  if (!variants || [0, 1, 2, 3].every((key) => variants.has(key)) || programs.glyphWarmupFailed)
+    return;
   if (programs.glyphWarmup) {
     programs.glyphWarmup.clocks ||= effectClocks;
     return;
@@ -164,7 +176,7 @@ export function prewarmGlyphPrograms(
             program: prepareProgram(
               gl,
               fullscreenVertex,
-              glyphFragmentFor({ focus, effectClocks }),
+              glyphFragmentFor({ focus, effectClocks, seasonal: false }),
             ),
           };
         else glyphProgram(gl, programs, focus, effectClocks);

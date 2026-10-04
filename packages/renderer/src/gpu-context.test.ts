@@ -167,6 +167,28 @@ describe('glyph program variants', () => {
     expect(after.glyphVariants?.size).toBe(1);
     expect(glyphProgram(context, after, false, false)).toBe(after.glyph);
   });
+  it('compiles seasonal code only on demand and keeps ordinary warmup independent', () => {
+    const programs = createPrograms(context);
+    const base = vi.mocked(createProgram).mock.calls[0]![2];
+    expect(base).not.toContain('vec4 carnivalSurface');
+    expect(base).not.toContain('float buntingInk');
+    expect(base).not.toContain('float festivePulse');
+    const seasonal = glyphProgram(context, programs, false, false, true);
+    const source = vi.mocked(createProgram).mock.calls.at(-1)![2];
+    expect(source).toContain('carnivalSurface(');
+    expect(source).toContain('buntingInk(');
+    expect(source).toContain('festivePulse(');
+    expect(glyphProgram(context, programs, false, false, true)).toBe(seasonal);
+    expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
+    glyphProgram(context, programs, true, false, true);
+    glyphProgram(context, programs, false, true, true);
+    expect(programs.glyphVariants?.size).toBe(4);
+    prewarmGlyphPrograms(context, programs, () => true);
+    vi.advanceTimersByTime(400);
+    expect([0, 1, 2, 3].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    deletePrograms(context, programs);
+    expect(gl.deleteProgram.mock.calls).toHaveLength(10);
+  });
 
   it('publishes completed parallel variants once and retains demand compilation after a warmup failure', () => {
     gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
