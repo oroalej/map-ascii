@@ -22,6 +22,9 @@ import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
+import type { FixtureVisibility } from './life/fixtures';
+import type { SeasonState } from './index';
+import { fireworkShellCount } from './fireworks-layout';
 import { Paint, VEHICLES } from './life/vehicles';
 import {
   CLASS_LABELS,
@@ -33,6 +36,7 @@ import {
 } from './theme';
 
 export type LegendEntryId =
+  | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
   | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'utilities'}`;
@@ -242,11 +246,15 @@ export function legendEntries(
     lights = false,
     sidewalksDerived = true,
     fixtures,
+    season,
   }: {
     life?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
-    fixtures?: { streetlights: boolean; trafficSignals: boolean; utilities?: boolean };
+    fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
+      utilities?: boolean;
+    };
+    season?: SeasonState | null;
   } = {},
 ): LegendEntry[] {
   const theme = themes[themeName];
@@ -376,7 +384,51 @@ export function legendEntries(
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
       color: css(theme.fixturePaints[7]!),
     });
+  if (season?.labels.lanterns && fixtures?.seasonal?.lanterns)
+    entries.push({
+      id: 'info:season-lanterns',
+      classes: [],
+      label: season.labels.lanterns,
+      glyphs: '★',
+      color: css(theme.fixturePaints[9]!),
+    });
+  if (season?.labels.fireworks && fireworkShellCount(zoom))
+    entries.push({
+      id: 'info:season-fireworks',
+      classes: [],
+      label: `${season.labels.fireworks} (illustrative)`,
+      glyphs: '* + ·',
+      color: '#ffca46',
+    });
+  if (season?.labels.installations && fixtures?.seasonal?.installations)
+    entries.push({
+      id: 'info:season-installations',
+      classes: [],
+      label: `${season.labels.installations} (illustrative)`,
+      glyphs: '\u2736\u2605',
+      color: css(theme.fixturePaints[9]!),
+    });
+  if (season?.labels.bunting && fixtures?.seasonal?.bunting)
+    entries.push({
+      id: 'info:season-bunting',
+      classes: [],
+      label: season.labels.bunting,
+      glyphs: '▼▽',
+      color: css(theme.fixturePaints[8]!),
+    });
+  if (
+    season?.labels.stalls &&
+    life &&
+    zoom >= 17.5 &&
+    (!onScreen || onScreen.has('path') || onScreen.has('park'))
+  )
+    entries.push({
+      ...vendorsEntry(theme),
+      id: 'info:season-stalls',
+      label: `${season.labels.stalls} (simulated)`,
+    });
   for (const entry of entries) {
+    if (entry.id.startsWith('info:season-')) continue;
     const classes = entry.classes.filter((cls) => isCellClass(cls));
     const life = entry.classes.flatMap((cls) => (lifeGroups[cls] ? [lifeGroups[cls]] : []));
     if (entry.id === 'life:vendors') life.push('vendors');

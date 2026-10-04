@@ -1,6 +1,9 @@
 import { labelCandidate } from './label-candidates';
 import { expect, it, vi } from 'vitest';
+import { buntingWindResponse } from './life/bunting-motion';
 import {
+  glyphPass,
+  fixturePass,
   overlayPass,
   cellPass,
   crownPass,
@@ -14,10 +17,12 @@ import * as twgl from 'twgl.js';
 import { classId, classVisibility, groundFlags } from './classes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
+import * as gpuContext from './gpu-context';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
+import { LampState } from './life/lights';
 
 const view: View = {
   camera: { lat: 13, lng: 123, zoom: 18 },
@@ -28,6 +33,219 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('supplies wind-driven bunting independently of Life and stills it for Calm or reduced motion', () => {
+  const strength = vi.fn(),
+    direction = vi.fn(),
+    shimmer = vi.fn();
+  const programs = {
+    glyph: {
+      program: {},
+      uniformSetters: { u_buntingWind: strength, u_buntingWindDir: direction, u_shimmer: shimmer },
+    },
+    emptyVao: null,
+  } as unknown as Programs;
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (
+    wind: { strength: number; dir: [number, number]; from: number } | null,
+    reduced = false,
+  ) =>
+    glyphPass(
+      gl,
+      programs,
+      { sub: {} } as CellTargets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      7,
+      reduced,
+      1,
+      { rain: 0, wind },
+    );
+  draw({ strength: 0.7, dir: [-1, 0], from: 90 });
+  expect(strength).toHaveBeenLastCalledWith(buntingWindResponse(0.7));
+  expect(direction).toHaveBeenLastCalledWith([-1, 0]);
+  expect(shimmer).toHaveBeenLastCalledWith(true);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(1);
+  expect(direction).toHaveBeenLastCalledWith([0, 1]);
+  draw({ strength: 0.325, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(0);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 }, true);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(shimmer).toHaveBeenLastCalledWith(false);
+  draw(null);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(direction).toHaveBeenLastCalledWith([0, 0]);
+});
+
+it('selects the seasonal shader from cached fixture inputs and returns to the ordinary shader', () => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = placeGrid(view, view.cellDev, 80, 34);
+  const draw = () =>
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      view,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+  try {
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+    fixturePass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [{ kind: 'season-bunting', id: 'row', from: [123, 13], to: [123.001, 13], seed: 1 }],
+      0,
+      true,
+    );
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(true);
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+  } finally {
+    choose.mockRestore();
+  }
+});
+it.each([
+  { zoom: 15, index: 1, margin: false, expected: false },
+  { zoom: 16.5, index: 1, margin: false, expected: false },
+  { zoom: 17, index: 0, margin: false, expected: false },
+  { zoom: 17, index: 1, margin: false, expected: true },
+  { zoom: 17, index: 1, margin: true, expected: true },
+])('selects seasonal shaders from written ink: %j', ({ zoom, index, margin, expected }) => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => index }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const current = { ...view, height: margin ? 180 : view.height, camera: { ...view.camera, zoom } };
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = {
+    ...placeGrid(current, current.cellDev, 80, 34),
+    toCell: (x: number, y: number): [number, number] => [x, y],
+  };
+  try {
+    const visible = fixturePass(
+      gl,
+      targets,
+      resources,
+      current,
+      placement,
+      [
+        {
+          kind: 'season-lantern',
+          lamp: {
+            kind: 'streetlight',
+            base: [20, 0],
+            tip: [20, margin ? 32 : 20],
+            forward: [20, 1],
+            right: [21, 0],
+            roadCenter: [20, 0],
+            seed: 1,
+            state: LampState.working,
+          },
+        },
+      ],
+      0,
+      true,
+    );
+    if (margin) expect(visible.seasonal?.lanterns).toBe(false);
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      current,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+    expect(choose.mock.calls.at(-1)![4]).toBe(expected);
+  } finally {
+    choose.mockRestore();
+  }
+});
 
 it('uploads the complete ground array to both base and crown draws', () => {
   const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});

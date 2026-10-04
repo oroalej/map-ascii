@@ -2,6 +2,7 @@
 import type { BBox, CameraState } from '@atlas/shared';
 import { project, TILE_SIZE, type Size } from './camera';
 import type { FeatureInfo, TileGeometry } from './raster/geometry';
+import type { ResidentialSites } from './fireworks-sites';
 
 export type TileId = { z: number; x: number; y: number };
 
@@ -13,7 +14,9 @@ export type TileHeader = {
 };
 
 export type WorkerRequest =
-  { type: 'init'; url: string } | { type: 'tile'; key: string; z: number; x: number; y: number };
+  | { type: 'init'; url: string; fireworks?: boolean; fireworksActive?: boolean }
+  | { type: 'fireworks'; active: boolean }
+  | { type: 'tile' | 'residential'; key: string; z: number; x: number; y: number };
 
 export type WorkerResponse =
   | { type: 'header'; header: TileHeader }
@@ -26,6 +29,13 @@ export type WorkerResponse =
       decodeMs?: number;
     }
   | { type: 'error'; key: string | null; message: string };
+
+export type ResidentialResponse = {
+  type: 'residential';
+  key: string;
+  sites: ResidentialSites;
+  newFeatures: FeatureInfo[];
+};
 
 export const tileKey = ({ z, x, y }: TileId) => `${z}/${x}/${y}`;
 
@@ -42,6 +52,46 @@ function tileAt(lng: number, lat: number, z: number): [number, number] {
   const [x, y] = project(lng, lat, z);
   const n = 2 ** z;
   return [clamp(Math.floor(x / TILE_SIZE), 0, n - 1), clamp(Math.floor(y / TILE_SIZE), 0, n - 1)];
+}
+
+export const RESIDENTIAL_ZOOM = 12;
+export const RESIDENTIAL_TILE_LIMIT = 16;
+/** Bounded building coverage for a cold coarse view; include its center and spread remaining requests. */
+export function residentialCoverageTiles(
+  camera: CameraState,
+  size: Size,
+  header: TileHeader,
+): TileId[] {
+  const z = clamp(RESIDENTIAL_ZOOM, header.minZoom, header.maxZoom);
+  const [cx, cy] = project(camera.lng, camera.lat, z);
+  const scale = 2 ** (z - camera.zoom);
+  const [west, south, east, north] = header.bounds;
+  const [ax, ay] = tileAt(west, north, z),
+    [bx, by] = tileAt(east, south, z);
+  const x0 = Math.max(ax, Math.floor((cx - (size.width * scale) / 2) / TILE_SIZE));
+  const x1 = Math.min(bx, Math.floor((cx + (size.width * scale) / 2) / TILE_SIZE));
+  const y0 = Math.max(ay, Math.floor((cy - (size.height * scale) / 2) / TILE_SIZE));
+  const y1 = Math.min(by, Math.floor((cy + (size.height * scale) / 2) / TILE_SIZE));
+  if (x0 > x1 || y0 > y1) return [];
+  const tiles: TileId[] = [];
+  const nx = Math.min(4, x1 - x0 + 1),
+    ny = Math.min(4, y1 - y0 + 1);
+  for (let y = 0; y < ny; y++)
+    for (let x = 0; x < nx; x++)
+      tiles.push({
+        z,
+        x: x0 + Math.floor(((x + 0.5) * (x1 - x0 + 1)) / nx),
+        y: y0 + Math.floor(((y + 0.5) * (y1 - y0 + 1)) / ny),
+      });
+  const center = {
+    z,
+    x: clamp(Math.floor(cx / TILE_SIZE), x0, x1),
+    y: clamp(Math.floor(cy / TILE_SIZE), y0, y1),
+  };
+  if (!tiles.some((tile) => tile.x === center.x && tile.y === center.y)) tiles.push(center);
+  const distance = (tile: TileId) =>
+    (tile.x + 0.5 - cx / TILE_SIZE) ** 2 + (tile.y + 0.5 - cy / TILE_SIZE) ** 2;
+  return tiles.sort((a, b) => distance(a) - distance(b)).slice(0, RESIDENTIAL_TILE_LIMIT);
 }
 
 /**
@@ -142,6 +192,7 @@ export type TileSourceHandlers = {
   tile: (key: string, geometry: TileGeometry | null) => void;
   /** `key` is the tile that failed, or null for archive-level errors. */
   error: (message: string, key: string | null) => void;
+  residential?: (key: string, sites: ResidentialSites) => void;
 };
 
 /** How many recent tile decodes `decodeMsAverage` covers. */
@@ -151,7 +202,9 @@ const DECODE_SAMPLES = 50;
 export const MAX_IN_FLIGHT = 6;
 
 /** Who wants a tile: the region's coarser tiles go before the view's own. */
-export type RequestGroup = 'region' | 'view';
+export type RequestGroup = 'region' | 'view' | 'fireworks';
+const requestKey = (tile: TileId, group: RequestGroup) =>
+  group === 'fireworks' ? `residential/${tileKey(tile)}` : tileKey(tile);
 
 /**
  * Tile requests: at most `max` at the worker at once, the rest queued in the order they are
@@ -160,16 +213,16 @@ export type RequestGroup = 'region' | 'view';
  */
 export class RequestQueue {
   private readonly inFlight = new Set<string>();
-  private readonly queues: Record<RequestGroup, TileId[]> = { region: [], view: [] };
+  private readonly queues: Record<RequestGroup, TileId[]> = { region: [], view: [], fireworks: [] };
 
   constructor(
-    private readonly send: (tile: TileId, key: string) => void,
+    private readonly send: (tile: TileId, key: string, group: RequestGroup) => void,
     private readonly max = MAX_IN_FLIGHT,
   ) {}
 
   /** The tiles `group` needs now, most wanted first: they replace its queue. */
   want(tiles: readonly TileId[], group: RequestGroup) {
-    this.queues[group] = tiles.filter((t) => !this.inFlight.has(tileKey(t)));
+    this.queues[group] = tiles.filter((t) => !this.inFlight.has(requestKey(t, group)));
     this.pump();
   }
 
@@ -182,24 +235,34 @@ export class RequestQueue {
   has(key: string) {
     return (
       this.inFlight.has(key) ||
-      this.queues.region.some((t) => tileKey(t) === key) ||
-      this.queues.view.some((t) => tileKey(t) === key)
+      (['region', 'view', 'fireworks'] as const).some((group) =>
+        this.queues[group].some((t) => requestKey(t, group) === key),
+      )
     );
   }
 
   /** Requests queued or at the worker. */
   get size() {
-    return this.inFlight.size + this.queues.region.length + this.queues.view.length;
+    return (
+      this.inFlight.size +
+      this.queues.region.length +
+      this.queues.view.length +
+      this.queues.fireworks.length
+    );
   }
 
   private pump() {
     while (this.inFlight.size < this.max) {
-      const tile = this.queues.region.shift() ?? this.queues.view.shift();
+      const group = (['region', 'view', 'fireworks'] as const).find(
+        (group) => this.queues[group].length > 0,
+      );
+      if (!group) return;
+      const tile = this.queues[group].shift();
       if (!tile) return;
-      const key = tileKey(tile);
+      const key = requestKey(tile, group);
       if (this.inFlight.has(key)) continue;
       this.inFlight.add(key);
-      this.send(tile, key);
+      this.send(tile, key, group);
     }
   }
 }
@@ -214,17 +277,26 @@ export class TileSource {
   private readonly worker: Worker;
   /** Decode times of the most recent tiles, for `decodeMsAverage`. */
   private readonly decodeTimes: number[] = [];
+  private fireworksActive: boolean;
 
-  constructor(url: string, handlers: TileSourceHandlers) {
-    this.requests = new RequestQueue((tile, key) => this.post({ type: 'tile', key, ...tile }));
+  constructor(
+    url: string,
+    handlers: TileSourceHandlers,
+    private readonly fireworks = false,
+    active = false,
+  ) {
+    this.fireworksActive = fireworks && active;
+    this.requests = new RequestQueue((tile, key, group) =>
+      this.post({ type: group === 'fireworks' ? 'residential' : 'tile', key, ...tile }),
+    );
     this.worker = new Worker(new URL('./tiles.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    this.worker.onmessage = (event: MessageEvent<WorkerResponse | ResidentialResponse>) => {
       const message = event.data;
       if (message.type === 'header') {
         handlers.header(message.header);
-      } else if (message.type === 'tile') {
+      } else if (message.type === 'tile' || message.type === 'residential') {
         this.requests.done(message.key);
-        if (message.decodeMs !== undefined) {
+        if (message.type === 'tile' && message.decodeMs !== undefined) {
           this.decodeTimes.push(message.decodeMs);
           if (this.decodeTimes.length > DECODE_SAMPLES) this.decodeTimes.shift();
         }
@@ -232,13 +304,21 @@ export class TileSource {
           this.features.push(info);
           this.indices.set(info.id, this.features.length);
         }
-        handlers.tile(message.key, message.geometry);
+        if (message.type === 'tile') handlers.tile(message.key, message.geometry);
+        else handlers.residential?.(message.key, message.sites);
       } else {
         handlers.error(message.message, message.key);
         if (message.key) this.requests.done(message.key);
       }
     };
-    this.post({ type: 'init', url });
+    this.post({ type: 'init', url, fireworks, fireworksActive: this.fireworksActive });
+  }
+
+  setFireworksActive(active: boolean) {
+    active &&= this.fireworks;
+    if (active === this.fireworksActive) return;
+    this.fireworksActive = active;
+    this.post({ type: 'fireworks', active });
   }
 
   /** The feature at an id-buffer index, if its tile has loaded. */

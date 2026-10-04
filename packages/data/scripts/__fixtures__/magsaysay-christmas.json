@@ -1,0 +1,381 @@
+{
+  "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation.",
+  "registration": {
+    "xScale": 2307635.127364287,
+    "xOffset": 987.5051070687764,
+    "yScale": -2348482.6018918366,
+    "yOffset": 1126.8089811513573,
+    "rmsPixels": [6.004610291759783, 6.091690446976604]
+  },
+  "red": [
+    [123.19570511, 13.63244767],
+    [123.19585201, 13.63258308],
+    [123.19584074, 13.63250942],
+    [123.19591355, 13.63243277],
+    [123.19593521, 13.63245619],
+    [123.19599328, 13.632397],
+    [123.19603402, 13.63241744],
+    [123.19587541, 13.63230545],
+    [123.19586414, 13.63231354],
+    [123.19580738, 13.63236464],
+    [123.19574541, 13.63242213],
+    [123.19570511, 13.63244767]
+  ],
+  "yellow": [
+    [123.19578398, 13.6323804],
+    [123.19580478, 13.63240211],
+    [123.19583684, 13.63242894],
+    [123.19587801, 13.6324481],
+    [123.19589881, 13.63242766],
+    [123.19591701, 13.63243362],
+    [123.19596815, 13.63239785],
+    [123.19593435, 13.63237358],
+    [123.19589101, 13.6323442],
+    [123.19587194, 13.6323178],
+    [123.19586631, 13.6323442],
+    [123.19583381, 13.63236251],
+    [123.19580131, 13.63237231],
+    [123.19578398, 13.6323804]
+  ],
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1959935, 13.6323999],
+            [123.1960961, 13.6325016],
+            [123.1960736, 13.632523],
+            [123.1961, 13.6325492],
+            [123.1960134, 13.6326318],
+            [123.1960454, 13.6326635],
+            [123.1959914, 13.6327149],
+            [123.1959358, 13.6326598],
+            [123.1959469, 13.6326492],
+            [123.1958664, 13.6325696],
+            [123.1958804, 13.6325562],
+            [123.1958322, 13.6325085],
+            [123.1959087, 13.6324356],
+            [123.1959319, 13.6324586],
+            [123.1959935, 13.6323999]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23664053",
+        "class": "building",
+        "kind": "building=yes",
+        "height": 6,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true,
+        "roof_plan": "{\"version\":1,\"origin\":[123.1959661,13.6325574],\"nodes\":[{\"type\":\"split\",\"at\":[6.6,-6.8],\"angleDeg\":44.45,\"negative\":1,\"positive\":2},{\"type\":\"roof\",\"center\":[3.9,-12.9],\"angleDeg\":44.45,\"halfLengthM\":4.1,\"halfWidthM\":2.5},{\"type\":\"split\",\"at\":[4.1,-4.2],\"angleDeg\":44.45,\"negative\":3,\"positive\":4},{\"type\":\"roof\",\"center\":[5.6,-5.2],\"angleDeg\":44.45,\"halfLengthM\":10.7,\"halfWidthM\":1.8},{\"type\":\"split\",\"at\":[-7.3,7.5],\"angleDeg\":44.45,\"negative\":5,\"positive\":6},{\"type\":\"roof\",\"center\":[0.4,3.7],\"angleDeg\":44.45,\"halfLengthM\":11.5,\"halfWidthM\":8.1},{\"type\":\"roof\",\"center\":[-9.1,8.2],\"angleDeg\":44.45,\"halfLengthM\":5.8,\"halfWidthM\":1.8}]}"
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.195814, 13.6325638],
+            [123.1959608, 13.6327214],
+            [123.1959037, 13.6327717],
+            [123.1958452, 13.632709],
+            [123.1958009, 13.632748],
+            [123.1957125, 13.6326531],
+            [123.195814, 13.6325638]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23671056",
+        "class": "building",
+        "kind": "building=yes",
+        "height": 6,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true,
+        "roof_plan": "{\"version\":1,\"origin\":[123.1958367,13.6326678],\"nodes\":[{\"type\":\"split\",\"at\":[-1.8,-1.6],\"angleDeg\":132.16,\"negative\":1,\"positive\":2},{\"type\":\"roof\",\"center\":[2.4,0],\"angleDeg\":132.16,\"halfLengthM\":11.8,\"halfWidthM\":4.2},{\"type\":\"roof\",\"center\":[-6.3,-1.5],\"angleDeg\":132.16,\"halfLengthM\":7.1,\"halfWidthM\":3.2}]}"
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1954494, 13.6326164],
+          [123.1951151, 13.6329206]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/30518281",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 10,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1951151, 13.6329206],
+          [123.1947883, 13.6332356],
+          [123.1946808, 13.6333485]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/30518283",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 10,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.2010268, 13.6219042],
+          [123.2010255, 13.6220969],
+          [123.2010138, 13.6241955],
+          [123.2009992, 13.6251495],
+          [123.2009915, 13.6256958],
+          [123.2009806, 13.625913],
+          [123.2009667, 13.6260139],
+          [123.2009331, 13.6261612],
+          [123.2008687, 13.6263647],
+          [123.2008333, 13.6264454],
+          [123.2007299, 13.626674],
+          [123.2006544, 13.626806],
+          [123.2005168, 13.6270099],
+          [123.1991999, 13.6285523],
+          [123.1990551, 13.6287206],
+          [123.1987017, 13.6291434],
+          [123.1980718, 13.6298958],
+          [123.1980548, 13.6299157],
+          [123.1979732, 13.6300111],
+          [123.1977397, 13.6302839],
+          [123.1976009, 13.630452],
+          [123.1974584, 13.6306139],
+          [123.1973624, 13.6307275],
+          [123.1971993, 13.6309166],
+          [123.1968746, 13.6312994],
+          [123.1967731, 13.6314016],
+          [123.1966734, 13.6314995],
+          [123.1964589, 13.6316949],
+          [123.1963753, 13.6317713],
+          [123.196329, 13.6318116],
+          [123.1962521, 13.6318831],
+          [123.1961817, 13.631948],
+          [123.1960123, 13.6321],
+          [123.1958668, 13.6322372],
+          [123.1958125, 13.6322833]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/252223483",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 10,
+        "sidewalk": "both",
+        "sidewalk_width": 2,
+        "sidewalk_left_width": 2,
+        "sidewalk_right_width": 2,
+        "sidewalk_src": "mapped",
+        "subdivision": "Dayangdang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.2011045, 13.6211674],
+          [123.2010742, 13.6212696],
+          [123.2010562, 13.6214041],
+          [123.2010575, 13.6215641],
+          [123.2010495, 13.621756],
+          [123.2010268, 13.6219042]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/252223486",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 5,
+        "oneway": 1,
+        "subdivision": "Concepcion PequeÃ±a",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.2010268, 13.6219042],
+          [123.2009874, 13.621752],
+          [123.200981, 13.6215655],
+          [123.2009804, 13.6214235],
+          [123.2009565, 13.6212656],
+          [123.2009273, 13.6211632]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/721779873",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 5,
+        "oneway": 1,
+        "subdivision": "Concepcion PequeÃ±a",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1958125, 13.6322833],
+          [123.1954494, 13.6326164]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/1060925382",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Magsaysay Avenue",
+        "kind": "highway=secondary",
+        "width": 10,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.19648, 13.6319629],
+          [123.196329, 13.6318116]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/1202491464",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 3.2,
+        "oneway": 1,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1958668, 13.6322372],
+          [123.1961764, 13.6325431]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/1422394648",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 3.2,
+        "oneway": 1,
+        "subdivision": "PeÃ±afrancia",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    }
+  ],
+  "integrationTrees": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.195739097, 13.632443287]
+      },
+      "properties": {
+        "id": "integration:landscape-tree",
+        "class": "tree",
+        "crown": 17,
+        "height": 6
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      }
+    }
+  ]
+}

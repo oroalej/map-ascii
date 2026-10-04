@@ -18,6 +18,8 @@ import { labelCharacters, mapGlyphs, type Theme } from './theme';
 import { buildLifeGlyphs, type LifeGlyphs } from './life/draw';
 import { waterGlyphs } from './life/water';
 import type { ThemeUniforms } from './theme-uniforms';
+import { deleteFireworks, type FireworksResources } from './fireworks-pass';
+import { fireworksFragment, fireworksVertex } from './shaders/fireworks';
 
 /** The rotated street names' quads (labels.ts `rotatedLabelVertices`), rebuilt with placement. */
 export type StreetTextMesh = {
@@ -28,15 +30,21 @@ export type StreetTextMesh = {
 };
 
 export type Programs = {
+  /** Lazy seasonal effect; recreated normally after context loss. */
+  fireworks?: FireworksResources;
+  /** An idle-linked program is consumed once when the effect creates its buffers. */
+  fireworksProgram?: twgl.ProgramInfo;
   labels: twgl.ProgramInfo;
   streetText: StreetTextMesh;
   cell: twgl.ProgramInfo;
   select: twgl.ProgramInfo;
   glyph: twgl.ProgramInfo;
-  /** At most four variants, compiled once when their features are first needed. */
+  /** At most eight variants; seasonal features compile only when their fixtures are needed. */
   glyphVariants?: Map<number, twgl.ProgramInfo>;
   glyphWarmup?: {
     clocks: boolean;
+    seasonal: boolean;
+    fireworks: boolean;
     pending?: { key: number; program: PendingProgram };
     cancel(): void;
   };
@@ -63,7 +71,7 @@ export function createPrograms(gl: GL): Programs {
   const glyph = createProgram(
     gl,
     fullscreenVertex,
-    glyphFragmentFor({ focus: false, effectClocks: false }),
+    glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
   );
   return {
     labels: createProgram(gl, labelVertex, labelFragment),
@@ -76,18 +84,29 @@ export function createPrograms(gl: GL): Programs {
   };
 }
 
-export function glyphProgram(gl: GL, programs: Programs, focus: boolean, effectClocks: boolean) {
+export function glyphProgram(
+  gl: GL,
+  programs: Programs,
+  focus: boolean,
+  effectClocks: boolean,
+  seasonal = false,
+) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
   if (!variants) return programs.glyph;
-  const key = Number(focus) | (Number(effectClocks) << 1);
+  const key = Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2);
   let program = variants.get(key);
   if (!program) {
     const pending = programs.glyphWarmup?.pending;
     if (pending?.key === key) {
       program = pending.program.finish();
       programs.glyphWarmup!.pending = undefined;
-    } else program = createProgram(gl, fullscreenVertex, glyphFragmentFor({ focus, effectClocks }));
+    } else
+      program = createProgram(
+        gl,
+        fullscreenVertex,
+        glyphFragmentFor({ focus, effectClocks, seasonal }),
+      );
     variants.set(key, program);
   }
   return program;
@@ -99,18 +118,36 @@ export function prewarmGlyphPrograms(
   programs: Programs,
   canWarm: () => boolean,
   effectClocks = true,
+  seasonal = false,
+  fireworks = false,
 ) {
   const variants = programs.glyphVariants;
-  if (!variants || variants.size === 4 || programs.glyphWarmupFailed) return;
+  if (!variants || programs.glyphWarmupFailed) return;
+  const keys = (clocks: boolean, seasonal: boolean, fireworks: boolean) => [
+    ...(fireworks ? [8] : []),
+    ...(seasonal ? (clocks ? [4, 5, 6, 7] : [4, 5]) : []),
+    ...(clocks ? [1, 2, 3] : [1]),
+  ];
+  const has = (key: number) =>
+    key === 8 ? !!(programs.fireworks || programs.fireworksProgram) : variants.has(key);
   if (programs.glyphWarmup) {
-    programs.glyphWarmup.clocks ||= effectClocks;
+    const warmup = programs.glyphWarmup;
+    warmup.clocks ||= effectClocks;
+    warmup.seasonal = seasonal;
+    warmup.fireworks = fireworks;
+    if (warmup.pending && !keys(warmup.clocks, seasonal, fireworks).includes(warmup.pending.key)) {
+      warmup.pending.program.cancel();
+      warmup.pending = undefined;
+    }
     return;
   }
-  if (!effectClocks && variants.has(1)) return;
+  if (keys(effectClocks, seasonal, fireworks).every(has)) return;
   let cancelled = false;
   let cancelTask: (() => void) | undefined;
   const warmup: NonNullable<Programs['glyphWarmup']> = {
     clocks: effectClocks,
+    seasonal,
+    fireworks,
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
@@ -144,27 +181,32 @@ export function prewarmGlyphPrograms(
       const pending = warmup.pending;
       if (pending) {
         if (pending.program.ready()) {
-          variants.set(pending.key, pending.program.finish());
+          const program = pending.program.finish();
+          if (pending.key === 8) programs.fireworksProgram = program;
+          else variants.set(pending.key, program);
           warmup.pending = undefined;
         }
       } else {
-        const key = (warmup.clocks ? [1, 2, 3] : [1]).find((key) => !variants.has(key));
+        const key = keys(warmup.clocks, warmup.seasonal, warmup.fireworks).find((key) => !has(key));
         if (key === undefined) {
           programs.glyphWarmup = undefined;
           return;
         }
         const focus = (key & 1) !== 0,
           effectClocks = (key & 2) !== 0;
+        const seasonal = (key & 4) !== 0;
         if (gl.getExtension('KHR_parallel_shader_compile'))
           warmup.pending = {
             key,
             program: prepareProgram(
               gl,
-              fullscreenVertex,
-              glyphFragmentFor({ focus, effectClocks }),
+              key === 8 ? fireworksVertex : fullscreenVertex,
+              key === 8 ? fireworksFragment : glyphFragmentFor({ focus, effectClocks, seasonal }),
             ),
           };
-        else glyphProgram(gl, programs, focus, effectClocks);
+        else if (key === 8)
+          programs.fireworksProgram = createProgram(gl, fireworksVertex, fireworksFragment);
+        else glyphProgram(gl, programs, focus, effectClocks, seasonal);
       }
       queue();
     } catch {
@@ -179,6 +221,8 @@ export function prewarmGlyphPrograms(
 
 export function deletePrograms(gl: GL, p: Programs) {
   p.glyphWarmup?.cancel();
+  if (p.fireworks) deleteFireworks(gl, p.fireworks);
+  if (p.fireworksProgram) gl.deleteProgram(p.fireworksProgram.program);
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);

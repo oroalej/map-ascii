@@ -1,5 +1,6 @@
+import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
-import type { CameraState, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid } from '../grid';
@@ -40,6 +41,8 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  seasons?: readonly SimulationSeason[];
+  shopSchedule?: ShopSchedule;
   itemInspection?: boolean;
   dialogue?: readonly DialogueChoice[];
   periods?: Readonly<GreetingPeriods>;
@@ -48,6 +51,15 @@ export type LifeInit = {
   profiling?: boolean;
 };
 export type SyncTile = Omit<LifeTile, 'life'> & { life?: LifeGeometry };
+
+export function configureLifeWorld(
+  world: LifeWorld,
+  options: Pick<LifeInit, 'processions' | 'seasons' | 'shopSchedule'>,
+) {
+  world.setProcessions(options.processions);
+  world.setSeasons(options.seasons ?? []);
+  world.setShopSchedule(options.shopSchedule);
+}
 
 /** Shared synchronous execution keeps the fallback's order and arguments identical. */
 export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: FrameProfiler) {
@@ -108,7 +120,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
         options.itemInspection,
       );
       preparation = new LifePreparation(world, profiler, preparationClock);
-      world.setProcessions(options.processions);
+      configureLifeWorld(world, options);
       geometries.clear();
       lastTerrain = undefined;
       terrainSent = false;

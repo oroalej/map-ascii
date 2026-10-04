@@ -65,8 +65,8 @@ jobs:
 
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
-  # across two runners: each test renders WebGL in software on a single worker. It waits for
-  # `check`, so a lint, typecheck or unit failure doesn't also spend two e2e runners.
+  # across three runners, gated on `check`, leaving room for setup, export and cleanup
+  # within six minutes without spending browser runners on a failed check.
   e2e:
     needs: check
     if: github.event_name == 'pull_request'
@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       ATLAS_REQUIRE_DETAILS: '1'
       # With this token, release assets download through the GitHub API (required for private repositories).
@@ -115,11 +115,11 @@ jobs:
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 
       # Prepares the static export before Playwright starts or reuses its web server.
-      - run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Check browser shard duration
         if: always()
-        run: pnpm check:e2e-budget --report=apps/web/test-results/shard-duration.json --shard=${{ matrix.shard }}/2
+        run: pnpm check:e2e-budget --report=apps/web/test-results/shard-duration.json --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - run: pnpm check:budgets
         if: matrix.shard == 1
