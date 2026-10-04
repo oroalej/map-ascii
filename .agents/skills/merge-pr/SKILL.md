@@ -131,7 +131,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
   "headSha": "def5678",
   "cleanup": {
     "plans": ["done/stable-labels: deleted 12, kept 3", "pr12-review-fixes: deleted 4, removed folder"],
-    "worktree": "removed D:/Projects/naga-ascii-labels",
+  "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
     "branch": "deleted codex/stable-labels"
   },
   "stopReason": null

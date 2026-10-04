@@ -10,3 +10,6 @@ apps/web/public/tiles
 
 # Hand-authored prose; keep as written
 *.md
+
+# nested agent worktrees (see AGENTS.md "Git")
+/worktrees
