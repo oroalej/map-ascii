@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, then clean up after it — delete its task scratch in .plans with pnpm plans:clean (keeping handoff.md and keep files), update the task's .plans row, and remove the local branch and its worktree folder with pnpm worktree:remove. The remote branch stays. Use when the user invokes $merge-pr [<branch>] [Head: <sha>], or when $sync-review reaches its merge step.
+description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, merging origin/main into the branch first whenever main has moved, then clean up after it — delete its task scratch in .plans with pnpm plans:clean (keeping handoff.md and keep files), update the task's .plans row, and remove the local branch and its worktree folder with pnpm worktree:remove. The remote branch stays. Use when the user invokes $merge-pr [<branch>] [Head: <sha>], or when $sync-review reaches its merge step.
 ---
 
 # Merge a PR, then clean up its scratch, branch and worktree
@@ -11,6 +11,8 @@ Usage: `$merge-pr [<branch>] [Head: <sha>]`. Without a branch, it uses the curre
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 
+- merging `origin/main` into its branch and pushing, whenever `main` has moved (step 2.3), resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`
+- commenting on its PR with the conflict decisions that merge made
 - merging its PR into `main`, which deploys to production through Vercel
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
 - deleting its local branch and its worktree folder
@@ -19,7 +21,8 @@ Don't ask for confirmation between steps. Stop only where this skill says to sto
 
 ## Rules
 
-- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, commit, or pass `--no-verify`. This skill never changes the branch's content.
+- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, or pass `--no-verify`. The only commit this skill makes is a main-sync merge (step 2.3). Otherwise it never changes the branch's content.
+- **Main moves on; keep going.** Other sessions merge into `main` all the time. A PR that is behind or conflicting gets `origin/main` merged in here, not sent back to `$review-pr`.
 - **Remote branch stays:** never pass `--delete-branch` to `gh pr merge`, and never run `git push --delete` or `git push origin :<branch>`.
 - **Deleting:** delete only with `pnpm plans:clean` and `pnpm worktree:remove`. Never delete files or folders with shell commands (`Remove-Item`, `rm`, `del`, `rmdir`): Codex rejects recursive deletes as "blocked by policy".
 - **Working directory:** run steps 4–6 with `<main-checkout>` as the command working directory. On Windows, also determine the session process's own directory, using its startup context (not a child command's directory). If that directory is inside `<wt>`, or cannot be established, defer the actual removal in step 6. A child command running in main does not release the session's handle on `<wt>`.
@@ -41,14 +44,17 @@ Check every condition. If one fails, stop with `stopped`, naming it.
 
 1. `<wt>` exists and `git -C <wt> status --porcelain` is empty. Uncommitted work belongs to the user or `$sync-review`, not this skill.
 2. `git -C <wt> fetch origin <branch>`, then `git -C <wt> rev-parse HEAD` equals `origin/<branch>` and the PR's `headRefOid`. Everything local is pushed.
-   - With `Head: <sha>`, `headRefOid` must also equal `<sha>`. If it doesn't, something was pushed after the caller's review: stop.
-   - Call this SHA `<gated-sha>`.
-3. CI passes on `<gated-sha>`. Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. Any failing check stops the run. This skill doesn't fix CI; `$review-pr` does.
-4. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. Conflicts stop the run and point to `$review-pr`, then rerun `$merge-pr`. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; step 3 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
+   - With `Head: <sha>`, `headRefOid` must equal `<sha>`, or `git -C <wt> merge-base --is-ancestor <sha> HEAD` must succeed and every commit in `git -C <wt> rev-list --first-parent <sha>..HEAD` must be a main-sync merge: a merge commit whose message starts with `🔀 merge(` and whose second parent is an ancestor of `origin/main` (such as one an earlier, stopped `$merge-pr` run pushed). Stop if ancestry or any command fails, or if a listed commit doesn't meet those checks: something else was pushed after the caller's review.
+   - Set `<gated-sha>` to the verified current `HEAD` (= `headRefOid`), including when the caller's `<sha>` is older.
+3. **Sync with main.** Before every visit, including returns from gate 5 or §3.1, repeat gate 1's worktree cleanliness check. If it fails, stop with `stopped` (`merge blocked by uncommitted <files>`). Run `git -C <wt> fetch origin main`. If `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise, if `mainSyncs` is already 5, stop before attempting another sync (`main moved <n> times during merge`). Follow `<skill-dir>/../review-pr/SKILL.md` step 1.7 (items 2–7) in `<wt>` as `<pr-checkout>`, with an empty baseline from this visit's clean-worktree check. If git subsequently refuses to merge because uncommitted files would be overwritten, stop with `stopped` (`merge blocked by uncommitted <files>`) and leave those edits untouched. The procedure merges `origin/main`, resolves every conflict and pushes. It aborts only when a tool the resolution needs can't run; then stop with `stopped` and its `merge tool unavailable: <tool> — <files>` stopReason. This merge comes after the PR's review, so if its commit has a `Conflict decisions:` body, post that list as a PR comment (`gh pr comment <N> --body-file <file>`, the file in the OS temp folder) and include it in the report. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`. `<skill-dir>` is the absolute folder of this `SKILL.md`.
+4. CI passes on `<gated-sha>`. Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. Any failing check stops the run. This skill doesn't fix CI; `$review-pr` does. When the failing head is this run's main-sync merge, use the stopReason `ci red after main sync: <check>`, so the caller knows to fix CI and rerun.
+5. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. If it shows `CONFLICTING`, `main` moved again: go back to gate 3. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; §3 step 1 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
+
+Initialize `mainSyncs` to 0. Gate 3 permits at most 5 successful main-sync merges per invocation, including syncs on returns from gate 5 and §3 step 1. Visits that need no merge don't consume the allowance. If a sixth sync is needed, stop with `stopped` (`main moved <n> times during merge`). That only happens when `main` changes faster than CI can finish.
 
 ## 3. Merge
 
-1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. Both must succeed. If the head lacks current `main`, stop with `stopped` and point to `$review-pr` to synchronize and review it, followed by rerunning `$merge-pr`; do not merge merely because GitHub says `CLEAN`.
+1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. If the head lacks current `main`, go back to gate 3 to sync it; don't merge merely because GitHub says `CLEAN`.
 2. `gh pr merge <N> --merge --match-head-commit <gated-sha>`. GitHub refuses the merge if the head moved after the gate; then stop with `stopped`. Never use `--delete-branch`, `--squash`, `--rebase`, `--admin` or `--auto`.
 3. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED`, stop with `error`. Record the merge commit `<sha>`.
 
@@ -129,6 +135,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
   "pr": 12,
   "mergeCommit": "abc1234",
   "headSha": "def5678",
+  "mainSyncs": 0,
   "cleanup": {
     "plans": ["done/stable-labels: deleted 12, kept 3", "pr12-review-fixes: deleted 4, removed folder"],
   "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
@@ -138,6 +145,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
 }
 ```
 
-- `status`: `merged` (the PR is merged, even if some cleanup failed), `stopped` (a step-2 gate or the head-commit match failed, nothing changed), or `error`.
+- `status`: `merged` (the PR is merged, even if some cleanup failed), `stopped` (a step-2 gate or the head-commit match failed; nothing merged into `main`, though a main-sync merge may have been pushed to the branch), or `error`.
 - `headSha`: the `<gated-sha>` that was merged.
+- `mainSyncs`: how many times gate 3 merged `origin/main` into the branch. The report lists each sync's `Conflict decisions:`, if any.
 - A cleanup entry that failed or was skipped says why, e.g. `"worktree": "partially deleted: in use by another process"` or `"plans": ["skipped: codex/x has local commits after the merge"]`.

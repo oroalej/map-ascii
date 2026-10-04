@@ -12,6 +12,7 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - editing its `handoff.md` with review amendments
 - creating its worktree if the handoff says it's a new task
 - implementing it, committing and pushing
+- merging `origin/main` into its branch, resolving every conflict (including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`)
 - opening a PR to `main`
 - running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
@@ -42,6 +43,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 ## Rules
 
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`.
+- **Main moves on; keep going.** Other sessions merge into `main` all the time. Until implementation starts, pull `origin/main` into the branch (steps 0.4 and 3.0). After that, `$review-pr` merges it (step 5). A handoff written against an older `main` gets amended, never blocked: the review step exists to catch that drift.
 - **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
 - **Long commands:** the `$review-pr` run can take several hours. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<scratch>`, and poll until it exits.
 - **To pause:** move the task folder to `.plans/paused/`, set its `.plans/README.md` row's Next step to the reason and what needs a human, then go to step 6.
@@ -67,8 +69,21 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    - **It's a new task:** run `pnpm worktree:new <short> <topic>` from `<main-checkout>`, with the names the handoff gives. If it gives none, derive them from the task folder name. If the script fails after creating the worktree, run `pnpm install --frozen-lockfile --prefer-offline` and `pnpm data:fetch` in it yourself.
 
    `<wt>` is that worktree.
+
+   Then pull `origin/main` into it (see "Pull main" below).
 5. Move `<task-dir>` to `<main-checkout>/.plans/active/` (update `<task-dir>`). Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`.
 6. Save the baseline: `git -C <wt> status --porcelain` → `<scratch>/status-baseline.txt`.
+
+### Pull main
+
+Bring the branch up to date with `main` before the review and again before the first code edit, so both work against current code:
+
+1. `git -C <wt> fetch origin main`. If `git -C <wt> merge-base --is-ancestor origin/main HEAD` succeeds, it's already current.
+2. Otherwise `git -C <wt> merge origin/main -m "🔀 merge(<scope>): sync <topic> with main"` (same `<scope>`/`<topic>` rule as `<skill-dir>/../review-pr/SKILL.md` step 1.7.3). A branch with no commits of its own just fast-forwards.
+3. Resolve every conflict as `review-pr` step 1.7.4–1.7.5 says: regenerate tiles, decide incompatible behaviors with `main` as the baseline, record `Conflict decisions:` in the merge commit, and fix what the tests catch. Never stop for a conflict. Only its step 1.7.6 case (a tool the resolution needs can't run) aborts the merge; then pause and stop with `merge tool unavailable: <tool> — <files>`. List any conflict decisions in the step 6 report.
+4. If git refuses because the merge would overwrite uncommitted files, those are another session's edits: pause and stop, naming them. Don't touch them.
+
+The merge commit is pushed with the rest of the branch in step 4.
 
 ## 1. Review the handoff (Codex #1: Sol 6.1, max, analysis only)
 
@@ -87,9 +102,11 @@ Run from `<wt>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is t
 Read `handoff-review.md`.
 
 - **Verdict `blocked`:** pause and stop before any code changes. This verdict is used only when no amendment can make the handoff implementable:
-  - one of its own "Stop and report if" conditions is already true, or
+  - one of its own "Stop and report if" conditions that is about outcomes or premises (measured numbers, a premise proven false) is already true, and no amendment can fix the handoff, or
   - its work has already landed on `main`, or
   - the branch or worktree it names belongs to a different task.
+
+  Drift on `main` is never a blocker: moved or changed `path:line` citations, functions, files or assumptions are fixed by amendments. If the only reason given is drift (including a handoff's own "a `path:line` no longer matches" stop condition), the verdict is wrong: treat it as `ready-with-amendments` and apply its amendments.
 - **Otherwise:** apply every finding's proposed amendment, factual and design alike, to `<task-dir>/handoff.md`:
   - Edit the affected sections in place, using the replacement text the review proposes.
   - Append (or extend) a `## Review amendments` section at the end. List each finding as `<n>. [factual|design] <section> — <problem> → <what changed>`. Mark design amendments in **bold**.
@@ -99,8 +116,9 @@ Read `handoff-review.md`.
 
 Work in `<wt>`, following the amended handoff:
 
+0. Pull `origin/main` once more ("Pull main" in step 0), then re-check the amended handoff's citations against any files that pull changed. This is the last pull; from here on `$review-pr` merges `main`.
 1. Do its steps in order. After each step, run that step's targeted test. Fix failures before moving on.
-2. Obey its "Stop and report if" section. If a condition is hit, commit nothing further, then pause and stop. Leave any commits already made local and unpushed, and list them in the report.
+2. Obey its "Stop and report if" section. A drift condition (cited code moved or changed) isn't a stop: find where the code went and continue. Stop for it only if the step's change no longer applies to the code at all. If any other condition is hit, commit nothing further, then pause and stop. Leave any commits already made local and unpushed, and list them in the report.
 3. Respect its Invariants and Out of scope sections, and `AGENTS.md`.
 4. Once at the end, run its Verification section.
 5. Commit as its Commit section says. Run `git status` and `git branch` first, stage by explicit path, and use its gitmoji message(s).
@@ -125,7 +143,7 @@ Start it once, in a fresh Codex #2, with a shell timeout of at least 4 hours:
 Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`.
 
 - `clean` (review clean and CI green): the task is done.
-- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for a `merge conflict` with `main` it couldn't resolve: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
+- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for `merge tool unavailable`: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
 
 ## 6. Report and clean up
 
