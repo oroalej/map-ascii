@@ -1,6 +1,6 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { describe, expect, it, vi } from 'vitest';
-import type { SeasonConfig } from '@atlas/shared';
+import type { SeasonConfig, SeasonalDisplayRecord } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
 import { MAX_TILE_AGENTS, activityLevels } from './config';
@@ -50,6 +50,78 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  function physicalPreview() {
+    const result = setup();
+    const display: SeasonalDisplayRecord = {
+      version: 1,
+      kind: 'christmas-tree',
+      id: 'tree',
+      installation: 'tree',
+      season: season.id,
+      anchor: 'osm:way/1',
+      seed: 1,
+      radius_m: 5,
+      at: tileToLngLat(tile, { x: 20, y: 20 }),
+    };
+    result.tiles[0]!.life.seasonalTrees = [display];
+    result.world.setSeasons(
+      simulationSeasons([
+        {
+          ...season,
+          installations: [
+            {
+              id: 'tree',
+              kind: 'christmas-tree',
+              anchor: display.anchor,
+              label: 'Tree',
+            },
+          ],
+        },
+      ]),
+    );
+    return { ...result, display };
+  }
+  it('leaves off-footprint closed carts and seated gatherers alone despite hidden-body overlaps', () => {
+    const { world, life } = physicalPreview();
+    const cart = life.stalls[0]!,
+      walker = life.movers.find((m) => m.kind === 'person')!;
+    expect(cart).toBeDefined();
+    expect(walker).toBeDefined();
+    cart.open = false;
+    walker.x = cart.x;
+    walker.y = cart.y;
+    const seated = life.gatherers[0]!;
+    expect(seated).toBeDefined();
+    seated.behavior = 'sit';
+    seated.x = walker.x;
+    seated.y = walker.y;
+    for (const id of [season.id, null]) {
+      select(world, id);
+      expect(life.stalls).toContain(cart);
+      expect(life.gatherers).toContain(seated);
+      expect(life.movers).toContain(walker);
+    }
+  });
+  it('restores obstructed actors and cart sites after deselection, including retirement and revival', () => {
+    const { world, life, tiles, display } = physicalPreview();
+    const cart = life.stalls[0]!;
+    display.at = tileToLngLat(tile, cart);
+    const population = life.population;
+    select(world);
+    expect(life.stalls).not.toContain(cart);
+    expect(life.canIdle(cart)).toBe(false);
+    expect(life.scenes.sites.some((site) => site.stall === cart)).toBe(false);
+    expect(life.population).toBe(population);
+    world.sync([]);
+    select(world, null);
+    world.sync(tiles);
+    select(world, null);
+    expect(world.active(tiles[0]!.key)).toBe(life);
+    expect(life.stalls).toContain(cart);
+    expect(life.scenes.sites.some((site) => site.stall === cart)).toBe(true);
+    expect(life.canIdle(cart)).toBe(true);
+    expect(life.population).toBe(population);
+  });
   it('skips anchorless and unchanged candidate searches after unrelated tile arrivals', () => {
     for (const anchored of [false, true]) {
       const { world, life, tiles } = setup(false, anchored, anchored);

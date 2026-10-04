@@ -243,7 +243,7 @@
             "day": 6
           }
         },
-        "note": "TODO(verify): December is sourced to Kamundagan; January 6 is an illustrative end date. Trees, parols, bells and light canopies combine documented decorations from several years. Sizes, density and exact placements are illustrative, including City Hall perimeter lights and the smaller Plaza Quezon trees. The private Magsaysay forecourt and adjacent house lights are schematic displays requested by the project owner, not a verified seasonal installation. Existing church-area banners and stalls remain illustrative. This is not an exact historical or Christmas 2026 reconstruction. The owner-requested Christmas perya beside LCC Mall Sabang uses a schematic vacant-lot boundary and illustrative rides/booths; web references describe other Philippine holiday carnivals and do not verify a Christmas carnival at this exact Naga lot. The 2026-10-03 owner follow-up adds forecourt lights and one small tree. The later walking-path and parking additions were removed at the owner's request; only seasonal decorations remain. The latest red/yellow annotation adds a larger tree at the red spot and dense multicolor hanging lights in three yellow forecourt patches. No paving or parking is restored.",
+        "note": "TODO(verify): December follows Kamundagan; January 6 is illustrative. Decorations combine references from several years, with schematic sizes and placements. The private Magsaysay display and Christmas perya beside LCC Mall Sabang were requested by the project owner; neither is a verified annual installation. Church-area banners and stalls are illustrative. This is not an exact historical or Christmas 2026 reconstruction.",
         "lanterns": {
           "label": "Parol lanterns",
           "shape": "star"
@@ -293,7 +293,7 @@
           },
           {
             "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-            "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+            "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
           },
           {
             "title": "City Government of Davao: Perya sa Pasko Fiesta (2025-12-26)",
@@ -312,11 +312,11 @@
           },
           {
             "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-            "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+            "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
           },
           {
             "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-            "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+            "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
           }
         ],
         "installations": [
@@ -485,7 +485,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
               }
             ],
             "label": "Christmas lights and ornaments",
@@ -501,7 +501,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
               }
             ],
             "label": "Christmas lights and ornaments",
@@ -657,7 +657,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -675,7 +675,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -693,7 +693,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -711,7 +711,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -725,7 +725,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -743,7 +743,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -761,7 +761,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -779,7 +779,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -793,7 +793,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           }
@@ -821,7 +821,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
               }
             ]
           },
@@ -860,7 +860,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -879,7 +879,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -898,7 +898,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
               }
             ]
           },
@@ -915,7 +915,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -932,7 +932,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -949,7 +949,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -966,7 +966,7 @@
             "sources": [
               {
                 "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The latest annotated reference requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           }

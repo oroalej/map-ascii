@@ -4,6 +4,7 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   UTILITY_ZOOM,
+  SEASON_ZOOM,
   shopHours,
   shopOpen,
   resolveSeason,
@@ -14,7 +15,7 @@ import { sameReferenceMembers } from './cache-inputs';
 import type {
   BBox,
   CameraState,
-  CityLifeConfig,
+  RuntimeCityLife,
   ClimateConfig,
   DialogueCatalog,
   RuntimeDialogueCatalog,
@@ -258,7 +259,7 @@ export type AtlasOptions = {
    */
   timezone?: string;
   /** The city's daily rhythm (its pack's `life`); default: `DEFAULT_RHYTHM`. */
-  cityLife?: CityLifeConfig;
+  cityLife?: RuntimeCityLife;
   /** The clock for the live time of day (tests pin it). */
   now?: () => Date;
   /**
@@ -1232,7 +1233,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
     const displaysShown = camera.zoom >= 18;
-    const buntingShown = bandVisibility({ min: 18 }, camera.zoom) > 0;
+    const buntingShown = bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0;
     if (
       displaysShown === fixtureDisplaysShown &&
       buntingShown === fixtureBuntingShown &&
@@ -1521,9 +1522,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!programs || lost || destroyed) return;
     const seasonal =
       !!season &&
-      ((!!season.lanterns && bandVisibility({ min: 17 }, camera.zoom) > 0) ||
-        (!!season.bunting && bandVisibility({ min: 18 }, camera.zoom) > 0) ||
-        (!!season.installations?.length && bandVisibility({ min: 18 }, camera.zoom) > 0));
+      ((!!season.lanterns && bandVisibility(SEASON_ZOOM.lanterns, camera.zoom) > 0) ||
+        (!!season.bunting && bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0) ||
+        (!!season.installations?.length &&
+          bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0));
     prewarmGlyphPrograms(
       gl,
       programs,

@@ -79,6 +79,60 @@ export type SeasonInstallation = {
   | { kind: 'carnival'; grounds: string; components: CarnivalComponent[] }
 );
 
+/** The browser needs calendar and admission fields; the pipeline owns source geometry. */
+export type RuntimeSeasonInstallation = Pick<
+  SeasonInstallation,
+  'id' | 'anchor' | 'kind' | 'label'
+> & {
+  layout?: Extract<SeasonInstallation, { kind: 'light-string' }>['layout'];
+  mount?: 'canopy';
+  style?: Extract<SeasonInstallation, { kind: 'access-path' }>['style'];
+};
+export type RuntimeSeasonConfig = Omit<
+  SeasonConfig,
+  'sources' | 'grounds' | 'installations' | 'bunting'
+> & {
+  installations?: RuntimeSeasonInstallation[];
+  bunting?: Omit<NonNullable<SeasonConfig['bunting']>, 'corridors'> & {
+    corridors?: Pick<BuntingCorridor, 'id' | 'ways'>[];
+  };
+};
+export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
+  const { id, title, status, window, note, fireworks, lanterns, bunting, stalls, installations } =
+    season;
+  return {
+    id,
+    title,
+    status,
+    window,
+    ...(note !== undefined && { note }),
+    ...(fireworks && { fireworks }),
+    ...(lanterns && { lanterns }),
+    ...(stalls && { stalls }),
+    ...(bunting && {
+      bunting: {
+        label: bunting.label,
+        near: bunting.near,
+        radius_m: bunting.radius_m,
+        spacing_m: bunting.spacing_m,
+        ...(bunting.corridors && {
+          corridors: bunting.corridors.map(({ id, ways }) => ({ id, ways })),
+        }),
+      },
+    }),
+    ...(installations && {
+      installations: installations.map((i) => ({
+        id: i.id,
+        anchor: i.anchor,
+        kind: i.kind,
+        label: i.label,
+        ...(i.kind === 'light-string' && { layout: i.layout, ...(i.mount && { mount: i.mount }) }),
+        ...(i.kind === 'access-path' && { style: i.style }),
+      })),
+    }),
+  };
+}
+
 /** A calendar day, as days since 1970-01-01 (the existing Life clock's arithmetic). */
 export const epochDay = (year: number, month: number, day: number): number =>
   Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);

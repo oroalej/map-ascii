@@ -35,7 +35,7 @@ import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
 import { SeasonControl, useSeasonState } from './SeasonControl';
-import type { SeasonConfig } from '@atlas/shared';
+import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { SpeechControls } from './SpeechControls';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -533,7 +533,7 @@ export function Hud({
   /** The city's IANA time zone (its pack's `timezone`). */
   timezone?: string | undefined;
   sidewalksDerived?: boolean;
-  seasons?: readonly SeasonConfig[] | undefined;
+  seasons?: readonly RuntimeSeasonConfig[] | undefined;
 }) {
   const hasCamera = useAtlasStore((s) => s.camera !== null);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);

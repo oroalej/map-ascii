@@ -1,13 +1,15 @@
-import type { SeasonConfig } from '@atlas/shared';
+import type { RuntimeSeasonConfig } from '@atlas/shared';
 
 /** Immutable, simulation-only calendar table installed once per Atlas instance. */
 export type SimulationSeason = {
   id: string;
-  stalls?: Pick<NonNullable<SeasonConfig['stalls']>, 'near' | 'radius_m' | 'per_tile'>;
+  stalls?: Pick<NonNullable<RuntimeSeasonConfig['stalls']>, 'near' | 'radius_m' | 'per_tile'>;
   installations?: readonly { id: string; anchor: string; kind: 'christmas-tree' | 'carnival' }[];
 };
 
-export function simulationSeasons(seasons: readonly SeasonConfig[] = []): SimulationSeason[] {
+export function simulationSeasons(
+  seasons: readonly RuntimeSeasonConfig[] = [],
+): SimulationSeason[] {
   return seasons.flatMap(({ id, stalls, installations }) => {
     const trees = installations?.flatMap((i) =>
       i.kind === 'christmas-tree' || i.kind === 'carnival'

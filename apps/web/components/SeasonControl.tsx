@@ -1,6 +1,6 @@
 'use client';
 
-import type { SeasonConfig } from '@atlas/shared';
+import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { useId, useSyncExternalStore } from 'react';
 import { useAtlasInstance } from '@/state/store';
 import { useLifeStore } from '@/state/life';
@@ -16,7 +16,11 @@ export function useSeasonState() {
 }
 
 /** Preview changes the decorative calendar only; time, timeline and URL remain independent. */
-export function SeasonControl({ seasons }: { seasons?: readonly SeasonConfig[] | undefined }) {
+export function SeasonControl({
+  seasons,
+}: {
+  seasons?: readonly RuntimeSeasonConfig[] | undefined;
+}) {
   const choice = useLifeStore((s) => s.season ?? 'auto');
   const active = useSeasonState();
   const noteId = useId();

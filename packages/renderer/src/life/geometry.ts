@@ -8,9 +8,72 @@ import type {
   SignalLayout,
   SeasonalDisplayRecord,
   SeasonalCarnivalRecord,
+  SeasonalRecord,
 } from '@atlas/shared';
+import { parseSeasonalRecord } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
+
+/** Raw worker payloads remain transferable until a seasonal consumer needs validated records. */
+export type SeasonalPayload = Uint8Array | readonly SeasonalRecord[];
+const decodedSeasons = new WeakMap<SeasonalPayload, readonly SeasonalRecord[]>();
+const NO_SEASONAL_RECORDS: readonly SeasonalRecord[] = [];
+export const encodeSeasonalPayload = (values: readonly string[]) =>
+  new TextEncoder().encode(JSON.stringify(values));
+export function seasonalRecords(payload: SeasonalPayload | undefined): readonly SeasonalRecord[] {
+  if (!payload) return NO_SEASONAL_RECORDS;
+  if (!(payload instanceof Uint8Array)) return payload;
+  const cached = decodedSeasons.get(payload);
+  if (cached) return cached;
+  const records: SeasonalRecord[] = [];
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(payload));
+    const values: unknown[] = Array.isArray(value) ? value : [];
+    for (const raw of values) {
+      const record = typeof raw === 'string' ? parseSeasonalRecord(raw) : undefined;
+      if (record) records.push(record);
+    }
+  } catch {
+    /* A malformed envelope cannot invalidate ordinary map geometry. */
+  }
+  decodedSeasons.set(payload, records);
+  return records;
+}
+type PhysicalRecord = SeasonalDisplayRecord | SeasonalCarnivalRecord;
+const physicalSeasons = new WeakMap<
+  LifeGeometry,
+  {
+    payload: SeasonalPayload | undefined;
+    trees: LifeGeometry['seasonalTrees'];
+    rides: LifeGeometry['seasonalRides'];
+    records: readonly PhysicalRecord[];
+  }
+>();
+export function physicalSeasonalRecords(life: LifeGeometry): readonly PhysicalRecord[] {
+  const saved = physicalSeasons.get(life);
+  if (
+    saved &&
+    saved.payload === life.seasonalPayload &&
+    saved.trees === life.seasonalTrees &&
+    saved.rides === life.seasonalRides
+  )
+    return saved.records;
+  const records = [
+    ...(life.seasonalTrees ?? []),
+    ...(life.seasonalRides ?? []),
+    ...seasonalRecords(life.seasonalPayload),
+  ].filter(
+    (r): r is PhysicalRecord =>
+      r.kind === 'christmas-tree' || (r.kind === 'carnival' && r.style !== 'midway'),
+  );
+  physicalSeasons.set(life, {
+    payload: life.seasonalPayload,
+    trees: life.seasonalTrees,
+    rides: life.seasonalRides,
+    records,
+  });
+  return records;
+}
 
 /**
  * Floats per lamp: head x/y, state, seed, pool center x/y, and road center x/y.
@@ -98,6 +161,7 @@ export const roostClasses: ReadonlySet<string> = new Set([
 ]);
 
 export type LifeGeometry = {
+  seasonalPayload?: SeasonalPayload;
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
   seasonalTrees?: readonly SeasonalDisplayRecord[];
   seasonalRides?: readonly SeasonalCarnivalRecord[];
@@ -455,6 +519,7 @@ export class LifeBuilder {
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.seasonalPayload instanceof Uint8Array ? [g.seasonalPayload.buffer as ArrayBuffer] : []),
   ...(g.flagpoles ? [g.flagpoles.buffer as ArrayBuffer] : []),
   ...(g.lampSites ? [g.lampSites.buffer as ArrayBuffer] : []),
   ...(g.lampStyles ? [g.lampStyles.buffer as ArrayBuffer] : []),

@@ -10,7 +10,7 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
-import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
+import { bandVisibility, CLASS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -79,7 +79,6 @@ import {
   type FixtureVisibility,
 } from './life/fixtures';
 import type { TileId } from './tiles';
-import { isSeasonalFixture } from './life/seasonal';
 
 const depths = classDepths();
 const grounds = groundFlags();
@@ -791,9 +790,9 @@ export function fixturePass(
           scale: `${view.camera.zoom}/${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
           base: {
             key: `${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
-            scale: 2 ** (view.camera.zoom - 17.5),
+            scale: 2 ** (view.camera.zoom - (SEASON_ZOOM.bunting.min - ZOOM_FADE)),
             toCell: (lng, lat) => {
-              const [x, y] = project(lng, lat, 17.5);
+              const [x, y] = project(lng, lat, SEASON_ZOOM.bunting.min - ZOOM_FADE);
               return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
             },
           },
@@ -830,7 +829,7 @@ export function fixturePass(
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
       fixtureScratch,
-      seasonal: fixtures.some(isSeasonalFixture),
+      seasonal: (packed.seasonalCells ?? 0) > 0,
       viewport,
     };
     fixturesOf.set(targets, cache);

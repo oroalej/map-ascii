@@ -7,10 +7,6 @@
  */
 import {
   parseUtilityRecord,
-  parseSeasonalRecord,
-  type SeasonalDisplayRecord,
-  type SeasonalCarnivalRecord,
-  type SeasonalRecord,
   parseDetailSelection,
   isLitRoad,
   TILE_EXTENT as EXTENT,
@@ -29,6 +25,8 @@ import {
 import earcut from 'earcut';
 import {
   isResidentialBuilding,
+  isResidentialStreet,
+  isRoofCandidate,
   isCompactRoof,
   neighborhoodSites,
   residentialSite,
@@ -64,10 +62,12 @@ import {
   LifeLine,
   lifeLineFor,
   lifeTransferables,
+  encodeSeasonalPayload,
   placeFor,
   plazaClasses,
   roostClasses,
   type LifeGeometry,
+  type SeasonalPayload,
 } from '../life/geometry';
 import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { stripRing } from '../life/terrain';
@@ -214,7 +214,7 @@ export type TileGeometry = GroundGeometry & {
   residential?: ResidentialSites;
   /** Static hardware stays outside Life so it is never cloned to the simulation worker. */
   utilities?: readonly UtilityRecord[];
-  seasonal?: readonly SeasonalRecord[];
+  seasonal?: SeasonalPayload;
   /**
    * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
@@ -780,7 +780,7 @@ export function buildTileGeometry(
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
   const utilities: UtilityRecord[] = [];
-  const seasonal: SeasonalRecord[] = [];
+  const rawSeasonal: string[] = [];
   const residential: ResidentialSite[] = [];
   const compactRoofs: ResidentialSite[] = [];
   const residentialStreets: TilePoint[][] = [];
@@ -792,8 +792,8 @@ export function buildTileGeometry(
     if (name === 'seasons') {
       if (tile && tile.z === maxZoom)
         for (let i = 0; i < layer.length; i++) {
-          const record = parseSeasonalRecord(layer.feature(i).properties.seasonal);
-          if (record) seasonal.push(record);
+          const raw = layer.feature(i).properties.seasonal;
+          if (typeof raw === 'string') rawSeasonal.push(raw);
         }
       continue;
     }
@@ -1130,13 +1130,7 @@ export function buildTileGeometry(
           }
         }
       } else if (feature.type === 2) {
-        if (
-          fireworks &&
-          !isRegion &&
-          className === 'road_minor' &&
-          (feature.properties.kind === 'highway=residential' ||
-            feature.properties.kind === 'highway=living_street')
-        )
+        if (fireworks && !isRegion && isResidentialStreet(className, feature.properties.kind))
           residentialStreets.push(...rings);
         const street = streetLabel(className, feature.properties.kind);
         if (street && tile && typeof text === 'string' && text.trim()) {
@@ -1319,10 +1313,7 @@ export function buildTileGeometry(
             fireworks &&
             !isRegion &&
             unitMeters &&
-            height > 0 &&
-            !landmark &&
-            className === 'building' &&
-            feature.properties.kind === 'building=yes' &&
+            isRoofCandidate(className, feature.properties.kind, height, landmark) &&
             isCompactRoof(points, triangles, unitMeters)
           ) {
             const site = residentialSite(id, points, triangles, EXTENT);
@@ -1450,6 +1441,7 @@ export function buildTileGeometry(
     lines: g.lines.finish(),
     points: g.points.finish(),
   });
+  const seasonal = rawSeasonal.length ? encodeSeasonalPayload(rawSeasonal) : undefined;
   return {
     ...finish(main),
     crowns: {
@@ -1462,23 +1454,10 @@ export function buildTileGeometry(
     labels,
     life: {
       ...life.finish(),
-      ...(seasonal.some((r) => r.kind === 'carnival' && r.style !== 'midway')
-        ? {
-            seasonalRides: seasonal.filter(
-              (r): r is SeasonalCarnivalRecord => r.kind === 'carnival' && r.style !== 'midway',
-            ),
-          }
-        : {}),
-      ...(seasonal.some((r) => r.kind === 'christmas-tree')
-        ? {
-            seasonalTrees: seasonal.filter(
-              (r): r is SeasonalDisplayRecord => r.kind === 'christmas-tree',
-            ),
-          }
-        : {}),
+      ...(seasonal ? { seasonalPayload: seasonal } : {}),
     },
     ...(utilities.length ? { utilities } : {}),
-    ...(seasonal.length ? { seasonal } : {}),
+    ...(seasonal ? { seasonal } : {}),
     ...(fireworks ? { residential: packResidentialSites(residential) } : {}),
   };
 }
@@ -1530,13 +1509,14 @@ export function buildResidentialSites(
       const feature = layer.feature(i),
         props = feature.properties;
       if (props.region === true) continue;
-      const road =
-        feature.type === 2 &&
-        props.class === 'road_minor' &&
-        (props.kind === 'highway=residential' || props.kind === 'highway=living_street');
+      const road = feature.type === 2 && isResidentialStreet(props.class, props.kind);
       const explicit = isResidentialBuilding(props.kind);
-      const roof =
-        props.kind === 'building=yes' && props.landmark !== true && Number(props.height) > 0;
+      const roof = isRoofCandidate(
+        props.class,
+        props.kind,
+        Number(props.height),
+        props.landmark === true,
+      );
       if (!road && !(feature.type === 3 && props.class === 'building' && (explicit || roof)))
         continue;
       const rings = feature

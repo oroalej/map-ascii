@@ -227,6 +227,8 @@ type FlagCloth = {
   opacity: number;
 };
 export type PackedFixtures = {
+  /** Successful seasonal writes, including offscreen texture margins. */
+  seasonalCells?: number;
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
@@ -340,6 +342,7 @@ export function packFixtures(
   out.fill(0);
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
   const packed: PackedFixtures = {
+    seasonalCells: 0,
     texels: out,
     visibility: { streetlights: false, trafficSignals: false, utilities: false },
     signals: [],
@@ -656,6 +659,9 @@ export function packFixtures(
       zoom,
       glyphIndex,
       admission,
+      () => {
+        packed.seasonalCells = (packed.seasonalCells ?? 0) + 1;
+      },
     );
     for (let cell = 0; cell < admission.length; cell++)
       if (admission[cell] === -3 || admission[cell] === -5) owners[cell] = -3;

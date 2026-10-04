@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { SeasonConfig } from '@atlas/shared';
+import { runtimeSeason, type SeasonConfig } from '@atlas/shared';
 import { simulationSeasons } from './seasonal-simulation';
 
 it('sends only stall admission and physical installation identities, omitting layout and prose', () => {
@@ -53,6 +53,7 @@ it('sends only stall admission and physical installation identities, omitting la
       ],
     },
   ]);
+  expect(simulationSeasons([runtimeSeason(season)])).toEqual(table);
   expect(
     simulationSeasons([
       { ...season, stalls: undefined, installations: [season.installations![2]!] },

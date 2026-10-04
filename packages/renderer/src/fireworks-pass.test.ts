@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FireworksConfig } from '@atlas/shared';
 import type { GL, CellTargets } from './gpu';
 import { createProgram } from './gpu';
@@ -6,6 +6,7 @@ import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass as drawFireworks, deleteFireworks } from './fireworks-pass';
 import type { FireworkSiteSampler } from './fireworks-sites';
+import type * as FireworksLayout from './fireworks-layout';
 import {
   FIREWORKS,
   fireworkRadius,
@@ -35,6 +36,10 @@ const setters = vi.hoisted(() => ({
 vi.mock('./gpu', () => ({
   createProgram: vi.fn(() => ({ program: {}, uniformSetters: setters })),
 }));
+vi.mock('./fireworks-layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof FireworksLayout>();
+  return { ...actual, createFireworkDisplay: () => actual.createFireworkDisplay(19) };
+});
 const view: View = {
   camera: { lng: 0, lat: 0, zoom: 19 },
   dpr: 1,
@@ -81,6 +86,7 @@ function gpu() {
   };
 }
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.restoreAllMocks());
 describe('seasonal GPU fireworks', () => {
   it.each(['cached', 'pending'])(
     'consumes an idle %s program exactly once on first demand',

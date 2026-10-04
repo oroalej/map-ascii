@@ -22,6 +22,7 @@ import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
+import { LampState } from './life/lights';
 
 const view: View = {
   camera: { lat: 13, lng: 123, zoom: 18 },
@@ -156,6 +157,91 @@ it('selects the seasonal shader from cached fixture inputs and returns to the or
     fixturePass(gl, targets, resources, view, placement, [], 0, true);
     draw();
     expect(choose.mock.calls.at(-1)![4]).toBe(false);
+  } finally {
+    choose.mockRestore();
+  }
+});
+it.each([
+  { zoom: 15, index: 1, margin: false, expected: false },
+  { zoom: 16.5, index: 1, margin: false, expected: false },
+  { zoom: 17, index: 0, margin: false, expected: false },
+  { zoom: 17, index: 1, margin: false, expected: true },
+  { zoom: 17, index: 1, margin: true, expected: true },
+])('selects seasonal shaders from written ink: %j', ({ zoom, index, margin, expected }) => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => index }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const current = { ...view, height: margin ? 180 : view.height, camera: { ...view.camera, zoom } };
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = {
+    ...placeGrid(current, current.cellDev, 80, 34),
+    toCell: (x: number, y: number): [number, number] => [x, y],
+  };
+  try {
+    const visible = fixturePass(
+      gl,
+      targets,
+      resources,
+      current,
+      placement,
+      [
+        {
+          kind: 'season-lantern',
+          lamp: {
+            kind: 'streetlight',
+            base: [20, 0],
+            tip: [20, margin ? 32 : 20],
+            forward: [20, 1],
+            right: [21, 0],
+            roadCenter: [20, 0],
+            seed: 1,
+            state: LampState.working,
+          },
+        },
+      ],
+      0,
+      true,
+    );
+    if (margin) expect(visible.seasonal?.lanterns).toBe(false);
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      current,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+    expect(choose.mock.calls.at(-1)![4]).toBe(expected);
   } finally {
     choose.mockRestore();
   }

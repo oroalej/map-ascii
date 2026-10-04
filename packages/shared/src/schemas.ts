@@ -4,17 +4,27 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { OsmId, OsmAreaId, MercatorPosition } from './schema-primitives';
+export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
-import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
+import {
+  RHYTHM_KINDS,
+  PLACE_KINDS,
+  runtimeCityLife,
+  type CityLifeConfig,
+  type RuntimeCityLife,
+} from './rhythm';
 import {
   FIREWORK_VARIANTS,
   validMonthDay,
+  runtimeSeason,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
   type SeasonWindow,
+  type RuntimeSeasonConfig,
 } from './seasons';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
@@ -93,8 +103,6 @@ export const DateCertainty = z.enum(['exact', 'circa']);
 export type DateCertainty = z.infer<typeof DateCertainty>;
 
 export const Year = z.int().min(YEAR_RANGE[0]).max(YEAR_RANGE[1]);
-
-export const OsmId = z.string().regex(/^osm:(node|way|relation)\/\d+$/, 'expected osm:<type>/<id>');
 
 export const Photo = z.object({
   src: z.string().min(1),
@@ -1052,9 +1060,17 @@ const SeasonPlaces = z
   .array(z.enum(PLACE_KINDS))
   .min(1)
   .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
+const SeasonGeometryId = z.string().regex(/^[a-z][a-z0-9-]*$/);
+const SeasonInstallationBase = {
+  id: SeasonGeometryId,
+  anchor: OsmId,
+  label: z.string().trim().min(1),
+  sources: Sources,
+  grounds: SeasonGeometryId.optional(),
+};
 export const SeasonGroundsSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-  anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
+  anchor: OsmAreaId,
   // Reuse the simple, closed, nonzero-area ring contract from plan-view structures.
   ring: SiteStructure.shape.ring.max(64),
   sources: Sources,
@@ -1092,21 +1108,14 @@ export const Season = z
         z.discriminatedUnion('kind', [
           z
             .strictObject({
-              id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-              anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
-              label: z.string().trim().min(1),
-              sources: Sources,
-              grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+              ...SeasonInstallationBase,
+              anchor: OsmAreaId,
+              grounds: SeasonGeometryId,
               kind: z.literal('access-path'),
               style: z.enum(['walkway', 'driveway', 'parking']),
               width_m: z.number().min(1).max(12),
               points: z
-                .array(
-                  z.tuple([
-                    z.number().min(-180).max(180),
-                    z.number().min(-85.051129).max(85.051129),
-                  ]),
-                )
+                .array(MercatorPosition)
                 .min(2)
                 .max(32)
                 .refine(
@@ -1122,11 +1131,9 @@ export const Season = z
               'parking requires bays and access',
             ),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            ...SeasonInstallationBase,
+            anchor: OsmAreaId,
+            grounds: SeasonGeometryId,
             kind: z.literal('carnival'),
             components: z
               .array(CarnivalComponentSchema)
@@ -1139,26 +1146,12 @@ export const Season = z
               .refine((v) => v.filter((c) => c.style === 'midway').length <= 1, 'only one midway'),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('christmas-tree'),
             radius_m: z.number().min(1).max(12),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('light-string'),
             layout: z.enum(['paths', 'perimeter', 'building-perimeter', 'canopy']),
             spacing_m: z.number().min(0.75).max(12),
@@ -1167,14 +1160,7 @@ export const Season = z
             palette: z.enum(['warm', 'christmas']).optional(),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('decorated-canopy'),
           }),
         ]),
@@ -1280,6 +1266,9 @@ export const Season = z
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
+export const RuntimeSeasonSchema = Season.transform(
+  runtimeSeason,
+) satisfies z.ZodType<RuntimeSeasonConfig>;
 export const CityLife = z.strictObject({
   seasons: z
     .array(Season)
@@ -1363,6 +1352,9 @@ export const CityLife = z.strictObject({
   source: z.string().min(1),
 }) satisfies z.ZodType<CityLifeConfig>;
 export type CityLife = z.infer<typeof CityLife>;
+export const RuntimeCityLifeSchema = CityLife.transform(
+  runtimeCityLife,
+) satisfies z.ZodType<RuntimeCityLife>;
 
 export const Traffic = z.strictObject({
   road_major: VehicleWeights,
@@ -1579,10 +1571,7 @@ export const TileLayer = z.enum([
 export type TileLayer = z.infer<typeof TileLayer>;
 
 /** Utility identities and coordinates survive MVT clipping as a validated JSON property. */
-const UtilityPosition = z.tuple([
-  z.number().min(-180).max(180),
-  z.number().min(-85.051129).max(85.051129),
-]);
+const UtilityPosition = MercatorPosition;
 const UtilityDirection = z
   .tuple([z.number(), z.number()])
   .refine((v) => Math.abs(Math.hypot(...v) - 1) < 0.001, 'expected unit direction');

@@ -1,4 +1,4 @@
-import { offsetUtility as metric, METERS_PER_DEGREE } from '@atlas/shared';
+import { offsetUtility as metric, METERS_PER_DEGREE, SEASON_ZOOM } from '@atlas/shared';
 import type {
   SeasonalDisplayRecord,
   SeasonalLightStringRecord,
@@ -52,7 +52,7 @@ export function installationLamps(
   fixtures: readonly InstallationFixture[],
   zoom: number,
 ): VisibleLamp[] {
-  if (zoom < 18) return [];
+  if (zoom < SEASON_ZOOM.installationLights.min) return [];
   return fixtures
     .filter(
       ({ record: r }) =>

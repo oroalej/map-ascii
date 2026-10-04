@@ -1,10 +1,8 @@
 import type { SeasonalRecord } from './seasons';
 import { z } from 'zod';
 import { CARNIVAL_STYLES, type CarnivalComponent } from './seasonal-record';
+import { MercatorPosition as point, OsmId as feature, OsmWayId as way } from './schema-primitives';
 
-const point = z.tuple([z.number().min(-180).max(180), z.number().min(-85.051129).max(85.051129)]);
-const way = z.string().regex(/^osm:way\/\d+$/);
-const feature = z.string().regex(/^osm:(node|way|relation)\/\d+$/);
 const carnival = {
   style: z.enum(CARNIVAL_STYLES),
   at: point,

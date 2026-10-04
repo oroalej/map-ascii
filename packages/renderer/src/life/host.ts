@@ -1,6 +1,6 @@
 import * as Comlink from 'comlink';
 import { simulationSeasons } from './seasonal-simulation';
-import type { CityLifeConfig, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { RuntimeCityLife, ProcessionRoute, TrafficMix } from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
@@ -115,7 +115,7 @@ export function createInlineHost(
 export function createWorkerHost(
   options: {
     traffic?: TrafficMix;
-    cityLife?: CityLifeConfig;
+    cityLife?: RuntimeCityLife;
     itemInspection?: boolean;
     moments?: MomentOptions;
   },

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as shared from '@atlas/shared';
 import type { SeasonConfig, UtilityRecord } from '@atlas/shared';
-import { LifeBuilder, LifeLine } from './geometry';
+import { LifeBuilder, LifeLine, encodeSeasonalPayload } from './geometry';
 import {
   collectSeasonAnchors,
   createSeasonalFixtureCache,
@@ -54,6 +55,22 @@ const pack = (fixtures: Parameters<typeof packFixtures>[2], zoom = 20) =>
   packFixtures(new Uint8Array(40000), grid, fixtures, zoom, index, 0);
 
 describe('seasonal fixtures', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('does not validate raw records while inactive and reuses decoding through season changes', () => {
+    const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+    const payload = encodeSeasonalPayload(['{', JSON.stringify({ version: 2 })]);
+    const groups = [
+      { tile, life: new LifeBuilder().finish(), fixtures: [lamp], seasonal: payload },
+    ];
+    const cache = createSeasonalFixtureCache();
+    expect(cache(groups, undefined, 13.6)).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+    expect(cache(groups, season, 13.6).map((f) => f.kind)).toEqual(['season-lantern']);
+    expect(parse).toHaveBeenCalledTimes(2);
+    cache(groups, undefined, 13.6);
+    cache(groups, season, 13.6);
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
   it('skips hidden bunting preparation and invalidates eligibility while retaining lanterns', () => {
     const b = new LifeBuilder();
     b.line(
