@@ -212,6 +212,20 @@ describe('cleanTask', () => {
     expect(readdirSync(folder).sort()).toEqual(['handoff.md', 'log.txt']);
   });
 
+  it('previews a whole-folder removal without deleting the folder or nested scratch', () => {
+    const folder = task('active', 'dry-review', ['notes.txt', 'round1/report.txt']);
+    const preview = cleanTask(root, 'dry-review', [], true);
+    expect(preview).toMatchObject({
+      deleted: ['notes.txt', 'round1'],
+      kept: [],
+      removedFolder: true,
+    });
+    expect(existsSync(folder)).toBe(true);
+    expect(readdirSync(folder).sort()).toEqual(['notes.txt', 'round1']);
+    expect(existsSync(join(folder, 'notes.txt'))).toBe(true);
+    expect(existsSync(join(folder, 'round1/report.txt'))).toBe(true);
+  });
+
   it('rejects a task name that could leave the plans folder', () => {
     task('done', 'labels', ['handoff.md']);
     expect(() => cleanTask(root, '../labels')).toThrow(/Invalid task/);

@@ -21,6 +21,66 @@ beforeEach(() => {
 });
 
 describe('removeWorktree', () => {
+  it('refuses a recreated merged branch whose head differs from the PR head', () => {
+    const options = mergedOptions();
+    const expectedHead = git(wt, 'rev-parse', 'HEAD').trim();
+    removeWorktree({ ...options, expectedHead });
+    git(repo, 'commit', '-q', '--allow-empty', '-m', 'main advances');
+    git(repo, 'worktree', 'add', '-q', wt, '-b', branch, '--no-track', 'main');
+    const head = git(wt, 'rev-parse', 'HEAD').trim();
+    for (const dryRun of [true, false]) {
+      expect(() => removeWorktree({ ...options, expectedHead, dryRun })).toThrow(
+        /head differs from expected/,
+      );
+      expect(existsSync(join(wt, '.git'))).toBe(true);
+      expect(existsSync(markerPath())).toBe(false);
+      expect(git(repo, 'rev-parse', `refs/heads/${branch}`).trim()).toBe(head);
+    }
+  });
+
+  it('removes a matching PR head and recognizes completed pinned reruns', () => {
+    const options = { ...mergedOptions(), expectedHead: git(wt, 'rev-parse', 'HEAD').trim() };
+    expect(removeWorktree({ ...options, dryRun: true }).deletedBranch).toBe(true);
+    expect(removeWorktree(options).deletedBranch).toBe(true);
+    for (const dryRun of [true, false]) {
+      expect(removeWorktree({ ...options, dryRun }).alreadyRemoved).toBe(true);
+    }
+  });
+
+  it('distinguishes protected ignored files from mixed uncommitted work', () => {
+    const options = mergedOptions();
+    const raw = join(wt, 'packages/data/raw/source.json');
+    mkdirSync(join(raw, '..'), { recursive: true });
+    writeFileSync(raw, 'saved download');
+    for (const dryRun of [true, false]) {
+      expect(() => removeWorktree({ ...options, dryRun })).toThrow(/has protected ignored files:/);
+    }
+    writeFileSync(join(wt, 'new.txt'), 'new work');
+    for (const dryRun of [true, false]) {
+      expect(() => removeWorktree({ ...options, dryRun })).toThrow(/has uncommitted changes:/);
+      expect(readFileSync(raw, 'utf8')).toBe('saved download');
+      expect(readFileSync(join(wt, 'new.txt'), 'utf8')).toBe('new work');
+      expect(existsSync(markerPath())).toBe(false);
+      expect(branches()).toContain(branch);
+    }
+  });
+
+  it('protects root performance reports while allowing web test caches', () => {
+    const options = mergedOptions();
+    const report = join(wt, 'test-results/perf.json');
+    mkdirSync(join(report, '..'), { recursive: true });
+    writeFileSync(report, 'performance evidence');
+    const webReport = join(wt, 'apps/web/test-results/result.json');
+    mkdirSync(join(webReport, '..'), { recursive: true });
+    writeFileSync(webReport, 'browser cache');
+    for (const dryRun of [true, false]) {
+      expect(() => removeWorktree({ ...options, dryRun })).toThrow(/protected ignored files/);
+      expect(readFileSync(report, 'utf8')).toBe('performance evidence');
+    }
+    rmSync(join(wt, 'test-results'), { recursive: true });
+    expect(removeWorktree({ ...options, dryRun: true }).removedWorktree).toBe(true);
+    expect(removeWorktree(options).removedWorktree).toBe(true);
+  });
   it('allows ignored OS junk at the root and in workspace packages', () => {
     writeFileSync(join(wt, '.gitignore'), 'desktop.ini\nThumbs.db\n.DS_Store\n');
     git(wt, 'add', '.gitignore');
@@ -171,7 +231,7 @@ describe('removeWorktree', () => {
     writeFileSync(archive, 'previous published');
     expect(removeWorktree({ ...options, dryRun: true }).removedWorktree).toBe(true);
     writeFileSync(archive, 'unpublished');
-    expect(() => removeWorktree(options)).toThrow(/uncommitted changes/);
+    expect(() => removeWorktree(options)).toThrow(/protected ignored files/);
     writeFileSync(archive, 'previous published');
     expect(removeWorktree(options).removedWorktree).toBe(true);
   });

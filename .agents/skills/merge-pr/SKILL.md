@@ -30,6 +30,7 @@ Don't ask for confirmation between steps. Stop only where this skill says to sto
 1. Take the branch from the argument, stripping a leading `origin/`, or from `git branch --show-current`. If it's `main`, stop with `error`.
 2. Run `git worktree list --porcelain`. `<main-checkout>` is the first entry. `<wt>` is the entry with this branch, if any. If the branch is checked out in `<main-checkout>`, stop with `error`.
 3. Run `gh pr view <branch> --json number,state,headRefOid,mergeable,mergeStateStatus,url`.
+   - Record `headRefOid` as `<cleanup-head>` for every cleanup command, including already-merged reruns.
    - No PR → stop with `error` (`No PR for <branch>`).
    - `state` is `MERGED` → a rerun after a cleanup failure. Take the merge commit from `gh pr view <N> --json mergeCommit` and go to step 4, which checks for newer local work before anything is cleaned.
    - `state` is `CLOSED` → stop with `error`.
@@ -43,11 +44,11 @@ Check every condition. If one fails, stop with `stopped`, naming it.
    - With `Head: <sha>`, `headRefOid` must also equal `<sha>`. If it doesn't, something was pushed after the caller's review: stop.
    - Call this SHA `<gated-sha>`.
 3. CI passes on `<gated-sha>`. Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. Any failing check stops the run. This skill doesn't fix CI; `$review-pr` does.
-4. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. Conflicts stop the run and point to `$sync-review`. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; step 3 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
+4. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. Conflicts stop the run and point to `$review-pr`, then rerun `$merge-pr`. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; step 3 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
 
 ## 3. Merge
 
-1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. Both must succeed. If the head lacks current `main`, stop with `stopped` and point to `$sync-review` to synchronize and review it; do not merge merely because GitHub says `CLEAN`.
+1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. Both must succeed. If the head lacks current `main`, stop with `stopped` and point to `$review-pr` to synchronize and review it, followed by rerunning `$merge-pr`; do not merge merely because GitHub says `CLEAN`.
 2. `gh pr merge <N> --merge --match-head-commit <gated-sha>`. GitHub refuses the merge if the head moved after the gate; then stop with `stopped`. Never use `--delete-branch`, `--squash`, `--rebase`, `--admin` or `--auto`.
 3. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED`, stop with `error`. Record the merge commit `<sha>`.
 
@@ -62,10 +63,10 @@ Before cleaning anything, from `<main-checkout>`:
 3. Run:
 
 ```
-pnpm worktree:remove <branch> --dry-run
+pnpm worktree:remove <branch> --head <cleanup-head> --dry-run
 ```
 
-It runs every check of step 6 without deleting: the branch is merged into `origin/main` (no local commits after the merge), and the worktree has no new uncommitted work or protected ignored files. Refusals saying `is not merged into`, `uncommitted changes`, or `protected ignored files` preserve the branch's scratch: skip steps 5–6 and report the safety refusal. Report other failures (missing scripts, Git errors, inaccessible metadata) as cleanup errors and also skip steps 5–6. A reported `finishing an interrupted removal` is fine: go on; dry-run must still establish current safety.
+It runs every check of step 6 without deleting: the local head matches the PR's `<cleanup-head>`, that head is merged into `origin/main`, and the worktree has no new uncommitted work or protected ignored files. Refusals saying `head differs from expected`, `is not merged into`, or `uncommitted changes` preserve the branch's scratch: skip steps 5–6 and report the safety refusal. For the distinct `has protected ignored files:` refusal, continue step 5 under its completion and keep-inventory safeguards, skip step 6, and report the protected paths to move before rerunning `pnpm worktree:remove <branch> --head <cleanup-head>` from main. Report other failures (missing scripts, Git errors, inaccessible metadata) as cleanup errors and skip steps 5–6. A reported `finishing an interrupted removal` is fine: go on; dry-run must still establish current safety.
 
 Exception for an **already-merged rerun**: if the command succeeds and reports `already removed: <branch>`, it has confirmed the local branch and worktree are absent and no recorded folder needs recovery. Record `already removed`, continue step 5 to finish plans cleanup, and skip step 6. A `Removal marker pending` or inaccessible-metadata refusal is a cleanup error; skip steps 5–6. Consume the command's result rather than inspecting its private marker files. Never treat a missing branch as success for an open PR or bypass another safety refusal.
 
@@ -99,12 +100,12 @@ Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associate
 
 ## 6. Worktree and local branch
 
-On Windows, if the session process's directory is inside `<wt>` (or unknown), run only `pnpm worktree:remove <branch> --dry-run` from main. Report removal as deferred, retain the worktree and local branch, and tell the user to close/leave the session using that directory and run `pnpm worktree:remove <branch>` from `<main-checkout>`. This also applies to the no-argument invocation that started inside the worktree. Do not attempt partial deletion.
+On Windows, if the session process's directory is inside `<wt>` (or unknown), run only `pnpm worktree:remove <branch> --head <cleanup-head> --dry-run` from main. Report removal as deferred, retain the worktree and local branch, and tell the user to close/leave the session using that directory and run `pnpm worktree:remove <branch> --head <cleanup-head>` from `<main-checkout>`. This also applies to the no-argument invocation that started inside the worktree. Do not attempt partial deletion.
 
 Otherwise, from `<main-checkout>`:
 
 ```
-pnpm worktree:remove <branch>
+pnpm worktree:remove <branch> --head <cleanup-head>
 ```
 
 It repeats step 4's checks, deletes the worktree folder, removes only its Git registration, and deletes the local branch. The remote branch stays.

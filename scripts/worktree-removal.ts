@@ -28,6 +28,8 @@ export interface RemoveWorktreeOptions {
   branch: string;
   /** The ref the branch must already be merged into, e.g. `origin/main`. */
   mergedInto: string;
+  /** The merged PR head; refuse a same-name branch that was recreated or advanced. */
+  expectedHead?: string;
   /** Defaults to `process.cwd()`. Windows can't delete a folder some process is using as its cwd. */
   cwd?: string;
   /** Run every check and report what would be removed, without removing anything. */
@@ -84,17 +86,17 @@ function readMarker(path: string): RemovalMarker | null {
 /** Explicitly disposable build/dependency caches; local data and configuration stay protected. */
 const workspaceCacheDirectories = ['node_modules/', 'coverage/', 'blob-report/'];
 const webCacheDirectories = ['.next/', 'out/', 'test-results/', 'playwright-report/'];
-const otherCacheDirectories = ['packages/data/build/', '.turbo/'];
-const workspaceCacheFiles = ['.eslintcache', 'tsconfig.tsbuildinfo'];
+const otherCacheDirectories = ['packages/data/build/'];
+const workspaceCacheFiles = ['tsconfig.tsbuildinfo'];
 const osJunkFiles = ['desktop.ini', 'Thumbs.db', '.DS_Store'];
 
 function disposableIgnored(path: string): boolean {
   const workspacePath = path.replace(/^(?:apps|packages)\/[^/]+\//, '');
-  const webPath = path.replace(/^apps\/web\//, '');
   return (
     workspaceCacheDirectories.includes(workspacePath) ||
     workspaceCacheFiles.includes(workspacePath) ||
-    webCacheDirectories.includes(webPath) ||
+    (path.startsWith('apps/web/') &&
+      webCacheDirectories.includes(path.slice('apps/web/'.length))) ||
     otherCacheDirectories.includes(path) ||
     osJunkFiles.includes(path.split('/').at(-1) ?? '')
   );
@@ -224,6 +226,7 @@ export function removeWorktree({
   repo,
   branch,
   mergedInto,
+  expectedHead,
   cwd = process.cwd(),
   dryRun = false,
   remove = removeFolder,
@@ -263,6 +266,9 @@ export function removeWorktree({
     );
   }
   const head = branchExists ? git(main, 'rev-parse', `refs/heads/${branch}`) : null;
+  if (head !== null && expectedHead !== undefined && head !== expectedHead) {
+    throw new Error(`${branch} head differs from expected ${expectedHead}; nothing was removed`);
+  }
   refuseActiveOperation(common, branch);
   if (!locatedWorktree && previous && existsSync(previous.worktree)) {
     if (previous.head !== head || isSelfOrDescendant(main, previous.worktree)) {
@@ -315,10 +321,12 @@ export function removeWorktree({
       if (entry.startsWith('?? ')) return !isPublishedArtifact(entry.slice(3));
       return !(resumed && entry.slice(0, 2) === ' D');
     });
-    if (changes.length)
-      throw new Error(
-        `${worktree} has uncommitted changes or protected ignored files:\n${changes.join('\n')}`,
-      );
+    if (changes.length) {
+      const reason = changes.every((entry) => entry.startsWith('!! '))
+        ? 'protected ignored files'
+        : 'uncommitted changes';
+      throw new Error(`${worktree} has ${reason}:\n${changes.join('\n')}`);
+    }
     if (isSelfOrDescendant(cwd, worktree)) {
       throw new Error(`The current directory is inside ${worktree}. Run this from ${main}.`);
     }
