@@ -55,7 +55,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
+          # Must match the e2e job's browser-cache key.
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          lookup-only: true
 
       - name: Install Playwright browsers for PRs
         if: github.event_name == 'push' && steps.playwright-cache.outputs.cache-hit != 'true'
@@ -98,6 +100,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
+          # Must match the check job's shared browser-cache key.
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       # Azure mirror downloads can exhaust the job budget before any browser test starts.
