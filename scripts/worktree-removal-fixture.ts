@@ -26,12 +26,13 @@ export function worktreeRemovalFixture() {
     expect(() =>
       removeWorktree({
         ...options,
-        remove: () => {
-          rmSync(join(wt, 'tracked.txt'));
+        remove: (path) => {
+          rmSync(join(path, 'tracked.txt'));
           throw Object.assign(new Error('resource busy'), { code: 'EBUSY' });
         },
       }),
     ).toThrow(/Partially deleted/);
+    return (JSON.parse(readFileSync(markerPath(), 'utf8')) as { tomb: string }).tomb;
   }
   function trackedFile() {
     writeFileSync(join(wt, 'tracked.txt'), 'original');

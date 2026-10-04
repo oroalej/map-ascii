@@ -101,6 +101,8 @@ Work in `<wt>`, following the amended handoff:
 
 Follow steps 1 and 3 of `<skill-dir>/../sync-review/SKILL.md` for this one branch and worktree, with these adjustments. Don't merge `origin/main` here: `$review-pr` does it first, in step 5.
 
+For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
+
 - **Step 1 (commit and push):** usually only pushes, since step 3 already committed. Anything uncommitted at this point is either work the handoff missed (commit it) or not this task's (hold it back and report it). A held-back file or rejected push → pause and stop.
 - **Step 3 (PR):** if there's no PR, create one. Take the body from the handoff's Goal & context, its steps, and its Verification results (what actually ran). Add a "Handoff review amendments" section listing the design amendments.
 

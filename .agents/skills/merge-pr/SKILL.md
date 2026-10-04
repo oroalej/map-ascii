@@ -108,9 +108,9 @@ Otherwise, from `<main-checkout>`:
 pnpm worktree:remove <branch> --head <cleanup-head>
 ```
 
-It repeats step 4's checks, deletes the worktree folder, removes only its Git registration, and deletes the local branch. The remote branch stays.
+It repeats step 4's checks, records recovery information, and renames the worktree to a unique sibling folder before deleting its contents. It then removes only its Git registration and deletes the local branch. The remote branch stays.
 
-- If it reports `Partially deleted`, a process (dev server, terminal or editor) is using the folder. Don't retry. Report it, so the user can close that process and run `$merge-pr <branch>` again: the rerun finishes the removal.
+- If it reports `Could not relocate`, a process is holding the original directory; its contents and branch were kept. If it reports `Partially deleted`, the recorded sibling folder needs recovery. In either case, don't retry or prune worktree metadata. Report the path, so the user can close the process and run `$merge-pr <branch>` again. The rerun uses the recorded folder and refuses a recreated original path.
 - If an already-merged rerun has no worktree (step 1 found none), it deletes only the local branch. An open PR still requires a worktree at gate 2.1.
 
 ## 7. Report

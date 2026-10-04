@@ -44,7 +44,7 @@ describe('removeWorktree', () => {
   it('refuses new or modified work after an interruption, also on dry-run', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     writeFileSync(join(wt, 'tracked.txt'), 'new work');
     writeFileSync(join(wt, 'new.txt'), 'new work');
     expect(() => removeWorktree({ ...options, dryRun: true })).toThrow(/uncommitted changes/);
@@ -57,7 +57,7 @@ describe('removeWorktree', () => {
   it('preserves an interrupted folder now owned by another branch', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     const marker = readFileSync(markerPath(), 'utf8');
     git(wt, 'switch', '-c', 'codex/other');
     writeFileSync(join(wt, 'private.txt'), 'new owner work');
@@ -74,7 +74,7 @@ describe('removeWorktree', () => {
   it('refuses staged changes on a resumed removal', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     git(wt, 'add', 'tracked.txt');
     expect(() => removeWorktree(options)).toThrow(/uncommitted changes/);
     expect(existsSync(wt)).toBe(true);
@@ -83,7 +83,7 @@ describe('removeWorktree', () => {
   it('leaves legitimate resumed removals and markers unchanged on dry-run', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     const marker = readFileSync(markerPath(), 'utf8');
     expect(removeWorktree({ ...options, dryRun: true }).resumed).toBe(true);
     expect(readFileSync(markerPath(), 'utf8')).toBe(marker);
@@ -94,7 +94,7 @@ describe('removeWorktree', () => {
   it('uses surviving Git metadata when removal deleted the worktree pointer', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     rmSync(join(wt, '.git'));
     expect(removeWorktree(options).resumed).toBe(true);
     expect(existsSync(wt)).toBe(false);
@@ -125,7 +125,7 @@ describe('removeWorktree', () => {
   it('removes an obsolete marker only on actual cleanup when its branch is gone', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     rmSync(wt, { recursive: true, force: true });
     git(repo, 'worktree', 'prune');
     git(repo, 'branch', '-D', branch);
@@ -134,7 +134,8 @@ describe('removeWorktree', () => {
     expect(existsSync(markerPath())).toBe(true);
     expect(removeWorktree(options).alreadyRemoved).toBe(true);
     expect(existsSync(markerPath())).toBe(false);
-    git(repo, 'worktree', 'add', '-q', wt, '-b', branch);
+    git(repo, 'worktree', 'add', '-q', fixture.wt, '-b', branch);
+    wt = fixture.wt;
     writeFileSync(join(wt, 'new.txt'), 'new work');
     expect(() => removeWorktree(options)).toThrow(/uncommitted changes/);
     expect(existsSync(join(wt, 'new.txt'))).toBe(true);
@@ -144,7 +145,7 @@ describe('removeWorktree', () => {
     trackedFile();
     const options = mergedOptions();
     const metadata = git(wt, 'rev-parse', '--absolute-git-dir').trim();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     const marker = readFileSync(markerPath(), 'utf8');
     rmSync(join(wt, '.git'));
     const gitdir = readFileSync(join(metadata, 'gitdir'), 'utf8');
@@ -180,8 +181,8 @@ describe('removeWorktree', () => {
     expect(() =>
       removeWorktree({
         ...otherOptions,
-        remove: () => {
-          rmSync(join(other, '.git'));
+        remove: (path) => {
+          rmSync(join(path, '.git'));
           throw Object.assign(new Error('resource busy'), { code: 'EBUSY' });
         },
       }),
@@ -196,7 +197,7 @@ describe('removeWorktree', () => {
   it('reports completed removal and refuses pending or unreadable markers without mutations', () => {
     trackedFile();
     const options = mergedOptions();
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     const marker = readFileSync(markerPath(), 'utf8');
     const metadata = git(wt, 'rev-parse', '--absolute-git-dir').trim();
     rmSync(join(wt, '.git'));
@@ -234,7 +235,7 @@ describe('removeWorktree', () => {
       writeFileSync(join(wt, path), 'cache');
     }
     expect(removeWorktree({ ...options, dryRun: true }).resumed).toBe(false);
-    interruptRemoval(options);
+    wt = interruptRemoval(options);
     mkdirSync(join(wt, 'local-data'));
     writeFileSync(join(wt, 'local-data', 'work.txt'), 'local work');
     expect(() => removeWorktree(options)).toThrow(/protected ignored files/);

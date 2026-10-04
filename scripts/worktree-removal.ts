@@ -11,10 +11,12 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { TilesLock } from '../packages/shared/src/schemas';
 import { sha256 } from '../packages/data/scripts/lib/tiles-release';
 import { git, gitRaw, gitSucceeds, listWorktrees, mainCheckout } from './git';
@@ -68,6 +70,9 @@ function removeFolder(path: string): void {
 interface RemovalMarker {
   worktree: string;
   head: string;
+  /** Absent only in markers written by the older, in-place removal. */
+  tomb?: string;
+  phase?: 'prepared' | 'prepared-legacy' | 'deleting';
 }
 
 function readMarker(path: string): RemovalMarker | null {
@@ -75,11 +80,43 @@ function readMarker(path: string): RemovalMarker | null {
     const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
     if (typeof value !== 'object' || value === null) return null;
     const record = value as Record<string, unknown>;
-    return typeof record.worktree === 'string' && typeof record.head === 'string'
-      ? { worktree: record.worktree, head: record.head }
-      : null;
+    if (typeof record.worktree !== 'string' || typeof record.head !== 'string') return null;
+    const { worktree, head, tomb, phase } = record;
+    if (tomb === undefined && phase === undefined) return { worktree, head };
+    if (
+      typeof tomb !== 'string' ||
+      !isAbsolute(worktree) ||
+      !isAbsolute(tomb) ||
+      relative(dirname(worktree), dirname(tomb)) !== '' ||
+      !basename(tomb).startsWith(`${basename(worktree)}.atlas-removal-`) ||
+      !/^[a-f0-9-]{36}$/.test(
+        basename(tomb).slice(`${basename(worktree)}.atlas-removal-`.length),
+      ) ||
+      (phase !== 'prepared' && phase !== 'prepared-legacy' && phase !== 'deleting')
+    )
+      return null;
+    return { worktree, head, tomb, phase };
   } catch {
     return null;
+  }
+}
+
+function saveMarker(path: string, value: RemovalMarker): void {
+  const temporary = `${path}.tmp-${randomUUID()}`;
+  writeFileSync(temporary, JSON.stringify(value));
+  renameSync(temporary, path);
+}
+
+function realDirectory(path: string): boolean {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`Refusing linked or non-directory removal folder ${path}`);
+    }
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -100,6 +137,20 @@ function disposableIgnored(path: string): boolean {
     otherCacheDirectories.includes(path) ||
     osJunkFiles.includes(path.split('/').at(-1) ?? '')
   );
+}
+
+/** Empty ignored scaffolding is disposable; links, files and unreadable trees are protected. */
+function emptyIgnoredTree(path: string): boolean {
+  try {
+    const stat = lstatSync(path);
+    return (
+      stat.isDirectory() &&
+      !stat.isSymbolicLink() &&
+      readdirSync(path).every((name) => emptyIgnoredTree(join(path, name)))
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Published artifacts are reproducible when they match a lock reachable from the captured head. */
@@ -161,7 +212,7 @@ function metadataDirectories(common: string): string[] {
     : [];
 }
 
-function worktreeMetadata(common: string, worktree: string): string {
+function worktreeMetadata(common: string, worktree: string): string | null {
   // Resolve by the registered path even when an interruption removed the .git pointer.
   const matches = metadataDirectories(common).filter((path) => {
     try {
@@ -175,12 +226,12 @@ function worktreeMetadata(common: string, worktree: string): string {
       return false;
     }
   });
-  if (matches.length !== 1) {
+  if (matches.length > 1) {
     throw new Error(
       `Cannot establish safe status for ${worktree}: worktree Git metadata is missing or ambiguous`,
     );
   }
-  return matches[0]!;
+  return matches[0] ?? null;
 }
 
 function refuseActiveOperation(common: string, branch: string): void {
@@ -218,9 +269,9 @@ function worktreeStatus(main: string, metadata: string, worktree: string): strin
 
 /**
  * Removes the merged branch's worktree folder and local branch, refusing anything unsafe.
- * Before deleting, it leaves a marker in the git directory. If a process holds a file and the
- * deletion stops partway, a rerun sees the marker and finishes, instead of refusing the
- * half-deleted worktree as one with uncommitted changes.
+ * Record recovery intent before relocating the folder, then delete only that sibling folder.
+ * A directory lock stops relocation without deleting contents. A rerun can finish deletion
+ * while preserving newly created work and a recreated original path.
  */
 export function removeWorktree({
   repo,
@@ -266,11 +317,27 @@ export function removeWorktree({
     );
   }
   const head = branchExists ? git(main, 'rev-parse', `refs/heads/${branch}`) : null;
-  if (head !== null && expectedHead !== undefined && head !== expectedHead) {
+  const pinnedHead =
+    expectedHead === undefined
+      ? undefined
+      : git(main, 'rev-parse', '--verify', `${expectedHead}^{commit}`);
+  if (head !== null && pinnedHead !== undefined && head !== pinnedHead) {
     throw new Error(`${branch} head differs from expected ${expectedHead}; nothing was removed`);
   }
   refuseActiveOperation(common, branch);
-  if (!locatedWorktree && previous && existsSync(previous.worktree)) {
+  if (
+    previous?.tomb &&
+    (head !== null || existsSync(previous.worktree) || existsSync(previous.tomb)) &&
+    (previous.head !== head ||
+      (locatedWorktree !== null && relative(previous.worktree, locatedWorktree) !== ''))
+  ) {
+    throw new Error(`Removal marker pending for ${branch}: recorded folder still needs recovery`);
+  }
+  if (
+    !locatedWorktree &&
+    previous &&
+    (existsSync(previous.worktree) || (previous.tomb && existsSync(previous.tomb)))
+  ) {
     if (previous.head !== head || isSelfOrDescendant(main, previous.worktree)) {
       throw new Error(`Removal marker pending for ${branch}: recorded folder still needs recovery`);
     }
@@ -282,6 +349,19 @@ export function removeWorktree({
     previous !== null &&
     relative(resolve(previous.worktree), worktree) === '' &&
     previous.head === head;
+  if (worktree !== null && isSelfOrDescendant(main, worktree)) {
+    throw new Error(`Refusing removal folder containing the main checkout ${main}`);
+  }
+  const originalExists = worktree !== null && realDirectory(worktree);
+  const tombExists = resumed && previous.tomb !== undefined && realDirectory(previous.tomb);
+  if (originalExists && resumed && previous.tomb && (tombExists || previous.phase === 'deleting')) {
+    throw new Error(`Removal marker pending for ${branch}: original worktree path was recreated`);
+  }
+  if (resumed && previous.tomb && previous.phase !== 'deleting' && !originalExists && !tombExists) {
+    throw new Error(`Removal marker pending for ${branch}: prepared folder is missing`);
+  }
+  let folder = tombExists ? previous.tomb! : worktree;
+  const folderExists = folder !== null && realDirectory(folder);
   const metadata = worktree === null ? null : worktreeMetadata(common, worktree);
   if (metadata !== null && existsSync(join(metadata, 'locked'))) {
     throw new Error(`${worktree} is locked (git worktree unlock); nothing was removed`);
@@ -307,27 +387,49 @@ export function removeWorktree({
   if (!head || !gitSucceeds(main, 'merge-base', '--is-ancestor', head, mergedInto)) {
     throw new Error(`${branch} is not merged into ${mergedInto}; nothing was removed`);
   }
-  const folderExists = worktree !== null && existsSync(worktree);
-  if (folderExists && metadata !== null) {
+  // Legacy in-place cleanup may have removed .git before Git pruned the registration.
+  // Only a matching marker and a physically empty real directory replace missing metadata.
+  const prunedEmpty =
+    folderExists &&
+    resumed &&
+    metadata === null &&
+    !others.some((entry) => relative(entry.path, worktree) === '') &&
+    readdirSync(folder!).length === 0 &&
+    (previous.tomb === undefined || previous.phase === 'deleting');
+  if (worktree !== null && metadata === null && !prunedEmpty) {
+    throw new Error(
+      `Cannot establish safe status for ${worktree}: worktree Git metadata is missing or ambiguous`,
+    );
+  }
+  const allowDeleted = resumed && previous.phase !== 'prepared';
+  const checkStatus = (path: string) => {
+    if (metadata === null) return;
     if (
       git(main, '--git-dir', metadata, 'symbolic-ref', '--quiet', 'HEAD') !== `refs/heads/${branch}`
     ) {
       throw new Error(`Cannot establish safe status for ${worktree}: branch ownership differs`);
     }
-    const isPublishedArtifact = createPublishedArtifactChecker(main, worktree, head);
-    const changes = worktreeStatus(main, metadata, worktree).filter((entry) => {
+    const isPublishedArtifact = createPublishedArtifactChecker(main, path, head);
+    const changes = worktreeStatus(main, metadata, path).filter((entry) => {
       if (entry.startsWith('!! '))
-        return !disposableIgnored(entry.slice(3)) && !isPublishedArtifact(entry.slice(3));
+        return (
+          !disposableIgnored(entry.slice(3)) &&
+          !emptyIgnoredTree(join(path, entry.slice(3))) &&
+          !isPublishedArtifact(entry.slice(3))
+        );
       if (entry.startsWith('?? ')) return !isPublishedArtifact(entry.slice(3));
-      return !(resumed && entry.slice(0, 2) === ' D');
+      return !(allowDeleted && entry.slice(0, 2) === ' D');
     });
     if (changes.length) {
       const reason = changes.every((entry) => entry.startsWith('!! '))
         ? 'protected ignored files'
         : 'uncommitted changes';
-      throw new Error(`${worktree} has ${reason}:\n${changes.join('\n')}`);
+      throw new Error(`${path} has ${reason}:\n${changes.join('\n')}`);
     }
-    if (isSelfOrDescendant(cwd, worktree)) {
+  };
+  if (folderExists) {
+    checkStatus(folder!);
+    if (isSelfOrDescendant(cwd, worktree!) || isSelfOrDescendant(cwd, folder!)) {
       throw new Error(`The current directory is inside ${worktree}. Run this from ${main}.`);
     }
   }
@@ -342,18 +444,50 @@ export function removeWorktree({
 
   if (folderExists) {
     mkdirSync(markers, { recursive: true });
-    writeFileSync(marker, JSON.stringify({ worktree, head }));
+    let recovery: RemovalMarker;
+    if (tombExists) {
+      recovery = previous!;
+    } else {
+      const tomb =
+        resumed && previous.tomb
+          ? previous.tomb
+          : join(dirname(worktree!), `${basename(worktree!)}.atlas-removal-${randomUUID()}`);
+      if (existsSync(tomb)) throw new Error(`Removal folder already exists: ${tomb}`);
+      recovery = {
+        worktree: worktree!,
+        tomb,
+        head,
+        phase: allowDeleted ? 'prepared-legacy' : 'prepared',
+      };
+      // Persist intent before rename, so a crash on either side is recoverable.
+      saveMarker(marker, recovery);
+      try {
+        renameSync(worktree!, tomb);
+      } catch (error) {
+        throw new Error(
+          `Could not relocate ${worktree}: nothing was removed. Close processes using it and rerun. The branch was kept. (${(error as NodeJS.ErrnoException).code ?? 'rename failed'})`,
+        );
+      }
+      folder = tomb;
+    }
+    // Check again after relocation to preserve any work created before the rename.
+    checkStatus(folder!);
+    recovery = { ...recovery, phase: 'deleting' };
+    saveMarker(marker, recovery);
     withCleanupError(
-      worktree,
+      folder!,
       'deleted',
       () => {
-        remove(worktree);
+        remove(folder!);
       },
       ' The branch was kept.',
     );
   }
+  if (worktree && realDirectory(worktree)) {
+    throw new Error(`Removal marker pending for ${branch}: original worktree path was recreated`);
+  }
   // Remove only this registration; global pruning destroys other sessions' recovery metadata.
-  if (worktree) git(main, 'worktree', 'remove', '--force', worktree);
+  if (worktree && metadata !== null) git(main, 'worktree', 'remove', '--force', worktree);
   // Compare-and-delete preserves any newer branch head another session created meanwhile.
   if (branchExists) {
     git(main, 'update-ref', '-d', `refs/heads/${branch}`, head);

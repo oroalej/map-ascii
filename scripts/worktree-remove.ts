@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { removeWorktree } from './worktree-removal';
+import type { RemovalResult } from './worktree-removal';
 
 export function parseWorktreeRemoveArgs(args: readonly string[]) {
   const { values, positionals } = parseArgs({
@@ -20,6 +21,24 @@ export function parseWorktreeRemoveArgs(args: readonly string[]) {
   const [name, ...rest] = positionals;
   if (!name || rest.length > 0) throw new Error('Expected exactly one branch name');
   return { branch: name, dryRun: values['dry-run'] ?? false, expectedHead: values.head };
+}
+
+/** Keep the phrases used by merge-pr's recovery flow in one testable place. */
+export function formatRemovalResult(
+  branch: string,
+  dryRun: boolean,
+  result: RemovalResult,
+): string[] {
+  const { worktree, removedWorktree, deletedBranch, resumed, alreadyRemoved } = result;
+  const remote = `remote branch: kept origin/${branch}`;
+  if (alreadyRemoved) return [`already removed: ${branch}`, remote];
+  const verb = (done: string) => (dryRun ? `would ${done.replace(/d$/, '')}` : done);
+  return [
+    ...(resumed ? ['finishing an interrupted removal'] : []),
+    `worktree: ${removedWorktree ? `${verb('removed')} ${worktree}` : (worktree ?? 'none')}`,
+    `local branch: ${deletedBranch ? `${verb('deleted')} ${branch}` : 'none'}`,
+    remote,
+  ];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -38,24 +57,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     execFileSync('git', ['fetch', 'origin', 'main'], { stdio: 'inherit' });
     // pnpm runs scripts from the package root; INIT_CWD is where the user ran pnpm.
     const cwd = process.env.INIT_CWD ?? process.cwd();
-    const { worktree, removedWorktree, deletedBranch, resumed, alreadyRemoved } = removeWorktree({
+    const result = removeWorktree({
       ...options,
       repo: process.cwd(),
       mergedInto: 'origin/main',
       cwd,
     });
-    if (alreadyRemoved) {
-      console.log(`already removed: ${branch}`);
-      console.log(`remote branch: kept origin/${branch}`);
-      process.exit(0);
-    }
-    const verb = (done: string) => (dryRun ? `would ${done.replace(/d$/, '')}` : done);
-    if (resumed) console.log('finishing an interrupted removal');
-    console.log(
-      `worktree: ${removedWorktree ? `${verb('removed')} ${worktree}` : (worktree ?? 'none')}`,
-    );
-    console.log(`local branch: ${deletedBranch ? `${verb('deleted')} ${branch}` : 'none'}`);
-    console.log(`remote branch: kept origin/${branch}`);
+    for (const line of formatRemovalResult(branch, dryRun, result)) console.log(line);
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

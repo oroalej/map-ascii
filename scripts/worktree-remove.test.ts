@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseWorktreeRemoveArgs } from './worktree-remove';
+import { formatRemovalResult, parseWorktreeRemoveArgs } from './worktree-remove';
 
 describe('worktree:remove arguments', () => {
   it.each(
@@ -51,5 +51,36 @@ describe('worktree:remove arguments', () => {
     expect(result.stderr).toContain('usage: pnpm worktree:remove');
     expect(result.stderr).not.toContain('fatal:');
     expect(result.stdout).not.toContain('already removed');
+  });
+});
+
+describe('worktree:remove output consumed by merge-pr', () => {
+  it.each([true, false])('pins resumed-removal output (dry-run: %s)', (dryRun) => {
+    expect(
+      formatRemovalResult('codex/topic', dryRun, {
+        worktree: '/repo-topic',
+        removedWorktree: true,
+        deletedBranch: true,
+        resumed: true,
+        alreadyRemoved: false,
+      }),
+    ).toEqual([
+      'finishing an interrupted removal',
+      `worktree: ${dryRun ? 'would remove' : 'removed'} /repo-topic`,
+      `local branch: ${dryRun ? 'would delete' : 'deleted'} codex/topic`,
+      'remote branch: kept origin/codex/topic',
+    ]);
+  });
+
+  it('pins already-removed output', () => {
+    expect(
+      formatRemovalResult('codex/topic', false, {
+        worktree: null,
+        removedWorktree: false,
+        deletedBranch: false,
+        resumed: false,
+        alreadyRemoved: true,
+      }),
+    ).toEqual(['already removed: codex/topic', 'remote branch: kept origin/codex/topic']);
   });
 });
