@@ -1,9 +1,9 @@
-/** Bounded ground feeding with separate blocked/water indexes and shared metric road access. */
+/** Bounded ground feeding with local water indexes and shared world clearance and road access. */
 import { Habitat, type BirdSpecies } from './birds';
 import { FORAGE } from './config';
 import { complete } from './cooperate';
 import { inTile, type LifeGeometry } from './geometry';
-import { pointInside, PolygonIndex, type Body, type Point, type Polygon } from './occupancy';
+import { PolygonIndex, type Body, type Point, type Polygon } from './occupancy';
 import { between } from './random';
 import { prepareRoadTerrainSteps, transformPolygon, type RoadAccess } from './terrain';
 
@@ -56,17 +56,67 @@ export const FORAGE_SPECIES: Partial<Record<BirdSpecies, ForageSpec>> = {
 export type ForageTerrain = {
   blocked: PolygonIndex;
   water: PolygonIndex;
-  shores: readonly { a: Point; b: Point }[];
+  membership: WaterMembership;
+  shores: readonly Shore[];
   shoreIndex: ShoreIndex;
   roads: RoadAccess;
 };
-type Shore = { a: Point; b: Point };
+type Segment = { a: Point; b: Point };
+type Shore = Segment & { wetLeft: boolean };
 const SHORE_BIN_M = 12;
+
+/** A horizontal ray only visits edges spanning its y bin; parity includes all polygon holes. */
+class WaterMembership {
+  private readonly bins = new Map<number, { a: Point; b: Point; polygon: number }[]>();
+  private readonly parity = new Set<number>();
+  private polygons = 0;
+
+  *addSteps(polygon: Polygon): Generator<void, void, void> {
+    const id = this.polygons++;
+    let count = 0;
+    for (const ring of polygon)
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i]!,
+          b = ring[(i + 1) % ring.length]!;
+        if (a.y !== b.y) {
+          const edge = { a, b, polygon: id };
+          for (
+            let y = Math.floor(Math.min(a.y, b.y) / SHORE_BIN_M);
+            y <= Math.floor(Math.max(a.y, b.y) / SHORE_BIN_M);
+            y++
+          ) {
+            const bin = this.bins.get(y) ?? [];
+            bin.push(edge);
+            this.bins.set(y, bin);
+            if ((++count & 127) === 0) yield;
+          }
+        }
+        if ((i & 127) === 0) yield;
+      }
+  }
+
+  /** Candidate count exposes bounded work without incrementing a production query counter. */
+  candidates(y: number): number {
+    return this.bins.get(Math.floor(y / SHORE_BIN_M))?.length ?? 0;
+  }
+
+  contains(p: Point): boolean {
+    this.parity.clear();
+    for (const { a, b, polygon } of this.bins.get(Math.floor(p.y / SHORE_BIN_M)) ?? [])
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+        if (this.parity.has(polygon)) this.parity.delete(polygon);
+        else this.parity.add(polygon);
+      }
+    return this.parity.size > 0;
+  }
+}
 
 /** Metric edge bins shared by union preparation and bounded shore searches. */
 class ShoreIndex {
-  private readonly bins = new Map<string, number[]>();
-  constructor(private readonly segments: readonly Shore[]) {}
+  // Nested numeric keys avoid coordinate-range assumptions and pair collisions.
+  private readonly bins = new Map<number, Map<number, number[]>>();
+  private readonly found = new Set<number>();
+  constructor(private readonly segments: readonly Segment[]) {}
 
   *addSteps(id: number): Generator<void, void, void> {
     const { a, b } = this.segments[id]!;
@@ -75,25 +125,32 @@ class ShoreIndex {
       let x = Math.floor(Math.min(a.x, b.x) / SHORE_BIN_M);
       x <= Math.floor(Math.max(a.x, b.x) / SHORE_BIN_M);
       x++
-    )
+    ) {
+      const column = this.bins.get(x) ?? new Map<number, number[]>();
+      this.bins.set(x, column);
       for (
         let y = Math.floor(Math.min(a.y, b.y) / SHORE_BIN_M);
         y <= Math.floor(Math.max(a.y, b.y) / SHORE_BIN_M);
         y++
       ) {
-        const key = `${x},${y}`;
-        const bin = this.bins.get(key) ?? [];
+        const bin = column.get(y) ?? [];
         bin.push(id);
-        this.bins.set(key, bin);
+        column.set(y, bin);
         if ((++count & 127) === 0) yield;
       }
+    }
   }
 
+  /** Borrowed query scratch; copy it before another query on this index. */
   nearby(x0: number, y0: number, x1: number, y1: number): Set<number> {
-    const found = new Set<number>();
-    for (let x = Math.floor(x0 / SHORE_BIN_M); x <= Math.floor(x1 / SHORE_BIN_M); x++)
-      for (let y = Math.floor(y0 / SHORE_BIN_M); y <= Math.floor(y1 / SHORE_BIN_M); y++)
-        for (const id of this.bins.get(`${x},${y}`) ?? []) {
+    this.found.clear();
+    for (let x = Math.floor(x0 / SHORE_BIN_M); x <= Math.floor(x1 / SHORE_BIN_M); x++) {
+      const column = this.bins.get(x);
+      if (!column) continue;
+      for (let y = Math.floor(y0 / SHORE_BIN_M); y <= Math.floor(y1 / SHORE_BIN_M); y++) {
+        const bin = column.get(y);
+        if (!bin) continue;
+        for (const id of bin) {
           const { a, b } = this.segments[id]!;
           if (
             Math.min(a.x, b.x) <= x1 &&
@@ -101,33 +158,47 @@ class ShoreIndex {
             Math.min(a.y, b.y) <= y1 &&
             Math.max(a.y, b.y) >= y0
           )
-            found.add(id);
+            this.found.add(id);
         }
-    return found;
+      }
+    }
+    return this.found;
   }
 }
 
-const prepared = new WeakMap<LifeGeometry, Map<number, ForageTerrain>>();
+export type ForageMode = 'standalone' | 'world';
+const prepared = {
+  standalone: new WeakMap<LifeGeometry, Map<number, ForageTerrain>>(),
+  world: new WeakMap<LifeGeometry, Map<number, ForageTerrain>>(),
+};
 
-export function prepareForageTerrain(geo: LifeGeometry, perMeter: number): ForageTerrain {
-  return complete(prepareForageTerrainSteps(geo, perMeter));
+export function prepareForageTerrain(
+  geo: LifeGeometry,
+  perMeter: number,
+  mode: ForageMode = 'standalone',
+): ForageTerrain {
+  return complete(prepareForageTerrainSteps(geo, perMeter, mode));
 }
 
 export function* prepareForageTerrainSteps(
   geo: LifeGeometry,
   perMeter: number,
+  mode: ForageMode = 'standalone',
 ): Generator<void, ForageTerrain, void> {
-  let variants = prepared.get(geo);
-  if (!variants) prepared.set(geo, (variants = new Map<number, ForageTerrain>()));
+  let variants = prepared[mode].get(geo);
+  if (!variants) prepared[mode].set(geo, (variants = new Map<number, ForageTerrain>()));
   const cached = variants.get(perMeter);
   if (cached) return cached;
   const blocked = new PolygonIndex(),
     water = new PolygonIndex();
-  const edges: Shore[] = [];
+  const membership = new WaterMembership();
+  const edges: Segment[] = [];
   for (const area of geo.areas ?? []) {
     if (area.kind !== 'blocked') continue;
+    if (!area.water && mode === 'world') continue;
     const polygon = transformPolygon(area.rings, 0, 0, 1 / perMeter);
     yield* (area.water ? water : blocked).addSteps(polygon);
+    if (area.water) yield* membership.addSteps(polygon);
     if (area.water)
       for (const ring of polygon) {
         for (let i = 0; i < ring.length; i++) {
@@ -183,16 +254,13 @@ export function* prepareForageTerrainSteps(
       const epsilon = Math.min(1e-6, ((t1 - t0) * length) / 1000);
       const nx = (-dy / length) * epsilon,
         ny = (dx / length) * epsilon;
-      const left = water.polygons.some((polygon: Polygon) =>
-        pointInside({ x: p.x + nx, y: p.y + ny }, polygon),
-      );
-      const right = water.polygons.some((polygon: Polygon) =>
-        pointInside({ x: p.x - nx, y: p.y - ny }, polygon),
-      );
+      const left = membership.contains({ x: p.x + nx, y: p.y + ny });
+      const right = membership.contains({ x: p.x - nx, y: p.y - ny });
       if (left !== right)
         shores.push({
           a: { x: a.x + dx * t0, y: a.y + dy * t0 },
           b: { x: a.x + dx * t1, y: a.y + dy * t1 },
+          wetLeft: left,
         });
       yield;
     }
@@ -200,18 +268,11 @@ export function* prepareForageTerrainSteps(
   const shoreIndex = new ShoreIndex(shores);
   for (let i = 0; i < shores.length; i++) yield* shoreIndex.addSteps(i);
   const roads = (yield* prepareRoadTerrainSteps(geo, perMeter)).access;
-  const terrain = { blocked, water, shores, shoreIndex, roads };
+  const terrain = { blocked, water, membership, shores, shoreIndex, roads };
   variants.set(perMeter, terrain);
   return terrain;
 }
 
-const pointBody = (p: Point, size = 0.01): Body => ({
-  ...p,
-  hx: 1,
-  hy: 0,
-  length: size,
-  width: size,
-});
 const metric = (p: Point, perMeter: number): Point => ({ x: p.x / perMeter, y: p.y / perMeter });
 function nearestFraction(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x,
@@ -234,7 +295,7 @@ export function shoreDistance(p: Point, terrain: ForageTerrain, radius = Infinit
   }
   const distance = Math.sqrt(squared);
   if (!Number.isFinite(distance) || distance > radius) return Infinity;
-  return terrain.water.hits([pointBody(p, 0)]) ? -distance : distance;
+  return terrain.membership.contains(p) ? -distance : distance;
 }
 
 export function forageable(
@@ -345,6 +406,57 @@ export function forageSpot(
     }
     if (ok(candidate)) return candidate;
   }
+}
+
+/** Prepare bounded local placement candidates once; the caller counts and validates each. */
+export function forageOffsets(
+  species: BirdSpecies,
+  habitat: Habitat,
+  origin: Point,
+  terrain: ForageTerrain,
+  perMeter: number,
+  rng: () => number,
+): () => Point | undefined {
+  const spec = FORAGE_SPECIES[species];
+  if (!spec) return () => undefined;
+  if (habitat !== Habitat.water || !spec.edge)
+    return () => {
+      const angle = rng() * 2 * Math.PI;
+      const radius = Math.sqrt(rng()) * spec.patch * perMeter;
+      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+    };
+  const p = metric(origin, perMeter);
+  const banks = [
+    ...terrain.shoreIndex.nearby(
+      p.x - spec.patch,
+      p.y - spec.patch,
+      p.x + spec.patch,
+      p.y + spec.patch,
+    ),
+  ].flatMap((id) => {
+    const bank = terrain.shores[id]!;
+    const dx = bank.b.x - bank.a.x,
+      dy = bank.b.y - bank.a.y;
+    const squared = dx * dx + dy * dy;
+    const projection = ((p.x - bank.a.x) * dx + (p.y - bank.a.y) * dy) / squared;
+    const cross = (p.x - bank.a.x) * dy - (p.y - bank.a.y) * dx;
+    const perpendicular = (cross * cross) / squared;
+    if (perpendicular > spec.patch * spec.patch) return [];
+    const reach = Math.sqrt((spec.patch * spec.patch - perpendicular) / squared);
+    const lo = Math.max(0, projection - reach),
+      hi = Math.min(1, projection + reach);
+    return lo <= hi ? [{ bank, dx, dy, length: Math.sqrt(squared), lo, hi }] : [];
+  });
+  return () => {
+    if (!banks.length) return;
+    const { bank, dx, dy, length, lo, hi } = banks[Math.floor(rng() * banks.length)]!;
+    const t = lo + (hi - lo) * rng();
+    const nudge = between(rng, [-spec.edge!.dry, spec.edge!.wet]) * (bank.wetLeft ? 1 : -1);
+    return {
+      x: (bank.a.x + dx * t - (dy / length) * nudge) * perMeter - origin.x,
+      y: (bank.a.y + dy * t + (dx / length) * nudge) * perMeter - origin.y,
+    };
+  };
 }
 
 export type GroundForager = {

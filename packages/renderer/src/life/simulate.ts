@@ -101,12 +101,14 @@ import {
   FORAGE_SPECIES,
   forageable,
   forageMovement,
+  forageOffsets,
   forageSpot,
   isForager,
   prepareForageTerrainSteps,
   rebaseForagers,
   stepForager,
   type ForageTerrain,
+  type ForageMode,
   type GroundForager,
 } from './forage';
 import { CAT_PAINTS } from './cats';
@@ -760,24 +762,30 @@ export class TileLife {
 
   /** Seasonal footprints change independently of immutable tile terrain. */
   setForageGuard(guard: ((from: Point, to: Point) => boolean) | undefined) {
-    const changed = !!guard || !!this.forageGuard;
     this.forageGuard = guard;
-    if (!changed) return;
+    if (!guard) return;
     for (const flock of this.flocks) {
       if (!flock.landed && !flock.landing) continue;
       let unsafe = false;
       for (const bird of flock.birds) {
         if (!isForager(bird)) continue;
-        // Discard certificates made against the previous seasonal terrain.
-        bird.tx = bird.gx;
-        bird.ty = bird.gy;
         const p = {
           x: (flock.landing ? flock.lx : flock.x) + bird.gx,
           y: (flock.landing ? flock.ly : flock.y) + bird.gy,
         };
-        if (guard) {
-          this.forageCheckCount++;
-          if (!guard(p, p)) unsafe = true;
+        const to = {
+          x: (flock.landing ? flock.lx : flock.x) + bird.tx,
+          y: (flock.landing ? flock.ly : flock.y) + bird.ty,
+        };
+        this.forageCheckCount++;
+        if (!guard(p, to)) {
+          const moving = bird.tx !== bird.gx || bird.ty !== bird.gy;
+          if (moving) this.forageCheckCount++;
+          if (!moving || !guard(p, p)) unsafe = true;
+          else {
+            bird.tx = bird.gx;
+            bird.ty = bird.gy;
+          }
         }
       }
       if (unsafe) {
@@ -809,6 +817,7 @@ export class TileLife {
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
     deferred = false,
     momentOptions?: MomentOptions,
+    private readonly forageMode: ForageMode = 'standalone',
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
@@ -836,7 +845,7 @@ export class TileLife {
     const lines = geo.kinds.length;
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
     if (geo.roosts.length)
-      this.forageTerrain = yield* prepareForageTerrainSteps(geo, this.perMeter);
+      this.forageTerrain = yield* prepareForageTerrainSteps(geo, this.perMeter, this.forageMode);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
@@ -3247,6 +3256,14 @@ export class TileLife {
     );
     if (!centre) return false;
     const patch = spec.patch * this.perMeter;
+    const pickOffset = forageOffsets(
+      flock.species,
+      habitat,
+      centre,
+      terrain,
+      this.perMeter,
+      this.forageRng,
+    );
     const placements: Point[] = [];
     for (const bird of flock.birds) {
       const turn = bird.phase * 6;
@@ -3259,9 +3276,9 @@ export class TileLife {
       if (!fits(offset)) {
         let found = false;
         for (let attempt = 0; attempt < FORAGE.attempts; attempt++) {
-          const angle = this.forageRng() * 2 * Math.PI;
-          const radius = Math.sqrt(this.forageRng()) * patch;
-          offset = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+          const candidate = pickOffset();
+          if (!candidate) continue;
+          offset = candidate;
           if (fits(offset)) {
             found = true;
             break;
@@ -3853,6 +3870,7 @@ export class LifeWorld {
       this.traffic,
       true,
       this.momentOptions,
+      'world',
     ).prepare();
     if (this.profiler) {
       this.profiler.registerPopulation(entry.key, life.movers);
@@ -4055,7 +4073,15 @@ export class LifeWorld {
           const fresh =
             saved?.life ??
             prepared?.get(key) ??
-            new TileLife(tile, life, hashString(key), this.traffic, false, this.momentOptions);
+            new TileLife(
+              tile,
+              life,
+              hashString(key),
+              this.traffic,
+              false,
+              this.momentOptions,
+              'world',
+            );
           this.retired.delete(key);
           this.tiles.set(key, fresh);
           if (!saved) {
@@ -4554,25 +4580,25 @@ export class LifeWorld {
       body.width *= o.scale;
       return body;
     };
-    life.setForageGuard(
-      terrain.seasonal.polygons.length
-        ? (from, to) => {
-            const dx = (to.x - from.x) / life.perMeter;
-            const dy = (to.y - from.y) / life.perMeter;
-            const length = Math.hypot(dx, dy);
-            return !terrain.seasonal.hits([
-              transform({
-                x: (from.x + to.x) / (2 * life.perMeter),
-                y: (from.y + to.y) / (2 * life.perMeter),
-                hx: length ? dx / length : 1,
-                hy: length ? dy / length : 0,
-                length: length + 0.01,
-                width: 0.01,
-              }),
-            ]);
-          }
-        : undefined,
-    );
+    life.setForageGuard((from, to) => {
+      // Read the current shared index so retired tiles do not retain old terrain copies.
+      const current = this.groundTerrain;
+      const at = current?.origins.get(life);
+      if (!current || !at) return false;
+      const dx = (to.x - from.x) / life.perMeter;
+      const dy = (to.y - from.y) / life.perMeter;
+      const length = Math.hypot(dx, dy);
+      return !current.blocked.hits([
+        {
+          x: at.x + ((from.x + to.x) / (2 * life.perMeter)) * at.scale,
+          y: at.y + ((from.y + to.y) / (2 * life.perMeter)) * at.scale,
+          hx: length ? dx / length : 1,
+          hy: length ? dy / length : 0,
+          length: (length + 0.01) * at.scale,
+          width: 0.01 * at.scale,
+        },
+      ]);
+    });
     life.reconcileSeasonalActors(
       (owner) => {
         const bodies = life.groundBodies(owner, 0, this.groundSample);
