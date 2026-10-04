@@ -1,5 +1,4 @@
-import { distanceMeters as distance } from './landmark-detail.geometry';
-import { readFileSync } from 'node:fs';
+import { distanceMeters as distance, readFixture, readPack } from './landmark-detail.geometry';
 import { Cemetery, DetailSelectionSchema, Landmark, Landcover, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import inside from '@turf/boolean-point-in-polygon';
@@ -21,24 +20,20 @@ import.meta.glob(
 );
 import.meta.glob('../../../content/cities/naga/landcover/basilica-cemeteries.json');
 
-const read = (p: string): unknown =>
-  JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8')) as unknown;
 const packs = ['santo-nino-memorial-park', 'eternal-gardens'].map((s) =>
-  Cemetery.parse(read(`../../../content/cities/naga/cemeteries/${s}.json`)),
+  Cemetery.parse(readPack('cemeteries', s)),
 );
-const trees = Landcover.parse(
-  read('../../../content/cities/naga/landcover/basilica-cemeteries.json'),
-);
-const source = read('../__fixtures__/cemetery-parents.json') as AtlasFeature[];
+const trees = Landcover.parse(readPack('landcover', 'basilica-cemeteries'));
+const source = readFixture('cemetery-parents.json') as AtlasFeature[];
 const landmarks = ['santo-nino-memorial-park', 'eternal-gardens'].map((s) =>
-  Landmark.parse(read(`../../../content/cities/naga/landmarks/${s}.json`)),
+  Landmark.parse(readPack('landmarks', s)),
 );
 const joined = mergeContent(
   structuredClone(source.filter((f) => packs.some((p) => p.osm_id === f.properties.id))),
   { landmarks } as ContentBundle,
 );
 const namedSource = source.map((f) => joined.find((p) => p.properties.id === f.properties.id) ?? f);
-const reference = read('../__fixtures__/cemetery-sections.json') as {
+const reference = readFixture('cemetery-sections.json') as {
   groups: { id: string; cemetery: string; kind: string; ring: LngLat[] }[];
 };
 const cover = landcoverFeatures(source, [trees]);

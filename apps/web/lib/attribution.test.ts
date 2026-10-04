@@ -1,6 +1,21 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
-import { additionalCredits } from './attribution';
+import { additionalCredits, creditTokens } from './attribution';
+
+it('tokenizes multiple URLs without losing punctuation, source text or exact link targets', () => {
+  const credit =
+    'Contributor (https://example.test/source), licence https://example.test/cc?x=1&y=2. Draft!';
+  const tokens = creditTokens(credit);
+  expect(tokens.map((token) => token.text).join('')).toBe(credit);
+  expect(tokens.filter((token) => token.url).map((token) => token.url)).toEqual([
+    'https://example.test/source',
+    'https://example.test/cc?x=1&y=2',
+  ]);
+  expect(creditTokens('Plain source text.')).toEqual([{ text: 'Plain source text.' }]);
+  expect(creditTokens('http://example.test/')).toEqual([
+    { text: 'http://example.test/', url: 'http://example.test/' },
+  ]);
+});
 
 it('removes repeated footer licensing while retaining additional sources and notes', () => {
   expect(

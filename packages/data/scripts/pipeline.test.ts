@@ -1,9 +1,10 @@
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import { mkdtemp, rm, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import { SiteDetail, type City, type CityArt, type LngLat } from '@atlas/shared';
+import { SiteDetail, OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
 import type { Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
@@ -11,12 +12,7 @@ import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, step as tileStep } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
-import {
-  detailLayoutKey,
-  publishDetailLayouts,
-  readDetailLayouts,
-  writeDetailLayouts,
-} from './lib/detail-layout';
+import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
 // A fixture city that is not tied to any real place (ARCHITECTURE.md §9).
@@ -239,7 +235,25 @@ describe('pipeline (02–04) on the fixture extract', () => {
       [1890, 2026],
       ['Imagery', 'DEM'],
     );
-    expect(credited.attribution).toEqual(['DEM', 'Imagery']);
+    expect(credited.attribution).toEqual([OSM_ATTRIBUTION, 'DEM', 'Imagery']);
+    const normalized = buildMeta(
+      city,
+      geography,
+      [1890, 2026],
+      [
+        'Survey. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.',
+        'Survey. Draft, undated estimates.',
+        '© OpenStreetMap contributors',
+        'Imagery © Provider; CC BY-SA 3.0, Contributor (https://example.test/source).',
+        'Unfamiliar source format.',
+      ],
+    );
+    expect(normalized.attribution).toEqual([
+      OSM_ATTRIBUTION,
+      'Survey. Draft, undated estimates.',
+      'Imagery © Provider; CC BY-SA 3.0, Contributor (https://example.test/source).',
+      'Unfamiliar source format.',
+    ]);
   });
 
   it('publishes validated detail fingerprints separately from startup metadata', async () => {

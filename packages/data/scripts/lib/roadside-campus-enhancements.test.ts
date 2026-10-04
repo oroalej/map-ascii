@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { Landcover, Landmark, SiteDetail, DetailSelectionSchema } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon, LineString } from 'geojson';
@@ -11,8 +10,11 @@ import { mergeSiteDetails } from './site-detail';
 import {
   assertPointClear,
   clearanceAssertions,
+  effectiveTrees,
   mappedFootprints,
   distanceMeters as distance,
+  readFixture,
+  readPack as pack,
 } from './landmark-detail.geometry';
 import { landcoverFeatures } from './landcover';
 
@@ -22,20 +24,15 @@ import.meta.glob(
 );
 import.meta.glob('../../../content/cities/naga/landcover/magsaysay-avenue.json');
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const pack = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
 const slugs = [
   'triangulo-elementary-school',
   'mariners-polytechnic-colleges-naga',
   'jose-rizal-elementary-school',
   'naga-city-school-of-arts-and-trades',
 ];
-const source = read('../__fixtures__/roadside-campus-parents.json') as AtlasFeature[];
-const reference = read('../__fixtures__/roadside-campus-reference.json') as {
-  magsaysay_before: Landcover;
-  arts_before: Landcover;
+const source = readFixture('roadside-campus-parents.json') as AtlasFeature[];
+const reference = readFixture('roadside-campus-reference.json') as {
+  roadside_report: { added: { at: [number, number] }[] };
 };
 const details = slugs.map((slug) => SiteDetail.parse(pack('details', slug)));
 const covers = slugs.map((slug) => Landcover.parse(pack('landcover', slug)));
@@ -78,8 +75,13 @@ describe('additional roadside and campus references', () => {
       const area = detail.grounds
         ? { type: 'Polygon' as const, coordinates: [detail.grounds] }
         : (source.find((f) => f.properties.id === detail.osm_id)!.geometry as Polygon);
-      expect(cover.trees.length).toBeGreaterThanOrEqual(8);
-      expect(cover.trees.length).toBeLessThanOrEqual(26);
+      const visible = effectiveTrees(source, [cover]).filter((tree) =>
+        inside(tree.geometry.coordinates, area),
+      );
+      expect(visible.length).toBeGreaterThanOrEqual(8);
+      expect(visible.length).toBeLessThanOrEqual(30);
+      expect(cover.status).toBe('draft');
+      expect(detail.status).toBe('draft');
       expect(cover.areas.some((a) => a.cover === 'grass')).toBe(true);
       expect(cover.areas.some((a) => a.cover === 'planting')).toBe(true);
       for (const [j, tree] of cover.trees.entries()) {
@@ -98,13 +100,6 @@ describe('additional roadside and campus references', () => {
     expect(landcoverFeatures(source, covers).warnings.filter((w) => w.includes('tree'))).toEqual(
       [],
     );
-    const arts = covers.find(
-      (cover) => cover.id === 'landcover/naga-city-school-of-arts-and-trades',
-    )!;
-    for (const [i, old] of reference.arts_before.trees.entries())
-      expect(arts.trees[i]!.at).toEqual(old.at);
-    for (const old of reference.arts_before.areas) expect(arts.areas).toContainEqual(old);
-    expect(arts.trees.length).toBeGreaterThan(reference.arts_before.trees.length);
   });
 
   it('keeps the southern Magsaysay segment clear while preserving northern canopies on both sides', () => {
@@ -124,21 +119,33 @@ describe('additional roadside and campus references', () => {
     expect(cover.trees.some((tree) => tree.at.every((v, i) => v === removedBridgeTree[i]))).toBe(
       false,
     );
-    for (const old of reference.magsaysay_before.trees.filter(
-      (tree) => tree.at[1] > atJunction[1]! && !tree.at.every((v, i) => v === removedBridgeTree[i]),
-    )) {
-      const retained = cover.trees.find((tree) => tree.at.every((v, i) => v === old.at[i]));
-      expect(retained).toBeDefined();
-      expect(retained!.height_m).toBe(old.height_m);
-      expect(retained!.crown_m).toBeGreaterThan(old.crown_m!);
+    const canopies = effectiveTrees(source, [cover])
+      .filter(
+        (tree) =>
+          (tree.properties.crown ?? 0) >= 17 && tree.geometry.coordinates[1]! > atJunction[1]!,
+      )
+      .map((tree) => ({
+        at: tree.geometry.coordinates as [number, number],
+        crown_m: tree.properties.crown!,
+      }));
+    for (const sample of reference.roadside_report.added.filter(
+      (tree) => tree.at[1] > atJunction[1]!,
+    ))
+      expect(canopies.some((tree) => distance(tree.at, sample.at) <= tree.crown_m / 2 + 1)).toBe(
+        true,
+      );
+    for (const tree of cover.trees) {
+      expect(tree.crown_m).toBeGreaterThanOrEqual(17);
+      expect(tree.crown_m).toBeLessThanOrEqual(20);
     }
+    expect(cover.status).toBe('draft');
     expect(cover.trees.every((tree) => tree.at[1] > atJunction[1]!)).toBe(true);
     const points = road.coordinates.slice(junction).map(xy);
     const lengths = points
       .slice(1)
       .map((p, i) => Math.hypot(p[0] - points[i]![0], p[1] - points[i]![1]));
     const total = lengths.reduce((a, b) => a + b, 0);
-    const located = cover.trees
+    const located = canopies
       .map((tree) => {
         const p = xy(tree.at);
         let closest = { distance: Infinity, side: 0, chain: 0 };
@@ -172,7 +179,7 @@ describe('additional roadside and campus references', () => {
         ).toBeGreaterThan(2);
       for (const [i, tree] of row.entries()) {
         expect(tree.distance).toBeGreaterThan(5);
-        expect(tree.tree.crown_m! / 2).toBeGreaterThan(tree.distance - 5);
+        expect(tree.tree.crown_m / 2).toBeGreaterThan(tree.distance - 5);
         for (const other of row.slice(i + 1))
           expect(distance(tree.tree.at, other.tree.at)).toBeGreaterThan(23.9);
       }

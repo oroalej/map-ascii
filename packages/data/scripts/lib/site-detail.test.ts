@@ -48,6 +48,56 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  for (const origin of ['mapped', 'authored'] as const) {
+    it(`protects ${origin} court boundaries and holes while allowing contained markings`, () => {
+      const ring = (west: number, south: number, east: number, north: number) => [
+        p(west, south),
+        p(east, south),
+        p(east, north),
+        p(west, north),
+        p(west, south),
+      ];
+      const court = {
+        id: 'court',
+        ring: ring(10, 10, 30, 30),
+        holes: [ring(18, 18, 22, 22)],
+        height_m: 0.06,
+        material: 'pitch' as const,
+        overhead: false,
+      };
+      const mapped: AtlasFeature = {
+        ...parent,
+        properties: { id: 'osm:way/court', class: 'pitch' },
+        geometry: { type: 'Polygon', coordinates: [court.ring, ...court.holes] },
+      };
+      const run = (outline: ReturnType<typeof ring>, holes: ReturnType<typeof ring>[] = []) =>
+        mergeSiteDetails(origin === 'mapped' ? [parent, mapped] : [parent], [
+          {
+            ...detail,
+            walks: [],
+            seating: [],
+            lamps: [],
+            structures: [
+              ...(origin === 'authored' ? [court] : []),
+              {
+                id: 'paving',
+                ring: outline,
+                holes,
+                height_m: 0.08,
+                material: 'paving',
+                overhead: false,
+                ground_override: true,
+              },
+            ],
+          },
+        ]);
+      expect(() => run(ring(8, 12, 14, 16))).toThrow('crosses pitch');
+      expect(() => run(ring(8, 8, 32, 32))).toThrow('crosses pitch');
+      expect(() => run(ring(16, 16, 24, 24))).toThrow('crosses pitch');
+      expect(() => run(ring(12, 12, 14, 14))).not.toThrow();
+      expect(() => run(ring(16, 16, 24, 24), [ring(17.5, 17.5, 22.5, 22.5)])).not.toThrow();
+    });
+  }
   it('checks roof wings against all final height overrides independent of pack order', () => {
     const building: AtlasFeature = {
       ...parent,

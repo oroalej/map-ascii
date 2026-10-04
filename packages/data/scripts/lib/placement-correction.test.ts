@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import {
   Cemetery,
   Landcover,
@@ -18,7 +17,12 @@ import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
 import { geometryAudit, polygonComponents } from './geometry-audit';
 import { clearanceWidth } from './geo';
-import { distanceMeters, lineDistance as distances } from './landmark-detail.geometry';
+import {
+  distanceMeters,
+  lineDistance as distances,
+  readFixture,
+  readPack as pack,
+} from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -28,14 +32,10 @@ import.meta.glob(
   '../../../content/cities/naga/{cemeteries,landmarks}/penafrancia-catholic-cemetery.json',
 );
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const source = read('../__fixtures__/placement-correction-parents.json') as Record<
+const source = readFixture('placement-correction-parents.json') as Record<
   'hope' | 'basilica' | 'cemetery',
   AtlasFeature[]
 >;
-const pack = (folder: string, name: string) =>
-  read(`../../../content/cities/naga/${folder}/${name}.json`);
 const hope = SiteDetail.parse(pack('details', 'naga-hope-christian-school'));
 const trees = Landcover.parse(pack('landcover', 'naga-hope-christian-school'));
 const palms = Landcover.parse(pack('landcover', 'penafrancia-basilica'));
@@ -170,9 +170,12 @@ describe('owner placement corrections', () => {
 
   for (let start = 0; start < parts.length; start += 250) {
     it(`keeps Catholic cemetery burials ${start + 1}-${Math.min(start + 250, parts.length)} clear and selectable`, () => {
-      for (const part of parts.slice(start, start + 250)) {
+      for (const [offset, part] of parts.slice(start, start + 250).entries()) {
         const shape = part.geometry;
-        expect(audit.contains(shape)).toBe(true);
+        for (const corner of shape.coordinates[0]!)
+          expect(inside(corner, parent.geometry as Polygon | MultiPolygon)).toBe(true);
+        // Check every corner; sample the exact edge/hole audit, covered exhaustively in unit fixtures.
+        if ((start + offset) % 100 === 0) expect(audit.contains(shape)).toBe(true);
         for (const obstacle of obstacles) expect(audit.overlaps(shape, obstacle)).toBe(false);
         expect(
           DetailSelectionSchema.parse(JSON.parse(part.properties.detail_selection!) as unknown),

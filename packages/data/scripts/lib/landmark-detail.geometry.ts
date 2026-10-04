@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
-import type { BBox, LngLat, SiteDetail } from '@atlas/shared';
+import type { BBox, LngLat, SiteDetail, Landcover } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
-import type { Polygon, MultiPolygon } from 'geojson';
+import type { Polygon, MultiPolygon, Point } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
@@ -10,6 +10,16 @@ import { geometryAudit } from './geometry-audit';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import type * as LandmarkFixtures from './landmark-detail.fixtures';
 import { isStandingBuilding } from './obstacles';
+import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
+
+/** Visible inventory after OSM replaces retired curated trees. */
+export function effectiveTrees(source: readonly AtlasFeature[], covers: readonly Landcover[]) {
+  const mapped = applyLandcoverTreeOverrides([...source], covers);
+  return [...mapped, ...landcoverFeatures(mapped, covers).features].filter(
+    (feature): feature is AtlasFeature & { geometry: Point } =>
+      feature.properties.class === 'tree' && feature.geometry.type === 'Point',
+  );
+}
 
 type Area = Polygon | MultiPolygon;
 type Fixtures = Pick<

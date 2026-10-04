@@ -2,7 +2,7 @@ import { buildUtilityTiles } from './lib/utility-tiles';
 import { utilityCoverageBounds } from './lib/utilities';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CityMeta, SubdivisionAreas, type City } from '@atlas/shared';
+import { CityMeta, SubdivisionAreas, normalizeCredits, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
 import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normalize';
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
@@ -46,7 +46,7 @@ export function buildMeta(
     regionBounds: geography.regionBounds,
     defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
-    attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
+    attribution: normalizeCredits([...(geography.attribution ?? []), ...credits]),
   });
 }
 

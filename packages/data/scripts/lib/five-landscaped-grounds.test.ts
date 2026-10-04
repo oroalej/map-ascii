@@ -1,5 +1,9 @@
-import { assertPointClear, distanceMeters as distance } from './landmark-detail.geometry';
-import { readFileSync } from 'node:fs';
+import {
+  assertPointClear,
+  distanceMeters as distance,
+  readFixture,
+  readPack as pack,
+} from './landmark-detail.geometry';
 import { DetailSelectionSchema, Landcover, Landmark, SiteDetail, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
@@ -18,8 +22,6 @@ import.meta.glob(
   '../../../content/cities/naga/{details,landcover,landmarks}/{julian-b-meliton-elementary-school,our-lady-of-mount-carmel-monastery,mac-mariano-elementary-school,sta-cruz-national-high-school,mabolo-elementary-school}.json',
 );
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const slugs = [
   'julian-b-meliton-elementary-school',
   'our-lady-of-mount-carmel-monastery',
@@ -27,9 +29,7 @@ const slugs = [
   'sta-cruz-national-high-school',
   'mabolo-elementary-school',
 ];
-const pack = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
-const source = read('../__fixtures__/five-landscaped-grounds.json') as AtlasFeature[];
+const source = readFixture('five-landscaped-grounds.json') as AtlasFeature[];
 const details = slugs.map((slug) => SiteDetail.parse(pack('details', slug)));
 const covers = slugs.map((slug) => Landcover.parse(pack('landcover', slug)));
 const landmarks = slugs.map((slug) => Landmark.parse(pack('landmarks', slug)));

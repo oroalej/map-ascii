@@ -1,36 +1,12 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DetailLayouts, SiteDetail } from '@atlas/shared';
+import { DetailLayouts } from '@atlas/shared';
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import type { StepContext } from '../step';
 import { files } from '../step';
 import { readJson, writeJson } from './io';
 import { sha256 } from './tiles-release';
-
-/** Geometry/selection fingerprint for matching local smoke fixtures to a generated archive. */
-export function detailLayoutKey(input: unknown): string {
-  const detail = SiteDetail.parse(input);
-  // Parsing fixes property order and defaults. Annotation edits do not invalidate a layout.
-  const layout = {
-    osm_id: detail.osm_id,
-    selection_osm_id: detail.selection_osm_id,
-    surface: detail.surface,
-    grounds: detail.grounds,
-    ...(detail.extent && { extent: detail.extent }),
-    structures: detail.structures.map((part) => ({
-      ...part,
-      ground_override: part.ground_override ?? false,
-    })),
-    ...(detail.roof_overrides.length && { roof_overrides: detail.roof_overrides }),
-    ...(detail.building_overrides.length && { building_overrides: detail.building_overrides }),
-    flagpoles: detail.flagpoles,
-    walks: detail.walks,
-    seating: detail.seating,
-    lamps: detail.lamps,
-    ...(detail.parked_vehicles.length && { parked_vehicles: detail.parked_vehicles }),
-  };
-  return createHash('sha256').update(JSON.stringify(layout)).digest('hex');
-}
 
 const layoutKeys = (details: StepContext['content']['details']) =>
   Object.fromEntries(details.map((detail) => [detail.id, detailLayoutKey(detail)]));

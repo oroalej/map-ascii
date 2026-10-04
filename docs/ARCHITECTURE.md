@@ -19,7 +19,8 @@ ascii-atlas/
 │     ├─ components/          CityAtlas, AtlasCanvas, SearchBox, InfoPanel, Hud, Timeline, TourPlayer
 │     ├─ state/               Zustand store + URL sync
 │     └─ public/tiles/        per city: <city>.pmtiles, <city>.meta.json,
-│                             <city>.search-index.json, imagery/<city>/ (all generated)
+│                             <city>.search-index.json, <city>.detail-layouts.json,
+│                             imagery/<city>/ (all generated)
 ├─ packages/
 │  ├─ renderer/               WebGL2 ASCII engine (no React)
 │  │  └─ src/
@@ -99,7 +100,9 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
 
 `AtlasOptions.utilities?: { derive: boolean }` controls static overhead hardware independently of Life. `fixtureschange` reports `{ streetlights: boolean, trafficSignals: boolean, utilities: boolean }` when viewport-packed hardware changes; `utilities` indicates nontransparent packed marks, before the shader's surface mask. `legendEntries` accepts that fixture report, including an omitted `utilities` field for older callers. Utility record version 1 is unchanged: pipeline validation remains strict, while the worker skips malformed or unsupported individual records using a Zod-free shape validator, retaining ordinary tile geometry.
 
-**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), `attribution` (extra credits the city's layers need), and optional `detail_layouts` (detail ids mapped to SHA-256 geometry/selection fingerprints bound to the successful step 04 merge).
+**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), and `attribution` (map source credits, with one standalone OSM credit).
+
+**Detail layouts** (`<city>.detail-layouts.json`, generated): detail ids mapped to SHA-256 geometry/selection fingerprints bound to the successful step 04 merge. Only smoke tests load this separately validated asset; the map does not fetch it at startup.
 
 ## 3. Rendering pipeline (per frame)
 

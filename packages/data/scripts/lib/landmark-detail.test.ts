@@ -5,7 +5,7 @@ import { difference, intersection } from 'polyclip-ts';
 import type { Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { bboxesOverlap } from './geo';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { mergeSiteDetails, seatingFootprint, structureClass } from './site-detail';
 import {
   details,
   covers,
@@ -23,20 +23,7 @@ describe('landmark detail tier coverage (fast)', () => {
       const tiers = new Set<number>();
       const add = (cls: AtlasClass) => tiers.add(CLASS_ZOOM[cls].min);
       if (detail.surface === 'paving') add('paving');
-      for (const part of detail.structures)
-        add(
-          part.roof_shape
-            ? 'building'
-            : part.material === 'pitch'
-              ? 'pitch'
-              : part.material === 'water'
-                ? 'water_area'
-                : part.material === 'paving'
-                  ? 'paving'
-                  : part.material === 'wood'
-                    ? 'building_woodwork'
-                    : 'building_part',
-        );
+      for (const part of detail.structures) add(structureClass(part));
       if (detail.seating.length) add('seating');
       if (detail.lamps.length || detail.flagpoles.length) add('furniture');
       const cover = covers.find((c) => c.id === `landcover/${detail.id.slice(7)}`);

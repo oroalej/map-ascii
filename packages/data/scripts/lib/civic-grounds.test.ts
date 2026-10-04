@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFixture, readPack as content } from './landmark-detail.geometry';
 import {
   Cemetery,
   Landmark,
@@ -31,9 +31,7 @@ import.meta.glob(
   '../../../content/cities/naga/cemeteries/{naga-city-public-cemetery,naga-cemetery-southern-section}.json',
 );
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const source = read('../__fixtures__/civic-ground-parents.json') as AtlasFeature[];
+const source = readFixture('civic-ground-parents.json') as AtlasFeature[];
 const slugs = [
   'people-power-monument',
   'padre-jorge-barlin-plaza',
@@ -43,8 +41,6 @@ const slugs = [
   'naga-cemetery-southern-section',
   'holy-rosary-major-seminary',
 ];
-const content = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
 const details = slugs.map((s) => SiteDetail.parse(content('details', s)));
 const covers = slugs.map((s) => Landcover.parse(content('landcover', s)));
 const landmarks = slugs

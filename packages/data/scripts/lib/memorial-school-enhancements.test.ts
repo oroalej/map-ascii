@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import {
   Cemetery,
   Landcover,
@@ -19,7 +18,10 @@ import { mergeSiteDetails } from './site-detail';
 import {
   assertPointClear,
   clearanceAssertions,
+  effectiveTrees,
   mappedFootprints,
+  readFixture,
+  readPack as pack,
 } from './landmark-detail.geometry';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 
@@ -33,10 +35,6 @@ import.meta.glob(
 import.meta.glob('../../../content/cities/naga/details/bicol-state-campus.json');
 import.meta.glob('../../../content/cities/naga/cemeteries/eternal-gardens.json');
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const pack = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
 const slugs = [
   'abcede-elementary-school',
   'sta-cruz-elementary-school',
@@ -46,9 +44,8 @@ const details = [...slugs, 'eternal-gardens'].map((slug) =>
   SiteDetail.parse(pack('details', slug)),
 );
 const covers = slugs.map((slug) => Landcover.parse(pack('landcover', slug)));
-const source = read('../__fixtures__/memorial-school-parents.json') as AtlasFeature[];
-const reference = read('../__fixtures__/memorial-school-reference.json') as {
-  civic_before: Landcover;
+const source = readFixture('memorial-school-parents.json') as AtlasFeature[];
+const reference = readFixture('memorial-school-reference.json') as {
   civic_masks: LngLat[][];
   grandstand_interior: LngLat[];
   memorial_centre: LngLat;
@@ -61,6 +58,32 @@ const intersects = audit.overlaps;
 const obstacles = mappedFootprints(source, { water: true });
 
 describe('owner memorial and school enhancements', () => {
+  it('retains effective tree coverage when an OSM point replaces a retired curated tree', () => {
+    const cover = covers[0]!;
+    const tree = cover.trees[0]!;
+    const mapped: AtlasFeature = {
+      type: 'Feature',
+      tippecanoe: { layer: 'landuse', minzoom: 15, maxzoom: 16 },
+      geometry: { type: 'Point', coordinates: tree.at },
+      properties: {
+        id: 'osm:node/retired-tree',
+        class: 'tree',
+        crown: tree.crown_m,
+        height: tree.height_m,
+      },
+    };
+    const retired = { ...cover, trees: cover.trees.slice(1) };
+    const effective = effectiveTrees([...source, mapped], [retired]);
+    expect(
+      effective.filter((feature) =>
+        feature.geometry.coordinates.every((value, i) => value === tree.at[i]),
+      ),
+    ).toHaveLength(1);
+    expect(effective.find((feature) => feature.properties.id === mapped.properties.id)).toEqual(
+      mapped,
+    );
+    expect(cover.trees[0]).toEqual(tree);
+  });
   it('keeps distinct school identities, complete source geometry and clear open yards', () => {
     const landmarks = [...slugs, 'eternal-gardens'].map((slug) =>
       Landmark.parse(pack('landmarks', slug)),
@@ -76,8 +99,12 @@ describe('owner memorial and school enhancements', () => {
       ).toEqual(f.geometry);
     for (const [i, cover] of covers.entries()) {
       const area = source.find((f) => f.properties.id === details[i]!.osm_id)!.geometry as Polygon;
-      expect(cover.trees.length).toBeGreaterThanOrEqual(10);
-      expect(cover.trees.length).toBeLessThanOrEqual(24);
+      const visible = effectiveTrees(source, [cover]).filter((tree) =>
+        inside(tree.geometry.coordinates, area),
+      );
+      expect(visible.length).toBeGreaterThanOrEqual(10);
+      expect(visible.length).toBeLessThanOrEqual(30);
+      expect(cover.status).toBe('draft');
       expect(cover.areas.some((a) => a.cover === 'grass')).toBe(true);
       expect(cover.areas.some((a) => a.cover === 'planting')).toBe(true);
       for (const tree of cover.trees) {
@@ -102,36 +129,31 @@ describe('owner memorial and school enhancements', () => {
     }
   });
 
-  it('enlarges only marked Civic crowns and adds three clear frontage trunks', () => {
+  it('keeps effective Civic canopy in the marked groups and preserves mapped trunks and heights', () => {
     const civic = Landcover.parse(pack('landcover', 'naga-city-civic-center'));
-    const before = reference.civic_before;
-    const marked = (at: LngLat) =>
-      reference.civic_masks.some((ring) => inside(at, { type: 'Polygon', coordinates: [ring] }));
-    let enlarged = 0;
-    for (const [i, old] of before.trees.entries()) {
-      expect(civic.trees[i]!.at).toEqual(old.at);
-      if (marked(old.at)) {
-        expect(civic.trees[i]!.crown_m).toBeGreaterThan(old.crown_m!);
-        enlarged++;
-      } else expect(civic.trees[i]).toEqual(old);
-    }
-    // Mapped positions/heights remain independent of the new crown estimates.
-    const mapped = read('../__fixtures__/seven-site-parents.json') as AtlasFeature[];
+    const mapped = readFixture('seven-site-parents.json') as AtlasFeature[];
     const adjusted = applyLandcoverTreeOverrides(mapped, [civic]);
-    for (const old of before.tree_overrides) {
-      const original = mapped.find((f) => f.properties.id === old.osm_id)!;
-      const at = (original.geometry as { type: 'Point'; coordinates: LngLat }).coordinates;
-      const current = civic.tree_overrides.find((t) => t.osm_id === old.osm_id)!;
-      if (marked(at)) {
-        expect(current.crown_m).toBeGreaterThan(old.crown_m!);
-        enlarged++;
-      } else expect(current).toEqual(old);
-      const out = adjusted.find((f) => f.properties.id === old.osm_id)!;
+    const trees = effectiveTrees(mapped, [civic]);
+    for (const ring of reference.civic_masks) {
+      const marked = trees.filter((tree) =>
+        inside(tree.geometry.coordinates, { type: 'Polygon', coordinates: [ring] }),
+      );
+      expect(marked.length).toBeGreaterThan(0);
+      expect(marked.some((tree) => (tree.properties.crown ?? 0) >= 17)).toBe(true);
+    }
+    for (const current of civic.tree_overrides) {
+      const original = mapped.find((f) => f.properties.id === current.osm_id)!;
+      const out = adjusted.find((f) => f.properties.id === current.osm_id)!;
       expect(out.geometry).toEqual(original.geometry);
       expect(out.properties.height).toBe(original.properties.height);
     }
-    expect(enlarged).toBe(11);
-    expect(civic.trees).toHaveLength(before.trees.length + 3);
+    const civicObstacles = mappedFootprints(mapped, { water: true });
+    for (const tree of civic.trees) {
+      expect(tree.crown_m).toBeGreaterThanOrEqual(7);
+      expect(tree.crown_m).toBeLessThanOrEqual(18);
+      assertPointClear(tree.at, civicObstacles, civic.id);
+    }
+    expect(civic.status).toBe('draft');
   });
 
   it('covers the annotated field interior with grass and leaves both basketball surfaces open', () => {

@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef } from 'react';
 import { useUiStore } from '@/state/ui';
-import { additionalCredits } from '@/lib/attribution';
+import { additionalCredits, creditTokens } from '@/lib/attribution';
 import styles from './Attribution.module.css';
 
 /** One empty list, so the store selector returns a stable value before the meta loads. */
@@ -10,17 +10,6 @@ const NONE: readonly string[] = [];
 
 /** The footer's height, for the panels that sit above it (the tour card, the HUD). */
 const HEIGHT_VAR = '--attribution-height';
-
-const linkedCredit = (credit: string) =>
-  credit.split(/(https?:\/\/[^\s()<>,;]*[^\s()<>,;.!?])/g).map((part, index) =>
-    /^https?:\/\//.test(part) ? (
-      <a key={index} href={part} target="_blank" rel="noreferrer">
-        {part}
-      </a>
-    ) : (
-      part
-    ),
-  );
 
 /**
  * Always-visible source attribution (DATA.md §6): OpenStreetMap, plus the credits the city's
@@ -62,7 +51,15 @@ export function Attribution() {
         >
           {extra.map((credit) => (
             <span key={credit} className={styles.extra}>
-              {linkedCredit(credit)}
+              {creditTokens(credit).map((token, index) =>
+                token.url ? (
+                  <a key={index} href={token.url} target="_blank" rel="noreferrer">
+                    {token.text}
+                  </a>
+                ) : (
+                  token.text
+                ),
+              )}
             </span>
           ))}
         </div>

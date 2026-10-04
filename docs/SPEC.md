@@ -51,6 +51,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Building — generic | `█ ▓ ▒ ░` (by shade/height; height from OSM `height` or `building:levels × 3 m`, else a class default) | amber-grey |
 | Religious building | `†` marker plus fill | gold |
 | School/university | `⌂` marker | soft blue |
+| Hospital | `+` marker plus fill | rose |
 | Market/commercial | `$` marker | orange |
 | Train station | `Ħ` marker | brick red |
 | Park/plaza | grown tufts, dense to sparse (`" ' , .`), in patches of deeper green and straw rather than a regular stripe; gusts of wind sweep across, and blades stir, then lean with the wind (`/` or `\`; upright `\|` when it blows north or south), then lie flat `~`, lightening as the gust strengthens and again fading in its wake | green, with darker and straw patches |
@@ -66,7 +67,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Street furniture | bench `╥`, fountain `○`, flagpole `¶` (from z18) | light grey |
 | Entrance | `▪` (from z18) | stone |
 | Parking / sports pitch | `▫ ·` / `─` in rows | grey / green |
-| Church, school, or market grounds | the class's lightest `░` fill, under its buildings | class color, dim |
+| Church, school, hospital, or market grounds | the class's lightest `░` fill, under its buildings | class color, dim |
 
 **Road glyphs follow edge direction.** The renderer computes each road cell's orientation and neighbor connectivity, and picks the matching box-drawing character. Straight segments get `─`/`│`, junctions get `┼`/`├` and so on, and diagonals get `╱ ╲` or stair-stepped runs.
 

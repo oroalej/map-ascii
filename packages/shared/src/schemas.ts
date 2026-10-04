@@ -17,10 +17,14 @@ import {
   BOAT_TYPES,
   VEHICLE_TYPES,
   YEAR_RANGE,
+  RoofShape,
   type TrafficMix,
 } from './constants';
 
 export const Frontage = z.enum(FRONTAGE_KINDS);
+const RoofShapeSchema = z.enum(
+  Object.keys(RoofShape) as [keyof typeof RoofShape, ...(keyof typeof RoofShape)[]],
+);
 /** Scalars retained through vector-tile clipping; all three must be supplied together. */
 export const ShopAnchor = z.object({
   shop_lng: z.number().finite().min(-180).max(180),
@@ -353,7 +357,7 @@ export const SiteStructure = z
     material: z.enum(['wood', 'stone', 'roof', 'paving', 'pitch', 'water']),
     overhead: z.boolean(),
     /** Explicit roof wing on a standing mapped building; generic ridges follow this outline. */
-    roof_shape: z.enum(['flat', 'gabled', 'hipped', 'pyramidal']).optional(),
+    roof_shape: RoofShapeSchema.optional(),
     roof_osm_id: OsmId.optional(),
     /** Explicit paving replacing a coarse ground fill; omitted preserves legacy priority. */
     ground_override: z.boolean().optional(),
@@ -418,7 +422,7 @@ export const SiteDetail = z
       .array(
         z.strictObject({
           osm_id: OsmId,
-          shape: z.enum(['flat', 'gabled', 'hipped', 'pyramidal']),
+          shape: RoofShapeSchema,
         }),
       )
       .default([]),
@@ -1234,7 +1238,7 @@ export const CityMeta = z.object({
   defaultCamera: CameraState,
   /** Earliest year with dated data, and the build year. */
   yearRange: z.tuple([Year, Year]),
-  /** Extra credits this city's layers need, beyond OpenStreetMap. */
+  /** Map source credits, including one standalone OpenStreetMap credit. */
   attribution: z.array(z.string().min(1)),
 });
 export type CityMeta = z.infer<typeof CityMeta>;

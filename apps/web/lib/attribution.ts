@@ -1,3 +1,5 @@
+import { normalizeCredits, OSM_ATTRIBUTION } from '@atlas/shared';
+
 // Put licence/contributor records and provider-only copyrights before lengthy reference notes.
 // Unknown formats retain their full text and stable order; only exact duplicates are grouped.
 const referencePriority = (credit: string) =>
@@ -8,21 +10,20 @@ const referencePriority = (credit: string) =>
 
 /** OSM has its permanent linked credit below; retain every other source in the pack. */
 export function additionalCredits(credits: readonly string[]): string[] {
-  return [
-    ...new Set(
-      credits.map((credit) =>
-        credit
-          .replace(
-            /(?:Geometry:?\s*|OSM geometry\s*)?© OpenStreetMap contributors(?:\s*\(ODbL\))?\.?/gi,
-            '',
-          )
-          .replace(/\s{2,}/g, ' ')
-          .replace(/;\s*;/g, ';')
-          .replace(/—\s*;/g, '—')
-          .trim(),
-      ),
-    ),
-  ]
-    .filter(Boolean)
+  return normalizeCredits(credits)
+    .filter((credit) => credit !== OSM_ATTRIBUTION)
     .sort((a, b) => referencePriority(a) - referencePriority(b));
+}
+
+/** Preserve surrounding text while identifying complete HTTP(S) link targets. */
+export function creditTokens(credit: string): { text: string; url?: string }[] {
+  const tokens: { text: string; url?: string }[] = [];
+  let position = 0;
+  for (const match of credit.matchAll(/https?:\/\/[^\s()<>,;]*[^\s()<>,;.!?]/g)) {
+    if (match.index > position) tokens.push({ text: credit.slice(position, match.index) });
+    tokens.push({ text: match[0], url: match[0] });
+    position = match.index + match[0].length;
+  }
+  if (position < credit.length) tokens.push({ text: credit.slice(position) });
+  return tokens;
 }

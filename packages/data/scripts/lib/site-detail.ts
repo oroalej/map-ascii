@@ -19,6 +19,16 @@ import { isStandingBuilding, nearbyRoadFootprints } from './obstacles';
 import { parkedVehicleParts } from './parked-vehicles';
 import { geometryAudit } from './geometry-audit';
 
+/** Match authored structure materials to their rendered class. */
+export function structureClass(part: SiteDetail['structures'][number]): AtlasProperties['class'] {
+  if (part.roof_shape) return 'building';
+  if (part.material === 'water') return 'water_area';
+  if (part.material === 'pitch') return 'pitch';
+  if (part.material === 'paving') return 'paving';
+  if (part.material === 'wood') return 'building_woodwork';
+  return 'building_part';
+}
+
 const distance = (a: Position, b: Position) => Math.hypot(...frame(a as LngLat).toMeters(b));
 
 function feature(
@@ -307,6 +317,21 @@ function emitDetailStructures(
     ),
   );
   const shapeOf = (part: SiteDetail['structures'][number]) => partShapes.get(part)!;
+  const pitches = pack.structures.some((part) => part.ground_override)
+    ? [
+        ...input
+          .filter(
+            (f) =>
+              f.properties.class === 'pitch' &&
+              isArea(f.geometry) &&
+              bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]),
+          )
+          .map((f) => ({ id: f.properties.id, shape: f.geometry as Polygon | MultiPolygon })),
+        ...pack.structures
+          .filter((part) => part.material === 'pitch')
+          .map((part) => ({ id: part.id, shape: shapeOf(part) })),
+      ]
+    : [];
   const vehicleIds = new Set(vehicleParts.map((part) => part.id));
   const vehicleKinds = new Map(
     inventory.flatMap(({ vehicle, parts }) =>
@@ -371,11 +396,16 @@ function emitDetailStructures(
     if (!vehicleIds.has(part.id) && !audit.contains(shape))
       throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
     // Ground replacements must clear complete mapped carriageways in every city pack.
-    if (part.ground_override)
+    if (part.ground_override) {
       for (const road of roads.filter((road) => road.class !== 'path')) {
         if (audit.overlaps(shape, road.geometry))
           throw new Error(pack.id + ' structure ' + part.id + ': crosses ' + road.id);
       }
+      // Markings may sit inside a court; approaches must not erase its edges or holes.
+      for (const pitch of pitches)
+        if (audit.overlaps(shape, pitch.shape) && !auditFor(pitch.shape).contains(shape))
+          throw new Error(`${pack.id} structure ${part.id}: crosses pitch ${pitch.id}`);
+    }
     if (part.roof_osm_id) {
       const roof = standingTarget(part.roof_osm_id);
       if (!roof || !auditFor(roof.shape).contains(shape) || part.height_m <= roof.height)
@@ -402,18 +432,7 @@ function emitDetailStructures(
         if (audit.overlaps(shape, water.geometry as Polygon | MultiPolygon))
           throw new Error(`${pack.id} structure ${part.id}: duplicates ${water.properties.id}`);
     return feature(`${prefix}/structure-${part.id}`, shape, {
-      class: part.roof_shape
-        ? // Roof surfaces have no independent school/market activity; selection uses link.
-          'building'
-        : part.material === 'water'
-          ? 'water_area'
-          : part.material === 'pitch'
-            ? 'pitch'
-            : part.material === 'paving'
-              ? 'paving'
-              : part.material === 'wood'
-                ? 'building_woodwork'
-                : 'building_part',
+      class: structureClass(part),
       height: part.height_m,
       ...(vehicleIds.has(part.id) && {
         kind: `parked_vehicle=${vehicleKinds.get(part.id)!}`,

@@ -1,5 +1,4 @@
-import { distanceMeters as distance } from './landmark-detail.geometry';
-import { readFileSync } from 'node:fs';
+import { distanceMeters as distance, readFixture, readPack } from './landmark-detail.geometry';
 import { Landcover, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
@@ -14,14 +13,10 @@ import { bboxesOverlap, clearanceWidth, localFrame } from './geo';
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob('../../../content/cities/naga/landcover/penafrancia-basilica.json');
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const pack = Landcover.parse(
-  read('../../../content/cities/naga/landcover/penafrancia-basilica.json'),
-);
-const source = read('../__fixtures__/landmark-parents.json') as AtlasFeature[];
+const pack = Landcover.parse(readPack('landcover', 'penafrancia-basilica'));
+const source = readFixture('landmark-parents.json') as AtlasFeature[];
 // Masks are traced from visible foliage independently of the authored points/crown sizes.
-const reference = read('../__fixtures__/basilica-vegetation.json') as {
+const reference = readFixture('basilica-vegetation.json') as {
   groups: { id: string; rings: LngLat[][] }[];
   palm_rows: { id: string; tree_indices: number[] }[];
   isolated_palms: { id: string; at: LngLat }[];

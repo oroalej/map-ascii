@@ -1,5 +1,4 @@
-import { distanceMeters as distance } from './landmark-detail.geometry';
-import { readFileSync } from 'node:fs';
+import { distanceMeters as distance, readFixture, readPack } from './landmark-detail.geometry';
 import { Landcover, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
@@ -16,15 +15,13 @@ import.meta.glob(
   '../../../content/cities/naga/landcover/{ateneo-de-naga-university,ateneo-frontage}.json',
 );
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
 const packs = ['ateneo-de-naga-university', 'ateneo-frontage'].map((slug) =>
-  Landcover.parse(read(`../../../content/cities/naga/landcover/${slug}.json`)),
+  Landcover.parse(readPack('landcover', slug)),
 );
-const source = read('../__fixtures__/landmark-parents.json') as AtlasFeature[];
+const source = readFixture('landmark-parents.json') as AtlasFeature[];
 // Independently traced foliage masks, not circles derived from authored tree positions.
 // The gitignored handoff retains the owner image and its OSM registration evidence.
-const reference = read('../__fixtures__/ateneo-vegetation.json') as {
+const reference = readFixture('ateneo-vegetation.json') as {
   groups: { id: string; rings: LngLat[][] }[];
   open_ground: { id: string; ring: LngLat[] }[];
 };

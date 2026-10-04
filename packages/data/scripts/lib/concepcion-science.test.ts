@@ -1,9 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { Landcover, SiteDetail, type LngLat } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import type { LineString } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
-import { clearanceAssertions, mappedFootprints } from './landmark-detail.geometry';
+import {
+  clearanceAssertions,
+  mappedFootprints,
+  readFixture,
+  readPack,
+} from './landmark-detail.geometry';
 import { clearanceWidth, localFrame } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
@@ -12,16 +16,12 @@ import.meta.glob(
 );
 import.meta.glob('../../../content/cities/naga/landcover/balatas-road.json');
 
-const root = new URL('../../../content/cities/naga/', import.meta.url);
-const read = (path: string): unknown => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
-const source = JSON.parse(
-  readFileSync(new URL('../__fixtures__/concepcion-science-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
+const source = readFixture('concepcion-science-parents.json') as AtlasFeature[];
 
 describe('Concepcion church, Science High School and Balatas landscaping', () => {
   it('keeps the two parking spaces clear of standing roofs and full-width roads', () => {
     for (const slug of ['immaculate-conception-parish', 'naga-city-science-high-school']) {
-      const cover = Landcover.parse(read(`landcover/${slug}.json`));
+      const cover = Landcover.parse(readPack('landcover', slug));
       const parking = cover.areas.filter((area) => area.cover === 'parking');
       expect(parking).toHaveLength(2);
       const obstacles = mappedFootprints(source, { paths: false });
@@ -30,14 +30,14 @@ describe('Concepcion church, Science High School and Balatas landscaping', () =>
         audit.clear({ type: 'Polygon', coordinates: [area.ring] }, obstacles, slug);
       expect(cover.areas.some((area) => area.cover === 'grass')).toBe(true);
       expect(cover.areas.some((area) => area.cover === 'planting')).toBe(true);
-      const detail = SiteDetail.parse(read(`details/${slug}.json`));
+      const detail = SiteDetail.parse(readPack('details', slug));
       expect(detail.walks.length).toBeGreaterThan(0);
       expect(detail.structures.every((part) => part.ground_override)).toBe(true);
     }
   });
 
   it('leaves spaced smaller crowns on both Balatas verges from Magsaysay to the Basilica', () => {
-    const cover = Landcover.parse(read('landcover/balatas-road.json'));
+    const cover = Landcover.parse(readPack('landcover', 'balatas-road'));
     const road = source.find((f) => f.properties.id === 'osm:way/23521696')!;
     const line = (road.geometry as LineString).coordinates as LngLat[];
     const end = line.findIndex((p) => p[0] === 123.2000138 && p[1] === 13.6334885);

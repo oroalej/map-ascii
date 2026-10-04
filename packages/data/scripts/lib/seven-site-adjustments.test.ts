@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { Landcover, Landmark, SiteDetail, DetailSelectionSchema, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon, Point } from 'geojson';
@@ -13,6 +12,8 @@ import {
   assertPointClear,
   distanceMeters as distance,
   mappedFootprints,
+  readFixture,
+  readPack as pack,
 } from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
@@ -26,11 +27,7 @@ import.meta.glob(
   '../../../content/cities/naga/details/{saint-joseph-school,camarines-sur-national-high-school,bicol-state-campus,universidad-de-santa-isabel}.json',
 );
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const pack = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
-const source = read('../__fixtures__/seven-site-parents.json') as AtlasFeature[];
+const source = readFixture('seven-site-parents.json') as AtlasFeature[];
 const campusSlugs = [
   'university-of-nueva-caceres',
   'saint-joseph-school',

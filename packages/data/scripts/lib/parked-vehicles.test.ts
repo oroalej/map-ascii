@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeSiteDetails } from './site-detail';
 import { parkedVehicleParts } from './parked-vehicles';
-import { detailLayoutKey } from './detail-layout';
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
 
 const m = 111_320;
 const p = (x: number, y: number): LngLat => [x / m, y / m];

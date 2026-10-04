@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { DetailLayouts, type SiteDetail } from '@atlas/shared';
+import { DetailLayouts, normalizeCredits, type SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
-import { detailLayoutKey } from '../../../packages/data/scripts/lib/detail-layout';
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import { isCityMeta } from '../lib/guards';
 import { cities, mapReady } from './helpers';
 import { additionalCredits } from '../lib/attribution';
@@ -50,15 +50,15 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const layoutResponse = await page.request.get(`/tiles/${city.slug}.detail-layouts.json`);
       const layouts = layoutResponse.ok() ? DetailLayouts.parse(await layoutResponse.json()) : {};
       const currentLayout = layouts[detail.id] === detailLayoutKey(detail);
+      const expectedCredits = normalizeCredits([detail.credit]);
+      const servedCredits = normalizeCredits(meta.attribution);
+      const hasCredit = expectedCredits.every((credit) => servedCredits.includes(credit));
       if (process.env.ATLAS_REQUIRE_DETAILS === '1') {
-        expect(meta.attribution).toContain(detail.credit);
+        expect(servedCredits).toEqual(expect.arrayContaining(expectedCredits));
         expect(layoutResponse.ok(), 'Tiles must include detail-layout fingerprints').toBe(true);
         expect(currentLayout, 'Served tiles must match this detail layout').toBe(true);
       }
-      test.skip(
-        !meta.attribution.includes(detail.credit) || !currentLayout,
-        'Pinned tiles predate this detail layout',
-      );
+      test.skip(!hasCredit || !currentLayout, 'Pinned tiles predate this detail layout');
       for (const credit of additionalCredits([detail.credit]))
         await expect(page.locator('footer')).toContainText(credit);
       await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();

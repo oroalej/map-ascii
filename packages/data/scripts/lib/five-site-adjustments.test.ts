@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { Landcover, SiteDetail, Landmark, DetailSelectionSchema, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +11,8 @@ import {
   assertPointClear,
   distanceMeters as metres,
   mappedFootprints,
+  readFixture,
+  readPack,
 } from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
@@ -22,12 +23,7 @@ import.meta.glob(
   '../../../content/cities/naga/landcover/universidad-de-santa-isabel-frontage.json',
 );
 
-const root = new URL('../../../content/cities/naga/', import.meta.url);
-const read = (folder: string, slug: string): unknown =>
-  JSON.parse(readFileSync(new URL(`${folder}/${slug}.json`, root), 'utf8')) as unknown;
-const source = JSON.parse(
-  readFileSync(new URL('../__fixtures__/landmark-parents.json', import.meta.url), 'utf8'),
-) as AtlasFeature[];
+const source = readFixture('landmark-parents.json') as AtlasFeature[];
 const slugs = [
   'naga-city-civic-center',
   'naga-hope-christian-school',
@@ -35,13 +31,13 @@ const slugs = [
   'universidad-de-santa-isabel',
   'naga-parochial-school',
 ];
-const details = slugs.map((slug) => SiteDetail.parse(read('details', slug)));
+const details = slugs.map((slug) => SiteDetail.parse(readPack('details', slug)));
 const covers = slugs
   .filter((slug) => !slug.includes('peoples-mall'))
-  .map((slug) => Landcover.parse(read('landcover', slug)));
-covers.push(Landcover.parse(read('landcover', 'universidad-de-santa-isabel-frontage')));
+  .map((slug) => Landcover.parse(readPack('landcover', slug)));
+covers.push(Landcover.parse(readPack('landcover', 'universidad-de-santa-isabel-frontage')));
 mergeContent(source, {
-  landmarks: slugs.map((slug) => Landmark.parse(read('landmarks', slug))),
+  landmarks: slugs.map((slug) => Landmark.parse(readPack('landmarks', slug))),
 } as ContentBundle);
 const adjusted = applyLandcoverTreeOverrides(source, covers);
 const authored = landcoverFeatures(adjusted, covers);
@@ -159,9 +155,11 @@ describe('five owner-referenced landmark adjustments', () => {
   });
 
   it('covers separately traced foliage masks with at least 70% nominal canopy', () => {
-    const masks = JSON.parse(
-      readFileSync(new URL('../__fixtures__/five-site-reference.json', import.meta.url), 'utf8'),
-    ) as { site: string; id: string; ring: LngLat[] }[];
+    const masks = readFixture('five-site-reference.json') as {
+      site: string;
+      id: string;
+      ring: LngLat[];
+    }[];
     const trees = input.filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point');
     for (const mask of masks) {
       // Later Civic annotations replace these original grove masks with selective crown edits.

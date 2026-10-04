@@ -1,6 +1,6 @@
 import { DetailLayouts, SiteDetail } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
-import { detailLayoutKey } from './detail-layout';
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
 
 const detail = {
   id: 'detail/fixture',

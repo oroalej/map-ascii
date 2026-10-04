@@ -1,4 +1,5 @@
 export * from './climate';
+export * from './attribution';
 export * from './dialogue';
 export * from './dialogue-options';
 export * from './constants';

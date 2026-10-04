@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SiteDetail, SiteStructure } from './schemas';
+import { RoofShape } from './constants';
 
 const part = {
   id: 'beam',
@@ -25,6 +26,23 @@ const detail = {
 };
 
 describe('site structure content', () => {
+  it('accepts shared roof shapes for both wings and overrides and rejects unknown shapes', () => {
+    for (const shape of [...Object.keys(RoofShape), 'unknown']) {
+      const expected = shape in RoofShape;
+      expect(
+        SiteStructure.safeParse({
+          ...part,
+          material: 'roof',
+          roof_shape: shape,
+          roof_osm_id: 'osm:way/2',
+        }).success,
+      ).toBe(expected);
+      expect(
+        SiteDetail.safeParse({ ...detail, roof_overrides: [{ osm_id: 'osm:way/2', shape }] })
+          .success,
+      ).toBe(expected);
+    }
+  });
   it('validates sourced building heights and rejects duplicate mapped targets', () => {
     expect(SiteDetail.parse(detail).building_overrides).toEqual([]);
     const override = { osm_id: 'osm:way/2', height_m: 9 };
