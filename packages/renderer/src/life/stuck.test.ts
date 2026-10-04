@@ -69,27 +69,51 @@ function mover(kind: 'person' | 'vehicle', metres: number, dir: 1 | -1): Mover {
   };
 }
 
-it.fails.each([2.9, 1.45])(
-  'lets head-on walkers each travel 20 metres within 30 seconds at minimum %s',
-  (minimum) => {
-    const { world, life } = fixture(LifeLine.path, 3, true);
-    const a = mover('person', 70, 1),
-      b = mover('person', 80, -1);
-    life.movers.push(a, b);
-    for (let frame = 0; frame < 900; frame++)
-      world.step(
-        1 / 30,
-        undefined,
-        minimum === 2.9 ? 17 : 18,
-        undefined,
-        undefined,
-        undefined,
-        minimum,
-      );
-    expect(a.walked ?? 0).toBeGreaterThanOrEqual(20);
-    expect(b.walked ?? 0).toBeGreaterThanOrEqual(20);
-  },
-);
+for (const minimum of [2.9, 1.45])
+  (minimum === 2.9 ? it.fails : it)(
+    `lets head-on walkers each travel 20 metres within 30 seconds at minimum ${minimum}`,
+    () => {
+      const { world, life } = fixture(LifeLine.path, 3, true);
+      const a = mover('person', 70, 1),
+        b = mover('person', 80, -1);
+      life.movers.push(a, b);
+      for (let frame = 0; frame < 900; frame++)
+        world.step(
+          1 / 30,
+          undefined,
+          minimum === 2.9 ? 17 : 18,
+          undefined,
+          undefined,
+          undefined,
+          minimum,
+        );
+      expect(a.walked ?? 0).toBeGreaterThanOrEqual(20);
+      expect(b.walked ?? 0).toBeGreaterThanOrEqual(20);
+    },
+  );
+
+it('checks a blocked walker reversal at its refreshed pose and rolls rejected group slots back', () => {
+  const { life } = fixture(LifeLine.path, 3);
+  const m = mover('person', 70, 1);
+  m.group = [walker(-0.3), walker(0.3)];
+  m.waiting = 4;
+  life.movers.push(m);
+  const before = { ...m };
+  const slots = m.group.map((w) => ({ ...w }));
+  let reversed = false;
+  life.step(1 / 30, undefined, undefined, undefined, {}, (owner) => {
+    if (owner.hx === -1) {
+      reversed = true;
+      expect(owner.x).toBeCloseTo(before.x);
+      expect(owner.y).toBeCloseTo(before.y);
+    }
+    return false;
+  });
+  expect(reversed).toBe(true);
+  expect(m).toEqual({ ...before, waiting: 4 + 1 / 30 });
+  expect(m.group).toEqual(slots);
+  expect(m.group).toBe(before.group);
+});
 
 it('lets a car clear a zoom-hidden crossing walker within 15 seconds at minimum 7', () => {
   const { world, life } = fixture(LifeLine.roadMajor, 8);

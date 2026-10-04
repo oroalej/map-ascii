@@ -65,6 +65,7 @@ import {
   PEOPLE,
   PERSON_PAUSE,
   PERSON_TURN_CHANCE,
+  WALK,
   PLACES,
   ROAD_MARGIN_M,
   spawnRules,
@@ -141,6 +142,11 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+/** Roll trials back including optional fields that the trial added. */
+function restoreMover(m: Mover, before: Mover) {
+  for (const key of Object.keys(m)) if (!Object.hasOwn(before, key)) Reflect.deleteProperty(m, key);
+  Object.assign(m, before);
+}
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
 export type WorldGroundGuard = ((
@@ -2734,6 +2740,7 @@ export class TileLife {
             this.signals.vehicleSpeed(m, dt, clock),
           );
         if (this.scenes.held(m)) {
+          m.waiting = 0;
           env?.diagnostics?.hold(m, 'service');
           if (m.vehicle) m.v = 0;
           continue;
@@ -2771,7 +2778,10 @@ export class TileLife {
       }
       if (m.kind === 'dog') {
         const speed = this.dogSpeed(m, dt, this.canIdle(m));
-        if (speed === undefined) continue;
+        if (speed === undefined) {
+          m.waiting = 0;
+          continue;
+        }
         speeds[i] = speed;
       }
       if (m.kind === 'cat') {
@@ -2793,6 +2803,7 @@ export class TileLife {
       }
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
+          m.waiting = 0;
           env?.diagnostics?.hold(m, 'moment');
           m.pause = Math.max(0, m.pause - dt);
           continue;
@@ -2800,11 +2811,13 @@ export class TileLife {
         const idle = this.canIdle(m);
         if (!idle) m.pause = 0;
         if (m.pause > 0) {
+          m.waiting = 0;
           m.pause -= dt;
           env?.diagnostics?.hold(m, 'pause');
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
+          m.waiting = 0;
           env?.diagnostics?.hold(m, 'pause');
           m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
           continue;
@@ -2885,7 +2898,7 @@ export class TileLife {
             // Mapped sidewalk/path widths bound detours; unmeasured paths retain 1.5 m.
             const width = m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind).width : 1;
             limit = Math.max(0, (this.geo.widths[m.line] || 4) / 2 - width / 2);
-            const side = Math.sign(before.avoid ?? 0) || (i % 2 ? -1 : 1);
+            const side = Math.sign(before.avoid ?? 0) || 1;
             tries = [
               [side, 0.5],
               [side, 0],
@@ -2894,9 +2907,10 @@ export class TileLife {
             ];
           }
           for (const [side, share] of tries) {
-            Object.assign(m, before);
+            restoreMover(m, before);
             if (walking) {
               m.avoid = Math.max(-limit, Math.min(limit, (before.avoid ?? 0) + side! * dt * 1.5));
+              if (share === 0 && m.avoid === (before.avoid ?? 0)) continue;
               m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             }
             moved = this.advance(m, distance * share!);
@@ -2904,10 +2918,28 @@ export class TileLife {
           }
         }
         if (!fits) {
-          Object.assign(m, before);
+          restoreMover(m, before);
           moved = 0;
         }
-        m.waiting = fits ? 0 : (before.waiting ?? 0) + dt;
+        m.waiting = distance > 0 && moved < distance * 0.25 ? (before.waiting ?? 0) + dt : 0;
+        if ((m.kind === 'person' || m.kind === 'dog') && m.waiting >= WALK.blockedTurnSeconds) {
+          const snapshot = { ...m };
+          const slots = m.group?.map((w) => ({ lateral: w.lateral, back: w.back }));
+          this.turnBack(m);
+          m.avoid = -(m.avoid ?? 0);
+          for (const w of m.group ?? []) {
+            w.lateral = -w.lateral;
+            w.back = -w.back;
+          }
+          this.advance(m, 0, false);
+          if (fitsGround(m, snapshot)) {
+            m.waiting = 0;
+            env?.diagnostics?.recovery(m, 'walker');
+          } else {
+            restoreMover(m, snapshot);
+            slots?.forEach((slot, index) => Object.assign(m.group![index]!, slot));
+          }
+        }
         if (!fits && m.kind === 'cat') {
           m.pause = CAT.blockedPause;
           this.turnBack(m);
