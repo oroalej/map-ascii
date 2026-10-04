@@ -9,9 +9,13 @@ const samples = JSON.parse(
   readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
 ) as Record<string, { slug: string; at: number[] }[]>;
 
-// A narrow viewport keeps the legend collapsed and leaves room above attribution. Enable
-// animation only for the Life-on check, after the map has loaded.
-test.use({ viewport: { width: 600, height: 800 }, reducedMotion: 'reduce' });
+// Keep the center above the controls and attribution. Lower pixel density makes
+// software WebGL's real Life-on pass responsive without changing this CSS layout.
+test.use({
+  viewport: { width: 600, height: 800 },
+  deviceScaleFactor: 0.5,
+  reducedMotion: 'reduce',
+});
 
 for (const city of cities.filter((city) => city.hasMeta)) {
   const directory = new URL(

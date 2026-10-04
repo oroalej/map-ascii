@@ -27,6 +27,22 @@ const car = { id: 'one', at: p(15, 15), bearing: 0, kind: 'car' as const };
 const bus = { id: 'bus', at: p(30, 30), bearing: 90, kind: 'bus' as const };
 
 describe('fixed plan-view parking', () => {
+  it('rejects water touching only a projecting wheel and names that part', () => {
+    const water: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/wheel-water', class: 'water_area' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [p(15.94, 16.1), p(16.04, 16.1), p(16.04, 16.55), p(15.94, 16.55), p(15.94, 16.1)],
+        ],
+      },
+    };
+    const pack = SiteDetail.parse({ ...base, parked_vehicles: [car] });
+    expect(() => mergeSiteDetails([parent, water], [pack])).toThrow(
+      'structure parked-one-wheel-right-front: crosses osm:way/wheel-water',
+    );
+  });
   it('rejects a road corridor whose centreline is outside the site', () => {
     const road: AtlasFeature = {
       ...parent,

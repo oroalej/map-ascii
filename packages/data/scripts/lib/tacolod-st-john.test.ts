@@ -40,7 +40,10 @@ describe('Tacolod school grounds', () => {
     const bounds = bufferBbox(bbox(areaFor(detail)) as BBox, 0.015);
     const input = source.filter((f) => bboxesOverlap(bounds, bbox(f) as BBox));
     const paths = detail.walks.map((w) => seatingFootprint(w.line, w.width_m));
-    const obstacles = mappedFootprints(input, { water: true });
+    const obstacles = mappedFootprints(input, {
+      water: true,
+      bounds: bbox(areaFor(detail)) as BBox,
+    });
 
     it(`${slug}: keeps full planting and crowns clear of roofs, roads and walks`, () => {
       expect(cover.trees.length).toBeGreaterThanOrEqual(3);

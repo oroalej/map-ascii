@@ -9,7 +9,7 @@ import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
 import { geometryAudit } from './geometry-audit';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import type * as LandmarkFixtures from './landmark-detail.fixtures';
-import { isStandingBuilding } from './obstacles';
+import { isStandingBuilding, nearbyRoadFootprints } from './obstacles';
 import { applyLandcoverTreeOverrides, landcoverFeatures } from './landcover';
 
 /** Visible inventory after OSM replaces retired curated trees. */
@@ -71,28 +71,73 @@ export function lineDistance(at: LngLat, line: number[][], signed = false) {
   return signed ? side : nearest;
 }
 
-/** Shared source clearance; callers choose whether their invariant also covers paths/water. */
-export function mappedFootprints(
+type ClearanceOptions = { paths?: boolean; water?: boolean; bounds?: BBox };
+const areaCache = new WeakMap<readonly AtlasFeature[], Map<string, Area[]>>();
+type PointObstacles = {
+  areas: Area[];
+  roads: { id: string; line: number[][]; radius: number }[];
+};
+const pointCache = new WeakMap<readonly AtlasFeature[], Map<string, PointObstacles>>();
+
+/** Point guards need segment distances, without constructing polygon corridor unions. */
+export function pointObstacles(
   source: readonly AtlasFeature[],
-  { paths = true, water = false } = {},
-): Area[] {
-  return source.flatMap<Area>((feature) => {
+  { paths = true, water = false }: ClearanceOptions = {},
+): PointObstacles {
+  const key = `${paths}/${water}`;
+  let cache = pointCache.get(source);
+  if (!cache) pointCache.set(source, (cache = new Map<string, PointObstacles>()));
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const out: PointObstacles = { areas: [], roads: [] };
+  for (const feature of source) {
     const g = feature.geometry,
       p = feature.properties;
     if (
       (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
       (isStandingBuilding(feature) || (water && p.class.startsWith('water')))
     )
-      return [g];
+      out.areas.push(g);
     if (g.type === 'LineString' && (p.class.startsWith('road') || (paths && p.class === 'path')))
-      return [seatingFootprint(g.coordinates as LngLat[], clearanceWidth(p))];
-    return [];
-  });
+      out.roads.push({ id: p.id, line: g.coordinates, radius: clearanceWidth(p) / 2 });
+  }
+  cache.set(key, out);
+  return out;
+}
+
+/** Exact area guards prepare only nearby segment capsules, once per immutable source/bounds. */
+export function mappedFootprints(
+  source: readonly AtlasFeature[],
+  { paths = true, water = false, bounds }: ClearanceOptions = {},
+): Area[] {
+  const key = `${paths}/${water}/${bounds?.join(',') ?? 'all'}`;
+  let cache = areaCache.get(source);
+  if (!cache) areaCache.set(source, (cache = new Map<string, Area[]>()));
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const areas = pointObstacles(source, { paths, water }).areas.filter(
+    (area) => !bounds || bboxesOverlap(bounds, bbox(area) as BBox),
+  );
+  const roadSource = paths ? source : source.filter((f) => f.properties.class !== 'path');
+  const roadBounds = bounds ?? (bbox({ type: 'FeatureCollection', features: [...source] }) as BBox);
+  const out = [
+    ...areas,
+    ...nearbyRoadFootprints(roadSource, roadBounds).map((road) => road.geometry),
+  ];
+  cache.set(key, out);
+  return out;
 }
 
 const obstacleBounds = new WeakMap<Area, BBox>();
-export const assertPointClear = (at: LngLat, obstacles: readonly Area[], context: string) => {
-  for (const obstacle of obstacles) {
+export const assertPointClear = (
+  at: LngLat,
+  obstacles: readonly Area[] | PointObstacles,
+  context: string,
+) => {
+  if ('roads' in obstacles)
+    for (const road of obstacles.roads)
+      expect(lineDistance(at, road.line), `${context} / ${road.id}`).toBeGreaterThan(road.radius);
+  for (const obstacle of 'areas' in obstacles ? obstacles.areas : obstacles) {
     let bounds = obstacleBounds.get(obstacle);
     if (!bounds) {
       bounds = bbox(obstacle) as BBox;
@@ -123,20 +168,6 @@ export function clearanceAssertions(area: Area) {
 /** Register each site's unchanged geometry assertions in exactly one deterministic shard. */
 export function geometrySuite(shard: number, of: number, fixtures: Fixtures) {
   const { covers, source, areaFor, newDetails, nearby } = fixtures;
-  // The source roads are immutable; reuse their exact footprints across ground-surface checks.
-  const roadFootprints = new Map<AtlasFeature, MultiPolygon>();
-  const roadFootprint = (feature: AtlasFeature) => {
-    let shape = roadFootprints.get(feature);
-    if (!shape) {
-      if (feature.geometry.type !== 'LineString') throw Error('expected a mapped road');
-      shape = seatingFootprint(
-        feature.geometry.coordinates as LngLat[],
-        clearanceWidth(feature.properties),
-      );
-      roadFootprints.set(feature, shape);
-    }
-    return shape;
-  };
   const selected = [...newDetails]
     .sort((a, b) => a.id.localeCompare(b.id))
     .filter((_, index) => index % of === shard - 1);
@@ -145,6 +176,7 @@ export function geometrySuite(shard: number, of: number, fixtures: Fixtures) {
       const area = areaFor(detail);
       const siteBounds = bbox(area) as [number, number, number, number];
       const audit = clearanceAssertions(area);
+      const carriageways = mappedFootprints(source, { paths: false, bounds: siteBounds });
       // Keep complete nearby features, including adjacent selection targets and crowns.
       // Growing city fixtures should not make each site merge unrelated distant content.
       const neighborhood = bufferBbox(siteBounds, 0.015);
@@ -196,21 +228,7 @@ export function geometrySuite(shard: number, of: number, fixtures: Fixtures) {
             coordinates: [[part.ring, ...(part.holes ?? [])]],
           };
           // Benches can stand on paving; standing footprints and carriageways cannot be erased.
-          for (const f of source) {
-            if (!bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number])) continue;
-            const obstacle =
-              f.geometry.type === 'Polygon' &&
-              f.properties.class.startsWith('building') &&
-              (f.properties.height ?? 0) > 0
-                ? f.geometry
-                : f.geometry.type === 'LineString' && f.properties.class.startsWith('road')
-                  ? roadFootprint(f)
-                  : undefined;
-            if (obstacle)
-              expect(audit.overlaps(shape, obstacle), `${part.id} / ${f.properties.id}`).toBe(
-                false,
-              );
-          }
+          audit.clear(shape, carriageways, part.id);
         }
         const cover = covers.find((c) => c.id === `landcover/${detail.id.slice(7)}`);
         // Existing Cathedral landcover includes unchanged frontage beyond its OSM grounds.

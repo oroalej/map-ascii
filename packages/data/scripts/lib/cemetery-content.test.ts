@@ -1,4 +1,9 @@
-import { distanceMeters as distance, readFixture, readPack } from './landmark-detail.geometry';
+import {
+  distanceMeters as distance,
+  readFixture,
+  readPack,
+  mappedFootprints,
+} from './landmark-detail.geometry';
 import { Cemetery, DetailSelectionSchema, Landmark, Landcover, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import inside from '@turf/boolean-point-in-polygon';
@@ -9,8 +14,7 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeCemeteries } from './cemeteries';
 import { landcoverFeatures, SAME_TREE_M } from './landcover';
-import { seatingFootprint } from './site-detail';
-import { bboxesOverlap, clearanceWidth } from './geo';
+import { bboxesOverlap } from './geo';
 import { mergeContent } from '../04-merge-content';
 import { polygonComponents } from './geometry-audit';
 
@@ -51,23 +55,16 @@ const centre = (f: AtlasFeature): LngLat => {
   ];
 };
 
-const obstacles = source.flatMap<{
-  shape: Polygon | MultiPolygon;
-  bounds: [number, number, number, number];
-}>((f) => {
-  const g = f.geometry,
-    p = f.properties;
-  let shape: Polygon | MultiPolygon;
-  if (
-    (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
-    ((p.class.startsWith('building') && (p.height ?? 0) > 0) || p.class.startsWith('water'))
-  )
-    shape = g;
-  else if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path'))
-    shape = seatingFootprint(g.coordinates as LngLat[], clearanceWidth(p));
-  else return [];
-  return [{ shape, bounds: bbox(shape) as [number, number, number, number] }];
-});
+const cemeteryBounds = bbox({
+  type: 'FeatureCollection',
+  features: source.filter((f) => packs.some((p) => p.osm_id === f.properties.id)),
+}) as [number, number, number, number];
+const obstacles = mappedFootprints(source, { water: true, bounds: cemeteryBounds }).map(
+  (shape) => ({
+    shape,
+    bounds: bbox(shape) as [number, number, number, number],
+  }),
+);
 
 describe('Basilica cemetery reference correction', () => {
   it('models both river-bend burial areas and every Eternal Gardens lawn section', () => {

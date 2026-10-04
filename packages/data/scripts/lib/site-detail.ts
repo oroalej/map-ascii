@@ -359,10 +359,17 @@ function emitDetailStructures(
           .map((f) => ({ id: f.properties.id, geometry: f.geometry as Polygon | MultiPolygon })),
       ]
     : [];
-  for (const part of vehicleParts) {
+  for (const [i, footprint] of vehicleFootprints.entries()) {
     for (const obstacle of parkingObstacles)
-      if (audit.overlaps(shapeOf(part), obstacle.geometry))
-        throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
+      if (audit.overlaps(footprint, obstacle.geometry)) {
+        const part = inventory[i]!.parts.find((part) =>
+          audit.overlaps(shapeOf(part), obstacle.geometry),
+        );
+        const id = part?.id ?? `parked-${inventory[i]!.vehicle.id}`;
+        throw new Error(`${pack.id} structure ${id}: crosses ${obstacle.id}`);
+      }
+  }
+  for (const part of vehicleParts) {
     for (const roof of pack.structures.filter((part) => part.material === 'roof'))
       if (audit.overlaps(shapeOf(part), shapeOf(roof)))
         throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);

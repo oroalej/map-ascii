@@ -140,9 +140,11 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
         (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
         (isStandingBuilding(f) ||
           p.class.startsWith('water') ||
-          (p.detail_parent === pack.osm_id &&
+          (p.id.startsWith('detail:') &&
             !p.detail_overhead &&
-            (p.class === 'paving' || p.class === 'pitch')))
+            (p.class === 'paving' ||
+              p.class === 'pitch' ||
+              (p.class === 'seating' && p.detail_blocked))))
       )
         shape = g;
       else if (g.type === 'Point' && (p.class === 'tree' || p.class === 'monument'))
@@ -159,7 +161,11 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
       ...original,
       properties: { ...original.properties, name: pack.title, landmark: true },
     };
-    if (original.properties.name && original.properties.name !== pack.title)
+    if (
+      !parent.properties.osm_name &&
+      original.properties.name &&
+      original.properties.name !== pack.title
+    )
       parent.properties.osm_name = original.properties.name;
     const anchor = interiorPoint(area);
     parent.properties.label_lng = anchor[0];

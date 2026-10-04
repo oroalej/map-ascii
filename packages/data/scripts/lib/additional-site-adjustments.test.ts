@@ -12,6 +12,9 @@ import {
   coordinates as coords,
   distanceMeters as dist,
   mappedFootprints,
+  pointObstacles,
+  assertPointClear,
+  clearanceAssertions,
   readFixture,
   readPack as pack,
 } from './landmark-detail.geometry';
@@ -43,6 +46,84 @@ const covers = [...slugs, 'bicol-central-station'].map((slug) =>
 const area = (detail: SiteDetail): Polygon | MultiPolygon => areaFor(detail, source);
 
 describe('additional landmark references', () => {
+  it('keeps point clearance around corridor bends and endpoints with the path option', () => {
+    const frame = localFrame([0, 0]);
+    const path: AtlasFeature = {
+      ...source[0]!,
+      properties: { id: 'osm:way/bend', class: 'path', width: 2 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-10, 0],
+          [10, 0],
+          [10, 0],
+          [10, 10],
+        ].map((at) => frame.toLngLat(at as LngLat)),
+      },
+    };
+    const obstacles = pointObstacles([path]);
+    for (const at of [
+      [10.5, -0.5],
+      [10, 10.9],
+    ])
+      expect(() => assertPointClear(frame.toLngLat(at as LngLat), obstacles, 'bend/end')).toThrow();
+    expect(() => assertPointClear(frame.toLngLat([10, 11.1]), obstacles, 'outside')).not.toThrow();
+    expect(() =>
+      assertPointClear(
+        frame.toLngLat([0, 0]),
+        pointObstacles([path], { paths: false }),
+        'ignored path',
+      ),
+    ).not.toThrow();
+  });
+  it('checks both point and area clearance against MultiPolygon standing roofs', () => {
+    const frame = localFrame([0, 0]);
+    const roof: AtlasFeature = {
+      ...source[0]!,
+      properties: { id: 'osm:relation/roof', class: 'building', height: 5 },
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
+          [
+            [
+              [-2, -2],
+              [2, -2],
+              [2, 2],
+              [-2, 2],
+              [-2, -2],
+            ].map((at) => frame.toLngLat(at as LngLat)),
+          ],
+        ],
+      },
+    };
+    expect(() => assertPointClear([0, 0], pointObstacles([roof]), 'roof')).toThrow();
+    const patch: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-1, -1],
+          [1, -1],
+          [1, 1],
+          [-1, 1],
+          [-1, -1],
+        ].map((at) => frame.toLngLat(at as LngLat)),
+      ],
+    };
+    expect(() =>
+      clearanceAssertions(patch).clear(
+        patch,
+        mappedFootprints([roof], { bounds: [-1, -1, 1, 1] }),
+        'roof',
+      ),
+    ).toThrow();
+    expect(() =>
+      assertPointClear(
+        [0, 0],
+        pointObstacles([{ ...roof, properties: { ...roof.properties, detail_overhead: true } }]),
+        'overhead',
+      ),
+    ).not.toThrow();
+  });
   it('checks the complete two-metre corridor of an unwidth-tagged path', () => {
     const frame = localFrame([0, 0]);
     const path: AtlasFeature = {
@@ -84,13 +165,13 @@ describe('additional landmark references', () => {
         expect(f.properties.detail_parent).toBe(detail.osm_id);
   });
   it('adds sparse crowns outside full roads, paths, standing roofs and mapped trunks', () => {
-    const obstacles = mappedFootprints(source, { water: true });
+    const obstacles = pointObstacles(source, { water: true });
     for (const [i, cover] of covers.entries()) {
       expect(cover.trees.length, cover.id).toBeGreaterThanOrEqual(i === 0 ? 4 : 6);
       for (const tree of cover.trees) {
         expect(tree.crown_m).toBeLessThanOrEqual(11);
         expect(inside(tree.at, area(details[i]!)), cover.id).toBe(true);
-        for (const obstacle of obstacles) expect(inside(tree.at, obstacle), cover.id).toBe(false);
+        assertPointClear(tree.at, obstacles, cover.id);
         for (const f of source.filter(
           (f) => f.properties.class === 'tree' && f.geometry.type === 'Point',
         ))

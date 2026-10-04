@@ -11,7 +11,7 @@ import { mergeSiteDetails } from './site-detail';
 import {
   assertPointClear,
   distanceMeters as distance,
-  mappedFootprints,
+  pointObstacles,
   readFixture,
   readPack as pack,
 } from './landmark-detail.geometry';
@@ -44,7 +44,7 @@ const roofs = source.filter(
     (f.properties.height ?? 0) > 0 &&
     ['Polygon', 'MultiPolygon'].includes(f.geometry.type),
 );
-const obstacles = mappedFootprints(source);
+const obstacles = pointObstacles(source);
 
 describe('seven-site planting adjustments', () => {
   it('bounds Civic Center canopy while preserving every mapped tree and sports facility', () => {

@@ -15,7 +15,7 @@ Ambient dialogue contains 100 illustrative scenes (40 independent utterances and
 | Country | Philippines (Geofabrik `philippines` extract) |
 | Boundary lookup | `relation["boundary"="administrative"]["name"="Naga City"]["admin_level"="6"]` within **Bicol Region** (OSM relation 3084673, verified 2026-09-29). Not within Camarines Sur: as an independent component city, Naga is cut out of the province polygon in OSM. |
 | Detail buffer | 2 km around the city boundary, clipped to the region bbox below |
-| Region | **Downtown only for now:** bbox `[123.170, 13.602, 123.213, 13.640]` (about 4.6 × 4.2 km: Balatas to the Felix Plazo St side, Liboton and Queborac Dr down to Almeda Hwy and the Milaor boundary). The whole Bicol Region view (OSM relation 3561455, which includes Masbate and Catanduanes) was too much to start with. The camera is clamped to the bbox, and detail data and search are limited to it. To widen it later, set `region` back to `{ "name": "Bicol Region", "osm_relation": "3561455" }`. |
+| Region | **Downtown only for now:** bbox `[123.1695, 13.602, 123.213, 13.640]` (about 4.7 × 4.2 km: Balatas to the Felix Plazo St side, Liboton and Queborac Dr down to Almeda Hwy and the Milaor boundary). The whole Bicol Region view (OSM relation 3561455, which includes Masbate and Catanduanes) was too much to start with. The camera is clamped to the bbox, and detail data and search are limited to it. To widen it later, set `region` back to `{ "name": "Bicol Region", "osm_relation": "3561455" }`. |
 | Subdivision | admin_level 10, local label **"barangay"** |
 | Content languages | `en` (required), `fil` (Filipino), `bcl` (Bikol) |
 | Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |

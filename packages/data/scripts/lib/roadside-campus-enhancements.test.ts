@@ -2,6 +2,7 @@ import { Landcover, Landmark, SiteDetail, DetailSelectionSchema } from '@atlas/s
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon, LineString } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
+import bbox from '@turf/bbox';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
@@ -11,6 +12,7 @@ import {
   assertPointClear,
   clearanceAssertions,
   effectiveTrees,
+  pointObstacles,
   mappedFootprints,
   distanceMeters as distance,
   readFixture,
@@ -44,7 +46,7 @@ const audit = clearanceAssertions(
     .geometry as Polygon | MultiPolygon,
 );
 const intersects = audit.overlaps;
-const obstacles = mappedFootprints(source, { water: true });
+const obstacles = pointObstacles(source, { water: true });
 
 describe('additional roadside and campus references', () => {
   it('keeps distinct source anchors and canonical selection for school approaches', () => {
@@ -91,7 +93,10 @@ describe('additional roadside and campus references', () => {
           expect(distance(tree.at, other.at)).toBeGreaterThan(4);
       }
       for (const patch of cover.areas)
-        for (const obstacle of obstacles)
+        for (const obstacle of mappedFootprints(source, {
+          water: true,
+          bounds: bbox(area) as [number, number, number, number],
+        }))
           expect(
             intersects({ type: 'Polygon', coordinates: [patch.ring] }, obstacle),
             cover.id,

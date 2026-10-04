@@ -1,4 +1,5 @@
-import { Landcover, SiteDetail, type LngLat } from '@atlas/shared';
+import { Landcover, SiteDetail, type LngLat, type BBox } from '@atlas/shared';
+import bbox from '@turf/bbox';
 import { describe, expect, it } from 'vitest';
 import type { LineString } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
@@ -20,12 +21,21 @@ const source = readFixture('concepcion-science-parents.json') as AtlasFeature[];
 
 describe('Concepcion church, Science High School and Balatas landscaping', () => {
   it('keeps the two parking spaces clear of standing roofs and full-width roads', () => {
-    for (const slug of ['immaculate-conception-parish', 'naga-city-science-high-school']) {
-      const cover = Landcover.parse(readPack('landcover', slug));
+    const sites = ['immaculate-conception-parish', 'naga-city-science-high-school'].map((slug) => ({
+      slug,
+      cover: Landcover.parse(readPack('landcover', slug)),
+    }));
+    const shapes = sites.flatMap(({ cover }) =>
+      cover.areas
+        .filter((a) => a.cover === 'parking')
+        .map((area) => ({ type: 'Polygon' as const, coordinates: [area.ring] })),
+    );
+    const bounds = bbox({ type: 'GeometryCollection', geometries: shapes }) as BBox;
+    const obstacles = mappedFootprints(source, { paths: false, bounds });
+    const audit = clearanceAssertions(shapes[0]!);
+    for (const { slug, cover } of sites) {
       const parking = cover.areas.filter((area) => area.cover === 'parking');
       expect(parking).toHaveLength(2);
-      const obstacles = mappedFootprints(source, { paths: false });
-      const audit = clearanceAssertions(obstacles[0]!);
       for (const area of parking)
         audit.clear({ type: 'Polygon', coordinates: [area.ring] }, obstacles, slug);
       expect(cover.areas.some((area) => area.cover === 'grass')).toBe(true);

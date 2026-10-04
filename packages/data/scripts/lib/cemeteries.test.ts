@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DetailSelectionSchema, type Cemetery, type LngLat } from '@atlas/shared';
+import { DetailSelectionSchema, SiteDetail, type Cemetery, type LngLat } from '@atlas/shared';
 import type { Polygon, MultiPolygon } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { burialRow, cemeteryCredits, mergeCemeteries } from './cemeteries';
 import { polygonComponents } from './geometry-audit';
+import { mergeSiteDetails } from './site-detail';
 
 const at = (x: number, y: number): LngLat => [x / 111_320, y / 111_320];
 const rectangle = (x: number, y: number, w: number, h: number): Polygon => ({
@@ -45,6 +46,64 @@ const parts = (features: AtlasFeature[]) =>
   features.filter((f) => f.properties.id.startsWith('cemetery:'));
 
 describe('burial geometry', () => {
+  it('preserves an original OSM name when a curated landmark receives a cemetery title', () => {
+    const renamed = {
+      ...parent,
+      properties: { ...parent.properties, name: 'Curated landmark', osm_name: 'Original OSM name' },
+    };
+    const result = mergeCemeteries([renamed], [pack]);
+    expect(result.features[0]!.properties).toMatchObject({
+      name: pack.title,
+      osm_name: 'Original OSM name',
+    });
+  });
+  it.each(['paving', 'seating'] as const)(
+    'reserves authored %s even with aliased selection',
+    (kind) => {
+      const target: AtlasFeature = {
+        ...parent,
+        geometry: { type: 'Point', coordinates: at(50, 50) },
+        properties: { id: 'osm:node/2', class: 'monument', landmark_id: 'landmark/alias' },
+      };
+      const detail = SiteDetail.parse({
+        id: 'detail/aisle',
+        osm_id: pack.osm_id,
+        selection_osm_id: target.properties.id,
+        title: 'Aisle',
+        surface: 'keep',
+        status: 'draft',
+        credit: 'Reference',
+        sources: [{ title: 'Reference' }],
+        structures:
+          kind === 'paving'
+            ? [
+                {
+                  id: 'aisle',
+                  ring: rectangle(48, 40, 4, 20).coordinates[0],
+                  material: 'paving',
+                  height_m: 0.03,
+                  overhead: false,
+                },
+              ]
+            : [],
+        seating:
+          kind === 'seating'
+            ? [
+                {
+                  id: 'rim',
+                  line: [at(50, 40), at(50, 60)],
+                  width_m: 3,
+                  height_m: 1,
+                  facing: 'left',
+                },
+              ]
+            : [],
+      });
+      const authored = mergeSiteDetails([parent, target], [detail]);
+      const result = mergeCemeteries(authored.features, [pack]);
+      expect(result.stats[0]).toMatchObject({ added: 8, blocked: 1 });
+    },
+  );
   it('places exact dimensions at endpoints, including single-marker midpoint and rotated rows', () => {
     expect(burialRow(row)).toHaveLength(9);
     const single = burialRow({ ...row, count: 1 })[0]!;
@@ -180,14 +239,27 @@ describe('burial geometry', () => {
         burialRow(row).filter((_, i) => i !== 4),
       );
       expect(merged.features[1]).toEqual(aisle);
-      for (const properties of [
-        { ...aisle.properties, detail_overhead: true },
-        { ...aisle.properties, detail_parent: 'osm:way/another-cemetery' },
-      ])
-        expect(mergeCemeteries([parent, { ...aisle, properties }], [pack]).stats[0]).toMatchObject({
-          added: 9,
-          blocked: 0,
-        });
+      expect(
+        mergeCemeteries(
+          [parent, { ...aisle, properties: { ...aisle.properties, detail_overhead: true } }],
+          [pack],
+        ).stats[0],
+      ).toMatchObject({
+        added: 9,
+        blocked: 0,
+      });
+      expect(
+        mergeCemeteries(
+          [
+            parent,
+            {
+              ...aisle,
+              properties: { ...aisle.properties, detail_parent: 'osm:way/another-cemetery' },
+            },
+          ],
+          [pack],
+        ).stats[0],
+      ).toMatchObject({ added: 8, blocked: 1 });
     },
   );
   it('clears full road width, curved joints, end caps and tree trunks', () => {

@@ -1,14 +1,20 @@
-import { distanceMeters as distance, readFixture, readPack } from './landmark-detail.geometry';
+import {
+  distanceMeters as distance,
+  readFixture,
+  readPack,
+  mappedFootprints,
+  pointObstacles,
+  assertPointClear,
+} from './landmark-detail.geometry';
 import { Landcover, type LngLat } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
-import type { MultiPolygon, Polygon } from 'geojson';
+import type { Polygon } from 'geojson';
 import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { landcoverFeatures, SAME_TREE_M } from './landcover';
-import { seatingFootprint } from './site-detail';
-import { bboxesOverlap, clearanceWidth, localFrame } from './geo';
+import { localFrame } from './geo';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -157,45 +163,16 @@ describe('Ateneo owner-reference vegetation coverage', () => {
 
   it('keeps trunks outside standing buildings and full-width carriageways, allowing crown overhang', () => {
     const siteBounds = bbox(campus) as [number, number, number, number];
-    const nearby = source.filter((f) =>
-      bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]),
-    );
-    const obstacles = nearby.flatMap<{ id: string; shape: Polygon | MultiPolygon }>((f) => {
-      if (
-        f.geometry.type === 'Polygon' &&
-        f.properties.class.startsWith('building') &&
-        (f.properties.height ?? 0) > 0
-      )
-        return [{ id: f.properties.id, shape: f.geometry }];
-      if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
-        return [
-          {
-            id: f.properties.id,
-            shape: seatingFootprint(
-              f.geometry.coordinates as LngLat[],
-              clearanceWidth(f.properties),
-            ),
-          },
-        ];
-      return [];
-    });
-    const bounded = obstacles.map((o) => ({ ...o, bounds: bbox(o.shape) }));
-    const violations: string[] = [];
+    const points = pointObstacles(source, { paths: false });
+    const bounded = mappedFootprints(source, { paths: false, bounds: siteBounds });
     for (const pack of packs)
       for (const [i, tree] of pack.trees.entries())
-        for (const obstacle of bounded) {
-          const [west, south, east, north] = obstacle.bounds;
-          if (tree.at[0] < west || tree.at[0] > east || tree.at[1] < south || tree.at[1] > north)
-            continue;
-          if (inside(tree.at, obstacle.shape))
-            violations.push(`${pack.id} tree ${i + 1} / ${obstacle.id}`);
-        }
-    expect(violations).toEqual([]);
+        assertPointClear(tree.at, points, `${pack.id} tree ${i + 1}`);
     for (const area of packs.flatMap((p) => p.areas).filter((a) => a.cover === 'shrubs'))
       for (const obstacle of bounded)
         expect(
-          intersection([area.ring], obstacle.shape.coordinates as LngLat[][] | LngLat[][][]),
-          `entrance bed / ${obstacle.id}`,
+          intersection([area.ring], obstacle.coordinates as LngLat[][] | LngLat[][][]),
+          'entrance bed',
         ).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@ import {
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
+import bbox from '@turf/bbox';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
@@ -19,6 +20,7 @@ import {
   assertPointClear,
   clearanceAssertions,
   effectiveTrees,
+  pointObstacles,
   mappedFootprints,
   readFixture,
   readPack as pack,
@@ -55,7 +57,7 @@ const audit = clearanceAssertions(
     .geometry as Polygon | MultiPolygon,
 );
 const intersects = audit.overlaps;
-const obstacles = mappedFootprints(source, { water: true });
+const obstacles = pointObstacles(source, { water: true });
 
 describe('owner memorial and school enhancements', () => {
   it('retains effective tree coverage when an OSM point replaces a retired curated tree', () => {
@@ -112,7 +114,10 @@ describe('owner memorial and school enhancements', () => {
         assertPointClear(tree.at, obstacles, cover.id);
       }
       for (const patch of cover.areas)
-        for (const obstacle of obstacles)
+        for (const obstacle of mappedFootprints(source, {
+          water: true,
+          bounds: bbox(area) as [number, number, number, number],
+        }))
           expect(
             intersects({ type: 'Polygon', coordinates: [patch.ring] }, obstacle),
             cover.id,
@@ -147,7 +152,7 @@ describe('owner memorial and school enhancements', () => {
       expect(out.geometry).toEqual(original.geometry);
       expect(out.properties.height).toBe(original.properties.height);
     }
-    const civicObstacles = mappedFootprints(mapped, { water: true });
+    const civicObstacles = pointObstacles(mapped, { water: true });
     for (const tree of civic.trees) {
       expect(tree.crown_m).toBeGreaterThanOrEqual(7);
       expect(tree.crown_m).toBeLessThanOrEqual(18);

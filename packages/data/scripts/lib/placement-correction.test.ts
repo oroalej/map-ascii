@@ -5,20 +5,22 @@ import {
   SiteDetail,
   DetailSelectionSchema,
   type LngLat,
+  type BBox,
 } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';
+import bbox from '@turf/bbox';
 import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { mergeSiteDetails } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
 import { geometryAudit, polygonComponents } from './geometry-audit';
-import { clearanceWidth } from './geo';
 import {
   distanceMeters,
+  mappedFootprints,
   lineDistance as distances,
   readFixture,
   readPack as pack,
@@ -145,16 +147,9 @@ describe('owner placement corrections', () => {
     );
   const parent = input.find((f) => f.properties.id === cemetery.osm_id)!;
   const audit = geometryAudit(parent.geometry as Polygon | MultiPolygon);
-  const obstacles = input.flatMap((f) => {
-    if (f.geometry.type === 'LineString' && f.properties.class.startsWith('road'))
-      return [seatingFootprint(f.geometry.coordinates as LngLat[], clearanceWidth(f.properties))];
-    if (
-      ['Polygon', 'MultiPolygon'].includes(f.geometry.type) &&
-      f.properties.class.startsWith('building') &&
-      (f.properties.height ?? 0) > 0
-    )
-      return [f.geometry as Polygon | MultiPolygon];
-    return [];
+  const obstacles = mappedFootprints(input, {
+    paths: false,
+    bounds: bbox(parent.geometry) as BBox,
   });
 
   it('makes the separate Catholic cemetery dense raised burials, leaving source roads/buildings and canonical selection intact', () => {

@@ -2,6 +2,7 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
+import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
 import {
   classId,
   Flags,
@@ -150,12 +151,7 @@ export const SUB = { cols: 2, rows: 3 } as const;
 
 /** Classes whose edges are drawn with sextants: areas, not lines or markers. */
 export const subcellClasses: readonly RenderClass[] = [
-  'building',
-  'building_religious',
-  'building_school',
-  'building_hospital',
-  'building_market',
-  'building_station',
+  ...ROOF_BUILDING_CLASSES,
   'building_part',
   'building_woodwork',
   'water_area',

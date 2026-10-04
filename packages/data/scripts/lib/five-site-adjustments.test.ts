@@ -10,7 +10,7 @@ import { mergeSiteDetails } from './site-detail';
 import {
   assertPointClear,
   distanceMeters as metres,
-  mappedFootprints,
+  pointObstacles,
   readFixture,
   readPack,
 } from './landmark-detail.geometry';
@@ -95,7 +95,7 @@ describe('five owner-referenced landmark adjustments', () => {
   });
 
   it('keeps new trunks clear of mapped roofs and full-width carriageways', () => {
-    const obstacles = mappedFootprints(source, { paths: false });
+    const obstacles = pointObstacles(source, { paths: false });
     for (const cover of covers)
       for (const tree of cover.trees) assertPointClear(tree.at, obstacles, cover.id);
   });
