@@ -51,9 +51,27 @@ describe('TileCache', () => {
   it('retains decoded residential anchors separately from the GPU and Life data', () => {
     const { cache, source } = setup();
     const tile = { z: 16, x: 55193, y: 30261 };
-    const residential = [{ id: 1, x: 1500, y: 2000 }];
+    const residential = new Float64Array([1, 1500, 2000]);
     source.handlers.tile(tileKey(tile), { labels: [], residential } as never);
     expect(cache.get(tile)?.residential).toBe(residential);
+  });
+  it('requests bounded cold coarse coverage only when selected and never uploads hidden meshes', () => {
+    const { cache, source } = setup();
+    const camera = { lat: 13.62, lng: 123.19, zoom: 8 };
+    expect(cache.residentialSitesFor(camera, size, false)).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, true)).toEqual([]);
+    const requested = source.request.mock.calls.map(([tile]) => tile);
+    expect(requested.length).toBeGreaterThan(0);
+    expect(requested.length).toBeLessThanOrEqual(16);
+    expect(requested.every((tile) => tile.z === 12)).toBe(true);
+    const tile = requested[0]!,
+      sites = new Float64Array([1, 1500, 2000]);
+    source.handlers.residential!(`residential/${tileKey(tile)}`, sites);
+    expect(cache.size).toBe(0);
+    expect(cache.residentialSitesFor(camera, size, true)).toContainEqual({ tile, sites });
+    expect(cache.residentialSitesFor(camera, size, false)).toEqual([]);
+    cache.destroy();
   });
   it('retains upload timings between callbacks, including context restoration', () => {
     let now = 0;

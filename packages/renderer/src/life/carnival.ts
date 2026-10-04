@@ -2,18 +2,11 @@ import { carnivalRing, offsetUtility, type SeasonalCarnivalRecord } from '@atlas
 import type { FixtureGrid } from './fixtures';
 import { SeasonalGlyph, SeasonalPart } from './seasonal-glyphs';
 import { encodeCarnivalUv, isCarnivalMotionPart } from './carnival-motion';
+import type { SeasonalWrite as Write } from './seasonal-packing';
 
 const BOOTH_TINTS = [1, 2, 3, 4] as const;
 const CANOPY_TINTS = [0, 1, 2, 0, 3, 5] as const;
 
-type Write = (
-  x: number,
-  y: number,
-  glyph: string,
-  part: number,
-  info: number,
-  replace?: boolean,
-) => boolean;
 /** North-up ride roofs/decks, never an upright illustration pasted onto the map. */
 export function packCarnival(r: SeasonalCarnivalRecord, grid: FixtureGrid, write: Write): boolean {
   const center = grid.toCell(...r.at),

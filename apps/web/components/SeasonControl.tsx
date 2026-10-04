@@ -1,7 +1,7 @@
 'use client';
 
 import type { SeasonConfig } from '@atlas/shared';
-import { useSyncExternalStore } from 'react';
+import { useId, useSyncExternalStore } from 'react';
 import { useAtlasInstance } from '@/state/store';
 import { useLifeStore } from '@/state/life';
 import styles from './Hud.module.css';
@@ -19,6 +19,7 @@ export function useSeasonState() {
 export function SeasonControl({ seasons }: { seasons?: readonly SeasonConfig[] | undefined }) {
   const choice = useLifeStore((s) => s.season ?? 'auto');
   const active = useSeasonState();
+  const noteId = useId();
   if (!seasons?.length) return null;
   const selected = seasons.find((s) => s.id === choice);
   const shown =
@@ -27,15 +28,28 @@ export function SeasonControl({ seasons }: { seasons?: readonly SeasonConfig[] |
   const choices = ['auto', ...seasons.map((s) => s.id)];
   const next = choices[(Math.max(0, choices.indexOf(choice)) + 1) % choices.length]!;
   const description = `Preview seasonal decorations${shown?.status === 'draft' ? ` — Draft: ${shown.note}` : ''}`;
+  const draft = shown?.status === 'draft';
   return (
-    <button
-      type="button"
-      className={styles.button}
-      aria-label={`Season: ${label}`}
-      title={description}
-      onClick={() => useLifeStore.setState({ season: next })}
-    >
-      {label}
-    </button>
+    <div className={styles.seasonControl}>
+      <button
+        type="button"
+        className={styles.button}
+        aria-label={`Season: ${label}`}
+        aria-describedby={draft ? noteId : undefined}
+        title={description}
+        onClick={() => useLifeStore.setState({ season: next })}
+      >
+        {label}
+        {draft ? ' · draft' : ''}
+      </button>
+      {draft && (
+        <details className={styles.seasonDisclosure} key={shown.id}>
+          <summary className={styles.button}>Draft info</summary>
+          <p id={noteId} className={styles.seasonNote}>
+            Draft seasonal preview. {shown.note}
+          </p>
+        </details>
+      )}
+    </div>
   );
 }

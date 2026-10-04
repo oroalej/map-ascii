@@ -2,8 +2,6 @@
 import centroid from '@turf/centroid';
 import {
   utilitySeed,
-  localMetricProjection,
-  LEGACY_LOCAL_METERS_PER_DEGREE,
   type BuntingCorridor,
   type SeasonConfig,
   type SeasonalPoint,
@@ -11,6 +9,7 @@ import {
 } from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
 import { lines, width } from './road-geometry';
+import { localFrame } from './geo';
 
 type Node = { key: string; at: SeasonalPoint; xy: SeasonalPoint; edges: Edge[] };
 type Edge = { id: string; road: string; width: number; a: Node; b: Node; length: number };
@@ -30,12 +29,8 @@ function bakeCorridor(features: readonly AtlasFeature[], season: string, config:
   });
   const positions = roads.flatMap((f) => lines(f).flat());
   const latitude = positions.reduce((n, p) => n + p[1]!, 0) / positions.length;
-  const { to: project, from: unproject } = localMetricProjection([0, 0], {
-    // Keep the world lattice and coordinate-derived identities of existing tile records.
-    latitude: latitude,
-    east: LEGACY_LOCAL_METERS_PER_DEGREE,
-    north: LEGACY_LOCAL_METERS_PER_DEGREE,
-  });
+  // Keep the legacy pipeline scale, world lattice and coordinate-derived identities.
+  const { toMeters: project, toLngLat: unproject } = localFrame([0, 0], latitude);
   const nodes = new Map<string, Node>(),
     edges: Edge[] = [];
   const node = (at: SeasonalPoint) => {

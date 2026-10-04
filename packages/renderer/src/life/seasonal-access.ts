@@ -5,24 +5,9 @@ import {
 } from '@atlas/shared';
 import type { FixtureGrid } from './fixtures';
 import { SeasonalPart } from './seasonal-glyphs';
+import { seasonalStroke as stroke, type SeasonalWrite as Write } from './seasonal-packing';
 
 export const AccessInk = { paving: 0, curb: 1, joint: 2, marking: 3 } as const;
-type Write = (
-  x: number,
-  y: number,
-  glyph: string,
-  part: number,
-  info: number,
-  replace?: boolean,
-) => boolean;
-const stroke = (x: number, y: number) =>
-  Math.abs(x) > Math.abs(y) * 1.8
-    ? '─'
-    : Math.abs(y) > Math.abs(x) * 1.8
-      ? '│'
-      : x * y > 0
-        ? '╲'
-        : '╱';
 
 /** Metric paving and parking markings, sampled from complete segments rather than viewport cells. */
 export function packAccess(record: SeasonalAccessRecord, grid: FixtureGrid, write: Write): boolean {

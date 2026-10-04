@@ -10,6 +10,7 @@ import { packAccess } from './seasonal-access';
 import type { FixtureGrid } from './fixtures';
 import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 import { LampState, type VisibleLamp } from './lights';
+import { seasonalStroke, type SeasonalWrite as Write } from './seasonal-packing';
 
 export type InstallationRecord =
   SeasonalDisplayRecord | SeasonalLightStringRecord | SeasonalCarnivalRecord | SeasonalAccessRecord;
@@ -83,14 +84,6 @@ export function installationLamps(
     });
 }
 
-type Write = (
-  x: number,
-  y: number,
-  glyph: string,
-  part: number,
-  info: number,
-  replace?: boolean,
-) => boolean;
 const CHRISTMAS_TINTS = [5, 0, 5, 0, 1, 1, 2, 2] as const;
 /** Bounded metric footprints, viewed from above; cords occupy gaps between ornaments. */
 export function packInstallation(
@@ -120,14 +113,7 @@ export function packInstallation(
     if (!Number.isFinite(length) || length > 100000) return false;
     // Always sample from complete world endpoints: panning/clipping cannot restart the pattern.
     const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
-    const cable =
-      Math.abs(dx) > Math.abs(dy) * 1.8
-        ? '─'
-        : Math.abs(dy) > Math.abs(dx) * 1.8
-          ? '│'
-          : dx * dy > 0
-            ? '╲'
-            : '╱';
+    const cable = seasonalStroke(dx * grid.cellWidth, dy * grid.cellHeight);
     for (let i = 0; i <= n; i++) {
       const x = a[0] + (dx * i) / n,
         y = a[1] + (dy * i) / n;

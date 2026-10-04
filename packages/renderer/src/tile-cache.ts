@@ -10,7 +10,7 @@ import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
 import type { UtilityRecord, SeasonalRecord } from '@atlas/shared';
 import type { LifeGeometry } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
-import type { ResidentialSite } from './fireworks-sites';
+import type { ResidentialSites } from './fireworks-sites';
 import {
   ancestorAt,
   findAncestor,
@@ -18,6 +18,8 @@ import {
   tileKey,
   TileSource,
   viewTiles,
+  residentialCoverageTiles,
+  RESIDENTIAL_ZOOM,
   type TileHeader,
   type TileId,
 } from './tiles';
@@ -29,7 +31,7 @@ export const RETRY_MAX_MS = 60_000;
 
 /** A loaded tile: its GPU mesh and label candidates. */
 export type LoadedTile = {
-  residential?: readonly ResidentialSite[];
+  residential?: ResidentialSites;
   mesh: TileMesh;
   labels: TileLabel[];
   life: LifeGeometry;
@@ -48,6 +50,7 @@ export class TileCache {
   private meshes: LruCache<LoadedTile | null>;
   /** While the WebGL context is lost, arriving tiles are dropped and asked for again later. */
   private suspended = false;
+  private readonly residential = new LruCache<ResidentialSites>(32);
 
   constructor(
     private readonly gl: GL,
@@ -55,36 +58,47 @@ export class TileCache {
     /** Called when the header or a tile arrives, so the view redraws. */
     onChange: () => void,
     profiler?: FrameProfiler,
+    fireworks = false,
   ) {
     this.meshes = this.createCache();
-    this.source = new TileSource(url, {
-      header: (h) => {
-        this.header = h;
-        onChange();
+    this.source = new TileSource(
+      url,
+      {
+        header: (h) => {
+          this.header = h;
+          onChange();
+        },
+        tile: (key, geometry) => {
+          if (this.suspended) return;
+          this.failed.delete(key);
+          if (geometry) {
+            const start = profiler?.time();
+            const mesh = uploadTile(gl, geometry);
+            if (start !== undefined) profiler!.record('tileUpload', profiler!.time() - start);
+            this.meshes.set(key, {
+              mesh,
+              labels: geometry.labels,
+              life: geometry.life,
+              ...(geometry.residential ? { residential: geometry.residential } : {}),
+              ...(geometry.utilities ? { utilities: geometry.utilities } : {}),
+              ...(geometry.seasonal ? { seasonal: geometry.seasonal } : {}),
+            });
+          } else this.meshes.set(key, null);
+          onChange();
+        },
+        error: (message, key) => {
+          if (key) this.retryLater(key, onChange);
+          console.warn(`ASCII Atlas: ${key ? `tile ${key}: ` : ''}${message}`);
+        },
+        residential: (key, sites) => {
+          if (this.suspended) return;
+          this.failed.delete(key);
+          this.residential.set(key, sites);
+          onChange();
+        },
       },
-      tile: (key, geometry) => {
-        if (this.suspended) return;
-        this.failed.delete(key);
-        if (geometry) {
-          const start = profiler?.time();
-          const mesh = uploadTile(gl, geometry);
-          if (start !== undefined) profiler!.record('tileUpload', profiler!.time() - start);
-          this.meshes.set(key, {
-            mesh,
-            labels: geometry.labels,
-            life: geometry.life,
-            ...(geometry.residential ? { residential: geometry.residential } : {}),
-            ...(geometry.utilities ? { utilities: geometry.utilities } : {}),
-            ...(geometry.seasonal ? { seasonal: geometry.seasonal } : {}),
-          });
-        } else this.meshes.set(key, null);
-        onChange();
-      },
-      error: (message, key) => {
-        if (key) this.retryLater(key, onChange);
-        console.warn(`ASCII Atlas: ${key ? `tile ${key}: ` : ''}${message}`);
-      },
-    });
+      fireworks,
+    );
   }
 
   /** A tile failed: ask for it again after a backoff, and redraw then so the view does. */
@@ -194,10 +208,30 @@ export class TileCache {
     return [...out.values()].sort((a, b) => a.z - b.z);
   }
 
+  /** Sites-only requests use their own bounded cache and never upload hidden geometry. */
+  residentialSitesFor(
+    camera: CameraState,
+    size: Size,
+    active: boolean,
+  ): { tile: TileId; sites: ResidentialSites }[] {
+    const out: { tile: TileId; sites: ResidentialSites }[] = [];
+    const missing: TileId[] = [];
+    if (active && this.header && !this.suspended && camera.zoom < RESIDENTIAL_ZOOM)
+      for (const tile of residentialCoverageTiles(camera, size, this.header)) {
+        const key = `residential/${tileKey(tile)}`;
+        const sites = this.get(tile)?.residential ?? this.residential.get(key);
+        if (sites) out.push({ tile, sites });
+        else if (this.mayRequest(key)) missing.push(tile);
+      }
+    this.source.want(missing, 'fireworks');
+    return out;
+  }
+
   destroy() {
     for (const timer of this.retryTimers) clearTimeout(timer);
     this.retryTimers.clear();
     this.source.destroy();
     this.meshes.clear();
+    this.residential.clear();
   }
 }

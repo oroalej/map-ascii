@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildTileGeometry, createIdRegistry, type TileFeatureLike } from './raster/geometry';
+import {
+  buildTileGeometry,
+  buildResidentialSites,
+  transferables,
+  createIdRegistry,
+  type TileFeatureLike,
+} from './raster/geometry';
 import { pointInside } from './life/occupancy';
 import { random } from './life/random';
 import { project } from './camera';
@@ -8,8 +14,11 @@ import type { TileId } from './tiles';
 import { FIREWORKS, createFireworkDisplay, fireworkShells } from './fireworks-layout';
 import {
   isResidentialBuilding,
-  residentialFireworkSites,
+  residentialFireworkSites as compileSites,
   residentialSite,
+  neighborhoodSites,
+  packResidentialSites,
+  type ResidentialSite,
 } from './fireworks-sites';
 
 const square = (x: number, y: number, size: number) => [
@@ -29,11 +38,34 @@ const feature = (
   properties: { id, class: cls, kind, height: 4 },
   loadGeometry: () => rings,
 });
-const decode = (features: TileFeatureLike[], tile?: TileId) =>
-  buildTileGeometry(
+const layers = (features: TileFeatureLike[]) => ({
+  buildings: { extent: 4096, length: features.length, feature: (i: number) => features[i]! },
+});
+const decode = (features: TileFeatureLike[], tile?: TileId) => {
+  const geometry = buildTileGeometry(
     { buildings: { extent: 4096, length: features.length, feature: (i) => features[i]! } },
     createIdRegistry(),
     tile,
+  );
+  const packed = geometry.residential;
+  return {
+    ...geometry,
+    residential: packed
+      ? Array.from({ length: packed.length / 3 }, (_, i) => ({
+          id: packed[i * 3]!,
+          x: packed[i * 3 + 1]!,
+          y: packed[i * 3 + 2]!,
+        }))
+      : undefined,
+  };
+};
+const residentialFireworkSites = (
+  tiles: { tile: TileId; sites: readonly ResidentialSite[] }[],
+  zoom: number,
+) =>
+  compileSites(
+    tiles.map(({ tile, sites }) => ({ tile, sites: packResidentialSites(sites) })),
+    zoom,
   );
 const view: View = {
   camera: { lng: 0, lat: 0, zoom: 16 },
@@ -48,6 +80,140 @@ const grid = (v = view) => placeGrid(v, v.cellDev, 202, 92).grid;
 const bounds = { left: 0, top: 0, right: 512, bottom: 512 };
 
 describe('mapped residential fireworks', () => {
+  it('bypasses inference for packs without fireworks and transfers packed anchors exactly', () => {
+    const data = layers([feature('home', 'building=house')]);
+    const disabled = buildTileGeometry(data, createIdRegistry(), undefined, undefined, false);
+    expect(disabled.residential).toBeUndefined();
+    const enabled = buildTileGeometry(data, createIdRegistry());
+    expect(enabled.residential).toBeInstanceOf(Float64Array);
+    expect(transferables(enabled)).toContain(enabled.residential!.buffer);
+    expect(enabled.fills.positions).toEqual(disabled.fills.positions);
+    const transferred = structuredClone(enabled, { transfer: transferables(enabled) });
+    expect(enabled.residential!.byteLength).toBe(0);
+    expect(transferred.residential).toHaveLength(3);
+    expect(transferred.residential![0]).toBe(1);
+  });
+
+  it('matches exact neighborhood admission across long segments and signed cell boundaries', () => {
+    const roofs = Array.from({ length: 180 }, (_, id) => ({
+      id,
+      x: ((id % 18) - 9) * 20,
+      y: (Math.floor(id / 18) - 5) * 20,
+    }));
+    const streets = [
+      [
+        { x: -3000, y: -3000 },
+        { x: 3000, y: 3000 },
+      ],
+      [
+        { x: -350, y: 35 },
+        { x: 350, y: 35 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ],
+    ];
+    const near = roofs.filter((roof) =>
+      streets.some((street) =>
+        street.slice(1).some((b, i) => {
+          const a = street[i]!,
+            dx = b.x - a.x,
+            dy = b.y - a.y,
+            length = dx * dx + dy * dy;
+          const t = length
+            ? Math.max(0, Math.min(1, ((roof.x - a.x) * dx + (roof.y - a.y) * dy) / length))
+            : 0;
+          return (roof.x - a.x - t * dx) ** 2 + (roof.y - a.y - t * dy) ** 2 <= 35 ** 2;
+        }),
+      ),
+    );
+    const expected = near.filter(
+      (site) =>
+        near.filter(
+          (other) =>
+            other.id !== site.id && (site.x - other.x) ** 2 + (site.y - other.y) ** 2 <= 60 ** 2,
+        ).length >= 2,
+    );
+    expect(neighborhoodSites(roofs, [], streets, 1)).toEqual(expected);
+    expect(
+      neighborhoodSites(
+        roofs,
+        [],
+        streets.map((line) => [...line].reverse()),
+        1,
+      ),
+    ).toEqual(expected);
+  });
+
+  it('extracts cold coarse coverage without ground buffers, using the same footprint and inference rules', () => {
+    const tile = { z: 16, x: 32768, y: 32768 };
+    const homes = [
+      feature('known', 'building=house'),
+      ...[1000, 1150, 1300].map((x, i) =>
+        feature(`unknown/${i}`, 'building=yes', [square(x, 1600, 60)]),
+      ),
+      feature('public', 'building=yes', [square(1000, 1600, 60)]),
+    ];
+    homes.at(-1)!.properties.landmark = true;
+    homes.push({
+      type: 2,
+      properties: { class: 'road_minor', kind: 'highway=residential', id: 'road' },
+      loadGeometry: () => [
+        [
+          { x: 900, y: 1610 },
+          { x: 1450, y: 1610 },
+        ],
+      ],
+    });
+    const registry = createIdRegistry();
+    const full = buildTileGeometry(layers(homes), registry, tile);
+    const coverage = buildResidentialSites(layers(homes), registry, tile);
+    expect(coverage).toEqual(full.residential);
+    expect(coverage).toHaveLength(12);
+    expect(buildResidentialSites(layers([]), registry, tile)).toHaveLength(0);
+  });
+
+  it('samples full and partial spatial bins uniformly and excludes occupied homes', () => {
+    const homes = Array.from({ length: 40 }, (_, id) => ({
+      id,
+      x: (id % 8) * 512 + 20,
+      y: Math.floor(id / 8) * 512 + 20,
+    }));
+    const sample = residentialFireworkSites([{ tile: { z: 12, x: 0, y: 0 }, sites: homes }], 12);
+    const occupied = new Set([0, 1, 9, 17]);
+    const area = { left: 0, top: 0, right: 350, bottom: 200 };
+    const eligible = homes.filter(
+      (home) => home.x / 8 <= area.right && home.y / 8 <= area.bottom && !occupied.has(home.id),
+    );
+    const choices = new Map<number, number>(),
+      rng = random(13579);
+    for (let i = 0; i < 5000; i++) {
+      const site = sample(area, rng, occupied)!;
+      choices.set(site.id, (choices.get(site.id) ?? 0) + 1);
+    }
+    expect([...choices.keys()].sort((a, b) => a - b)).toEqual(eligible.map((home) => home.id));
+    for (const count of choices.values())
+      expect(count).toBeGreaterThan((5000 / eligible.length) * 0.6);
+  });
+  it('selects within a full bin without retrying occupied positions', () => {
+    const sample = residentialFireworkSites(
+      [
+        {
+          tile: { z: 12, x: 0, y: 0 },
+          sites: [
+            { id: 1, x: 10, y: 10 },
+            { id: 2, x: 20, y: 20 },
+            { id: 3, x: 30, y: 30 },
+          ],
+        },
+      ],
+      12,
+    );
+    const rng = vi.fn(() => 0);
+    expect(sample({ left: 0, top: 0, right: 512, bottom: 512 }, rng, new Set([1, 2]))?.id).toBe(3);
+    expect(rng).toHaveBeenCalledTimes(2);
+  });
   it('admits compact roof clusters along residential streets, excluding isolated roofs and nonresidential roads', () => {
     const houses = [1000, 1150, 1300].map((x, i) =>
       feature(`untyped/${i}`, 'building=yes', [square(x, 1000, 60)]),

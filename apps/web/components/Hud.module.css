@@ -198,6 +198,33 @@
   opacity: 0.5;
 }
 
+.seasonControl {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.seasonDisclosure summary {
+  list-style: none;
+}
+
+.seasonNote {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(40ch, calc(100vw - 24px));
+  max-height: 30dvh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #2a2c36;
+  background: rgb(4 5 10 / 95%);
+  pointer-events: auto;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
@@ -224,7 +251,8 @@
 
   .legendEntry,
   .legend summary,
-  .focusClear {
+  .focusClear,
+  .seasonControl .button {
     min-height: 44px;
     padding-top: 8px;
     padding-bottom: 8px;

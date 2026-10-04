@@ -697,6 +697,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsFor = null;
     },
     profiler,
+    options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
   );
   const { source } = tileCache;
 
@@ -1192,19 +1193,27 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hadUtilities = false;
   let fixtureDisplaysShown = false;
   let fireworkSites = NO_FIREWORK_SITES;
-  let residentialInputs: readonly LoadedTile[] = [];
+  let residentialInputs: readonly Float64Array[] = [];
+  let residentialActive = false;
   const syncResidentialSites = (tiles: readonly TileId[]) => {
+    const active = !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom;
+    if (!active) {
+      if (residentialActive) tileCache.residentialSitesFor(camera, cssSize(), false);
+      residentialActive = false;
+      residentialInputs = [];
+      fireworkSites = NO_FIREWORK_SITES;
+      return;
+    }
+    residentialActive = true;
     const groups = tiles.flatMap((tile) => {
       const loaded = tileCache.get(tile);
-      return loaded?.residential ? [{ tile, loaded }] : [];
+      return loaded?.residential ? [{ tile, sites: loaded.residential }] : [];
     });
-    const inputs = groups.map((group) => group.loaded);
+    groups.push(...tileCache.residentialSitesFor(camera, cssSize(), true));
+    const inputs = groups.map((group) => group.sites);
     if (sameReferenceMembers(inputs, residentialInputs)) return;
     residentialInputs = inputs;
-    fireworkSites = residentialFireworkSites(
-      groups.map(({ tile, loaded }) => ({ tile, sites: loaded.residential! })),
-      FIREWORKS.referenceZoom,
-    );
+    fireworkSites = residentialFireworkSites(groups, FIREWORKS.referenceZoom);
   };
   const syncFixtures = (tiles: readonly TileId[]) => {
     if (camera.zoom < 15) {

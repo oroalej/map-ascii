@@ -24,6 +24,7 @@ import {
 import { mapGlyphs, themes } from '../theme';
 import { LifeWorld } from './simulate';
 import { LampState } from './lights';
+import { SeasonalPart } from './seasonal-glyphs';
 import { worldTiles } from './testing/scenarios';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
 import { activityLevels } from './config';
@@ -112,6 +113,29 @@ const grid: FixtureGrid = {
   ],
 };
 const index = (glyph: string) => mapGlyphs(themes.dark).indexOf(glyph);
+it.each([35, -35, 55, 0, 90])(
+  'keeps light-string stroke direction at %s degrees with rectangular cells',
+  (angle) => {
+    const radians = (angle * Math.PI) / 180;
+    const glyphs = new Set<string>();
+    const from: [number, number] = [0, 0],
+      to: [number, number] = [Math.cos(radians) * 0.001, Math.sin(radians) * 0.001];
+    packInstallation(
+      { ...string, from, to },
+      {
+        ...grid,
+        toCell: (lng, lat) => [40 + lng * 10000, 40 + (lat * 10000) / 1.8],
+      },
+      (_x, _y, glyph, part) => {
+        if (part === SeasonalPart.festiveWire) glyphs.add(glyph);
+        return true;
+      },
+    );
+    expect(glyphs).toEqual(
+      new Set([angle === 0 ? '─' : angle === 90 ? '│' : angle < 0 ? '╱' : '╲']),
+    );
+  },
+);
 it('packs walkable paving below decorations, stays anchored when panning, and obeys season admission', () => {
   const access: SeasonalAccessRecord = {
     version: 1,

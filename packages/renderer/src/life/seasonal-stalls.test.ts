@@ -50,6 +50,44 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it('retains a cart and its purchasing customer when a neighboring tile arrives', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    const stall = life.seasonalStalls[0]!;
+    const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+    const customer = life.movers.find((m) => m.kind === 'person' && life.scenes.reserve(m, site))!;
+    const visit = life.scenes.visits.get(customer)!;
+    visit.state = 'purchase';
+    world.sync([
+      ...tiles,
+      { key: 'empty-neighbor', tile: { ...tile, x: tile.x + 1 }, life: new LifeBuilder().finish() },
+    ]);
+    select(world);
+    expect(life.seasonalStalls).toContain(stall);
+    expect(life.scenes.visits.get(customer)).toBe(visit);
+    expect(visit.state).toBe('purchase');
+  });
+
+  it('invalidates only carts ceded to a new finer owner and preserves the remaining identities', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    const previous = [...life.seasonalStalls];
+    world.sync([
+      ...tiles,
+      {
+        key: 'fine',
+        tile: { z: tile.z + 3, x: tile.x * 8, y: tile.y * 8 + 1 },
+        life: tiles[0]!.life,
+      },
+    ]);
+    select(world);
+    const retained = previous.filter((s) => s.x >= 512 || s.y < 512 || s.y >= 1024);
+    expect(retained.length).toBeGreaterThan(0);
+    for (const stall of retained) expect(life.seasonalStalls).toContain(stall);
+    const ceded = previous.filter((s) => s.x < 512 && s.y >= 512 && s.y < 1024);
+    expect(ceded.length).toBeGreaterThan(0);
+    for (const stall of ceded) expect(life.seasonalStalls).not.toContain(stall);
+  });
   it('keeps a customer at the same cart long enough to purchase across ordinary frames', () => {
     const { world, life } = setup();
     select(world);
@@ -164,29 +202,42 @@ describe('seasonal stall lifecycle', () => {
     select(world, null);
     expect(life.stalls.length).toBeGreaterThan(0);
   });
-  it('keeps both bodies off neighboring roads, including crossing regions, and releases evicted carts', () => {
-    const { world, life, tiles } = setup();
-    select(world);
-    const neighbor = new LifeBuilder(),
-      pm = 1 / metersPerUnit(tile);
-    neighbor.line(
-      [
-        { x: -4096, y: 800 },
-        { x: 0, y: 800 },
-      ],
-      LifeLine.roadMinor,
-      10,
-    );
-    neighbor.area('crossing', [stripRing({ x: -4096, y: 800 }, { x: 0, y: 800 }, 5 * pm)]);
-    const next = { key: 'neighbor', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() };
-    world.sync([...tiles, next]);
-    select(world);
-    for (const stall of life.seasonalStalls) expect(life.canIdle(stall)).toBe(true);
-    expect(life.seasonalStalls.every((s) => Math.abs(s.y - 800) > 5 * pm)).toBe(true);
-    world.sync([]);
-    select(world);
-    expect(worldTiles(world).size).toBe(0);
-  });
+  it.each([4096, 250])(
+    'keeps both bodies off neighboring roads of length %s, preserves valid carts and releases evicted carts',
+    (length) => {
+      const { world, life, tiles } = setup();
+      select(world);
+      const original = [...life.seasonalStalls];
+      const neighbor = new LifeBuilder(),
+        pm = 1 / metersPerUnit(tile);
+      neighbor.line(
+        [
+          { x: -4096, y: 800 },
+          { x: -4096 + length, y: 800 },
+        ],
+        LifeLine.roadMinor,
+        10,
+      );
+      neighbor.area('crossing', [
+        stripRing({ x: -4096, y: 800 }, { x: -4096 + length, y: 800 }, 5 * pm),
+      ]);
+      const next = { key: 'neighbor', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() };
+      world.sync([...tiles, next]);
+      select(world);
+      for (const stall of life.seasonalStalls) expect(life.canIdle(stall)).toBe(true);
+      expect(
+        life.seasonalStalls.every((s) => s.x > length + 5 * pm || Math.abs(s.y - 800) > 5 * pm),
+      ).toBe(true);
+      if (length < 4096) {
+        const unaffected = original.filter((s) => s.x > length + 50 * pm);
+        expect(unaffected.length).toBeGreaterThan(0);
+        for (const stall of unaffected) expect(life.seasonalStalls).toContain(stall);
+      }
+      world.sync([]);
+      select(world);
+      expect(worldTiles(world).size).toBe(0);
+    },
+  );
   it('matches direct and worker frames through activation, deactivation and reload', () => {
     const { tiles, world } = setup(),
       api = createLifeWorkerApi();

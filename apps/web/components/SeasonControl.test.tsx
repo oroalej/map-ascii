@@ -49,16 +49,34 @@ it('cycles Today and pack titles, shows active/draft information, and preserves 
     snapshot = { id: 'winter', title: 'Winter', status: 'draft', labels: { lanterns: 'Stars' } };
     change();
   });
-  expect(button().textContent).toBe('Today · Winter');
+  expect(button().textContent).toBe('Today · Winter · draft');
   expect(button().title).toContain('Draft: TODO(verify)');
+  const note = document.getElementById(button().getAttribute('aria-describedby')!)!;
+  expect(note.textContent).toContain('Draft seasonal preview. TODO(verify): provisional schedule');
+  expect(container.querySelector('summary')!.textContent).toBe('Draft info');
+  act(() => container.querySelector('summary')!.click());
+  expect(container.querySelector('details')!.open).toBe(true);
   act(() => button().click());
   expect(useLifeStore.getState().season).toBe('winter');
-  expect(button().textContent).toBe('Winter');
+  expect(button().textContent).toBe('Winter · draft');
   act(() => button().click());
-  expect(button().textContent).toBe('Feast');
+  expect(button().textContent).toBe('Feast · draft');
+  expect(container.querySelector('details')!.open).toBe(false);
   act(() => button().click());
-  expect(button().textContent).toBe('Today · Winter');
+  expect(button().textContent).toBe('Today · Winter · draft');
   expect(useLifeStore.getState()).toMatchObject({ enabled: false, time: 'night', wind: 'calm' });
+});
+it('removes draft disclosure when Today leaves the draft season', () => {
+  snapshot = { id: 'winter', title: 'Winter', status: 'draft', labels: { lanterns: 'Stars' } };
+  act(() => root.render(createElement(SeasonControl, { seasons })));
+  expect(container.querySelector('details')).not.toBe(null);
+  act(() => {
+    snapshot = null;
+    change();
+  });
+  expect(container.querySelector('button')!.textContent).toBe('Today');
+  expect(container.querySelector('button')!.hasAttribute('aria-describedby')).toBe(false);
+  expect(container.querySelector('details')).toBe(null);
 });
 it('hides for a pack with no seasons and tolerates an obsolete choice', () => {
   act(() => root.render(createElement(SeasonControl, {})));

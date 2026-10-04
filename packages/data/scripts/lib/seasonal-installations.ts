@@ -2,8 +2,6 @@
 import {
   utilitySeed,
   isRoofBuilding,
-  localMetricProjection,
-  LEGACY_LOCAL_METERS_PER_DEGREE,
   pointInPolygon as inside,
   offsetUtility,
   carnivalRing,
@@ -16,6 +14,7 @@ import {
 import type { AtlasFeature } from '../03-normalize';
 import type { Geometry } from 'geojson';
 import { lines } from './road-geometry';
+import { localFrame } from './geo';
 
 type Point = SeasonalPoint;
 const distance = (p: Point, a: Point, b: Point) => {
@@ -84,12 +83,8 @@ export function generateSeasonalInstallations(
         );
       const ll = grounds ? [grounds.ring] : rings(anchor),
         lat = ll[0]![0]![1];
-      const { to: project, from: unproject } = localMetricProjection([0, 0], {
-        // Keep the world lattice and coordinate-derived identities of existing tile records.
-        latitude: lat,
-        east: LEGACY_LOCAL_METERS_PER_DEGREE,
-        north: LEGACY_LOCAL_METERS_PER_DEGREE,
-      });
+      // Keep the legacy pipeline scale, world lattice and coordinate-derived identities.
+      const { toMeters: project, toLngLat: unproject } = localFrame([0, 0], lat);
       const polygon = ll.map((r) => r.map(project));
       if (grounds) {
         const source = [...rings(anchor).flat(), ...(lines(anchor).flat() as Point[])].map(project);

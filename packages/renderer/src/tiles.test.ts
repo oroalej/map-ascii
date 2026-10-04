@@ -10,6 +10,8 @@ import {
   tileKey,
   tileZoom,
   viewTiles,
+  residentialCoverageTiles,
+  TileSource,
   type TileHeader,
 } from './tiles';
 
@@ -26,6 +28,14 @@ describe('tileZoom', () => {
 });
 
 describe('viewTiles', () => {
+  it('bounds coarse fireworks coverage, includes the center and needs no previous close view', () => {
+    const world: TileHeader = { minZoom: 7, maxZoom: 16, bounds: [-180, -85, 180, 85] };
+    const tiles = residentialCoverageTiles({ lng: 0, lat: 0, zoom: 7 }, size, world);
+    expect(tiles.length).toBeLessThanOrEqual(16);
+    expect(tiles).toContainEqual({ z: 12, x: 2048, y: 2048 });
+    expect(tiles.every((tile) => tile.z === 12)).toBe(true);
+    expect(residentialCoverageTiles({ ...at(15), lng: 0, lat: 0 }, size, header)).toEqual([]);
+  });
   it('covers the view plus a margin, nearest to the center first', () => {
     const camera = at(14.5);
     const tiles = viewTiles(camera, size, header);
@@ -106,6 +116,20 @@ describe('ancestorAt', () => {
 });
 
 describe('RequestQueue', () => {
+  it('keeps coverage behind visible tiles and cancels queued coverage on season changes', () => {
+    const sent: string[] = [];
+    const queue = new RequestQueue((_tile, key) => sent.push(key), 1);
+    queue.want([tile(1)], 'view');
+    queue.want([tile(2), tile(3)], 'fireworks');
+    queue.want([tile(4)], 'view');
+    queue.done('16/1/0');
+    expect(sent).toEqual(['16/1/0', '16/4/0']);
+    queue.done('16/4/0');
+    expect(sent.at(-1)).toBe('residential/16/2/0');
+    queue.want([], 'fireworks');
+    queue.done('residential/16/2/0');
+    expect(queue.size).toBe(0);
+  });
   const tile = (x: number, z = 16) => ({ z, x, y: 0 });
   const setUp = () => {
     const sent: string[] = [];
@@ -138,4 +162,56 @@ describe('RequestQueue', () => {
     expect(sent).toEqual(['16/1/0', '16/2/0', '11/0/0', '16/10/0']);
     expect(queue.size).toBe(3);
   });
+});
+
+it('sends pack capability and routes transferred coverage separately from drawable tiles', () => {
+  const post = vi.fn();
+  const workers: {
+    postMessage: typeof post;
+    onmessage?: (event: MessageEvent) => void;
+    terminate: () => void;
+  }[] = [];
+  vi.stubGlobal(
+    'Worker',
+    class {
+      postMessage = post;
+      terminate() {}
+      constructor() {
+        workers.push(this);
+      }
+    },
+  );
+  try {
+    const residential = vi.fn(),
+      tile = vi.fn();
+    const source = new TileSource(
+      '/test.pmtiles',
+      { header() {}, tile, residential, error() {} },
+      true,
+    );
+    expect(post).toHaveBeenCalledWith({ type: 'init', url: '/test.pmtiles', fireworks: true });
+    source.want([{ z: 12, x: 2, y: 3 }], 'fireworks');
+    expect(post).toHaveBeenLastCalledWith({
+      type: 'residential',
+      key: 'residential/12/2/3',
+      z: 12,
+      x: 2,
+      y: 3,
+    });
+    const sites = new Float64Array([1, 100, 200]);
+    workers[0]!.onmessage!({
+      data: {
+        type: 'residential',
+        key: 'residential/12/2/3',
+        sites,
+        newFeatures: [{ id: 'home', class: 'building' }],
+      },
+    } as MessageEvent);
+    expect(residential).toHaveBeenCalledWith('residential/12/2/3', sites);
+    expect(tile).not.toHaveBeenCalled();
+    expect(source.indexOf('home')).toBe(1);
+    source.destroy();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

@@ -193,6 +193,41 @@ it('blocks solid ride footprints only while active and leaves the midway walkabl
   choose(null);
   expect(world.cellTerrain()!.trees.hits([body(ride)])).toBe(false);
 });
+it.each([true, false])(
+  'rejects prepared carnival terrain after the season changes (prepared active: %s)',
+  (active) => {
+    const world = new LifeWorld();
+    world.setSeasons(simulationSeasons([season]));
+    const select = (on: boolean) =>
+      world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: on ? 'winter' : null });
+    const complete = <T>(generator: Generator<void, T, void>): T => {
+      let next = generator.next();
+      while (!next.done) next = generator.next();
+      return next.value;
+    };
+    const entries = [
+      {
+        key: 'prepared-fair',
+        tile,
+        life: { ...new LifeBuilder().finish(), seasonalRides: [ride] },
+      },
+    ];
+    select(active);
+    const life = complete(world.prepareTile(entries[0]!));
+    const prepared = new Map([[entries[0]!.key, life]]);
+    complete(world.prepareActivation(entries, prepared));
+    select(!active);
+    world.sync(entries, undefined, undefined, prepared);
+    select(!active);
+    const at = lngLatToTile(tile, ...ride.at),
+      unit = metersPerUnit(tile);
+    expect(
+      world
+        .cellTerrain()!
+        .trees.hits([{ x: at.x * unit, y: at.y * unit, hx: 1, hy: 0, length: 1, width: 1 }]),
+    ).toBe(!active);
+  },
+);
 it('decodes exact neighboring payloads and transfers only solid rides to Life', () => {
   const records = [ride, { ...ride, id: 'midway', style: 'midway' }, { ...ride, version: 2 }];
   const layer = {

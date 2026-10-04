@@ -3305,6 +3305,8 @@ export class LifeWorld {
     this.seasonsDirty = true;
   }
   private seasonsDirty = false;
+  /** Retired tiles retain their carts and reconcile the season when they return. */
+  private readonly appliedSeasons = new WeakMap<TileLife, string | null>();
 
   private syncSeason(season: string | null | undefined) {
     const config = this.seasons.find(
@@ -3322,7 +3324,11 @@ export class LifeWorld {
       this.groundTerrain = undefined;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
-    for (const life of this.tiles.values()) life.clearSeasonalStalls();
+    for (const life of this.tiles.values()) {
+      const id = config?.id ?? null;
+      if (this.appliedSeasons.get(life) !== id) life.clearSeasonalStalls();
+      this.appliedSeasons.set(life, id);
+    }
     if (installGround) {
       const guard = this.groundGuard(0, undefined, undefined, true);
       for (const life of this.tiles.values())
@@ -3340,17 +3346,43 @@ export class LifeWorld {
       [...this.tiles.values()].map((life) => ({ tile: life.tile, life: life.geo })),
     );
     const guard = this.groundGuard(0, undefined, undefined, true);
-    for (const life of this.tiles.values())
+    for (const life of this.tiles.values()) {
+      const near = seasonProximity(
+        life.tile,
+        anchors,
+        config.stalls.near,
+        config.stalls.radius_m,
+        true,
+      );
+      for (let i = life.seasonalStalls.length - 1; i >= 0; i--) {
+        const stall = life.seasonalStalls[i]!;
+        if (
+          this.owns(life, stall) &&
+          near(stall.x, stall.y) &&
+          life.canIdle(stall) &&
+          guard(life, stall)
+        )
+          continue;
+        guard.remove(stall);
+        life.scenes.removeStall(stall);
+        life.seasonalStalls.splice(i, 1);
+      }
+      life.clearSeasonalStalls(
+        Math.min(config.stalls.per_tile, Math.max(0, MAX_TILE_AGENTS - life.movers.length)),
+      );
       life.admitSeasonalStalls(
         config.stalls,
         anchors,
         (owner, before) => this.owns(life, owner) && guard(life, owner, before),
       );
+    }
   }
   private terrainKey(keys: readonly string[]) {
     return (
       keys.join('|') +
-      (this.seasonalConfig?.installations?.some((i) => i.kind === 'christmas-tree')
+      (this.seasonalConfig?.installations?.some(
+        (i) => i.kind === 'christmas-tree' || i.kind === 'carnival',
+      )
         ? `|installations:${this.seasonalConfig.id}`
         : '')
     );

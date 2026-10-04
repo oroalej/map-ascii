@@ -40,6 +40,7 @@ import { Readback } from './readback';
 import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
+import * as FireworkSites from './fireworks-sites';
 
 /** Label cases opt into the real CPU overlay; motion cases keep their original empty map. */
 const labelFixture = vi.hoisted(() => ({
@@ -61,6 +62,7 @@ vi.mock('./gpu-context', () => ({
   deleteMapGlyphs: vi.fn(),
   deleteLabelGlyphs: vi.fn(),
 }));
+vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
   createCellTargets: (
@@ -113,6 +115,9 @@ vi.mock('./tile-cache', () => ({
     }
     regionTilesFor() {
       return labelFixture.enabled && labelFixture.region ? [{ z: 11, x: 1024, y: 1024 }] : [];
+    }
+    residentialSitesFor() {
+      return [];
     }
     get(tile: { z: number }) {
       return labelFixture.enabled
@@ -256,6 +261,60 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('compiles residential samplers only while a fireworks season is selected', () => {
+    atlas.destroy();
+    labelFixture.enabled = true;
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: new LifeBuilder().finish(),
+      residential: new Float64Array([1, 1000, 2000]),
+    };
+    const compile = vi.spyOn(FireworkSites, 'residentialFireworkSites');
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'new-year',
+            title: { en: 'New Year' },
+            status: 'draft',
+            note: 'TODO(verify)',
+            sources: [{ title: 'Test' }],
+            window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          },
+        ],
+      },
+      life: { season: 'auto' },
+      now: () => new Date('2026-06-01T12:00:00Z'),
+    });
+    draw(100);
+    expect(compile).not.toHaveBeenCalled();
+    atlas.setLife({ season: 'new-year' });
+    draw(200);
+    expect(compile).toHaveBeenCalledTimes(1);
+    atlas.setCamera({ lng: 0.00001 });
+    draw(300);
+    expect(compile).toHaveBeenCalledTimes(1);
+    atlas.setLife({ season: 'auto' });
+    draw(400);
+    labelFixture.loaded = {
+      ...labelFixture.loaded,
+      residential: new Float64Array([2, 2000, 3000]),
+    };
+    labelFixture.arrive?.();
+    draw(500);
+    expect(compile).toHaveBeenCalledTimes(1);
+    atlas.setLife({ season: 'new-year' });
+    draw(600);
+    expect(compile).toHaveBeenCalledTimes(2);
   });
 
   it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
