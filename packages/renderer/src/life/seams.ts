@@ -3,7 +3,7 @@ import type { TileId } from '../tiles';
 import { frameBetween, masked } from './frames';
 import type { Mover, TileLife } from './simulate';
 
-export const SEAMS = { missingSeconds: 3 } as const;
+export const SEAMS = { missingSeconds: 3, rejectedSeconds: 8 } as const;
 
 /** First geographic ownership boundary along this line, without choosing turns or drawing RNG. */
 export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], reach: number) {

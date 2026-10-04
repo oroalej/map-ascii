@@ -66,6 +66,7 @@ import {
   PERSON_PAUSE,
   PERSON_TURN_CHANCE,
   WALK,
+  VEHICLE_RECOVERY,
   PLACES,
   ROAD_MARGIN_M,
   spawnRules,
@@ -167,6 +168,8 @@ export type StepPass = {
   owns?: (p: { x: number; y: number }) => boolean;
   seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
+  recoveredLines?: Set<number>;
+  recovered?: (m: Mover) => void;
 };
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
@@ -2694,6 +2697,7 @@ export class TileLife {
     const speeds = this.followLimits(dt, table, env?.diagnostics);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
+    let recoveredLines = pass?.recoveredLines;
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movers
       .map((m, i) => ({ m, i }))
@@ -2715,13 +2719,14 @@ export class TileLife {
       if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
       env?.diagnostics?.eligible(m, m.kind);
+      let intentionalHold = false;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
           const movement = table.movement(m);
-          this.signals.vehicleLimit(
+          intentionalHold = this.signals.vehicleLimit(
             m,
             dt,
             clock,
@@ -2921,7 +2926,11 @@ export class TileLife {
           restoreMover(m, before);
           moved = 0;
         }
-        m.waiting = distance > 0 && moved < distance * 0.25 ? (before.waiting ?? 0) + dt : 0;
+        const commanded = m.kind === 'vehicle' ? m.speed * dt : distance;
+        m.waiting =
+          !intentionalHold && commanded > 0 && moved < commanded * 0.25
+            ? (before.waiting ?? 0) + dt
+            : 0;
         if ((m.kind === 'person' || m.kind === 'dog') && m.waiting >= WALK.blockedTurnSeconds) {
           const snapshot = { ...m };
           const slots = m.group?.map((w) => ({ lateral: w.lateral, back: w.back }));
@@ -2944,6 +2953,14 @@ export class TileLife {
           m.pause = CAT.blockedPause;
           this.turnBack(m);
         }
+        if (m.kind === 'vehicle' && m.waiting >= VEHICLE_RECOVERY.blockedTurnSeconds) {
+          recoveredLines ??= new Set();
+          if (this.recoverVehicle(m, fitsGround, table, recoveredLines, pass?.owns)) {
+            moved = 0;
+            pass?.recovered?.(m);
+            env?.diagnostics?.recovery(m, 'vehicle');
+          }
+        }
       }
       if (m.vehicle) m.v = moved / dt;
       if (env?.diagnostics && m.kind === 'person') {
@@ -2955,6 +2972,57 @@ export class TileLife {
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+  }
+
+  /** A recovery reverses a two-way road vehicle only through checked, source-owned space. */
+  recoverVehicle(
+    m: Mover,
+    guard: GroundGuard,
+    table: JunctionTable,
+    lines: Set<number>,
+    owns?: (p: { x: number; y: number }) => boolean,
+  ): boolean {
+    if (m.kind !== 'vehicle' || !m.vehicle || this.geo.oneway?.[m.line] || lines.has(m.line))
+      return false;
+    if (
+      this.groundBodies(m).some((b) => {
+        const dx = ((Math.abs(b.hx) * b.length + Math.abs(b.hy) * b.width) * this.perMeter) / 2;
+        const dy = ((Math.abs(b.hy) * b.length + Math.abs(b.hx) * b.width) * this.perMeter) / 2;
+        return this.junctionIndex.junctions.some(
+          (j) =>
+            Math.abs(b.x * this.perMeter - j.x) <= j.radius + dx &&
+            Math.abs(b.y * this.perMeter - j.y) <= j.radius + dy,
+        );
+      })
+    )
+      return false;
+    const before = { ...m };
+    let accepted = false;
+    // Bumpers may be only the normal following gap apart. A bounded retreat gives
+    // the rotating footprint room, checked with the same swept guard as every move.
+    for (const retreat of [0, 0.5, 1, 2]) {
+      restoreMover(m, before);
+      this.turnBack(m);
+      if (m.d + retreat * this.perMeter >= this.segment(m.from, m.from + m.dir)) continue;
+      delete m.next;
+      delete m.came;
+      delete m.junctionRoute;
+      if (m.routing) m.routing = { seed: m.routing.seed, turns: m.routing.turns };
+      this.advance(m, retreat * this.perMeter, false);
+      if ((!owns || owns(m)) && guard(m, before)) {
+        accepted = true;
+        break;
+      }
+    }
+    if (!accepted) {
+      restoreMover(m, before);
+      return false;
+    }
+    table.release(m);
+    lines.add(m.line);
+    m.v = 0;
+    m.waiting = 0;
+    return true;
   }
 
   /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
@@ -3361,6 +3429,10 @@ export class LifeWorld {
   private preparedSettled = new WeakSet<TileLife>();
   private preparationTouched = new WeakSet<TileLife>();
   private seamWait = new WeakMap<Mover, { key: string; at: number }>();
+  private rejectedSeams = new WeakMap<
+    Mover,
+    { key: string; seconds: number; at: number; queued: boolean }
+  >();
   private preparedRegistered?: WeakSet<TileLife>;
   private readonly idleSample: Body[] = [];
 
@@ -3422,6 +3494,7 @@ export class LifeWorld {
     this.preparedSettled = new WeakSet();
     this.preparationTouched = new WeakSet();
     this.seamWait = new WeakMap();
+    this.rejectedSeams = new WeakMap();
     this.preparedRegistered = undefined;
     this.profiler?.clearContinuity();
     for (const tile of this.tiles.values()) tile.momentHost.clear();
@@ -4353,6 +4426,7 @@ export class LifeWorld {
     const guard = this.groundGuard(cellMeters, undefined, bounds, false, undefined, shows);
     this.junctions.begin(new Set(this.tiles.values()));
     const eligibility = new Map<TileLife, (m: Mover) => boolean>();
+    const recoveries = new Map<TileLife, Set<number>>();
     for (const tile of this.tiles.values()) {
       const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
@@ -4362,6 +4436,24 @@ export class LifeWorld {
         (!env.levels || m.rank < env.levels[m.kind]) &&
         !tile.scenes.hidden(m);
       eligibility.set(tile, active);
+      for (const m of tile.movers) {
+        if (env.inspecting === m || !active(m) || !this.rejectedSeams.get(m)?.queued) continue;
+        let lines = recoveries.get(tile);
+        if (!lines) recoveries.set(tile, (lines = new Set()));
+        if (
+          tile.recoverVehicle(
+            m,
+            (owner, before) => this.owns(tile, owner) && guard(tile, owner, before),
+            this.junctions,
+            lines,
+            (p) => this.owns(tile, p),
+          )
+        ) {
+          this.rejectedSeams.delete(m);
+          this.seamWait.delete(m);
+          env.diagnostics?.recovery(m, 'seam');
+        }
+      }
       tile.prepareTraffic(active);
     }
     for (const [key, tile] of this.tiles)
@@ -4382,6 +4474,18 @@ export class LifeWorld {
       boundary: Mover;
     }[] = [];
     const inbound = new Map<TileLife, number>();
+    const rejected = (m: Mover, key: string) => {
+      let history = this.rejectedSeams.get(m);
+      if (history?.key !== key) {
+        history = { key, seconds: 0, at: -1, queued: false };
+        this.rejectedSeams.set(m, history);
+      }
+      if (history.at !== this.clock) {
+        history.seconds += clamped;
+        history.at = this.clock;
+      }
+      history.queued = history.seconds >= SEAMS.rejectedSeconds;
+    };
     const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
     const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
       owners.find((life) => {
@@ -4406,15 +4510,20 @@ export class LifeWorld {
           (m.v ?? m.speed) ** 2 / (2 * k.brake * pm) + (length + 2) * pm,
         );
         // Cheap uniform-tile rejection keeps the additional work off ordinary inner-tile traffic.
-        if (!this.covers.has(source) && Math.min(m.x, m.y, EXTENT - m.x, EXTENT - m.y) > reach)
+        if (!this.covers.has(source) && Math.min(m.x, m.y, EXTENT - m.x, EXTENT - m.y) > reach) {
+          this.rejectedSeams.delete(m);
           continue;
+        }
         const seam = seamAhead(source, m, this.covers.get(source) ?? [], reach);
         if (!seam) {
           this.seamWait.delete(m);
+          this.rejectedSeams.delete(m);
           continue;
         }
         this.profiler?.countContinuity('attempts');
         const target = ownerAt(source, seam.preview);
+        const rejectionKey = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}/${target?.tile.z}/${target?.tile.x}/${target?.tile.y}`;
+        if (this.rejectedSeams.get(m)?.key !== rejectionKey) this.rejectedSeams.delete(m);
         if (!target || target === source) {
           const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}`;
           let wait = this.seamWait.get(m);
@@ -4446,11 +4555,13 @@ export class LifeWorld {
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
           seamLimits.set(m, { room: Infinity, crossing: true });
-        } else
+        } else {
+          if (target && target !== source) rejected(m, rejectionKey);
           seamLimits.set(m, {
             room: Math.max(0, seam.distance - (length / 2 + FOLLOW.minGap) * pm),
             crossing: false,
           });
+        }
       }
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
@@ -4463,6 +4574,8 @@ export class LifeWorld {
         momentView: { zoom: zoom ?? MOMENTS.zoom, cellWidth: cellMeters, cellAspect },
         seams: seamLimits,
         owns: this.covers.has(tile) ? (p) => this.owns(tile, p) : undefined,
+        recoveredLines: recoveries.get(tile),
+        recovered: (m) => this.rejectedSeams.delete(m),
       });
     }
     // All original owners have stepped once. New owners start stepping on the next frame.
@@ -4484,6 +4597,7 @@ export class LifeWorld {
         )
       ) {
         this.profiler?.countContinuity('transfers');
+        this.rejectedSeams.delete(m);
         if (held)
           this.junctions.rebind(
             m,
@@ -4496,8 +4610,13 @@ export class LifeWorld {
       } else {
         // A final pose/clearance check can fail after a bend or another actor's accepted step.
         this.profiler?.lifeDiagnostics?.tag(m, 'rejectedSeam');
+        rejected(
+          m,
+          `${source.tile.z}/${source.tile.x}/${source.tile.y}/${before.line}/${before.dir}/${target.tile.z}/${target.tile.x}/${target.tile.y}`,
+        );
         // Keep the original owner at its last safe pose instead of hiding it beyond the seam.
-        Object.assign(m, before, { v: 0 });
+        restoreMover(m, before);
+        m.v = 0;
         guard.remove(m);
         if (m.kind === 'vehicle') guard(source, m);
       }

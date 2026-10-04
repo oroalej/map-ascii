@@ -54,6 +54,52 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('advances an owned visit and service when their site is covered by another tile', () => {
+    const scene = setup(),
+      p = person(),
+      bus = { ...person(50, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    scene.services.set(bus, { site: visit.site, time: 10, arriving: false, boarded: 0 });
+    scene.step(
+      0.1,
+      [p, bus],
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (owner) => owner === p || owner === bus,
+    );
+    expect(p.x).toBeGreaterThan(40);
+    expect(scene.services.get(bus)!.time).toBeCloseTo(9.9);
+  });
+
+  it('replans a blocked return on the walking graph while retaining the visit and position', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    p.x = 48;
+    visit.state = 'return';
+    visit.path = [
+      { x: 48, y: 30 },
+      { x: 40, y: 50 },
+      { x: 40, y: 30 },
+    ];
+    visit.next = 1;
+    visit.blocked = 15.95;
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect([p.x, p.y]).toEqual([48, 30]);
+    expect(visit.blocked).toBe(0);
+    expect(visit.next).toBe(1);
+    expect(visit.path.every((point) => point.y === 30)).toBe(true);
+    scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(p.x).toBeLessThan(48);
+    expect(scene.visits.get(p)).toBe(visit);
+  });
   it('lets a bus leave a held boarding visitor and safely returns the visitor on release', () => {
     const scene = setup(),
       p = person(),

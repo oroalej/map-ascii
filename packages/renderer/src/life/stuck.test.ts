@@ -3,6 +3,7 @@ import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type Mover, type Walker, type WorldGroundGuard } from './simulate';
 import { worldTiles } from './testing/scenarios';
 import { tileToLngLat, metersPerUnit } from '../raster/geometry';
+import { JunctionTable } from './junctions';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
@@ -127,7 +128,7 @@ it('lets a car clear a zoom-hidden crossing walker within 15 seconds at minimum 
   expect(car.x / pm).toBeGreaterThan((1000 + 75 * pm) / pm);
 });
 
-it.fails('lets both head-on cars accept forward travel after recovery within 35 seconds', () => {
+it('lets both head-on cars accept forward travel after recovery within 35 seconds', () => {
   const { world, life } = fixture(LifeLine.roadMajor, 3.2);
   const cars = [mover('vehicle', 70, 1), mover('vehicle', 82, -1)];
   life.movers.push(...cars);
@@ -141,6 +142,29 @@ it.fails('lets both head-on cars accept forward travel after recovery within 35 
           resumed.add(m);
   }
   expect(resumed.size).toBe(2);
+});
+
+it('rolls back rejected vehicle recoveries, retains routing identity, and admits one per line', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8);
+  const m = mover('vehicle', 70, 1);
+  m.routing = { seed: 12, turns: 3, indicating: true };
+  m.next = 2;
+  const before = { ...m };
+  const table = new JunctionTable(),
+    lines = new Set<number>();
+  expect(life.recoverVehicle(m, () => false, table, lines)).toBe(false);
+  expect(m).toEqual(before);
+  expect(m.routing).toBe(before.routing);
+  expect(lines.size).toBe(0);
+  expect(life.recoverVehicle(m, () => true, table, lines)).toBe(true);
+  expect(m.hx).toBe(-1);
+  expect(m.routing).toEqual({ seed: 12, turns: 3 });
+  expect(Object.hasOwn(m, 'next')).toBe(false);
+  expect(m.waiting).toBe(0);
+  expect(m.v).toBe(0);
+  expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, lines)).toBe(false);
+  life.geo.oneway![0] = 1;
+  expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, new Set())).toBe(false);
 });
 
 it('keeps a two-person group moving after switching from minimum 1.45 to 2.9', () => {

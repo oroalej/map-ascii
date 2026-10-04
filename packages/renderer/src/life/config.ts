@@ -201,6 +201,7 @@ export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
 /** A commanded walker with no useful path progress may safely reverse after this many seconds. */
 export const WALK = { blockedTurnSeconds: 4 } as const;
+export const VEHICLE_RECOVERY = { blockedTurnSeconds: 30 } as const;
 
 /**
  * Street dogs (askals): they stop to sniff often (chance per second, and how long in s), turn

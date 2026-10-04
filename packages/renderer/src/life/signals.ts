@@ -150,7 +150,8 @@ export class SignalControl {
     out: MotionLimit,
     clearing?: string,
     diagnostics?: LifeDiagnostics,
-  ): void {
+  ): boolean {
+    let held = false;
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
@@ -165,11 +166,15 @@ export class SignalControl {
       const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
       const v = m.v ?? m.speed;
       if (state === 'red' || (state === 'amber' && (v * v) / (2 * brake) <= ahead)) {
-        if (ahead <= 0.5 * this.perMeter) diagnostics?.hold(m, 'signal');
+        if (ahead <= 0.5 * this.perMeter) {
+          held = true;
+          diagnostics?.hold(m, 'signal');
+        }
         out.target = Math.min(out.target, approach(ahead, 0, brake));
         out.cap = Math.min(out.cap, Math.max(0, ahead) / dt);
       }
     }
+    return held;
   }
   allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
     for (const s of this.signals) {

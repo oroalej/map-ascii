@@ -358,6 +358,14 @@ export class LocalScenes {
       visit.blocked += dt;
       // Give an approaching group time to clear; abandoned visits release their queue slot.
       if (visit.blocked >= 8 && visit.state !== 'return') this.returning(m, visit);
+      else if (visit.blocked >= 16 && visit.state === 'return') {
+        const path = this.graph.route(m, visit.trail[0]!);
+        if (path) {
+          visit.path = path;
+          visit.next = 1;
+        }
+        visit.blocked = 0;
+      }
       return false;
     }
     visit.blocked = 0;
@@ -414,7 +422,7 @@ export class LocalScenes {
     for (const [m, visit] of this.visits) {
       if (inspecting === m) continue;
       if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
-      if (owns && (!owns(m) || !owns(visit.site))) continue;
+      if (owns && !owns(m)) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
       diagnostics?.eligible(m, m.kind);
       if (visit.state !== 'approach' && visit.state !== 'return') diagnostics?.hold(m, 'visit');
@@ -475,7 +483,7 @@ export class LocalScenes {
     }
     for (const [m, service] of this.services) {
       if (inspecting === m) continue;
-      if (owns && (!owns(m) || !owns(service.site))) continue;
+      if (owns && !owns(m)) continue;
       if ((shows && !shows('vehicle')) || (near && !near(m.x, m.y))) continue;
       if (service.arriving) {
         // A stop left behind (past a bend, or on another line) can no longer be reached.

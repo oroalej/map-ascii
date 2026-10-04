@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { LifeWorld, type LifeTile } from './simulate';
+import { describe, expect, it, vi } from 'vitest';
+import { LifeWorld, type LifeTile, type Mover } from './simulate';
 import { continuityTile, continuityMover, left, right, parent } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import { LifeBuilder, LifeLine } from './geometry';
 import { frameBetween } from './frames';
 import { seamAhead, SEAMS } from './seams';
-import { activityLevels } from './config';
+import { activityLevels, MAX_TILE_AGENTS } from './config';
 
 function fixture(entries: LifeTile[]) {
   const world = new LifeWorld({ road_major: { car: 1 } });
@@ -215,3 +215,38 @@ it('keeps one-way endpoint restrictions after a missing-owner timeout', () => {
   expect(mover.dir).toBe(1);
   expect(mover.v).toBeLessThan(0.01);
 });
+
+it.each(['quota', 'projection', 'final'] as const)(
+  'recovers a two-way vehicle after repeated %s rejection without transferring ownership',
+  (reason) => {
+    const { world, lives } = fixture([
+      continuityTile(left),
+      continuityTile(right, reason === 'projection' ? LifeLine.path : LifeLine.roadMajor),
+    ]);
+    const source = lives[0]!,
+      target = lives[1]!;
+    for (const life of lives) life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    if (reason === 'quota')
+      target.movers.push(
+        ...Array<Mover>(MAX_TILE_AGENTS).fill({
+          ...continuityMover(target, 20),
+          kind: 'train',
+          rank: 1,
+          vehicle: undefined,
+        }),
+      );
+    if (reason === 'final') vi.spyOn(target, 'adoptFrom').mockReturnValue(false);
+    const m = continuityMover(source, 4095);
+    source.movers.push(m);
+    const before = { ...m };
+    for (let frame = 0; frame < 100 && m.dir === 1; frame++) world.step(0.1);
+    expect(m.dir).toBe(-1);
+    expect(source.movers).toContain(m);
+    expect(target.movers).not.toContain(m);
+    expect(m.x).toBeLessThan(4096);
+    expect(m.routing?.seed).toBe(before.routing?.seed);
+    expect(m.routing?.turns).toBe(before.routing?.turns);
+    expect(source.elapsed).toBeGreaterThanOrEqual(SEAMS.rejectedSeconds);
+    expect(source.elapsed).toBeLessThan(10);
+  },
+);
