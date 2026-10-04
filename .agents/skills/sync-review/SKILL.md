@@ -81,7 +81,7 @@ Then process the branches one at a time, in the order given. `<slug>` is the bra
 
 ## 2. Delegate main synchronization to review-pr
 
-Nothing to do here: `$review-pr` merges `origin/main` into the branch as its first step (step 1.7 of `<review-pr-skill>`), resolving conflicts, before Claude reviews. Each branch is synced once, after the previous branch merged, so it includes that branch's changes.
+Nothing to do here: `$review-pr` merges `origin/main` into the branch as its first step (step 1.7 of `<review-pr-skill>`), resolving conflicts, before Claude reviews. If `main` moves again before the merge, `$merge-pr` syncs it (its gate 3), so each branch also picks up the branches merged before it.
 
 ## 3. Open a PR if none exists
 
@@ -111,14 +111,17 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 
 ## 6. Merge into main
 
-1. Check every condition:
+1. Check every condition. If one fails, stop.
    - `$review-pr` ended `clean`
    - nothing was held back in step 1
    - step 5 passed on the PR's current head SHA
-   - `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`
-2. If `main` moved and the PR is behind or conflicting, merge it again by following `<review-pr-skill>` step 1.7 yourself in `<wt>` (it pushes), at most twice. Before each repeat, save a fresh `git -C <wt> status --porcelain` to `<run>/<slug>-resync-status-baseline.txt` with `Out-File -Encoding utf8`. In step 1.7, use `<wt>` as `<pr-checkout>` and this file as the baseline for step 1.7.2. Route every refusal or abort through this skill's steps 7–8 to stop the branch; preserve `merge conflict: <files> — <why>` for an aborted merge. After each successful repeat, run the "CI gate" section (step 6) of `<review-pr-skill>` yourself in `<wt>`. If its rule calls for another review round (a CI fix touched non-test source code), run step 4 again instead. Then check again.
-3. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha`, or, after a step-6.2 repeat, the new head once its CI gate passed, with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
-4. Read its `merge-pr-result`. `status` other than `merged` → stop with its `stopReason`. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
+
+   Don't check whether the PR is behind `main` or conflicting: if `main` moved, `$merge-pr` merges `origin/main` into it (its gate 3).
+2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+3. Read its `merge-pr-result`.
+   - `merged` → done. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
+   - `stopped` with `ci red after main sync: …` → run the "CI gate" section (step 6) of `<review-pr-skill>` yourself in `<wt>`. If its rule calls for another review round (a CI fix touched non-test source code), run step 4 again instead. Once CI is green, rerun step 6.2 with the new head. At most twice per branch; after that, stop with the stopReason.
+   - Anything else → stop with its `stopReason`.
 
 ## 7. Note a stopped branch in `.plans`
 

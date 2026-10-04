@@ -22,7 +22,7 @@ Work as if in plan mode. Don't edit, create, delete, stage, commit, or push anyt
 1. **Verified current state:** check every claim against the code as it is now, on `origin/main` and on the task branch.
    - Each cited `path:line` still says what the handoff claims.
    - Each named function, utility, type, file, script and command exists, and works as described.
-2. **Stale state:** look for commits on `origin/main` since the handoff was written (use its dates, or the task folder's history) that touch files it names. Check whether they change its assumptions, or already do part of its work.
+2. **Stale state:** look for commits on `origin/main` since the handoff was written (use its dates, or the task folder's history) that touch files it names. Check whether they change its assumptions, or already do part of its work. The handoff gets implemented on current `origin/main`, so every moved or changed `path:line`, function, file, assumption or pinned artifact becomes an amendment that rewrites it against current `origin/main`. Drift is never a reason to block.
 3. **Assumptions:** look for wrong or unstated assumptions about the data, the renderer pipeline, state or URL handling, the pack schemas, or the build.
 4. **Steps:** look for steps that are missing, out of order, ambiguous, or unimplementable as written. Each step should name its files and its change.
 5. **Invariants and rules:** look for steps that would break the handoff's own invariants, or an `AGENTS.md` rule:
@@ -37,7 +37,9 @@ Work as if in plan mode. Don't edit, create, delete, stage, commit, or push anyt
    - the Verification section matches the "Verifying changes" table
    - no per-step typecheck or lint, and no e2e beyond what's needed
 7. **Branch and worktree:** the ones the handoff names exist, or are clearly new. They aren't another task's (check `git worktree list` and the `.plans` index). A follow-up uses its task's existing branch, not a new one.
-8. **Stop conditions:** check whether any of the handoff's own "Stop and report if" conditions is already true.
+8. **Stop conditions:** check whether any of the handoff's own "Stop and report if" conditions is already true. Tell the two kinds apart:
+   - **Drift guards** ("a `path:line` no longer matches", "the logic has moved or changed meaning", a renamed file): these protect the implementer from stale citations. Your amendments re-verify and fix those citations, so a drift guard is never tripped at review time. Amend the handoff so it matches current `origin/main`.
+   - **Outcome or premise conditions** (measured numbers, a premise proven false, an approach that can't work): report one as tripped only if it's true now and no amendment can make the handoff correct.
 
 ## Classify each finding
 
@@ -53,9 +55,11 @@ Don't nitpick wording, and don't add new features. Report only what would make t
 - `ready`: no findings.
 - `ready-with-amendments`: findings that the amendments fix.
 - `blocked`: nothing can make the handoff implementable now. Use this only when:
-  - one of its own "Stop and report if" conditions is already true, or
+  - one of its own outcome or premise stop conditions (not a drift guard) is already true, and no amendment can fix the handoff, or
   - its work has already landed on `main`, or
   - the branch or worktree it names belongs to a different task.
+
+Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles archive) are never `blocked`; they are amendments. When unsure between `blocked` and `ready-with-amendments`, choose `ready-with-amendments`.
 
 ## Output
 

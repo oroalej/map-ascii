@@ -53,7 +53,7 @@ The PR is always the current branch's PR. No input selects a different one.
    ```
 
    Check `$LASTEXITCODE` immediately after each command. If either fails, stop with `error`. Set `<codex>` and `<claude>` to the absolute paths each prints on stdout, and retain them in session context, like `<scratch>` and `<speed>`. Each prints `<tool> <version> <path>` on stderr; note both versions for the report. Shell variables do not survive separate tool calls: replace these placeholders with the resolved paths in every later command, keeping the single quotes around them for paths containing spaces.
-7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. This is the only place the review flows merge `main`; `$sync-review` and `$implement-handoff` rely on it. Work in `<pr-checkout>`.
+7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. Every flow merges `main` with this one procedure: `$implement-handoff` before implementing, `$sync-review` through this skill, and `$merge-pr` when `main` moves again before the merge. Work in `<pr-checkout>`.
    1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
    2. If the merge would touch a file listed in the baseline (another session's uncommitted edits), stop with `stopped` (`merge blocked by uncommitted <files>`) without merging.
    3. `git merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
