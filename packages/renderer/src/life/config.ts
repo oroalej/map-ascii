@@ -74,7 +74,14 @@ export function laneOffset(
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
  * side may overlap this much (m) and still pass.
  */
-export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
+export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+export const PEDESTRIAN = {
+  corridorPad: 0.3,
+  lookaheadPad: 4,
+  maxRange: 30,
+  curbReach: 2,
+  holdMax: 20,
+} as const;
 
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */

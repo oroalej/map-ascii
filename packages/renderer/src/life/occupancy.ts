@@ -22,7 +22,10 @@ export type Body = {
   hy: number;
   length: number;
   width: number;
+  /** Query classification only; it never changes physical collision scores. */
+  kind?: number;
 };
+export const BODY_KIND = { human: 1, vehicle: 2, fixed: 4, animal: 8 } as const;
 export type Point = { x: number; y: number };
 export type Polygon = readonly (readonly Point[])[];
 
@@ -103,6 +106,67 @@ function reach(p: Body, x: number, y: number) {
     (Math.abs(p.hx * x + p.hy * y) * p.length) / 2 + (Math.abs(-p.hy * x + p.hx * y) * p.width) / 2
   );
 }
+
+/** Clip a footprint in corridor coordinates; projections alone overestimate rotated corners. */
+export function corridorDistance(
+  b: Body,
+  x: number,
+  y: number,
+  hx: number,
+  hy: number,
+  halfWidth: number,
+  range: number,
+) {
+  if (range < 0 || halfWidth < 0) return Infinity;
+  const dx = b.x - x,
+    dy = b.y - y;
+  const cx = dx * hx + dy * hy,
+    cy = -dx * hy + dy * hx;
+  const along = b.hx * hx + b.hy * hy,
+    side = -b.hx * hy + b.hy * hx;
+  const ax = (along * b.length) / 2,
+    ay = (side * b.length) / 2;
+  const bx = (-side * b.width) / 2,
+    by = (along * b.width) / 2;
+  const forwardReach = Math.abs(ax) + Math.abs(bx),
+    lateralReach = Math.abs(ay) + Math.abs(by);
+  if (
+    cx + forwardReach < -1e-9 ||
+    cx - forwardReach > range + 1e-9 ||
+    Math.abs(cy) > halfWidth + lateralReach + 1e-9
+  )
+    return Infinity;
+  let previousX = cx - ax - bx,
+    previousY = cy - ay - by;
+  let first = Infinity,
+    last = -Infinity;
+  // Clipping only the lateral strip yields a continuous forward interval. Its nearest
+  // intersection with [0, range] needs no temporary polygons or forward-edge clipping.
+  for (let i = 1; i <= 4; i++) {
+    const longitudinal = i === 1 || i === 2 ? 1 : -1;
+    const lateral = i === 2 || i === 3 ? 1 : -1;
+    const nextX = cx + longitudinal * ax + lateral * bx;
+    const nextY = cy + longitudinal * ay + lateral * by;
+    if (Math.abs(nextY) <= halfWidth + 1e-9) {
+      first = Math.min(first, nextX);
+      last = Math.max(last, nextX);
+    }
+    const span = nextY - previousY;
+    if (span !== 0)
+      for (let edge = 0; edge < 2; edge++) {
+        const boundary = edge ? halfWidth : -halfWidth;
+        const t = (boundary - previousY) / span;
+        if (t < 0 || t > 1) continue;
+        const at = previousX + (nextX - previousX) * t;
+        first = Math.min(first, at);
+        last = Math.max(last, at);
+      }
+    previousX = nextX;
+    previousY = nextY;
+  }
+  return last < -1e-9 || first > range + 1e-9 ? Infinity : Math.max(0, first);
+}
+
 function insideRing(p: Point, ring: readonly Point[]) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -175,31 +239,58 @@ export function bodyHitsPolygon(b: Body, polygon: Polygon, corners = bodyCorners
 /** A spatial hash avoids comparing every person against every car each frame. */
 export class Occupancy {
   private bins = new Map<number, Set<object>>();
-  private entries = new Map<object, { bodies: readonly Body[]; keys: number[] }>();
+  private entries = new Map<object, { bodies: readonly Body[]; keys: number[]; mask: number }>();
+  private humans = 0;
+  get hasHumans() {
+    return this.humans > 0;
+  }
   private readonly corners: Point[] = [];
   private readonly scratchKeys: number[] = [];
   private readonly uniqueKeys = new Set<number>();
   private readonly neighbors = new Set<object>();
+  private readonly queryNeighbors = new Set<object>();
   private keys(b: Body): number[] {
     return binKeys(bodyCorners(b, this.corners), 0.2, this.scratchKeys);
   }
   set(owner: object, bodies: readonly Body[]) {
-    const keys = this.entries.get(owner)?.keys ?? [];
+    const previous = this.entries.get(owner);
+    this.uniqueKeys.clear();
+    let mask = 0;
+    for (const b of bodies) {
+      mask |= b.kind ?? BODY_KIND.fixed;
+      for (const key of this.keys(b)) this.uniqueKeys.add(key);
+    }
+    if (
+      previous &&
+      previous.keys.length === this.uniqueKeys.size &&
+      previous.keys.every((key) => this.uniqueKeys.has(key))
+    ) {
+      this.humans +=
+        Number(!!(mask & BODY_KIND.human)) - Number(!!(previous.mask & BODY_KIND.human));
+      previous.bodies = bodies;
+      previous.mask = mask;
+      for (const key of previous.keys) {
+        // Preserve the original delete/reinsert neighbor order, including singleton bins.
+        const bin = this.bins.get(key)!;
+        bin.delete(owner);
+        bin.add(owner);
+      }
+      this.uniqueKeys.clear();
+      return;
+    }
+    const keys = previous?.keys ?? [];
     this.delete(owner);
     keys.length = 0;
+    for (const key of this.uniqueKeys) keys.push(key);
     this.uniqueKeys.clear();
-    for (const b of bodies)
-      for (const key of this.keys(b))
-        if (!this.uniqueKeys.has(key)) {
-          this.uniqueKeys.add(key);
-          keys.push(key);
-        }
-    this.uniqueKeys.clear();
-    this.entries.set(owner, { bodies, keys });
+    this.entries.set(owner, { bodies, keys, mask });
+    if (mask & BODY_KIND.human) this.humans++;
     for (const key of keys) put(this.bins, key, owner);
   }
   delete(owner: object) {
-    for (const key of this.entries.get(owner)?.keys ?? []) {
+    const entry = this.entries.get(owner);
+    if ((entry?.mask ?? 0) & BODY_KIND.human) this.humans--;
+    for (const key of entry?.keys ?? []) {
       const bin = this.bins.get(key);
       bin?.delete(owner);
       if (bin?.size === 0) this.bins.delete(key);
@@ -208,6 +299,85 @@ export class Occupancy {
   }
   bodies(owner: object): readonly Body[] {
     return this.entries.get(owner)?.bodies ?? [];
+  }
+  nearestInCorridor(
+    x: number,
+    y: number,
+    hx: number,
+    hy: number,
+    halfWidth: number,
+    range: number,
+    kindMask: number,
+    ignore?: object,
+    excludedAreas?: readonly Polygon[],
+  ): number {
+    if (range < 0 || halfWidth < 0) return Infinity;
+    const corridor: Body = {
+      x: x + (hx * range) / 2,
+      y: y + (hy * range) / 2,
+      hx,
+      hy,
+      length: range,
+      width: halfWidth * 2,
+    };
+    const owners = this.queryNeighbors;
+    const support = (BIN_M / 2) * (Math.abs(hx) + Math.abs(hy));
+    owners.clear();
+    try {
+      for (const key of this.keys(corridor)) {
+        const bx = Math.floor(key / 65536) - 32768,
+          by = (key % 65536) - 32768;
+        const dx = (bx + 0.5) * BIN_M - x,
+          dy = (by + 0.5) * BIN_M - y;
+        const forward = dx * hx + dy * hy;
+        if (
+          Math.abs(-dx * hy + dy * hx) > halfWidth + support + 1e-9 ||
+          forward < -support - 1e-9 ||
+          forward > range + support + 1e-9
+        )
+          continue;
+        for (const owner of this.bins.get(key) ?? [])
+          if (owner !== ignore && this.entries.get(owner)!.mask & kindMask) owners.add(owner);
+      }
+      let nearest = Infinity;
+      for (const owner of owners)
+        for (const b of this.entries.get(owner)!.bodies) {
+          if (!((b.kind ?? BODY_KIND.fixed) & kindMask)) continue;
+          if (excludedAreas?.some((area) => bodyHitsPolygon(b, area))) continue;
+          nearest = Math.min(nearest, corridorDistance(b, x, y, hx, hy, halfWidth, range));
+        }
+      return nearest;
+    } finally {
+      owners.clear();
+    }
+  }
+  /** Visit matching footprints, never expose owners or retain callback/body references. */
+  someInArea(
+    polygon: Polygon,
+    kindMask: number,
+    predicate?: (body: Readonly<Body>) => boolean,
+    ignore?: object,
+  ): boolean {
+    const owners = this.queryNeighbors;
+    owners.clear();
+    try {
+      const points = polygon.length === 1 ? polygon[0]! : polygon.flat();
+      if (!points.length) return false;
+      for (const key of binKeys(points, 0, this.scratchKeys))
+        for (const owner of this.bins.get(key) ?? [])
+          if (owner !== ignore && this.entries.get(owner)!.mask & kindMask) owners.add(owner);
+      for (const owner of owners)
+        for (const b of this.entries.get(owner)!.bodies)
+          if (
+            (b.kind ?? BODY_KIND.fixed) & kindMask &&
+            bodyHitsPolygon(b, polygon, bodyCorners(b, this.corners)) &&
+            (!predicate || predicate(b))
+          )
+            return true;
+      return false;
+    } finally {
+      owners.clear();
+    }
   }
   conflicts(owner: object, bodies: readonly Body[], ignore?: object): number {
     const neighbors = this.neighbors;

@@ -10,7 +10,7 @@ import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometr
 import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
-import { isWalker, usableLines, type Activity } from './config';
+import { isWalker, usableLines, kinematicsOf, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { approach, type MotionLimit } from './motion';
@@ -20,6 +20,8 @@ export const INTERACTIONS = {
   stopQueue: 6,
   vendorQueue: 4,
   terminalQueue: 3,
+  /** Begin service only after the vehicle has completed its approach, m/s. */
+  arrivalSpeed: 0.1,
   /** Seconds a vehicle serves a stop, and a customer spends at a stall. */
   dwell: [8, 15],
   purchase: [3, 6],
@@ -487,6 +489,7 @@ export class LocalScenes {
         )
           continue;
         if (Math.abs(ahead(service.site, m)) > 0.8 * this.perMeter) continue;
+        if ((m.v ?? 0) > INTERACTIONS.arrivalSpeed * this.perMeter) continue;
         service.arriving = false;
         for (const person of service.site.queue) {
           const visit = this.visits.get(person);
@@ -556,6 +559,9 @@ export class LocalScenes {
         if (!modes || this.services.has(m)) continue;
         const previous = this.stopCooldown.get(m);
         if (previous && dist(m, previous) > 40 * this.perMeter) this.stopCooldown.delete(m);
+        const velocity = m.v ?? 0;
+        const brakingRoom =
+          velocity ** 2 / (2 * kinematicsOf(m.vehicle).brake * this.perMeter) + velocity * dt;
         for (const site of this.sites) {
           if (
             (owns && !owns(site)) ||
@@ -563,8 +569,8 @@ export class LocalScenes {
             !(site.modes & modes) ||
             site.road !== m.line ||
             site.direction !== m.dir ||
-            dist(m, site) > 15 * this.perMeter ||
-            ahead(site, m) < 0
+            dist(m, site) > Math.max(15 * this.perMeter, brakingRoom + 4 * this.perMeter) ||
+            ahead(site, m) < brakingRoom
           )
             continue;
           const services = [...this.services].filter(
@@ -622,7 +628,7 @@ export class LocalScenes {
     const service = this.services.get(m);
     if (!service) return;
     const distance = service.arriving ? Math.max(0, ahead(service.site, m)) : 0;
-    out.target = Math.min(out.target, approach(distance, 0, brake));
+    out.target = Math.min(out.target, approach(Math.max(0, distance - brake * dt * dt), 0, brake));
     out.cap = Math.min(out.cap, distance / Math.max(dt, 0.001));
   }
   walkable(from: WalkPoint, to: WalkPoint): boolean {
@@ -633,6 +639,20 @@ export class LocalScenes {
     if (!site) return normal;
     const blend = Math.max(0, 1 - dist(m, site) / (20 * this.perMeter));
     return normal + (curb - normal) * blend;
+  }
+  /** Evaluate a future pose without substituting a copy for the service owner. */
+  offsetAt(m: Mover, at: WalkPoint, normal: number, curb: number): number {
+    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
+    if (!site) return normal;
+    const blend = Math.max(0, 1 - dist(at, site) / (20 * this.perMeter));
+    return normal + (curb - normal) * blend;
+  }
+  get hasCurbScenes(): boolean {
+    return this.services.size > 0 || this.stopCooldown.size > 0;
+  }
+  merging(m: Mover): boolean {
+    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
+    return !!site && dist(m, site) < 20 * this.perMeter;
   }
   hidden(m: Mover): boolean {
     return this.visits.get(m)?.state === 'aboard';
