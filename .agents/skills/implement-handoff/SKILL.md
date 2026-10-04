@@ -74,7 +74,6 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
    Then pull `origin/main` into it (see "Pull main" below).
 5. Move `<task-dir>` to `<main-checkout>/.plans/active/` if it is not already there. Before moving, verify resolved old/new paths stay within this task's main-checkout `.plans/` locations and that the destination is unoccupied. Retain each task-local path's suffix relative to the old task directory. After moving, rebase `<task-dir>`, `<scratch>`, a supplied task-local `--candidate`, and any result/artifact variables onto the new directory. Verify the relocated candidate and its adjacent canonical result still exist before forwarding them; preserve historical JSON records unchanged. Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`.
-6. Save the baseline: `git -C <wt> status --porcelain` → `<scratch>/status-baseline.txt`.
 
 ### Pull main
 
