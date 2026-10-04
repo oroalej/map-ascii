@@ -52,6 +52,15 @@ export type LifeInit = {
 };
 export type SyncTile = Omit<LifeTile, 'life'> & { life?: LifeGeometry };
 
+export function configureLifeWorld(
+  world: LifeWorld,
+  options: Pick<LifeInit, 'processions' | 'seasons' | 'shopSchedule'>,
+) {
+  world.setProcessions(options.processions);
+  world.setSeasons(options.seasons ?? []);
+  world.setShopSchedule(options.shopSchedule);
+}
+
 /** Shared synchronous execution keeps the fallback's order and arguments identical. */
 export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: FrameProfiler) {
   const { gust, step } = input;
@@ -111,9 +120,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
         options.itemInspection,
       );
       preparation = new LifePreparation(world, profiler, preparationClock);
-      world.setProcessions(options.processions);
-      world.setSeasons(options.seasons ?? []);
-      world.setShopSchedule(options.shopSchedule);
+      configureLifeWorld(world, options);
       geometries.clear();
       lastTerrain = undefined;
       terrainSent = false;

@@ -144,7 +144,7 @@ export function AtlasCanvas({
     };
     store.initCamera(camera);
     // The life layer's settings are remembered in this browser, not in the URL.
-    const lifePrefs = loadLifePrefs(cityLife?.seasons);
+    const lifePrefs = loadLifePrefs(slug, cityLife?.seasons);
     useLifeStore.setState(lifePrefs);
     const speechPrefs = dialogue
       ? loadSpeechPrefs(slug, dialogue)
@@ -194,7 +194,7 @@ export function AtlasCanvas({
       atlas.on('procession', (run) => useUiStore.setState({ procession: run })),
       useLifeStore.subscribe((prefs) => {
         atlas.setLife(lifeSettings(prefs));
-        saveLifePrefs(prefs);
+        saveLifePrefs(slug, prefs);
       }),
     ];
     return () => {

@@ -18,7 +18,7 @@ import {
 } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
-import type { FixtureGrid, LegacyStreetFixture } from './fixtures';
+import type { FixtureGrid, LegacyStreetFixture, StreetFixture } from './fixtures';
 import { lightByte, LampState, placeSeed } from './lights';
 import { clipUtilityLine } from './utilities';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
@@ -46,6 +46,13 @@ export type SeasonalFixture =
       priority?: BuntingPriority;
     };
 export type SeasonalVisibility = { lanterns: boolean; bunting: boolean; installations?: boolean };
+export function isSeasonalFixture(fixture: StreetFixture): fixture is SeasonalFixture {
+  return (
+    fixture.kind === 'season-lantern' ||
+    fixture.kind === 'season-bunting' ||
+    fixture.kind === 'season-installation'
+  );
+}
 export type SeasonalTile = {
   tile: TileId;
   life: LifeGeometry;
@@ -143,10 +150,83 @@ function fallbackBunting(
   return result;
 }
 
+type Coverage = { a: Point; dx: number; dy: number; length2: number; halfWidth: number };
+const corridorGeometry = new WeakMap<SeasonalBuntingRecord, Coverage>();
+/** One world-space index for all contributing tiles; include reach and buffered segments. */
+function buntingCoverage(
+  records: Iterable<SeasonalBuntingRecord>,
+  groups: readonly SeasonalTile[],
+) {
+  const cell = 2 ** -18;
+  const spatial = new Map<number, Map<number, Coverage[]>>();
+  let padding = 0;
+  for (const { tile } of groups)
+    padding = Math.max(padding, 1 / (metersPerUnit(tile) * EXTENT * 2 ** tile.z));
+  const world = (p: Point): Point => {
+    const q = lngLatToTile({ z: 0, x: 0, y: 0 }, ...p);
+    return [q.x / EXTENT, q.y / EXTENT];
+  };
+  for (const record of records) {
+    let c = corridorGeometry.get(record);
+    if (!c) {
+      const a = world(record.segment[0]),
+        b = world(record.segment[1]);
+      const from = world(record.from),
+        to = world(record.to);
+      const dx = b[0] - a[0],
+        dy = b[1] - a[1];
+      c = {
+        a,
+        dx,
+        dy,
+        length2: dx * dx + dy * dy,
+        halfWidth: Math.hypot(to[0] - from[0], to[1] - from[1]) / 2,
+      };
+      corridorGeometry.set(record, c);
+    }
+    if (!c.length2) continue;
+    const reach = c.halfWidth + padding;
+    const x0 = Math.floor((Math.min(c.a[0], c.a[0] + c.dx) - reach) / cell);
+    const x1 = Math.floor((Math.max(c.a[0], c.a[0] + c.dx) + reach) / cell);
+    const y0 = Math.floor((Math.min(c.a[1], c.a[1] + c.dy) - reach) / cell);
+    const y1 = Math.floor((Math.max(c.a[1], c.a[1] + c.dy) + reach) / cell);
+    for (let x = x0; x <= x1; x++) {
+      let column = spatial.get(x);
+      if (!column) spatial.set(x, (column = new Map<number, Coverage[]>()));
+      for (let y = y0; y <= y1; y++) {
+        let bucket = column.get(y);
+        if (!bucket) column.set(y, (bucket = []));
+        bucket.push(c);
+      }
+    }
+  }
+  return (tile: TileId) => {
+    const scale = 2 ** tile.z,
+      margin = 1 / (metersPerUnit(tile) * EXTENT * scale);
+    return (x: number, y: number) => {
+      const wx = (tile.x + x / EXTENT) / scale,
+        wy = (tile.y + y / EXTENT) / scale;
+      for (const c of spatial.get(Math.floor(wx / cell))?.get(Math.floor(wy / cell)) ?? []) {
+        const dx = wx - c.a[0],
+          dy = wy - c.a[1];
+        const u = (dx * c.dx + dy * c.dy) / c.length2;
+        if (
+          u >= 0 &&
+          u <= 1 &&
+          (dx - u * c.dx) ** 2 + (dy - u * c.dy) ** 2 <= (c.halfWidth + margin) ** 2
+        )
+          return true;
+      }
+      return false;
+    };
+  };
+}
+
 export function seasonalFixtures(
   groups: readonly SeasonalTile[],
   season: SeasonConfig | undefined,
   latitude: number,
+  buntingVisible = true,
 ): SeasonalFixture[] {
   if (!season) return [];
   const anchors = collectSeasonAnchors(groups);
@@ -160,6 +240,7 @@ export function seasonalFixtures(
         displays.set(r.id, { kind: 'season-installation', record: r });
       else if (
         r.kind === 'bunting' &&
+        buntingVisible &&
         r.season === season.id &&
         corridors.get(r.corridor)?.ways.includes(r.road)
       )
@@ -167,10 +248,16 @@ export function seasonalFixtures(
     }
   const segments = new Map<string, SeasonalBuntingRecord>();
   for (const r of dense.values()) segments.set(JSON.stringify(r.segment), r);
+  const coveredByDense = buntingCoverage(segments.values(), groups);
   const spans = new Map<string, UtilitySpan>();
   for (const group of groups)
     for (const record of group.utilities ?? [])
-      if (record.kind === 'span' && record.span.kind === 'crossing')
+      if (
+        buntingVisible &&
+        season.bunting &&
+        record.kind === 'span' &&
+        record.span.kind === 'crossing'
+      )
         spans.set(record.span.id, record.span);
   const bunting = new Map<string, Extract<SeasonalFixture, { kind: 'season-bunting' }>>();
   for (const group of groups) {
@@ -187,37 +274,15 @@ export function seasonalFixtures(
           if (near(p.x, p.y)) result.push({ kind: 'season-lantern', lamp });
         }
     }
-    if (!season.bunting) continue;
+    if (!season.bunting || !buntingVisible) continue;
     const baseNear = seasonProximity(
       group.tile,
       anchors,
       season.bunting.near,
       season.bunting.radius_m,
     );
-    const coverage = [...segments.values()].map((r) => {
-      const a = lngLatToTile(group.tile, ...r.segment[0]),
-        b = lngLatToTile(group.tile, ...r.segment[1]);
-      const dx = b.x - a.x,
-        dy = b.y - a.y,
-        length2 = dx * dx + dy * dy;
-      const from = lngLatToTile(group.tile, ...r.from),
-        to = lngLatToTile(group.tile, ...r.to);
-      return {
-        a,
-        dx,
-        dy,
-        length2,
-        reach2: (Math.hypot(to.x - from.x, to.y - from.y) / 2 + 1 / metersPerUnit(group.tile)) ** 2,
-      };
-    });
-    const near = (x: number, y: number) =>
-      baseNear(x, y) &&
-      !coverage.some((c) => {
-        const u = ((x - c.a.x) * c.dx + (y - c.a.y) * c.dy) / c.length2;
-        return (
-          u >= 0 && u <= 1 && (x - c.a.x - u * c.dx) ** 2 + (y - c.a.y - u * c.dy) ** 2 <= c.reach2
-        );
-      });
+    const coveredHere = coveredByDense(group.tile);
+    const near = (x: number, y: number) => baseNear(x, y) && !coveredHere(x, y);
     const covered = new Set<number>();
     for (const span of spans.values()) {
       const at: Point = [
@@ -305,12 +370,19 @@ export function seasonalFixtures(
 export function createSeasonalFixtureCache() {
   let previous: readonly SeasonalTile[] = [],
     previousSeason: SeasonConfig | undefined,
+    previousBunting = true,
     previousLatitude = NaN;
   let result: SeasonalFixture[] = [];
-  return (groups: readonly SeasonalTile[], season: SeasonConfig | undefined, latitude: number) => {
+  return (
+    groups: readonly SeasonalTile[],
+    season: SeasonConfig | undefined,
+    latitude: number,
+    buntingVisible = true,
+  ) => {
     if (!season && !previousSeason) return result;
     if (
       season === previousSeason &&
+      buntingVisible === previousBunting &&
       latitude === previousLatitude &&
       groups.length === previous.length &&
       groups.every((g, i) => {
@@ -330,7 +402,8 @@ export function createSeasonalFixtureCache() {
     previous = season ? groups.slice() : [];
     previousSeason = season;
     previousLatitude = latitude;
-    result = seasonalFixtures(groups, season, latitude);
+    previousBunting = buntingVisible;
+    result = seasonalFixtures(groups, season, latitude, buntingVisible);
     return result;
   };
 }

@@ -12,10 +12,25 @@ type Row = {
 };
 type Fixture = Row | { kind: 'season-lantern' | 'season-installation' };
 export type ProjectedBunting = { from: Point; to: Point };
-export type BuntingProjection = { scale: string; toCell: (lng: number, lat: number) => Point };
+export type BuntingProjection = {
+  scale: string;
+  toCell: (lng: number, lat: number) => Point;
+  /** Fixed lower zoom, with uniform scaling to the current zoom. Cell aspect belongs in key. */
+  base?: { key: string; scale: number; toCell: (lng: number, lat: number) => Point };
+};
 type Grid = { toCell: BuntingProjection['toCell']; buntingProjection?: BuntingProjection };
 const admitted = new WeakMap<readonly Fixture[], { scale: string; rows: readonly Row[] }>();
 const ordered = new WeakMap<readonly Fixture[], readonly Row[]>();
+type CandidateGeometry = {
+  rows: readonly Row[];
+  origin: Point;
+  base: readonly ProjectedBunting[];
+  spans: ProjectedBunting[];
+  candidates: readonly number[][];
+  valid: Uint8Array;
+  accepted: Uint8Array;
+};
+const prepared = new WeakMap<readonly Fixture[], { key: string; geometry: CandidateGeometry }>();
 const BUCKET = 16;
 // A one-cell square glyph fits in this circle; two rows need twice this clearance.
 const RADIUS = Math.SQRT1_2;
@@ -87,12 +102,110 @@ function conflict(a: ProjectedBunting, b: ProjectedBunting): boolean {
   );
 }
 
-function buckets(span: ProjectedBunting, visit: (key: string) => void) {
-  const minX = Math.floor((Math.min(span.from[0], span.to[0]) - RADIUS) / BUCKET);
-  const maxX = Math.floor((Math.max(span.from[0], span.to[0]) + RADIUS) / BUCKET);
-  const minY = Math.floor((Math.min(span.from[1], span.to[1]) - RADIUS) / BUCKET);
-  const maxY = Math.floor((Math.max(span.from[1], span.to[1]) + RADIUS) / BUCKET);
-  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) visit(`${x}/${y}`);
+function buckets(span: ProjectedBunting, visit: (x: number, y: number) => void) {
+  // Each hanging span shifts 1.5 cells. This envelope covers shifts and glyph clearance
+  // at the base zoom and every larger scale, irrespective of which rows get admitted.
+  const padding = 1.5 + RADIUS;
+  const minX = Math.floor((Math.min(span.from[0], span.to[0]) - padding) / BUCKET);
+  const maxX = Math.floor((Math.max(span.from[0], span.to[0]) + padding) / BUCKET);
+  const minY = Math.floor((Math.min(span.from[1], span.to[1]) - padding) / BUCKET);
+  const maxY = Math.floor((Math.max(span.from[1], span.to[1]) + padding) / BUCKET);
+  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) visit(x, y);
+}
+
+function prepareCandidates(
+  fixtures: readonly Fixture[],
+  toCell: Grid['toCell'],
+): CandidateGeometry {
+  let rows = ordered.get(fixtures);
+  if (!rows) {
+    const all = fixtures.filter((f): f is Row => f.kind === 'season-bunting');
+    rows = [...all.filter((r) => r.priority).sort(compare), ...all.filter((r) => !r.priority)];
+    ordered.set(fixtures, rows);
+  }
+  const base = rows.map((row) => ({ from: toCell(...row.from), to: toCell(...row.to) }));
+  const first = base.find((s) => Number.isFinite(s.from[0]) && Number.isFinite(s.from[1]));
+  const origin: Point = [first?.from[0] ?? 0, first?.from[1] ?? 0];
+  for (const s of base)
+    for (const p of [s.from, s.to]) {
+      p[0] -= origin[0];
+      p[1] -= origin[1];
+    }
+  const valid = new Uint8Array(rows.length);
+  const seen = new Uint32Array(rows.length);
+  const candidates: number[][] = rows.map(() => []);
+  const spatial = new Map<number, Map<number, number[]>>();
+  for (let i = 0; i < rows.length; i++) {
+    const span = base[i]!;
+    if (
+      !Number.isFinite(span.from[0]) ||
+      !Number.isFinite(span.from[1]) ||
+      !Number.isFinite(span.to[0]) ||
+      !Number.isFinite(span.to[1])
+    )
+      continue;
+    valid[i] = 1;
+    if (!rows[i]!.priority) continue;
+    const dx = span.to[0] - span.from[0],
+      dy = span.to[1] - span.from[1];
+    buckets(span, (x, y) => {
+      for (const j of spatial.get(x)?.get(y) ?? []) {
+        if (seen[j] === i + 1) continue;
+        seen[j] = i + 1;
+        const other = base[j]!;
+        const ox = other.to[0] - other.from[0],
+          oy = other.to[1] - other.from[1];
+        if (Math.abs(dx * oy - dy * ox) > Math.hypot(dx, dy) * Math.hypot(ox, oy) * 1e-3)
+          candidates[i]!.push(j);
+      }
+    });
+    buckets(span, (x, y) => {
+      let column = spatial.get(x);
+      if (!column) spatial.set(x, (column = new Map<number, number[]>()));
+      let bucket = column.get(y);
+      if (!bucket) column.set(y, (bucket = []));
+      bucket.push(i);
+    });
+  }
+  return {
+    rows,
+    origin,
+    base,
+    candidates,
+    valid,
+    accepted: new Uint8Array(rows.length),
+    spans: rows.map(() => ({ from: [0, 0], to: [0, 0] })),
+  };
+}
+
+function admit(geometry: CandidateGeometry, scale: number): Row[] {
+  const { rows, base, spans, candidates, valid, accepted } = geometry;
+  accepted.fill(0);
+  const result: Row[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (!valid[i]) continue;
+    const source = base[i]!,
+      span = spans[i]!;
+    const dx = source.to[0] - source.from[0],
+      dy = source.to[1] - source.from[1];
+    const length = Math.hypot(dx, dy) || 1;
+    const ox = (-dy / length) * 1.5,
+      oy = (dx / length) * 1.5;
+    span.from[0] = source.from[0] * scale + ox;
+    span.from[1] = source.from[1] * scale + oy;
+    span.to[0] = source.to[0] * scale + ox;
+    span.to[1] = source.to[1] * scale + oy;
+    let blocked = false;
+    for (const j of candidates[i]!)
+      if (accepted[j] && conflict(span, spans[j]!)) {
+        blocked = true;
+        break;
+      }
+    if (blocked) continue;
+    accepted[i] = 1;
+    result.push(rows[i]!);
+  }
+  return result;
 }
 
 /** Full unclipped spans make admission invariant under panning, including offscreen junctions.
@@ -106,41 +219,36 @@ export function selectBuntingRows(
 ): Map<Row, ProjectedBunting> {
   const projection = grid.buntingProjection;
   if (projection) {
+    const scaleKey = `${projection.scale}/${projection.base?.key ?? ''}`;
     let cache = admitted.get(fixtures);
-    if (!cache || cache.scale !== projection.scale) {
+    if (!cache || cache.scale !== scaleKey) {
       // Canonical coordinates have no grid-origin translation; offscreen rows still compete.
-      cache = {
-        scale: projection.scale,
-        rows: [...selectBuntingRows(fixtures, { toCell: projection.toCell }).keys()],
-      };
+      const base = projection.base;
+      let geometry: CandidateGeometry;
+      if (base && base.scale >= 1) {
+        let entry = prepared.get(fixtures);
+        if (!entry || entry.key !== base.key) {
+          entry = { key: base.key, geometry: prepareCandidates(fixtures, base.toCell) };
+          prepared.set(fixtures, entry);
+        }
+        geometry = entry.geometry;
+      } else geometry = prepareCandidates(fixtures, projection.toCell);
+      cache = { scale: scaleKey, rows: admit(geometry, base && base.scale >= 1 ? base.scale : 1) };
       admitted.set(fixtures, cache);
     }
     return new Map(cache.rows.map((row) => [row, projectBunting(row, grid)]));
   }
-  let rows = ordered.get(fixtures);
-  if (!rows) {
-    const all = fixtures.filter((f): f is Row => f.kind === 'season-bunting');
-    rows = [...all.filter((r) => r.priority).sort(compare), ...all.filter((r) => !r.priority)];
-    ordered.set(fixtures, rows);
-  }
-  const accepted = new Map<Row, ProjectedBunting>();
-  const spatial = new Map<string, ProjectedBunting[]>();
-  for (const row of rows) {
-    const span = projectBunting(row, grid);
-    if (![...span.from, ...span.to].every(Number.isFinite)) continue;
-    if (!row.priority) {
-      accepted.set(row, span);
-      continue;
+  const geometry = prepareCandidates(fixtures, grid.toCell);
+  admit(geometry, 1);
+  const result = new Map<Row, ProjectedBunting>();
+  for (let i = 0; i < geometry.rows.length; i++)
+    if (geometry.accepted[i]) {
+      const s = geometry.spans[i]!,
+        [x, y] = geometry.origin;
+      result.set(geometry.rows[i]!, {
+        from: [s.from[0] + x, s.from[1] + y],
+        to: [s.to[0] + x, s.to[1] + y],
+      });
     }
-    const candidates = new Set<ProjectedBunting>();
-    buckets(span, (key) => spatial.get(key)?.forEach((s) => candidates.add(s)));
-    if ([...candidates].some((s) => conflict(span, s))) continue;
-    accepted.set(row, span);
-    buckets(span, (key) => {
-      const bucket = spatial.get(key);
-      if (bucket) bucket.push(span);
-      else spatial.set(key, [span]);
-    });
-  }
-  return accepted;
+  return result;
 }

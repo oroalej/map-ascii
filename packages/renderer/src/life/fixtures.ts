@@ -30,6 +30,7 @@ import {
 import { signalState } from './signals';
 import {
   packSeasonalFixtures,
+  isSeasonalFixture,
   SeasonalPart,
   type SeasonalFixture,
   type SeasonalVisibility,
@@ -628,12 +629,7 @@ export function packFixtures(
   updateFixtureFlags(packed, motion);
   let seasonal = seasonalInputs.get(fixtures);
   if (!seasonal) {
-    seasonal = fixtures.filter(
-      (f): f is SeasonalFixture =>
-        f.kind === 'season-lantern' ||
-        f.kind === 'season-bunting' ||
-        f.kind === 'season-installation',
-    );
+    seasonal = fixtures.filter(isSeasonalFixture);
     seasonalInputs.set(fixtures, seasonal);
   }
   if (seasonal.length) {

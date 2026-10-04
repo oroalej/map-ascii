@@ -4,6 +4,7 @@
  * so "upstream" walks the river's ways backwards.
  */
 import {
+  LEGACY_LOCAL_METERS_PER_DEGREE,
   localMetricProjection,
   pointInPolygon,
   type Procession,
@@ -25,7 +26,7 @@ type Point = [number, number];
 /** Meters east and north of an origin, near enough flat over a few kilometers. */
 function localMeters(origin: Point) {
   // Preserve existing published route coordinates and bank widths exactly.
-  return localMetricProjection(origin, { east: 111_320, north: 110_540 });
+  return localMetricProjection(origin, { east: LEGACY_LOCAL_METERS_PER_DEGREE, north: 110_540 });
 }
 
 const distance = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);

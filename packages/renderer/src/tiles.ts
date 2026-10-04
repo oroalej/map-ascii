@@ -14,7 +14,8 @@ export type TileHeader = {
 };
 
 export type WorkerRequest =
-  | { type: 'init'; url: string; fireworks?: boolean }
+  | { type: 'init'; url: string; fireworks?: boolean; fireworksActive?: boolean }
+  | { type: 'fireworks'; active: boolean }
   | { type: 'tile' | 'residential'; key: string; z: number; x: number; y: number };
 
 export type WorkerResponse =
@@ -276,8 +277,15 @@ export class TileSource {
   private readonly worker: Worker;
   /** Decode times of the most recent tiles, for `decodeMsAverage`. */
   private readonly decodeTimes: number[] = [];
+  private fireworksActive: boolean;
 
-  constructor(url: string, handlers: TileSourceHandlers, fireworks = false) {
+  constructor(
+    url: string,
+    handlers: TileSourceHandlers,
+    private readonly fireworks = false,
+    active = false,
+  ) {
+    this.fireworksActive = fireworks && active;
     this.requests = new RequestQueue((tile, key, group) =>
       this.post({ type: group === 'fireworks' ? 'residential' : 'tile', key, ...tile }),
     );
@@ -303,7 +311,14 @@ export class TileSource {
         if (message.key) this.requests.done(message.key);
       }
     };
-    this.post({ type: 'init', url, fireworks });
+    this.post({ type: 'init', url, fireworks, fireworksActive: this.fireworksActive });
+  }
+
+  setFireworksActive(active: boolean) {
+    active &&= this.fireworks;
+    if (active === this.fireworksActive) return;
+    this.fireworksActive = active;
+    this.post({ type: 'fireworks', active });
   }
 
   /** The feature at an id-buffer index, if its tile has loaded. */

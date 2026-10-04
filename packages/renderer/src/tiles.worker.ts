@@ -22,11 +22,13 @@ const scope = self as unknown as {
 let archive: PMTiles | undefined;
 let maxZoom: number | undefined;
 let fireworks = false;
+let fireworksActive = false;
 const registry = createIdRegistry();
 
 async function handle(request: WorkerRequest) {
   if (request.type === 'init') {
     fireworks = request.fireworks === true;
+    fireworksActive = fireworks && request.fireworksActive === true;
     archive = new PMTiles(request.url);
     const h = await archive.getHeader();
     maxZoom = h.maxZoom;
@@ -38,6 +40,10 @@ async function handle(request: WorkerRequest) {
         bounds: [h.minLon, h.minLat, h.maxLon, h.maxLat],
       },
     });
+    return;
+  }
+  if (request.type === 'fireworks') {
+    fireworksActive = fireworks && request.active;
     return;
   }
   const { key, z, x, y } = request;
@@ -62,7 +68,7 @@ async function handle(request: WorkerRequest) {
     ]);
     return;
   }
-  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y }, maxZoom, fireworks);
+  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y }, maxZoom, fireworksActive);
   const decodeMs = performance.now() - start;
   scope.postMessage(
     { type: 'tile', key, geometry, newFeatures: registry.takeNew(), decodeMs },
@@ -75,7 +81,7 @@ scope.onmessage = (event) => {
   handle(request).catch((err: unknown) => {
     scope.postMessage({
       type: 'error',
-      key: request.type === 'init' ? null : request.key,
+      key: request.type === 'init' || request.type === 'fireworks' ? null : request.key,
       message: err instanceof Error ? err.message : String(err),
     });
   });

@@ -1,5 +1,5 @@
 import { simulationSeasons } from './seasonal-simulation';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { SeasonConfig } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
@@ -50,6 +50,37 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it('skips anchorless and unchanged candidate searches after unrelated tile arrivals', () => {
+    for (const anchored of [false, true]) {
+      const { world, life, tiles } = setup(false, anchored, anchored);
+      select(world);
+      expect(life.seasonalStalls).toEqual([]);
+      const admission = vi.spyOn(life, 'admitSeasonalStalls');
+      const points = vi.spyOn(life, 'pointAt');
+      world.sync([
+        ...tiles,
+        { key: 'far', tile: { ...tile, x: tile.x + 4 }, life: new LifeBuilder().finish() },
+      ]);
+      select(world);
+      expect(admission).not.toHaveBeenCalled();
+      expect(points).not.toHaveBeenCalled();
+    }
+  });
+
+  it('reconsiders an existing anchorless tile when a neighboring worship anchor arrives', () => {
+    const { world, life, tiles } = setup(false, false);
+    select(world);
+    expect(life.seasonalStalls).toEqual([]);
+    const neighbor = new LifeBuilder();
+    neighbor.place({ x: 10, y: 2000 }, 'worship', 20);
+    world.sync([
+      ...tiles,
+      { key: 'anchor', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() },
+    ]);
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+  });
+
   it('retains a cart and its purchasing customer when a neighboring tile arrives', () => {
     const { world, life, tiles } = setup();
     select(world);

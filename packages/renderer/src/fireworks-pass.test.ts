@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FireworksConfig } from '@atlas/shared';
 import type { GL, CellTargets } from './gpu';
+import { createProgram } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { placeGrid, type View } from './grid';
 import { fireworksPass as drawFireworks, deleteFireworks } from './fireworks-pass';
@@ -81,6 +82,54 @@ function gpu() {
 }
 beforeEach(() => vi.clearAllMocks());
 describe('seasonal GPU fireworks', () => {
+  it.each(['cached', 'pending'])(
+    'consumes an idle %s program exactly once on first demand',
+    (kind) => {
+      const gl = gpu();
+      const programs: Programs = {};
+      const program: ReturnType<typeof createProgram> = {
+        program: {},
+        uniformSetters: setters,
+        uniformLocations: {},
+        attribLocations: {},
+        attribSetters: {},
+      };
+      const finish = vi.fn(() => program);
+      if (kind === 'cached') programs.fireworksProgram = program;
+      else
+        programs.glyphWarmup = {
+          clocks: false,
+          seasonal: false,
+          fireworks: true,
+          cancel: vi.fn(),
+          pending: { key: 8, program: { ready: () => false, finish, cancel: vi.fn() } },
+        };
+      const grid = placeGrid(view, view.cellDev, 202, 92).grid;
+      for (const time of [2.6, 2.7])
+        fireworksPass(
+          gl as unknown as GL,
+          programs,
+          {} as CellTargets,
+          resources,
+          view,
+          grid,
+          grid,
+          config,
+          time,
+          false,
+          wind,
+          0,
+        );
+      expect(programs.fireworks?.program).toBe(program);
+      expect(programs.fireworksProgram).toBeUndefined();
+      expect(programs.glyphWarmup?.pending).toBeUndefined();
+      expect(finish).toHaveBeenCalledTimes(kind === 'pending' ? 1 : 0);
+      expect(createProgram).not.toHaveBeenCalled();
+      expect(gl.bufferData).toHaveBeenCalledOnce();
+      deleteFireworks(gl as unknown as GL, programs.fireworks!);
+      expect(gl.deleteProgram).toHaveBeenCalledExactlyOnceWith(program.program);
+    },
+  );
   it('draws no fireworks without mapped residential sites', () => {
     const gl = gpu(),
       programs = {} as Programs;

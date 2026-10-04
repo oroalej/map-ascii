@@ -489,6 +489,72 @@ it('settles existing actors away from a newly activated physical display', () =>
   ))
     expect(trees.hits(life.groundBodies(m))).toBe(false);
 });
+it('retains ordinary carts over a buffered building when no installation occupies them', () => {
+  const b = new LifeBuilder();
+  for (const y of [800, 1600, 2400, 3200])
+    b.line(
+      [
+        { x: 0, y },
+        { x: 4095, y },
+      ],
+      LifeLine.path,
+      8,
+    );
+  const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
+  const entry = { key: 'cart-0', tile, life: b.finish() };
+  world.sync([entry]);
+  const life = worldTiles(world).get(entry.key)!;
+  const cart = life.stalls.find((s) => s.x > 3900)!;
+  expect(cart).toBeDefined();
+  const neighbor = new LifeBuilder();
+  const x = cart.x - 4096,
+    y = cart.y;
+  neighbor.area('blocked', [
+    [
+      { x: x - 35, y: y - 35 },
+      { x: x + 35, y: y - 35 },
+      { x: x + 35, y: y + 35 },
+      { x: x - 35, y: y + 35 },
+      { x: x - 35, y: y - 35 },
+    ],
+  ]);
+  world.sync([
+    entry,
+    { key: 'neighbor', tile: { ...tile, x: tile.x + 1 }, life: neighbor.finish() },
+  ]);
+  const carts = [...life.stalls];
+  expect(carts).toContain(cart);
+  for (const id of ['winter', null]) {
+    world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: id });
+    expect(life.stalls).toEqual(carts);
+    expect(life.canIdle(cart)).toBe(true);
+  }
+});
+it('rejects an ordinary cart footprint occupied by an active tree', () => {
+  const b = new LifeBuilder();
+  for (const y of [800, 1600, 2400, 3200])
+    b.line(
+      [
+        { x: 0, y },
+        { x: 4095, y },
+      ],
+      LifeLine.path,
+      8,
+    );
+  const physical = { ...tree, at: [...tree.at] as [number, number] };
+  const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
+  world.sync([{ key: 'cart-0', tile, life: { ...b.finish(), seasonalTrees: [physical] } }]);
+  const life = worldTiles(world).get('cart-0')!;
+  const cart = life.stalls.find((s) => s.x > 3900)!;
+  expect(cart).toBeDefined();
+  physical.at = tileToLngLat(tile, cart);
+  expect(life.canIdle(cart)).toBe(true);
+  world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: 'winter' });
+  expect(life.canIdle(cart)).toBe(false);
+  expect(life.stalls).not.toContain(cart);
+});
 it('keeps direct and worker frames equivalent through installation activation, eviction and reload', () => {
   const geo = {
     ...new LifeBuilder().finish(),

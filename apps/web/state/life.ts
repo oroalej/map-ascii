@@ -45,26 +45,57 @@ const DEFAULTS: LifePrefs = { enabled: true, time: 'live', wind: 'live', season:
 export const useLifeStore = create<LifePrefs>()(() => ({ ...DEFAULTS }));
 
 const KEY = 'atlas.life';
+const seasonKey = (slug: string) => `${KEY}.season.${slug}`;
+const parsePrefs = (raw: string | null): Partial<LifePrefs> => {
+  try {
+    const value: unknown = JSON.parse(raw ?? '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+};
 
 /** The saved preferences, or the defaults (storage can be missing or blocked). */
-export function loadLifePrefs(seasons: readonly { id: string }[] = []): LifePrefs {
+export function loadLifePrefs(slug: string, seasons: readonly { id: string }[] = []): LifePrefs {
   try {
-    const raw = window.localStorage.getItem(KEY);
-    const saved = raw ? (JSON.parse(raw) as Partial<LifePrefs>) : {};
+    const storage = window.localStorage;
+    const saved = parsePrefs(storage.getItem(KEY));
+    let preview = storage.getItem(seasonKey(slug));
+    if (preview === null && seasons.some((s) => s.id === saved.season)) {
+      preview = saved.season!;
+      try {
+        storage.setItem(seasonKey(slug), preview);
+        delete saved.season;
+        storage.setItem(KEY, JSON.stringify(saved));
+      } catch {
+        /* The valid legacy choice still applies when writes are blocked. */
+      }
+    }
     return {
       enabled: typeof saved.enabled === 'boolean' ? saved.enabled : true,
       time: timeChoice(saved.time),
       wind: WIND_CHOICES.includes(saved.wind as WindChoice) ? (saved.wind as WindChoice) : 'live',
-      season: seasons.some((s) => s.id === saved.season) ? saved.season : 'auto',
+      season: seasons.some((s) => s.id === preview) ? preview! : 'auto',
     };
   } catch {
     return { ...DEFAULTS };
   }
 }
 
-export function saveLifePrefs(prefs: LifePrefs) {
+export function saveLifePrefs(slug: string, prefs: LifePrefs) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(prefs));
+    const storage = window.localStorage;
+    const legacy = parsePrefs(storage.getItem(KEY)).season;
+    storage.setItem(seasonKey(slug), prefs.season ?? 'auto');
+    storage.setItem(
+      KEY,
+      JSON.stringify({
+        enabled: prefs.enabled,
+        time: prefs.time,
+        wind: prefs.wind,
+        ...(typeof legacy === 'string' ? { season: legacy } : {}),
+      }),
+    );
   } catch {
     // Not remembered; the setting still applies until the page closes.
   }

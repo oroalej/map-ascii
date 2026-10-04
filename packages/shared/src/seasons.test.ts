@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import cityPack from '../../content/cities/naga/city.json';
 import {
   activeSeason,
   epochDay,
@@ -13,6 +14,19 @@ const winter: SeasonWindow = { from: { month: 12, day: 1 }, to: { month: 1, day:
 const contains = (window: SeasonWindow, year: number, month: number, day: number) =>
   seasonContains(window, year, epochDay(year, month, day));
 describe('annual season calendars', () => {
+  it.each([
+    [2024, 13, 22],
+    [2026, 11, 20],
+    [2030, 13, 22],
+  ])(
+    'uses the actual city-pack fiesta window in %s, including both boundaries',
+    (year, from, to) => {
+      const fiesta = cityPack.life.seasons.find((s) => s.id === 'penafrancia-fiesta')!;
+      expect(fiesta).toBeDefined();
+      for (let day = 1; day <= 30; day++)
+        expect(contains(fiesta.window, year, 9, day)).toBe(day >= from && day <= to);
+    },
+  );
   it('prioritizes New Year across the year boundary and keeps Christmas outside its window', () => {
     const seasons = [
       { id: 'new-year', window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } } },

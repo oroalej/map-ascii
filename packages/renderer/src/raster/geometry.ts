@@ -1479,7 +1479,7 @@ export function buildTileGeometry(
     },
     ...(utilities.length ? { utilities } : {}),
     ...(seasonal.length ? { seasonal } : {}),
-    ...(residential.length ? { residential: packResidentialSites(residential) } : {}),
+    ...(fireworks ? { residential: packResidentialSites(residential) } : {}),
   };
 }
 

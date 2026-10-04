@@ -28,8 +28,15 @@ export type FireworksResources = {
 };
 
 /** Created lazily for a pack that opts in; one static upload for the entire context lifetime. */
-function createFireworks(gl: GL): FireworksResources {
-  const program = createProgram(gl, fireworksVertex, fireworksFragment);
+function createFireworks(gl: GL, programs: Programs): FireworksResources {
+  const pending = programs.glyphWarmup?.pending;
+  let program = programs.fireworksProgram;
+  if (!program && pending?.key === 8) {
+    program = pending.program.finish();
+    programs.glyphWarmup!.pending = undefined;
+  }
+  program ??= createProgram(gl, fireworksVertex, fireworksFragment);
+  programs.fireworksProgram = undefined;
   const vao = gl.createVertexArray(),
     buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -72,7 +79,7 @@ export function fireworksPass(
   sites: FireworkSiteSampler = NO_FIREWORK_SITES,
 ) {
   if (!config?.variants.length || !fireworkShellCount(view.camera.zoom)) return;
-  const resources = (programs.fireworks ??= createFireworks(gl));
+  const resources = (programs.fireworks ??= createFireworks(gl, programs));
   if (resources.config !== config) {
     resources.variants.fill(0);
     resources.variants.set(fireworkVariantCodes(config));

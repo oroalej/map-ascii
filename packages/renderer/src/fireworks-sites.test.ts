@@ -238,10 +238,10 @@ describe('mapped residential fireworks', () => {
     expect(decode([...houses, road('highway=residential')], tile).residential).toHaveLength(3);
     expect(decode([...houses, road('highway=living_street')], tile).residential).toHaveLength(3);
     for (const kind of ['highway=service', 'highway=unclassified', 'highway=tertiary'])
-      expect(decode([...houses, road(kind)], tile).residential).toBeUndefined();
+      expect(decode([...houses, road(kind)], tile).residential).toHaveLength(0);
     expect(
       decode([houses[0]!, houses[1]!, road('highway=residential')], tile).residential,
-    ).toBeUndefined();
+    ).toHaveLength(0);
   });
 
   it('admits explicit homes and rejects unknown, commercial, public and field features', () => {
@@ -260,7 +260,7 @@ describe('mapped residential fireworks', () => {
     expect(geometry.residential).toHaveLength(4);
     expect(
       decode([feature('field', 'building=house', undefined, 'farmland')]).residential,
-    ).toBeUndefined();
+    ).toHaveLength(0);
     expect(isResidentialBuilding(undefined)).toBe(false);
     expect(isResidentialBuilding('building=houseboat')).toBe(false);
   });

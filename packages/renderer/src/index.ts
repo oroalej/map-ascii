@@ -116,6 +116,7 @@ import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from 
 import { simulationSeasons } from './life/seasonal-simulation';
 import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
+import { configureLifeWorld } from './life/worker-api';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
 import { LifePause, LivePauseOffset } from './life/pause';
@@ -698,6 +699,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     profiler,
     options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
+    !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
   );
   const { source } = tileCache;
 
@@ -749,6 +751,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     labelGrid = labelPlacement.grid;
     cellsFor = cellsKey(v, placement, labelPlacement);
     cellsTargets = targets;
+    source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
@@ -874,9 +877,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
       : (() => {
           const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
-          world.setProcessions(processions);
-          world.setSeasons(simulationSeasons(options.cityLife?.seasons));
-          world.setShopSchedule(options.cityLife?.schedules?.shops);
+          configureLifeWorld(world, {
+            processions,
+            seasons: simulationSeasons(options.cityLife?.seasons),
+            shopSchedule: options.cityLife?.schedules?.shops,
+          });
           return createInlineHost(world, profiler);
         })();
   /** The procession last reported (`procession` event), as "id live". */
@@ -1192,24 +1197,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let fixtureInputs: readonly LoadedTile[] = [];
   let hadUtilities = false;
   let fixtureDisplaysShown = false;
+  let fixtureBuntingShown = false;
   let fireworkSites = NO_FIREWORK_SITES;
   let residentialInputs: readonly Float64Array[] = [];
-  let residentialActive = false;
   const syncResidentialSites = (tiles: readonly TileId[]) => {
     const active = !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom;
+    const groups = tileCache.residentialSitesFor(camera, cssSize(), active, tiles);
     if (!active) {
-      if (residentialActive) tileCache.residentialSitesFor(camera, cssSize(), false);
-      residentialActive = false;
       residentialInputs = [];
       fireworkSites = NO_FIREWORK_SITES;
       return;
     }
-    residentialActive = true;
-    const groups = tiles.flatMap((tile) => {
-      const loaded = tileCache.get(tile);
-      return loaded?.residential ? [{ tile, sites: loaded.residential }] : [];
-    });
-    groups.push(...tileCache.residentialSitesFor(camera, cssSize(), true));
     const inputs = groups.map((group) => group.sites);
     if (sameReferenceMembers(inputs, residentialInputs)) return;
     residentialInputs = inputs;
@@ -1234,14 +1232,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
     const displaysShown = camera.zoom >= 18;
+    const buntingShown = bandVisibility({ min: 18 }, camera.zoom) > 0;
     if (
       displaysShown === fixtureDisplaysShown &&
+      buntingShown === fixtureBuntingShown &&
       showUtilities === hadUtilities &&
       season === fixtureSeason &&
       sameReferenceMembers(inputs, fixtureInputs)
     )
       return;
     fixtureDisplaysShown = displaysShown;
+    fixtureBuntingShown = buntingShown;
     fixtureSeason = season;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
@@ -1270,7 +1271,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       : [];
     fixtures.push(...cachedUtilities(utilityGroups));
     fixtures.push(
-      ...cachedSeasonal(seasonalGroups, season, (options.bounds[1] + options.bounds[3]) / 2),
+      ...cachedSeasonal(
+        seasonalGroups,
+        season,
+        (options.bounds[1] + options.bounds[3]) / 2,
+        buntingShown,
+      ),
     );
     festiveLamps = installationLamps(
       fixtures.filter((f): f is InstallationFixture => f.kind === 'season-installation'),
@@ -1346,7 +1352,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (next === season) return;
     lifeHover.clear();
     season = next;
+    source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     seasonSnapshot = seasonState();
+    warmSeasonalPrograms();
     host.invalidateFrame();
     lifeAgents = [];
     cellDirty = true;
@@ -1509,6 +1517,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     watch.watched() &&
     !flight &&
     performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
+  const warmSeasonalPrograms = (clocks = false) => {
+    if (!programs || lost || destroyed) return;
+    const seasonal =
+      !!season &&
+      ((!!season.lanterns && bandVisibility({ min: 17 }, camera.zoom) > 0) ||
+        (!!season.bunting && bandVisibility({ min: 18 }, camera.zoom) > 0) ||
+        (!!season.installations?.length && bandVisibility({ min: 18 }, camera.zoom) > 0));
+    prewarmGlyphPrograms(
+      gl,
+      programs,
+      canWarmGlyphs,
+      clocks,
+      seasonal,
+      !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
+    );
+  };
   const frame = (now: number) => {
     if (destroyed || lost) return;
     lifePause.tick(now, lifeRunning());
@@ -1696,8 +1720,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // frame cannot consume freshly confirmed speech before it is published.
     readback.poll();
     const raster = lifeRaster(targets);
-    if (lastDraw !== -Infinity)
-      prewarmGlyphPrograms(gl, programs, canWarmGlyphs, Boolean(raster?.candles));
+    if (lastDraw !== -Infinity) warmSeasonalPrograms(Boolean(raster?.candles));
     lifeHover.update(
       lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
         ? {
@@ -1729,6 +1752,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     reportSpeech(performance.now());
     profiler?.end();
   };
+  if (season) warmSeasonalPrograms();
   raf = requestAnimationFrame(frame);
 
   // A lost context (GPU reset, too many contexts, a backgrounded mobile tab) takes every GPU
@@ -1770,6 +1794,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
     programs = createPrograms(gl);
+    if (season) warmSeasonalPrograms();
     gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
     tileCache.resume();
     // `resize` rebuilds the theme resources and render targets.

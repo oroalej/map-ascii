@@ -54,6 +54,27 @@ const pack = (fixtures: Parameters<typeof packFixtures>[2], zoom = 20) =>
   packFixtures(new Uint8Array(40000), grid, fixtures, zoom, index, 0);
 
 describe('seasonal fixtures', () => {
+  it('skips hidden bunting preparation and invalidates eligibility while retaining lanterns', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+    );
+    b.place({ x: 2000, y: 2000 }, 'worship', 20);
+    const groups = [{ tile, life: b.finish(), fixtures: [lamp] }];
+    const cache = createSeasonalFixtureCache();
+    const hidden = cache(groups, season, 13.6, false);
+    expect(hidden.map((f) => f.kind)).toEqual(['season-lantern']);
+    expect(cache(groups, season, 13.6, false)).toBe(hidden);
+    const shown = cache(groups, season, 13.6, true);
+    expect(shown.some((f) => f.kind === 'season-bunting')).toBe(true);
+    expect(cache(groups, season, 13.6, true)).toBe(shown);
+    expect(cache(groups, season, 13.6, false).map((f) => f.kind)).toEqual(['season-lantern']);
+  });
   it('hangs pennants beside horizontal, vertical and diagonal utility cables without erasing them', () => {
     for (const end of [
       [80.5, 40.5],

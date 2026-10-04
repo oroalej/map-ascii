@@ -13,6 +13,7 @@ vi.mock('./tiles', async (importOriginal) => {
     request = vi.fn<(tile: TileId) => void>();
     want = vi.fn((wanted: readonly TileId[]) => wanted.forEach((t) => this.request(t)));
     destroy = vi.fn();
+    setFireworksActive = vi.fn();
     constructor(_url: string, handlers: TileSourceHandlers) {
       sources.push({ handlers, request: this.request });
     }
@@ -48,6 +49,25 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('backfills detailed tiles loaded before activation and remembers computed-empty sites', () => {
+    const { cache, source } = setup();
+    const tile = { z: 16, x: 55193, y: 30261 };
+    source.handlers.tile(tileKey(tile), geometry);
+    expect(cache.get(tile)?.residential).toBeUndefined();
+    expect(cache.residentialSitesFor(camera, size, false, [tile])).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([]);
+    expect(source.request).toHaveBeenCalledExactlyOnceWith(tile);
+    const sites = new Float64Array();
+    source.handlers.residential!(`residential/${tileKey(tile)}`, sites);
+    expect(cache.get(tile)?.residential).toBe(sites);
+    source.request.mockClear();
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([{ tile, sites }]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, false, [tile])).toEqual([]);
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([{ tile, sites }]);
+    expect(source.request).not.toHaveBeenCalled();
+  });
   it('retains decoded residential anchors separately from the GPU and Life data', () => {
     const { cache, source } = setup();
     const tile = { z: 16, x: 55193, y: 30261 };

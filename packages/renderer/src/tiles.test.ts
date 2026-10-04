@@ -189,7 +189,19 @@ it('sends pack capability and routes transferred coverage separately from drawab
       { header() {}, tile, residential, error() {} },
       true,
     );
-    expect(post).toHaveBeenCalledWith({ type: 'init', url: '/test.pmtiles', fireworks: true });
+    expect(post).toHaveBeenCalledWith({
+      type: 'init',
+      url: '/test.pmtiles',
+      fireworks: true,
+      fireworksActive: false,
+    });
+    source.setFireworksActive(true);
+    expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: true });
+    const count = post.mock.calls.length;
+    source.setFireworksActive(true);
+    expect(post).toHaveBeenCalledTimes(count);
+    source.setFireworksActive(false);
+    expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: false });
     source.want([{ z: 12, x: 2, y: 3 }], 'fireworks');
     expect(post).toHaveBeenLastCalledWith({
       type: 'residential',

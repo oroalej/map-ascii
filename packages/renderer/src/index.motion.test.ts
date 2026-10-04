@@ -34,7 +34,7 @@ import type * as GpuModule from './gpu';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { TileCache, type LoadedTile } from './tile-cache';
-import { LifeBuilder } from './life/geometry';
+import { LifeBuilder, LifeLine } from './life/geometry';
 import type { TileMesh } from './gpu';
 import { Readback } from './readback';
 import { SpeechController } from './life/speech';
@@ -51,6 +51,7 @@ const labelFixture = vi.hoisted(() => ({
   reply: undefined as ((result: PickResult) => void) | undefined,
   arrive: undefined as (() => void) | undefined,
   requests: vi.fn(),
+  residentialRequests: vi.fn(),
 }));
 
 vi.mock('./gpu-context', () => ({
@@ -105,6 +106,7 @@ vi.mock('./tile-cache', () => ({
       featureById: (id: string) => (labelFixture.enabled ? { id, class: 'landmark' } : undefined),
       pendingCount: 0,
       decodeMsAverage: 0,
+      setFireworksActive: vi.fn(),
     };
     size = labelFixture.enabled ? 1 : 0;
     constructor(_gl: unknown, _url: string, arrive: () => void) {
@@ -116,8 +118,19 @@ vi.mock('./tile-cache', () => ({
     regionTilesFor() {
       return labelFixture.enabled && labelFixture.region ? [{ z: 11, x: 1024, y: 1024 }] : [];
     }
-    residentialSitesFor() {
-      return [];
+    residentialSitesFor(
+      _camera: unknown,
+      _size: unknown,
+      active: boolean,
+      tiles: readonly { z: number }[] = [],
+    ) {
+      labelFixture.residentialRequests(active, tiles);
+      return active
+        ? tiles.flatMap((tile) => {
+            const loaded = this.get(tile);
+            return loaded?.residential ? [{ tile, sites: loaded.residential }] : [];
+          })
+        : [];
     }
     get(tile: { z: number }) {
       return labelFixture.enabled
@@ -297,9 +310,20 @@ describe('live motion preference', () => {
     });
     draw(100);
     expect(compile).not.toHaveBeenCalled();
+    expect(labelFixture.residentialRequests).toHaveBeenLastCalledWith(false, [
+      { z: 16, x: 32768, y: 32768 },
+    ]);
     atlas.setLife({ season: 'new-year' });
+    expect(vi.mocked(prewarmGlyphPrograms).mock.calls.at(-1)?.slice(3)).toEqual([
+      false,
+      false,
+      true,
+    ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
+    expect(labelFixture.residentialRequests).toHaveBeenLastCalledWith(true, [
+      { z: 16, x: 32768, y: 32768 },
+    ]);
     atlas.setCamera({ lng: 0.00001 });
     draw(300);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -315,6 +339,59 @@ describe('live motion preference', () => {
     atlas.setLife({ season: 'new-year' });
     draw(600);
     expect(compile).toHaveBeenCalledTimes(2);
+  });
+  it('prepares bunting as its fade becomes visible without a tile arrival', () => {
+    atlas.destroy();
+    labelFixture.enabled = true;
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+    );
+    b.place({ x: 2000, y: 2000 }, 'worship', 20);
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: b.finish(),
+    };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 17.5 },
+      year: 2026,
+      life: { season: 'feast' },
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'feast',
+            title: { en: 'Feast' },
+            status: 'draft',
+            note: 'TODO(verify)',
+            sources: [{ title: 'Test' }],
+            window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
+            bunting: { label: 'Rows', near: ['worship'], radius_m: 300, spacing_m: 30 },
+          },
+        ],
+      },
+    });
+    const hasBunting = () =>
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-bunting');
+    draw(100);
+    expect(hasBunting()).toBe(false);
+    atlas.setCamera({ zoom: 17.75 });
+    draw(200);
+    expect(hasBunting()).toBe(true);
+    atlas.setCamera({ zoom: 17.5 });
+    draw(300);
+    expect(hasBunting()).toBe(false);
   });
 
   it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
@@ -351,6 +428,8 @@ describe('live motion preference', () => {
       expect.anything(),
       expect.any(Function),
       true,
+      false,
+      false,
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());

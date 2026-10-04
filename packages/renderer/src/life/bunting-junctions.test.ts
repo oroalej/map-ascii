@@ -3,6 +3,7 @@ import { buntingWidth, selectBuntingRows } from './bunting-junctions';
 import { packSeasonalFixtures, type SeasonalFixture } from './seasonal';
 import type { FixtureGrid } from './fixtures';
 import { mapGlyphs, themes } from '../theme';
+import { project, unproject } from '../camera';
 
 type Point = [number, number];
 type Row = Extract<SeasonalFixture, { kind: 'season-bunting' }>;
@@ -34,6 +35,42 @@ const ids = (rows: readonly Row[], target = grid) =>
   [...selectBuntingRows(rows, target).keys()].map((r) => r.id);
 const horizontal = () => row('horizontal', [10, 40], [70, 40]);
 const vertical = () => row('vertical', [40, 10], [40, 70]);
+
+it('reuses spatial candidates across fractional zoom while checking actual near-junction clearance', () => {
+  const [px, py] = project(123.1863, 13.6248, 18);
+  const geo = ([x, y]: Point): Point => unproject(px + x * 5, py + y * 9, 18);
+  const rows = [row('a', [0, 0], [10, 0], 14.5), row('b', [10.97, 0.97], [10.97, 5], 10.5, 1)].map(
+    (r) => ({ ...r, from: geo(r.from), to: geo(r.to) }),
+  );
+  const base = vi.fn((lng: number, lat: number): Point => {
+    const [x, y] = project(lng, lat, 17.5);
+    return [x / 5, y / 9];
+  });
+  const at = (zoom: number): FixtureGrid => {
+    const toCell = (lng: number, lat: number): Point => {
+      const [x, y] = project(lng, lat, zoom);
+      return [x / 5, y / 9];
+    };
+    return {
+      ...grid,
+      toCell,
+      buntingProjection: {
+        scale: String(zoom),
+        toCell,
+        base: { key: '5/9', scale: 2 ** (zoom - 17.5), toCell: base },
+      },
+    };
+  };
+  expect(ids(rows, at(18.04))).toEqual(['a', 'b']);
+  expect(ids(rows, at(18.001))).toEqual(['a']);
+  expect(ids(rows, at(18.04))).toEqual(['a', 'b']);
+  expect(base).toHaveBeenCalledTimes(4);
+  for (const zoom of [17.5, 17.75, 18.001, 18.04, 19.8, 22]) {
+    const target = at(zoom);
+    expect(ids(rows, target)).toEqual(ids(rows, { ...target, buntingProjection: undefined }));
+  }
+  expect(base).toHaveBeenCalledTimes(4);
+});
 
 it('caches admission across pans, invalidates scale/input changes and retains only the latest scale', () => {
   const rows = [vertical(), horizontal()];

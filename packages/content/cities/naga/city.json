@@ -467,7 +467,7 @@
             "sources": [
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The annotated screenshot limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
               }
             ],
             "label": "Christmas lights and ornaments",
@@ -981,14 +981,14 @@
         "window": {
           "anchor": {
             "month": 9,
-            "weekday": 0,
+            "weekday": 6,
             "nth": 3,
-            "offset_days": 0
+            "offset_days": 1
           },
           "days_before": 9,
           "days_after": 0
         },
-        "note": "TODO(verify): The 2026 calendar supports September 11–20, covering the novena and feast day. Confirm the recurring annual rule and decoration/stall positions. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds. Dense red/yellow rectangular banderitas on selected Centro corridors were requested by the project owner on 2026-10-01 using a photograph and marked map references; 3 m rows and curb-to-curb spans are illustrative, not surveyed installations.",
+        "note": "TODO(verify): The Basilica's calendar explanation places the feast on the Sunday after September 15, represented here as the day after the third Saturday. The 2026 calendar supports September 11–20, covering the novena and feast day. Decoration/stall positions remain unverified. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds. Dense red/yellow rectangular banderitas on selected Centro corridors were requested by the project owner on 2026-10-01 using a photograph and marked map references; 3 m rows and curb-to-curb spans are illustrative, not surveyed installations.",
         "bunting": {
           "label": "Fiesta banners",
           "near": ["worship"],
@@ -1082,12 +1082,17 @@
           {
             "title": "Archdiocese of Caceres: 2026 religious events calendar",
             "url": "https://www.archdioceseofcaceres.org/caceresevents",
-            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions and annual recurrence remain unverified."
+            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified."
           },
           {
             "title": "Naga City Tourism: Peñafrancia Fiesta Major Civic and Religious Events Schedule for 2026",
             "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
             "note": "Supports the September 11 Traslación and September 19 fluvial procession, with civic and food events during the festivities."
+          },
+          {
+            "title": "Basilica Minore Bulletin: Fr. Juan Pablo Z. Carpio on the Peñafrancia feast calendar (2021)",
+            "url": "https://www.basilicaminorebulletin.com/2021/09/katekismo-corner-on-celebrating-feast.html",
+            "note": "Explains that the solemnity follows September 15 on a Sunday, between September 16 and 22, and that the preceding nine days form the novena. This supports the recurring feast rule, not decoration or stall positions."
           }
         ]
       }

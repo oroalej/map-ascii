@@ -79,6 +79,7 @@ import {
   type FixtureVisibility,
 } from './life/fixtures';
 import type { TileId } from './tiles';
+import { isSeasonalFixture } from './life/seasonal';
 
 const depths = classDepths();
 const grounds = groundFlags();
@@ -788,6 +789,14 @@ export function fixturePass(
         toCell: placement.toCell,
         buntingProjection: {
           scale: `${view.camera.zoom}/${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+          base: {
+            key: `${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+            scale: 2 ** (view.camera.zoom - 17.5),
+            toCell: (lng, lat) => {
+              const [x, y] = project(lng, lat, 17.5);
+              return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+            },
+          },
           toCell: (lng, lat) => {
             const [x, y] = project(lng, lat, view.camera.zoom);
             return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
@@ -821,12 +830,7 @@ export function fixturePass(
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
       fixtureScratch,
-      seasonal: fixtures.some(
-        (fixture) =>
-          fixture.kind === 'season-lantern' ||
-          fixture.kind === 'season-bunting' ||
-          fixture.kind === 'season-installation',
-      ),
+      seasonal: fixtures.some(isSeasonalFixture),
       viewport,
     };
     fixturesOf.set(targets, cache);

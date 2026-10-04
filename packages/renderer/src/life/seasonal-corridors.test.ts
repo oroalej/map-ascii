@@ -81,6 +81,31 @@ it('replaces sparse rows only along the trimmed segment, retaining ordinary rows
       expect(x < row.segment[0][0] || x > row.segment[1][0]).toBe(true);
     }
 });
+it('suppresses fallback from a buffered neighboring segment using its complete width envelope', () => {
+  const home = { ...make(), seasonal: [] };
+  const buffered: SeasonalRecord = {
+    ...row,
+    id: 'buffered',
+    segment: [point(-500, 2100), point(3500, 2100)],
+    from: point(2000, 1800),
+    to: point(2000, 2400),
+  };
+  const neighbor = {
+    tile: { ...tile, x: tile.x + 1 },
+    life: new LifeBuilder().finish(),
+    fixtures: [],
+    seasonal: [buffered],
+  };
+  const result = seasonalFixtures([home, neighbor], season, 13.6);
+  const sparse = result.filter((f) => f.kind === 'season-bunting' && !f.style);
+  expect(sparse.length).toBeGreaterThan(0);
+  for (const f of sparse)
+    if (f.kind === 'season-bunting') {
+      const center = lngLatToTile(tile, (f.from[0] + f.to[0]) / 2, (f.from[1] + f.to[1]) / 2);
+      expect(center.x).toBeGreaterThan(3500);
+    }
+  expect(result.some((f) => f.kind === 'season-bunting' && f.id === buffered.id)).toBe(true);
+});
 it('invalidates when the decoded corridor payload changes and keeps old archives working', () => {
   const group = make(),
     cache = createSeasonalFixtureCache();

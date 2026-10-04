@@ -4,7 +4,12 @@ import type { CityLifeConfig, ProcessionRoute, TrafficMix } from '@atlas/shared'
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
-import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
+import {
+  configureLifeWorld,
+  runLifeFrame,
+  type FrameInput,
+  type LifeWorkerApi,
+} from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
@@ -121,9 +126,11 @@ export function createWorkerHost(
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
-    world.setProcessions(processions);
-    world.setSeasons(seasons);
-    world.setShopSchedule(options.cityLife?.schedules?.shops);
+    configureLifeWorld(world, {
+      processions,
+      seasons,
+      shopSchedule: options.cityLife?.schedules?.shops,
+    });
     return createInlineHost(world, profiler);
   };
   try {

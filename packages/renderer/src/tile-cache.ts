@@ -59,6 +59,7 @@ export class TileCache {
     onChange: () => void,
     profiler?: FrameProfiler,
     fireworks = false,
+    fireworksActive = false,
   ) {
     this.meshes = this.createCache();
     this.source = new TileSource(
@@ -94,10 +95,13 @@ export class TileCache {
           if (this.suspended) return;
           this.failed.delete(key);
           this.residential.set(key, sites);
+          const loaded = this.meshes.get(key.slice('residential/'.length));
+          if (loaded) loaded.residential = sites;
           onChange();
         },
       },
       fireworks,
+      fireworksActive,
     );
   }
 
@@ -213,11 +217,15 @@ export class TileCache {
     camera: CameraState,
     size: Size,
     active: boolean,
+    drawnTiles: readonly TileId[] = [],
   ): { tile: TileId; sites: ResidentialSites }[] {
+    this.source.setFireworksActive(active);
     const out: { tile: TileId; sites: ResidentialSites }[] = [];
     const missing: TileId[] = [];
-    if (active && this.header && !this.suspended && camera.zoom < RESIDENTIAL_ZOOM)
-      for (const tile of residentialCoverageTiles(camera, size, this.header)) {
+    if (active && this.header && !this.suspended)
+      for (const tile of camera.zoom < RESIDENTIAL_ZOOM
+        ? residentialCoverageTiles(camera, size, this.header)
+        : drawnTiles) {
         const key = `residential/${tileKey(tile)}`;
         const sites = this.get(tile)?.residential ?? this.residential.get(key);
         if (sites) out.push({ tile, sites });
