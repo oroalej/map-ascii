@@ -1,7 +1,9 @@
 name: CI
 
-# PRs only: a run on main after merging would repeat what the PR already checked.
+# Main checks merged code and refreshes shared caches; browser tests run on PRs only.
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -13,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  # Jobs run in parallel and time out at 6 minutes, so a change that makes CI slow fails its
-  # PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
+  # Every job times out at 6 minutes; the e2e shards start once `check` passes, so a change
+  # that makes CI slow fails its PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -40,12 +42,32 @@ jobs:
 
       - run: pnpm test
 
+      # PR-scoped caches cannot be restored by other PRs. Refresh the shared browser cache
+      # on main without building the export, installing system dependencies, or running e2e.
+      - name: Playwright version
+        if: github.event_name == 'push'
+        id: playwright
+        run: echo "version=$(pnpm --filter @atlas/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers for PRs
+        if: github.event_name == 'push'
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers for PRs
+        if: github.event_name == 'push' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @atlas/web exec playwright install chromium
+
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
   # across two runners: each test renders WebGL in software on a single worker. It waits for
   # `check`, so a lint, typecheck or unit failure doesn't also spend two e2e runners.
   e2e:
     needs: check
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     strategy:

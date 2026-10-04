@@ -39,7 +39,7 @@ Read these before doing substantial work:
 
 ## Verifying changes
 
-Verification has three stages. Don't run a later stage's checks earlier, and never run the whole unit suite or the whole e2e suite locally: CI runs both on every push to a PR (lint, format, typecheck, every unit test, and the e2e smoke suite on desktop and, for tests tagged `@mobile`, a Pixel 7).
+Verification has three stages. Don't run a later stage's checks earlier, and never run the whole unit suite or the whole e2e suite locally: CI runs both on every push to a PR (lint, format, typecheck, every unit test, and the e2e smoke suite on desktop and, for tests tagged `@mobile`, a Pixel 7). Pushes to `main` rerun `check` and refresh shared pnpm and Playwright caches.
 
 **1. While working: targeted tests only.** After each step, run the tests that depend on the files you changed: `pnpm test:related <changed files>`. In your own worktree, `pnpm run test --changed` selects the same (use `pnpm run test`, not `pnpm test`, which can consume the flag). Don't typecheck, lint or build after each step. Content edits count: tests that read city-pack files declare them with `import.meta.glob`, so an edited `dialogue.json` or detail file selects its tests.
 
@@ -55,13 +55,13 @@ Verification has three stages. Don't run a later stage's checks earlier, and nev
 
 If one fails, fix it and rerun only that check.
 
-**3. CI** runs everything on each push to a PR (not again on `main` after merging). Report which checks ran locally and which were left to CI.
+**3. CI** runs everything on each push to a PR. Pushes to `main` run `check` (lint, format, typecheck, content validation, unit tests) and refresh shared caches; browser smoke tests and export budgets run on PRs only. Report which checks ran locally and which were left to CI.
 
 - **No screenshots or visual evidence.** Don't write capture scripts or browser harnesses, take screenshots, or collect evidence files. The owner reviews visual changes in `pnpm dev`; your report lists the URLs to open (`/<city>?lat=…&lng=…&zoom=…&year=…`).
 - **Perf harnesses** (`pnpm perf:*`) run only when the task is about performance. They take the whole machine (below).
 - **Keep tests fast; never raise a time limit.** Vitest runs files in parallel and each file serially, so the slowest file sets the suite's wall time. Split a slow file or make it cheaper. ESLint rejects a timeout argument in a test, and CI fails any test file over 30 s (`scripts/test-budget.ts`).
 - Keep e2e a small smoke suite: add a Playwright test only for what unit tests can't see (the static export boots, the map draws, a core flow works end to end). Logic goes in Vitest.
-- Keep CI fast: the e2e shards run in parallel once `check` (lint, format, typecheck, unit tests) passes, and every job times out at 6 minutes (`.github/workflows/ci.yml`). Feature work proves itself with unit tests, not pixel-level Playwright specs. Vitest runs in `node`; a test file opts into jsdom (`// @vitest-environment jsdom`) only when it needs the DOM.
+- Keep CI fast: on PRs, the e2e shards run in parallel once `check` (lint, format, typecheck, unit tests) passes; `main` runs `check` and shared-cache preparation only. Every job times out at 6 minutes (`.github/workflows/ci.yml`). Feature work proves itself with unit tests, not pixel-level Playwright specs. Vitest runs in `node`; a test file opts into jsdom (`// @vitest-environment jsdom`) only when it needs the DOM.
 - **This machine is shared by several sessions.** Locally Vitest uses at most 4 workers; don't pass `--maxWorkers`. Builds, e2e and perf runs wait for one of two machine-wide heavy slots (`scripts/heavy-slot.ts`; perf takes both) and print `waiting for a heavy slot`; let them wait.
 - Build preparation compares content hashes for runtime code, city packs, public assets, build configuration, dependencies, and build environment/toolchain inputs. Docs, tests, test configuration, and pipeline-only edits do not invalidate the export; regenerated public assets do. Missing or changed export files trigger rebuilding too. The fingerprint is saved only after a successful, stable build.
 - E2E checks export freshness before Playwright reuses an existing server (`reuseExistingServer`). When e2e is needed more than once, keep `pnpm --filter @atlas/web serve` running in the background (it serves on this checkout's port). `--list` and `--help` do not prepare an export.
