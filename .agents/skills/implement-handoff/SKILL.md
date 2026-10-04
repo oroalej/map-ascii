@@ -28,6 +28,8 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Codex #2: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
 | Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
 
+**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.1. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-pr` resolves its own `codex` and `claude`.
+
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$implement-handoff` again from a session with those settings.
 
 `<speed>` comes from the `--fast` option:
@@ -46,7 +48,13 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 ## 0. Resolve the handoff
 
-1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`.
+1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Resolve the newest installed Codex (PowerShell):
+
+   ```
+   pnpm.cmd -C <repo> --silent cli:latest codex
+   ```
+
+   `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`). Use `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`. Check `$LASTEXITCODE` immediately; if non-zero, stop and report. Set `<codex>` to the absolute path printed on stdout and retain it in session context, like `<scratch>` and `<speed>`. It prints `codex <version> <path>` on stderr; note the version for the report. Shell variables do not survive separate tool calls: replace `<codex>` with the resolved path in every later command, keeping its single quotes for paths containing spaces.
 2. Find the handoff:
    - **A path:** use it.
    - **A task name:** look for `<main-checkout>/.plans/{todo,paused,active}/<task>/handoff.md`.
@@ -67,7 +75,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 Run from `<wt>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is the absolute folder of this `SKILL.md`.
 
 ```
-codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <wt> -o <scratch>/handoff-review.md "Follow <skill-dir>/references/handoff-review-prompt.md exactly. Handoff: <task-dir>/handoff.md. Worktree: <wt>, branch <branch>. Main checkout: <main-checkout>."
+& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <wt> -o <scratch>/handoff-review.md "Follow <skill-dir>/references/handoff-review-prompt.md exactly. Handoff: <task-dir>/handoff.md. Worktree: <wt>, branch <branch>. Main checkout: <main-checkout>."
 ```
 
 - Never change the model, effort or speed flags, and never skip this run to review the handoff in this session instead.
@@ -111,7 +119,7 @@ For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SK
 Start it once, in a fresh Codex #2, with a shell timeout of at least 4 hours:
 
 ```
-codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <scratch>/review.md 'Use the review-pr skill at <skill-dir>/../review-pr/SKILL.md, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <scratch>/review.json.'
+& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <scratch>/review.md 'Use the review-pr skill at <skill-dir>/../review-pr/SKILL.md, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <scratch>/review.json.'
 ```
 
 Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`.
@@ -126,7 +134,7 @@ Report, following the handoff's "Report back" section, and add:
 - **Handoff review:** the verdict and every amendment, with the design amendments listed first.
 - **The PR URL**, and the `$review-pr` result: the main merge (`mainMerge`), review rounds (`roundCount` of 3), final status, the CI status, and anything it skipped or noticed.
 - Which checks ran locally, and which were left to CI.
-- The speed the Codex instances ran at (fast or normal).
+- The speed the Codex instances ran at (fast or normal), and the `codex` version from step 0.1.
 
 Then, per `AGENTS.md`:
 

@@ -30,6 +30,8 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
 | Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
 
+**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.5. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-pr` resolves its own `codex` and `claude`.
+
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$sync-review` again from a session with those settings.
 
 `<speed>` comes from the `--fast` option:
@@ -58,7 +60,13 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    - No worktree → `skipped: no worktree`. Never create one.
    - Checked out in the first entry (the main checkout) → `skipped: main checkout`.
 4. Create `<run>` = `$env:TEMP/sync-review-<yyyyMMdd-HHmmss>/`. It lives outside `.plans/` on purpose. `<main-checkout>` is the first worktree entry.
-5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, stop.
+5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, stop. Then resolve the newest installed Codex (PowerShell):
+
+   ```
+   pnpm.cmd -C <repo> --silent cli:latest codex
+   ```
+
+   `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`). Use `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`. Check `$LASTEXITCODE` immediately; if non-zero, stop and report. Set `<codex>` to the absolute path printed on stdout and retain it in session context, like `<run>` and `<speed>`. It prints `codex <version> <path>` on stderr; note the version for the report. Shell variables do not survive separate tool calls: replace `<codex>` with the resolved path in every later command, keeping its single quotes for paths containing spaces.
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
 
@@ -87,7 +95,7 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 `$review-pr` runs the review loop (up to 3 rounds, with stall detection) and the CI gate (up to 3 fix attempts) itself. Start it once, in a fresh Codex #2:
 
 ```
-codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-review.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <run>/<slug>-review.json.'
+& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-review.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <run>/<slug>-review.json.'
 ```
 
 - Shell timeout: at least 4 hours (three review rounds plus CI). Background-and-poll as needed.
@@ -122,4 +130,4 @@ After each branch, print one line:
 
 `<branch>: commit <sha|none> · main <mainMerge from the review result> · PR #N · review <roundCount> of 3 rounds, <status> · CI <ci.status> · <merged <sha>, cleanup <done|failed: what> | stopped: <reason>>`
 
-At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, held-back files, aborted merges with their conflicting files, cleanup failures, and errors. Leave `<run>` in the OS temp folder and print its path: Codex rejects recursive shell deletes as "blocked by policy".
+At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, held-back files, aborted merges with their conflicting files, cleanup failures, and errors. Print the `codex` version from step 0.5 under it. Leave `<run>` in the OS temp folder and print its path: Codex rejects recursive shell deletes as "blocked by policy".

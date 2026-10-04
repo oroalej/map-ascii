@@ -17,11 +17,13 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Codex #1: validates Claude's review (analysis only, every round) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 | This session: fixes, commits, pushes, CI fixes | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 
+**Binaries:** several copies of `codex` and `claude` can be installed, and an old `codex` rejects `gpt-6.1-sol`. Run only the newest installed copies, `<codex>` and `<claude>`, resolved in step 1.6. Never run a bare `codex` or `claude`, or any path other than the resolved `<codex>` or `<claude>`.
+
 ## Inputs (all optional)
 
 The PR is always the current branch's PR. No input selects a different one.
 
-- `--fast`: every Codex instance this skill starts runs in fast mode. Today that's Codex #1, in every round. Set `<speed>` once, and pass it to every `codex exec` this skill runs:
+- `--fast`: every Codex instance this skill starts runs in fast mode. Today that's Codex #1, in every round. Set `<speed>` once, and pass it to every `<codex> exec` this skill runs:
   - with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
   - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
@@ -43,7 +45,14 @@ The PR is always the current branch's PR. No input selects a different one.
 3. Find the checkout with this branch: `git worktree list`. Call it `<pr-checkout>`.
 4. The main checkout is the first entry of `git worktree list`. Create the review root `<main-checkout>/.plans/active/pr<N>-review-fixes/` if needed, then create a **new, unique invocation folder** beneath it (for example `run-<timestamp>-<uuid>/`). Set `<scratch>` to that fresh folder, refusing any already-existing invocation path. `.plans/` is gitignored. Put this invocation's baseline, rounds, rejected entries, logs and results there. Never reuse earlier round output or delete another invocation's files. Earlier runs remain available until `$merge-pr` cleans the review root.
 5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
-6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used.
+6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used. Then resolve the binaries (PowerShell; `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`). `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`):
+
+   ```
+   pnpm.cmd -C <repo> --silent cli:latest codex
+   pnpm.cmd -C <repo> --silent cli:latest claude
+   ```
+
+   Check `$LASTEXITCODE` immediately after each command. If either fails, stop with `error`. Set `<codex>` and `<claude>` to the absolute paths each prints on stdout, and retain them in session context, like `<scratch>` and `<speed>`. Each prints `<tool> <version> <path>` on stderr; note both versions for the report. Shell variables do not survive separate tool calls: replace these placeholders with the resolved paths in every later command, keeping the single quotes around them for paths containing spaces.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. This is the only place the review flows merge `main`; `$sync-review` and `$implement-handoff` rely on it. Work in `<pr-checkout>`.
    1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
    2. If the merge would touch a file listed in the baseline (another session's uncommitted edits), stop with `stopped` (`merge blocked by uncommitted <files>`) without merging.
@@ -70,7 +79,7 @@ Rounds start at k = 1. Each round has its own folder, `<scratch>/round<k>/`. Ref
 Run from `<pr-checkout>`, with a shell timeout of at least 20 minutes:
 
 ```
-claude -p "/review-pr <N>" --model claude-opus-5-5 --effort high --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 <scratch>/round<k>/claude-review.md
+& '<claude>' -p "/review-pr <N>" --model claude-opus-5-5 --effort high --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 <scratch>/round<k>/claude-review.md
 ```
 
 - Use exactly these flags. Never change the model or effort, or drop a flag.
@@ -83,7 +92,7 @@ claude -p "/review-pr <N>" --model claude-opus-5-5 --effort high --dangerously-s
 Run from `<pr-checkout>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is the absolute path of the folder holding this `SKILL.md` (`.agents/skills/review-pr/` in the checkout Codex loaded it from).
 
 ```
-codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <pr-checkout> -o <scratch>/round<k>/validation.md "Follow <skill-dir>/references/validate-prompt.md exactly. PR: #<N> (<url>), head <headRefOid>, base <baseRefName>. Claude's review: <scratch>/round<k>/claude-review.md."
+& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <pr-checkout> -o <scratch>/round<k>/validation.md "Follow <skill-dir>/references/validate-prompt.md exactly. PR: #<N> (<url>), head <headRefOid>, base <baseRefName>. Claude's review: <scratch>/round<k>/claude-review.md."
 ```
 
 - Never change the model, effort or speed flags, and never skip this run to validate in this session instead.
@@ -148,7 +157,7 @@ Report:
 - Anything under "Noticed, not in Claude's review", with its severity, for the user to decide on (not fixed). A noticed blocker or should-fix makes the status `stopped` (see `status` below)
 - The CI gate: reruns, fix attempts and fix commits, and the final check state
 - Which checks ran locally, and which were left to CI
-- The PR URL, the speed Codex #1 ran at (fast or normal), and the final status
+- The PR URL, the speed Codex #1 ran at (fast or normal), the `codex` and `claude` versions from step 1.6, and the final status
 
 End the report with a fenced block tagged `review-pr-result`, holding one JSON object:
 
@@ -158,6 +167,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "pr": 12,
   "headSha": "def5678",
   "fast": false,
+  "cli": { "codex": "0.159.3", "claude": "2.1.289" },
   "mainMerge": "current",
   "roundCount": 1,
   "rounds": [
@@ -191,6 +201,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
+- `cli`: the versions step 1.6 resolved (`null` for one not resolved).
 - `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted`, or `not-run` (stopped before step 1.7).
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
 - `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity.
