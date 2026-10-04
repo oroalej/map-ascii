@@ -5,7 +5,9 @@ import { worldTiles } from './testing/scenarios';
 import { LifeBuilder, LifeLine } from './geometry';
 import { frameBetween } from './frames';
 import { seamAhead, SEAMS } from './seams';
-import { activityLevels } from './config';
+import { activityLevels, FOLLOW } from './config';
+import { metersPerUnit } from '../raster/geometry';
+import { VEHICLES } from './vehicles';
 
 function fixture(entries: LifeTile[]) {
   const world = new LifeWorld({ road_major: { car: 1 } });
@@ -16,6 +18,72 @@ function fixture(entries: LifeTile[]) {
 }
 
 describe('runtime geographic seam handover', () => {
+  for (const accepted of [false, true])
+    it(`previews a seam beyond a split junction with ${accepted ? 'an accepted' : 'a refused'} destination`, () => {
+      const pm = 1 / metersPerUnit(left);
+      const junctionX = 4096 - pm;
+      const builder = new LifeBuilder();
+      builder.line(
+        [
+          { x: 3800, y: 2000 },
+          { x: junctionX, y: 2000 },
+          { x: 4200, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        6,
+        77,
+      );
+      builder.line(
+        [
+          { x: junctionX, y: 1000 },
+          { x: junctionX, y: 2000 },
+          { x: junctionX, y: 3000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+        88,
+      );
+      builder.splitRoadJunctions(pm, 40);
+      const entry = continuityTile(left);
+      entry.life = builder.finish();
+      const { world, lives } = fixture([
+        entry,
+        continuityTile(right, LifeLine.roadMajor, 77, 0, accepted ? 0 : -1),
+      ]);
+      for (const life of lives) {
+        life.parked.length = life.stalls.length = life.gatherers.length = 0;
+        life.scenes.sites.length = 0;
+      }
+      const source = lives[0]!,
+        target = lives[1]!;
+      const m = continuityMover(source, 4096 - 11 * pm);
+      Object.assign(m, { d: m.x - 3800, v: 10 * pm, next: 2 });
+      source.movers.push(m);
+      const before = structuredClone(m);
+      const preview = seamAhead(source, m, [], 20 * pm)!;
+      expect(preview.distance / pm).toBeCloseTo(11, 5);
+      expect(preview.preview.line).toBe(1);
+      expect(preview.preview.dir).toBe(1);
+      expect(preview.preview.from).toBe(source.geo.starts[1]);
+      expect(preview.preview.x).toBeGreaterThan(4096);
+      expect(m).toEqual(before);
+      if (!accepted) {
+        for (let frame = 0; frame < 60; frame++) world.step(1 / 30);
+        expect(source.movers).toContain(m);
+        expect(m.v! / pm).toBeLessThan(0.02);
+        expect((4096 - m.x) / pm).toBeGreaterThanOrEqual(
+          VEHICLES.car.length / 2 + FOLLOW.minGap - 1e-4,
+        );
+        target.geo.oneway![0] = 0;
+      }
+      for (let frame = 0; frame < 120 && source.movers.includes(m); frame++) world.step(1 / 30);
+      expect(target.movers).toContain(m);
+      expect(source.movers).not.toContain(m);
+      expect(lives.filter((life) => life.movers.includes(m))).toHaveLength(1);
+      expect(target.geo.lineIds![m.line]).toBe(77);
+      expect(m.dir).toBe(1);
+    });
+
   it('crosses an exactly clipped west endpoint and continues through successive owners', () => {
     const a = continuityTile(left),
       b = continuityTile(right),

@@ -64,50 +64,64 @@ export function outsideView(
   });
 }
 
-/** Deterministic possible entrances along the original route. No seed stream is consumed. */
+type Entrance = { line: number; distance: number; endpoint?: boolean };
+
+/** Deterministic entrances along the original population route. No seed stream is consumed. */
 export function entryDistances(
   life: TileLife,
   m: Mover,
   view: LifeViewContext,
   radius: number,
-): number[] {
+): Entrance[] {
   const r = viewRect(life, view, radius + 0.01),
     pm = life.perMeter;
-  const c = life.geo.coords,
-    start = life.geo.starts[m.line]!,
-    last = life.geo.starts[m.line + 1]! - 1;
-  const values: number[] = [];
-  let along = 0;
-  for (let v = start; v < last; v++) {
-    const ax = c[v * 2]! / pm,
-      ay = c[v * 2 + 1]! / pm;
-    const dx = c[v * 2 + 2]! / pm - ax,
-      dy = c[v * 2 + 3]! / pm - ay;
-    const length = Math.hypot(dx, dy);
-    const put = (t: number) => {
-      if (t < 0 || t > 1) return;
-      const x = ax + dx * t,
-        y = ay + dy * t;
-      if (x < r.x0 - 0.001 || x > r.x1 + 0.001 || y < r.y0 - 0.001 || y > r.y1 + 0.001) return;
-      if (((r.x0 + r.x1) / 2 - x) * dx * m.dir + ((r.y0 + r.y1) / 2 - y) * dy * m.dir <= 0) return;
-      values.push((along + t * length) * pm);
-    };
-    if (dx) {
-      put((r.x0 - ax) / dx);
-      put((r.x1 - ax) / dx);
+  const c = life.geo.coords;
+  const { first, end } =
+    m.kind === 'vehicle' ? life.populationRange(m.line) : { first: m.line, end: m.line + 1 };
+  const values: Entrance[] = [];
+  for (let line = first; line < end; line++) {
+    const start = life.geo.starts[line]!,
+      last = life.geo.starts[line + 1]! - 1;
+    let along = 0;
+    for (let v = start; v < last; v++) {
+      const ax = c[v * 2]! / pm,
+        ay = c[v * 2 + 1]! / pm;
+      const dx = c[v * 2 + 2]! / pm - ax,
+        dy = c[v * 2 + 3]! / pm - ay;
+      const length = Math.hypot(dx, dy);
+      const put = (t: number) => {
+        if (t < 0 || t > 1) return;
+        const x = ax + dx * t,
+          y = ay + dy * t;
+        if (x < r.x0 - 0.001 || x > r.x1 + 0.001 || y < r.y0 - 0.001 || y > r.y1 + 0.001) return;
+        if (((r.x0 + r.x1) / 2 - x) * dx * m.dir + ((r.y0 + r.y1) / 2 - y) * dy * m.dir <= 0)
+          return;
+        values.push({ line, distance: (along + t * length) * pm });
+      };
+      if (dx) {
+        put((r.x0 - ax) / dx);
+        put((r.x1 - ax) / dx);
+      }
+      if (dy) {
+        put((r.y0 - ay) / dy);
+        put((r.y1 - ay) / dy);
+      }
+      along += length;
     }
-    if (dy) {
-      put((r.y0 - ay) / dy);
-      put((r.y1 - ay) / dy);
-    }
-    along += length;
   }
   // Mapped route endpoints are valid entrances even when the viewport contains the whole tile.
-  values.push(
-    m.dir === 1
-      ? Math.min(along / 2, radius + 0.01) * pm
-      : Math.max(along / 2, along - radius - 0.01) * pm,
+  const length = life.populationLength(first, end);
+  const position = life.populationPiece(
+    first,
+    end,
+    Math.min(length / 2, (radius + 0.01) * pm),
+    m.dir,
   );
+  values.push({
+    line: position.line,
+    distance: m.dir === 1 ? position.distance : life.lineLength(position.line) - position.distance,
+    endpoint: true,
+  });
   return values;
 }
 
@@ -216,14 +230,13 @@ export function admitBirths(context: BirthContext, dt: number) {
       const distances = entryDistances(life, m, view, radius);
       const index = (seed.entrance ?? 0) % distances.length;
       seed.entrance = (seed.entrance ?? 0) + 1;
-      const distance = distances[index];
-      if (distance !== undefined) {
-        const placed = life.placeSeed(m, distance);
+      const entry = distances[index];
+      if (entry) {
+        const placed = life.placeSeed({ ...m, line: entry.line }, entry.distance);
         const full = placed ? life.birthBodies(placed) : [];
         // Vehicles enter connected road ends offscreen; other route endpoints stay explicit entrances.
         const endpoint =
-          index === distances.length - 1 &&
-          (m.kind !== 'vehicle' || !life.continuesRoad(m.line, m.dir === 1));
+          entry.endpoint && (m.kind !== 'vehicle' || !life.continuesRoad(entry.line, m.dir === 1));
         if (
           placed &&
           inTile(placed) &&

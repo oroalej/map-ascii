@@ -448,7 +448,10 @@ export class LifeBuilder {
     }
   }
 
-  /** Shared road vertices become endpoints so traffic can choose an exit at each junction. */
+  /**
+   * Shared road vertices become endpoints so traffic can choose an exit at each junction.
+   * Call splitSignalRoads first to initialize linked-member protection, even without local arms.
+   */
   splitRoadJunctions(perMeter: number, signalClearanceM: number) {
     const owners = new Map<number, number>();
     const starts = [...this.starts, this.coords.length / 2];

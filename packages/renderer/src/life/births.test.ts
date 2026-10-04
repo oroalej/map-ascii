@@ -136,6 +136,77 @@ function endpointAdmission(
   return { life, m, view };
 }
 
+for (const dir of [-1, 1] as const)
+  for (const accepted of [false, true])
+    it(`${accepted ? 'admits' : 'preserves a rejected seed on'} a wholly visible population piece in ${dir} flow`, () => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 1000, y: 2000 },
+          { x: 1800, y: 2000 },
+          { x: 2200, y: 2000 },
+          { x: 3000, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        6,
+        77,
+      );
+      for (const x of [1800, 2200])
+        b.line(
+          [
+            { x, y: 1000 },
+            { x, y: 2000 },
+            { x, y: 3000 },
+          ],
+          LifeLine.roadMinor,
+          6,
+          x,
+        );
+      b.splitRoadJunctions(1 / metersPerUnit(left), 40);
+      const life = new TileLife(left, b.finish(), 4);
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      for (let frame = 0; frame < 11; frame++) life.step(0.1);
+      life.birthCredit = 1;
+      const m = life.placeSeed(
+        { ...continuityMover(life, 2000, 'vehicle'), line: 1, dir, speed: 0, v: 0 },
+        200,
+      )!;
+      const before = structuredClone(m);
+      const view = context();
+      const guard = Object.assign(
+        vi.fn(() => accepted),
+        {
+          remove: () => {},
+          reserveSeam: () => {},
+        },
+      );
+      life.pending.push({ mover: m, at: 0 });
+      admitBirths(
+        {
+          view,
+          lives: [life],
+          credit: 4,
+          cursor: 0,
+          owns: () => true,
+          guard: () => guard,
+          boatRoom: () => true,
+        },
+        0.1,
+      );
+      expect(guard).toHaveBeenCalled();
+      if (accepted) {
+        expect(life.movers).toEqual([m]);
+        expect(life.pending).toHaveLength(0);
+        expect(m.line).toBe(dir === 1 ? 0 : 2);
+        expect(m.dir).toBe(dir);
+        expect(outsideView(life, life.birthBodies(m), view, 0)).toBe(true);
+      } else {
+        expect(life.movers).toHaveLength(0);
+        expect(life.pending[0]!.mover).toBe(m);
+        expect(m).toEqual(before);
+      }
+    });
+
 it('rejects in-view endpoint births at a same-way split and a different-way T-junction', () => {
   for (const kind of ['split', 'different-way'] as const) {
     const { life, m } = endpointAdmission(kind);

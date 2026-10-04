@@ -114,6 +114,32 @@ const clockFor = (life: TileLife, group: 'a' | 'b', color: 'green' | 'red' | 'am
   )!;
 
 describe('authoritative signal approaches', () => {
+  it('varies the first linked-route fallback across bicycle ranks deterministically', () => {
+    const route = (rank: number) => {
+      const { life, car } = fixture();
+      const m = car(0);
+      m.vehicle = 'bicycle';
+      m.rank = rank;
+      expect(m.next).toBeUndefined();
+      expect(m.routing?.plan).toBeUndefined();
+      // Isolate the fallback: ordinary traffic preparation preselects the connector.
+      (life as unknown as { prepareSignalRoute(m: Mover): void }).prepareSignalRoute(m);
+      const first = m.junctionRoute?.exits[0];
+      expect(first).toBeDefined();
+      const line = first! >> 1;
+      const dir = first! & 1 ? -1 : 1;
+      const flow = life.geo.oneway?.[line];
+      expect(!flow || flow === dir).toBe(true);
+      const from = dir === 1 ? life.geo.starts[line]! : life.geo.starts[line + 1]! - 1;
+      expect(
+        Math.hypot(life.geo.coords[from * 2]! - 1800, life.geo.coords[from * 2 + 1]! - 2000),
+      ).toBeLessThan(2);
+      return first!;
+    };
+    const exits = Array.from({ length: 12 }, (_, i) => route(i / 12));
+    expect(new Set(exits).size).toBe(2);
+    expect(route(5 / 12)).toBe(exits[5]);
+  });
   it('varies the final linked-signal exit per bicycle while retaining a forced connector', () => {
     const route = (rank: number) => {
       const { life, geo, p, q, car } = fixture();

@@ -180,6 +180,32 @@ describe('shared road junction splits', () => {
     expect(b.finish()).toEqual(before);
   });
 
+  for (const member of [false, true])
+    it(`splits just outside ${member ? 'linked-member' : 'controller'} protection`, () => {
+      const perMeter = 2;
+      const radius = 6;
+      const origin = member ? 400 : 0;
+      const boundary = (clearance + radius) * perMeter + 2;
+      for (const offset of [-1, 1]) {
+        const b = crossing(origin + boundary + offset, 0);
+        b.signal({ x: 0, y: 0 }, radius, 0, 90, true, {
+          members: member
+            ? [
+                [0, 0],
+                [origin, 0],
+              ]
+            : [[0, 0]],
+          arms: [],
+        });
+        b.splitSignalRoads(
+          ([x, y]) => ({ x, y }),
+          () => 0,
+        );
+        b.splitRoadJunctions(perMeter, clearance);
+        expect(b.finish().kinds).toHaveLength(offset < 0 ? 2 : 4);
+      }
+    });
+
   for (const x of [100.1, -511.9, 4608.1])
     it(`uses tile-unit rounding at buffered x=${x} without moving vertices`, () => {
       const b = new LifeBuilder();

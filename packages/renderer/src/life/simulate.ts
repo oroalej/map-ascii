@@ -203,11 +203,16 @@ export type WorldGroundGuard = ((
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
 };
+type SeamLimit = {
+  room: number;
+  crossing: boolean;
+  boundary?: Pick<Mover, 'line' | 'dir'>;
+};
 export type StepPass = {
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
   owns?: (p: { x: number; y: number }) => boolean;
-  seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
+  seams?: ReadonlyMap<Mover, SeamLimit>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
 };
 
@@ -802,7 +807,7 @@ export class TileLife {
     yield* this.spawnParked(random(seed ^ 0x9e3779b9));
     yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
     for (let line = 0; line < lines;) {
-      const end = this.populationEnd(line);
+      const { end } = this.populationRange(line);
       yield* this.spawnOn(line, false, end);
       line = end;
     }
@@ -869,16 +874,37 @@ export class TileLife {
     return this.along[this.last(line)]!;
   }
 
-  private populationEnd(line: number): number {
+  populationRange(line: number): { first: number; end: number } {
+    let first = line;
     let end = line + 1;
     const group = this.geo.spawnGroups?.[line];
+    while (group !== undefined && first > 0 && this.geo.spawnGroups![first - 1] === group) first--;
     while (
       group !== undefined &&
       end < this.geo.kinds.length &&
       this.geo.spawnGroups![end] === group
     )
       end++;
-    return end;
+    return { first, end };
+  }
+
+  /** Combined length of a population's contiguous routing pieces, in tile units. */
+  populationLength(first: number, end: number): number {
+    let length = 0;
+    for (let piece = first; piece < end; piece++) length += this.lineLength(piece);
+    return length;
+  }
+
+  /** Locate a distance measured from the chosen end of a population line. */
+  populationPiece(first: number, end: number, distance: number, dir: 1 | -1) {
+    let line = dir === 1 ? first : end - 1;
+    for (let count = 1; count < end - first; count++) {
+      const length = this.lineLength(line);
+      if (distance < length) break;
+      distance -= length;
+      line += dir;
+    }
+    return { line, distance };
   }
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
@@ -886,8 +912,7 @@ export class TileLife {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
-    let length = 0;
-    for (let piece = line; piece < endLine; piece++) length += this.lineLength(piece);
+    const length = this.populationLength(line, endLine);
     const meters = length / this.perMeter;
     if (!rules || meters === 0) return;
     const rng = dogs ? this.dogRng : this.rng;
@@ -946,17 +971,10 @@ export class TileLife {
         }
         if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
         // Routing splits keep the original population and random draws in their original order.
-        let distance = rng() * length;
-        let piece = dir === 1 ? line : endLine - 1;
-        for (let count = 1; count < endLine - line; count++) {
-          const size = this.lineLength(piece);
-          if (distance < size) break;
-          distance -= size;
-          piece += dir;
-        }
-        mover.line = piece;
-        mover.from = dir === 1 ? this.first(piece) : this.last(piece);
-        this.advance(mover, distance, false);
+        const position = this.populationPiece(line, endLine, rng() * length, dir);
+        mover.line = position.line;
+        mover.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+        this.advance(mover, position.distance, false);
         if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
@@ -1508,19 +1526,14 @@ export class TileLife {
     };
     const paints = VEHICLES.cart.paints;
     for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
-      end = this.populationEnd(line);
+      end = this.populationRange(line).end;
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
-      let length = 0;
-      for (let piece = line; piece < end; piece++) length += this.lineLength(piece);
+      const length = this.populationLength(line, end);
       if (!spacing || length === 0) continue;
       const point = (distance: number) => {
-        let piece = line;
-        while (piece < end - 1 && distance >= this.lineLength(piece)) {
-          distance -= this.lineLength(piece);
-          piece++;
-        }
-        return this.pointAt(piece, distance);
+        const position = this.populationPiece(line, end, distance, 1);
+        return this.pointAt(position.line, position.distance);
       };
       const middle = point(length / 2);
       const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
@@ -2097,29 +2110,69 @@ export class TileLife {
   }
 
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
-  private oneWayEndRoom(m: Mover): number | undefined {
+  private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
-    if (this.seamLimits?.get(m)?.crossing) return;
+    if (this.crossesSeamLine(m)) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
-    if (this.exitOptions(m, end).length) return;
+    if (
+      junctions
+        ? this.exitOptions(m, end).length
+        : this.populationContinuation(m, end) !== undefined
+    )
+      return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
     const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
     return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
   }
 
-  /** Initial settlement follows the original line without choosing a random junction exit. */
-  private continuePopulation(m: Mover): boolean {
+  /** A legal continuation on the original population line, without changing a cursor or RNG. */
+  private populationContinuation(m: Mover, end: number): number | undefined {
     const group = this.geo.spawnGroups?.[m.line];
     const line = m.line + m.dir;
-    if (group === undefined || this.geo.spawnGroups?.[line] !== group) return false;
+    if (group === undefined || this.geo.spawnGroups?.[line] !== group) return;
     const vertex = m.dir === 1 ? this.first(line) : this.last(line);
-    if (this.endKey(m.from) !== this.endKey(vertex)) return false;
-    if (!this.exitOptions(m, m.from).includes(line * 2 + (m.dir === 1 ? 0 : 1))) return false;
+    if (this.endKey(end) !== this.endKey(vertex)) return;
+    const code = line * 2 + (m.dir === 1 ? 0 : 1);
+    if (this.exitOptions(m, end).includes(code)) return code;
+  }
+
+  /** Initial settlement follows the original line without choosing a random junction exit. */
+  private continuePopulation(m: Mover): boolean {
+    const code = this.populationContinuation(m, m.from);
+    if (code === undefined) return false;
+    const line = code >> 1;
+    const vertex = code & 1 ? this.last(line) : this.first(line);
     m.line = line;
     m.from = vertex;
     m.next = undefined;
     if (m.routing) m.routing = { ...m.routing, plan: undefined };
     return true;
+  }
+
+  /** Read the committed next exit, or the only legal exit, without advancing a random stream. */
+  seamExit(m: Mover, line: number, dir: 1 | -1): number | undefined {
+    const end = dir === 1 ? this.last(line) : this.first(line);
+    const cursor = line === m.line && dir === m.dir ? m : { ...m, line, dir };
+    const exits = this.exitOptions(cursor, end);
+    const route = m.junctionRoute?.exits;
+    const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
+    const routeIndex = cursor === m ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
+    const reserved = routeIndex >= 0 ? route?.[routeIndex] : undefined;
+    const plan = m.routing?.plan;
+    const planned =
+      reserved ??
+      (cursor === m ? (plan?.line === line && plan.dir === dir ? plan.exit : m.next) : undefined);
+    if (planned !== undefined && exits.includes(planned)) return planned;
+    return exits.length === 1 ? exits[0] : undefined;
+  }
+
+  /** An accepted boundary belongs to its actual routing piece, rather than earlier junctions. */
+  private crossesSeamLine(m: Mover): boolean {
+    const seam = this.seamLimits?.get(m);
+    return (
+      !!seam?.crossing &&
+      (!seam.boundary || (seam.boundary.line === m.line && seam.boundary.dir === m.dir))
+    );
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
@@ -2131,7 +2184,7 @@ export class TileLife {
     for (let guard = 0; guard < 256 && left > 0; guard++) {
       // Also protects initial placement, oversized steps, and collision retries. Re-evaluate
       // after each junction in case this step enters a one-way line ending at a dead end.
-      const room = this.oneWayEndRoom(m);
+      const room = this.oneWayEndRoom(m, junctions);
       if (room !== undefined) left = Math.min(left, room);
       if (left <= 0) break;
       const to = m.from + m.dir;
@@ -2155,7 +2208,7 @@ export class TileLife {
       const atEnd = m.dir === 1 ? to === this.last(m.line) : to === this.first(m.line);
       if (atEnd) {
         // The clipped line end is a geographic seam, not a route choice.
-        if (this.seamLimits?.get(m)?.crossing) {
+        if (this.crossesSeamLine(m)) {
           m.from -= m.dir;
           m.d = length;
           break;
@@ -4747,7 +4800,7 @@ export class LifeWorld {
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
       env.inspecting,
     );
-    const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
+    const seamLimits = new Map<Mover, SeamLimit>();
     const intents: {
       source: TileLife;
       target: TileLife;
@@ -4816,7 +4869,7 @@ export class LifeWorld {
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
-          seamLimits.set(m, { room: Infinity, crossing: true });
+          seamLimits.set(m, { room: Infinity, crossing: true, boundary: seam.preview });
         } else
           seamLimits.set(m, {
             room: Math.max(0, seam.distance - (length / 2 + FOLLOW.minGap) * pm),

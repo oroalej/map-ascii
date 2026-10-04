@@ -171,6 +171,61 @@ describe('curved traffic', () => {
   });
 
   for (const dir of [-1, 1] as const)
+    it(`keeps the bus setback while settling at a different-road T in ${dir} flow`, () => {
+      const b = new LifeBuilder();
+      b.line(
+        dir === 1
+          ? [
+              { x: 1000, y: 2000 },
+              { x: 2000, y: 2000 },
+            ]
+          : [
+              { x: 2000, y: 2000 },
+              { x: 3000, y: 2000 },
+            ],
+        LifeLine.roadMid,
+        8,
+        77,
+        dir,
+      );
+      b.line(
+        [
+          { x: 2000, y: 1000 },
+          { x: 2000, y: 2000 },
+          { x: 2000, y: 3000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+        88,
+      );
+      b.splitRoadJunctions(pm, 40);
+      const life = new TileLife(tile, b.finish(), 7);
+      const { m } = corner(true);
+      Object.assign(m, {
+        vehicle: 'bus',
+        line: 0,
+        from: dir === 1 ? 0 : 1,
+        dir,
+        d: 1000 - 8 * pm,
+        x: 2000 - dir * 8 * pm,
+        y: 2000,
+        hx: dir,
+        hy: 0,
+      });
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.movers.push(m);
+      const setback = VEHICLES.bus.length / 2 + FOLLOW.minGap;
+      life.settleGround((owner) => {
+        expect(m.dir).toBe(dir);
+        return owner === m && ((2000 - m.x) * dir) / pm <= setback + 1e-6;
+      });
+      expect(life.movers).toEqual([m]);
+      expect(m.line).toBe(0);
+      expect(((2000 - m.x) * dir) / pm).toBeCloseTo(setback, 6);
+      expect(m.routing?.turns ?? 0).toBe(0);
+    });
+
+  for (const dir of [-1, 1] as const)
     for (const oneway of [false, true])
       it(`settles across an original-line split in ${dir} ${oneway ? 'one-way' : 'two-way'} flow`, () => {
         const b = new LifeBuilder();
