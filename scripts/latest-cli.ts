@@ -105,8 +105,8 @@ function candidates(tool: Tool): string[] {
     if (tool === 'codex')
       found.push(...codexVendorBinaries(path.join(path.dirname(hit), 'node_modules')));
   }
-  const npmRoot = lines('npm root -g')[0];
   if (tool === 'codex') {
+    const npmRoot = lines('npm root -g')[0];
     if (npmRoot) found.push(...codexVendorBinaries(npmRoot));
     const local = process.env.LOCALAPPDATA;
     if (local) {
@@ -146,6 +146,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.error(`no installed ${tool} answered --version`);
     process.exit(1);
   }
-  console.error(`${tool} ${latest.raw} ${latest.path}`);
+  const version =
+    latest.version.core.join('.') +
+    (latest.version.pre.length ? `-${latest.version.pre.join('.')}` : '');
+  console.error(`${tool} ${version} ${latest.path}`);
   console.log(latest.path);
 }
