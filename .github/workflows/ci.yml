@@ -15,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  # Every job times out at 6 minutes; the e2e shards start once `check` passes, so a change
-  # that makes CI slow fails its PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
+  # Every job times out at 6 minutes, so a change that makes CI slow fails its PR instead of
+  # quietly adding minutes (AGENTS.md "Verifying changes"). The e2e shards start once `check` passes.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -77,7 +77,7 @@ jobs:
       matrix:
         shard: [1, 2]
     env:
-      # Release assets download through the API with this token (authenticated rate limits).
+      # With this token, release assets download through the GitHub API (required for private repositories).
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
