@@ -149,7 +149,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   const latest = pickLatest(candidates(tool).flatMap((file) => probe(file) ?? []));
   if (!latest) {
-    console.error(`no installed ${tool} answered --version`);
+    console.error(`no installed native ${tool} executable answered --version`);
     process.exit(1);
   }
   const version =

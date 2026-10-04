@@ -101,6 +101,37 @@ describe('CLI output', () => {
     if (root) rmSync(root, { recursive: true, force: true });
   });
 
+  it('reports that a runnable native executable is required', async () => {
+    vi.mocked(spawnSync).mockReturnValue({
+      pid: 0,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      output: [null, '', ''],
+    });
+    const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stopped = new Error('CLI exited');
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw stopped;
+    });
+    const originalArgv = process.argv;
+    try {
+      vi.resetModules();
+      process.argv = [originalArgv[0]!, path.resolve('scripts/latest-cli.ts'), 'claude'];
+      await expect(import('./latest-cli')).rejects.toBe(stopped);
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(exit.mock.calls).toEqual([[1]]);
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr.mock.calls).toEqual([
+      ['no installed native claude executable answered --version'],
+    ]);
+  });
+
   it.each([
     ['codex', 'codex-cli 0.159.3', '0.159.3'],
     ['codex', 'codex-cli 0.155.0-alpha.9.2', '0.155.0-alpha.9.2'],
