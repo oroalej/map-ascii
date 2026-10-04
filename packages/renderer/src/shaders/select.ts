@@ -8,7 +8,14 @@
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
  */
-import { classId, Flags, Marking, MAX_CLASSES } from '../classes';
+import {
+  classId,
+  Flags,
+  Marking,
+  MAX_CLASSES,
+  PavingVariant,
+  pavingOverrideBase,
+} from '../classes';
 import { CellState, MAX_HIGHLIGHT } from '../picking';
 import {
   BUILDING_STEPS,
@@ -68,6 +75,7 @@ uniform bool u_shadows;
 uniform bool u_awnings;
 uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
+uniform bool u_pavingVisible;    // the cell pass can draw paving at the camera zoom
 uniform float u_cellAspect;       // cell height / width, for ridge directions
 uniform uint u_hover;             // feature index under the pointer (0 = none)
 uniform uint u_selected;          // selected feature index (0 = none)
@@ -182,6 +190,15 @@ bool isBuilding(int c) {
 }
 
 // CPU twin: glyphs/select.ts edgeForegroundWins.
+bool pavingOverride(int c, vec4 attr) {
+  return c == ${classId('paving')} && int(attr.b * 255.0 + 0.5) == ${PavingVariant.override};
+}
+bool belowPavingOverride(int c, vec4 attr) {
+  return !pavingOverride(c, attr) && (
+    ${pavingOverrideBase.map((cls) => `c == ${classId(cls)}`).join(' || ')} ||
+    (isBuilding(c) && attr.r == 0.0)
+  );
+}
 bool edgeForegroundWins(int c, vec4 attr, int fg, vec4 fgAttr) {
   bool crown = c == ${classId('tree_crown')};
   bool underCrown = fg == ${classId('tree_crown')};
@@ -189,6 +206,8 @@ bool edgeForegroundWins(int c, vec4 attr, int fg, vec4 fgAttr) {
   bool underRoof = isBuilding(fg) && fgAttr.r > 0.0;
   if (crown && (underRoof || underCrown)) return attr.r > fgAttr.r;
   if (underCrown && standing) return attr.r >= fgAttr.r;
+  if (pavingOverride(c, attr)) return belowPavingOverride(fg, fgAttr);
+  if (pavingOverride(fg, fgAttr)) return c != 0 && !belowPavingOverride(c, attr);
   return crown || (!underRoof && standing);
 }
 
@@ -200,15 +219,37 @@ int subClassAt(ivec2 q) {
 // false if the cell keeps its glyph. cls is the cell's class (0 for none), id its feature.
 bool subcellEdge(ivec2 p, int cls, vec4 id) {
   ivec2 base = p * ivec2(${SUB.cols}, ${SUB.rows});
+  vec4 centerAttr = texelFetch(u_attr, p, 0);
+  bool nonArea = cls != 0 && !isArea(cls);
+  bool centerBelowOverride = belowPavingOverride(cls, centerAttr);
+  // Non-area ground (terrain) participates only beside an opt-in paving surface.
+  // Keep its legacy edge behavior when no override reaches this cell.
+  if (nonArea && maskBit(u_roadMask, cls) == 0) {
+    if (!u_pavingVisible || !centerBelowOverride) return false;
+    bool adjacentOverride = false;
+    for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
+      ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
+      int c = subClassAt(q);
+      if (c == ${classId('paving')} && pavingOverride(c, texelFetch(u_subAttr, q, 0))) {
+        adjacentOverride = true;
+        break;
+      }
+    }
+    if (!adjacentOverride) return false;
+  }
   int fg = isArea(cls) ? cls : 0;
   vec4 fgId = id;
-  vec4 fgAttr = texelFetch(u_attr, p, 0);
+  vec4 fgAttr = centerAttr;
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
     ivec2 q = base + ivec2(i % ${SUB.cols}, i / ${SUB.cols});
     int c = subClassAt(q);
-    if (cls != 0 && !isArea(cls) && c != ${classId('tree_crown')}) continue;
+    if (!isArea(c)) continue;
+    if (nonArea && c != ${classId('tree_crown')} &&
+        (!centerBelowOverride || c != ${classId('paving')})) continue;
     vec4 sampleAttr = texelFetch(u_subAttr, q, 0);
-    if (isArea(c) && (fg == 0 || edgeForegroundWins(c, sampleAttr, fg, fgAttr))) {
+    if (nonArea && c != ${classId('tree_crown')} &&
+        !(centerBelowOverride && pavingOverride(c, sampleAttr))) continue;
+    if (fg == 0 || edgeForegroundWins(c, sampleAttr, fg, fgAttr)) {
       fg = c;
       fgId = texelFetch(u_subId, q, 0);
       fgAttr = sampleAttr;
@@ -361,7 +402,7 @@ void main() {
   int variant = int(attr.b * 255.0 + 0.5);
 
   // Test crown edges before road curbs and roof walls, including centers outside the crown.
-  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls)) && subcellEdge(p, cls, id)) return;
+  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls) || (u_pavingVisible && !isArea(cls) && belowPavingOverride(cls, attr))) && subcellEdge(p, cls, id)) return;
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {

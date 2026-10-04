@@ -1,8 +1,15 @@
-import { SiteDetail } from '@atlas/shared';
+import { Cemetery, SiteDetail } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import type { Polygon } from 'geojson';
+import {
+  detailSelectionOf,
+  finalizeDetailSelections,
+  mergeSiteDetails,
+  seatingFootprint,
+} from './site-detail';
+import { mergeCemeteries } from './cemeteries';
 
 const m = 111_320;
 const p = (x: number, y: number): [number, number] => [x / m, y / m];
@@ -41,6 +48,582 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  for (const origin of ['mapped', 'authored'] as const) {
+    it(`protects ${origin} court boundaries and holes while allowing contained markings`, () => {
+      const ring = (west: number, south: number, east: number, north: number) => [
+        p(west, south),
+        p(east, south),
+        p(east, north),
+        p(west, north),
+        p(west, south),
+      ];
+      const court = {
+        id: 'court',
+        ring: ring(10, 10, 30, 30),
+        holes: [ring(18, 18, 22, 22)],
+        height_m: 0.06,
+        material: 'pitch' as const,
+        overhead: false,
+      };
+      const mapped: AtlasFeature = {
+        ...parent,
+        properties: { id: 'osm:way/court', class: 'pitch' },
+        geometry: { type: 'Polygon', coordinates: [court.ring, ...court.holes] },
+      };
+      const run = (outline: ReturnType<typeof ring>, holes: ReturnType<typeof ring>[] = []) =>
+        mergeSiteDetails(origin === 'mapped' ? [parent, mapped] : [parent], [
+          {
+            ...detail,
+            walks: [],
+            seating: [],
+            lamps: [],
+            structures: [
+              ...(origin === 'authored' ? [court] : []),
+              {
+                id: 'paving',
+                ring: outline,
+                holes,
+                height_m: 0.08,
+                material: 'paving',
+                overhead: false,
+                ground_override: true,
+              },
+            ],
+          },
+        ]);
+      expect(() => run(ring(8, 12, 14, 16))).toThrow('crosses pitch');
+      expect(() => run(ring(8, 8, 32, 32))).toThrow('crosses pitch');
+      expect(() => run(ring(16, 16, 24, 24))).toThrow('crosses pitch');
+      expect(() => run(ring(12, 12, 14, 14))).not.toThrow();
+      expect(() => run(ring(16, 16, 24, 24), [ring(17.5, 17.5, 22.5, 22.5)])).not.toThrow();
+    });
+  }
+  it('checks roof wings against all final height overrides independent of pack order', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      properties: {
+        id: 'osm:way/2',
+        class: 'building_school',
+        height: 6,
+        landmark_id: 'landmark/roof',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)]],
+      },
+    };
+    const campus = { ...parent, properties: { ...parent.properties, id: 'osm:way/3' } };
+    const wing = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      selection_osm_id: building.properties.id,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'wing',
+          ring: [p(12, 12), p(30, 12), p(30, 20), p(12, 20), p(12, 12)],
+          height_m: 10,
+          material: 'roof',
+          overhead: true,
+          roof_shape: 'gabled',
+          roof_osm_id: building.properties.id,
+        },
+      ],
+    });
+    const override = SiteDetail.parse({
+      ...detail,
+      id: 'detail/other',
+      osm_id: campus.properties.id,
+      surface: 'keep',
+      walks: [],
+      seating: [],
+      lamps: [],
+      building_overrides: [{ osm_id: building.properties.id, height_m: 12 }],
+    });
+    for (const packs of [
+      [wing, override],
+      [override, wing],
+    ])
+      expect(() => mergeSiteDetails([parent, campus, building], packs)).toThrow('roof wing');
+    override.building_overrides[0]!.height_m = 9;
+    for (const packs of [
+      [wing, override],
+      [override, wing],
+    ]) {
+      const output = mergeSiteDetails([parent, campus, building], packs).features;
+      const selected = output.find((f) => f.properties.id === 'detail:test/structure-wing')!;
+      expect(JSON.parse(selected.properties.detail_selection!)).toMatchObject({
+        id: building.properties.id,
+        height: 9,
+      });
+    }
+    expect(building.properties.height).toBe(6);
+  });
+
+  it('finalizes every existing descriptor after cemetery names change', () => {
+    const cemeteryParent = {
+      ...parent,
+      properties: { ...parent.properties, class: 'grass' as const, kind: 'landuse=cemetery' },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'marker',
+          ring: [p(5, 5), p(7, 5), p(7, 7), p(5, 7), p(5, 5)],
+          material: 'stone',
+          overhead: false,
+          height_m: 1,
+        },
+      ],
+    });
+    const cemetery = Cemetery.parse({
+      id: 'cemetery/test',
+      osm_id: parent.properties.id,
+      title: 'Final cemetery name',
+      rows: [
+        {
+          id: 'one',
+          line: [p(20, 20), p(25, 20)],
+          count: 1,
+          kind: 'slab',
+          width_m: 1,
+          length_m: 2,
+          height_m: 0.2,
+        },
+      ],
+      status: 'draft',
+      credit: 'Survey',
+      sources: [{ title: 'Survey' }],
+    });
+    const output = mergeCemeteries(mergeSiteDetails([cemeteryParent], [pack]).features, [
+      cemetery,
+    ]).features;
+    finalizeDetailSelections(output);
+    const aliases = output.filter((f) => f.properties.detail_selection);
+    expect(aliases.length).toBeGreaterThan(1);
+    for (const alias of aliases)
+      expect(JSON.parse(alias.properties.detail_selection!)).toMatchObject({
+        id: parent.properties.id,
+        name: cemetery.title,
+      });
+  });
+
+  it('does not prepare distant standing footprints again for each site structure', () => {
+    const reads = (withPitch: boolean) => {
+      let count = 0;
+      const distant = Array.from({ length: 20 }, (_, i): AtlasFeature => {
+        const geometry: Polygon = {
+          type: 'Polygon',
+          coordinates: [
+            [
+              p(1000 + i * 10, 0),
+              p(1005 + i * 10, 0),
+              p(1005 + i * 10, 5),
+              p(1000 + i * 10, 5),
+              p(1000 + i * 10, 0),
+            ],
+          ],
+        };
+        const coordinates = geometry.coordinates;
+        Object.defineProperty(geometry, 'coordinates', {
+          get: () => {
+            count++;
+            return coordinates;
+          },
+        });
+        return {
+          ...parent,
+          geometry,
+          properties: { id: 'osm:way/distant-' + i, class: 'building', height: 6 },
+        };
+      });
+      const pack = SiteDetail.parse({
+        ...detail,
+        walks: [],
+        seating: [],
+        lamps: [],
+        structures: withPitch
+          ? [
+              {
+                id: 'court',
+                ring: [p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)],
+                material: 'pitch',
+                overhead: false,
+                height_m: 0.15,
+              },
+            ]
+          : [],
+      });
+      mergeSiteDetails([parent, ...distant], [pack]);
+      return count;
+    };
+    expect(reads(true)).toBe(reads(false));
+  });
+
+  it('builds shared selection metadata with optional fields and only finite positive heights', () => {
+    const bare = { id: 'osm:way/2', class: 'grass' as const };
+    for (const height of [undefined, 0, -1, Infinity, NaN])
+      expect(detailSelectionOf({ ...bare, height })).toEqual(bare);
+    expect(
+      detailSelectionOf({
+        ...bare,
+        name: 'Updated cemetery title',
+        landmark_id: 'landmark/cemetery',
+        subdivision: 'Ward',
+        subdivision_approx: true,
+        kind: 'landuse=cemetery',
+        height: 4,
+      }),
+    ).toEqual({
+      ...bare,
+      name: 'Updated cemetery title',
+      landmarkId: 'landmark/cemetery',
+      subdivision: 'Ward',
+      subdivisionApprox: true,
+      kind: 'landuse=cemetery',
+      height: 4,
+    });
+  });
+  it('accepts normalized paths with repeated vertices without losing endpoint caps', () => {
+    const path: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/path', class: 'path' },
+      geometry: { type: 'LineString', coordinates: [p(5, 5), p(5, 5), p(45, 5)] },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      parked_vehicles: [{ id: 'one', at: p(35, 35), bearing: 0, kind: 'car' }],
+    });
+    expect(() => mergeSiteDetails([parent, path], [pack])).not.toThrow();
+    const shape = seatingFootprint([p(5, 5), p(5, 5), p(45, 5)], 2);
+    expect(shape.coordinates.flat(3).every(Number.isFinite)).toBe(true);
+    expect(inside(p(4.5, 5), shape)).toBe(true);
+    expect(inside(p(45.5, 5), shape)).toBe(true);
+    expect(() =>
+      mergeSiteDetails(
+        [parent, path],
+        [{ ...pack, parked_vehicles: [{ ...pack.parked_vehicles[0]!, at: p(30, 5) }] }],
+      ),
+    ).toThrow('crosses');
+  });
+  it('rejects overriding paving that erases a mapped carriageway, including its full width', () => {
+    const road: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/road', class: 'road_minor', width: 6 },
+      geometry: { type: 'LineString', coordinates: [p(5, 40), p(45, 40)] },
+    };
+    const court = {
+      id: 'court',
+      ring: [p(10, 35), p(20, 35), p(20, 38), p(10, 38), p(10, 35)],
+      height_m: 0.15,
+      material: 'paving' as const,
+      overhead: false,
+      ground_override: true,
+    };
+    expect(() => mergeSiteDetails([parent, road], [{ ...detail, structures: [court] }])).toThrow(
+      'structure court: crosses osm:way/road',
+    );
+    expect(() =>
+      mergeSiteDetails(
+        [parent, road],
+        [{ ...detail, structures: [{ ...court, ground_override: false }] }],
+      ),
+    ).not.toThrow();
+  });
+  it('anchors riverside detail to a complete mapped bridge line without changing its road', () => {
+    const bridge: AtlasFeature = {
+      ...parent,
+      geometry: { type: 'LineString', coordinates: [p(5, 25), p(45, 25)] },
+      properties: { ...parent.properties, class: 'road_mid', width: 10 },
+      tippecanoe: { layer: 'roads', minzoom: 10, maxzoom: 16 },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      grounds: (parent.geometry as Polygon).coordinates[0],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'bank-wall',
+          ring: [p(5, 10), p(45, 10), p(45, 11), p(5, 11), p(5, 10)],
+          height_m: 3,
+          material: 'stone',
+          overhead: false,
+        },
+      ],
+    });
+    const original = structuredClone(bridge);
+    const result = mergeSiteDetails([bridge], [pack]);
+    expect(result.features.find((f) => f.properties.id === bridge.properties.id)).toEqual(original);
+    expect(bridge).toEqual(original);
+    const wall = result.features.find(
+      (f) => f.properties.id === 'detail:test/structure-bank-wall',
+    )!;
+    expect(wall.properties.detail_parent).toBe(bridge.properties.id);
+    expect(JSON.parse(wall.properties.detail_selection!)).toMatchObject({
+      id: bridge.properties.id,
+      class: 'road_mid',
+      name: 'Test plaza',
+    });
+    expect(() => mergeSiteDetails([bridge], [{ ...pack, grounds: undefined }])).toThrow(
+      'explicit grounds',
+    );
+    const concave = [
+      p(0, 0),
+      p(50, 0),
+      p(50, 50),
+      p(30, 50),
+      p(30, 20),
+      p(20, 20),
+      p(20, 50),
+      p(0, 50),
+      p(0, 0),
+    ];
+    expect(() => mergeSiteDetails([bridge], [{ ...pack, grounds: concave }])).toThrow(
+      'contain parent',
+    );
+    const bent: AtlasFeature = {
+      ...bridge,
+      geometry: {
+        type: 'LineString',
+        coordinates: [p(5, 25), p(25, 60), p(45, 25)],
+      },
+    };
+    expect(() => mergeSiteDetails([bent], [pack])).toThrow('contain parent');
+    // A centreline on the outline is contained, rather than needing a buffered road envelope.
+    const edge: AtlasFeature = {
+      ...bridge,
+      geometry: {
+        type: 'LineString',
+        coordinates: [p(0, 0), p(50, 0)],
+      },
+    };
+    expect(() => mergeSiteDetails([edge], [pack])).not.toThrow();
+  });
+
+  it('links a sourced pool to its site, blocks pedestrian routes and rejects mapped water duplicates', () => {
+    const pool = {
+      id: 'pool',
+      ring: [p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)],
+      material: 'water' as const,
+      height_m: 0.05,
+      overhead: false,
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      structures: [pool],
+      walks: [],
+      seating: [],
+      lamps: [],
+    });
+    const result = mergeSiteDetails([parent], [pack]).features;
+    const water = result.find((f) => f.properties.class === 'water_area')!;
+    expect(water.properties).toMatchObject({
+      kind: 'leisure=swimming_pool',
+      detail_parent: parent.properties.id,
+      detail_blocked: true,
+    });
+    const mappedWater: AtlasFeature = {
+      ...water,
+      properties: { id: 'osm:way/3', class: 'water_area' },
+    };
+    expect(() => mergeSiteDetails([parent, mappedWater], [pack])).toThrow('duplicates');
+    expect(() =>
+      mergeSiteDetails(
+        [parent],
+        [{ ...pack, walks: [{ id: 'crossing', line: [p(5, 15), p(25, 15)], width_m: 2 }] }],
+      ),
+    ).toThrow('crosses');
+    const roof: AtlasFeature = {
+      ...water,
+      properties: { id: 'osm:way/2', class: 'building', height: 6 },
+    };
+    expect(() => mergeSiteDetails([parent, roof], [pack])).toThrow('crosses');
+  });
+  it('applies sourced building height without mutating input and rejects missing or exterior targets', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)]],
+      },
+      properties: { id: 'osm:way/2', class: 'building_school', height: 6, variant: 'gabled' },
+    };
+    const pack = {
+      ...detail,
+      walks: [],
+      seating: [],
+      lamps: [],
+      building_overrides: [{ osm_id: building.properties.id, height_m: 9 }],
+    };
+    const original = structuredClone(building);
+    const changed = mergeSiteDetails([parent, building], [pack]).features.find(
+      (f) => f.properties.id === building.properties.id,
+    )!;
+    expect(changed).toEqual({ ...building, properties: { ...building.properties, height: 9 } });
+    expect(building).toEqual(original);
+    for (const input of [
+      [parent],
+      [parent, { ...building, properties: { ...building.properties, height: 0 } }],
+      [parent, { ...building, properties: { ...building.properties, class: 'grass' as const } }],
+      [
+        parent,
+        {
+          ...building,
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [[p(60, 60), p(70, 60), p(70, 70), p(60, 70), p(60, 60)]],
+          },
+        },
+      ],
+    ])
+      expect(() => mergeSiteDetails(input, [pack])).toThrow('standing building inside the site');
+  });
+  it('preserves a track infield and rejects exterior or intersecting holes', () => {
+    const ring = [p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)];
+    const hole = [p(20, 20), p(30, 20), p(30, 30), p(20, 30), p(20, 20)];
+    const pack = {
+      ...detail,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'track',
+          ring,
+          holes: [hole],
+          height_m: 0.15,
+          material: 'paving' as const,
+          overhead: false,
+          ground_override: true,
+        },
+      ],
+    };
+    const track = mergeSiteDetails([parent], [pack]).features.at(-1)!;
+    expect(track.geometry.type).toBe('Polygon');
+    expect(inside(p(25, 25), track.geometry as Polygon)).toBe(false);
+    expect(inside(p(15, 15), track.geometry as Polygon)).toBe(true);
+    for (const holes of [[hole, hole], [ring], [[p(0, 0), p(5, 0), p(5, 5), p(0, 5), p(0, 0)]]])
+      expect(() =>
+        mergeSiteDetails([parent], [{ ...pack, structures: [{ ...pack.structures[0]!, holes }] }]),
+      ).toThrow('interior');
+  });
+  it('renders mapped roof wings above an unchanged source footprint with canonical selection', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)]],
+      },
+      properties: { id: 'osm:way/2', class: 'building_market', height: 8 },
+    };
+    const wing = {
+      id: 'roof',
+      ring: [p(12, 12), p(38, 12), p(38, 20), p(12, 20), p(12, 12)],
+      height_m: 10,
+      material: 'roof' as const,
+      overhead: true,
+      roof_shape: 'gabled' as const,
+      roof_osm_id: 'osm:way/2',
+    };
+    const pack = {
+      ...detail,
+      surface: 'keep' as const,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [wing],
+      roof_overrides: [{ osm_id: 'osm:way/2', shape: 'flat' as const }],
+    };
+    const result = mergeSiteDetails([parent, building], [pack]).features;
+    expect(result.find((f) => f.properties.id === building.properties.id)).toEqual({
+      ...building,
+      properties: { ...building.properties, variant: 'flat' },
+    });
+    expect(building.properties.variant).toBeUndefined();
+    expect(
+      result.find((f) => f.properties.id === 'detail:test/structure-roof')!.properties,
+    ).toMatchObject({
+      class: 'building',
+      variant: 'gabled',
+      height: 10,
+      detail_overhead: true,
+      detail_parent: parent.properties.id,
+    });
+    for (const extra of [
+      { height_m: 8 },
+      { roof_osm_id: 'osm:way/3' },
+      { ring: [p(5, 5), p(15, 5), p(15, 15), p(5, 15), p(5, 5)] },
+    ])
+      expect(() =>
+        mergeSiteDetails([parent, building], [{ ...pack, structures: [{ ...wing, ...extra }] }]),
+      ).toThrow('roof wing');
+    expect(() =>
+      mergeSiteDetails(
+        [parent, building],
+        [{ ...pack, roof_overrides: [{ osm_id: parent.properties.id, shape: 'flat' }] }],
+      ),
+    ).toThrow('standing building');
+  });
+  it('keeps ordinary terraces and emits opt-in overriding paving with canonical selection', () => {
+    const pack = {
+      ...detail,
+      structures: [false, true].map((ground_override, i) => ({
+        id: `court-${i}`,
+        ring: [p(5, 35), p(15, 35), p(15, 40), p(5, 40), p(5, 35)],
+        height_m: 0.15,
+        material: 'paving' as const,
+        overhead: false,
+        ground_override,
+      })),
+    };
+    const parts = mergeSiteDetails([parent], [pack]).features.filter((f) =>
+      f.properties.id.startsWith('detail:test/structure-'),
+    );
+    expect(parts.map((f) => f.properties.variant)).toEqual(['terrace', 'terrace_override']);
+    expect(parts.map((f) => f.properties.detail_parent)).toEqual(['osm:way/1', 'osm:way/1']);
+  });
+  it('rejects a ground override enclosing a standing building, but permits an overhead canopy', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(8, 37), p(10, 37), p(10, 39), p(8, 39), p(8, 37)]],
+      },
+      properties: { id: 'osm:way/roof', class: 'building', height: 6 },
+    };
+    const court = {
+      id: 'court',
+      ring: [p(5, 35), p(15, 35), p(15, 40), p(5, 40), p(5, 35)],
+      height_m: 0.15,
+      material: 'paving' as const,
+      overhead: false,
+      ground_override: true,
+    };
+    expect(() =>
+      mergeSiteDetails([parent, building], [{ ...detail, structures: [court] }]),
+    ).toThrow('structure court: crosses osm:way/roof');
+    const { ground_override: _override, ...canopy } = court;
+    expect(() =>
+      mergeSiteDetails(
+        [parent, building],
+        [{ ...detail, structures: [{ ...canopy, material: 'roof', overhead: true }] }],
+      ),
+    ).not.toThrow();
+    // Legacy terraces retain their previous semantics.
+    expect(() =>
+      mergeSiteDetails([parent, building], [{ ...detail, structures: [canopy] }]),
+    ).not.toThrow();
+  });
   const flagpole: AtlasFeature = {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: p(-5, 5) },

@@ -1,0 +1,25 @@
+{
+  "id": "landmark/mother-seton-hospital",
+  "osm_id": "osm:relation/8412007",
+  "name": {
+    "en": "Mother Seton Hospital"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/relation/8412007",
+      "note": "Mapped footprint matched to the owner-requested site."
+    },
+    {
+      "title": "City of Naga emergency directory",
+      "url": "https://www2.naga.gov.ph/emergency-hotline/",
+      "note": "Confirms USI Mother Seton Hospital on Roxas Avenue. The standing OSM courtyard relation anchors the requested grounds; the separate northern circular building and courtyard footprints remain. The northwestern envelope stops clear of the separately mapped Jose Rizal Elementary campus."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference identifies the site and guides restrained outdoor detail."
+    }
+  ]
+}

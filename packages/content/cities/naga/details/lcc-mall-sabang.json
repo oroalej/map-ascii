@@ -1,0 +1,104 @@
+{
+  "id": "detail/lcc-mall-sabang",
+  "osm_id": "osm:way/23665048",
+  "title": "LCC Mall Sabang",
+  "surface": "keep",
+  "grounds": [
+    [123.17977039, 13.617683529],
+    [123.178999161, 13.6177714],
+    [123.179667836, 13.619886939],
+    [123.179781949, 13.620198612],
+    [123.180426964, 13.61998115],
+    [123.180387313, 13.619676019],
+    [123.179866543, 13.617972508],
+    [123.17977039, 13.617683529]
+  ],
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.179312693, 13.618202666],
+        [123.179329082, 13.618185583],
+        [123.179302132, 13.618161162],
+        [123.179230183, 13.617950884],
+        [123.179207379, 13.617958254],
+        [123.179281261, 13.618174183],
+        [123.179312693, 13.618202666]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-1-1",
+      "ring": [
+        [123.180328849, 13.619852329],
+        [123.180310922, 13.619799934],
+        [123.180288118, 13.619807304],
+        [123.180306045, 13.619859699],
+        [123.180328849, 13.619852329]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-2-1",
+      "ring": [
+        [123.180287829, 13.620021147],
+        [123.180323003, 13.619960311],
+        [123.180302052, 13.619948869],
+        [123.180266878, 13.620009705],
+        [123.180287829, 13.620021147]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.179218781, 13.617954569],
+        [123.179291696, 13.618167672],
+        [123.179320888, 13.618194124]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-1",
+      "line": [
+        [123.18029952, 13.619803619],
+        [123.180317447, 13.619856014]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-2",
+      "line": [
+        [123.180312527, 13.61995459],
+        [123.180277353, 13.620015426]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: LCC Mall Naga",
+      "url": "https://www.openstreetmap.org/way/23665048",
+      "note": "ODbL. Original source identity, standing roof footprints, access routes and mapped parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied LCC, Queborac Terminal and Bible Church references",
+      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated draft estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

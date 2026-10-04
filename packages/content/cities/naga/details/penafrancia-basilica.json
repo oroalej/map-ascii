@@ -1,0 +1,186 @@
+{
+  "id": "detail/penafrancia-basilica",
+  "osm_id": "osm:way/838935827",
+  "title": "Peñafrancia Basilica grounds",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "pilgrim-forecourt-0",
+      "ring": [
+        [123.19961814, 13.63234218],
+        [123.1998099, 13.63240259],
+        [123.19995037, 13.63245209],
+        [123.19997199, 13.63251312],
+        [123.19970979, 13.63260086],
+        [123.19961814, 13.63234218]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "pilgrim-forecourt-1",
+      "ring": [
+        [123.19968858, 13.63230394],
+        [123.19970525, 13.63229836],
+        [123.19992278, 13.63237425],
+        [123.19992561, 13.63238221],
+        [123.19982958, 13.63234838],
+        [123.19982851, 13.6323484],
+        [123.19982862, 13.63234805],
+        [123.19968858, 13.63230394]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1203053275-0",
+      "ring": [
+        [123.199682807, 13.632715565],
+        [123.199682057, 13.632720772],
+        [123.199683572, 13.63272614],
+        [123.199703256, 13.632731414],
+        [123.19970625, 13.632728967],
+        [123.199708482, 13.632725661],
+        [123.199822191, 13.632408836],
+        [123.19979596, 13.632400091],
+        [123.199682807, 13.632715565]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1203053276-0",
+      "ring": [
+        [123.199774772, 13.632844959],
+        [123.199769447, 13.632844028],
+        [123.199764161, 13.632845147],
+        [123.199759719, 13.632848147],
+        [123.199756796, 13.632852571],
+        [123.199755879, 13.632856424],
+        [123.199756507, 13.632861646],
+        [123.199759144, 13.632866237],
+        [123.199763388, 13.632869497],
+        [123.200113176, 13.633003165],
+        [123.20012014, 13.632976869],
+        [123.199774772, 13.632844959]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1203053277-0",
+      "ring": [
+        [123.199499794, 13.633201565],
+        [123.199499776, 13.633205519],
+        [123.199501577, 13.633210477],
+        [123.199505192, 13.633214388],
+        [123.199510073, 13.633216656],
+        [123.199515475, 13.633216937],
+        [123.199519374, 13.633215806],
+        [123.199523733, 13.633212692],
+        [123.199526008, 13.633209414],
+        [123.199637234, 13.632911595],
+        [123.199637924, 13.632905081],
+        [123.199635476, 13.632899172],
+        [123.199618639, 13.63289467],
+        [123.199614933, 13.632896977],
+        [123.199611692, 13.632901186],
+        [123.199499794, 13.633201565]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1203053278-0",
+      "ring": [
+        [123.199566229, 13.632791976],
+        [123.199571623, 13.63279158],
+        [123.199577479, 13.632788342],
+        [123.199579355, 13.632786178],
+        [123.199581732, 13.632777813],
+        [123.1995796, 13.63277137],
+        [123.199576937, 13.63276838],
+        [123.199573495, 13.632766271],
+        [123.199238644, 13.632659375],
+        [123.19922968, 13.632684879],
+        [123.199566229, 13.632791976]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "pilgrim-axis",
+      "line": [
+        [123.19982047, 13.63240313],
+        [123.19986669, 13.63256482]
+      ],
+      "width_m": 2
+    }
+  ],
+  "seating": [
+    {
+      "id": "west-court",
+      "line": [
+        [123.19964148, 13.63246434],
+        [123.19968518, 13.63244971]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    },
+    {
+      "id": "east-court",
+      "line": [
+        [123.19990954, 13.63249129],
+        [123.19995324, 13.63247666]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Peñafrancia Basilica grounds — Belfry reference: © Carlo Joseph Moskito, 2016 (https://commons.wikimedia.org/wiki/User:Carlojoseph14), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); substantially schematic adaptation. Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.; facade reference: Dominic McArthur, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/838935827",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Belfry_of_Pe%C3%B1afrancia_Basilica,_Naga_City.jpg",
+      "note": "Commons belfry record is retained for tower research; facade appearance comes from the independent Dominic McArthur photograph. Crossing and facade parts remain schematic estimates. Forecourt fitted to Basilica Loop; grounds extent is estimated in OSM. Centennial Globe already mapped, not duplicated. Architectural positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The separate landcover pack now uses owner-supplied Google Maps overhead and Street View vegetation references, imagery/capture dates unknown. No timeline dates are inferred."
+    },
+    {
+      "title": "Dominic McArthur: Peñafrancia Basilica Minore, 2014",
+      "url": "https://commons.wikimedia.org/wiki/File:Pe%C3%B1afrancia_Basilica_Minore.jpg",
+      "note": "CC BY-SA 3.0. Independent facade photograph inspected for bell-tower, lawn, planting, trees and paving appearance; coordinates remain schematic OSM-based estimates."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
+    },
+    {
+      "title": "Owner correction: palm rows and approaches",
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Existing cross footways have explicit three-metre paving; roads, standing roofs and canonical Basilica selection stay intact."
+    }
+  ],
+  "selection_osm_id": "osm:way/23670362"
+}

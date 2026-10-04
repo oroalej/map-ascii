@@ -1,0 +1,77 @@
+{
+  "id": "landcover/bicol-central-station",
+  "title": "Bicol Central Station planting",
+  "trees": [
+    {
+      "at": [123.190484605, 13.619210176],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.19045738, 13.619094606],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.190449398, 13.618914506],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.190347544, 13.618749426],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.190224167, 13.618678869],
+      "crown_m": 6,
+      "height_m": 5
+    },
+    {
+      "at": [123.189922341, 13.618698276],
+      "crown_m": 6,
+      "height_m": 5
+    },
+    {
+      "at": [123.189404099, 13.618846667],
+      "crown_m": 6,
+      "height_m": 5
+    },
+    {
+      "at": [123.189220452, 13.618970154],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.189084067, 13.619038828],
+      "crown_m": 6,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.190414707, 13.61923191],
+        [123.190533102, 13.619198221],
+        [123.190408054, 13.618728324],
+        [123.190320459, 13.618741415],
+        [123.190414707, 13.61923191]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Bicol Central Station - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/293702439",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ]
+}

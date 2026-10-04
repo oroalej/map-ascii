@@ -1,0 +1,123 @@
+{
+  "id": "detail/naga-city-public-cemetery",
+  "osm_id": "osm:way/179078354",
+  "title": "Naga City Public Cemetery",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "north-aisle",
+      "ring": [
+        [123.20594243, 13.620767534],
+        [123.205944276, 13.620766593],
+        [123.205945896, 13.620765321],
+        [123.205947231, 13.620763765],
+        [123.205948227, 13.620761986],
+        [123.205948847, 13.620760053],
+        [123.205949067, 13.620758039],
+        [123.205948879, 13.620756022],
+        [123.205948289, 13.62075408],
+        [123.205947321, 13.620752287],
+        [123.205946012, 13.620750711],
+        [123.205944411, 13.620749415],
+        [123.205942581, 13.620748446],
+        [123.205940592, 13.620747844],
+        [123.205938519, 13.62074763],
+        [123.203978243, 13.620733023],
+        [123.203976168, 13.620733206],
+        [123.20397417, 13.620733779],
+        [123.203972324, 13.62073472],
+        [123.203970704, 13.620735992],
+        [123.203969369, 13.620737548],
+        [123.203968373, 13.620739327],
+        [123.203967753, 13.62074126],
+        [123.203967533, 13.620743274],
+        [123.203967721, 13.620745291],
+        [123.203968311, 13.620747233],
+        [123.203969279, 13.620749026],
+        [123.203970588, 13.620750602],
+        [123.203972189, 13.620751898],
+        [123.203974019, 13.620752867],
+        [123.203976008, 13.620753469],
+        [123.203978081, 13.620753683],
+        [123.205938357, 13.62076829],
+        [123.205940432, 13.620768107],
+        [123.20594243, 13.620767534]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "central-aisle",
+      "ring": [
+        [123.205201361, 13.620618106],
+        [123.205387072, 13.620995336],
+        [123.205408494, 13.620997223],
+        [123.205216886, 13.620608013],
+        [123.205215997, 13.620606572],
+        [123.205214848, 13.620605317],
+        [123.205213478, 13.620604292],
+        [123.20471376, 13.620298021],
+        [123.204204413, 13.619826578],
+        [123.204192978, 13.619840804],
+        [123.204701678, 13.620311648],
+        [123.204703122, 13.620312741],
+        [123.205201361, 13.620618106]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "south-aisle",
+      "ring": [
+        [123.205833241, 13.61991924],
+        [123.205834962, 13.619919253],
+        [123.205836653, 13.619918939],
+        [123.205838248, 13.619918311],
+        [123.205839687, 13.619917392],
+        [123.205840913, 13.619916218],
+        [123.20584188, 13.619914834],
+        [123.205842551, 13.619913293],
+        [123.2058429, 13.619911655],
+        [123.205842913, 13.619909982],
+        [123.20584259, 13.619908339],
+        [123.205841943, 13.619906788],
+        [123.205840998, 13.61990539],
+        [123.20583979, 13.619904198],
+        [123.205838366, 13.619903258],
+        [123.205836781, 13.619902607],
+        [123.205065183, 13.619668895],
+        [123.20506363, 13.619668571],
+        [123.205062044, 13.619668523],
+        [123.204384564, 13.619708068],
+        [123.204299727, 13.619730119],
+        [123.205061492, 13.619685654],
+        [123.205831555, 13.619918901],
+        [123.205833241, 13.61991924]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Naga City Public Cemetery — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/179078354",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "Undated owner reference, inspected 2026-10-02. Draft plan-view translation; positions, sizes and heights are estimates. Preserve mapped identities and standing footprints. Temporary vehicles, wires, signage and other background clutter omitted; no species or historical dates inferred. Representative burial blocks and access aisles, not individual grave records or a measured burial inventory. The northern named area and the southern unnamed OSM relation remain distinct; no shared ownership is asserted."
+    }
+  ]
+}

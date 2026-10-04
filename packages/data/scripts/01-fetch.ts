@@ -99,7 +99,17 @@ export const trafficQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bb
 out body;`;
 export const neighborhoodQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
 (nwr["shop"]; nwr["amenity"~"^(restaurant|fast_food|cafe|bar|pub|food_court|ice_cream|pharmacy|bank|clinic|dentist|internet_cafe)$"];
-nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"];);
+nwr["craft"]; nwr["natural"~"^(scrub|heath)$"]; nwr["landuse"~"^(orchard|plant_nursery|cemetery)$"]; nwr["amenity"="grave_yard"];);
+out body; >; out skel qt;`;
+
+/** Outdoor recreation grounds, separately queried to retain all existing download caches. */
+export const groundsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+nwr["landuse"="recreation_ground"];
+out body; >; out skel qt;`;
+
+/** Pools are not necessarily tagged natural=water; keep the existing detail caches valid. */
+export const poolsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+nwr["leisure"="swimming_pool"];
 out body; >; out skel qt;`;
 
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
@@ -243,6 +253,20 @@ export const step: Step = {
       cache,
     );
     console.log(`  neighborhood: ${neighborhood.elements.length} elements`);
+
+    const grounds = await overpass(
+      groundsQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailGrounds),
+      cache,
+    );
+    console.log(`  recreation grounds: ${grounds.elements.length} elements`);
+
+    const pools = await overpass(
+      poolsQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailPools),
+      cache,
+    );
+    console.log(`  swimming pools: ${pools.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

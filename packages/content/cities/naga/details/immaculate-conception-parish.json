@@ -1,0 +1,272 @@
+{
+  "id": "detail/immaculate-conception-parish",
+  "osm_id": "osm:way/605107791",
+  "title": "Our Lady of the Immaculate Conception Parish Church",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.201174687, 13.621267037],
+        [123.201174687, 13.621225699],
+        [123.201150655, 13.621225699],
+        [123.201150655, 13.621267037],
+        [123.201174687, 13.621267037]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.201174687, 13.621394754],
+        [123.201174687, 13.621310123],
+        [123.201150655, 13.621310123],
+        [123.201150655, 13.621394754],
+        [123.201174687, 13.621394754]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-3-1",
+      "ring": [
+        [123.20121839, 13.621494114],
+        [123.201220669, 13.621470863],
+        [123.201174687, 13.621466607],
+        [123.201174687, 13.621433934],
+        [123.201150655, 13.621433934],
+        [123.201150655, 13.621487844],
+        [123.20121839, 13.621494114]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-4-1",
+      "ring": [
+        [123.201368016, 13.621508549],
+        [123.201371415, 13.621485428],
+        [123.201358196, 13.621483593],
+        [123.201230253, 13.62147175],
+        [123.201227975, 13.621495001],
+        [123.201355355, 13.621506791],
+        [123.201368016, 13.621508549]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-5-1",
+      "ring": [
+        [123.201487878, 13.621501598],
+        [123.201428218, 13.621493314],
+        [123.20142482, 13.621516436],
+        [123.201484479, 13.621524719],
+        [123.201487878, 13.621501598]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-1-1",
+      "ring": [
+        [123.201618355, 13.621307343],
+        [123.201618355, 13.621196953],
+        [123.201594323, 13.621196953],
+        [123.201594323, 13.621307343],
+        [123.201618355, 13.621307343]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-2-1",
+      "ring": [
+        [123.201479339, 13.621503557],
+        [123.201493018, 13.62152276],
+        [123.201618355, 13.621438429],
+        [123.201618355, 13.62136921],
+        [123.201594323, 13.62136921],
+        [123.201594323, 13.621426191],
+        [123.201479339, 13.621503557]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.201542898, 13.621147481],
+        [123.201563299, 13.621145278],
+        [123.201560645, 13.621122065],
+        [123.201540376, 13.621124254],
+        [123.201260305, 13.621151473],
+        [123.20115622, 13.621215846],
+        [123.201169122, 13.621235551],
+        [123.201268384, 13.621174161],
+        [123.201542898, 13.621147481]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-2-1",
+      "ring": [
+        [123.201786286, 13.621097699],
+        [123.201732309, 13.621103528],
+        [123.201734963, 13.621126741],
+        [123.20178894, 13.621120912],
+        [123.201786286, 13.621097699]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-3-1",
+      "ring": [
+        [123.201873061, 13.621088328],
+        [123.201807645, 13.621095393],
+        [123.201810299, 13.621118606],
+        [123.201875715, 13.621111542],
+        [123.201873061, 13.621088328]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.201162671, 13.621225699],
+        [123.201162671, 13.621267037]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.201162671, 13.621310123],
+        [123.201162671, 13.621394754]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-3",
+      "line": [
+        [123.201162671, 13.621433934],
+        [123.201162671, 13.621477226],
+        [123.20121953, 13.621482489]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-4",
+      "line": [
+        [123.201229114, 13.621483376],
+        [123.201356775, 13.621495192],
+        [123.201369716, 13.621496989]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-5",
+      "line": [
+        [123.201426519, 13.621504875],
+        [123.201486179, 13.621513158]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-1",
+      "line": [
+        [123.201606339, 13.621196953],
+        [123.201606339, 13.621307343]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-2",
+      "line": [
+        [123.201606339, 13.62136921],
+        [123.201606339, 13.62143231],
+        [123.201486179, 13.621513158]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.201162671, 13.621225699],
+        [123.201264345, 13.621162817],
+        [123.201541637, 13.621135868],
+        [123.201561972, 13.621133672]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-2",
+      "line": [
+        [123.201733636, 13.621115134],
+        [123.201787613, 13.621109306]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-3",
+      "line": [
+        [123.201808972, 13.621106999],
+        [123.201874388, 13.621099935]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "status": "draft",
+  "credit": "Owner-supplied church, Science High School and Balatas Road references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/605107791",
+      "note": "ODbL. Existing standing footprints, grounds where mapped, roads and identities retained."
+    },
+    {
+      "title": "Owner-supplied church and Science High School reference",
+      "note": "Inspected 2026-10-02. Owner-supplied reference guides relative foliage, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped buildings and full road/path widths govern fits where image geometry differs. Positions, sizes and heights are undated estimates; parking areas are schematic spaces, not a surveyed bay inventory. No species, construction history or building opening inferred. Reference bitmaps remain ignored evidence."
+    }
+  ],
+  "grounds": [
+    [123.201144185, 13.621162817],
+    [123.201144185, 13.621638922],
+    [123.201578609, 13.621647905],
+    [123.201744985, 13.62157604],
+    [123.201948333, 13.621531124],
+    [123.201948333, 13.621064003],
+    [123.201541637, 13.621117901],
+    [123.201264345, 13.621144851],
+    [123.201144185, 13.621162817]
+  ]
+}

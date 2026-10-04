@@ -1,0 +1,160 @@
+{
+  "id": "detail/naga-cemetery-southern-section",
+  "osm_id": "osm:relation/16196458",
+  "title": "Southern mapped cemetery section",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "main-access",
+      "ring": [
+        [123.204337532, 13.618864093],
+        [123.204669167, 13.61908733],
+        [123.204677212, 13.619088575],
+        [123.204687257, 13.619071096],
+        [123.20435342, 13.618846377],
+        [123.204194421, 13.618580096],
+        [123.204175027, 13.61859415],
+        [123.204333981, 13.618860355],
+        [123.204335545, 13.618862414],
+        [123.204337532, 13.618864093]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "main-access-2",
+      "ring": [
+        [123.204125528, 13.618511252],
+        [123.204143738, 13.618541749],
+        [123.204163131, 13.618527695],
+        [123.204145523, 13.618498205],
+        [123.204125528, 13.618511252]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "cross-aisle",
+      "ring": [
+        [123.205155073, 13.618874805],
+        [123.205156512, 13.618874058],
+        [123.205157772, 13.618873053],
+        [123.205158807, 13.618871828],
+        [123.205159575, 13.61887043],
+        [123.205160049, 13.618868913],
+        [123.205160209, 13.618867336],
+        [123.205160049, 13.618865759],
+        [123.205159575, 13.618864242],
+        [123.205158807, 13.618862844],
+        [123.205157772, 13.618861619],
+        [123.205156512, 13.618860614],
+        [123.205155073, 13.618859867],
+        [123.205153513, 13.618859407],
+        [123.20515189, 13.618859251],
+        [123.204879926, 13.618859251],
+        [123.204870634, 13.618875421],
+        [123.20515189, 13.618875421],
+        [123.205153513, 13.618875265],
+        [123.205155073, 13.618874805]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "cross-aisle-2",
+      "ring": [
+        [123.204216607, 13.618875421],
+        [123.204799702, 13.618875421],
+        [123.204808994, 13.618859251],
+        [123.20420791, 13.618859251],
+        [123.204216607, 13.618875421]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "cross-aisle-3",
+      "ring": [
+        [123.204019279, 13.618875421],
+        [123.204146729, 13.618875421],
+        [123.204138032, 13.618859251],
+        [123.204008894, 13.618859251],
+        [123.204019279, 13.618875421]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "southern-access",
+      "ring": [
+        [123.204456267, 13.618832839],
+        [123.204457225, 13.618834229],
+        [123.204458444, 13.61883541],
+        [123.204459876, 13.618836338],
+        [123.204461467, 13.618836976],
+        [123.204463156, 13.618837301],
+        [123.204464877, 13.618837299],
+        [123.204466565, 13.618836971],
+        [123.204468154, 13.618836329],
+        [123.204469585, 13.618835397],
+        [123.2044708, 13.618834213],
+        [123.204471755, 13.618832821],
+        [123.204472412, 13.618831275],
+        [123.204472746, 13.618829633],
+        [123.204472744, 13.61882796],
+        [123.204472406, 13.61882632],
+        [123.204471745, 13.618824775],
+        [123.204337771, 13.618581867],
+        [123.20431868, 13.618490052],
+        [123.20430311, 13.618501335],
+        [123.204320813, 13.61858648],
+        [123.204321681, 13.618588822],
+        [123.204456267, 13.618832839]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "southern-access-2",
+      "ring": [
+        [123.204283712, 13.618408042],
+        [123.204289544, 13.618436091],
+        [123.204305114, 13.618424807],
+        [123.204299488, 13.618397748],
+        [123.204283712, 13.618408042]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Southern mapped cemetery section — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/relation/16196458",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "Undated owner reference, inspected 2026-10-02. Draft plan-view translation; positions, sizes and heights are estimates. Preserve mapped identities and standing footprints. Temporary vehicles, wires, signage and other background clutter omitted; no species or historical dates inferred. Representative burial blocks and access aisles, not individual grave records or a measured burial inventory. The northern named area and the southern unnamed OSM relation remain distinct; no shared ownership is asserted."
+    }
+  ]
+}

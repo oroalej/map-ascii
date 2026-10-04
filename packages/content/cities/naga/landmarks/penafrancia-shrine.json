@@ -1,0 +1,25 @@
+{
+  "id": "landmark/penafrancia-shrine",
+  "osm_id": "osm:way/606888524",
+  "name": {
+    "en": "Our Lady of Peñafrancia Shrine"
+  },
+  "type": "church",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Our Lady of Peñafrancia Shrine",
+      "url": "https://www.openstreetmap.org/way/606888524",
+      "note": "Mapped Shrine church; distinct from the Minor Basilica."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference guides approximate planting, lawns, paths and parking. Positions and dimensions are draft estimates; mapped buildings and access routes are retained."
+    },
+    {
+      "title": "OpenStreetMap: Plaza de Covarrubias",
+      "url": "https://www.openstreetmap.org/way/724187419",
+      "note": "Outdoor detail includes the existing monument court beside the Shrine."
+    }
+  ]
+}

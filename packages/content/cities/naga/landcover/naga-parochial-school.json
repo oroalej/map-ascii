@@ -1,0 +1,87 @@
+{
+  "id": "landcover/naga-parochial-school",
+  "title": "Naga Parochial School grounds",
+  "trees": [
+    {
+      "at": [123.187320746, 13.629221677],
+      "crown_m": 8
+    },
+    {
+      "at": [123.187509589, 13.629128806],
+      "crown_m": 8
+    },
+    {
+      "at": [123.187461054, 13.629069887],
+      "crown_m": 10
+    },
+    {
+      "at": [123.18740881, 13.62904311],
+      "crown_m": 9
+    },
+    {
+      "at": [123.187296919, 13.629116509],
+      "crown_m": 7
+    },
+    {
+      "at": [123.187034042, 13.629273176],
+      "crown_m": 4
+    },
+    {
+      "at": [123.187097636, 13.629241625],
+      "crown_m": 4
+    },
+    {
+      "at": [123.187159613, 13.629206337],
+      "crown_m": 4
+    },
+    {
+      "at": [123.187215615, 13.629179163],
+      "crown_m": 4
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "grass",
+      "ring": [
+        [123.187252814, 13.629117933],
+        [123.186922298, 13.629281148],
+        [123.186978594, 13.629364263],
+        [123.187310887, 13.629202025],
+        [123.187252814, 13.629117933]
+      ]
+    },
+    {
+      "cover": "grass",
+      "ring": [
+        [123.187448437, 13.629003151],
+        [123.187323888, 13.629062955],
+        [123.187388965, 13.629163233],
+        [123.187515453, 13.629101644],
+        [123.187448437, 13.629003151]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.187251631, 13.629127728],
+        [123.186965166, 13.629279992],
+        [123.186973031, 13.629291905],
+        [123.187260735, 13.62913937],
+        [123.187251631, 13.629127728]
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "title": "OpenStreetMap: school grounds and buildings",
+      "url": "https://www.openstreetmap.org/way/1315514528"
+    },
+    {
+      "title": "Owner-supplied overhead reference, five-site adjustment",
+      "note": "Inspected supplied image; registered to cached OSM roof/pool outlines. Capture and imagery dates unknown. Positions, sizes and counts are estimates; no construction dates inferred. Reference bitmap remains ignored evidence and is not distributed. Mapped footprints are preserved, including alignment uncertainty."
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga Parochial School — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL)."
+}

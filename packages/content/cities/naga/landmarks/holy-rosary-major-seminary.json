@@ -1,0 +1,20 @@
+{
+  "id": "landmark/holy-rosary-major-seminary",
+  "osm_id": "osm:way/886573227",
+  "name": {
+    "en": "Holy Rosary Major Seminary"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/886573227",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "Undated owner reference. Draft landscaping and important built forms; dimensions and layout are estimated, with no construction date inferred."
+    }
+  ]
+}

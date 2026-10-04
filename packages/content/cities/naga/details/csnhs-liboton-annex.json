@@ -1,0 +1,111 @@
+{
+  "id": "detail/csnhs-liboton-annex",
+  "osm_id": "osm:way/1060927534",
+  "title": "Camarines Sur National High School - Liboton Annex",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "field-west-walk",
+      "ring": [
+        [123.192475435, 13.634101468],
+        [123.192449039, 13.634104633],
+        [123.192574418, 13.634576056],
+        [123.192600244, 13.634571024],
+        [123.192475435, 13.634101468]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "south-entry-walk",
+      "ring": [
+        [123.192467399, 13.633965095],
+        [123.192435138, 13.633963888],
+        [123.192417157, 13.634161864],
+        [123.19246667, 13.634143465],
+        [123.192467399, 13.633965095]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "north-field-approach",
+      "ring": [
+        [123.193024847, 13.634477864],
+        [123.192563591, 13.634571125],
+        [123.192564861, 13.634577918],
+        [123.193027608, 13.634487758],
+        [123.193024847, 13.634477864]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "parked_vehicles": [
+    {
+      "id": "west-apron-1",
+      "at": [123.192416764, 13.634632416],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-2",
+      "at": [123.192410445, 13.634602751],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-3",
+      "at": [123.192400825, 13.634570944],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-4",
+      "at": [123.192390444, 13.634537139],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-5",
+      "at": [123.192381082, 13.634501656],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-6",
+      "at": [123.192368939, 13.63445451],
+      "bearing": 103.161,
+      "kind": "car"
+    },
+    {
+      "id": "west-apron-7",
+      "at": [123.192356043, 13.634398855],
+      "bearing": 103.161,
+      "kind": "car"
+    }
+  ],
+  "status": "draft",
+  "credit": "Camarines Sur National High School - Liboton Annex - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/1060927534",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ]
+}

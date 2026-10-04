@@ -18,11 +18,39 @@ import {
   intersectBbox,
   splitOverpassBbox,
   toOverpassBbox,
+  localFrame,
+  clearanceWidth,
 } from './geo';
+
+it('keeps meter-frame origins and explicit clearance margins', () => {
+  const frame = localFrame([123, 14], 15);
+  const point: [number, number] = [123.001, 14.002];
+  const meters = frame.toMeters(point);
+  expect(meters[0]).toBeCloseTo(111.32 * Math.cos((15 * Math.PI) / 180), 6);
+  expect(meters[1]).toBeCloseTo(222.64, 6);
+  expect(frame.toLngLat(meters)).toEqual(point);
+  expect(clearanceWidth({ class: 'road_minor' })).toBe(6);
+  expect(clearanceWidth({ class: 'path' })).toBe(2);
+  expect(clearanceWidth({ class: 'road_minor', width: 8 }, 0.1)).toBe(8.1);
+});
 
 describe('classify', () => {
   const area = (tags: Record<string, string>) => classify(tags, 'area', 10);
   const line = (tags: Record<string, string>) => classify(tags, 'line', 10);
+
+  it('retains cemetery identity on burial lawns with park or garden tags', () => {
+    const cases: Record<string, string>[] = [
+      { landuse: 'cemetery', leisure: 'park' },
+      { landuse: 'cemetery', leisure: 'garden' },
+      { amenity: 'grave_yard', leisure: 'garden' },
+    ];
+    for (const tags of cases) {
+      expect(area(tags)).toBe('grass');
+      expect(kindOf(tags)).toMatch(/^(landuse=cemetery|amenity=grave_yard)$/);
+    }
+    expect(area({ building: 'chapel', landuse: 'cemetery' })).toBe('building_religious');
+    expect(area({ leisure: 'garden' })).toBe('park');
+  });
 
   it('maps highways by hierarchy, including links', () => {
     expect(line({ highway: 'trunk' })).toBe('road_major');
@@ -47,6 +75,9 @@ describe('classify', () => {
     expect(line({ waterway: 'stream' })).toBe('water_stream');
     expect(line({ waterway: 'canal' })).toBe('water_stream');
     expect(area({ natural: 'water' })).toBe('water_area');
+    expect(area({ leisure: 'swimming_pool', sport: 'swimming' })).toBe('water_area');
+    expect(area({ leisure: 'swimming_pool', building: 'yes' })).toBe('building');
+    expect(classify({ leisure: 'swimming_pool' }, 'point', 10)).toBeNull();
     expect(area({ place: 'square' })).toBe('park');
     expect(area({ landuse: 'forest' })).toBe('trees');
     expect(area({ landuse: 'farmland', crop: 'rice' })).toBe('farmland');
@@ -69,6 +100,27 @@ describe('classify', () => {
     expect(variantOf({ railway: 'rail', service: 'spur' }, 'rail')).toBe('spur');
     expect(variantOf({ railway: 'rail', service: 'siding' }, 'rail')).toBe('siding');
     expect(variantOf({ railway: 'rail', usage: 'main' }, 'rail')).toBeUndefined();
+  });
+
+  it('recognizes hospital roofs, grounds and point POIs without including other healthcare', () => {
+    const roofs: Record<string, string>[] = [
+      { building: 'hospital' },
+      { building: 'yes', amenity: 'hospital' },
+      { building: 'yes', healthcare: 'hospital' },
+    ];
+    for (const tags of roofs) {
+      expect(area(tags)).toBe('building_hospital');
+      expect(buildingHeight(tags, 'building_hospital')).toBe(6);
+    }
+    const sites: Record<string, string>[] = [{ amenity: 'hospital' }, { healthcare: 'hospital' }];
+    for (const tags of sites) {
+      expect(area(tags)).toBe('building_hospital');
+      expect(classify(tags, 'point', 10)).toBe('building_hospital');
+      expect(buildingHeight(tags, 'building_hospital')).toBeUndefined();
+    }
+    expect(kindOf({ healthcare: 'hospital' })).toBe('healthcare=hospital');
+    expect(area({ building: 'yes', healthcare: 'clinic' })).toBe('building');
+    expect(classify({ amenity: 'pharmacy' }, 'point', 10)).not.toBe('building_hospital');
   });
 
   it('keeps only the configured subdivision level of admin boundaries', () => {
@@ -132,10 +184,12 @@ describe('classify: street-level detail', () => {
       { landuse: 'village_green' },
       { natural: 'grassland' },
       { leisure: 'recreation_ground' },
+      { landuse: 'recreation_ground' },
     ]) {
       expect(classify(tags, 'area', 10)).toBe('grass');
     }
     expect(classify({ leisure: 'park', landuse: 'grass' }, 'area', 10)).toBe('park');
+    expect(classify({ leisure: 'park', landuse: 'recreation_ground' }, 'area', 10)).toBe('park');
     expect(layerFor('grass', 'area')).toBe('landuse');
   });
 

@@ -1,0 +1,116 @@
+{
+  "id": "detail/sta-cruz-elementary-school",
+  "osm_id": "osm:relation/15353667",
+  "title": "Sta. Cruz Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "courtyard-approach-1-1",
+      "ring": [
+        [123.181798216, 13.626811509],
+        [123.181803313, 13.626811687],
+        [123.181804384, 13.626812918],
+        [123.181800571, 13.626911472],
+        [123.181821325, 13.626911472],
+        [123.181821325, 13.626510869],
+        [123.181798216, 13.626510869],
+        [123.181798216, 13.626811509]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-2-1",
+      "ring": [
+        [123.181812078, 13.626504353],
+        [123.181812312, 13.62652681],
+        [123.182289986, 13.626522097],
+        [123.182289751, 13.62649964],
+        [123.181812078, 13.626504353]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-3-1",
+      "ring": [
+        [123.182273471, 13.626904026],
+        [123.182296567, 13.626904779],
+        [123.182311115, 13.626482967],
+        [123.18228802, 13.626482215],
+        [123.182273471, 13.626904026]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-4-1",
+      "ring": [
+        [123.18181034, 13.626263368],
+        [123.181833448, 13.626263506],
+        [123.181835753, 13.625898309],
+        [123.181812645, 13.625898276],
+        [123.18181034, 13.626263368]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-4-2",
+      "ring": [
+        [123.181957164, 13.625827671],
+        [123.181950021, 13.62584941],
+        [123.181949084, 13.625850295],
+        [123.181915591, 13.625840159],
+        [123.181864745, 13.625855433],
+        [123.181864712, 13.625878949],
+        [123.182083646, 13.625813183],
+        [123.182082967, 13.625789881],
+        [123.181957164, 13.625827671]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-5-1",
+      "ring": [
+        [123.182062513, 13.626270441],
+        [123.182085621, 13.626270573],
+        [123.182087573, 13.625948033],
+        [123.182085299, 13.625869954],
+        [123.182064938, 13.625869838],
+        [123.182062513, 13.626270441]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/relation/15353667",
+      "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+    },
+    {
+      "title": "Owner-supplied memorial and school enhancement references",
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+    }
+  ]
+}

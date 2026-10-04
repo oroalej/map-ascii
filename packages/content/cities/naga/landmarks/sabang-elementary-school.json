@@ -1,0 +1,24 @@
+{
+  "id": "landmark/sabang-elementary-school",
+  "osm_id": "osm:relation/11525332",
+  "name": {
+    "en": "Sabang Elementary School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Sabang Elementary School",
+      "url": "https://www.openstreetmap.org/relation/11525332",
+      "note": "Mapped school grounds."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference guides approximate planting, lawns, paths and parking. Positions and dimensions are draft estimates; mapped buildings and access routes are retained."
+    },
+    {
+      "title": "Owner approximate school-complex outline",
+      "note": "The outline spans separately mapped Sabang Elementary, Sabang National High School and Naga City School of Arts and Trades. Their identities remain separate."
+    }
+  ]
+}

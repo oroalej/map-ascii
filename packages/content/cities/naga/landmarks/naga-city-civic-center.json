@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-city-civic-center",
+  "osm_id": "osm:way/462785043",
+  "name": {
+    "en": "Naga City Civic Center"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/462785043",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

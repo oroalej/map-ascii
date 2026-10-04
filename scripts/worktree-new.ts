@@ -1,12 +1,14 @@
 /**
  * Create a task worktree ready to work in (AGENTS.md "Git"):
  *   pnpm worktree:new <short> <topic>
- * adds ../naga-ascii-<short> on a new branch codex/<topic> from main, installs dependencies and
- * fetches the pinned tiles.
+ * adds worktrees/<short> (gitignored, inside the main checkout) on a new branch
+ * codex/<topic> from the latest origin/main, installs dependencies and fetches the pinned tiles.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
+import { mainCheckout } from './git';
+import { initializeClaudeWorktree } from './claude-worktree-settings';
 
 const [short, topic] = process.argv.slice(2).filter((arg) => arg !== '--');
 const slug = /^[a-z0-9][a-z0-9-]*$/;
@@ -15,11 +17,8 @@ if (!short || !topic || !slug.test(short) || !slug.test(topic)) {
   process.exit(2);
 }
 
-const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-// The main checkout is the common directory's parent, whichever worktree this runs from.
-const common = resolve(git('rev-parse', '--git-common-dir'));
-const main = dirname(common);
-const path = resolve(dirname(main), `${basename(main)}-${short}`);
+const main = mainCheckout(process.cwd());
+const path = resolve(main, 'worktrees', short);
 const branch = `codex/${topic}`;
 
 if (existsSync(path)) {
@@ -46,7 +45,11 @@ const pnpm = (args: string[], cwd: string) => {
   run(process.execPath, [entry, ...args], cwd);
 };
 
-run('git', ['worktree', 'add', path, '-b', branch, 'main'], main);
+run('git', ['fetch', 'origin', 'main'], main);
+// From origin/main, not the main checkout's local main, which may be behind. --no-track: the
+// branch gets its own upstream on first push instead of tracking main.
+run('git', ['worktree', 'add', path, '-b', branch, '--no-track', 'origin/main'], main);
+initializeClaudeWorktree(main, path);
 pnpm(['install', '--frozen-lockfile', '--prefer-offline'], path);
 pnpm(['data:fetch'], path);
 console.log(`\nReady: ${path} on ${branch}`);

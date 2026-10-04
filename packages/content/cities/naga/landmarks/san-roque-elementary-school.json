@@ -1,0 +1,20 @@
+{
+  "id": "landmark/san-roque-elementary-school",
+  "osm_id": "osm:way/839238886",
+  "name": {
+    "en": "San Roque Elementary School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: mapped school grounds",
+      "url": "https://www.openstreetmap.org/way/839238886",
+      "note": "ODbL. Complete mapped grounds, standing roofs, courts, road and path widths and parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied school reference",
+      "note": "Undated reference identifies the requested school and guides restrained outdoor detail."
+    }
+  ]
+}

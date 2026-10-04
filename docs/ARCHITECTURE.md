@@ -19,7 +19,8 @@ ascii-atlas/
 │     ├─ components/          CityAtlas, AtlasCanvas, SearchBox, InfoPanel, Hud, Timeline, TourPlayer
 │     ├─ state/               Zustand store + URL sync
 │     └─ public/tiles/        per city: <city>.pmtiles, <city>.meta.json,
-│                             <city>.search-index.json, imagery/<city>/ (all generated)
+│                             <city>.search-index.json, <city>.detail-layouts.json,
+│                             imagery/<city>/ (all generated)
 ├─ packages/
 │  ├─ renderer/               WebGL2 ASCII engine (no React)
 │  │  └─ src/
@@ -52,7 +53,8 @@ ascii-atlas/
 │  │     ├─ tours/*.json
 │  │     ├─ plans/*.json, art/*.json   landmark plan-view parts, front-view art
 │  │     ├─ landcover/*.json   trees, grass, parking OSM doesn't map yet, traced from imagery (dropped as OSM catches up)
-│  │     ├─ details/*.json     sourced outdoor paving, walking routes, curved seating, and lamps
+│  │     ├─ details/*.json     sourced paving, walks, seating, lamps, structures, building/roof overrides, and parked vehicles
+│  │     ├─ cemeteries/*.json  sourced burial rows and sections with individual-marker clearance
 │  │     ├─ historic-maps/*.json
 │  │     └─ media/            photos (or references to external hosting)
 │  └─ shared/                 zod schemas + TS types
@@ -104,7 +106,9 @@ The web app owns app state (Zustand) and pushes it into the renderer. The render
 
 `AtlasOptions.utilities?: { derive: boolean }` controls static overhead hardware independently of Life. `fixtureschange` reports `{ streetlights: boolean, trafficSignals: boolean, utilities: boolean }` when viewport-packed hardware changes; `utilities` indicates nontransparent packed marks, before the shader's surface mask. `legendEntries` accepts that fixture report, including an omitted `utilities` field for older callers. Utility record version 1 is unchanged: pipeline validation remains strict, while the worker skips malformed or unsupported individual records using a Zod-free shape validator, retaining ordinary tile geometry.
 
-**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), and `attribution` (extra credits the city's layers need).
+**City meta** (`<city>.meta.json`, generated): `slug`, `name`, `subdivisionLabel`, `languages`, `bounds` (the city boundary bbox), `regionBounds`, `defaultCamera` (centered on the city config's `focus` feature at its zoom, else the boundary centroid), `yearRange` (earliest year with data to the current year), and `attribution` (map source credits, with one standalone OSM credit).
+
+**Detail layouts** (`<city>.detail-layouts.json`, generated): detail ids mapped to SHA-256 geometry/selection fingerprints bound to the successful step 04 merge. Only smoke tests load this separately validated asset; the map does not fetch it at startup.
 
 ## 3. Rendering pipeline (per frame)
 
@@ -167,7 +171,7 @@ CI emits a Playwright JSON report for each shard and checks `stats.duration` aga
 - Zoom follows the 512-px tile convention (`@math.gl/web-mercator`, MapLibre).
 
 **Implementation notes (Place-level detail).**
-- Sourced `SiteDetail` records preserve an OSM area's selection identity while replacing its ground class with paving. Rounded seating footprints and raised planting beds enter the existing walking obstacles and full-body clearance. Bench anchors retain compass headings; authored walks enter the walking graph without painted path glyphs. Stone footprints use the `seating` class, below crowns and above grass; closed seating lines retain polygon holes and outward pause anchors. The `shrubs` area class adds blocked planting without creating crowns or roosts. Both have subcell edges; stone seating also uses connected wall glyphs at Place detail, independent of its sub-meter height. The `planting` class draws sparse green tufts over brown soil using a separate optional theme `fillColor` (other styles default to their glyph color). Crowns remain opaque above all ground detail. Multi-head lamps use the static fixture pass and remain visible with Life disabled. Optional per-head `lampStyles` worker bytes distinguish compact lanterns from legacy streetlights; omitted bytes keep the streetlight default. Heads on the same authored lantern post share hardware ownership at their base. Per-class tables have 56 rows, including five reserved glyph rows; shader bit-mask lookups reject class ids above 31 rather than wrapping their shifts.
+- Sourced `SiteDetail` records preserve canonical OSM landmark selection while replacing a ground class with paving, retaining a campus/religious fill, or adding a curated apron around a standing building or terminal point. Explicit selection aliases include canonical metadata in the worker registry before detail geometry is registered, allowing cold-load selection across tile boundaries without assigning the target any extra picking ink. Rounded seating footprints and raised planting beds enter the existing walking obstacles and full-body clearance. Bench anchors retain compass headings; authored walks enter the walking graph without painted path glyphs. Stone footprints use the `seating` class, below crowns and above grass; closed seating lines retain polygon holes and outward pause anchors. The `shrubs` area class adds blocked planting without creating crowns or roosts. Both have subcell edges; stone seating also uses connected wall glyphs at Place detail, independent of its sub-meter height. The `planting` class draws sparse green tufts over brown soil using a separate optional theme `fillColor` (other styles default to their glyph color). Crowns remain opaque above all ground detail. Multi-head lamps use the static fixture pass and remain visible with Life disabled. Optional per-head `lampStyles` worker bytes distinguish compact lanterns from legacy streetlights; omitted bytes keep the streetlight default. Heads on the same authored lantern post share hardware ownership at their base. Per-class tables have 56 rows, including five reserved glyph rows; shader bit-mask lookups reject class ids above 31 rather than wrapping their shifts.
 - **Overlay.** Labels are drawn from an RGBA8 overlay texture on the cell grid (a 16-bit glyph code per cell), over the map in the glyph pass. Map/life glyphs use ten-bit indices: the red byte stores the low eight bits and the green byte stores a six-bit class plus the two high glyph bits. Label characters use their own atlas.
 - **Top-down only.** The map never mixes in front views: landmark detail comes from plan-view `building_part` footprints (pipeline step 04, from the city pack's `plans/`), which the renderer treats like any building (outlines, priority by height).
 - **Outdoor structures.** Optional `SiteDetail.structures` supplies polygon beams, supports, platforms and roof contours. Timber uses the appended `building_woodwork` class; stone and roof contours reuse `building_part`, with the existing fill, outline, subcell edge and crown-height pipeline. Timber has no lit windows. `detail_overhead` excludes elevated geometry from both ground polygons and walking outlines while retaining its visual coverage; supports and platforms remain obstacles. No render pass, texture, public renderer method or city-specific renderer code is added.
@@ -638,7 +642,7 @@ Candidate pooling improved the large artificial crowd but regressed small views.
 
 ## 10. Deployment
 
-- `next build` with `output: 'export'` produces a static site on Vercel. The web app's `build` script reuses an unchanged, complete export; when rebuilding, it fetches each city's published tiles first (the GitHub release its `tiles.lock.json` names, DATA.md §9) into `public/tiles/`. Its fingerprint in `.next/cache/atlas-export.json` covers build inputs and export file hashes and is saved only after a successful build with stable inputs. E2E prepares the export before Playwright can reuse a running static server. `pnpm build:force` bypasses export reuse. The repository is private, so the Vercel project needs a `GITHUB_TOKEN` environment variable with read access to its contents; CI uses the workflow's token.
+- `next build` with `output: 'export'` produces a static site on Vercel. The web app's `build` script reuses an unchanged, complete export; when rebuilding, it fetches each city's published tiles first (the GitHub release its `tiles.lock.json` names, DATA.md §9) into `public/tiles/`. Its fingerprint in `.next/cache/atlas-export.json` covers build inputs and export file hashes and is saved only after a successful build with stable inputs. E2E prepares the export before Playwright can reuse a running static server. `pnpm build:force` bypasses export reuse. This repository is public, so Vercel can fetch its release assets without a token. Without a token, downloads use public release URLs; supplying a `GITHUB_TOKEN` selects the GitHub API, which is required for private repositories. CI uses the workflow's token.
 - PMTiles and imagery are static files. If they exceed Vercel limits, host them on Cloudflare R2 or similar with CORS and range requests enabled.
 - Set long cache headers on tiles, and add a content hash in the filename (e.g. `<city>.<hash>.pmtiles`) for cache busting.
 

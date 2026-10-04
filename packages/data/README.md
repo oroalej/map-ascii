@@ -17,8 +17,8 @@ pnpm data:build -- --city naga --from 03     # rerun from a step (earlier output
 | `01-fetch` | Look up the boundary relation (must match exactly one), then download OSM for the buffered boundary bbox, the region's low-detail layers (per region part), and the Copernicus DEM GLO-90 tiles for the region into `raw/<city>/`, clipped to the region. Downloads are kept until `--refresh`; a saved larger area answers a smaller one. |
 | `02-convert` | OSM → GeoJSON (`osmtogeojson`); derive the sea (from the coastline), province label points, and terrain bands (from the DEM); derive the boundary bbox, region bounds, default view (the `focus` feature, else the boundary centroid), and attribution |
 | `03-normalize` | Map OSM tags to atlas classes, tile layers, and zoom bands, and compute heights, widths, ids, OSM dates, and subdivisions (mapped boundaries, else approximate areas from `place` nodes) |
-| `04-merge-content` | Join the city pack's landmarks onto features by `osm_id`, add plan-view landmark parts from `plans/`, and write `<city>.art.json` from `art/` |
-| `05-tiles` | Build `<city>.pmtiles` (z6–z16) with tippecanoe, and write it, `<city>.meta.json`, and `<city>.subdivisions.json` to `apps/web/public/tiles/` |
+| `04-merge-content` | Join landmarks by `osm_id`, add plan-view parts from `plans/`, merge landcover and site details, then place cemetery rows around reserved obstacles; write `<city>.art.json` from `art/` and stage the detail-layout fingerprints |
+| `05-tiles` | Build `<city>.pmtiles` (z6–z16) with tippecanoe, and publish it with `<city>.meta.json`, `<city>.subdivisions.json` and the smoke-only `<city>.detail-layouts.json` in `apps/web/public/tiles/` |
 | `06-search-index` | Build `<city>.search-index.json`: entries plus a serialized MiniSearch index |
 
 `raw/` and `build/` are gitignored. Never hand-edit generated tiles.

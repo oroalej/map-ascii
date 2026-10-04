@@ -1,0 +1,67 @@
+{
+  "id": "plan/penafrancia-basilica",
+  "osm_id": "osm:way/23670362",
+  "title": "Peñafrancia Basilica crossing",
+  "front": "n",
+  "parts": [
+    {
+      "kind": "dome",
+      "shape": "circle",
+      "size_m": 9,
+      "height_m": 21,
+      "at": {
+        "along": 0.1,
+        "across": 0
+      }
+    },
+    {
+      "kind": "tower",
+      "shape": "circle",
+      "size_m": 2,
+      "height_m": 25,
+      "at": {
+        "along": 0.1,
+        "across": 0
+      }
+    },
+    {
+      "kind": "belfry",
+      "shape": "square",
+      "size_m": 4,
+      "height_m": 24,
+      "at": {
+        "along": 0.8,
+        "across": 0.65
+      }
+    },
+    {
+      "kind": "cupola",
+      "shape": "circle",
+      "size_m": 1.5,
+      "height_m": 28,
+      "at": {
+        "along": 0.8,
+        "across": 0.65
+      }
+    }
+  ],
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/838935827",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Belfry_of_Pe%C3%B1afrancia_Basilica,_Naga_City.jpg",
+      "note": "Commons belfry record supports further tower research. Facade appearance was reviewed in Dominic McArthur's independent photograph; crossing and facade parts are schematic estimates. Forecourt fitted to Basilica Loop; grounds extent is estimated in OSM. Centennial Globe already mapped, not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
+    },
+    {
+      "title": "Dominic McArthur: Peñafrancia Basilica Minore, 2014",
+      "url": "https://commons.wikimedia.org/wiki/File:Pe%C3%B1afrancia_Basilica_Minore.jpg",
+      "note": "CC BY-SA 3.0. Independent frontage photograph shows the bell tower and spire beside the facade, paving, lawn, planting and mature trees. Tower, crossing and roof positions/sizes are schematic estimates fitted to OSM; no roof geometry is surveyed."
+    }
+  ],
+  "credit": "Reference: Dominic McArthur, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/), Wikimedia Commons. Schematic plan adaptation."
+}

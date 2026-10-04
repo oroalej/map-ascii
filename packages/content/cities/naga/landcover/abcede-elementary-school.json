@@ -1,0 +1,143 @@
+{
+  "id": "landcover/abcede-elementary-school",
+  "title": "Dr. Domingo G. Abcede Elementary School planting",
+  "trees": [
+    {
+      "at": [123.185336067, 13.633265409],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185620641, 13.633258034],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185710039, 13.633320249],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185919706, 13.633274627],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.186187891, 13.63303471],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.186112489, 13.632737885],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185935569, 13.632776827],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185611155, 13.632789733],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185286741, 13.632815545],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.1852092, 13.632999106],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185618744, 13.633034946],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185965923, 13.633038633],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.185840711, 13.633154787],
+      "crown_m": 8,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "grass",
+      "ring": [
+        [123.185945055, 13.632760234],
+        [123.185945055, 13.632732578],
+        [123.185813164, 13.632737894],
+        [123.185809671, 13.632760599],
+        [123.185808374, 13.632761746],
+        [123.185771598, 13.632756562],
+        [123.185770925, 13.632755229],
+        [123.185772993, 13.632739513],
+        [123.185533372, 13.632749172],
+        [123.185262078, 13.632780515],
+        [123.185265873, 13.632810014],
+        [123.185660481, 13.632769452],
+        [123.185945055, 13.632760234]
+      ]
+    },
+    {
+      "cover": "grass",
+      "ring": [
+        [123.185669967, 13.63308657],
+        [123.185626332, 13.633103163],
+        [123.185632024, 13.63322116],
+        [123.185689222, 13.633212608],
+        [123.185672239, 13.633157603],
+        [123.185671825, 13.633149308],
+        [123.185673907, 13.633141254],
+        [123.185678304, 13.633134135],
+        [123.18568264, 13.633130001],
+        [123.185669967, 13.63308657]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.185903317, 13.633123444],
+        [123.185922289, 13.633158474],
+        [123.186084852, 13.633128961],
+        [123.186072835, 13.633092326],
+        [123.185903317, 13.633123444]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.185643407, 13.632896668],
+        [123.185638406, 13.632898828],
+        [123.18564053, 13.63293298],
+        [123.185639497, 13.632933544],
+        [123.185615208, 13.632935191],
+        [123.185626332, 13.632979635],
+        [123.18566807, 13.632968572],
+        [123.185643407, 13.632896668]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/881063054",
+      "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+    },
+    {
+      "title": "Owner-supplied memorial and school enhancement references",
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+    }
+  ]
+}

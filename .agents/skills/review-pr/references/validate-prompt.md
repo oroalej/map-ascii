@@ -37,7 +37,7 @@ Go through every Blocker, Should-fix, and Nit in Claude's review. For each one:
    - **invalid**: the claim doesn't hold (say why)
 4. Correct the severity if it's wrong, with a one-line reason.
 
-Don't add findings of your own. If you notice something serious that Claude missed, list it under "Noticed, not in Claude's review". It won't be fixed automatically.
+Don't add findings of your own. If you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. It won't be fixed automatically, but a noticed blocker or should-fix keeps the PR from being reported clean, so a person decides before it merges.
 
 ## Output
 
@@ -58,7 +58,7 @@ Your final message is saved as `validation.md` and drives the fixes. Use exactly
    - Outside the PR's diff: <no | yes, because …>
 
 ### Noticed, not in Claude's review
-- <path:line — one line> (or "None")
+- **<blocker | should-fix | nit>** <path:line — one line> (or "None")
 ```
 
 - Include every entry in the Validation table, invalid ones too.

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { legendEntries } from './legend';
 import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
+import { classId } from './classes';
+import { normalizeFocus } from './focus';
+import { themes } from './theme';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
 it('labels atmospheric fireworks independently of Life and removes them below their zoom or in another season', () => {
@@ -103,6 +106,37 @@ it('reports seasonal hardware with Life off and temporary vendors only where pat
       fixtures: { ...fixtures, seasonal: { lanterns: false, bunting: false } },
     }).some((e) => e.id.startsWith('info:season-')),
   ).toBe(false);
+});
+
+it('merges visible hospital roofs and markers into a distinct, focusable category in both themes', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    for (const present of [
+      ['building_hospital'],
+      ['marker_hospital'],
+      ['building_hospital', 'marker_hospital'],
+    ] as const) {
+      const entries = legendEntries(theme, 19, ['building', ...present]);
+      const hospital = entries.find((e) => e.id === 'class:building_hospital')!;
+      expect(hospital.label).toBe('Hospital');
+      expect(hospital.classes).toEqual([...present]);
+      const { mask } = normalizeFocus(hospital.focus!);
+      for (const cls of present) {
+        const id = classId(cls);
+        expect((mask[id >>> 5]! >>> (id & 31)) & 1).toBe(1);
+      }
+      const generic = classId('building');
+      expect((mask[generic >>> 5]! >>> (generic & 31)) & 1).toBe(0);
+      expect(hospital.color).not.toBe(entries.find((e) => e.id === 'class:building')!.color);
+      if (present.some((cls) => cls === 'marker_hospital')) expect(hospital.glyphs).toContain('+');
+    }
+    expect(themes[theme].styles.marker_hospital!.color).toBe(
+      themes[theme].styles.building_hospital!.color,
+    );
+    expect(legendEntries(theme, 19, ['building']).some((e) => e.label === 'Hospital')).toBe(false);
+    expect(legendEntries(theme, 12, ['marker_hospital']).some((e) => e.label === 'Hospital')).toBe(
+      false,
+    );
+  }
 });
 
 it('keeps category identity through themes, class membership and changing explanatory wording', () => {

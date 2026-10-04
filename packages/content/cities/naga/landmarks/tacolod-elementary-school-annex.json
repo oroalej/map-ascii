@@ -1,0 +1,24 @@
+{
+  "id": "landmark/tacolod-elementary-school-annex",
+  "osm_id": "osm:way/880725922",
+  "name": {
+    "en": "Tacolod Elementary School – Annex"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: mapped school grounds",
+      "url": "https://www.openstreetmap.org/way/880725922",
+      "note": "ODbL. Complete mapped grounds, standing roofs and neighboring road geometry are retained."
+    },
+    {
+      "title": "Owner-supplied Google Maps school reference",
+      "note": "Image #1: owner-supplied Google Maps overhead of the Annex on Fourth Street, inspected 2026-10-04. The owner explicitly instructed proceeding with this reference. The central lawn, eastern foliage and edge approaches guide a restrained fit to the complete mapped grounds and five standing classroom roofs. The imagery is rotated relative to north-up OSM; alignment and dimensions remain approximate. No Google reuse rights are asserted; the reference raster is not distributed."
+    },
+    {
+      "title": "Draft layout limits",
+      "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
+    }
+  ]
+}

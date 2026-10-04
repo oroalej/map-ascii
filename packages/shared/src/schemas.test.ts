@@ -270,6 +270,20 @@ describe('City', () => {
     expect(parse([entry, entry]).success).toBe(false);
   });
 
+  it('requires a source and unique OSM ways for road exclusions', () => {
+    const entry = { osm_id: 'osm:way/1', source: 'Owner annotated atlas' };
+    const parse = (exclusions: unknown[]) => City.safeParse({ ...city, streets: { exclusions } });
+    expect(parse([entry]).success).toBe(true);
+    for (const invalid of [
+      { ...entry, osm_id: 'osm:node/1' },
+      { ...entry, source: ' ' },
+      { osm_id: entry.osm_id },
+      { ...entry, typo: true },
+    ])
+      expect(parse([invalid]).success).toBe(false);
+    expect(parse([entry, entry]).success).toBe(false);
+  });
+
   it('rejects localized fields in undeclared languages', () => {
     const result = City.safeParse({ ...city, languages: [] });
     expect(result.error?.issues[0]?.path).toEqual(['subdivision', 'label', 'xx']);

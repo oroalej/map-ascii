@@ -1,0 +1,20 @@
+{
+  "id": "landmark/naga-city-science-high-school",
+  "osm_id": "osm:way/222976551",
+  "name": {
+    "en": "Naga City Science High School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/222976551",
+      "note": "ODbL. Existing standing footprints, grounds where mapped, roads and identities retained."
+    },
+    {
+      "title": "Owner-supplied church and Science High School reference",
+      "note": "Inspected 2026-10-02. Owner-supplied reference guides relative foliage, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped buildings and full road/path widths govern fits where image geometry differs. Positions, sizes and heights are undated estimates; parking areas are schematic spaces, not a surveyed bay inventory. No species, construction history or building opening inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}
