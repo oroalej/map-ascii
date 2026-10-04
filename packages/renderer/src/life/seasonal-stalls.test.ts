@@ -169,6 +169,68 @@ describe('seasonal stall lifecycle', () => {
     expect(visit.state).toBe('purchase');
   });
 
+  it.each([false, true])(
+    'retains a purchasing customer across equivalent seasons (retired: %s)',
+    (retired) => {
+      const { world, life, tiles } = setup();
+      const included = { ...season, id: 'new-year', includes: [season.id] };
+      world.setSeasons(simulationSeasons([season, included]));
+      select(world);
+      const stall = life.seasonalStalls[0]!;
+      const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+      const customer = life.movers.find(
+        (m) => m.kind === 'person' && life.scenes.reserve(m, site),
+      )!;
+      const visit = life.scenes.visits.get(customer)!;
+      visit.state = 'purchase';
+      if (retired) world.sync([]);
+      select(world, included.id);
+      if (retired) {
+        world.sync(tiles);
+        select(world, included.id);
+      }
+      expect(life.seasonalStalls).toContain(stall);
+      expect(life.scenes.visits.get(customer)).toBe(visit);
+      expect(visit.state).toBe('purchase');
+      select(world, null);
+      expect(life.seasonalStalls).toEqual([]);
+      expect(visit.state).toBe('return');
+    },
+  );
+
+  it('rechecks physical admission when an equivalent stall season adds an obstacle', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    const stall = life.seasonalStalls[0]!;
+    const display: SeasonalDisplayRecord = {
+      version: 1,
+      kind: 'christmas-tree',
+      id: 'new-year-tree',
+      installation: 'tree',
+      season: 'new-year',
+      anchor: 'osm:way/1',
+      seed: 1,
+      radius_m: 5,
+      at: tileToLngLat(tile, stall),
+    };
+    tiles[0]!.life.seasonalTrees = [display];
+    world.setSeasons(
+      simulationSeasons([
+        season,
+        {
+          ...season,
+          id: 'new-year',
+          installations: [
+            { id: 'tree', kind: 'christmas-tree', anchor: display.anchor, label: 'Tree' },
+          ],
+        },
+      ]),
+    );
+    select(world, 'new-year');
+    expect(life.seasonalStalls).not.toContain(stall);
+    expect(life.scenes.sites.some((site) => site.stall === stall)).toBe(false);
+  });
+
   it('invalidates only carts ceded to a new finer owner and preserves the remaining identities', () => {
     const { world, life, tiles } = setup();
     select(world);

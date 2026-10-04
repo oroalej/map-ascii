@@ -103,6 +103,8 @@ describe('season client payload', () => {
     const second = {
       ...base,
       id: 'second',
+      bunting: { ...base.bunting!, label: 'Second flags' },
+      stalls: { ...base.stalls!, label: 'Second carts' },
       installations: [{ ...base.installations![0]!, id: 'second-tree' }],
     };
     const own: RuntimeSeasonConfig = {

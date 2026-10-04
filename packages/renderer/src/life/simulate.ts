@@ -3417,7 +3417,7 @@ export class LifeWorld {
   }
   private seasonsDirty = false;
   /** Retired tiles retain their carts and reconcile the season when they return. */
-  private readonly appliedSeasons = new WeakMap<TileLife, string | null>();
+  private readonly appliedSeasons = new WeakMap<TileLife, SimulationSeason | null>();
   private readonly stallAnchors = new WeakMap<TileLife, readonly SeasonAnchor[]>();
   private readonly stallBounds = new WeakMap<TileLife, readonly number[]>();
   private readonly stallInputs = new WeakMap<
@@ -3487,12 +3487,23 @@ export class LifeWorld {
     this.seasonalConfig = config;
     this.seasonsDirty = false;
     for (const life of this.tiles.values()) {
-      const id = config?.id ?? null;
-      if (this.appliedSeasons.get(life) !== id) {
-        life.clearSeasonalStalls();
+      const previous = this.appliedSeasons.get(life) ?? null;
+      if (previous !== (config ?? null)) {
+        const before = previous?.stalls,
+          after = config?.stalls;
+        if (
+          !before ||
+          !after ||
+          before.radius_m !== after.radius_m ||
+          before.per_tile !== after.per_tile ||
+          before.near.length !== after.near.length ||
+          !before.near.every((kind) => after.near.includes(kind))
+        )
+          life.clearSeasonalStalls();
+        // Equivalent carts keep their scenes, but still recheck terrain and ownership.
         this.stallInputs.delete(life);
       }
-      this.appliedSeasons.set(life, id);
+      this.appliedSeasons.set(life, config ?? null);
     }
     if (
       !this.groundTerrain &&

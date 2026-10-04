@@ -74,7 +74,7 @@ The project owner's photograph and marked Centro maps (2026-10-01) request crowd
 | Arana | Elias Angeles to Peñafrancia | 42 m | 15 |
 | Peñafrancia Avenue | Panganiban through San Francisco to the old Shrine | 1,682 m | 561 |
 
-These positions remain `TODO(verify)` under the Fiesta record. Verify coverage and placement against permitted field evidence before marking them surveyed. Dense corridors need locally rebuilt tiles; the pinned release remains unchanged until publication is authorized.
+These positions are illustrative; verify coverage and placement against permitted field evidence. Dense corridors need locally rebuilt tiles; the pinned release remains unchanged until publication is authorized.
 
 Record each item in `packages/content/cities/naga/` with its sources:
 

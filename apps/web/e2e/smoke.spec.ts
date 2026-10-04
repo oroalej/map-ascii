@@ -101,7 +101,7 @@ for (const city of cities) {
           await expect(
             page.getByText(`${first.fireworks.label} (illustrative)`, { exact: true }),
           ).toBeVisible();
-        // Also exercise a fixture season: fireworks alone don't compile its glyph variant.
+        // Exercise fixtures separately when the first preview has no inherited lanterns.
         const decorated = city.seasons.findIndex((season) => !!season.lanterns);
         if (decorated > 0) {
           for (let i = 0; i < decorated; i++)
