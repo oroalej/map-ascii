@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mainCheckout } from './git';
+import { initializeClaudeWorktree } from './claude-worktree-settings';
 
 const [short, topic] = process.argv.slice(2).filter((arg) => arg !== '--');
 const slug = /^[a-z0-9][a-z0-9-]*$/;
@@ -48,6 +49,7 @@ run('git', ['fetch', 'origin', 'main'], main);
 // From origin/main, not the main checkout's local main, which may be behind. --no-track: the
 // branch gets its own upstream on first push instead of tracking main.
 run('git', ['worktree', 'add', path, '-b', branch, '--no-track', 'origin/main'], main);
+initializeClaudeWorktree(main, path);
 pnpm(['install', '--frozen-lockfile', '--prefer-offline'], path);
 pnpm(['data:fetch'], path);
 console.log(`\nReady: ${path} on ${branch}`);

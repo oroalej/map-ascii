@@ -56,3 +56,6 @@ apps/web/public/tiles/imagery/
 
 # nested agent worktrees (see AGENTS.md "Git")
 /worktrees/
+
+# local Claude settings (generated instruction exclusions and personal configuration)
+/.claude/settings.local.json
