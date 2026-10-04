@@ -3932,8 +3932,9 @@ export class LifeWorld {
     bounds?: LngLatBounds,
     allBodies = false,
     region?: ReadonlySet<TileLife>,
+    shows?: (kind: Mover['kind']) => boolean,
   ) {
-    return complete(this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false));
+    return complete(this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false, shows));
   }
 
   private *groundGuardSteps(
@@ -3943,6 +3944,7 @@ export class LifeWorld {
     allBodies = false,
     region?: ReadonlySet<TileLife>,
     cooperative = true,
+    shows?: (kind: Mover['kind']) => boolean,
   ): Generator<void, WorldGroundGuard, void> {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
@@ -4047,7 +4049,9 @@ export class LifeWorld {
         if (cooperative && ++visited % 32 === 0) yield;
         if (
           allBodies ||
-          (s.open !== false && (!this.lastLevels || s.rank < this.lastLevels.person))
+          ((!shows || shows('person')) &&
+            s.open !== false &&
+            (!this.lastLevels || s.rank < this.lastLevels.person))
         ) {
           if (allBodies) {
             if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
@@ -4062,6 +4066,7 @@ export class LifeWorld {
           this.owns(life, m) &&
           !life.scenes.hidden(m) &&
           (m.kind === 'vehicle' || isWalker(m.kind)) &&
+          (allBodies || !shows || shows(m.kind)) &&
           (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
         )
           occupied.set(m, bodies(life, m, buffer(m).live));
@@ -4071,6 +4076,7 @@ export class LifeWorld {
         if (
           inView(g) &&
           this.owns(life, g) &&
+          (allBodies || !shows || shows('person')) &&
           (allBodies || !this.lastLevels || g.rank < this.lastLevels.places[g.place])
         )
           occupied.set(g, bodies(life, g, buffer(g).live));
@@ -4132,6 +4138,34 @@ export class LifeWorld {
       const waterNear = onFoot && water.near(x0, y0, x1, y1);
       const roadNear = onFoot && roadAccess.near(x0, y0, x1, y1, crossing);
       const steps = Math.max(1, Math.ceil(distance / 0.3), turns);
+      // A larger ASCII cell can touch terrain while the physical agent is still legal.
+      // Keep the inflated group slots: recomputing slots at minimum zero would test
+      // different people positions. Only allocate this fallback on a terrain denial.
+      let inherited: number[] | undefined;
+      let physical: Body[] | undefined;
+      const violations = (sample: readonly Body[]) =>
+        sample.map(
+          (b) =>
+            (blockedNear && blocked.hits([b]) ? 1 : 0) |
+            (waterNear && water.hits([b]) ? 2 : 0) |
+            (roadNear && !roadAccess.allows([b], crossing) ? 4 : 0),
+        );
+      const physicalLegal = (sample: readonly Body[]) => {
+        physical ??= life.groundBodies(owner).map((b) => toRef(origin(life), { ...b }));
+        for (let i = 0; i < sample.length; i++) {
+          const p = physical[i]!,
+            s = sample[i]!;
+          p.x = s.x;
+          p.y = s.y;
+          p.hx = s.hx;
+          p.hy = s.hy;
+        }
+        return (
+          (!blockedNear || !blocked.hits(physical)) &&
+          (!waterNear || !water.hits(physical)) &&
+          (!roadNear || roadAccess.allows(physical, crossing))
+        );
+      };
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
         const sample = this.groundSample;
@@ -4147,6 +4181,12 @@ export class LifeWorld {
           s.y = a.y + (b.y - a.y) * t;
           s.hx = hx / norm;
           s.hy = hy / norm;
+          if (a.hx * b.hx + a.hy * b.hy < -0.95) {
+            const start = Math.atan2(a.hy, a.hx);
+            const delta = Math.atan2(a.hx * b.hy - a.hy * b.hx, a.hx * b.hx + a.hy * b.hy);
+            s.hx = Math.cos(start + delta * t);
+            s.hy = Math.sin(start + delta * t);
+          }
           s.length = b.length;
           s.width = b.width;
         }
@@ -4155,17 +4195,24 @@ export class LifeWorld {
           (waterNear && water.hits(sample)) ||
           (roadNear && !roadAccess.allows(sample, crossing))
         ) {
-          if (diagnostics) {
-            const reason =
-              blockedNear && blocked.hits(sample)
-                ? 'building'
-                : waterNear && water.hits(sample)
-                  ? 'water'
-                  : 'road';
-            diagnostics.reject(identity, reason);
+          if (before && !inherited && physicalLegal(previous)) inherited = violations(previous);
+          const mayEscape =
+            inherited &&
+            physicalLegal(sample) &&
+            violations(sample).every((v, i) => (v & ~inherited![i]!) === 0);
+          if (!mayEscape) {
+            if (diagnostics) {
+              const reason =
+                blockedNear && blocked.hits(sample)
+                  ? 'building'
+                  : waterNear && water.hits(sample)
+                    ? 'water'
+                    : 'road';
+              diagnostics.reject(identity, reason);
+            }
+            reject?.('terrain');
+            return false;
           }
-          reject?.('terrain');
-          return false;
         }
         if (oldScore === 0 && occupied.conflicts(identity, sample, ignore) > 0) {
           diagnoseOccupancy?.(identity, sample, ignore);
@@ -4271,7 +4318,7 @@ export class LifeWorld {
       ...weather,
       diagnostics: this.profiler?.lifeDiagnostics,
     };
-    const guard = this.groundGuard(cellMeters, undefined, bounds);
+    const guard = this.groundGuard(cellMeters, undefined, bounds, false, undefined, shows);
     this.junctions.begin(new Set(this.tiles.values()));
     const eligibility = new Map<TileLife, (m: Mover) => boolean>();
     for (const tile of this.tiles.values()) {
