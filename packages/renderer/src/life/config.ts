@@ -246,6 +246,21 @@ export function umbrellaShare(rain: number, sunAltitude: number): number {
 }
 
 /**
+ * People running (life/running.ts): now and then someone walking alone runs at `speed` m/s for
+ * `seconds` (`chance` per second), at most `maxPerTile` at once. In the rain those with no
+ * umbrella run at `dash` m/s, on their way or to a covered shelter within `shelter.reach` m,
+ * which they head for with `shelter.chance` (life/interactions.ts).
+ */
+export const RUN = {
+  chance: 0.004,
+  seconds: [3, 8] as const,
+  speed: [2.6, 3.4] as const,
+  maxPerTile: 2,
+  dash: [2.8, 3.6] as const,
+  shelter: { reach: 60, chance: 0.9 },
+} as const;
+
+/**
  * Street vendors with their carts: one per this many meters of line (`spacing`), `marketBoost`
  * times as many on lines within `marketReach` m of a market, at most `maxPerTile`. A cart stands
  * `curb` m in from a road's edge, or `beside` m off a path or a park's edge, facing along it.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityLevels } from './config';
+import { activityLevels, RUN } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LocalScenes } from './interactions';
 import { stripRing } from './terrain';
@@ -477,6 +477,37 @@ describe('local interaction scenes', () => {
     run(scene, [dog], 12, 0);
     expect(scene.visits.has(dog)).toBe(false);
     expect(dog.lying).toBe(false);
+  });
+  it('runs those with no umbrella to shelter and walks them back after the rain', () => {
+    const scene = setup(2);
+    const caught = { ...person(), group: [walker] };
+    const dry = { ...person(), group: [{ ...walker, umbrella: 0 }] };
+    const other = setup(2);
+    scene.step(0.1, [], { rain: 1 });
+    other.step(0.1, [], { rain: 1 });
+    expect(scene.reserve(caught, 0)).toBe(true);
+    expect(other.reserve(dry, 0)).toBe(true);
+    scene.step(0.5, [caught], { rain: 1 });
+    other.step(0.5, [dry], { rain: 1 });
+    expect(caught.x - 40).toBeGreaterThan(RUN.dash[0] * 0.5 - 1e-9);
+    expect(dry.x - 40).toBeCloseTo(dry.speed * 0.5);
+    run(scene, [caught], 6, 1);
+    expect(scene.visits.get(caught)!.state).toBe('shelter');
+    run(scene, [caught], 1, 0);
+    const from = caught.x;
+    scene.step(0.5, [caught], { rain: 0 });
+    expect(scene.visits.get(caught)!.state).toBe('return');
+    expect(from - caught.x).toBeCloseTo(caught.speed * 0.5);
+  });
+  it('sends those with no umbrella to cover from further away', () => {
+    const covered = (umbrella: number) => {
+      const scene = setup(2);
+      const p = { ...person(), x: 2, d: 2, group: [{ ...walker, umbrella }] };
+      run(scene, [p], 20, 1);
+      return scene.visits.has(p);
+    };
+    expect(covered(1)).toBe(true);
+    expect(covered(0)).toBe(false);
   });
   it('freezes unseen visits and resumes them without accumulating time', () => {
     const scene = setup();

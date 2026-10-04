@@ -57,6 +57,7 @@ import {
   LIFE_ZOOM,
   MAX_STEP_S,
   RETIRE,
+  RUN,
   ADOPT,
   MAX_TILE_AGENTS,
   MAX_TILE_GATHERERS,
@@ -88,6 +89,7 @@ import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from '
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { exposed, runPace } from './running';
 import { LifeInspection } from './inspection';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { DialogueMemory } from './dialogue';
@@ -216,6 +218,8 @@ export type Mover = {
   /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
   trot?: number;
   lying?: boolean;
+  /** People: seconds left of a run (config.ts `RUN`). */
+  run?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -473,6 +477,7 @@ export class TileLife {
   signals!: SignalControl;
   scenes!: LocalScenes;
   private readonly catRng: () => number;
+  private readonly runRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
   readonly pending: PendingSeed[] = [];
@@ -593,6 +598,7 @@ export class TileLife {
     this.birdRng = random(seed ^ 0x165667b1);
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
+    this.runRng = random(seed ^ 0xcc9e2d51);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
@@ -2689,6 +2695,13 @@ export class TileLife {
           (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
           a.i - b.i,
       );
+    const rain = env?.rain ?? 0;
+    // Runners held out of view keep their run but not their place among those running.
+    let running = 0;
+    for (const m of this.movers)
+      if ((m.run ?? 0) <= 0) continue;
+      else if (this.scenes.visits.has(m)) m.run = 0;
+      else if (!near || near(m.x, m.y)) running++;
     for (const { i, m } of order) {
       if (this.inspected === m) continue;
       if (pass?.owns && !pass.owns(m)) continue;
@@ -2779,6 +2792,10 @@ export class TileLife {
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
+          if (m.run) {
+            m.run = 0;
+            running--;
+          }
           continue;
         }
         const idle = this.canIdle(m);
@@ -2789,9 +2806,17 @@ export class TileLife {
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
           m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
+          if (m.run) {
+            m.run = 0;
+            running--;
+          }
           continue;
         }
         if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
+          if (m.run) {
+            m.run = 0;
+            running--;
+          }
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -2799,6 +2824,12 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+      }
+      if (m.kind === 'person') {
+        const was = (m.run ?? 0) > 0;
+        const pace = this.runSpeed(m, dt, rain, running < RUN.maxPerTile);
+        running += Number((m.run ?? 0) > 0) - Number(was);
+        if (pace !== undefined) speeds[i] = pace;
       }
       const walking = isWalker(m.kind);
       if (walking) {
@@ -2907,6 +2938,28 @@ export class TileLife {
     m.d = this.segment(m.from, to) - m.d;
     m.from = to;
     m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /**
+   * How fast a person runs this step (config.ts `RUN`), or undefined while they walk. In the rain
+   * anyone with no umbrella runs; otherwise someone walking alone now and then runs a few
+   * seconds, while there is `room` (fewer than `RUN.maxPerTile` in the tile running). A run ends
+   * early when they are held up.
+   */
+  private runSpeed(m: Mover, dt: number, rain: number, room: boolean): number | undefined {
+    if (this.scenes.raining) {
+      if (m.run) m.run = 0;
+      return exposed(m.group, rain) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+    }
+    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : m.run! - dt;
+    else if (
+      room &&
+      m.group?.length === 1 &&
+      m.group[0]!.figure === 'adult' &&
+      this.runRng() < RUN.chance * dt
+    )
+      m.run = between(this.runRng, RUN.seconds);
+    return (m.run ?? 0) > 0 ? runPace(m, RUN.speed, this.perMeter) : undefined;
   }
 
   /**
