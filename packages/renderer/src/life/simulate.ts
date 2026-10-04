@@ -103,7 +103,7 @@ import {
   forageMovement,
   forageSpot,
   isForager,
-  prepareForageTerrain,
+  prepareForageTerrainSteps,
   rebaseForagers,
   stepForager,
   type ForageTerrain,
@@ -503,16 +503,21 @@ export type Flock = {
   perch: number;
   /** Sitting in that tree. */
   perched: boolean;
-  /** Flying down to its roost to settle on the ground there, and settled (life/birds.ts `ground`). */
+  /** Approaching a prepared suitable ground patch, and settled there (birds.ts `ground`). */
   landing: boolean;
   landed: boolean;
-  /** Ground phase and fixed patch anchor; home retains the roost through a tree rest. */
+  /** Feeding rather than resting during a ground visit. */
   feeding: boolean;
+  /** Seconds left in the current feeding or ground-rest bout. */
   bout: number;
+  /** Fixed landing-patch anchor, in tile units, retained through a tree rest. */
   lx: number;
   ly: number;
+  /** Saved roost index for a tree return; -1 outside a committed tree rest. */
   home: number;
+  /** Ground preparation was tried for this destination; bounds failed rain retries. */
   landingAttempted: boolean;
+  /** Approach offset blend from 0 to 1; completed before touchdown. */
   landingBlend: number;
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
@@ -746,10 +751,44 @@ export class TileLife {
   /** Ground choices cannot change flight, traffic, or walking random streams. */
   private readonly forageRng: () => number;
   private forageTerrain?: ForageTerrain;
+  private forageGuard?: (from: Point, to: Point) => boolean;
   private forageCheckCount = 0;
   /** Includes centre/layout candidates and complete ground movement validations. */
   get forageChecks() {
     return this.forageCheckCount;
+  }
+
+  /** Seasonal footprints change independently of immutable tile terrain. */
+  setForageGuard(guard: ((from: Point, to: Point) => boolean) | undefined) {
+    const changed = !!guard || !!this.forageGuard;
+    this.forageGuard = guard;
+    if (!changed) return;
+    for (const flock of this.flocks) {
+      if (!flock.landed && !flock.landing) continue;
+      let unsafe = false;
+      for (const bird of flock.birds) {
+        if (!isForager(bird)) continue;
+        // Discard certificates made against the previous seasonal terrain.
+        bird.tx = bird.gx;
+        bird.ty = bird.gy;
+        const p = {
+          x: (flock.landing ? flock.lx : flock.x) + bird.gx,
+          y: (flock.landing ? flock.ly : flock.y) + bird.gy,
+        };
+        if (guard) {
+          this.forageCheckCount++;
+          if (!guard(p, p)) unsafe = true;
+        }
+      }
+      if (unsafe) {
+        flock.landed = false;
+        this.pickDestination(flock);
+        flock.perch = -1;
+        flock.landing = false;
+        flock.landingAttempted = false;
+        flock.scatter = PERCH.scatter;
+      }
+    }
   }
   /** Dogs: their own stream, so no one else moves for them. */
   private readonly dogRng: () => number;
@@ -796,6 +835,8 @@ export class TileLife {
     const { tile, geo, routingSeed: seed } = this;
     const lines = geo.kinds.length;
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
+    if (geo.roosts.length)
+      this.forageTerrain = yield* prepareForageTerrainSteps(geo, this.perMeter);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
@@ -3179,11 +3220,15 @@ export class TileLife {
     flock.landingAttempted = true;
     const spec = FORAGE_SPECIES[flock.species];
     if (!spec || !this.geo.roosts.length) return false;
-    const terrain = (this.forageTerrain ??= prepareForageTerrain(this.geo, this.perMeter));
+    const terrain = this.forageTerrain;
+    if (!terrain) return false;
     const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
     const ok = (p: Point) => {
       this.forageCheckCount++;
-      return forageable(flock.species, habitat, p.x, p.y, terrain, this.perMeter);
+      return (
+        forageable(flock.species, habitat, p.x, p.y, terrain, this.perMeter) &&
+        (!this.forageGuard || this.forageGuard(p, p))
+      );
     };
     const origin = {
       x: this.geo.roosts[flock.roost * 2]!,
@@ -3278,7 +3323,8 @@ export class TileLife {
       }
     }
     if (!flock.feeding) return;
-    const terrain = (this.forageTerrain ??= prepareForageTerrain(this.geo, this.perMeter));
+    const terrain = this.forageTerrain;
+    if (!terrain) return;
     const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
     const context = {
       x: flock.x,
@@ -3288,7 +3334,10 @@ export class TileLife {
       perMeter: this.perMeter,
       ok: (from: Point, to: Point) => {
         this.forageCheckCount++;
-        return forageMovement(flock.species, habitat, from, to, terrain, this.perMeter);
+        return (
+          forageMovement(flock.species, habitat, from, to, terrain, this.perMeter) &&
+          (!this.forageGuard || this.forageGuard(from, to))
+        );
       },
     };
     for (const bird of flock.birds)
@@ -3344,7 +3393,7 @@ export class TileLife {
   /**
    * Move the flocks on. A sitting flock (in a tree, or on the ground) stays its while, unless a
    * gust through the crown or someone coming near flushes it; in the rain (`env`) it sits it out,
-   * and flying flocks that perch head for the trees, those that land settle at their roost. The
+   * and flying flocks that perch head for the trees, those that land seek a safe ground patch. The
    * wind pushes circling flocks downwind, and faster round the downwind side. Bats flit.
    */
   private stepFlocks(
@@ -3407,7 +3456,7 @@ export class TileLife {
       ) {
         this.pickDestination(flock);
       }
-      // Rain: those that perch head for the trees, those that land settle at their roost.
+      // Rain: those that perch head for the trees, those that land seek a safe ground patch.
       if (sheltering && flock.scatter === 0 && flock.perch < 0 && !flock.landing) {
         if (spec.perch > 0 && perches.length > 0) {
           flock.perch = Math.floor(this.birdRng() * (perches.length / 2));
@@ -3417,7 +3466,7 @@ export class TileLife {
       }
       if (flock.landing)
         flock.landingBlend = Math.min(1, flock.landingBlend + dt / FORAGE.settleSeconds);
-      // Flying to a tree, or down to its roost: straight there, nudged downwind, then settle.
+      // Flying to a tree or prepared ground patch: straight there, nudged downwind, then settle.
       const to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
@@ -4505,6 +4554,25 @@ export class LifeWorld {
       body.width *= o.scale;
       return body;
     };
+    life.setForageGuard(
+      terrain.seasonal.polygons.length
+        ? (from, to) => {
+            const dx = (to.x - from.x) / life.perMeter;
+            const dy = (to.y - from.y) / life.perMeter;
+            const length = Math.hypot(dx, dy);
+            return !terrain.seasonal.hits([
+              transform({
+                x: (from.x + to.x) / (2 * life.perMeter),
+                y: (from.y + to.y) / (2 * life.perMeter),
+                hx: length ? dx / length : 1,
+                hy: length ? dy / length : 0,
+                length: length + 0.01,
+                width: 0.01,
+              }),
+            ]);
+          }
+        : undefined,
+    );
     life.reconcileSeasonalActors(
       (owner) => {
         const bodies = life.groundBodies(owner, 0, this.groundSample);

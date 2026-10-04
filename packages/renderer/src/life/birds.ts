@@ -57,7 +57,7 @@ export type BirdSpec = {
   flap: number;
   /** The chance a flock picking where to go next lands in a tree (config.ts `PERCH`). */
   perch: number;
-  /** The chance it lands on the ground at its roost instead of circling it (not in trees). */
+  /** The chance it approaches suitable ground near its roost instead of circling it. */
   ground: number;
   /** A sitting flock takes off when someone comes within this many meters (a dog, twice). */
   wary: number;

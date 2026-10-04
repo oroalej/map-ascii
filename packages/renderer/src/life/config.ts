@@ -363,6 +363,7 @@ export const BIRDS = {
 /** Ground feeding: bounded spot searches, visit seconds, nearby tree rests and landing blend. */
 export const FORAGE = {
   attempts: 8,
+  /** Search radius in metres for both reachable shoreline and a nearby resting tree. */
   reach: 40,
   visit: [60, 180],
   returnChance: 0.8,

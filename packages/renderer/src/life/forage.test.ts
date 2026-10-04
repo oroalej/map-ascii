@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SeasonalDisplayRecord } from '@atlas/shared';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
-import { BirdPose, Habitat, type BirdSpecies } from './birds';
+import { BIRD_SPECIES, BirdPose, Habitat, type BirdSpecies } from './birds';
 import { FORAGE, type AgentKind } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import {
@@ -9,11 +10,15 @@ import {
   forageMovement,
   forageSpot,
   prepareForageTerrain,
+  prepareForageTerrainSteps,
   rebaseForagers,
   stepForager,
+  shoreDistance,
   type GroundForager,
 } from './forage';
 import { random } from './random';
+import { complete } from './cooperate';
+import { PolygonIndex } from './occupancy';
 import { LifeWorld, TileLife, trainLength, type Flock, type Mover } from './simulate';
 import { worldTiles } from './testing/scenarios';
 
@@ -30,6 +35,81 @@ const ring = (x0: number, y0: number, x1: number, y1: number) => [
 const ground = (): GroundForager => ({ gx: 0, gy: 0, tx: 0, ty: 0, face: 0, wait: 0 });
 
 describe('foraging terrain', () => {
+  it('keeps only exposed union boundaries, including partially shared and intersecting edges', () => {
+    for (const overlap of [false, true]) {
+      const builder = new LifeBuilder();
+      builder.area('blocked', [ring(-30, -20, overlap ? 10 : 0, 20)], true);
+      builder.area('blocked', [ring(overlap ? -10 : 0, -10, 30, 10)], true);
+      const terrain = prepareForageTerrain(builder.finish(), perMeter);
+      const seam = point(overlap ? 10 : 0, 0);
+      expect(forageable('egret', Habitat.water, seam.x, seam.y, terrain, perMeter)).toBe(false);
+      const exposed = point((overlap ? 10 : 0) - 0.5, 15);
+      expect(
+        shoreDistance({ x: exposed.x / perMeter, y: exposed.y / perMeter }, terrain),
+      ).toBeCloseTo(-0.5);
+      expect(forageable('egret', Habitat.water, exposed.x, exposed.y, terrain, perMeter)).toBe(
+        true,
+      );
+      const spot = forageSpot('egret', Habitat.water, seam, terrain, perMeter, random(1));
+      expect(spot).toBeDefined();
+      expect(Math.hypot(spot!.x - seam.x, spot!.y - seam.y) / perMeter).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('cooperatively prepares and caches terrain before the first landing step', () => {
+    const builder = new LifeBuilder();
+    builder.area('blocked', [ring(-100, -10, 100, 10)], true);
+    builder.roost(point(0, 20), Habitat.park);
+    const geo = builder.finish();
+    const work = prepareForageTerrainSteps(geo, perMeter);
+    expect(work.next().done).toBe(false);
+    const terrain = complete(work);
+    const cached = prepareForageTerrainSteps(geo, perMeter).next();
+    expect(cached.done).toBe(true);
+    expect(cached.value).toBe(terrain);
+    expect(prepareForageTerrain(geo, perMeter)).toBe(terrain);
+
+    const fresh = new LifeBuilder();
+    fresh.area('blocked', [ring(20, 20, 25, 25)]);
+    const { life, flock } = flockFixture('pigeon', fresh);
+    const add = vi.spyOn(PolygonIndex.prototype, 'add');
+    try {
+      flock.stay = 1000;
+      life.step(0.1, undefined, onlyBirds, undefined, { rain: 1 });
+      expect(life.forageChecks).toBeGreaterThan(0);
+      expect(add).not.toHaveBeenCalled();
+    } finally {
+      add.mockRestore();
+    }
+  });
+
+  it('matches exact shore distances within bounded searches and uses one query for point moves', () => {
+    const builder = new LifeBuilder();
+    builder.area('blocked', [ring(-100, -10, 100, 10), ring(-4, -4, 4, 4)], true);
+    builder.area('blocked', [ring(50, 50, 80, 80)], true);
+    const terrain = prepareForageTerrain(builder.finish(), perMeter);
+    const nearby = vi.spyOn(terrain.shoreIndex, 'nearby');
+    for (let x = -15; x <= 15; x += 3)
+      for (let y = -15; y <= 15; y += 3) {
+        const p = point(x, y);
+        const metric = { x: p.x / perMeter, y: p.y / perMeter };
+        const exact = shoreDistance(metric, terrain);
+        const bounded = shoreDistance(metric, terrain, 3);
+        if (Math.abs(exact) <= 3) expect(bounded).toBeCloseTo(exact);
+        else expect(bounded).toBe(Infinity);
+      }
+    expect(nearby).toHaveBeenCalled();
+    nearby.mockRestore();
+    const p = point(0, 9);
+    const water = vi.spyOn(terrain.water, 'hits');
+    expect(forageable('egret', Habitat.water, p.x, p.y, terrain, perMeter)).toBe(true);
+    expect(water).toHaveBeenCalledTimes(1);
+    water.mockClear();
+    expect(forageMovement('egret', Habitat.water, p, p, terrain, perMeter)).toBe(true);
+    expect(water).toHaveBeenCalledTimes(1);
+    water.mockRestore();
+  });
+
   it('uses metric blocked, water and full carriageway footprints, preserving holes and cache scale', () => {
     const builder = new LifeBuilder();
     builder.area('blocked', [ring(-100, -10, 100, 10), ring(-4, -4, 4, 4)], true);
@@ -108,6 +188,10 @@ describe('foraging terrain', () => {
 });
 
 describe('ground gaits', () => {
+  it('provides a forage specification for every ground-capable species', () => {
+    for (const species of Object.keys(BIRD_SPECIES) as BirdSpecies[])
+      if (BIRD_SPECIES[species].ground > 0) expect(FORAGE_SPECIES[species]).toBeDefined();
+  });
   it('converts distances and speeds to tile units, validating once before interpolation', () => {
     const bird = ground(),
       ok = vi.fn(() => true);
@@ -235,6 +319,13 @@ describe('foraging flocks', () => {
     for (let i = 0; i < 3000; i++) life.step(0.1, undefined, onlyBirds, undefined, { rain: 1 });
     expect(life.forageChecks).toBe(checks);
     expect(flock.landed).toBe(false);
+    for (let i = 0; i < 3000; i++) {
+      flock.stay = 0;
+      life.step(0.1, undefined, onlyBirds);
+      expect(flock.landed).toBe(false);
+      expect(flock.landing).toBe(false);
+    }
+    expect(life.forageChecks).toBeGreaterThan(checks + FORAGE.attempts);
   });
 
   it('alternates feeding and rest, keeps every step safe, expires visits, and bounds total checks', () => {
@@ -459,6 +550,118 @@ describe('foraging flocks', () => {
   });
 });
 
+describe('seasonal foraging clearance', () => {
+  const fixture = (radius = 5) => {
+    const builder = new LifeBuilder();
+    builder.roost(point(0, 0));
+    const tree: SeasonalDisplayRecord = {
+      version: 1,
+      kind: 'christmas-tree',
+      id: 'forage-tree',
+      season: 'winter',
+      installation: 'tree',
+      anchor: 'osm:way/1',
+      at: tileToLngLat(tile, point(0, 0)),
+      radius_m: radius,
+      seed: 19,
+    };
+    const geo = { ...builder.finish(), seasonalTrees: [tree] };
+    const world = new LifeWorld();
+    world.setSeasons([
+      {
+        id: 'winter',
+        installations: [{ id: 'tree', anchor: tree.anchor, kind: 'christmas-tree' }],
+      },
+    ]);
+    // A neighboring reference tile makes the seasonal index's metric origin different.
+    world.sync([
+      { key: 'neighbor', tile: { ...tile, x: tile.x - 1 }, life: new LifeBuilder().finish() },
+      { key: 'seasonal-forage', tile, life: geo },
+    ]);
+    const life = worldTiles(world).get('seasonal-forage')!;
+    const flock = life.flocks[0]!;
+    life.flocks.splice(0, life.flocks.length, flock);
+    life.movers.length = life.gatherers.length = 0;
+    Object.assign(flock, { species: 'pigeon', rank: 0, perch: -1, perched: false, stay: 0 });
+    const season = (active: boolean) =>
+      world.step(0, undefined, 21, undefined, undefined, {
+        rain: 0,
+        season: active ? 'winter' : null,
+      });
+    return { world, life, flock, geo, season };
+  };
+
+  it('excludes active installation footprints from complete landing layouts', () => {
+    const { life, flock, season } = fixture();
+    season(true);
+    land(life, flock);
+    for (const bird of flock.birds)
+      expect(
+        Math.hypot(flock.x + bird.gx! - 2048, flock.y + bird.gy! - 2048) / perMeter,
+      ).toBeGreaterThan(5);
+  });
+
+  it('flushes unsafe grounded and approaching flocks when a season activates', () => {
+    for (const approaching of [false, true]) {
+      const { life, flock, geo, season } = fixture();
+      land(life, flock);
+      const identities = [...flock.birds];
+      Object.assign(flock, {
+        ...point(0, 0),
+        lx: 2048,
+        ly: 2048,
+        landed: !approaching,
+        landing: approaching,
+      });
+      for (const bird of flock.birds) Object.assign(bird, { gx: 0, gy: 0, tx: 0, ty: 0 });
+      const cached = prepareForageTerrain(geo, perMeter);
+      season(false);
+      expect(flock.landed || flock.landing).toBe(true);
+      season(true);
+      expect(flock).toMatchObject({ landed: false, landing: false, feeding: false, home: -1 });
+      expect(flock.scatter).toBeGreaterThan(0);
+      expect(flock.birds).toEqual(identities);
+      expect(prepareForageTerrain(geo, perMeter)).toBe(cached);
+    }
+  });
+
+  it('cancels old certificates and rejects a seasonal obstacle between safe movement endpoints', () => {
+    const { life, flock, season } = fixture(0.1);
+    land(life, flock);
+    const bird = flock.birds[0]!;
+    flock.birds.splice(1);
+    Object.assign(flock, {
+      ...point(-0.25, 0),
+      lx: point(-0.25, 0).x,
+      ly: 2048,
+      feeding: true,
+      stay: 100,
+      bout: 100,
+    });
+    Object.assign(bird, { gx: 0, gy: 0, tx: 0.5 * perMeter, ty: 0, face: 0, wait: 0 });
+    season(true);
+    expect(flock.landed).toBe(true);
+    expect(bird.tx).toBe(bird.gx);
+    // Fix the new movement decision to a straight 0.5 m walk across the footprint.
+    const rng = vi
+      .spyOn(life as unknown as { forageRng: () => number }, 'forageRng')
+      .mockReturnValue(0.5);
+    try {
+      life.step(0.1, undefined, onlyBirds);
+      expect(bird.gx).toBe(0);
+      expect(bird.tx).toBe(0);
+      expect(bird.wait).toBeGreaterThan(0);
+      season(false);
+      bird.face = bird.wait = 0;
+      life.step(0.1, undefined, onlyBirds);
+      expect(bird.gx).toBeGreaterThan(0);
+      expect((flock.x + bird.tx! - point(-0.25, 0).x) / perMeter).toBeCloseTo(0.5);
+    } finally {
+      rng.mockRestore();
+    }
+  });
+});
+
 describe('ground bird views', () => {
   const viewFixture = () => {
     const builder = new LifeBuilder();
@@ -510,7 +713,17 @@ describe('ground bird views', () => {
     expect(groundState(flock)).toEqual(state);
     flock.feeding = false;
     flock.bout = 100;
+    for (const bird of flock.birds) bird.face = bird.phase * 2 * Math.PI + 1;
     const rest = views();
+    rest.forEach((agent, i) => {
+      const bird = flock.birds[i]!;
+      expect(agent.ahead).toEqual(
+        tileToLngLat(tile, {
+          x: flock.x + bird.gx! + Math.cos(bird.face!) * perMeter,
+          y: flock.y + bird.gy! + Math.sin(bird.face!) * perMeter,
+        }),
+      );
+    });
     life.step(1, undefined, onlyBirds);
     expect(views()).toEqual(rest);
   });
