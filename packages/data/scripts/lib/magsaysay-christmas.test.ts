@@ -1,172 +1,117 @@
 import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
-import {
-  Season,
-  localMetricProjection,
-  type SeasonalPoint,
-  type SeasonalLightStringRecord,
-} from '@atlas/shared';
+import { Season, localMetricProjection, type SeasonalPoint } from '@atlas/shared';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';
 import { generateSeasonalInstallations } from './seasonal-installations';
 
-it('keeps Magsaysay ground displays inside orange/red, outside access/parking, and lights only the adjacent house', () => {
-  const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
-  const config = {
-    ...season,
-    grounds: season.grounds!.filter((g) => g.id === 'magsaysay-orange-display'),
-    installations: season.installations!.filter((i) =>
-      ['magsaysay-orange-garlands', 'magsaysay-house-lights', 'magsaysay-orange-border'].includes(
-        i.id,
-      ),
-    ),
-  };
-  expect(config.installations).toHaveLength(3);
-  expect(config.grounds).toHaveLength(1);
-  expect(config.installations.every((i) => i.anchor === 'osm:way/23664053')).toBe(true);
-  const features = reference.features as AtlasFeature[];
+const anchor = 'osm:way/23664053';
+const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
+const config = {
+  ...season,
+  grounds: season.grounds!.filter((g) => g.anchor === anchor),
+  installations: season.installations!.filter((i) => i.anchor === anchor),
+};
+const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
+
+it('wraps the existing roadside crown and retains house lights without yard strings, paths or parking', () => {
+  expect(config.installations).toHaveLength(4);
+  expect(config.grounds).toHaveLength(3);
+  expect(config.installations.filter((i) => i.kind === 'light-string')).toMatchObject([
+    { id: 'magsaysay-house-lights', layout: 'building-perimeter' },
+  ]);
+  expect(config.installations.find((i) => i.id === 'magsaysay-tree-lights')).toMatchObject({
+    kind: 'decorated-canopy',
+    grounds: 'magsaysay-tree-display',
+    trees: 'overlapping',
+  });
+  const before = structuredClone(features);
   const result = generateSeasonalInstallations(features, [config]);
-  const red = polygon([reference.red]),
-    yellow = polygon([reference.yellow]);
-  const orange = polygon([config.grounds[0]!.ring]);
-  const house = features.find((f) => f.properties.id === config.installations[0]!.anchor)!;
+  expect(features).toEqual(before);
+  expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
+  expect(result.records.some((r) => r.kind === 'access-path')).toBe(false);
+  const crowns = result.records.filter((r) => r.kind === 'decorated-canopy');
+  expect(crowns).toHaveLength(1);
+  expect(crowns[0]).toMatchObject({
+    installation: 'magsaysay-tree-lights',
+    at: reference.integrationTrees[0]!.geometry.coordinates,
+    radius_m: 8.5,
+  });
+  expect(new Set(result.records.map((r) => r.id)).size).toBe(result.records.length);
+  const strings = result.records.filter((r) => r.kind === 'light-string');
+  expect(strings).toHaveLength(21);
+  expect(
+    strings.every((r) => r.installation === 'magsaysay-house-lights' && r.mount === 'building'),
+  ).toBe(true);
+  const house = features.find((f) => f.properties.id === anchor)!;
   if (house.geometry.type !== 'Polygon') throw new Error('expected complete house');
   const roof = polygon(house.geometry.coordinates);
-  let trees = 0,
-    groundStrings = 0,
-    roofStrings = 0;
-  const clear = (p: SeasonalPoint) => {
-    expect(booleanPointInPolygon(p, orange)).toBe(true);
-    expect(booleanPointInPolygon(p, red)).toBe(true);
-    expect(booleanPointInPolygon(p, yellow)).toBe(false);
-    expect(booleanPointInPolygon(p, roof)).toBe(false);
-  };
-  for (const record of result.records) {
-    if (record.kind === 'christmas-tree') {
-      trees++;
-      // Include the full physical footprint and its pedestrian clearance, not only its center.
-      for (let i = 0; i < 64; i++) {
-        const angle = (i * Math.PI) / 32,
-          radius = record.radius_m + 1;
-        clear([
-          record.at[0] +
-            (Math.cos(angle) * radius) / (111320 * Math.cos((record.at[1] * Math.PI) / 180)),
-          record.at[1] + (Math.sin(angle) * radius) / 111320,
-        ]);
-      }
-    } else if (record.kind === 'light-string') {
-      expect(record.bulb_spacing_m).toBeLessThanOrEqual(0.4);
-      expect(record.palette).toBe(
-        record.installation === 'magsaysay-orange-garlands' ? 'warm' : 'christmas',
-      );
-      if (record.mount === 'building') roofStrings++;
-      else groundStrings++;
-      for (let i = 0; i <= 100; i++) {
-        const p: SeasonalPoint = [
-          record.from[0] + ((record.to[0] - record.from[0]) * i) / 100,
-          record.from[1] + ((record.to[1] - record.from[1]) * i) / 100,
-        ];
-        if (record.mount === 'building') expect(booleanPointInPolygon(p, roof)).toBe(true);
-        else clear(p);
-      }
-    } else throw new Error('unexpected Magsaysay decoration');
-  }
-  expect(trees).toBe(0);
-  expect(groundStrings).toBeGreaterThan(5);
-  const canopy = config.installations.find((i) => i.id === 'magsaysay-orange-garlands')!;
-  expect(canopy).toMatchObject({ layout: 'canopy', mount: 'canopy', spacing_m: 0.9 });
-  expect(roofStrings).toBeGreaterThan(10);
-  expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
-  // The independently authored landscape tree occupies the orange patch. Hanging lights
-  // must still bake identically without attempting to add a blocked physical tree.
-  expect(
-    generateSeasonalInstallations(
-      [...features, ...(reference.integrationTrees as AtlasFeature[])],
-      [config],
-    ),
-  ).toEqual(result);
-});
-it('lights all three latest yellow patches and places the red Christmas tree without restoring paths or parking', () => {
-  const season = Season.parse(city.life.seasons.find((s) => s.id === 'christmas'));
-  const config = {
-    ...season,
-    installations: season.installations!.filter((i) => i.id.startsWith('magsaysay-')),
-  };
-  const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
-  const result = generateSeasonalInstallations(features, [config]);
-  expect(config.installations.some((i) => i.kind === 'access-path')).toBe(false);
-  expect(result.records.some((r) => r.kind === 'access-path')).toBe(false);
-  expect(result.records.filter((r) => r.kind === 'christmas-tree')).toHaveLength(2);
-  const tree = result.records.find(
-    (r) => r.kind === 'christmas-tree' && r.installation === 'magsaysay-red-tree',
-  );
-  if (!tree || tree.kind !== 'christmas-tree') throw new Error('missing red tree');
-  expect(tree.radius_m).toBe(1.8);
-  const projection = localMetricProjection([123.19584784, 13.63244394]);
-  expect(Math.hypot(...projection.to(tree.at))).toBeLessThan(1.1);
-  const treeGrounds = polygon([config.grounds!.find((g) => g.id === 'magsaysay-red-tree')!.ring]);
-  for (let i = 0; i < 64; i++) {
-    const angle = (i * Math.PI) / 32;
-    const offset = projection.to(tree.at);
-    const footprint = projection.from([
-      offset[0] + Math.cos(angle) * (tree.radius_m + 1),
-      offset[1] + Math.sin(angle) * (tree.radius_m + 1),
-    ]);
-    expect(booleanPointInPolygon(footprint, treeGrounds)).toBe(true);
-  }
-  for (const patch of ['west', 'middle', 'east']) {
-    const id = `magsaysay-yellow-${patch}-lights`;
-    const installation = config.installations.find((i) => i.id === id)!;
-    expect(installation).toMatchObject({
-      kind: 'light-string',
-      spacing_m: 0.75,
-      bulb_spacing_m: 0.3,
-      palette: 'christmas',
-      mount: 'canopy',
-    });
-    const patchLights = result.records.filter(
-      (r): r is SeasonalLightStringRecord => r.kind === 'light-string' && r.installation === id,
-    );
-    expect(patchLights.length).toBeGreaterThanOrEqual(3);
-    const ground = polygon([config.grounds!.find((g) => g.id === installation.grounds)!.ring]);
-    for (const light of patchLights)
-      for (let n = 0; n <= 20; n++)
-        expect(
-          booleanPointInPolygon(
-            [
-              light.from[0] + ((light.to[0] - light.from[0]) * n) / 20,
-              light.from[1] + ((light.to[1] - light.from[1]) * n) / 20,
-            ],
-            ground,
-          ),
-        ).toBe(true);
-  }
-  const lights = result.records.filter(
-    (r): r is SeasonalLightStringRecord =>
-      r.kind === 'light-string' && r.installation.includes('-island-'),
-  );
-  expect(lights.length).toBeGreaterThanOrEqual(5);
-  for (const light of lights)
-    for (let i = 0; i <= 100; i++) {
-      const p: SeasonalPoint = [
-        light.from[0] + ((light.to[0] - light.from[0]) * i) / 100,
-        light.from[1] + ((light.to[1] - light.from[1]) * i) / 100,
+  for (const string of strings) {
+    expect(string.palette).toBe('christmas');
+    expect(string.bulb_spacing_m).toBe(0.4);
+    for (let n = 0; n <= 20; n++) {
+      const point: SeasonalPoint = [
+        string.from[0] + ((string.to[0] - string.from[0]) * n) / 20,
+        string.from[1] + ((string.to[1] - string.from[1]) * n) / 20,
       ];
-      const grounds = config.grounds!.find(
-        (g) =>
-          g.id === config.installations.find((item) => item.id === light.installation)!.grounds,
-      )!;
-      expect(booleanPointInPolygon(p, polygon([grounds.ring]))).toBe(true);
+      expect(booleanPointInPolygon(point, roof)).toBe(true);
     }
-  for (const [id, count] of [
-    ['magsaysay-orange-garlands', 7],
-    ['magsaysay-orange-border', 9],
-    ['magsaysay-house-lights', 21],
-  ] as const)
-    expect(
-      result.records.filter((r) => r.kind !== 'bunting' && r.installation === id),
-    ).toHaveLength(count);
-  expect(generateSeasonalInstallations([...features].reverse(), [config])).toEqual(result);
+  }
+  expect(
+    generateSeasonalInstallations(features, [
+      {
+        ...config,
+        installations: config.installations.filter((i) => i.id === 'magsaysay-house-lights'),
+      },
+    ]).records,
+  ).toEqual(strings);
+});
+
+it('preserves both Christmas tree identities, footprints and exact positions', () => {
+  const result = generateSeasonalInstallations(features, [config]);
+  const trees = result.records.filter((r) => r.kind === 'christmas-tree');
+  expect(trees).toEqual([
+    {
+      version: 1,
+      id: 'season:christmas/magsaysay-island-tree-1/tree',
+      season: 'christmas',
+      installation: 'magsaysay-island-tree-1',
+      anchor,
+      seed: 1725857888,
+      kind: 'christmas-tree',
+      at: [123.19588264988285, 13.63237500422925],
+      radius_m: 1,
+    },
+    {
+      version: 1,
+      id: 'season:christmas/magsaysay-red-tree/tree',
+      season: 'christmas',
+      installation: 'magsaysay-red-tree',
+      anchor,
+      seed: 2445793126,
+      kind: 'christmas-tree',
+      at: [123.19584599056593, 13.632442139335248],
+      radius_m: 1.8,
+    },
+  ]);
+  for (const tree of trees) {
+    if (tree.kind !== 'christmas-tree') throw new Error('expected Christmas tree');
+    const installation = config.installations.find((i) => i.id === tree.installation)!;
+    const ground = polygon([config.grounds.find((g) => g.id === installation.grounds)!.ring]);
+    const projection = localMetricProjection(tree.at);
+    for (let i = 0; i < 64; i++) {
+      const angle = (i * Math.PI) / 32;
+      expect(
+        booleanPointInPolygon(
+          projection.from([
+            Math.cos(angle) * (tree.radius_m + 1),
+            Math.sin(angle) * (tree.radius_m + 1),
+          ]),
+          ground,
+        ),
+      ).toBe(true);
+    }
+  }
 });

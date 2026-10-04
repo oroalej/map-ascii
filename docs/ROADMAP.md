@@ -140,7 +140,7 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - [x] Small human moments — greetings, conversations, ball passing and monument viewing, with guarded stationary poses, independent decisions and spare-capacity props.
 - [ ] M3 — Polish: trains on the same track queue; rain splashes on water.
 - [ ] M4 — Transit stops: bus and jeepney stops and terminals from OSM; jeepneys dwell to board and drop people; tricycles queue at terminals.
-- [x] M5a — Festive decorations: sourced draft pack calendars, preview chip, star lanterns, bunting, temporary stalls, residential fireworks, Christmas installations and seasonal carnivals (`life.seasons`); automatic real city date and reduced-motion behavior. Generated dense corridors, installations and carnivals are implemented with local tiles; archive publication remains pending.
+- [x] M5a — Festive decorations: sourced illustrative pack calendars, preview chip, star lanterns, bunting, temporary stalls, residential fireworks, Christmas installations and seasonal carnivals (`life.seasons`); automatic real city date and reduced-motion behavior. Generated dense corridors, installations and carnivals are implemented with local tiles; archive publication remains pending.
 - [ ] M5b — Fiesta crowds in September, separately from decorative fixtures and vendor carts.
 
 - [ ] M6 — Street processions: a `street` procession kind routed over walkable ways; Naga's Traslación (draft).

@@ -13,8 +13,6 @@ const tile = { z: 16, x: 55192, y: 30266 };
 const season: SeasonConfig = {
   id: 'feast',
   title: { en: 'Feast' },
-  status: 'draft',
-  note: 'TODO(verify)',
   sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   stalls: { label: 'Food carts', near: ['worship'], radius_m: 300, per_tile: 12 },

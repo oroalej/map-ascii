@@ -1083,16 +1083,16 @@ export const FireworksSchema = z.strictObject({
     .max(FIREWORK_VARIANTS.length)
     .refine((v) => new Set(v).size === v.length, 'duplicate firework variants'),
 }) satisfies z.ZodType<FireworksConfig>;
+const SeasonId = z
+  .string()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
+  .refine((id) => id !== 'auto', 'auto is reserved');
 export const Season = z
   .strictObject({
-    id: z
-      .string()
-      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
-      .refine((id) => id !== 'auto', 'auto is reserved'),
+    id: SeasonId,
     title: LocalizedText,
-    status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
-    note: z.string().trim().min(1).optional(),
+    includes: z.array(SeasonId).min(1).optional(),
     fireworks: FireworksSchema.optional(),
     grounds: z
       .array(SeasonGroundsSchema)
@@ -1162,6 +1162,7 @@ export const Season = z
           z.strictObject({
             ...SeasonInstallationBase,
             kind: z.literal('decorated-canopy'),
+            trees: z.enum(['inside', 'overlapping']).optional(),
           }),
         ]),
       )
@@ -1248,21 +1249,6 @@ export const Season = z
       !season.fireworks
     )
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
-    const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
-      v.includes(TODO_VERIFY),
-    );
-    if (season.status === 'verified' && todo)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a verified season cannot contain ${TODO_VERIFY}`,
-      });
-    if (season.status === 'draft' && !season.note?.includes(TODO_VERIFY))
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a draft season needs a ${TODO_VERIFY} note`,
-      });
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
@@ -1276,6 +1262,31 @@ export const CityLife = z.strictObject({
       (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
       'duplicate season id',
     )
+    .superRefine((seasons, ctx) => {
+      const byId = new Map(seasons.map((season) => [season.id, season]));
+      for (const [index, season] of seasons.entries()) {
+        const seen = new Set<string>();
+        for (const [includeIndex, id] of (season.includes ?? []).entries()) {
+          const included = byId.get(id);
+          const message = !included
+            ? 'included season must exist'
+            : id === season.id
+              ? 'a season cannot include itself'
+              : seen.has(id)
+                ? 'duplicate included season'
+                : included.includes
+                  ? 'included seasons cannot include another season'
+                  : undefined;
+          if (message)
+            ctx.addIssue({
+              code: 'custom',
+              path: [index, 'includes', includeIndex],
+              message,
+            });
+          seen.add(id);
+        }
+      }
+    })
     .optional(),
   signals: z
     .strictObject({

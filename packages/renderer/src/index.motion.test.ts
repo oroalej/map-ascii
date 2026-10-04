@@ -297,8 +297,6 @@ describe('live motion preference', () => {
           {
             id: 'new-year',
             title: { en: 'New Year' },
-            status: 'draft',
-            note: 'TODO(verify)',
             window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
             fireworks: { label: 'Fireworks', variants: ['peony'] },
           },
@@ -369,8 +367,6 @@ describe('live motion preference', () => {
           {
             id: 'feast',
             title: { en: 'Feast' },
-            status: 'draft',
-            note: 'TODO(verify)',
             window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
             bunting: { label: 'Rows', near: ['worship'], radius_m: 300, spacing_m: 30 },
           },
@@ -1011,8 +1007,6 @@ describe('live motion preference', () => {
           {
             id: 'winter',
             title: { en: 'Winter' },
-            status: 'draft',
-            note: 'TODO(verify)',
             window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
             lanterns: { label: 'Lanterns', shape: 'star' },
           },
@@ -1044,8 +1038,6 @@ describe('live motion preference', () => {
     const winter = {
       id: 'winter',
       title: { en: 'Winter' },
-      status: 'draft' as const,
-      note: 'TODO(verify)',
       sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
       window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
       lanterns: { label: 'Stars', shape: 'star' as const },

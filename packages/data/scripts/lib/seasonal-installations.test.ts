@@ -60,8 +60,6 @@ const shared = {
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: shared.sources,
   installations: [
@@ -247,6 +245,39 @@ it('keeps deterministic tree footprints away from paths, monuments and each othe
   });
   expect(a.records.filter((r) => r.kind === 'light-string').length).toBeGreaterThan(10);
 });
+it('selects overlapping crowns outside the grounds once, without changing center-inside defaults', () => {
+  const outside: AtlasFeature = {
+    ...features[3]!,
+    properties: { id: 'osm:node/5', class: 'tree', crown: 16 },
+    geometry: { type: 'Point', coordinates: [-0.00005, 0.0002] },
+  };
+  const distant: AtlasFeature = {
+    ...outside,
+    properties: { ...outside.properties, id: 'osm:node/6' },
+    geometry: { type: 'Point', coordinates: [-0.0002, 0.0002] },
+  };
+  const crowns = { ...shared, id: 'crowns', kind: 'decorated-canopy' as const };
+  const config = { ...season, installations: [crowns] };
+  const source = [...features, outside, outside, distant];
+  const original = generateSeasonalInstallations(source, [config]).records;
+  expect(original).toHaveLength(1);
+  expect(original[0]).toMatchObject({ at: [0.0002, 0.0002], radius_m: 4 });
+  expect(
+    generateSeasonalInstallations(source, [
+      { ...config, installations: [{ ...crowns, trees: 'inside' }] },
+    ]).records,
+  ).toEqual(original);
+  const overlapping = { ...config, installations: [{ ...crowns, trees: 'overlapping' as const }] };
+  const result = generateSeasonalInstallations(source, [overlapping]);
+  expect(result.records).toHaveLength(2);
+  expect(result.records.find((record) => record.id.endsWith('/osm:node/5'))).toMatchObject({
+    at: [-0.00005, 0.0002],
+    radius_m: 8,
+  });
+  expect(new Set(result.records.map((record) => record.id)).size).toBe(result.records.length);
+  expect(generateSeasonalInstallations([...source].reverse(), [overlapping])).toEqual(result);
+});
+
 it('fails loudly for missing anchors, impossible footprints and unavailable mapped trees', () => {
   const run = (change: Partial<SeasonConfig>) =>
     generateSeasonalInstallations(features, [{ ...season, ...change }]);

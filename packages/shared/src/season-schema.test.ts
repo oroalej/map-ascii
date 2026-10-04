@@ -5,13 +5,33 @@ import { FIREWORK_VARIANTS } from './seasons';
 const season = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
-  note: 'TODO(verify): annual dates and placement',
   lanterns: { label: 'Lanterns', shape: 'star' },
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('accepts center-inside and overlapping crown selection only for decorated canopies', () => {
+    const canopy = {
+      id: 'lights',
+      kind: 'decorated-canopy',
+      anchor: 'osm:way/1',
+      label: 'Lights',
+      sources: season.sources,
+    };
+    for (const trees of [undefined, 'inside', 'overlapping'])
+      expect(Season.safeParse({ ...season, installations: [{ ...canopy, trees }] }).success).toBe(
+        true,
+      );
+    expect(
+      Season.safeParse({ ...season, installations: [{ ...canopy, trees: 'all' }] }).success,
+    ).toBe(false);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...canopy, kind: 'christmas-tree', radius_m: 3, trees: 'overlapping' }],
+      }).success,
+    ).toBe(false);
+  });
   it('requires sourced, bounded access routes in matching grounds', () => {
     const grounds = {
       id: 'lot',
@@ -202,32 +222,21 @@ describe('season content validation', () => {
     ])
       expect(Season.safeParse({ ...only, installations }).success).toBe(false);
   });
-  it('accepts sourced drafts and fully verified records', () => {
+  it('requires sources, decorations, and a nonreserved id', () => {
     expect(Season.safeParse(season).success).toBe(true);
-    expect(
-      Season.safeParse({ ...season, status: 'verified', note: 'Confirmed calendar' }).success,
-    ).toBe(true);
-  });
-  it('requires sources, decorations, and a draft verification note', () => {
-    for (const change of [
-      { sources: [] },
-      { lanterns: undefined },
-      { note: undefined },
-      { note: 'Unconfirmed' },
-      { id: 'auto' },
-    ])
+    for (const change of [{ sources: [] }, { lanterns: undefined }, { id: 'auto' }])
       expect(Season.safeParse({ ...season, ...change }).success).toBe(false);
   });
-  it('rejects verified TODOs in any title language or note', () => {
-    expect(Season.safeParse({ ...season, status: 'verified' }).success).toBe(false);
+  it('accepts one-level includes and rejects unknown, self, duplicate, and nested references', () => {
+    const next = { ...season, id: 'new-year', includes: ['winter'] };
+    const parse = (seasons: unknown[]) => CityLife.safeParse({ source: 'Calendar', seasons });
+    expect(parse([next, season]).success).toBe(true);
+    for (const includes of [['missing'], ['new-year'], ['winter', 'winter'], [], ['auto']])
+      expect(parse([{ ...next, includes }, season]).success).toBe(false);
     expect(
-      Season.safeParse({
-        ...season,
-        status: 'verified',
-        note: undefined,
-        title: { en: 'Winter', fil: 'TODO(verify)' },
-      }).success,
+      parse([next, { ...season, includes: ['feast'] }, { ...season, id: 'feast' }]).success,
     ).toBe(false);
+    expect(parse([next, { ...season, includes: ['new-year'] }]).success).toBe(false);
   });
   it('rejects unknown keys, impossible dates, duplicate IDs, and incomplete placement filters', () => {
     expect(Season.safeParse({ ...season, extra: true }).success).toBe(false);

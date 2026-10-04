@@ -69,8 +69,6 @@ const carnival: SeasonalCarnivalRecord = {
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: source,
   installations: [
@@ -113,6 +111,20 @@ const grid: FixtureGrid = {
   ],
 };
 const index = (glyph: string) => mapGlyphs(themes.dark).indexOf(glyph);
+it('admits included Christmas records while retaining definition, anchor, and kind guards', () => {
+  const record = { ...tree, season: 'christmas' };
+  const newYear = { ...season, id: 'new-year', includes: ['christmas'] };
+  expect(admitsInstallation(record, newYear)).toBe(true);
+  expect(admitsInstallation(record, { ...newYear, includes: undefined })).toBe(false);
+  expect(admitsInstallation({ ...record, anchor: 'osm:way/999' }, newYear)).toBe(false);
+  expect(admitsInstallation({ ...record, installation: 'unknown' }, newYear)).toBe(false);
+  expect(admitsInstallation({ ...record, kind: 'decorated-canopy' }, newYear)).toBe(false);
+  const groups = [{ tile, life: new LifeBuilder().finish(), fixtures: [], seasonal: [record] }];
+  expect(seasonalFixtures(groups, newYear, 13.6)).toEqual([
+    { kind: 'season-installation', record },
+  ]);
+  expect(admitsInstallation(record, simulationSeasons([newYear])[0]!)).toBe(true);
+});
 it.each([35, -35, 55, 0, 90])(
   'keeps light-string stroke direction at %s degrees with rectangular cells',
   (angle) => {

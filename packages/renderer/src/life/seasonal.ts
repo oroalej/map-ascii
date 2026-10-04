@@ -3,6 +3,7 @@ import {
   DEFAULT_ROAD_WIDTH_M,
   bandVisibility,
   SEASON_ZOOM,
+  admitsSeasonRecord,
   type PlaceKind,
   type RuntimeSeasonConfig,
   type UtilityRecord,
@@ -248,7 +249,7 @@ export function seasonalFixtures(
       else if (
         r.kind === 'bunting' &&
         buntingVisible &&
-        r.season === season.id &&
+        admitsSeasonRecord(season, r.season) &&
         corridors.get(r.corridor)?.ways.includes(r.road)
       )
         dense.set(r.id, r);

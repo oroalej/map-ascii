@@ -33,9 +33,8 @@ export type FireworksConfig = { label: string; variants: FireworkVariant[] };
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
-  status: 'draft' | 'verified';
   window: SeasonWindow;
-  note?: string;
+  includes?: string[];
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
@@ -68,7 +67,7 @@ export type SeasonInstallation = {
       bulb_spacing_m?: number;
       palette?: 'warm' | 'christmas';
     }
-  | { kind: 'decorated-canopy' }
+  | { kind: 'decorated-canopy'; trees?: 'inside' | 'overlapping' }
   | {
       kind: 'access-path';
       grounds: string;
@@ -98,14 +97,13 @@ export type RuntimeSeasonConfig = Omit<
   };
 };
 export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
-  const { id, title, status, window, note, fireworks, lanterns, bunting, stalls, installations } =
+  const { id, title, window, includes, fireworks, lanterns, bunting, stalls, installations } =
     season;
   return {
     id,
     title,
-    status,
     window,
-    ...(note !== undefined && { note }),
+    ...(includes && { includes }),
     ...(fireworks && { fireworks }),
     ...(lanterns && { lanterns }),
     ...(stalls && { stalls }),
@@ -131,6 +129,41 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
       })),
     }),
   };
+}
+
+/** Expand the validated, one-level decoration references once, before identity-based caches. */
+export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeSeasonConfig[] {
+  const byId = new Map(seasons.map((season) => [season.id, season]));
+  return seasons.map((season) => {
+    const included = (season.includes ?? []).flatMap((id) => {
+      const config = byId.get(id);
+      return config ? [config] : [];
+    });
+    const lanterns = season.lanterns ?? included.find((s) => s.lanterns)?.lanterns;
+    const bunting = season.bunting ?? included.find((s) => s.bunting)?.bunting;
+    const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
+    const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
+    const installations = [
+      ...(season.installations ?? []),
+      ...included.flatMap((s) => s.installations ?? []),
+    ];
+    return {
+      ...season,
+      ...(lanterns && { lanterns }),
+      ...(bunting && { bunting }),
+      ...(stalls && { stalls }),
+      ...(fireworks && { fireworks }),
+      ...(installations.length && { installations }),
+    };
+  });
+}
+
+/** Tile records retain the authoring season id when a preview includes its decorations. */
+export function admitsSeasonRecord(
+  season: { id: string; includes?: readonly string[] },
+  recordSeason: string,
+): boolean {
+  return recordSeason === season.id || season.includes?.includes(recordSeason) === true;
 }
 
 /** A calendar day, as days since 1970-01-01 (the existing Life clock's arithmetic). */

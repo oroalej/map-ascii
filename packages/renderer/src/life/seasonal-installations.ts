@@ -1,4 +1,9 @@
-import { offsetUtility as metric, METERS_PER_DEGREE, SEASON_ZOOM } from '@atlas/shared';
+import {
+  admitsSeasonRecord,
+  offsetUtility as metric,
+  METERS_PER_DEGREE,
+  SEASON_ZOOM,
+} from '@atlas/shared';
 import type {
   SeasonalDisplayRecord,
   SeasonalLightStringRecord,
@@ -19,6 +24,7 @@ export function admitsInstallation(
   record: InstallationRecord,
   season: {
     id: string;
+    includes?: readonly string[];
     installations?: readonly {
       id: string;
       anchor: string;
@@ -30,7 +36,7 @@ export function admitsInstallation(
   },
 ) {
   return (
-    record.season === season.id &&
+    admitsSeasonRecord(season, record.season) &&
     season.installations?.some(
       (i) =>
         i.id === record.installation &&

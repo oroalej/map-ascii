@@ -12,8 +12,6 @@ const point = (x: number, y: number) => tileToLngLat(tile, { x, y });
 const season: SeasonConfig = {
   id: 'feast',
   title: { en: 'Feast' },
-  status: 'draft',
-  note: 'TODO(verify)',
   sources: [],
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   bunting: {
@@ -49,6 +47,11 @@ const make = (places = true) => {
   if (places) b.place({ x: 2000, y: 2000 }, 'worship', 20);
   return { tile, life: b.finish(), fixtures: [], seasonal: [row] };
 };
+it('keeps included corridor records and their dense-row suppression during a different season', () => {
+  const groups = [make()];
+  const preview = { ...season, id: 'new-year', includes: ['feast'] };
+  expect(seasonalFixtures(groups, preview, 13.6)).toEqual(seasonalFixtures(groups, season, 13.6));
+});
 it('uses exact buffered corridor records once, independently of nearby worship samples', () => {
   const a = make(false),
     b = { ...make(false), tile: { ...tile, x: tile.x + 1 } };

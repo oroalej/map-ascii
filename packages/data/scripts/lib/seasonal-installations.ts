@@ -371,12 +371,17 @@ export function generateSeasonalInstallations(
           .filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point')
           .sort((a, b) => a.properties.id.localeCompare(b.properties.id))) {
           const at = f.geometry.type === 'Point' ? (f.geometry.coordinates as Point) : undefined;
-          if (at && inside(project(at), polygon))
+          const radius = Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2));
+          if (
+            at &&
+            (inside(project(at), polygon) ||
+              (config.trees === 'overlapping' && edgeDistance(project(at), polygon) < radius))
+          )
             records.push({
               ...base(f.properties.id),
               kind: config.kind,
               at,
-              radius_m: Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2)),
+              radius_m: radius,
             });
         }
       } else {

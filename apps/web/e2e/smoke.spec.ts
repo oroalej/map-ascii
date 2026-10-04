@@ -94,7 +94,7 @@ for (const city of cities) {
           exact: true,
         });
         await expect(preview).toBeVisible();
-        if (first.status === 'draft') await expect(preview).toHaveAttribute('title', /Draft/);
+        await expect(preview).toHaveAttribute('title', 'Preview seasonal decorations');
         if (first.lanterns)
           await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
         if (first.fireworks)
