@@ -1,5 +1,6 @@
 name: CI
 
+# Main checks merged code and refreshes shared caches; browser tests run on PRs only.
 on:
   push:
     branches: [main]
@@ -14,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  # Jobs run in parallel and time out at 6 minutes, so a change that makes CI slow fails its
-  # PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
+  # Every job times out at 6 minutes, so a change that makes CI slow fails its PR instead of
+  # quietly adding minutes (AGENTS.md "Verifying changes"). The e2e shards start once `check` passes.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -41,10 +42,34 @@ jobs:
 
       - run: pnpm test
 
+      # PR-scoped caches cannot be restored by other PRs. Refresh the shared browser cache
+      # on main without building the export, installing system dependencies, or running e2e.
+      - name: Playwright version
+        if: github.event_name == 'push'
+        id: playwright
+        run: echo "version=$(pnpm --filter @atlas/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers for PRs
+        if: github.event_name == 'push'
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          # Must match the e2e job's browser-cache key.
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          lookup-only: true
+
+      - name: Install Playwright browsers for PRs
+        if: github.event_name == 'push' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @atlas/web exec playwright install chromium
+
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
-  # across two runners: each test renders WebGL in software on a single worker.
+  # across two runners: each test renders WebGL in software on a single worker. It waits for
+  # `check`, so a lint, typecheck or unit failure doesn't also spend two e2e runners.
   e2e:
+    needs: check
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     strategy:
@@ -52,7 +77,7 @@ jobs:
       matrix:
         shard: [1, 2]
     env:
-      # Release assets of a private repository download through the API with this token.
+      # With this token, release assets download through the GitHub API (required for private repositories).
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
@@ -75,6 +100,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
+          # Must match the check job's shared browser-cache key.
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       # Azure mirror downloads can exhaust the job budget before any browser test starts.
