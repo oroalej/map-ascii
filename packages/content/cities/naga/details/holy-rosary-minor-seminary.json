@@ -1,0 +1,105 @@
+{
+  "id": "detail/holy-rosary-minor-seminary",
+  "osm_id": "osm:way/1205481634",
+  "title": "Holy Rosary Minor Seminary",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "field-building-approach",
+      "ring": [
+        [123.185766175, 13.628062372],
+        [123.185726616, 13.628080995],
+        [123.185953229, 13.628763156],
+        [123.185990362, 13.62874217],
+        [123.185766175, 13.628062372]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "field-building-approach-1",
+      "ring": [
+        [123.185697117, 13.627852968],
+        [123.185669727, 13.627868227],
+        [123.185669721, 13.62786823],
+        [123.185669701, 13.627868241],
+        [123.185669695, 13.627868244],
+        [123.185667205, 13.627869477],
+        [123.185667193, 13.627869483],
+        [123.185667152, 13.627869501],
+        [123.185667139, 13.627869506],
+        [123.185664538, 13.627870496],
+        [123.185664525, 13.627870501],
+        [123.185664482, 13.627870515],
+        [123.185664469, 13.627870519],
+        [123.18566178, 13.627871256],
+        [123.185661767, 13.627871259],
+        [123.185661723, 13.627871269],
+        [123.185661709, 13.627871272],
+        [123.185658959, 13.62787175],
+        [123.185658946, 13.627871752],
+        [123.185658901, 13.627871757],
+        [123.185658887, 13.627871759],
+        [123.185657153, 13.627871892],
+        [123.185695698, 13.627987921],
+        [123.185735432, 13.627969153],
+        [123.185697117, 13.627852968]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "field-building-approach-2",
+      "ring": [
+        [123.18563419628744, 13.62780278532692],
+        [123.1856732871398, 13.627780710995914],
+        [123.18567888500108, 13.627797684997844],
+        [123.18564067300451, 13.627818972996407],
+        [123.18564064800128, 13.627818987998204],
+        [123.18564064200235, 13.627818990998563],
+        [123.1856397619996, 13.627819539004312],
+        [123.18563419628744, 13.62780278532692]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "south-courtyard",
+      "ring": [
+        [123.186097008, 13.627280522],
+        [123.186094623, 13.62728185],
+        [123.186163202, 13.627393609],
+        [123.186165197, 13.627392552],
+        [123.186097008, 13.627280522]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "parked_vehicles": [],
+  "status": "draft",
+  "credit": "Holy Rosary Minor Seminary - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/1205481634",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ]
+}

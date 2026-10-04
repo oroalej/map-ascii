@@ -4,6 +4,7 @@
  */
 import {
   LAMP_PLACEMENT,
+  ROOF_BUILDING_CLASSES,
   curveAt,
   SHOP_POINT_RADIUS_M,
   PLACE_KINDS,
@@ -564,13 +565,7 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
 const water = ['water_river', 'water_stream', 'water_area', 'water_sea'];
-const lit = [
-  'building',
-  'building_religious',
-  'building_school',
-  'building_market',
-  'building_station',
-];
+const lit: readonly string[] = ROOF_BUILDING_CLASSES;
 /** Where people can't stand: roofs, water, and walls. */
 const noWalking = new Set([
   ...lit,

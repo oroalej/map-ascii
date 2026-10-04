@@ -1,0 +1,41 @@
+{
+  "id": "plan/holy-rosary-major-seminary",
+  "osm_id": "osm:way/959623307",
+  "title": "Major Seminary circular central roof",
+  "front": "n",
+  "parts": [
+    {
+      "kind": "dome",
+      "shape": "circle",
+      "size_m": 28,
+      "height_m": 9,
+      "at": {
+        "along": 0,
+        "across": 0
+      }
+    },
+    {
+      "kind": "cupola",
+      "shape": "circle",
+      "size_m": 3.5,
+      "height_m": 11,
+      "at": {
+        "along": 0,
+        "across": 0
+      }
+    }
+  ],
+  "status": "draft",
+  "credit": "Holy Rosary Major Seminary — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/886573227",
+      "note": "ODbL. Complete source geometry and identities retained; edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied civic and seminary reference",
+      "note": "The central circular roof is represented by estimated concentric caps inside its unchanged standing footprint. No engineering roof type or construction date is asserted."
+    }
+  ]
+}

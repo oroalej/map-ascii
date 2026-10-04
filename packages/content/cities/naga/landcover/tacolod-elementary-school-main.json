@@ -1,0 +1,152 @@
+{
+  "id": "landcover/tacolod-elementary-school-main",
+  "title": "Tacolod Elementary School – Main landscaping",
+  "trees": [
+    {
+      "at": [123.16994891, 13.631549112],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.169976677, 13.631481902],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.170008924, 13.631406836],
+      "crown_m": 5,
+      "height_m": 5
+    },
+    {
+      "at": [123.170036251, 13.631349661],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.170054009, 13.631605728],
+      "crown_m": 5,
+      "height_m": 5
+    },
+    {
+      "at": [123.169997418, 13.631575243],
+      "crown_m": 5,
+      "height_m": 5
+    },
+    {
+      "at": [123.170370184, 13.631755508],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.170427564, 13.631673439],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.170467896, 13.631602727],
+      "crown_m": 4,
+      "height_m": 5
+    }
+  ],
+  "tree_overrides": [],
+  "rows": [],
+  "areas": [
+    {
+      "ring": [
+        [123.170028166, 13.631345306],
+        [123.170072631, 13.631369259],
+        [123.170009893, 13.631479254],
+        [123.169965428, 13.631455301],
+        [123.170028166, 13.631345306]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.16996455, 13.63147537],
+        [123.170122198, 13.631560294],
+        [123.170077385, 13.631638862],
+        [123.169919736, 13.631553938],
+        [123.16996455, 13.63147537]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.170469652, 13.63156259],
+        [123.17050199, 13.63158001],
+        [123.170425807, 13.631713576],
+        [123.170393469, 13.631696156],
+        [123.170469652, 13.63156259]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.170371941, 13.631715371],
+        [123.170400236, 13.631730614],
+        [123.170364386, 13.631793468],
+        [123.17033609, 13.631778226],
+        [123.170371941, 13.631715371]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.170078339, 13.631238812],
+        [123.170098551, 13.6312497],
+        [123.1700627, 13.631312554],
+        [123.170042489, 13.631301667],
+        [123.170078339, 13.631238812]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.170103304, 13.631519303],
+        [123.170143727, 13.631541079],
+        [123.170137005, 13.631552864],
+        [123.170096582, 13.631531089],
+        [123.170103304, 13.631519303]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.170110492, 13.63152523],
+        [123.170134746, 13.631538295],
+        [123.170130265, 13.631546152],
+        [123.170106011, 13.631533087],
+        [123.170110492, 13.63152523]
+      ],
+      "cover": "shrubs"
+    },
+    {
+      "ring": [
+        [123.170446367, 13.631621943],
+        [123.170470621, 13.631635008],
+        [123.170457177, 13.631658578],
+        [123.170432923, 13.631645513],
+        [123.170446367, 13.631621943]
+      ],
+      "cover": "planting"
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: mapped school grounds",
+      "url": "https://www.openstreetmap.org/way/880722105",
+      "note": "ODbL. Complete mapped grounds, standing roofs and neighboring road geometry are retained."
+    },
+    {
+      "title": "Owner-supplied Google Maps school reference",
+      "note": "Image #2: owner-supplied Google Maps overhead labeled Tacolod Elementary School – Main near Talidtid Road, inspected 2026-10-04. The owner explicitly instructed proceeding with this reference. Western trees and eastern margins guide draft landscaping fitted to mapped grounds and four standing classroom roofs. The central blue covered area visible in the reference is reserved from new planting and paths; no missing roof is reconstructed. The imagery is rotated relative to north-up OSM; alignment and dimensions remain approximate. No Google reuse rights are asserted; the reference raster is not distributed. The retained OSM address is Barvo Street; the reference label does not rename a mapped road."
+    },
+    {
+      "title": "Draft layout limits",
+      "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
+    }
+  ]
+}

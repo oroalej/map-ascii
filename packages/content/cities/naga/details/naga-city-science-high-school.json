@@ -1,0 +1,248 @@
+{
+  "id": "detail/naga-city-science-high-school",
+  "osm_id": "osm:way/222976551",
+  "title": "Naga City Science High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.205215436, 13.627673673],
+        [123.205223035, 13.627651515],
+        [123.205196829, 13.627643026],
+        [123.205196829, 13.62751832],
+        [123.205172797, 13.62751832],
+        [123.205172797, 13.62765986],
+        [123.205215436, 13.627673673]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-3-1",
+      "ring": [
+        [123.205501999, 13.627850234],
+        [123.205519084, 13.62785662],
+        [123.205527711, 13.627834821],
+        [123.20551466, 13.627829942],
+        [123.205357311, 13.627695014],
+        [123.20526511, 13.627665145],
+        [123.205257511, 13.627687303],
+        [123.205345075, 13.627715669],
+        [123.205501999, 13.627850234]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-4-1",
+      "ring": [
+        [123.205632806, 13.627874104],
+        [123.20556818, 13.627849948],
+        [123.205559553, 13.627871747],
+        [123.205624179, 13.627895903],
+        [123.205632806, 13.627874104]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-1-1",
+      "ring": [
+        [123.20500272, 13.627818545],
+        [123.20500272, 13.627660426],
+        [123.204978687, 13.627660426],
+        [123.204978687, 13.627818545],
+        [123.20500272, 13.627818545]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-2-1",
+      "ring": [
+        [123.20500272, 13.62800719],
+        [123.20500272, 13.627861631],
+        [123.204978687, 13.627861631],
+        [123.204978687, 13.62800719],
+        [123.20500272, 13.62800719]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-3-1",
+      "ring": [
+        [123.205037629, 13.628561342],
+        [123.205896418, 13.628570414],
+        [123.20589668, 13.62854706],
+        [123.205054697, 13.628538165],
+        [123.20500272, 13.628395041],
+        [123.20500272, 13.628050276],
+        [123.204978687, 13.628050276],
+        [123.204978687, 13.628399041],
+        [123.205037629, 13.628561342]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.205269157, 13.62797817],
+        [123.205374652, 13.627931567],
+        [123.205364707, 13.627910305],
+        [123.205266849, 13.627953534],
+        [123.205205373, 13.627938597],
+        [123.205196794, 13.627830209],
+        [123.205172832, 13.627832001],
+        [123.20518274, 13.627957173],
+        [123.205269157, 13.62797817]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4-1-1",
+      "ring": [
+        [123.205863218, 13.628002747],
+        [123.205776908, 13.6279991],
+        [123.205775864, 13.628022434],
+        [123.205862174, 13.628026081],
+        [123.205863218, 13.628002747]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4-2-1",
+      "ring": [
+        [123.205977861, 13.628024172],
+        [123.20600283, 13.62808349],
+        [123.206025073, 13.628074647],
+        [123.205997191, 13.628008408],
+        [123.205983694, 13.628007838],
+        [123.205983056, 13.628022107],
+        [123.205977861, 13.628024172]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.205184813, 13.62751832],
+        [123.205184813, 13.627651443],
+        [123.205219236, 13.627662594]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-3",
+      "line": [
+        [123.205261311, 13.627676224],
+        [123.205351193, 13.627705341],
+        [123.205508329, 13.627840088],
+        [123.205523398, 13.62784572]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-4",
+      "line": [
+        [123.205563867, 13.627860847],
+        [123.205628493, 13.627885004]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-1",
+      "line": [
+        [123.204990703, 13.627660426],
+        [123.204990703, 13.627818545]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-2",
+      "line": [
+        [123.204990703, 13.627861631],
+        [123.204990703, 13.62800719]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-3",
+      "line": [
+        [123.204990703, 13.628050276],
+        [123.204990703, 13.628397041],
+        [123.205046163, 13.628549754],
+        [123.205896549, 13.628558737]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.205184813, 13.627831105],
+        [123.205194056, 13.627947885],
+        [123.205268003, 13.627965852],
+        [123.20536968, 13.627920936]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-4-1",
+      "line": [
+        [123.205776386, 13.628010767],
+        [123.205862696, 13.628014414]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-4-2",
+      "line": [
+        [123.205983172, 13.628019505],
+        [123.205988982, 13.62801975],
+        [123.206013952, 13.628079069]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "status": "draft",
+  "credit": "Owner-supplied church, Science High School and Balatas Road references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/222976551",
+      "note": "ODbL. Existing standing footprints, grounds where mapped, roads and identities retained."
+    },
+    {
+      "title": "Owner-supplied church and Science High School reference",
+      "note": "Inspected 2026-10-02. Owner-supplied reference guides relative foliage, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped buildings and full road/path widths govern fits where image geometry differs. Positions, sizes and heights are undated estimates; parking areas are schematic spaces, not a surveyed bay inventory. No species, construction history or building opening inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

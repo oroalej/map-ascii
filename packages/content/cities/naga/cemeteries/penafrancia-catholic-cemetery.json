@@ -1,0 +1,776 @@
+{
+  "id": "cemetery/penafrancia-catholic-cemetery",
+  "osm_id": "osm:relation/15350427",
+  "title": "Peñafrancia Catholic Cemetery",
+  "rows": [
+    {
+      "id": "crypt-11-0",
+      "line": [
+        [123.195381531, 13.634800709],
+        [123.195395257, 13.63478737]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-12-0",
+      "line": [
+        [123.195392352, 13.634838468],
+        [123.195529611, 13.634705076]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-13-0",
+      "line": [
+        [123.195414101, 13.634865608],
+        [123.195606263, 13.634678858]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-14-1",
+      "line": [
+        [123.195423855, 13.634904403],
+        [123.195629744, 13.634704315]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-15-0",
+      "line": [
+        [123.195424816, 13.634951745],
+        [123.195644431, 13.634738317]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-16-0",
+      "line": [
+        [123.195435638, 13.634989503],
+        [123.19576506, 13.634669362]
+      ],
+      "count": 25,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-17-0",
+      "line": [
+        [123.195446459, 13.635027262],
+        [123.195899414, 13.634587067]
+      ],
+      "count": 34,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-18-0",
+      "line": [
+        [123.195457281, 13.635065021],
+        [123.195923961, 13.634611487]
+      ],
+      "count": 35,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-19-0",
+      "line": [
+        [123.195468102, 13.63510278],
+        [123.195948509, 13.634635906]
+      ],
+      "count": 36,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-20-0",
+      "line": [
+        [123.195478923, 13.635140539],
+        [123.195973056, 13.634660326]
+      ],
+      "count": 37,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-21-0",
+      "line": [
+        [123.195489745, 13.635178297],
+        [123.195997603, 13.634684746]
+      ],
+      "count": 38,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-22-0",
+      "line": [
+        [123.195500566, 13.635216056],
+        [123.19602215, 13.634709165]
+      ],
+      "count": 39,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-23-0",
+      "line": [
+        [123.195511387, 13.635253815],
+        [123.196046698, 13.634733585]
+      ],
+      "count": 40,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-24-0",
+      "line": [
+        [123.195524337, 13.635289506],
+        [123.196073373, 13.634755936]
+      ],
+      "count": 41,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-25-0",
+      "line": [
+        [123.19554279, 13.635319848],
+        [123.196091826, 13.634786279]
+      ],
+      "count": 41,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-26-0",
+      "line": [
+        [123.195561243, 13.63535019],
+        [123.196124005, 13.634803282]
+      ],
+      "count": 42,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-27-0",
+      "line": [
+        [123.195579696, 13.635380533],
+        [123.196142458, 13.634833624]
+      ],
+      "count": 42,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-28-0",
+      "line": [
+        [123.195598148, 13.635410875],
+        [123.196174637, 13.634850627]
+      ],
+      "count": 43,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-29-0",
+      "line": [
+        [123.195616601, 13.635441217],
+        [123.196206815, 13.63486763]
+      ],
+      "count": 44,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-30-0",
+      "line": [
+        [123.195635054, 13.635471559],
+        [123.196005654, 13.6351114]
+      ],
+      "count": 28,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-30-1",
+      "line": [
+        [123.196073589, 13.635045378],
+        [123.1962383, 13.634885307]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-31-0",
+      "line": [
+        [123.195653507, 13.635501901],
+        [123.196024107, 13.635141742]
+      ],
+      "count": 28,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-31-1",
+      "line": [
+        [123.196102788, 13.635065277],
+        [123.196281225, 13.634891867]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-32-0",
+      "line": [
+        [123.19567196, 13.635532244],
+        [123.196056286, 13.635158745]
+      ],
+      "count": 29,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-32-1",
+      "line": [
+        [123.196128588, 13.635088479],
+        [123.196307025, 13.634915069]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-33-0",
+      "line": [
+        [123.195690413, 13.635562586],
+        [123.196074739, 13.635189087]
+      ],
+      "count": 29,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-33-1",
+      "line": [
+        [123.196154389, 13.635111681],
+        [123.196346552, 13.634924931]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-34-0",
+      "line": [
+        [123.195708866, 13.635592928],
+        [123.196106918, 13.63520609]
+      ],
+      "count": 30,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-34-1",
+      "line": [
+        [123.196180189, 13.635134883],
+        [123.196372352, 13.634948133]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-35-0",
+      "line": [
+        [123.195727319, 13.63562327],
+        [123.196139097, 13.635223093]
+      ],
+      "count": 31,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-35-1",
+      "line": [
+        [123.19620599, 13.635158084],
+        [123.196411878, 13.634957996]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-36-0",
+      "line": [
+        [123.195745772, 13.635653612],
+        [123.195896757, 13.635506881]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-36-1",
+      "line": [
+        [123.19623179, 13.635181286],
+        [123.196437679, 13.634981197]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-37-0",
+      "line": [
+        [123.195765978, 13.635682251],
+        [123.195916963, 13.63553552]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-37-1",
+      "line": [
+        [123.196253824, 13.635208148],
+        [123.196473438, 13.63499472]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-38-0",
+      "line": [
+        [123.195791359, 13.63570586],
+        [123.195942344, 13.635559129]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-39-0",
+      "line": [
+        [123.19581674, 13.63572947],
+        [123.195967725, 13.635582738]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-40-0",
+      "line": [
+        [123.195842122, 13.635753079],
+        [123.196308802, 13.635299545]
+      ],
+      "count": 35,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-40-1",
+      "line": [
+        [123.196500215, 13.635113524],
+        [123.196568844, 13.635046828]
+      ],
+      "count": 6,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-41-0",
+      "line": [
+        [123.195867503, 13.635776688],
+        [123.196608702, 13.635056369]
+      ],
+      "count": 55,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-42-0",
+      "line": [
+        [123.195892884, 13.635800297],
+        [123.196634083, 13.635079978]
+      ],
+      "count": 55,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-43-0",
+      "line": [
+        [123.195918265, 13.635823906],
+        [123.19667319, 13.635090248]
+      ],
+      "count": 56,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-44-0",
+      "line": [
+        [123.195943646, 13.635847516],
+        [123.196698571, 13.635113857]
+      ],
+      "count": 56,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-45-1",
+      "line": [
+        [123.196066661, 13.635776242],
+        [123.19673923, 13.635122619]
+      ],
+      "count": 50,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-46-1",
+      "line": [
+        [123.196092613, 13.635799296],
+        [123.196765182, 13.635145673]
+      ],
+      "count": 50,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-47-1",
+      "line": [
+        [123.196118533, 13.635822381],
+        [123.196804828, 13.635155419]
+      ],
+      "count": 51,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-48-0",
+      "line": [
+        [123.196045171, 13.635941952],
+        [123.196841273, 13.635168276]
+      ],
+      "count": 59,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-49-0",
+      "line": [
+        [123.196070552, 13.635965561],
+        [123.196866654, 13.635191886]
+      ],
+      "count": 59,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-50-0",
+      "line": [
+        [123.196095933, 13.635989171],
+        [123.196905762, 13.635202156]
+      ],
+      "count": 60,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-51-0",
+      "line": [
+        [123.196121314, 13.63601278],
+        [123.196944869, 13.635212425]
+      ],
+      "count": 61,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-52-0",
+      "line": [
+        [123.196146695, 13.636036389],
+        [123.19697025, 13.635236035]
+      ],
+      "count": 61,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-53-0",
+      "line": [
+        [123.196225843, 13.636007746],
+        [123.19700822, 13.635247409]
+      ],
+      "count": 58,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-54-0",
+      "line": [
+        [123.196306623, 13.635977518],
+        [123.197047822, 13.635257199]
+      ],
+      "count": 55,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-55-0",
+      "line": [
+        [123.196387402, 13.635947289],
+        [123.197073697, 13.635280327]
+      ],
+      "count": 51,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-56-0",
+      "line": [
+        [123.196468181, 13.635917061],
+        [123.197113299, 13.635290117]
+      ],
+      "count": 48,
+      "kind": "slab",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 0.35
+    },
+    {
+      "id": "crypt-57-0",
+      "line": [
+        [123.196548961, 13.635886832],
+        [123.19661759, 13.635820136]
+      ],
+      "count": 6,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-57-1",
+      "line": [
+        [123.196671038, 13.635768194],
+        [123.197137719, 13.63531466]
+      ],
+      "count": 35,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-58-1",
+      "line": [
+        [123.1967099, 13.635778703],
+        [123.197162854, 13.635338508]
+      ],
+      "count": 34,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-59-0",
+      "line": [
+        [123.196743446, 13.635794376],
+        [123.197141498, 13.635407538]
+      ],
+      "count": 30,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-60-0",
+      "line": [
+        [123.196791299, 13.635796147],
+        [123.19712072, 13.635476006]
+      ],
+      "count": 25,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-61-0",
+      "line": [
+        [123.196872078, 13.635765919],
+        [123.197091693, 13.635552491]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-62-0",
+      "line": [
+        [123.196952857, 13.635735691],
+        [123.19707639, 13.635615637]
+      ],
+      "count": 10,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    },
+    {
+      "id": "crypt-63-0",
+      "line": [
+        [123.197033637, 13.635705462],
+        [123.197047363, 13.635692123]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 1.35,
+      "length_m": 2.65,
+      "height_m": 1.5
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner supplied overhead correction; © Google and imagery providers. Geometry © OpenStreetMap contributors (ODbL). Representative draft burial layout.",
+  "sources": [
+    {
+      "title": "OpenStreetMap cemetery, roads and standing facilities",
+      "url": "https://www.openstreetmap.org/relation/15350427",
+      "note": "Existing cemetery classification, extent, internal access road and original standing buildings retained."
+    },
+    {
+      "title": "Owner supplied Peñafrancia cemetery comparison",
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Dense raised tomb/crypt rows and low slab roofs replace the misleading uninterrupted lawn appearance. Row axes follow mapped internal access; source road clearances interrupt rows. Counts represent geometry, not individual burials. No deceased names or inferred historical dates."
+    }
+  ]
+}

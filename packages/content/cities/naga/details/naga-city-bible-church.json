@@ -1,0 +1,60 @@
+{
+  "id": "detail/naga-city-bible-church",
+  "osm_id": "osm:way/23674686",
+  "title": "Naga City Bible Church",
+  "surface": "paving",
+  "grounds": [
+    [123.197071862, 13.631191004],
+    [123.196868206, 13.631416503],
+    [123.196946142, 13.63148298],
+    [123.197156183, 13.631604311],
+    [123.197323256, 13.631417481],
+    [123.197149697, 13.631257396],
+    [123.197071862, 13.631191004]
+  ],
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.19706517, 13.631355021],
+        [123.19713834, 13.631274003],
+        [123.197120277, 13.631258597],
+        [123.197047107, 13.631339614],
+        [123.19706517, 13.631355021]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.197129308, 13.6312663],
+        [123.197056138, 13.631347317]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Naga City Bible Church",
+      "url": "https://www.openstreetmap.org/way/23674686",
+      "note": "ODbL. Original source identity, standing roof footprints, access routes and mapped parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied LCC, Queborac Terminal and Bible Church references",
+      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated draft estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Tightly cropped church reference",
+      "note": "The reference supports the standing roof and immediate forecourt only. Add small estimated frontage plants, a narrow lawn strip and short approaches; no expanded rear garden or new roof geometry is inferred."
+    }
+  ]
+}

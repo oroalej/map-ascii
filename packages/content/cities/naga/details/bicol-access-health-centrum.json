@@ -1,0 +1,101 @@
+{
+  "id": "detail/bicol-access-health-centrum",
+  "osm_id": "osm:way/293702442",
+  "title": "Bicol Access Health Centrum",
+  "surface": "keep",
+  "grounds": [
+    [123.192127896, 13.618199363],
+    [123.192296411, 13.619364698],
+    [123.191966902, 13.619409705],
+    [123.191798386, 13.61824437],
+    [123.192127896, 13.618199363]
+  ],
+  "structures": [
+    {
+      "id": "path-1-1",
+      "ring": [
+        [123.192175368, 13.618973018],
+        [123.192072458, 13.618261363],
+        [123.192048766, 13.618264599],
+        [123.192160777, 13.618975011],
+        [123.192175368, 13.618973018]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "path-2-1",
+      "ring": [
+        [123.192227598, 13.619168176],
+        [123.192223885, 13.619145098],
+        [123.192129316, 13.619158015],
+        [123.192128415, 13.619151788],
+        [123.192104618, 13.619155039],
+        [123.192108863, 13.619184394],
+        [123.192227598, 13.619168176]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "path-3-1",
+      "ring": [
+        [123.192040299, 13.619381537],
+        [123.192009426, 13.619168041],
+        [123.191985628, 13.619171291],
+        [123.192016501, 13.619384788],
+        [123.192040299, 13.619381537]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.192061717, 13.618270995],
+        [123.192100754, 13.618540947]
+      ],
+      "width_m": 1.6
+    },
+    {
+      "id": "approach-2-1",
+      "line": [
+        [123.192117674, 13.61916142],
+        [123.192119089, 13.619171205],
+        [123.192217503, 13.619157762]
+      ],
+      "width_m": 1.6
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.191998685, 13.619177672],
+        [123.192027242, 13.619375157]
+      ],
+      "width_m": 1.6
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied school and hospital references; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/way/293702442",
+      "note": "ODbL. Complete source roofs, courts, roads and mapped parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied school and hospital references",
+      "note": "Inspected 2026-10-03. Source-relative draft planting, lawns, paved approaches and schematic parking fit complete mapped roofs and full road/path widths. The outline is an estimated visual envelope, not a surveyed property boundary. No species, dates, roof reconstruction or exact parking/vehicle inventory inferred. Reference bitmaps stay in ignored evidence."
+    }
+  ]
+}

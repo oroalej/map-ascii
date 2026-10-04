@@ -2,12 +2,15 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
+import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
 import {
   classId,
   Flags,
   Marking,
   markingOf,
   MAX_CLASSES,
+  PavingVariant,
+  pavingOverrideBase,
   renderClasses,
   type RenderClass,
 } from '../classes';
@@ -148,11 +151,7 @@ export const SUB = { cols: 2, rows: 3 } as const;
 
 /** Classes whose edges are drawn with sextants: areas, not lines or markers. */
 export const subcellClasses: readonly RenderClass[] = [
-  'building',
-  'building_religious',
-  'building_school',
-  'building_market',
-  'building_station',
+  ...ROOF_BUILDING_CLASSES,
   'building_part',
   'building_woodwork',
   'water_area',
@@ -259,7 +258,7 @@ export function inShadow(
 export const EDGE_INK = 0.4;
 
 /** One raster sample: its class (null for none), feature id, and height (0 for grounds). */
-export type Sample = { cls: RenderClass | null; id: number; height?: number };
+export type Sample = { cls: RenderClass | null; id: number; height?: number; variant?: number };
 
 export type SubcellEdge = {
   /** The feature the sextant draws. */
@@ -272,6 +271,12 @@ export type SubcellEdge = {
 /** A building standing (not grounds, which have no height). */
 const isBuilding = (s: Sample) => s.cls !== null && s.cls.startsWith('building') && s.height !== 0;
 
+const isPavingOverride = (s: Sample) => s.cls === 'paving' && s.variant === PavingVariant.override;
+const belowPavingOverride = (s: Sample) =>
+  !isPavingOverride(s) &&
+  s.cls !== null &&
+  (pavingOverrideBase.includes(s.cls) || (s.cls.startsWith('building') && s.height === 0));
+
 /** Crowns and roofs share height precedence at their edge; equal heights favor the roof. */
 export function edgeForegroundWins(candidate: Sample, current: Sample): boolean {
   const crown = candidate.cls === 'tree_crown';
@@ -279,6 +284,8 @@ export function edgeForegroundWins(candidate: Sample, current: Sample): boolean 
   if (crown && (isBuilding(current) || underCrown))
     return (candidate.height ?? 0) > (current.height ?? 0);
   if (underCrown && isBuilding(candidate)) return (candidate.height ?? 0) >= (current.height ?? 0);
+  if (isPavingOverride(candidate)) return belowPavingOverride(current);
+  if (isPavingOverride(current)) return candidate.cls !== null && !belowPavingOverride(candidate);
   return crown || (!isBuilding(current) && isBuilding(candidate));
 }
 
@@ -294,12 +301,35 @@ export function subcellEdge(
   center: Sample,
   samples: readonly Sample[],
   outlined: (sample: Sample) => boolean,
+  beforeOutline = false,
 ): SubcellEdge | null {
   const isArea = (s: Sample) => s.cls !== null && subcellClasses.includes(s.cls);
-  if (center.cls !== null && !isArea(center) && !roadClasses.includes(center.cls)) return null;
+  // The shader's first pass is for road/roof crowns and non-area paving edges.
+  // Outlined parks and terraces must reach their outline before the ordinary edge pass.
+  if (
+    beforeOutline &&
+    center.cls !== null &&
+    !roadClasses.includes(center.cls) &&
+    !center.cls.startsWith('building') &&
+    !(!isArea(center) && belowPavingOverride(center))
+  )
+    return null;
+  if (
+    center.cls !== null &&
+    !isArea(center) &&
+    !roadClasses.includes(center.cls) &&
+    !(belowPavingOverride(center) && samples.some(isPavingOverride))
+  )
+    return null;
   let fg: Sample | null = isArea(center) ? center : null;
   for (const s of samples) {
-    if (center.cls !== null && !isArea(center) && s.cls !== 'tree_crown') continue;
+    if (
+      center.cls !== null &&
+      !isArea(center) &&
+      s.cls !== 'tree_crown' &&
+      !(belowPavingOverride(center) && isPavingOverride(s))
+    )
+      continue;
     if (isArea(s) && (fg === null || edgeForegroundWins(s, fg))) fg = s;
   }
   if (fg === null || outlined(fg)) return null;
@@ -410,6 +440,7 @@ export const seeThrough: readonly RenderClass[] = [
   'monument',
   'marker_religious',
   'marker_school',
+  'marker_hospital',
   'marker_market',
   'marker_station',
   'marker_landmark',

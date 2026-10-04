@@ -8,9 +8,7 @@ import {
 import type { Feature, Geometry, Polygon, Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { TILE_ZOOMS } from '../03-normalize';
-
-/** Meters per degree of latitude (and of longitude at the equator). */
-const METERS_PER_DEGREE = 111_320;
+import { localFrame } from './geo';
 
 const compass = {
   n: [0, 1],
@@ -24,18 +22,6 @@ const compass = {
 } as const;
 
 type Vec = [number, number];
-
-/** A local meters frame around a point (east, north), and back to lng/lat. */
-function localFrame([lng0, lat0]: Vec) {
-  const mx = METERS_PER_DEGREE * Math.cos((lat0 * Math.PI) / 180);
-  return {
-    toMeters: ([lng, lat]: Position): Vec => [
-      (lng! - lng0) * mx,
-      (lat! - lat0) * METERS_PER_DEGREE,
-    ],
-    toLngLat: ([x, y]: Vec): Vec => [lng0 + x / mx, lat0 + y / METERS_PER_DEGREE],
-  };
-}
 
 /** The outer ring of an area feature's largest polygon, or null for other geometries. */
 function outerRing(geometry: Geometry): Position[] | null {

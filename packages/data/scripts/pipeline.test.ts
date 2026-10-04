@@ -1,15 +1,18 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { detailLayoutKey } from '@atlas/shared/detail-layout';
+import { mkdtemp, rm, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import type { City, CityArt } from '@atlas/shared';
+import { SiteDetail, OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
+import type { Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
-import { buildMeta } from './05-tiles';
+import { buildMeta, step as tileStep } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
+import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
 // A fixture city that is not tied to any real place (ARCHITECTURE.md §9).
@@ -56,6 +59,7 @@ const content: ContentBundle = {
       id: 'landcover/fixture-grounds',
       title: 'Fixture grounds',
       trees: [{ at: [0.004, 0.004], crown_m: 10 }],
+      tree_overrides: [],
       rows: [],
       areas: [],
       status: 'draft',
@@ -77,6 +81,7 @@ const content: ContentBundle = {
   ],
   processions: [],
   details: [],
+  cemeteries: [],
 };
 
 let ctx: StepContext;
@@ -105,6 +110,45 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('writes aliases using the canonical parent final surface class', async () => {
+    const parent = features.find((f) => f.properties.id === 'osm:way/105')!;
+    const detail = SiteDetail.parse({
+      id: 'detail/finalized',
+      osm_id: parent.properties.id,
+      selection_osm_id: parent.properties.id,
+      title: 'Fixture court',
+      surface: 'paving',
+      structures: [
+        {
+          id: 'terrace',
+          ring: (parent.geometry as Polygon).coordinates[0] as LngLat[],
+          height_m: 0.15,
+          material: 'paving',
+          overhead: false,
+        },
+      ],
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    try {
+      await mergeContent.run({ ...ctx, content: { ...content, details: [detail] } });
+      let aliases = 0;
+      for await (const feature of readFeatures(join(ctx.buildDir, files.merged))) {
+        const p = (feature as AtlasFeature).properties;
+        if (p.id === 'detail:finalized/structure-terrace') {
+          aliases++;
+          expect(JSON.parse(p.detail_selection!)).toMatchObject({
+            id: parent.properties.id,
+            class: 'paving',
+          });
+        }
+      }
+      expect(aliases).toBe(1);
+    } finally {
+      await mergeContent.run(ctx);
+    }
+  });
   it('classifies features into layers and drops unmapped ones', () => {
     const summary = features
       .map((f) => [f.properties.id, f.properties.class, f.tippecanoe.layer])
@@ -191,7 +235,70 @@ describe('pipeline (02–04) on the fixture extract', () => {
       [1890, 2026],
       ['Imagery', 'DEM'],
     );
-    expect(credited.attribution).toEqual(['DEM', 'Imagery']);
+    expect(credited.attribution).toEqual([OSM_ATTRIBUTION, 'DEM', 'Imagery']);
+    const normalized = buildMeta(
+      city,
+      geography,
+      [1890, 2026],
+      [
+        'Survey. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.',
+        'Survey. Draft, undated estimates.',
+        '© OpenStreetMap contributors',
+        'Imagery © Provider; CC BY-SA 3.0, Contributor (https://example.test/source).',
+        'Unfamiliar source format.',
+      ],
+    );
+    expect(normalized.attribution).toEqual([
+      OSM_ATTRIBUTION,
+      'Survey. Draft, undated estimates.',
+      'Imagery © Provider; CC BY-SA 3.0, Contributor (https://example.test/source).',
+      'Unfamiliar source format.',
+    ]);
+  });
+
+  it('publishes validated detail fingerprints separately from startup metadata', async () => {
+    const geography = await readJson<Geography>(join(ctx.buildDir, files.geography));
+    const detail = SiteDetail.parse({
+      id: 'detail/fixture',
+      osm_id: 'osm:way/105',
+      title: 'Fixture plaza',
+      surface: 'paving',
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    expect(buildMeta(city, geography, [1890, 2026])).not.toHaveProperty('detail_layouts');
+    const layouts = { [detail.id]: detailLayoutKey(detail) };
+    await publishDetailLayouts(ctx, layouts);
+    const output = join(ctx.outDir, `${city.slug}.detail-layouts.json`);
+    expect(await readJson(output)).toEqual(layouts);
+    await expect(publishDetailLayouts(ctx, { [detail.id]: 'invalid' })).rejects.toThrow();
+    expect(await readJson(output)).toEqual(layouts);
+  });
+
+  it('rejects changed-pack step-05 inputs before invoking the tile compiler', async () => {
+    expect(await readDetailLayouts(ctx)).toEqual({});
+    const detail = SiteDetail.parse({
+      id: 'detail/fixture',
+      osm_id: 'osm:way/105',
+      title: 'Fixture plaza',
+      surface: 'paving',
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    const changed = { ...ctx, content: { ...content, details: [detail] } };
+    await expect(tileStep.run(changed)).rejects.toThrow('rerun from step 04');
+    await mergeContent.run(changed);
+    expect(await readDetailLayouts(changed)).toEqual({ [detail.id]: detailLayoutKey(detail) });
+    await mergeContent.run(ctx);
+  });
+
+  it('rejects changed merge bytes even when the city pack is unchanged', async () => {
+    await appendFile(join(ctx.buildDir, files.merged), '\n');
+    await expect(readDetailLayouts(ctx)).rejects.toThrow('rerun from step 04');
+    await writeDetailLayouts(ctx);
+    expect(await readDetailLayouts(ctx)).toEqual({});
   });
 
   it('checks that tours point at features in the data and stay in the region', () => {

@@ -1,4 +1,23 @@
-import type { BBox } from '@atlas/shared';
+import { DEFAULT_ROAD_WIDTH_M, type BBox, type LngLat } from '@atlas/shared';
+import type { Position } from 'geojson';
+
+export const METERS_PER_DEGREE = 111_320;
+
+/** Local east/north meters, preserving the caller's origin and reference latitude. */
+export function localFrame([lng0, lat0]: LngLat, latitude = lat0) {
+  const mx = METERS_PER_DEGREE * Math.cos((latitude * Math.PI) / 180);
+  return {
+    toMeters: ([lng, lat]: Position): LngLat => [
+      (lng! - lng0) * mx,
+      (lat! - lat0) * METERS_PER_DEGREE,
+    ],
+    toLngLat: ([x, y]: LngLat): LngLat => [lng0 + x / mx, lat0 + y / METERS_PER_DEGREE],
+  };
+}
+
+/** Full corridor width; cemetery callers explicitly add their clearance margin. */
+export const clearanceWidth = (properties: { class: string; width?: number }, padding = 0) =>
+  (properties.width ?? (properties.class === 'path' ? 2 : DEFAULT_ROAD_WIDTH_M)) + padding;
 
 const kmPerDegreeLat = 111.32;
 

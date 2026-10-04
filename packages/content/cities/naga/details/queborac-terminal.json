@@ -1,0 +1,128 @@
+{
+  "id": "detail/queborac-terminal",
+  "osm_id": "osm:node/4545731100",
+  "title": "Queborac Terminal",
+  "surface": "paving",
+  "grounds": [
+    [123.184315109, 13.634035977],
+    [123.184823508, 13.634035977],
+    [123.184814264, 13.634233605],
+    [123.185415098, 13.634215639],
+    [123.185627701, 13.635042085],
+    [123.185396611, 13.635275646],
+    [123.184499982, 13.635266663],
+    [123.184315109, 13.635024119],
+    [123.184315109, 13.634035977]
+  ],
+  "structures": [
+    {
+      "id": "approach-1-1-1",
+      "ring": [
+        [123.184576703, 13.63432553],
+        [123.184576703, 13.634231809],
+        [123.18455267, 13.634231809],
+        [123.18455267, 13.63432553],
+        [123.184576703, 13.63432553]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.184807654, 13.635067259],
+        [123.184762551, 13.634782351],
+        [123.184738797, 13.634785902],
+        [123.1847839, 13.63507081],
+        [123.184807654, 13.635067259]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2-1-1",
+      "ring": [
+        [123.185112832, 13.634574964],
+        [123.185112832, 13.634323436],
+        [123.185088799, 13.634323436],
+        [123.185088799, 13.634574964],
+        [123.185112832, 13.634574964]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.185351634, 13.634973498],
+        [123.185222223, 13.63474892],
+        [123.185201254, 13.634760332],
+        [123.185330665, 13.63498491],
+        [123.185351634, 13.634973498]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-1",
+      "line": [
+        [123.184564687, 13.634231809],
+        [123.184564687, 13.63432553]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.184750674, 13.634784126],
+        [123.184795777, 13.635069035]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-2-1",
+      "line": [
+        [123.185100816, 13.634323436],
+        [123.185100816, 13.634574964]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.185211739, 13.634754626],
+        [123.185341149, 13.634979204]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Naga Integrated Northbound Terminal",
+      "url": "https://www.openstreetmap.org/node/4545731100",
+      "note": "ODbL. Original source identity, standing roof footprints, access routes and mapped parking retain geometry."
+    },
+    {
+      "title": "Owner-supplied LCC, Queborac Terminal and Bible Church references",
+      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated draft estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Owner-marked approximate terminal extent",
+      "note": "The red outline guides an estimated visual envelope around the existing Northbound Terminal point, terminal roofs and parking apron. It does not assert cadastral ownership. Existing Magnolia, Rosal, Queborac and internal drives remain."
+    }
+  ]
+}

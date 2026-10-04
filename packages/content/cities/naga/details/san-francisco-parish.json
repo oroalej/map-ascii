@@ -1,0 +1,80 @@
+{
+  "id": "detail/san-francisco-parish",
+  "osm_id": "osm:way/23662997",
+  "title": "San Francisco Parish",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "marker",
+      "ring": [
+        [123.18626626, 13.62462933],
+        [123.18627093, 13.62462565],
+        [123.18627296, 13.6246281],
+        [123.18626829, 13.62463177],
+        [123.18626626, 13.62462933]
+      ],
+      "height_m": 1.5,
+      "material": "stone",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [],
+  "seating": [],
+  "lamps": [
+    {
+      "id": "forecourt",
+      "at": [123.18624188, 13.62460176],
+      "bearing": 0,
+      "reach_m": 0.5,
+      "heads": 1,
+      "style": "streetlight"
+    }
+  ],
+  "status": "draft",
+  "credit": "San Francisco Parish — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23662997",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/san-francisco-church-historical-marker-home-at-last/",
+      "note": "Official report confirms the historical marker returned in February 2025. Keep the existing sourced roof plan. The earlier facade tread intersected the standing church and is removed. A broad tread outside the actual northwest facade conflicts with the cached full-width Peñafrancia Avenue carriageway (way 1529540512); frontage alignment needs a current reference. Unsourced facade statue pedestals remain omitted. Marker and lamp placement remains schematic. No Google Maps imagery was inspected and no timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
+    }
+  ],
+  "grounds": [
+    [123.18616485, 13.62451116],
+    [123.18618572573364, 13.62451116],
+    [123.18620791156613, 13.624493671879362],
+    [123.18620346833333, 13.62448834],
+    [123.18618655, 13.62448834],
+    [123.18618655, 13.62442546],
+    [123.186207426625, 13.62442546],
+    [123.18624745, 13.62439391448276],
+    [123.18624745, 13.62437746],
+    [123.18631215, 13.62437746],
+    [123.18631215, 13.62438369245629],
+    [123.18650245, 13.624233805846481],
+    [123.18650245, 13.62421736],
+    [123.18656715, 13.62421736],
+    [123.18656715, 13.62423765699029],
+    [123.18665322214575, 13.62434086],
+    [123.18667015, 13.62434086],
+    [123.18667015, 13.62440374],
+    [123.18664926957761, 13.62440374],
+    [123.18631845, 13.624664294515211],
+    [123.18631845, 13.62468074],
+    [123.18625375, 13.62468074],
+    [123.18625375, 13.624660436377953],
+    [123.18618176651358, 13.62457404],
+    [123.18616485, 13.62457404],
+    [123.18616485, 13.62451116]
+  ]
+}

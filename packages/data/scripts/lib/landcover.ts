@@ -29,6 +29,33 @@ export const SAME_TREE_M = 3;
 
 type Placed = Pick<Feature<Geometry, { id: string; class?: string }>, 'geometry' | 'properties'>;
 
+/** Apply sourced crown/height refinements to OSM trees; never add or move a mapped trunk. */
+export function applyLandcoverTreeOverrides(
+  input: readonly AtlasFeature[],
+  packs: readonly Landcover[],
+) {
+  const targets = new Map<string, Landcover['tree_overrides'][number]>();
+  const byId = new Map(input.map((f) => [f.properties.id, f]));
+  for (const pack of packs)
+    for (const tree of pack.tree_overrides) {
+      const original = byId.get(tree.osm_id);
+      if (targets.has(tree.osm_id))
+        throw new Error(`${pack.id}: duplicate tree override ${tree.osm_id}`);
+      if (original?.properties.class !== 'tree' || original.geometry.type !== 'Point')
+        throw new Error(`${pack.id}: tree override ${tree.osm_id} must be a mapped tree point`);
+      targets.set(tree.osm_id, tree);
+    }
+  return input.map((f) => {
+    const tree = targets.get(f.properties.id);
+    if (!tree) return f;
+    const properties = { ...f.properties };
+    if (tree.crown_m !== undefined) properties.crown = tree.crown_m;
+    if (tree.height_m !== undefined) properties.height = tree.height_m;
+    if (tree.kind !== undefined) properties.variant = tree.kind;
+    return { ...f, properties };
+  });
+}
+
 /**
  * A curated tree's attributes as the OSM tags a mapper would use, so it goes through the same
  * `treeSize` / `variantOf` rules as an OSM tree (a palm is named by its taxonomy in OSM).

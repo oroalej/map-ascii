@@ -1,0 +1,16 @@
+{
+  "id": "landmark/oragon-monument",
+  "osm_id": "osm:node/5067240326",
+  "name": {
+    "en": "Oragon Monument"
+  },
+  "type": "monument",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/5067240326",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

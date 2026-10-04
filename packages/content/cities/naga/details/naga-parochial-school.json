@@ -1,0 +1,144 @@
+{
+  "id": "detail/naga-parochial-school",
+  "osm_id": "osm:way/1315514528",
+  "title": "Naga Parochial School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "courtyard-divider-0",
+      "ring": [
+        [123.187317268, 13.629082107],
+        [123.187293952, 13.629093994],
+        [123.18736511, 13.629202191],
+        [123.187374469, 13.629198021],
+        [123.187391072, 13.629190023],
+        [123.187317268, 13.629082107]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-front-path-0",
+      "ring": [
+        [123.187449837, 13.629000121],
+        [123.186999206, 13.629232413],
+        [123.186917338, 13.629280071],
+        [123.186922515, 13.629287912],
+        [123.18745894, 13.629011764],
+        [123.187449837, 13.629000121]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-roof-wing-0-0",
+      "ring": [
+        [123.18697963, 13.629419896],
+        [123.186983041, 13.629492061],
+        [123.187681513, 13.62916396],
+        [123.187630108, 13.629106663],
+        [123.18697963, 13.629419896]
+      ],
+      "height_m": 8,
+      "material": "roof",
+      "overhead": true,
+      "roof_shape": "hipped",
+      "roof_osm_id": "osm:relation/16253275"
+    },
+    {
+      "id": "courtyard-roof-wing-1-0",
+      "ring": [
+        [123.187664087, 13.629124951],
+        [123.187523115, 13.628928314],
+        [123.187446342, 13.628978412],
+        [123.187535799, 13.629126573],
+        [123.18753582, 13.629126612],
+        [123.187535837, 13.629126653],
+        [123.187535849, 13.629126695],
+        [123.187535858, 13.629126739],
+        [123.187535862, 13.629126782],
+        [123.187535861, 13.629126827],
+        [123.187535856, 13.629126871],
+        [123.187535847, 13.629126914],
+        [123.187535833, 13.629126956],
+        [123.187535816, 13.629126996],
+        [123.187535794, 13.629127035],
+        [123.187535768, 13.629127072],
+        [123.187535739, 13.629127105],
+        [123.187535706, 13.629127136],
+        [123.187535671, 13.629127164],
+        [123.187535633, 13.629127188],
+        [123.187535593, 13.629127208],
+        [123.187527744, 13.629130706],
+        [123.18756254, 13.629185402],
+        [123.187669544, 13.629133658],
+        [123.187664087, 13.629124951]
+      ],
+      "height_m": 8,
+      "material": "roof",
+      "overhead": true,
+      "roof_shape": "hipped",
+      "roof_osm_id": "osm:relation/16253275"
+    },
+    {
+      "id": "courtyard-roof-wing-2-0",
+      "ring": [
+        [123.187442663, 13.628973215],
+        [123.187442703, 13.628973194],
+        [123.187442745, 13.628973177],
+        [123.187442789, 13.628973164],
+        [123.187442833, 13.628973156],
+        [123.187442879, 13.628973151],
+        [123.187442924, 13.628973151],
+        [123.18744297, 13.628973156],
+        [123.187443014, 13.628973165],
+        [123.187443058, 13.628973178],
+        [123.1874431, 13.628973195],
+        [123.18744314, 13.628973216],
+        [123.187443178, 13.628973241],
+        [123.187443213, 13.62897327],
+        [123.187443245, 13.628973301],
+        [123.187443274, 13.628973336],
+        [123.187443299, 13.628973373],
+        [123.187453148, 13.628989686],
+        [123.187523444, 13.628954128],
+        [123.187473509, 13.628898239],
+        [123.186844842, 13.629214899],
+        [123.186885246, 13.62927695],
+        [123.187157271, 13.629139351],
+        [123.187442663, 13.628973215]
+      ],
+      "height_m": 8,
+      "material": "roof",
+      "overhead": true,
+      "roof_shape": "hipped",
+      "roof_osm_id": "osm:relation/16253275"
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "sources": [
+    {
+      "title": "OpenStreetMap: school grounds and buildings",
+      "url": "https://www.openstreetmap.org/way/1315514528"
+    },
+    {
+      "title": "Owner-supplied overhead reference, five-site adjustment",
+      "note": "Inspected supplied image; registered to cached OSM roof/pool outlines. Capture and imagery dates unknown. Positions, sizes and counts are estimates; no construction dates inferred. Reference bitmap remains ignored evidence and is not distributed. Mapped footprints are preserved, including alignment uncertainty."
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga Parochial School — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "roof_overrides": [
+    {
+      "osm_id": "osm:relation/16253275",
+      "shape": "flat"
+    }
+  ]
+}

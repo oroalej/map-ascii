@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from 'react';
 import { useUiStore } from '@/state/ui';
+import { additionalCredits, creditTokens } from '@/lib/attribution';
 import styles from './Attribution.module.css';
 
 /** One empty list, so the store selector returns a stable value before the meta loads. */
@@ -15,7 +16,8 @@ const HEIGHT_VAR = '--attribution-height';
  * other layers need (e.g. the DEM behind the terrain), from its meta.
  */
 export function Attribution() {
-  const extra = useUiStore((s) => s.meta?.attribution ?? NONE);
+  const credits = useUiStore((s) => s.meta?.attribution ?? NONE);
+  const extra = additionalCredits(credits);
   const ref = useRef<HTMLElement>(null);
 
   // The credits wrap to more lines on narrow screens, so publish the real height rather than
@@ -40,12 +42,28 @@ export function Attribution() {
       <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
         OpenStreetMap contributors
       </a>
-      {extra.map((credit) => (
-        <span key={credit} className={styles.extra}>
-          {' · '}
-          {credit}
-        </span>
-      ))}
+      {extra.length > 0 && (
+        <div
+          className={styles.sources}
+          role="region"
+          aria-label="Additional map sources"
+          tabIndex={0}
+        >
+          {extra.map((credit) => (
+            <span key={credit} className={styles.extra}>
+              {creditTokens(credit).map((token, index) =>
+                token.url ? (
+                  <a key={index} href={token.url} target="_blank" rel="noreferrer">
+                    {token.text}
+                  </a>
+                ) : (
+                  token.text
+                ),
+              )}
+            </span>
+          ))}
+        </div>
+      )}
     </footer>
   );
 }

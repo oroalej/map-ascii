@@ -1,0 +1,31 @@
+{
+  "id": "landcover/ateneo-frontage",
+  "title": "Vegetation adjoining Ateneo grounds",
+  "trees": [
+    {
+      "at": [123.18458322, 13.63267816],
+      "crown_m": 5.6,
+      "height_m": 10
+    },
+    {
+      "at": [123.18549388, 13.63012989],
+      "crown_m": 5.9,
+      "height_m": 10
+    }
+  ],
+  "rows": [],
+  "areas": [],
+  "status": "draft",
+  "credit": "Ateneo vegetation — OSM geometry © OpenStreetMap contributors; owner annotated Google Maps overhead reference. Draft estimates; imagery date unknown.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: campus and surrounding features",
+      "url": "https://www.openstreetmap.org/way/222268858",
+      "note": "ODbL. Registration anchors and campus boundary use cached mapped roof footprints. Ten mapped tree points and existing lawns, pitches, parking, paths and buildings are retained. OSM edit dates are not construction dates."
+    },
+    {
+      "title": "Owner-supplied annotated Google Maps overhead reference",
+      "note": "Inspected 2026-10-02: owner screenshot highlighting missing foliage. Image/capture date unknown. Registered to mapped Burns and Adriatico roof corners and checked against Alingal, Phelan, Xavier and covered-court footprints. Crowns/positions are schematic estimates within traced visible foliage, not surveyed trunks or an exact tree count. Heights use the generic 10 m default; species unspecified. Entrance planting is modeled as low shrubs. Vegetation is undated; no timeline dates inferred."
+    }
+  ]
+}

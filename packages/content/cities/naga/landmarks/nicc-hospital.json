@@ -1,0 +1,20 @@
+{
+  "id": "landmark/nicc-hospital",
+  "osm_id": "osm:way/269764019",
+  "name": {
+    "en": "NICC Doctors' Hospital"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/way/269764019",
+      "note": "Mapped footprint matched to the owner-requested site."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference identifies the site and guides restrained outdoor detail."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "landmark/balatas-elementary-school",
+  "osm_id": "osm:way/1044674447",
+  "name": {
+    "en": "Balatas Elementary School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: mapped school grounds",
+      "url": "https://www.openstreetmap.org/way/1044674447",
+      "note": "ODbL. Complete mapped grounds, standing classroom roofs and adjacent roads retain geometry."
+    },
+    {
+      "title": "Owner-supplied school grounds reference",
+      "note": "Inspected owner reference 2026-10-03. Preserve the open central courtyard; restrained edge planting, grass, a paved apron, paths and schematic parking fit seven complete saved OSM classroom roofs and full adjacent road/path widths. Undated draft estimates; no surveyed boundary, species, court markings, construction date, roof reconstruction or vehicle inventory inferred. Reference bitmap remains ignored evidence."
+    }
+  ]
+}

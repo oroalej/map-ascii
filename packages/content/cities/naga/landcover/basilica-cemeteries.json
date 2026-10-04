@@ -1,0 +1,308 @@
+{
+  "id": "landcover/basilica-cemeteries",
+  "title": "Scattered cemetery trees beside the Basilica",
+  "trees": [
+    {
+      "at": [123.19947899, 13.6356125],
+      "crown_m": 11
+    },
+    {
+      "at": [123.19980441, 13.63553954],
+      "crown_m": 10
+    },
+    {
+      "at": [123.19988486, 13.63540932],
+      "crown_m": 10
+    },
+    {
+      "at": [123.1999786, 13.63524174],
+      "crown_m": 8
+    },
+    {
+      "at": [123.19994792, 13.63505044],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20025998, 13.63497283],
+      "crown_m": 10
+    },
+    {
+      "at": [123.20007311, 13.63482005],
+      "crown_m": 10
+    },
+    {
+      "at": [123.19988182, 13.63464963],
+      "crown_m": 10
+    },
+    {
+      "at": [123.1996368, 13.63461871],
+      "crown_m": 10
+    },
+    {
+      "at": [123.19978875, 13.63438004],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20018069, 13.63447957],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20037663, 13.63454909],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20076641, 13.63440736],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20095629, 13.63434915],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20118344, 13.63440169],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20119635, 13.63465221],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20135226, 13.63467708],
+      "crown_m": 11
+    },
+    {
+      "at": [123.20154891, 13.63460829],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20170453, 13.63454753],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20186911, 13.63470429],
+      "crown_m": 11
+    },
+    {
+      "at": [123.20193533, 13.63503484],
+      "crown_m": 8
+    },
+    {
+      "at": [123.2020561, 13.6347912],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20245193, 13.63484043],
+      "crown_m": 10
+    },
+    {
+      "at": [123.20240381, 13.63471427],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20266675, 13.63469722],
+      "crown_m": 10
+    },
+    {
+      "at": [123.20256377, 13.63495875],
+      "crown_m": 10
+    },
+    {
+      "at": [123.20201687, 13.63432064],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20242673, 13.6343722],
+      "crown_m": 8
+    },
+    {
+      "at": [123.2028857, 13.63437199],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20311306, 13.63431915],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20338496, 13.63427153],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20002089, 13.63415589],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20011096, 13.6336396],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20280669, 13.63372944],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20295412, 13.63352582],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20310136, 13.63342318],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20299456, 13.63334654],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20312865, 13.63312511],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20303973, 13.63301807],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20324484, 13.63294725],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20298386, 13.63275633],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20353786, 13.63352793],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20374729, 13.63352745],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20383234, 13.63332266],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20367663, 13.63318803],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20383277, 13.63308995],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20399318, 13.63309295],
+      "crown_m": 9
+    },
+    {
+      "at": [123.2041395, 13.63348647],
+      "crown_m": 9
+    },
+    {
+      "at": [123.20398776, 13.63361097],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20483084, 13.63313054],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20503585, 13.6331168],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20482699, 13.63280993],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20486735, 13.63267017],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20472509, 13.63249188],
+      "crown_m": 8
+    },
+    {
+      "at": [123.2046317, 13.63239353],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20456972, 13.63217722],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20447638, 13.63204814],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20439206, 13.63186215],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20431662, 13.63169389],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20353506, 13.63263652],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20341944, 13.63251142],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20320168, 13.6321956],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20345104, 13.63229246],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20349603, 13.63206058],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20375446, 13.63207419],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20390158, 13.63203302],
+      "crown_m": 7
+    },
+    {
+      "at": [123.20335598, 13.63187136],
+      "crown_m": 8
+    },
+    {
+      "at": [123.20359968, 13.63192617],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20370596, 13.63179226],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20382202, 13.63168465],
+      "crown_m": 5
+    },
+    {
+      "at": [123.20406511, 13.63168906],
+      "crown_m": 6
+    },
+    {
+      "at": [123.20388648, 13.63158864],
+      "crown_m": 5
+    },
+    {
+      "at": [123.203827, 13.63140373],
+      "crown_m": 6
+    }
+  ],
+  "rows": [],
+  "areas": [],
+  "status": "draft",
+  "credit": "Basilica cemeteries: owner-supplied Google Maps overhead / ground references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Draft estimates; imagery dates unknown.",
+  "sources": [
+    {
+      "title": "Owner-supplied cemetery overhead and closeups",
+      "note": "Inspected 2026-10-02. Isolated visible crowns traced alongside burial rows and internal drives in Santo Niño and Eternal Gardens. Species unspecified and generic default height; crown diameters and trunk locations estimated. Mapped OSM trees retained, 3 m duplicate clearance and standing building/road exclusion enforced by regression checks. Image/capture dates unknown; no historical timeline date. No reference bitmap ships with the app. Two unconfirmed boundary trunks omitted; 10 estimated trunks adjusted by 0.25–3.25 m to clear mapped roads within registration uncertainty. Canopy overhang remains allowed."
+    }
+  ]
+}

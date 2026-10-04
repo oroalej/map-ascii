@@ -1,0 +1,111 @@
+{
+  "id": "detail/naga-central-school-ii",
+  "osm_id": "osm:way/795855561",
+  "title": "Naga Central School II",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "courtyard-approach-0-0",
+      "ring": [
+        [123.189558291, 13.631851133],
+        [123.189578752, 13.631878409],
+        [123.189830089, 13.631777635],
+        [123.18982503, 13.631765295],
+        [123.189825079, 13.631764583],
+        [123.189825613, 13.631764086],
+        [123.189877842, 13.631744024],
+        [123.189878481, 13.63174413],
+        [123.189878915, 13.631744569],
+        [123.18988367, 13.631756152],
+        [123.189939432, 13.631733794],
+        [123.189920191, 13.63170581],
+        [123.189558291, 13.631851133]
+      ],
+      "material": "paving",
+      "height_m": 0.08,
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-1-1",
+      "ring": [
+        [123.18988987, 13.631616707],
+        [123.189901991, 13.631645493],
+        [123.189964391, 13.631730963],
+        [123.189968901, 13.631729172],
+        [123.189916024, 13.631628279],
+        [123.189916062, 13.63162762],
+        [123.189916511, 13.631627134],
+        [123.189935763, 13.631617507],
+        [123.189926087, 13.631604101],
+        [123.18988987, 13.631616707]
+      ],
+      "material": "paving",
+      "height_m": 0.08,
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-2-0",
+      "ring": [
+        [123.189884227, 13.631603306],
+        [123.189895522, 13.631630132],
+        [123.189964252, 13.631603263],
+        [123.1900238, 13.631573489],
+        [123.190010636, 13.631555487],
+        [123.189884227, 13.631603306]
+      ],
+      "material": "paving",
+      "height_m": 0.08,
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "parked_vehicles": [],
+  "status": "draft",
+  "credit": "Naga Central School II - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/795855561",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ],
+  "extent": [
+    [123.190776635, 13.632386027],
+    [123.190776625, 13.632385449],
+    [123.190776755, 13.632384876],
+    [123.19077703, 13.632384331],
+    [123.190777458, 13.632383839],
+    [123.191250004, 13.63196609],
+    [123.190895855, 13.631487058],
+    [123.190895532, 13.631486456],
+    [123.190895382, 13.63148576],
+    [123.190895426, 13.631485117],
+    [123.19089567, 13.631484438],
+    [123.190896013, 13.631483951],
+    [123.190896437, 13.631483571],
+    [123.191472173, 13.631072886],
+    [123.1909769, 13.630613044],
+    [123.19076962, 13.630804635],
+    [123.190778435, 13.630813836],
+    [123.190778702, 13.630814364],
+    [123.190778755, 13.630814967],
+    [123.190778614, 13.630815471],
+    [123.190778262, 13.630815958],
+    [123.190335862, 13.631235258],
+    [123.190182268, 13.631347533],
+    [123.190057608, 13.631462748],
+    [123.189299126, 13.631753102],
+    [123.189722712, 13.632755518],
+    [123.190776635, 13.632386027]
+  ]
+}

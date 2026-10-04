@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { classId, MAX_CLASSES, type RenderClass } from '../classes';
+import {
+  classId,
+  classDepths,
+  MAX_CLASSES,
+  PavingVariant,
+  pavingOverrideDepth,
+  variantCode,
+  type RenderClass,
+} from '../classes';
 import { buildingRamp, doubleLine, sextantGlyphs, singleLine, themes } from '../theme';
 import {
   buildGlyphTables,
@@ -348,6 +356,61 @@ describe('sub-cell edges', () => {
     });
   });
 
+  it('shows opt-in paving over base ground while preserving planting and higher surfaces', () => {
+    const paving: Sample = { cls: 'paving', id: 20, height: 1, variant: PavingVariant.override };
+    expect(variantCode('paving', 'terrace_override')).toBe(PavingVariant.override);
+    const depths = classDepths();
+    expect(pavingOverrideDepth()).toBeLessThan(depths[classId('park')]!);
+    expect(pavingOverrideDepth()).toBeGreaterThan(depths[classId('planting')]!);
+    for (const cls of ['grass', 'park', 'parking', 'pitch', 'terrain'] as const) {
+      const ground: Sample = { cls, id: 21 };
+      expect(subcellEdge(ground, [paving, ground, paving, ground, paving, ground], never)).toEqual({
+        fg: paving,
+        mask: 21,
+        bg: cls,
+      });
+      expect(
+        subcellEdge(
+          ground,
+          [{ ...paving, variant: 1 }, ground, ground, ground, ground, ground],
+          never,
+        ),
+      ).toEqual(cls === 'terrain' ? null : { fg: ground, mask: 62, bg: 'paving' });
+    }
+    for (const cls of [
+      'planting',
+      'shrubs',
+      'seating',
+      'water_area',
+      'tree_crown',
+      'building',
+    ] as const) {
+      const higher: Sample = { cls, id: 22, height: 5 };
+      expect(subcellEdge(paving, [higher, paving, higher, paving, higher, paving], never)).toEqual({
+        fg: higher,
+        mask: 21,
+        bg: 'paving',
+      });
+    }
+    expect(subcellEdge(R, [paving, R, paving, R, paving, R], never)).toBeNull();
+    const terrain: Sample = { cls: 'terrain', id: 24 };
+    const crown: Sample = { cls: 'tree_crown', id: 25, height: 10 };
+    expect(
+      subcellEdge(terrain, [crown, terrain, crown, terrain, crown, terrain], never),
+    ).toBeNull();
+    expect(
+      subcellEdge(terrain, [paving, crown, terrain, terrain, terrain, terrain], never),
+    ).toEqual({
+      fg: crown,
+      mask: 2,
+      bg: 'paving',
+    });
+    const grounds: Sample = { cls: 'building_school', id: 23, height: 0 };
+    expect(
+      subcellEdge(grounds, [paving, grounds, paving, grounds, paving, grounds], never),
+    ).toEqual({ fg: paving, mask: 21, bg: 'building_school' });
+  });
+
   it('draws a building over the park it stands in', () => {
     expect(subcellEdge(P, [P, P, P, B, P, B], never)).toEqual({ fg: B, mask: 40, bg: 'park' });
   });
@@ -355,6 +418,19 @@ describe('sub-cell edges', () => {
   it('leaves outlined features to their walls', () => {
     const outlined = (s: Sample) => s.cls === 'building';
     expect(subcellEdge(B, [B, P, B, P, B, P], outlined)).toBeNull();
+  });
+
+  it('defers outlined areas to their walls while still covering road cells with crowns', () => {
+    const crown: Sample = { cls: 'tree_crown', id: 10, height: 10 };
+    for (const center of [
+      P,
+      { cls: 'paving', id: 11, height: 0.15, variant: PavingVariant.terrace } as Sample,
+    ]) {
+      const samples = [center, crown, center, crown, center, crown];
+      expect(subcellEdge(center, samples, never, true)).toBeNull();
+      expect(subcellEdge(center, samples, never)?.fg).toEqual(crown);
+    }
+    expect(subcellEdge(R, [R, crown, R, crown, R, crown], never, true)?.fg).toEqual(crown);
   });
 
   it('shows crowns reaching into road cells without promoting unrelated ground areas', () => {

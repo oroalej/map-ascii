@@ -9,12 +9,13 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
+import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
 import {
   classDepths,
   classId,
   classVisibility,
   crownSurfaces,
-  groundClasses,
+  groundFlags,
   groundDepth,
   TIER_STEP,
 } from './classes';
@@ -76,7 +77,7 @@ import {
 import type { TileId } from './tiles';
 
 const depths = classDepths();
-const grounds = groundClasses.reduce((mask, cls) => mask | (1 << classId(cls)), 0);
+const grounds = groundFlags();
 const groundsDepth = groundDepth();
 const crownClass = classId('tree_crown');
 const crownSurfaceClasses = crownSurfaces();
@@ -251,7 +252,7 @@ export function cellPass(
   gl.useProgram(program.program);
   twgl.setUniforms(program, {
     u_depth: depths,
-    u_groundMask: grounds,
+    u_ground: grounds,
     u_groundDepth: groundsDepth,
     u_vis: classVisibility(camera.zoom),
     u_zoom: view.detailZoom,
@@ -330,7 +331,7 @@ export function crownPass(
   gl.useProgram(program.program);
   twgl.setUniforms(program, {
     u_depth: depths,
-    u_groundMask: grounds,
+    u_ground: grounds,
     u_groundDepth: groundsDepth,
     u_vis: classVisibility(view.camera.zoom),
     u_zoom: view.detailZoom,
@@ -486,6 +487,7 @@ export function selectPass(
     u_windDir: wind.dir,
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
+    u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
     u_roadMask: roads,
     u_cellAspect: view.cellDev.h / view.cellDev.w,
     u_hover: highlights.hover,

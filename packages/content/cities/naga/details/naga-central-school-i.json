@@ -1,0 +1,113 @@
+{
+  "id": "detail/naga-central-school-i",
+  "osm_id": "osm:way/795855560",
+  "title": "Naga Central School I",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "garden-approach",
+      "ring": [
+        [123.189325338, 13.631305932],
+        [123.189324556, 13.631305889],
+        [123.189324044, 13.631305336],
+        [123.189298439, 13.631235879],
+        [123.189251425, 13.631173],
+        [123.18924336, 13.631175721],
+        [123.189289672, 13.63128812],
+        [123.189338121, 13.631355276],
+        [123.189336991, 13.631352121],
+        [123.189337113, 13.631351517],
+        [123.189337573, 13.631351103],
+        [123.189374865, 13.631338095],
+        [123.189345614, 13.631298973],
+        [123.189325338, 13.631305932]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "ii-entry",
+      "ring": [
+        [123.18949088, 13.63163612],
+        [123.189931724, 13.631460629],
+        [123.189916763, 13.631439387],
+        [123.18949088, 13.63163612]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "east-courtyard-approach",
+      "ring": [
+        [123.189719132, 13.631083044],
+        [123.189867079, 13.631231148],
+        [123.189899233, 13.631216314],
+        [123.189752925, 13.631068941],
+        [123.189719132, 13.631083044]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "east-courtyard-approach-1",
+      "ring": [
+        [123.189624881, 13.630988694],
+        [123.189664076, 13.631027931],
+        [123.189698017, 13.631013632],
+        [123.189659909, 13.630975249],
+        [123.189624881, 13.630988694]
+      ],
+      "height_m": 0.08,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "flagpoles": [],
+  "parked_vehicles": [],
+  "status": "draft",
+  "credit": "Naga Central School I - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/795855560",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ],
+  "extent": [
+    [123.190134578, 13.631022104],
+    [123.190133787, 13.631022214],
+    [123.190132941, 13.63102203],
+    [123.19013227, 13.6310216],
+    [123.190131776, 13.631020944],
+    [123.189784865, 13.630319672],
+    [123.189679614, 13.630388003],
+    [123.189306575, 13.630625183],
+    [123.189122697, 13.63071622],
+    [123.189122048, 13.63071636],
+    [123.189121507, 13.63071624],
+    [123.189121039, 13.630715902],
+    [123.189120697, 13.630715313],
+    [123.18891305, 13.630795954],
+    [123.189262664, 13.631757643],
+    [123.190042862, 13.631447064],
+    [123.190334519, 13.631233895],
+    [123.190776712, 13.630814791],
+    [123.190676069, 13.630709919],
+    [123.190135039, 13.631021902],
+    [123.190134578, 13.631022104]
+  ]
+}

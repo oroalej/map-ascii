@@ -21,6 +21,27 @@ export type StreetStats = {
 
 const road = (f: AtlasFeature) => !f.properties.region && f.properties.class.startsWith('road_');
 
+/** Remove exact sourced road targets and their region copies before deriving other geometry. */
+export function applyRoadExclusions(
+  features: AtlasFeature[],
+  exclusions: NonNullable<City['streets']>['exclusions'],
+): AtlasFeature[] {
+  if (!exclusions?.length) return features;
+  const targets = new Set(exclusions.map((item) => item.osm_id));
+  if (targets.size !== exclusions.length) throw new Error('Duplicate road exclusion target');
+  const matched = new Set<string>();
+  for (const feature of features) {
+    const id = feature.properties.id;
+    if (!targets.has(id) || feature.properties.region) continue;
+    if (!road(feature) || feature.geometry.type !== 'LineString')
+      throw new Error(`Road exclusion target is not a road LineString: ${id}`);
+    matched.add(id);
+  }
+  for (const id of targets)
+    if (!matched.has(id)) throw new Error(`Road exclusion target not found in detail data: ${id}`);
+  return features.filter((feature) => !targets.has(feature.properties.id));
+}
+
 /** Apply sourced city corrections before resolving junction approaches and arrow anchors. */
 export function applyRoadDirections(
   features: AtlasFeature[],

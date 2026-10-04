@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { CellBit, cellBits } from './life/config';
+import { seeThroughMask, subcellAreas } from './glyphs/select';
 import {
   classDepths,
   classesIn,
@@ -6,7 +8,46 @@ import {
   classVisibility,
   crownSurfaces,
   groundDepth,
+  groundFlags,
+  pavingOverrideBase,
+  pavingOverrideDepth,
+  renderClasses,
 } from './classes';
+
+it('treats hospital roofs as buildings and keeps their marker within the connectivity mask', () => {
+  const roof = classId('building_hospital');
+  expect(classDepths()[roof]).toBe(classDepths()[classId('building')]);
+  expect(crownSurfaces()[roof]).toBe(2);
+  expect(subcellAreas()[roof]).toBe(1);
+  expect(cellBits()[roof]! & CellBit.person).toBe(0);
+  expect(cellBits()[roof]! & CellBit.grounds).toBeTruthy();
+  expect(cellBits()[roof]! & CellBit.window).toBeTruthy();
+  expect((seeThroughMask() >>> classId('marker_hospital')) & 1).toBe(1);
+});
+
+it('admits heightless building grounds above id 31 without admitting roads or markers', () => {
+  const flags = groundFlags();
+  for (const cls of ['building_station', 'building_hospital']) {
+    expect(classId(cls)).toBeGreaterThan(31);
+    expect(flags[classId(cls)]).toBe(1);
+  }
+  for (const cls of ['road_major', 'road_mid', 'road_minor', 'marker_station', 'marker_hospital'])
+    expect(flags[classId(cls)]).toBe(0);
+  expect(flags[0]).toBe(0);
+  expect(Array.from(flags).filter(Boolean)).toHaveLength(6);
+});
+
+it('limits paving overrides to surfaces below the planting tier', () => {
+  const depths = classDepths();
+  for (const cls of renderClasses) {
+    expect(pavingOverrideBase.includes(cls), cls).toBe(
+      depths[classId(cls)]! < 2 && depths[classId(cls)]! > pavingOverrideDepth(),
+    );
+  }
+  expect(pavingOverrideBase).toHaveLength(8);
+  for (const cls of ['road_major', 'building', 'water_area', 'shrubs', 'planting', 'tree_crown'])
+    expect(pavingOverrideBase).not.toContain(cls);
+});
 
 describe('classesIn', () => {
   it('lists the class ids in a class-buffer read, once each, in id order', () => {
@@ -88,6 +129,7 @@ it('allows crown overlap on roads and compares every roof class, including ids a
     'building',
     'building_religious',
     'building_school',
+    'building_hospital',
     'building_market',
     'building_station',
     'building_part',

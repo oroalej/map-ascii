@@ -27,6 +27,7 @@ const collections = {
   plans: 'LandmarkPlan',
   landcover: 'Landcover',
   details: 'SiteDetail',
+  cemeteries: 'Cemetery',
   processions: 'Procession',
 } as const satisfies Record<string, keyof Schemas>;
 
@@ -150,6 +151,7 @@ export async function loadCityPacks(
       plans: [],
       landcover: [],
       details: [],
+      cemeteries: [],
       processions: [],
     };
     const seenIds = new Map<string, string>();

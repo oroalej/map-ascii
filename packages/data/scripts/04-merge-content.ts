@@ -8,12 +8,15 @@ import type { AtlasFeature } from './03-normalize';
 import { placeArt } from './lib/art';
 import { planParts } from './lib/plan';
 import { enrichRoofs } from './lib/roofs';
-import { landcoverFeatures } from './lib/landcover';
-import { mergeSiteDetails } from './lib/site-detail';
+import { landcoverFeatures, applyLandcoverTreeOverrides } from './lib/landcover';
+import { mergeCemeteries } from './lib/cemeteries';
+import { finalizeDetailSelections, mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
 import { mergeTraffic } from './lib/traffic';
+import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
+import { writeDetailLayouts } from './lib/detail-layout';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
@@ -99,17 +102,22 @@ export function checkTours(
 // Join the city pack's curated content onto features
 export const step: Step = {
   name: '04-merge-content',
-  async run({ city, content, buildDir, outDir }) {
-    const features: AtlasFeature[] = [];
+  async run(ctx) {
+    const { city, content, buildDir, outDir } = ctx;
+    let features: AtlasFeature[] = [];
     for await (const f of readFeatures(join(buildDir, files.normalized))) {
       features.push(f as AtlasFeature);
     }
+    features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
-    const merged = mergeTraffic(
-      mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
-      city.life?.signals,
-      city.streets,
-      (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
+    const merged = applyLandcoverTreeOverrides(
+      mergeTraffic(
+        mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+        city.life?.signals,
+        city.streets,
+        (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
+      ),
+      content.landcover,
     );
     const tourProblems = checkTours(merged, content.tours, regionBounds);
     if (tourProblems.length > 0) {
@@ -120,17 +128,22 @@ export const step: Step = {
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
     const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
+    // Standing detail parts and approaches reserve their ground before representative
+    // burial rows are placed, including memorials added inside a mapped cemetery.
     const detail = mergeSiteDetails(
       [...merged, ...parts, ...landcover.features],
       content.details,
       subdivisions,
     );
+    const cemeteries = mergeCemeteries(detail.features, content.cemeteries);
+    if (cemeteries.stats.length) console.log(`  cemeteries: ${JSON.stringify(cemeteries.stats)}`);
     for (const warning of [...warnings, ...landcover.warnings, ...detail.warnings]) {
       console.warn(`  warning: ${warning}`);
     }
-    const roofs = enrichRoofs(detail.features);
+    const roofs = enrichRoofs(cemeteries.features);
+    finalizeDetailSelections(cemeteries.features);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
-    await writeFeatures(join(buildDir, files.merged), detail.features);
+    await writeFeatures(join(buildDir, files.merged), cemeteries.features);
     console.log(
       `  joined ${content.landmarks.length} landmarks; ${parts.length} landmark parts; ` +
         `${landcover.features.length} curated trees and areas; checked ${content.tours.length} tours`,
@@ -140,6 +153,7 @@ export const step: Step = {
     const art = placeArt(features, content.art);
     await mkdir(outDir, { recursive: true });
     await writeJson(join(outDir, `${city.slug}.art.json`), art);
+    await writeDetailLayouts(ctx);
     const drafts = art.pieces.filter((p) => p.status === 'draft').length;
     console.log(`  placed ${art.pieces.length} art pieces (${drafts} draft)`);
   },

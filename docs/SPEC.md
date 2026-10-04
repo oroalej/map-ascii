@@ -51,6 +51,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Building — generic | `█ ▓ ▒ ░` (by shade/height; height from OSM `height` or `building:levels × 3 m`, else a class default) | amber-grey |
 | Religious building | `†` marker plus fill | gold |
 | School/university | `⌂` marker | soft blue |
+| Hospital | `+` marker plus fill | rose |
 | Market/commercial | `$` marker | orange |
 | Train station | `Ħ` marker | brick red |
 | Park/plaza | grown tufts, dense to sparse (`" ' , .`), in patches of deeper green and straw rather than a regular stripe; gusts of wind sweep across, and blades stir, then lean with the wind (`/` or `\`; upright `\|` when it blows north or south), then lie flat `~`, lightening as the gust strengthens and again fading in its wake | green, with darker and straw patches |
@@ -66,7 +67,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 | Street furniture | bench `╥`, fountain `○`, flagpole `¶` (from z18) | light grey |
 | Entrance | `▪` (from z18) | stone |
 | Parking / sports pitch | `▫ ·` / `─` in rows | grey / green |
-| Church, school, or market grounds | the class's lightest `░` fill, under its buildings | class color, dim |
+| Church, school, hospital, or market grounds | the class's lightest `░` fill, under its buildings | class color, dim |
 
 **Road glyphs follow edge direction.** The renderer computes each road cell's orientation and neighbor connectivity, and picks the matching box-drawing character. Straight segments get `─`/`│`, junctions get `┼`/`├` and so on, and diagonals get `╱ ╲` or stair-stepped runs.
 
@@ -93,6 +94,8 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - From z19, roofs use the real sun direction: slopes facing it brighten, opposing slopes darken, and near-perpendicular slopes retain height shading. Night uses the established fallback light. Untagged roofs are stylized hips; explicit gabled, hipped, pyramidal and flat shapes are respected. Conservative L-, T- and cross-shaped footprints get a ridge per wing, with continuous feature identity. Flat roofs, grounds, woodwork and landmark parts keep their existing shading. Adjoining buildings of equal height and wall style share a single joined wall; below outline zoom a dark seam separates them. These shapes are inferred from footprints, not surveyed roof geometry.
 - **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong in the info panel (Phase 2).
 - The Place level reaches z21, where a cell is about 0.4 × 0.7 m.
+
+**Landmark grounds.** City packs can enrich plazas, campuses, religious grounds, building aprons and terminal sites while preserving their canonical landmark selection. Curated ground and landscaping appear from z12.5, parking and courts from z16, plan structures and trees from z17, seating and fixtures from z18, and shrubs from z19. Kept grounds retain their existing fill; curated paving adds only a ground surface beneath standing buildings. Position and dimension estimates remain draft and carry sources and attribution.
 
 **Plaza landscaping.** Sourced stone seating and planter edges draw as solid neutral gray bands with connected outlines from z18. Open seating curves have rounded ends; closed lines can enclose raised beds. Planting beds mix brown soil with sparse patches of green ground cover. Shrub clusters appear from z19 as compact green foliage above grass and below mature crowns, without tree trunks or bird roosts. Accessible paving stays connected around the monument and gardens; stonework and shrubs are obstacles to ground agents. Three-head lantern posts use compact top-down housings and short brackets, independent of the Life toggle, with the existing warm nighttime lighting. Tree crowns retain their natural coverage of these ground details.
 
@@ -177,6 +180,8 @@ Explicitly authored country flags appear as upright pole-and-flag map symbols fr
 
 Raised paved forecourts remain walkable. Their terrace and stair treads use connected plan-view outlines from z18, with broad front steps and neutral paving beneath planted islands and furniture. Selection on the raised paving resolves to its parent plaza. Height and footprint estimates belong to the city pack.
 
+Curated paving can explicitly replace a coarse lawn or park fill when supported by a site's references. Planted islands, furniture, water, buildings and streets keep their usual draw order above it, including partial cells along the paving edge. Kept campuses retain their mapped parks, parking and courts; authored detail supplements those facilities.
+
 Streetlights and traffic signals remain visible in daylight and with Life off. Compact lamp stars (from z15) and signal dots (from z17) dissolve into detailed top-down plans across z18–18.5. Streetlights show a curb base, road-facing arm, and lamp housing; signals show a support, housing, and three separate lens marks, with only the current red/amber/green phase bright. Small housings are enlarged for readability (at least two cells along a lamp and three separate lens cells in a signal); further zoom scales their world dimensions. Roofs, water, and tree cover mask the hardware, and labels remain above it. Streetlight glow retains dusk/dawn, dead lamps, and flicker. Only the active signal lens emits a short, soft-edged ray in its red, amber, or green color toward approaching traffic, including compact signal dots. It is a faint 4 CSS-pixel stub by day, smoothly growing to 14 CSS pixels and greater brightness at night, when a soft 6 CSS-pixel halo surrounds the lens. These screen-sized rays stay small at close zoom, respect the same cover as the hardware, and stay below labels. Signal colors use the traffic clock and freeze with Life off or reduced motion; before Life runs, they show the deterministic phase at clock zero. These are illustrative top-down fixtures rather than surveyed hardware models.
 
 ### Shopfronts and neighborhood activity
@@ -221,7 +226,7 @@ Shop areas without a building or another rendered area class receive one interio
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
 - A "Life" toggle for the life layer (§4) and a time chip that cycles live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00 (the city's local time). Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
-- Attribution line, always visible.
+- Attribution keeps the OSM link visible, with additional credits in a bounded scrolling region so sourced city packs leave the map and controls accessible.
 
 ## 6. Tours
 
