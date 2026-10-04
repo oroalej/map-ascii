@@ -4,6 +4,7 @@ import { unpackGlyph } from '../glyphs/select';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
+import { PackingOutcome } from './diagnostics';
 import { catGlyphs } from './cats';
 import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
 import { Heading } from './masters';
@@ -58,6 +59,53 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it.fails('draws two miniature cars sharing a cell when an adjacent cell is available', () => {
+    const a: VisibleAgent = { kind: 'vehicle', vehicle: 'car', lng: 2.2, lat: 2.2, flap: 0 };
+    const b = { ...a, lng: 2.4 };
+    const out = new Uint8Array(200);
+    expect(packLife(out, grid, [a, b], themes.dark, glyphIndex)).toBe(2);
+  });
+  it.fails('draws a curbside walker when an adjacent permitted cell is available', () => {
+    const out = new Uint8Array(200);
+    const person: VisibleAgent = { kind: 'person', lng: 4.8, lat: 2, flap: 0 };
+    expect(
+      packLife(
+        out,
+        { ...grid, allowsGroundCell: (_agent, col) => col >= 5 },
+        [person],
+        themes.dark,
+        glyphIndex,
+      ),
+    ).toBe(1);
+  });
+  it('reports exclusive packing outcomes without changing pixels, owners or counts', () => {
+    const agents: VisibleAgent[] = [
+      { kind: 'vehicle', vehicle: 'car', lng: 2, lat: 2, flap: 0 },
+      { kind: 'vehicle', vehicle: 'car', lng: 2, lat: 2, flap: 0 },
+      { kind: 'person', lng: 5, lat: 2, flap: 0 },
+      { kind: 'person', lng: 15, lat: 2, flap: 0 },
+    ];
+    const outcomes = new Uint8Array(agents.length),
+      a = new Uint8Array(200),
+      b = a.slice();
+    const ga = {
+      ...grid,
+      allowsGroundCell: (_agent: VisibleAgent, col: number) => col < 5,
+      owners: new Uint32Array(50),
+    };
+    const gb = { ...ga, owners: new Uint32Array(50), outcomes };
+    expect(packLife(a, ga, agents, themes.dark, glyphIndex)).toBe(
+      packLife(b, gb, agents, themes.dark, glyphIndex),
+    );
+    expect(a).toEqual(b);
+    expect(ga.owners).toEqual(gb.owners);
+    expect([...outcomes]).toEqual([
+      PackingOutcome.drawn,
+      PackingOutcome.collision,
+      PackingOutcome.cellGuard,
+      PackingOutcome.outside,
+    ]);
+  });
   it('marks complete detailed stamps while preserving ownership, permissions and indicators', () => {
     const big = { ...grid, cols: 40, rows: 30 };
     const agents: VisibleAgent[] = [

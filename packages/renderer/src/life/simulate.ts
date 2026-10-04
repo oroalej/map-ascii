@@ -18,7 +18,7 @@ import {
   walkingTransfer,
   type AdoptionOptions,
 } from './continuity';
-import type { ContinuityCounter, ContinuityRejection } from './diagnostics';
+import type { ContinuityCounter, ContinuityRejection, LifeDiagnostics } from './diagnostics';
 import { seamAhead, SEAMS } from './seams';
 import { complete } from './cooperate';
 import { admitBirths, outsideView, type LifeViewContext, type PendingSeed } from './births';
@@ -247,6 +247,7 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  diagnostics?: LifeDiagnostics;
   inspecting?: object;
   clock?: number;
   minutes?: number;
@@ -2539,7 +2540,11 @@ export class TileLife {
   }
 
   /** Nearest overlapping leader, including the chosen exit when this line is clear. */
-  private followLimits(dt: number, table: JunctionTable): Float64Array {
+  private followLimits(
+    dt: number,
+    table: JunctionTable,
+    diagnostics?: LifeDiagnostics,
+  ): Float64Array {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
@@ -2556,6 +2561,7 @@ export class TileLife {
         leader = movers[j]!;
       const gap = separation - (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2;
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
+      if (room < 0.5 * pm) diagnostics?.following(m, leader);
       speeds[i] = Math.min(
         speeds[i]!,
         room / FOLLOW.headway,
@@ -2650,9 +2656,11 @@ export class TileLife {
       shows,
       guard,
       (m) => this.offsetOf(m),
-      (m, target, distance) => this.signals.walkDistance(m, target, distance, clock),
+      (m, target, distance) =>
+        this.signals.walkDistance(m, target, distance, clock, env?.diagnostics),
       pass?.owns,
       this.inspected,
+      env?.diagnostics,
     );
     const momentView = pass?.momentView;
     this.momentHost.step(
@@ -2677,7 +2685,7 @@ export class TileLife {
       this.requestJunctions(table, active, clock);
       table.resolve(clock);
     }
-    const speeds = this.followLimits(dt, table);
+    const speeds = this.followLimits(dt, table, env?.diagnostics);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
@@ -2690,12 +2698,17 @@ export class TileLife {
           a.i - b.i,
       );
     for (const { i, m } of order) {
-      if (this.inspected === m) continue;
+      if (this.inspected === m) {
+        env?.diagnostics?.eligible(m, m.kind);
+        env?.diagnostics?.hold(m, 'inspection');
+        continue;
+      }
       if (pass?.owns && !pass.owns(m)) continue;
       if (shows && !shows(m.kind)) continue;
       if (near && !m.train && !near(m.x, m.y)) continue;
       if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
+      env?.diagnostics?.eligible(m, m.kind);
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
@@ -2710,6 +2723,7 @@ export class TileLife {
             movement && table.granted(m) && movement.ahead < -0.05 * this.perMeter
               ? movement.key
               : undefined,
+            env?.diagnostics,
           );
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
@@ -2720,6 +2734,7 @@ export class TileLife {
             this.signals.vehicleSpeed(m, dt, clock),
           );
         if (this.scenes.held(m)) {
+          env?.diagnostics?.hold(m, 'service');
           if (m.vehicle) m.v = 0;
           continue;
         }
@@ -2778,6 +2793,7 @@ export class TileLife {
       }
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
+          env?.diagnostics?.hold(m, 'moment');
           m.pause = Math.max(0, m.pause - dt);
           continue;
         }
@@ -2785,9 +2801,11 @@ export class TileLife {
         if (!idle) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
+          env?.diagnostics?.hold(m, 'pause');
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
+          env?.diagnostics?.hold(m, 'pause');
           m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
           continue;
         }
@@ -2808,6 +2826,7 @@ export class TileLife {
             { x: m.x + m.hx * speeds[i]! * dt, y: m.y + m.hy * speeds[i]! * dt },
             speeds[i]! * dt,
             clock,
+            env?.diagnostics,
           ) / dt;
       }
       if (m.vehicle) {
@@ -2895,6 +2914,11 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
+      if (env?.diagnostics && m.kind === 'person') {
+        const width = this.geo.widths[m.line] || 4;
+        if (Math.abs(m.avoid ?? 0) >= Math.max(0, width / 2 - 0.5) - 1e-8)
+          env.diagnostics.tag(m, 'avoidanceLimit');
+      }
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
@@ -3960,6 +3984,38 @@ export class LifeWorld {
     };
     if (rebuild) this.revalidateTerrain();
     const roadAccess = this.groundTerrain!.roadAccess;
+    const diagnostics = this.profiler?.lifeDiagnostics;
+    const diagnoseOccupancy =
+      diagnostics &&
+      ((owner: GroundAgent, next: readonly Body[], ignore?: object) => {
+        const blocker = occupied.firstConflict(owner, next, ignore);
+        const tags: string[] = [];
+        if (blocker && 'kind' in blocker) {
+          const m = blocker as Mover;
+          if (bandVisibility(LIFE_ZOOM[m.kind], diagnostics.zoom) < 1) tags.push('hiddenAtZoom');
+          if (this.lastLevels && m.rank >= this.lastLevels[m.kind] * diagnostics.crowd)
+            tags.push('hiddenByCrowd');
+          if (
+            'kind' in owner &&
+            owner.kind === 'vehicle' &&
+            m.kind === 'vehicle' &&
+            owner.hx * m.hx + owner.hy * m.hy < 0
+          )
+            tags.push('opposingVehicle');
+        } else if (blocker && this.lastLevels) {
+          const ground = blocker as Gatherer | Stall;
+          if (bandVisibility(LIFE_ZOOM.person, diagnostics.zoom) < 1) tags.push('hiddenAtZoom');
+          const level =
+            'place' in ground
+              ? this.lastLevels.places[ground.place]
+              : 'shirt' in ground
+                ? this.lastLevels.person
+                : undefined;
+          if (level !== undefined && ground.rank >= level * diagnostics.crowd)
+            tags.push('hiddenByCrowd');
+        }
+        diagnostics.reject(owner, 'occupancy', blocker, tags);
+      });
     let visited = 0;
     for (const life of this.tiles.values()) {
       if (region && !region.has(life)) continue;
@@ -4040,6 +4096,7 @@ export class LifeWorld {
       const endScore = occupied.conflicts(identity, next, ignore);
       // Existing overlaps at a density change may escape, but never deepen or tunnel through.
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) {
+        diagnoseOccupancy?.(identity, next, ignore);
         reject?.('occupancy');
         return false;
       }
@@ -4098,10 +4155,20 @@ export class LifeWorld {
           (waterNear && water.hits(sample)) ||
           (roadNear && !roadAccess.allows(sample, crossing))
         ) {
+          if (diagnostics) {
+            const reason =
+              blockedNear && blocked.hits(sample)
+                ? 'building'
+                : waterNear && water.hits(sample)
+                  ? 'water'
+                  : 'road';
+            diagnostics.reject(identity, reason);
+          }
           reject?.('terrain');
           return false;
         }
         if (oldScore === 0 && occupied.conflicts(identity, sample, ignore) > 0) {
+          diagnoseOccupancy?.(identity, sample, ignore);
           reject?.('occupancy');
           return false;
         }
@@ -4202,6 +4269,7 @@ export class LifeWorld {
       rain: this.lastRain,
       wind,
       ...weather,
+      diagnostics: this.profiler?.lifeDiagnostics,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
     this.junctions.begin(new Set(this.tiles.values()));
@@ -4279,7 +4347,10 @@ export class LifeWorld {
         } else this.seamWait.delete(m);
         const reject =
           this.profiler &&
-          ((reason: ContinuityRejection) => this.profiler!.countContinuity(reason));
+          ((reason: ContinuityRejection) => {
+            this.profiler!.countContinuity(reason);
+            this.profiler!.lifeDiagnostics?.tag(m, 'rejectedSeam');
+          });
         let preview: Mover | undefined;
         if (!target || target === source) reject?.('ownership');
         else if (target.movers.length + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
@@ -4345,6 +4416,7 @@ export class LifeWorld {
         if (m.kind === 'vehicle') guard(target, m);
       } else {
         // A final pose/clearance check can fail after a bend or another actor's accepted step.
+        this.profiler?.lifeDiagnostics?.tag(m, 'rejectedSeam');
         // Keep the original owner at its last safe pose instead of hiding it beyond the seam.
         Object.assign(m, before, { v: 0 });
         guard.remove(m);
@@ -4391,8 +4463,32 @@ export class LifeWorld {
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
-          if (!this.profiler.tracing(m)) continue;
+          const diagnostics = this.profiler.lifeDiagnostics;
+          if (!this.profiler.tracing(m) && !diagnostics?.tracks(m)) continue;
           const [lng, lat] = tileToLngLat(life.tile, life.pose(m));
+          if (diagnostics?.position(m, lng, lat)) {
+            if (this.seamWait.has(m)) diagnostics.tag(m, 'rejectedSeam');
+            if (
+              life.groundBodies(m).some((body) => {
+                const dx =
+                  ((Math.abs(body.hx) * body.length + Math.abs(body.hy) * body.width) *
+                    life.perMeter) /
+                  2;
+                const dy =
+                  ((Math.abs(body.hy) * body.length + Math.abs(body.hx) * body.width) *
+                    life.perMeter) /
+                  2;
+                const x = body.x * life.perMeter,
+                  y = body.y * life.perMeter;
+                return life.junctionIndex.junctions.some(
+                  (junction) =>
+                    Math.abs(x - junction.x) <= junction.radius + dx &&
+                    Math.abs(y - junction.y) <= junction.radius + dy,
+                );
+              })
+            )
+              diagnostics.tag(m, 'junctionFootprint');
+          }
           this.profiler.traceTraveler(m, { at: this.clock, tile: key, event: 'step', lng, lat });
         }
   }
@@ -4625,12 +4721,22 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const diagnostics = this.profiler?.lifeDiagnostics;
+    diagnostics?.beginVisible();
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const push: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
-      ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
-      : (_owner, agent) => out.push(agent);
+    const normalPush: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number =
+      inspection
+        ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
+        : (_owner, agent) => out.push(agent);
+    const push = diagnostics
+      ? (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+          const n = normalPush(owner, agent, birdSpeed);
+          diagnostics.view(owner, out[n - 1]!);
+          return n;
+        }
+      : normalPush;
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -4942,7 +5048,9 @@ export class LifeWorld {
     };
     if (out.length <= maxAgents) {
       const result = withBalls([...staged, ...out]);
-      return inspection?.finish(result) ?? result;
+      const admitted = inspection?.finish(result) ?? result;
+      diagnostics?.admitted(admitted);
+      return admitted;
     }
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
@@ -4969,6 +5077,8 @@ export class LifeWorld {
       count += group.agents.length;
     }
     const result = withBalls(kept);
-    return inspection?.finish(result, true) ?? result;
+    const admitted = inspection?.finish(result, true) ?? result;
+    diagnostics?.admitted(admitted);
+    return admitted;
   }
 }

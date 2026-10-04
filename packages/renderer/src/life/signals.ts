@@ -8,6 +8,7 @@ import { placeSeed } from './lights';
 import type { Mover } from './simulate';
 import { VEHICLES } from './vehicles';
 import { complete } from './cooperate';
+import type { LifeDiagnostics } from './diagnostics';
 
 export type SignalColor = 'green' | 'amber' | 'red';
 export type SignalPhase = {
@@ -142,7 +143,14 @@ export class SignalControl {
     this.vehicleLimit(m, dt, clock, out);
     return Math.min(out.target, out.cap);
   }
-  vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit, clearing?: string): void {
+  vehicleLimit(
+    m: Mover,
+    dt: number,
+    clock: number,
+    out: MotionLimit,
+    clearing?: string,
+    diagnostics?: LifeDiagnostics,
+  ): void {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
@@ -157,6 +165,7 @@ export class SignalControl {
       const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
       const v = m.v ?? m.speed;
       if (state === 'red' || (state === 'amber' && (v * v) / (2 * brake) <= ahead)) {
+        if (ahead <= 0.5 * this.perMeter) diagnostics?.hold(m, 'signal');
         out.target = Math.min(out.target, approach(ahead, 0, brake));
         out.cap = Math.min(out.cap, Math.max(0, ahead) / dt);
       }
@@ -188,7 +197,13 @@ export class SignalControl {
     return true;
   }
   /** Clamp new crossing entries; someone inside the crossing always clears it. */
-  walkDistance(from: Point, toward: Point, distance: number, clock: number): number {
+  walkDistance(
+    from: Point,
+    toward: Point,
+    distance: number,
+    clock: number,
+    diagnostics?: LifeDiagnostics,
+  ): number {
     const dx = toward.x - from.x,
       dy = toward.y - from.y,
       length = Math.hypot(dx, dy);
@@ -213,8 +228,10 @@ export class SignalControl {
         if (entry < -0.01 * this.perMeter || entry > distance) continue;
         const state = signalState(s.seed, clock, s.a < 0),
           walking = group(s, hx, hy) === 'a' ? state.walkA : state.walkB;
-        if (!walking || state.left < SIGNAL.walkMin)
+        if (!walking || state.left < SIGNAL.walkMin) {
           distance = Math.min(distance, Math.max(0, entry));
+          if (distance <= 0.01 * this.perMeter) diagnostics?.hold(from, 'signal');
+        }
       }
     }
     return distance;

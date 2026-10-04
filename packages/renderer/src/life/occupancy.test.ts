@@ -26,6 +26,21 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 
 describe('ground footprints', () => {
+  it('finds the same first blocker with owner/ignore exclusions without changing occupancy', () => {
+    const occupied = new Occupancy(),
+      owner = {},
+      ignored = {},
+      blocker = {};
+    occupied.set(owner, [box(0, 0)]);
+    occupied.set(ignored, [box(1, 0)]);
+    occupied.set(blocker, [box(2, 0)]);
+    const before = occupied.conflicts(owner, [box(0, 0)], ignored);
+    expect(occupied.firstConflict(owner, [box(0, 0)], ignored)).toBe(blocker);
+    expect(occupied.conflicts(owner, [box(0, 0)], ignored)).toBe(before);
+    occupied.delete(blocker);
+    expect(occupied.firstConflict(owner, [box(0, 0)], ignored)).toBeUndefined();
+    expect(occupied.firstConflict(owner, [box(0, 0)])).toBe(ignored);
+  });
   it('matches exhaustive tests around a concave polygon with a hole', () => {
     const polygons: Polygon[] = [
       [

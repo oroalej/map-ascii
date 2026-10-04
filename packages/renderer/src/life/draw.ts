@@ -4,6 +4,7 @@
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
 import { classId } from '../classes';
+import { PackingOutcome } from './diagnostics';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { sextantGlyphs, type Theme } from '../theme';
@@ -56,6 +57,10 @@ export type LifeGrid = {
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
+  /** Diagnostic-only final outcome, one byte per supplied agent. */
+  outcomes?: Uint8Array;
+  /** Diagnostic attempt denial flags: collision 1, terrain 2 (both may be set). */
+  denials?: Uint8Array;
 };
 /** Per-person packing, independent of cart and group owner identity. */
 export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
@@ -178,6 +183,12 @@ export function packLife(
   metadata: LifePackMetadata = {},
 ): number {
   const cells = grid.cols * grid.rows;
+  if (grid.outcomes && grid.outcomes.length !== agents.length)
+    throw new RangeError('Packing outcomes must match agents');
+  grid.outcomes?.fill(PackingOutcome.outside);
+  if (grid.denials && grid.denials.length !== agents.length)
+    throw new RangeError('Packing denials must match agents');
+  grid.denials?.fill(0);
   drawingOwners = metadata.owners ?? grid.owners;
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
@@ -212,14 +223,26 @@ export function packLife(
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+        const collision = journal?.denied ?? false;
+        let cellDenied = false;
         if (journal && grid.allowsGroundCell)
           for (const at of journal.before.keys())
             if (
               !grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
             ) {
               journal.denied = true;
+              cellDenied = true;
               break;
             }
+        if (grid.outcomes)
+          grid.outcomes[index] = collision
+            ? PackingOutcome.collision
+            : cellDenied
+              ? PackingOutcome.cellGuard
+              : n > 0
+                ? PackingOutcome.drawn
+                : PackingOutcome.outside;
+        if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
         else if (journal.denied)
           for (const [at, previous] of journal.before) {

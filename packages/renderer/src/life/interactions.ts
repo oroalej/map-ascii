@@ -15,6 +15,7 @@ import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { approach, type MotionLimit } from './motion';
 import { complete } from './cooperate';
+import type { LifeDiagnostics } from './diagnostics';
 
 export const INTERACTIONS = {
   stopQueue: 6,
@@ -378,6 +379,7 @@ export class LocalScenes {
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
     owns?: (p: { x: number; y: number }) => boolean,
     inspecting?: object,
+    diagnostics?: LifeDiagnostics,
   ) {
     const rain = env.rain ?? 0;
     this.speechEvents.length = 0;
@@ -414,6 +416,9 @@ export class LocalScenes {
       if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
       if (owns && (!owns(m) || !owns(visit.site))) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
+      diagnostics?.eligible(m, m.kind);
+      if (visit.state !== 'approach' && visit.state !== 'return') diagnostics?.hold(m, 'visit');
+      if (visit.state === 'return' && visit.blocked > 0) diagnostics?.tag(m, 'blockedReturn');
       const { kind } = visit.site;
       if (
         visit.state !== 'return' &&

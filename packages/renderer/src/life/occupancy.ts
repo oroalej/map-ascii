@@ -228,6 +228,16 @@ export class Occupancy {
       neighbors.clear();
     }
   }
+  /** Diagnostic-only first blocker, with the same exclusions as conflicts. */
+  firstConflict(owner: object, bodies: readonly Body[], ignore?: object): object | undefined {
+    for (const a of bodies)
+      for (const key of this.keys(a))
+        for (const other of this.bins.get(key) ?? []) {
+          if (other === owner || other === ignore) continue;
+          if (this.entries.get(other)!.bodies.some((b) => bodiesOverlap(a, b))) return other;
+        }
+    return undefined;
+  }
 }
 
 /** Polygon holes remain usable; index only the bounds and check the actual shape on query. */
