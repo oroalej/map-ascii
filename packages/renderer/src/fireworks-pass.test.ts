@@ -86,7 +86,7 @@ describe('seasonal GPU fireworks', () => {
     'consumes an idle %s program exactly once on first demand',
     (kind) => {
       const gl = gpu();
-      const programs: Programs = {};
+      const programs = {} as Programs;
       const program: ReturnType<typeof createProgram> = {
         program: {},
         uniformSetters: setters,
