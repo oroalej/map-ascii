@@ -93,6 +93,7 @@ import {
   PLACE_CODES,
   PLACE_STRIDE,
   vertexKey,
+  sharedRoadVertexRecorder,
   physicalSeasonalRecords,
   type LifeGeometry,
 } from './geometry';
@@ -771,14 +772,11 @@ export class TileLife {
   *prepare(): Generator<void, TileLife, void> {
     const { tile, geo, routingSeed: seed } = this;
     const lines = geo.kinds.length;
-    const roadOwners = new Map<number, number>();
-    const recordRoadVertex = (vertex: number, line: number) => {
-      if (geo.kinds[line]! > LifeLine.roadMinor) return;
-      const key = this.endKey(vertex);
-      const owner = roadOwners.get(key);
-      if (owner !== undefined && owner !== line) this.sharedRoadVertices.add(key);
-      else roadOwners.set(key, line);
-    };
+    const recordRoadVertex = sharedRoadVertexRecorder(
+      geo.coords,
+      geo.kinds,
+      this.sharedRoadVertices,
+    );
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
@@ -2152,18 +2150,22 @@ export class TileLife {
   /** Read the committed next exit, or the only legal exit, without advancing a random stream. */
   seamExit(m: Mover, line: number, dir: 1 | -1): number | undefined {
     const end = dir === 1 ? this.last(line) : this.first(line);
-    const cursor = line === m.line && dir === m.dir ? m : { ...m, line, dir };
+    const current = line === m.line && dir === m.dir;
+    const cursor = current ? m : { kind: m.kind, line, dir };
     const exits = this.exitOptions(cursor, end);
     const route = m.junctionRoute?.exits;
     const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
-    const routeIndex = cursor === m ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
+    const routeIndex = current ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
     const reserved = routeIndex >= 0 ? route?.[routeIndex] : undefined;
     const plan = m.routing?.plan;
     const planned =
-      reserved ??
-      (cursor === m ? (plan?.line === line && plan.dir === dir ? plan.exit : m.next) : undefined);
-    if (planned !== undefined && exits.includes(planned)) return planned;
-    return exits.length === 1 ? exits[0] : undefined;
+      current && plan?.line === line && plan.dir === dir && plan.vertex === end
+        ? plan.exit
+        : undefined;
+    return (
+      this.committedExit(exits, reserved, planned, current ? m.next : undefined) ??
+      (exits.length === 1 ? exits[0] : undefined)
+    );
   }
 
   /** An accepted boundary belongs to its actual routing piece, rather than earlier junctions. */
@@ -2239,7 +2241,7 @@ export class TileLife {
     return moved;
   }
 
-  private exitOptions(m: Mover, vertex: number): number[] {
+  private exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[] {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const usable = usableLines[m.kind];
     return (this.ends.get(this.endKey(vertex)) ?? []).filter(
@@ -2444,29 +2446,28 @@ export class TileLife {
       }
       return;
     }
-    const reserved = m.junctionRoute?.exits[0];
     const code =
-      reserved !== undefined && options.includes(reserved)
-        ? reserved
-        : plan
-          ? plan.exit
-          : m.vehicle && m.next !== undefined && options.includes(m.next)
-            ? m.next
-            : m.train
-              ? this.straightest(m, options)
-              : options[
-                  Math.floor(
-                    (m.vehicle
-                      ? this.routeRng()
-                      : m.kind === 'cat'
-                        ? this.catRng()
-                        : m.kind === 'dog'
-                          ? this.dogRng()
-                          : m.kind === 'person'
-                            ? this.walkerRng()
-                            : this.rng()) * options.length,
-                  )
-                ]!;
+      this.committedExit(
+        options,
+        m.junctionRoute?.exits[0],
+        plan?.exit,
+        m.vehicle ? m.next : undefined,
+      ) ??
+      (m.train
+        ? this.straightest(m, options)
+        : options[
+            Math.floor(
+              (m.vehicle
+                ? this.routeRng()
+                : m.kind === 'cat'
+                  ? this.catRng()
+                  : m.kind === 'dog'
+                    ? this.dogRng()
+                    : m.kind === 'person'
+                      ? this.walkerRng()
+                      : this.rng()) * options.length,
+            )
+          ]!);
     m.next = undefined;
     if (m.junctionRoute)
       m.junctionRoute =
@@ -2477,6 +2478,18 @@ export class TileLife {
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
     m.dir = fromStart ? 1 : -1;
+  }
+
+  /** Reservations, valid plans and remembered exits share the same legal priority. */
+  private committedExit(
+    options: readonly number[],
+    reserved: number | undefined,
+    planned: number | undefined,
+    remembered: number | undefined,
+  ): number | undefined {
+    if (reserved !== undefined && options.includes(reserved)) return reserved;
+    if (planned !== undefined && options.includes(planned)) return planned;
+    if (remembered !== undefined && options.includes(remembered)) return remembered;
   }
 
   /** Of the line ends meeting at a mover's vertex, the one carrying on straightest. */
@@ -4843,7 +4856,7 @@ export class LifeWorld {
         this.profiler?.countContinuity('attempts');
         const target = ownerAt(source, seam.preview);
         if (!target || target === source) {
-          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}`;
+          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${seam.preview.line}/${seam.preview.dir}`;
           let wait = this.seamWait.get(m);
           if (wait?.key !== key) {
             wait = { key, at: source.elapsed };

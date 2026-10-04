@@ -1182,8 +1182,9 @@ describe('buildTileGeometry life', () => {
     }
   });
 
-  it('protects production signal lookahead beyond the weaker 40-metre clearance', () => {
-    const junction = 1000 + 62 / metersPerUnit(tile);
+  it('protects production signal lookahead, setback and vehicle half-length', () => {
+    // Inside 67 m + the 6 m controller radius + quantization, outside either reduced allowance.
+    const junction = 1000 + 73.1 / metersPerUnit(tile);
     const { life } = buildTileGeometry(
       {
         roads: layer([

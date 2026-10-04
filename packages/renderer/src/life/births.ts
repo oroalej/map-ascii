@@ -234,9 +234,11 @@ export function admitBirths(context: BirthContext, dt: number) {
       if (entry) {
         const placed = life.placeSeed({ ...m, line: entry.line }, entry.distance);
         const full = placed ? life.birthBodies(placed) : [];
+        const { first, end } = life.populationRange(m.line);
         // Vehicles enter connected road ends offscreen; other route endpoints stay explicit entrances.
         const endpoint =
-          entry.endpoint && (m.kind !== 'vehicle' || !life.continuesRoad(entry.line, m.dir === 1));
+          entry.endpoint &&
+          (m.kind !== 'vehicle' || !life.continuesRoad(m.dir === 1 ? first : end - 1, m.dir === 1));
         if (
           placed &&
           inTile(placed) &&

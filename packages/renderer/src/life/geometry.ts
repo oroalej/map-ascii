@@ -237,13 +237,30 @@ export const PLACE_STRIDE = 5;
 export const SITE_STRIDE = 5;
 export const SIGNAL_STRIDE = 6;
 
-const TILE_QUANTIZATION_TOLERANCE = 2;
+/** Signal/member coordinate matching allows two tile units of vector-tile quantization. */
+export const TILE_QUANTIZATION_TOLERANCE = 2;
 const VERTEX_COORD_OFFSET = 32768;
 const VERTEX_COORD_RANGE = 65536;
 
 /** Rounded, buffered tile coordinates use the same connection key in builders and simulation. */
 export const vertexKey = (x: number, y: number) =>
   (Math.round(x) + VERTEX_COORD_OFFSET) * VERTEX_COORD_RANGE + Math.round(y) + VERTEX_COORD_OFFSET;
+
+/** Accumulate shared road vertices without counting a line's own repeated vertices. */
+export function sharedRoadVertexRecorder(
+  coords: ArrayLike<number>,
+  kinds: ArrayLike<number>,
+  shared: Set<number>,
+) {
+  const owners = new Map<number, number>();
+  return (vertex: number, line: number) => {
+    if (kinds[line]! > LifeLine.roadMinor) return;
+    const key = vertexKey(coords[vertex * 2]!, coords[vertex * 2 + 1]!);
+    const owner = owners.get(key);
+    if (owner === undefined) owners.set(key, line);
+    else if (owner !== line) shared.add(key);
+  };
+}
 
 /** A tile's own extent in tile units (raster/geometry.ts `EXTENT`). */
 const TILE_EXTENT = 4096;
@@ -453,19 +470,14 @@ export class LifeBuilder {
    * Call splitSignalRoads first to initialize linked-member protection, even without local arms.
    */
   splitRoadJunctions(perMeter: number, signalClearanceM: number) {
-    const owners = new Map<number, number>();
+    const splits = new Set<number>();
+    const recordRoadVertex = sharedRoadVertexRecorder(this.coords, this.kinds, splits);
     const starts = [...this.starts, this.coords.length / 2];
     for (let line = 0; line < this.kinds.length; line++) {
       if (this.kinds[line]! > LifeLine.roadMinor) continue;
-      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
-        const key = vertexKey(this.coords[v * 2]!, this.coords[v * 2 + 1]!);
-        const owner = owners.get(key);
-        owners.set(key, owner === undefined || owner === line ? line : -1);
-      }
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) recordRoadVertex(v, line);
     }
-    const splits = new Set<number>();
-    for (const [key, owner] of owners) {
-      if (owner !== -1) continue;
+    for (const key of splits) {
       const x = Math.floor(key / VERTEX_COORD_RANGE) - VERTEX_COORD_OFFSET;
       const y = (key % VERTEX_COORD_RANGE) - VERTEX_COORD_OFFSET;
       let protectedApproach = false;
@@ -482,7 +494,7 @@ export class LifeBuilder {
           break;
         }
       }
-      if (!protectedApproach) splits.add(key);
+      if (protectedApproach) splits.delete(key);
     }
     if (!splits.size) return;
     const { coords, kinds, addPiece } = this.takeLines(true);

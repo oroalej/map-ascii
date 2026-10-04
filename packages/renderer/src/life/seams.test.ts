@@ -18,6 +18,101 @@ function fixture(entries: LifeTile[]) {
 }
 
 describe('runtime geographic seam handover', () => {
+  it('previews reserved future exits ahead of competing plans and remembered exits', () => {
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 3600, y: 2000 },
+        { x: 3700, y: 2000 },
+        { x: 3800, y: 2000 },
+        { x: 4200, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+    );
+    for (const x of [3700, 3800])
+      builder.line(
+        [
+          { x, y: 2000 },
+          { x, y: 3000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+        x,
+      );
+    builder.splitRoadJunctions(1 / metersPerUnit(left), 40);
+    const entry = continuityTile(left);
+    entry.life = builder.finish();
+    const { lives } = fixture([entry]);
+    const source = lives[0]!;
+    const mover = continuityMover(source, 3650);
+    mover.d = 50;
+    mover.next = 6;
+    mover.routing = {
+      seed: 123,
+      turns: 0,
+      plan: { line: 0, dir: 1, vertex: 1, exit: 6, radius: 0 },
+    };
+    mover.junctionRoute = { key: 'reserved', exits: [2, 4] };
+    const before = structuredClone(mover);
+    expect(source.seamExit(mover, 0, 1)).toBe(2);
+    expect(source.seamExit(mover, 1, 1)).toBe(4);
+    expect(seamAhead(source, mover, [], 100 * source.perMeter)?.preview.line).toBe(2);
+    expect(mover).toEqual(before);
+    mover.junctionRoute = undefined;
+    mover.next = 2;
+    expect(source.seamExit(mover, 0, 1)).toBe(6);
+    mover.routing = { ...mover.routing, plan: { ...mover.routing.plan!, vertex: 0 } };
+    expect(source.seamExit(mover, 0, 1)).toBe(2);
+    mover.next = 4;
+    expect(source.seamExit(mover, 1, 1)).toBeUndefined();
+  });
+
+  it('keeps a missing-owner timeout across a committed junction continuation', () => {
+    const pm = 1 / metersPerUnit(left);
+    const junctionX = 4096 - pm;
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 3800, y: 2000 },
+        { x: junctionX, y: 2000 },
+        { x: 4200, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+    );
+    builder.line(
+      [
+        { x: junctionX, y: 1000 },
+        { x: junctionX, y: 2000 },
+        { x: junctionX, y: 3000 },
+      ],
+      LifeLine.roadMinor,
+      6,
+      88,
+    );
+    builder.splitRoadJunctions(pm, 40);
+    const entry = continuityTile(left);
+    entry.life = builder.finish();
+    const { world, lives } = fixture([entry]);
+    const source = lives[0]!;
+    source.parked.length = source.stalls.length = source.gatherers.length = 0;
+    source.scenes.sites.length = 0;
+    const mover = continuityMover(source, 4096 - 11 * pm);
+    Object.assign(mover, { d: mover.x - 3800, v: 10 * pm, next: 2 });
+    source.movers.push(mover);
+    for (let frame = 0; frame < 180 && mover.line === 0; frame++) world.step(1 / 30);
+    expect(mover.line).toBe(1);
+    expect(source.elapsed).toBeGreaterThanOrEqual(SEAMS.missingSeconds);
+    for (let frame = 0; frame < 3; frame++) {
+      world.step(1 / 30);
+      expect(mover.dir).toBe(1);
+      expect(mover.v! / pm).toBeGreaterThan(0.5);
+    }
+  });
+
   for (const accepted of [false, true])
     it(`previews a seam beyond a split junction with ${accepted ? 'an accepted' : 'a refused'} destination`, () => {
       const pm = 1 / metersPerUnit(left);
