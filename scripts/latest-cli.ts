@@ -120,10 +120,16 @@ function candidates(tool: Tool): string[] {
   }
   const seen = new Set<string>();
   return found.filter((file) => {
-    if (!existsSync(file) || !statSync(file).isFile()) return false;
-    const real = realpathSync(file).toLowerCase();
-    if (seen.has(real)) return false;
-    seen.add(real);
+    if (!existsSync(file)) return false;
+    let key = file.toLowerCase();
+    try {
+      if (!statSync(file).isFile()) return false;
+      key = realpathSync(file).toLowerCase();
+    } catch {
+      // Concurrent executable updates/removals can race inspection; let probe() judge this path.
+    }
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }

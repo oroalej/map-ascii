@@ -1,5 +1,6 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import type * as NodeFs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,10 @@ import {
 } from './latest-cli';
 
 vi.mock('node:child_process', () => ({ spawnSync: vi.fn() }));
+vi.mock('node:fs', async (importOriginal) => {
+  const fs = await importOriginal<typeof NodeFs>();
+  return { ...fs, statSync: vi.fn(fs.statSync), realpathSync: vi.fn(fs.realpathSync) };
+});
 
 const v = (text: string) => parseVersion(text)!;
 const probe = (file: string, text: string): Probe => ({ path: file, version: v(text), raw: text });
@@ -91,6 +96,8 @@ describe('CLI output', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.mocked(spawnSync).mockReset();
+    vi.mocked(statSync).mockReset();
+    vi.mocked(realpathSync).mockReset();
     if (root) rmSync(root, { recursive: true, force: true });
   });
 
@@ -147,6 +154,70 @@ describe('CLI output', () => {
         .mocked(spawnSync)
         .mock.calls.filter(([command]) => command === 'npm root -g');
       expect(npmCalls).toHaveLength(tool === 'codex' ? 1 : 0);
+    },
+  );
+
+  it.each([
+    ['stat', false],
+    ['stat', true],
+    ['realpath', false],
+    ['realpath', true],
+  ] as const)(
+    'continues discovery when %s fails and candidate runnable=%s',
+    async (operation, runnable) => {
+      root = mkdtempSync(path.join(tmpdir(), 'latest-cli-'));
+      const exe = process.platform === 'win32' ? 'codex.exe' : 'codex';
+      const changing = path.join(root, 'updating', exe);
+      const healthy = path.join(root, 'stable', exe);
+      for (const file of [changing, healthy]) {
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, '');
+      }
+      const failInspection = () => {
+        throw Object.assign(new Error('candidate changed during inspection'), { code: 'ENOENT' });
+      };
+      if (operation === 'stat') vi.mocked(statSync).mockImplementationOnce(failInspection);
+      else vi.mocked(realpathSync).mockImplementationOnce(failInspection);
+      vi.mocked(spawnSync).mockImplementation((command): SpawnSyncReturns<string> => {
+        const stdout =
+          command === 'where.exe' || command === 'which'
+            ? `${changing}\n${healthy}\n`
+            : command === healthy
+              ? 'codex-cli 1.0.0'
+              : command === changing && runnable
+                ? 'codex-cli 2.0.0'
+                : '';
+        return {
+          pid: 0,
+          status: stdout ? 0 : 1,
+          signal: null,
+          stdout,
+          stderr: '',
+          output: [null, stdout, ''],
+        };
+      });
+      const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalArgv = process.argv;
+      try {
+        vi.resetModules();
+        process.argv = [originalArgv[0]!, path.resolve('scripts/latest-cli.ts'), 'codex'];
+        await import('./latest-cli');
+      } finally {
+        process.argv = originalArgv;
+      }
+
+      const selected = runnable ? changing : healthy;
+      expect(stdout.mock.calls).toEqual([[selected]]);
+      expect(stderr.mock.calls).toEqual([[`codex ${runnable ? '2.0.0' : '1.0.0'} ${selected}`]]);
+      expect(spawnSync).toHaveBeenCalledWith(changing, ['--version'], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      expect(spawnSync).toHaveBeenCalledWith(healthy, ['--version'], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
     },
   );
 });
