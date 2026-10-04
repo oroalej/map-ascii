@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import type * as NodeFs from 'node:fs';
+import * as fsHelpers from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,6 +36,52 @@ function task(status: string, name: string, files: string[]): string {
 }
 
 describe('cleanTask', () => {
+  it('refuses ambiguous keep entries before deleting any scratch', () => {
+    const folder = task('done', 'ambiguous', ['Notes.md', 'scratch.txt']);
+    const original = fsHelpers.readdirSync;
+    // Simulate colliding entries on Windows, whose filesystem cannot create both spellings.
+    const listing = vi.spyOn(fsHelpers, 'readdirSync').mockImplementation((...args) => {
+      const entries = original(...args);
+      return args[0] === folder ? [...entries, ...entries] : entries;
+    });
+    try {
+      for (const dryRun of [true, false]) {
+        expect(() =>
+          cleanTask(root, 'ambiguous', ['notes.md'], dryRun, { caseInsensitive: true }),
+        ).toThrow(/Ambiguous keep path/);
+      }
+    } finally {
+      listing.mockRestore();
+    }
+    expect(readdirSync(folder).sort()).toEqual(['Notes.md', 'scratch.txt']);
+  });
+
+  it('refuses a missing keep parent before deleting any scratch', () => {
+    const folder = task('done', 'missing-parent', ['handoff.md', 'scratch.txt']);
+    for (const dryRun of [true, false]) {
+      expect(() => cleanTask(root, 'missing-parent', ['missing/report.txt'], dryRun)).toThrow(
+        /Keep path folder .* is missing/,
+      );
+      expect(readdirSync(folder).sort()).toEqual(['handoff.md', 'scratch.txt']);
+    }
+  });
+
+  it('keeps whole directories and all descendants while removing sibling scratch', () => {
+    const folder = task('done', 'whole-directory', [
+      'handoff.md',
+      'archive/a.txt',
+      'archive/nested/b.txt',
+      'scratch.txt',
+      'other/log.txt',
+    ]);
+    const preview = cleanTask(root, 'whole-directory', ['archive'], true);
+    expect(preview.kept).toEqual(['archive', 'handoff.md']);
+    expect(cleanTask(root, 'whole-directory', ['archive'])).toEqual(preview);
+    expect(readdirSync(folder).sort()).toEqual(['archive', 'handoff.md']);
+    expect(existsSync(join(folder, 'archive/a.txt'))).toBe(true);
+    expect(existsSync(join(folder, 'archive/nested/b.txt'))).toBe(true);
+  });
+
   it('preserves the actual spelling of Windows keep paths and handoff', () => {
     const folder = task('done', 'case-keeps', [
       'Handoff.md',

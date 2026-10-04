@@ -5,8 +5,6 @@
  * The folder is deleted in Node because Codex rejects recursive shell deletes
  * (`Remove-Item -Recurse`, `rm -rf`) as "blocked by policy" when it can't ask for approval.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   existsSync,
   lstatSync,
@@ -18,7 +16,8 @@ import {
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { TilesLock } from '../packages/shared/src/schemas';
-import { listWorktrees, mainCheckout } from './git';
+import { sha256 } from '../packages/data/scripts/lib/tiles-release';
+import { git, gitRaw, gitSucceeds, listWorktrees, mainCheckout } from './git';
 import { withCleanupError } from './fs-cleanup';
 
 export { listWorktrees } from './git';
@@ -47,11 +46,6 @@ export interface RemovalResult {
   /** No branch, registration, or recorded folder remains; safe for merged cleanup reruns. */
   alreadyRemoved: boolean;
 }
-
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const succeeds = (cwd: string, ...args: string[]) =>
-  spawnSync('git', args, { cwd, stdio: 'ignore' }).status === 0;
 
 const isSelfOrDescendant = (path: string, folder: string) => {
   const rel = relative(resolve(folder), resolve(path));
@@ -88,16 +82,30 @@ function readMarker(path: string): RemovalMarker | null {
 }
 
 /** Explicitly disposable build/dependency caches; local data and configuration stay protected. */
+const workspaceCacheDirectories = ['node_modules/', 'coverage/', 'blob-report/'];
+const webCacheDirectories = ['.next/', 'out/', 'test-results/', 'playwright-report/'];
+const otherCacheDirectories = ['packages/data/build/', '.turbo/'];
+const workspaceCacheFiles = ['.eslintcache', 'tsconfig.tsbuildinfo'];
+const osJunkFiles = ['desktop.ini', 'Thumbs.db', '.DS_Store'];
+
 function disposableIgnored(path: string): boolean {
+  const workspacePath = path.replace(/^(?:apps|packages)\/[^/]+\//, '');
+  const webPath = path.replace(/^apps\/web\//, '');
   return (
-    /^(?:(?:(?:apps|packages)\/[^/]+\/)?(?:node_modules|coverage|blob-report)|(?:apps\/web\/)?(?:\.next|out|test-results|playwright-report)|packages\/data\/build|\.turbo)\/$/.test(
-      path,
-    ) || /^(?:(?:apps|packages)\/[^/]+\/)?(?:\.eslintcache|tsconfig\.tsbuildinfo)$/.test(path)
+    workspaceCacheDirectories.includes(workspacePath) ||
+    workspaceCacheFiles.includes(workspacePath) ||
+    webCacheDirectories.includes(webPath) ||
+    otherCacheDirectories.includes(path) ||
+    osJunkFiles.includes(path.split('/').at(-1) ?? '')
   );
 }
 
 /** Published artifacts are reproducible when they match a lock reachable from the captured head. */
-function generatedFiles(main: string, worktree: string, head: string): (path: string) => boolean {
+function createPublishedArtifactChecker(
+  main: string,
+  worktree: string,
+  head: string,
+): (path: string) => boolean {
   const hashes = new Map<string, Map<string, Set<string>>>();
   const pinnedTile = (path: string): boolean => {
     const match = /^apps\/web\/public\/tiles\/([a-z0-9][a-z0-9-]*)\.[^/]+$/.exec(path);
@@ -129,14 +137,7 @@ function generatedFiles(main: string, worktree: string, head: string): (path: st
       }
       const name = path.slice('apps/web/public/tiles/'.length);
       const accepted = hashes.get(city)?.get(name);
-      return (
-        accepted !== undefined &&
-        accepted.has(
-          createHash('sha256')
-            .update(readFileSync(join(worktree, path)))
-            .digest('hex'),
-        )
-      );
+      return accepted !== undefined && accepted.has(sha256(readFileSync(join(worktree, path))));
     } catch {
       return false;
     }
@@ -144,9 +145,6 @@ function generatedFiles(main: string, worktree: string, head: string): (path: st
   return (path) => {
     if (path === 'apps/web/next-env.d.ts') {
       return lstatSync(join(worktree, path)).isFile();
-    }
-    if (path === 'apps/web/public/tiles/') {
-      return readdirSync(join(worktree, path)).every((name) => pinnedTile(`${path}${name}`));
     }
     return pinnedTile(path);
   };
@@ -167,7 +165,7 @@ function worktreeMetadata(common: string, worktree: string): string {
     try {
       return (
         relative(
-          resolve(readFileSync(join(path, 'gitdir'), 'utf8').trim()),
+          resolve(path, readFileSync(join(path, 'gitdir'), 'utf8').trim()),
           join(worktree, '.git'),
         ) === ''
       );
@@ -200,20 +198,17 @@ function refuseActiveOperation(common: string, branch: string): void {
 
 function worktreeStatus(main: string, metadata: string, worktree: string): string[] {
   // -z avoids quoted filenames; do not trim away the leading status column in " D".
-  return execFileSync(
-    'git',
-    [
-      '--git-dir',
-      metadata,
-      '--work-tree',
-      worktree,
-      'status',
-      '--porcelain',
-      '--ignored=matching',
-      '--untracked-files=all',
-      '-z',
-    ],
-    { cwd: main, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  return gitRaw(
+    main,
+    '--git-dir',
+    metadata,
+    '--work-tree',
+    worktree,
+    'status',
+    '--porcelain',
+    '--ignored=matching',
+    '--untracked-files=all',
+    '-z',
   )
     .split('\0')
     .filter(Boolean);
@@ -281,6 +276,18 @@ export function removeWorktree({
     previous !== null &&
     relative(resolve(previous.worktree), worktree) === '' &&
     previous.head === head;
+  const metadata = worktree === null ? null : worktreeMetadata(common, worktree);
+  if (metadata !== null && existsSync(join(metadata, 'locked'))) {
+    throw new Error(`${worktree} is locked (git worktree unlock); nothing was removed`);
+  }
+  if (
+    !worktree &&
+    !branchExists &&
+    !(previous && gitSucceeds(main, 'merge-base', '--is-ancestor', previous.head, mergedInto)) &&
+    !gitSucceeds(main, 'show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`)
+  ) {
+    throw new Error(`no local branch or worktree named ${branch}`);
+  }
   if (!dryRun && !resumed) rmSync(marker, { force: true });
   if (!worktree && !branchExists) {
     return {
@@ -291,22 +298,21 @@ export function removeWorktree({
       alreadyRemoved: true,
     };
   }
-  if (!head || !succeeds(main, 'merge-base', '--is-ancestor', head, mergedInto)) {
+  if (!head || !gitSucceeds(main, 'merge-base', '--is-ancestor', head, mergedInto)) {
     throw new Error(`${branch} is not merged into ${mergedInto}; nothing was removed`);
   }
   const folderExists = worktree !== null && existsSync(worktree);
-  if (folderExists) {
-    const metadata = worktreeMetadata(common, worktree);
+  if (folderExists && metadata !== null) {
     if (
       git(main, '--git-dir', metadata, 'symbolic-ref', '--quiet', 'HEAD') !== `refs/heads/${branch}`
     ) {
       throw new Error(`Cannot establish safe status for ${worktree}: branch ownership differs`);
     }
-    const generated = generatedFiles(main, worktree, head);
+    const isPublishedArtifact = createPublishedArtifactChecker(main, worktree, head);
     const changes = worktreeStatus(main, metadata, worktree).filter((entry) => {
       if (entry.startsWith('!! '))
-        return !disposableIgnored(entry.slice(3)) && !generated(entry.slice(3));
-      if (entry.startsWith('?? ')) return !generated(entry.slice(3));
+        return !disposableIgnored(entry.slice(3)) && !isPublishedArtifact(entry.slice(3));
+      if (entry.startsWith('?? ')) return !isPublishedArtifact(entry.slice(3));
       return !(resumed && entry.slice(0, 2) === ' D');
     });
     if (changes.length)
@@ -341,7 +347,10 @@ export function removeWorktree({
   // Remove only this registration; global pruning destroys other sessions' recovery metadata.
   if (worktree) git(main, 'worktree', 'remove', '--force', worktree);
   // Compare-and-delete preserves any newer branch head another session created meanwhile.
-  if (branchExists) git(main, 'update-ref', '-d', `refs/heads/${branch}`, head);
+  if (branchExists) {
+    git(main, 'update-ref', '-d', `refs/heads/${branch}`, head);
+    gitSucceeds(main, 'config', '--remove-section', `branch.${branch}`);
+  }
   rmSync(marker, { force: true });
   return result;
 }

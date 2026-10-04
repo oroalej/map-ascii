@@ -1,13 +1,17 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+
+/** Preserve status columns and NUL separators for callers that need raw Git output. */
+export const gitRaw = (cwd: string, ...args: string[]): string =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+export const git = (cwd: string, ...args: string[]): string => gitRaw(cwd, ...args).trim();
+export const gitSucceeds = (cwd: string, ...args: string[]): boolean =>
+  spawnSync('git', args, { cwd, stdio: 'ignore' }).status === 0;
 
 /** `git worktree list --porcelain` as `{ path, branch }`, the main checkout first. */
 export function listWorktrees(repo: string): { path: string; branch: string | null }[] {
-  return execFileSync('git', ['worktree', 'list', '--porcelain'], {
-    cwd: repo,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  return gitRaw(repo, 'worktree', 'list', '--porcelain')
     .trim()
     .split(/\r?\n\r?\n/)
     .map((block) => {

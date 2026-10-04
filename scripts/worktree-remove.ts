@@ -5,12 +5,24 @@
  * clean. The remote branch stays. Rerun it to finish a removal that a busy file interrupted.
  */
 import { execFileSync } from 'node:child_process';
+import { parseArgs } from 'node:util';
 import { removeWorktree } from './worktree-removal';
 
-const args = process.argv.slice(2).filter((arg) => arg !== '--');
-const dryRun = args.includes('--dry-run');
-const [branch, ...rest] = args.filter((arg) => arg !== '--dry-run');
-if (!branch || rest.length > 0) {
+let branch: string;
+let dryRun: boolean;
+try {
+  const { values, positionals } = parseArgs({
+    args: process.argv.slice(2).filter((arg) => arg !== '--'),
+    options: { 'dry-run': { type: 'boolean' } },
+    allowPositionals: true,
+    strict: true,
+  });
+  const [name, ...rest] = positionals;
+  if (!name || rest.length > 0) throw new Error('Expected exactly one branch name');
+  branch = name;
+  dryRun = values['dry-run'] ?? false;
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
   console.error('usage: pnpm worktree:remove <branch> [--dry-run]  (run from the main checkout)');
   process.exit(2);
 }
