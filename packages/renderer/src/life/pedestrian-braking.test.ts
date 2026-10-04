@@ -119,15 +119,34 @@ describe('live pedestrian readers', () => {
     body.x = 15;
     body.y = 5;
     occupied.set(owner, [body]);
-    expect(view.walkersAlong!(path, 1.2, 30)).toBeCloseTo(19.5);
+    expect(view.walkersAlong(path, 1.2, 30)).toBeCloseTo(19.5);
     body.x = 32;
     body.y = 0;
     body.length = 8;
     occupied.set(owner, [body]);
-    expect(view.walkersAlong!([{ ...path[0]!, length: 30 }], 1.2, 30)).toBeCloseTo(28);
+    expect(view.walkersAlong([{ ...path[0]!, length: 30 }], 1.2, 30)).toBeCloseTo(28);
     occupied.delete(owner);
-    expect(view.walkersAlong!(path, 1.2, 30)).toBe(Infinity);
+    expect(view.walkersAlong(path, 1.2, 30)).toBe(Infinity);
     expect(view.empty).toBe(true);
+  });
+  it('closes a lazy path once later chords cannot improve the nearest hit', () => {
+    const occupied = new Occupancy();
+    occupied.set({}, [{ x: 5, y: 0, hx: 1, hy: 0, length: 1, width: 1, kind: BODY_KIND.human }]);
+    let consumed = 0,
+      closed = false;
+    function* path(): Generator<PedestrianSegment> {
+      try {
+        for (let i = 0; i < 30; i++) {
+          consumed++;
+          yield { x: i, y: 0, hx: 1, hy: 0, length: 1, ahead: i, line: 0 };
+        }
+      } finally {
+        closed = true;
+      }
+    }
+    expect(pedestrianView(occupied, 0.9).walkersAlong(path(), 1.2, 30)).toBeCloseTo(4.5);
+    expect(consumed).toBe(6);
+    expect(closed).toBe(true);
   });
   it('rewrites body tags in reused buffers and filters animals through both readers', () => {
     const {
@@ -390,6 +409,116 @@ function brakingFixture(craft: 'car' | 'bus' = 'car', distance = 15) {
   return { world, life, car, human };
 }
 describe('pedestrian braking targets', () => {
+  it('keeps unrelated crossings lazy while checking known exits and cleaning retained holds', () => {
+    const setup = (onExit: boolean) => {
+      const pm = 1 / metersPerUnit(tile),
+        builder = new LifeBuilder();
+      builder.line(
+        [
+          { x: 0, y: 2000 },
+          { x: 2000, y: 2000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+      );
+      builder.line(
+        [
+          { x: 2000, y: 2000 },
+          { x: 2000, y: 4000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+      );
+      builder.line(
+        [
+          { x: 0, y: 500 },
+          { x: 4095, y: 500 },
+        ],
+        LifeLine.roadMinor,
+        6,
+      );
+      const cx = onExit ? 2000 : 1000,
+        cy = onExit ? 2000 + 10 * pm : 500;
+      builder.area('crossing', [
+        [
+          { x: cx - (onExit ? 3 : 1.5) * pm, y: cy - (onExit ? 1.5 : 3) * pm },
+          { x: cx + (onExit ? 3 : 1.5) * pm, y: cy - (onExit ? 1.5 : 3) * pm },
+          { x: cx + (onExit ? 3 : 1.5) * pm, y: cy + (onExit ? 1.5 : 3) * pm },
+          { x: cx - (onExit ? 3 : 1.5) * pm, y: cy + (onExit ? 1.5 : 3) * pm },
+        ],
+      ]);
+      const life = new StandaloneLife(tile, builder.finish(), 1);
+      const car: Mover = {
+        ...person(life, 2000 - 5 * pm),
+        kind: 'vehicle',
+        vehicle: 'car',
+        group: undefined,
+        pause: 0,
+        speed: 8 * pm,
+        v: 8 * pm,
+        next: 2,
+      };
+      const occupied = new Occupancy();
+      occupied.set({}, [
+        {
+          x: (cx - 5.5 * pm) / pm,
+          y: cy / pm,
+          hx: 1,
+          hy: 0,
+          length: 0.9,
+          width: 1,
+          kind: BODY_KIND.human,
+        },
+      ]);
+      const tracer = life as unknown as {
+        pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
+        pedestrianPath(
+          m: Mover,
+          range: number,
+          physicalRange: number,
+        ): Generator<PedestrianSegment>;
+        pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+      };
+      const original = tracer.pedestrianPath.bind(life);
+      let consumed = 0;
+      vi.spyOn(tracer, 'pedestrianPath').mockImplementation(function* (...args) {
+        for (const p of original(...args)) {
+          consumed++;
+          yield p;
+        }
+      });
+      const materialized = vi.spyOn(tracer, 'pedestrianSegments');
+      const target = () =>
+        tracer.pedestrianTarget(car, car.speed, pedestrianView(occupied, 0.9), 0.1);
+      return { car, target, materialized, consumed: () => consumed };
+    };
+    const unrelated = setup(false);
+    expect(unrelated.target()).toBe(unrelated.car.speed);
+    expect(unrelated.consumed()).toBe(1);
+    expect(unrelated.materialized).not.toHaveBeenCalled();
+    for (const route of ['next', 'plan', 'linked'] as const) {
+      const exit = setup(true);
+      exit.car.next = undefined;
+      if (route === 'next') exit.car.next = 2;
+      else if (route === 'plan')
+        exit.car.routing = {
+          seed: 1,
+          turns: 0,
+          plan: { line: 0, dir: 1, vertex: 1, exit: 2, radius: 6 },
+        };
+      else exit.car.junctionRoute = { key: 'turn', exits: [2] };
+      expect(exit.target()).toBeLessThan(exit.car.speed);
+      expect(exit.car.pedestrianHolds).toHaveLength(1);
+      expect(exit.materialized).toHaveBeenCalledTimes(1);
+      expect(exit.consumed()).toBeGreaterThan(1);
+      exit.car.next = -1;
+      exit.car.routing = undefined;
+      exit.car.junctionRoute = undefined;
+      exit.target();
+      expect(exit.materialized).toHaveBeenCalledTimes(2);
+      expect(exit.car.pedestrianHolds).toBeUndefined();
+    }
+  });
   for (const hz of [10, 30, 60, 120])
     it(`brakes gradually and preserves front clearance at ${hz} Hz`, () => {
       const { world, life, car, human } = brakingFixture();
@@ -527,20 +656,32 @@ describe('pedestrian braking targets', () => {
     }
     expect(path.some((p) => p.line === 1)).toBe(true);
     expect(path.some((p) => p.hx > 0.1 && p.hy > 0.1)).toBe(true);
-    const queries = (path: Iterable<PedestrianSegment>, range = Infinity) => {
+    const queries = (input: Iterable<PedestrianSegment>, range: number) => {
       const calls: number[][] = [];
-      const view: PedestrianView = {
-        empty: false,
-        minimum: 0.9,
-        walkersAhead(x, y, hx, hy, width, length) {
-          calls.push([x, y, hx, hy, width, length]);
-          return Infinity;
+      const occupied = new Occupancy(),
+        start = path[0]!;
+      // A nearby footprint behind the path keeps the real candidate query active without a hit.
+      occupied.set({}, [
+        {
+          x: start.x - 5,
+          y: start.y - 5,
+          hx: 1,
+          hy: 0,
+          length: 1,
+          width: 1,
+          kind: BODY_KIND.human,
         },
-        walkersInArea: () => false,
-      };
+      ]);
+      function* observed() {
+        for (const p of input) {
+          if (p.ahead < range - 1e-7)
+            calls.push([p.x, p.y, p.hx, p.hy, 1.2, Math.min(p.length, range - p.ahead)]);
+          yield p;
+        }
+      }
       pedestrianLimit(
-        view,
-        path,
+        pedestrianView(occupied, 0.9),
+        observed(),
         1.2,
         4.4,
         car.speed,
@@ -549,11 +690,12 @@ describe('pedestrian braking targets', () => {
         1 / 30,
         range,
       );
+      expect(calls.length).toBeGreaterThan(1);
       return calls;
     };
     for (const range of [8.37, 14.73])
       expect(queries(tracer.pedestrianPath(car, 30, range), range)).toEqual(
-        queries(tracer.pedestrianPath(car, range)),
+        queries(tracer.pedestrianPath(car, range), range),
       );
     const p = path.find((p) => p.ahead > 8)!;
     const human = person(life);
@@ -569,6 +711,7 @@ describe('pedestrian braking targets', () => {
       kinematicsOf('car'),
       life.perMeter,
       1 / 30,
+      20,
     );
     expect(target).toBeLessThan(car.speed);
     expect(car).toEqual(original);
@@ -646,6 +789,32 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   return { pm, crossings, path, occupied, view, body, limit };
 }
 describe('unsignalised pedestrian crossings', () => {
+  it('keeps yielding inside the stopping margin after a leader clears', () => {
+    const { world, life, car } = pedestrianWorld(-9.5);
+    // The front is 1 m before the stripes, inside the 1.5 m desired stopping margin.
+    car.x = car.d = 2000 - 4.7 * life.perMeter;
+    car.v = 0;
+    const leader = {
+      ...car,
+      x: car.x + (4.4 + FOLLOW.minGap) * life.perMeter,
+      d: car.d + (4.4 + FOLLOW.minGap) * life.perMeter,
+      speed: 0,
+      pause: 100,
+    };
+    life.movers.push(leader);
+    const start = car.x;
+    world.step(0.1, undefined, 18);
+    expect(car.v).toBe(0);
+    expect(car.pedestrianHolds?.[0]?.committed).toBe(false);
+    life.movers.splice(life.movers.indexOf(leader), 1);
+    for (let i = 0; i < 20; i++) {
+      world.step(0.1, undefined, 18);
+      expect(car.v).toBe(0);
+      expect(car.x).toBeCloseTo(start);
+      expect(car.pedestrianHolds?.[0]?.committed).toBe(false);
+    }
+    expect(life.motionStats.hardCaps).toBe(0);
+  });
   for (const [centre, speed] of [
     [0, 3],
     [-3.2, 3],
@@ -681,7 +850,17 @@ describe('unsignalised pedestrian crossings', () => {
     expect(crossing.holds?.[0]?.committed).toBe(true);
     expect(crossing.target).toBe(8 * f.pm);
     expect(
-      pedestrianLimit(f.view, f.path, 1.2, 4.4, crossing.target, kinematicsOf('car'), f.pm, 0.1),
+      pedestrianLimit(
+        f.view,
+        f.path,
+        1.2,
+        4.4,
+        crossing.target,
+        kinematicsOf('car'),
+        f.pm,
+        0.1,
+        30,
+      ),
     ).toBeLessThan(crossing.target);
   });
   it('matches direct and indexed road associations for rotated and reverse lookahead', () => {
@@ -739,7 +918,7 @@ describe('unsignalised pedestrian crossings', () => {
     f.path[0]!.x += 5;
     f.occupied.set({}, [f.body(0, 3.5)]);
     expect(
-      pedestrianLimit(f.view, f.path, 1.2, 4.4, 8 * f.pm, kinematicsOf('car'), f.pm, 0.1),
+      pedestrianLimit(f.view, f.path, 1.2, 4.4, 8 * f.pm, kinematicsOf('car'), f.pm, 0.1, 30),
     ).toBeLessThan(8 * f.pm);
   });
   it('retains active records through real zoom adoption', () => {
@@ -899,7 +1078,7 @@ describe('unsignalised pedestrian crossings', () => {
     expect(f.view.walkersAhead(f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(14.5, 3);
     f.path[0]!.x += 5;
     expect(
-      pedestrianLimit(f.view, f.path, 1.2, 4.4, result.target, kinematicsOf('car'), f.pm, 0.1),
+      pedestrianLimit(f.view, f.path, 1.2, 4.4, result.target, kinematicsOf('car'), f.pm, 0.1, 30),
     ).toBeLessThan(result.target);
     f.occupied.set(owner, [f.body(-5, 3.5)]);
     expect(f.view.walkersAhead(f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(4.5, 3);

@@ -13,7 +13,7 @@ import { VEHICLES } from './vehicles';
 import { isWalker, usableLines, kinematicsOf, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
-import { approach, type MotionLimit } from './motion';
+import { stopBefore, stoppingReach, type MotionLimit } from './motion';
 import { complete } from './cooperate';
 
 export const INTERACTIONS = {
@@ -24,6 +24,8 @@ export const INTERACTIONS = {
   arrivalSpeed: 0.1,
   /** Blend a transit vehicle from its ordinary lane toward the curb over this distance, m. */
   curbBlend: 20,
+  /** Extra distance for selecting an approaching service stop, m. */
+  stopPad: 4,
   /** Seconds a vehicle serves a stop, and a customer spends at a stall. */
   dwell: [8, 15],
   purchase: [3, 6],
@@ -567,8 +569,12 @@ export class LocalScenes {
         const previous = this.stopCooldown.get(m);
         if (previous && dist(m, previous) > 40 * this.perMeter) this.stopCooldown.delete(m);
         const velocity = m.v ?? 0;
-        const brakingRoom =
-          velocity ** 2 / (2 * kinematicsOf(m.vehicle).brake * this.perMeter) + velocity * dt;
+        const brakingRoom = stoppingReach(
+          velocity,
+          kinematicsOf(m.vehicle).brake * this.perMeter,
+          0,
+          velocity * dt,
+        );
         for (const site of this.sites) {
           if (
             (owns && !owns(site)) ||
@@ -576,7 +582,8 @@ export class LocalScenes {
             !(site.modes & modes) ||
             site.road !== m.line ||
             site.direction !== m.dir ||
-            dist(m, site) > Math.max(15 * this.perMeter, brakingRoom + 4 * this.perMeter) ||
+            dist(m, site) >
+              Math.max(15 * this.perMeter, brakingRoom + INTERACTIONS.stopPad * this.perMeter) ||
             ahead(site, m) < brakingRoom
           )
             continue;
@@ -635,7 +642,7 @@ export class LocalScenes {
     const service = this.services.get(m);
     if (!service) return;
     const distance = service.arriving ? Math.max(0, ahead(service.site, m)) : 0;
-    out.target = Math.min(out.target, approach(Math.max(0, distance - brake * dt * dt), 0, brake));
+    out.target = Math.min(out.target, stopBefore(distance, 0, brake, 0, brake * dt * dt));
     out.cap = Math.min(out.cap, distance / Math.max(dt, 0.001));
   }
   walkable(from: WalkPoint, to: WalkPoint): boolean {

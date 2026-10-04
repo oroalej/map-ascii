@@ -76,13 +76,14 @@ export function laneOffset(
  */
 export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
-export const TERMINAL = { cruise: 12, pad: 4 } as const;
+export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
 export const PEDESTRIAN = {
   corridorPad: 0.3,
   lookaheadPad: 4,
   maxRange: 30,
   curbReach: 2,
   holdMax: 20,
+  holdMatch: 2,
 } as const;
 
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.

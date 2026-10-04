@@ -57,8 +57,9 @@ describe('life worker protocol', () => {
       const center = tileToLngLat(entry.tile, { x: 2000, y: 2000 });
       let braked = false,
         held = false,
-        expired = false;
-      for (let frame = 0; frame < 240; frame++) {
+        expired = false,
+        released = false;
+      for (let frame = 0; frame < 300; frame++) {
         const input: FrameInput = {
           gust: {
             camera: { lng: center[0], lat: center[1], zoom: 18 },
@@ -82,13 +83,20 @@ describe('life worker protocol', () => {
         braked ||= car.v! < car.speed;
         held ||= !!car.pedestrianHolds?.length;
         expired ||= !!car.pedestrianHolds?.[0]?.expired;
+        released ||= expired && fixtures.every(({ car }) => car.pedestrianHolds === undefined);
         if (frame === 220)
           for (const world of worlds) {
             const life = worldTiles(world).get(entry.key)!;
             life.movers.splice(1, 1);
           }
       }
-      expect({ braked, held, expired }).toEqual({ braked: true, held: true, expired: true });
+      expect({ braked, held, expired, released }).toEqual({
+        braked: true,
+        held: true,
+        expired: true,
+        released: true,
+      });
+      for (const { car } of fixtures) expect(car.pedestrianHolds).toBeUndefined();
       expect(completeScenarioState(worlds[1]!)).toEqual(completeScenarioState(direct));
     } finally {
       intercept.mockRestore();

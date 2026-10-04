@@ -105,7 +105,7 @@ import { LifeInspection } from './inspection';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
-import { approach, nextSpeed } from './motion';
+import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
 import { JunctionIndex, JunctionTable } from './junctions';
 import { trainLimits, type TrainLimit } from './train-motion';
@@ -169,7 +169,7 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
-  return (velocity * velocity) / (2 * brake) + length / 2 + FOLLOW.minGap + TERMINAL.pad;
+  return stoppingReach(velocity, brake, length / 2 + FOLLOW.minGap, TERMINAL.pad);
 }
 
 type GroundAgent = Mover | Gatherer | Stall;
@@ -1316,6 +1316,17 @@ export class TileLife {
     return segments;
   }
 
+  private hasPedestrianCrossing(m: Mover): boolean {
+    const crossings = this.pedestrianCrossings;
+    if (m.pedestrianHolds?.length || crossings.hasLine(m.line)) return true;
+    const planned = m.routing?.plan?.exit;
+    if (planned !== undefined && planned >= 0 && crossings.hasLine(planned >> 1)) return true;
+    if (m.next !== undefined && m.next >= 0 && crossings.hasLine(m.next >> 1)) return true;
+    const exits = m.junctionRoute?.exits;
+    if (exits) for (const code of exits) if (code >= 0 && crossings.hasLine(code >> 1)) return true;
+    return false;
+  }
+
   /** Target-only limits from the live post-walker index, leaving safety caps to the guard. */
   private pedestrianTarget(m: Mover, target: number, pedestrians: PedestrianView, dt: number) {
     const crossings = this.pedestrianCrossings;
@@ -1329,7 +1340,9 @@ export class TileLife {
     const range = pedestrianRange((m.v ?? m.speed) / this.perMeter, length, k);
     const halfWidth = spec.width / 2 + PEDESTRIAN.corridorPad;
     const fullRange = m.pedestrianHolds ? PEDESTRIAN.maxRange : range;
-    const segments = crossings.empty ? undefined : this.pedestrianSegments(m, fullRange, range);
+    const segments = this.hasPedestrianCrossing(m)
+      ? this.pedestrianSegments(m, fullRange, range)
+      : undefined;
     const crossing =
       segments &&
       crossings.limit(
@@ -3062,24 +3075,32 @@ export class TileLife {
       this.hasExit(m, end)
     )
       return target;
-    const room = Math.max(0, remaining - (VEHICLES[m.vehicle].length / 2 + FOLLOW.minGap) * pm);
-    return Math.min(target, approach(room, pm, k.brake * pm));
+    return Math.min(
+      target,
+      stopBefore(
+        remaining,
+        TERMINAL.creep * pm,
+        k.brake * pm,
+        (VEHICLES[m.vehicle].length / 2 + FOLLOW.minGap) * pm,
+      ),
+    );
+  }
+
+  private mergeLane(m: Mover): number {
+    const spec = VEHICLES[m.vehicle!];
+    return laneOffset(this.roadWidth(m.line), spec.width, m.lane, spec.curb);
   }
 
   private mergingOverlap(i: number, j: number, lane: number): boolean {
     const { movers, offsets } = this;
-    const mergeLane = (m: Mover) => {
-      const spec = VEHICLES[m.vehicle!];
-      return laneOffset(this.roadWidth(m.line), spec.width, m.lane, spec.curb);
-    };
     const a = movers[i]!,
       b = movers[j]!;
     const mergingA = this.scenes.merging(a),
       mergingB = this.scenes.merging(b);
     const width = (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
-    if (!mergingA && !mergingB) return Math.abs(lane - offsets[j]!) < width - FOLLOW.squeeze;
-    const futureA = mergingA && lane === offsets[i] ? mergeLane(a) : lane,
-      futureB = mergingB ? mergeLane(b) : offsets[j]!;
+    if (!mergingA && !mergingB) return false;
+    const futureA = mergingA && lane === offsets[i] ? this.mergeLane(a) : lane,
+      futureB = mergingB ? this.mergeLane(b) : offsets[j]!;
     const separation = Math.max(
       Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
       Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),

@@ -9,7 +9,7 @@ import {
   type Polygon,
 } from './occupancy';
 import { FOLLOW, PEDESTRIAN, type Kinematics } from './config';
-import { approach } from './motion';
+import { stopBefore, stoppingReach } from './motion';
 import { LifeLine, type LifeGeometry } from './geometry';
 import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
 import type { TileId } from '../tiles';
@@ -28,13 +28,14 @@ export type PedestrianView = {
     excludedAreas?: readonly Polygon[],
   ): number;
   walkersInArea(polygon: Polygon, predicate?: (body: Readonly<Body>) => boolean): boolean;
-  walkersAlong?(path: Iterable<PedestrianSegment>, halfWidth: number, range: number): number;
+  walkersAlong(path: Iterable<PedestrianSegment>, halfWidth: number, range: number): number;
 };
 export const EMPTY_PEDESTRIANS: PedestrianView = {
   empty: true,
   minimum: 0,
   walkersAhead: () => Infinity,
   walkersInArea: () => false,
+  walkersAlong: () => Infinity,
 };
 // Prepared query geometry is owned by this module and remains unchanged after preparation.
 const preparedAreas = new WeakSet<Polygon>();
@@ -178,7 +179,7 @@ class IndexedPedestrians implements PedestrianView {
       let nearest = Infinity;
       for (; !item.done; item = iterator.next()) {
         const p = item.value;
-        if (p.ahead >= range - 1e-7) break;
+        if (p.ahead >= range - 1e-7 || p.ahead >= nearest) break;
         for (let i = 0; i < count; i++) {
           const d = corridorDistance(
             this.candidateBodies[i]!,
@@ -213,11 +214,16 @@ export type PedestrianSegment = {
 export const pedestrianRange = (velocity: number, length: number, k: Kinematics) =>
   Math.min(
     PEDESTRIAN.maxRange,
-    (velocity * velocity) / (2 * k.brake) + length / 2 + FOLLOW.minGap + PEDESTRIAN.lookaheadPad,
+    stoppingReach(velocity, k.brake, length / 2 + FOLLOW.minGap, PEDESTRIAN.lookaheadPad),
   );
 function stopTarget(distance: number, length: number, k: Kinematics, pm: number, dt: number) {
-  const room = Math.max(0, distance - FOLLOW.minGap - length / 2 - k.brake * dt * dt);
-  return approach(room * pm, 0, k.brake * pm);
+  return stopBefore(
+    distance * pm,
+    0,
+    k.brake * pm,
+    (FOLLOW.minGap + length / 2) * pm,
+    k.brake * dt * dt * pm,
+  );
 }
 export function pedestrianLimit(
   view: PedestrianView,
@@ -228,26 +234,10 @@ export function pedestrianLimit(
   k: Kinematics,
   pm: number,
   dt: number,
-  range = Infinity,
+  range: number,
 ): number {
   if (target <= 0 || view.empty) return target;
-  let nearest =
-    view.walkersAlong && Number.isFinite(range)
-      ? view.walkersAlong(path, halfWidth, range)
-      : Infinity;
-  if (!view.walkersAlong || !Number.isFinite(range))
-    for (const p of path) {
-      if (p.ahead >= range - 1e-7) break;
-      const d = view.walkersAhead(
-        p.x,
-        p.y,
-        p.hx,
-        p.hy,
-        halfWidth,
-        Math.min(p.length, range - p.ahead),
-      );
-      nearest = Math.min(nearest, p.ahead + d);
-    }
+  const nearest = view.walkersAlong(path, halfWidth, range);
   if (!Number.isFinite(nearest)) return target;
   return Math.min(target, stopTarget(nearest, length, k, pm, dt));
 }
@@ -284,6 +274,9 @@ export class PedestrianCrossings {
   private readonly usedHolds = new Set<PedestrianHold>();
   get empty() {
     return this.index.size === 0;
+  }
+  hasLine(line: number): boolean {
+    return this.lines.has(line);
   }
   constructor(
     private readonly tile: TileId,
@@ -513,8 +506,8 @@ export class PedestrianCrossings {
         const previous = holds.find(
           (h) =>
             h.key === c.identity.key ||
-            (Math.hypot(h.x - c.identity.x, h.y - c.identity.y) <= 2 * scale &&
-              Math.abs(h.radius - c.identity.radius) <= 2 * scale),
+            (Math.hypot(h.x - c.identity.x, h.y - c.identity.y) <= PEDESTRIAN.holdMatch * scale &&
+              Math.abs(h.radius - c.identity.radius) <= PEDESTRIAN.holdMatch * scale),
         );
         if (previous) used.add(previous);
         if (previous?.expired) {
@@ -526,11 +519,11 @@ export class PedestrianCrossings {
         if (!previous && !blocked) continue;
         const elapsed = Math.min(PEDESTRIAN.holdMax, (previous?.elapsed ?? 0) + (blocked ? dt : 0));
         const expired = previous?.expired || elapsed >= PEDESTRIAN.holdMax - 1e-9;
-        const clear = ahead - FOLLOW.minGap - length / 2;
+        const front = ahead - length / 2;
         const committed =
           previous?.committed === true ||
-          clear <= 0 ||
-          (!previous && clear < (velocity * velocity) / (2 * k.maxBrake));
+          front <= 0 ||
+          (!previous && front < (velocity * velocity) / (2 * k.maxBrake));
         const record =
           previous &&
           elapsed === previous.elapsed &&
