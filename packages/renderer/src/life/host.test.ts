@@ -5,6 +5,7 @@ import { createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
 import type { LifeTile } from './simulate';
+import { snapshotOf } from './terrain-snapshot';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
 ];
@@ -13,7 +14,7 @@ const mock = vi.hoisted(() => ({
   init: vi.fn(),
   sync: vi.fn<(tiles: readonly SyncTile[]) => Promise<void>>(),
   clearTiles: vi.fn(),
-  frame: vi.fn(),
+  frame: vi.fn<(input: FrameInput) => Promise<FrameResult>>(),
   play: vi.fn(),
   stop: vi.fn(),
   setLive: vi.fn(),
@@ -77,6 +78,84 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('initializes the ordinary shop schedule once without sending city config in frame requests', async () => {
+    const s = fixture(),
+      shops = { open: '22:00', close: '06:00' };
+    const host = createWorkerHost({ cityLife: { source: 'Test', schedules: { shops } } }, []);
+    host.sync(s.tiles);
+    await flush();
+    expect(mock.init).toHaveBeenCalledWith(
+      expect.objectContaining({ seasons: [], shopSchedule: shops }),
+    );
+    mock.frame.mockResolvedValueOnce(result(1));
+    host.request(s.input);
+    await flush();
+    expect(mock.frame.mock.calls[0]![0].step.weather).toBeUndefined();
+    host.dispose();
+  });
+  it('retains terrain from a stale season reply, including when the worker does not resend it', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.invalidateFrame();
+    host.invalidateFrame();
+    resolve({ ...result(99), terrain: snapshotOf(s.world.cellTerrain()!).snapshot });
+    await flush();
+    const project = (lng: number, lat: number): [number, number] => [lng * 10000, lat * 10000];
+    expect(host.latest()?.cellGuard(project)).toBeTypeOf('function');
+    expect(host.latest()).toMatchObject({ agents: [], signalClock: 0, procession: undefined });
+    mock.frame.mockResolvedValueOnce(result(2));
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.cellGuard(project)).toBeTypeOf('function');
+    expect(host.latest()?.signalClock).toBe(2);
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.invalidateFrame();
+    resolve({ ...result(100), terrain: null });
+    await flush();
+    expect(host.latest()?.cellGuard(project)).toBeUndefined();
+    expect(host.latest()?.signalClock).toBe(2);
+    host.dispose();
+  });
+  it('discards in-flight replies after a season changes without clearing tile residency', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, [], undefined);
+    host.sync(s.tiles);
+    await flush();
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    expect(host.request(s.input)).toBe(true);
+    host.invalidateFrame();
+    resolve(result(1));
+    await flush();
+    expect(host.latest()).toBeUndefined();
+    mock.frame.mockResolvedValueOnce(result(2));
+    expect(host.request(s.input)).toBe(true);
+    await flush();
+    expect(host.latest()?.signalClock).toBe(2);
+    expect(mock.sync).toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
   it('accepts an atomic in-flight frame while new geometry queues, but drops it after an empty view', async () => {
     const s = fixture(),
       host = createWorkerHost({}, []);

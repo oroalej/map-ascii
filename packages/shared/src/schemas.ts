@@ -4,10 +4,30 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { OsmId, OsmAreaId, MercatorPosition } from './schema-primitives';
+export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
-import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import {
+  RHYTHM_KINDS,
+  PLACE_KINDS,
+  runtimeCityLife,
+  type CityLifeConfig,
+  type RuntimeCityLife,
+} from './rhythm';
+import {
+  FIREWORK_VARIANTS,
+  validMonthDay,
+  runtimeSeason,
+  type FireworksConfig,
+  type SeasonConfig,
+  type SeasonGrounds,
+  type SeasonWindow,
+  type RuntimeSeasonConfig,
+} from './seasons';
+import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
+export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
@@ -83,8 +103,6 @@ export const DateCertainty = z.enum(['exact', 'circa']);
 export type DateCertainty = z.infer<typeof DateCertainty>;
 
 export const Year = z.int().min(YEAR_RANGE[0]).max(YEAR_RANGE[1]);
-
-export const OsmId = z.string().regex(/^osm:(node|way|relation)\/\d+$/, 'expected osm:<type>/<id>');
 
 export const Photo = z.object({
   src: z.string().min(1),
@@ -1022,7 +1040,243 @@ export const LifeSite = z
  * A city's life beyond traffic mix and winds: its daily rhythm, and when places fill up
  * (rhythm.ts).
  */
+const MonthDaySchema = z
+  .strictObject({ month: z.int().min(1).max(12), day: z.int().min(1).max(31) })
+  .refine(validMonthDay, 'expected a real month/day');
+export const SeasonWindowSchema = z.union([
+  z.strictObject({ from: MonthDaySchema, to: MonthDaySchema }),
+  z.strictObject({
+    anchor: z.strictObject({
+      month: z.int().min(1).max(12),
+      weekday: z.int().min(0).max(6),
+      nth: z.int().min(1).max(5),
+      offset_days: z.int().min(-31).max(31),
+    }),
+    days_before: z.int().min(0).max(60),
+    days_after: z.int().min(0).max(60),
+  }),
+]) satisfies z.ZodType<SeasonWindow>;
+const SeasonPlaces = z
+  .array(z.enum(PLACE_KINDS))
+  .min(1)
+  .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
+const SeasonGeometryId = z.string().regex(/^[a-z][a-z0-9-]*$/);
+const SeasonInstallationBase = {
+  id: SeasonGeometryId,
+  anchor: OsmId,
+  label: z.string().trim().min(1),
+  sources: Sources,
+  grounds: SeasonGeometryId.optional(),
+};
+export const SeasonGroundsSchema = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+  anchor: OsmAreaId,
+  // Reuse the simple, closed, nonzero-area ring contract from plan-view structures.
+  ring: SiteStructure.shape.ring.max(64),
+  sources: Sources,
+}) satisfies z.ZodType<SeasonGrounds>;
+export const FireworksSchema = z.strictObject({
+  label: z.string().trim().min(1),
+  variants: z
+    .array(z.enum(FIREWORK_VARIANTS))
+    .min(1)
+    .max(FIREWORK_VARIANTS.length)
+    .refine((v) => new Set(v).size === v.length, 'duplicate firework variants'),
+}) satisfies z.ZodType<FireworksConfig>;
+export const Season = z
+  .strictObject({
+    id: z
+      .string()
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
+      .refine((id) => id !== 'auto', 'auto is reserved'),
+    title: LocalizedText,
+    status: z.enum(['draft', 'verified']),
+    window: SeasonWindowSchema,
+    note: z.string().trim().min(1).optional(),
+    fireworks: FireworksSchema.optional(),
+    grounds: z
+      .array(SeasonGroundsSchema)
+      .min(1)
+      .max(16)
+      .refine(
+        (grounds) => new Set(grounds.map((g) => g.id)).size === grounds.length,
+        'duplicate grounds ids',
+      )
+      .optional(),
+    installations: z
+      .array(
+        z.discriminatedUnion('kind', [
+          z
+            .strictObject({
+              ...SeasonInstallationBase,
+              anchor: OsmAreaId,
+              grounds: SeasonGeometryId,
+              kind: z.literal('access-path'),
+              style: z.enum(['walkway', 'driveway', 'parking']),
+              width_m: z.number().min(1).max(12),
+              points: z
+                .array(MercatorPosition)
+                .min(2)
+                .max(32)
+                .refine(
+                  (points) =>
+                    points
+                      .slice(1)
+                      .every((p, i) => p[0] !== points[i]![0] || p[1] !== points[i]![1]),
+                  'empty access segment',
+                ),
+            })
+            .refine(
+              (v) => v.style !== 'parking' || v.width_m >= 5.5,
+              'parking requires bays and access',
+            ),
+          z.strictObject({
+            ...SeasonInstallationBase,
+            anchor: OsmAreaId,
+            grounds: SeasonGeometryId,
+            kind: z.literal('carnival'),
+            components: z
+              .array(CarnivalComponentSchema)
+              .min(1)
+              .max(48)
+              .refine(
+                (v) => new Set(v.map((c) => c.id)).size === v.length,
+                'duplicate carnival components',
+              )
+              .refine((v) => v.filter((c) => c.style === 'midway').length <= 1, 'only one midway'),
+          }),
+          z.strictObject({
+            ...SeasonInstallationBase,
+            kind: z.literal('christmas-tree'),
+            radius_m: z.number().min(1).max(12),
+          }),
+          z.strictObject({
+            ...SeasonInstallationBase,
+            kind: z.literal('light-string'),
+            layout: z.enum(['paths', 'perimeter', 'building-perimeter', 'canopy']),
+            spacing_m: z.number().min(0.75).max(12),
+            mount: z.literal('canopy').optional(),
+            bulb_spacing_m: z.number().min(0.3).max(3).optional(),
+            palette: z.enum(['warm', 'christmas']).optional(),
+          }),
+          z.strictObject({
+            ...SeasonInstallationBase,
+            kind: z.literal('decorated-canopy'),
+          }),
+        ]),
+      )
+      .min(1)
+      .max(32)
+      .refine((v) => new Set(v.map((i) => i.id)).size === v.length, 'duplicate installation ids')
+      .optional(),
+    lanterns: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        shape: z.literal('star'),
+        near: SeasonPlaces.optional(),
+        radius_m: z.number().min(50).max(3000).optional(),
+      })
+      .refine(
+        (v) => (v.near === undefined) === (v.radius_m === undefined),
+        'give near and radius_m together',
+      )
+      .optional(),
+    bunting: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        near: SeasonPlaces,
+        radius_m: z.number().min(50).max(1000),
+        spacing_m: z.number().min(15).max(80),
+        corridors: z
+          .array(BuntingCorridorSchema)
+          .min(1)
+          .max(32)
+          .refine((v) => new Set(v.map((c) => c.id)).size === v.length, 'duplicate corridor ids')
+          .optional(),
+      })
+      .optional(),
+    stalls: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        near: SeasonPlaces,
+        radius_m: z.number().min(50).max(600),
+        per_tile: z.int().min(1).max(24),
+      })
+      .optional(),
+    sources: Sources,
+  })
+  .superRefine((season, ctx) => {
+    for (const [index, installation] of (season.installations ?? []).entries()) {
+      if (installation.kind === 'light-string') {
+        if (installation.layout !== 'canopy' && installation.spacing_m < 3)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['installations', index, 'spacing_m'],
+            message: 'only canopy rows may be closer than 3 m',
+          });
+        if (installation.layout === 'canopy' && installation.mount !== 'canopy')
+          ctx.addIssue({
+            code: 'custom',
+            path: ['installations', index, 'mount'],
+            message: 'canopy rows must be mounted above the ground',
+          });
+      }
+      if (
+        installation.kind === 'light-string' &&
+        installation.layout === 'building-perimeter' &&
+        (installation.grounds || installation.mount)
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['installations', index, 'grounds'],
+          message: 'building lights use the mapped building without grounds or canopy mounting',
+        });
+      if (!installation.grounds) continue;
+      const grounds = season.grounds?.find((g) => g.id === installation.grounds);
+      if (!grounds || grounds.anchor !== installation.anchor)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['installations', index, 'grounds'],
+          message: 'grounds must exist and share the installation anchor',
+        });
+    }
+    if (
+      !season.lanterns &&
+      !season.bunting &&
+      !season.stalls &&
+      !season.installations?.length &&
+      !season.fireworks
+    )
+      ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
+    const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
+      v.includes(TODO_VERIFY),
+    );
+    if (season.status === 'verified' && todo)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: `a verified season cannot contain ${TODO_VERIFY}`,
+      });
+    if (season.status === 'draft' && !season.note?.includes(TODO_VERIFY))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: `a draft season needs a ${TODO_VERIFY} note`,
+      });
+  }) satisfies z.ZodType<SeasonConfig>;
+export type Season = z.infer<typeof Season>;
+
+export const RuntimeSeasonSchema = Season.transform(
+  runtimeSeason,
+) satisfies z.ZodType<RuntimeSeasonConfig>;
 export const CityLife = z.strictObject({
+  seasons: z
+    .array(Season)
+    .refine(
+      (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
+      'duplicate season id',
+    )
+    .optional(),
   signals: z
     .strictObject({
       derive: z.boolean().optional(),
@@ -1098,6 +1352,9 @@ export const CityLife = z.strictObject({
   source: z.string().min(1),
 }) satisfies z.ZodType<CityLifeConfig>;
 export type CityLife = z.infer<typeof CityLife>;
+export const RuntimeCityLifeSchema = CityLife.transform(
+  runtimeCityLife,
+) satisfies z.ZodType<RuntimeCityLife>;
 
 export const Traffic = z.strictObject({
   road_major: VehicleWeights,
@@ -1222,6 +1479,14 @@ export const City = z
         ctx.addIssue({ code: 'custom', path: [...path, ...issue.path], message: issue.message });
       }
     }
+    for (const [index, season] of (city.life?.seasons ?? []).entries()) {
+      for (const issue of text.safeParse(season.title).error?.issues ?? [])
+        ctx.addIssue({
+          code: 'custom',
+          path: ['life', 'seasons', index, 'title', ...issue.path],
+          message: issue.message,
+        });
+    }
   });
 export type City = z.infer<typeof City>;
 
@@ -1306,10 +1571,7 @@ export const TileLayer = z.enum([
 export type TileLayer = z.infer<typeof TileLayer>;
 
 /** Utility identities and coordinates survive MVT clipping as a validated JSON property. */
-const UtilityPosition = z.tuple([
-  z.number().min(-180).max(180),
-  z.number().min(-85.051129).max(85.051129),
-]);
+const UtilityPosition = MercatorPosition;
 const UtilityDirection = z
   .tuple([z.number(), z.number()])
   .refine((v) => Math.abs(Math.hypot(...v) - 1) < 0.001, 'expected unit direction');

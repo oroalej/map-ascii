@@ -23,6 +23,7 @@ function renderer() {
   return {
     atlas: {
       on,
+      getSeason: () => null,
       setFocus: focus,
       getStats: () => ({ quality: { choice: 'high', tier: 0, name: 'high' } }),
     } as unknown as Atlas,

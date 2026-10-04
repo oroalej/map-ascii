@@ -440,7 +440,11 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
  */
 export function activityLevels(
   daylight: number,
-  clock?: { minutes: number; weekday: number; life?: CityLifeConfig | undefined },
+  clock?: {
+    minutes: number;
+    weekday: number;
+    life?: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined;
+  },
 ): Activity {
   const byRhythm = (kind: 'vehicle' | 'person' | 'boat' | 'train') =>
     clock ? curveAt(rhythmFor(clock.life, kind), clock.minutes) : activity(kind, daylight);

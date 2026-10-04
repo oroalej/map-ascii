@@ -3,7 +3,7 @@
 import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
-  type CityLifeConfig,
+  type RuntimeCityLife,
   type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
@@ -111,7 +111,7 @@ export function AtlasCanvas({
   traffic?: TrafficMix | undefined;
   climate?: ClimateConfig | undefined;
   timezone?: string | undefined;
-  cityLife?: CityLifeConfig | undefined;
+  cityLife?: RuntimeCityLife | undefined;
   dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -144,7 +144,7 @@ export function AtlasCanvas({
     };
     store.initCamera(camera);
     // The life layer's settings are remembered in this browser, not in the URL.
-    const lifePrefs = loadLifePrefs();
+    const lifePrefs = loadLifePrefs(slug, cityLife?.seasons);
     useLifeStore.setState(lifePrefs);
     const speechPrefs = dialogue
       ? loadSpeechPrefs(slug, dialogue)
@@ -194,7 +194,7 @@ export function AtlasCanvas({
       atlas.on('procession', (run) => useUiStore.setState({ procession: run })),
       useLifeStore.subscribe((prefs) => {
         atlas.setLife(lifeSettings(prefs));
-        saveLifePrefs(prefs);
+        saveLifePrefs(slug, prefs);
       }),
     ];
     return () => {
