@@ -108,6 +108,7 @@ import {
   rebaseForagers,
   stepForager,
   type ForageTerrain,
+  type ForageContext,
   type ForageMode,
   type GroundForager,
 } from './forage';
@@ -152,6 +153,7 @@ import {
   segmentCrossing,
   Occupancy,
   PolygonIndex,
+  segmentBody,
   memberSize,
   animalSize,
   type Body,
@@ -489,7 +491,13 @@ export type Parked = {
   paint: number;
 };
 
-export type Bird = { ox: number; oy: number; phase: number } & Partial<GroundForager>;
+export type Bird = {
+  ox: number;
+  oy: number;
+  phase: number;
+  /** Rendered offset retained when departing, independent of a replacement landing layout. */
+  departure?: Point;
+} & Partial<GroundForager>;
 
 export type Flock = {
   species: BirdSpecies;
@@ -521,6 +529,8 @@ export type Flock = {
   landingAttempted: boolean;
   /** Approach offset blend from 0 to 1; completed before touchdown. */
   landingBlend: number;
+  /** Departure offset blend from 1 to 0, independent of approach preparation. */
+  departureBlend?: number;
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -754,6 +764,28 @@ export class TileLife {
   private readonly forageRng: () => number;
   private forageTerrain?: ForageTerrain;
   private forageGuard?: (from: Point, to: Point) => boolean;
+  private readonly forageContext: ForageContext & {
+    species: BirdSpecies;
+    habitat: Habitat;
+    terrain?: ForageTerrain;
+  } = {
+    x: 0,
+    y: 0,
+    lx: 0,
+    ly: 0,
+    perMeter: 1,
+    species: 'pigeon',
+    habitat: Habitat.park,
+    ok: (from, to) => {
+      this.forageCheckCount++;
+      const { species, habitat, terrain, perMeter } = this.forageContext;
+      return (
+        !!terrain &&
+        forageMovement(species, habitat, from, to, terrain, perMeter) &&
+        (!this.forageGuard || this.forageGuard(from, to))
+      );
+    },
+  };
   private forageCheckCount = 0;
   /** Includes centre/layout candidates and complete ground movement validations. */
   get forageChecks() {
@@ -789,8 +821,9 @@ export class TileLife {
         }
       }
       if (unsafe) {
+        this.beginDeparture(flock);
         flock.landed = false;
-        this.pickDestination(flock);
+        this.pickDestination(flock, { prepare: false });
         flock.perch = -1;
         flock.landing = false;
         flock.landingAttempted = false;
@@ -3205,7 +3238,7 @@ export class TileLife {
    * `BirdSpec.perch`, or always if the tile has no roost), else a roost to circle, more likely
    * one of a habitat its species favors.
    */
-  private pickDestination(flock: Flock) {
+  private pickDestination(flock: Flock, { prepare = true }: { prepare?: boolean } = {}) {
     const roosts = this.geo.roosts.length / 2;
     const perches = this.geo.perches.length / 2;
     const spec = BIRD_SPECIES[flock.species];
@@ -3220,7 +3253,8 @@ export class TileLife {
     } else {
       flock.perch = -1;
       if (roosts > 1) flock.roost = this.pickRoost(flock.species, this.birdRng);
-      if (roosts > 0 && spec.ground > 0 && this.birdRng() < spec.ground) this.prepareLanding(flock);
+      if (roosts > 0 && spec.ground > 0 && this.birdRng() < spec.ground && prepare)
+        this.prepareLanding(flock);
     }
   }
 
@@ -3305,6 +3339,29 @@ export class TileLife {
     return true;
   }
 
+  /** Capture the visible layout before destination selection can replace ground offsets. */
+  private beginDeparture(flock: Flock): void {
+    if (!flock.landed && !flock.landing) return;
+    const approach = flock.landed ? 1 : flock.landingBlend;
+    const departure = flock.departureBlend ?? 0;
+    const spread = flock.landed ? 1 : 1 + (3 * flock.scatter) / PERCH.scatter;
+    for (const bird of flock.birds) {
+      const turn = (flock.landed ? 0 : this.time * 0.8) + bird.phase * 6;
+      const cos = Math.cos(turn) * spread,
+        sin = Math.sin(turn) * spread;
+      const ox = bird.ox * cos - bird.oy * sin,
+        oy = bird.ox * sin + bird.oy * cos;
+      let x = ox + ((bird.gx ?? ox) - ox) * approach,
+        y = oy + ((bird.gy ?? oy) - oy) * approach;
+      if (bird.departure && departure > 0) {
+        x += (bird.departure.x - x) * departure;
+        y += (bird.departure.y - y) * departure;
+      }
+      bird.departure = { x, y };
+    }
+    flock.departureBlend = 1;
+  }
+
   private stepGroundFlock(flock: Flock, dt: number): void {
     const spec = FORAGE_SPECIES[flock.species];
     if (!spec) return;
@@ -3320,7 +3377,7 @@ export class TileLife {
           }
         let nearest = -1,
           reach = FORAGE.reach * this.perMeter;
-        if (spec.treeRest > 0)
+        if (spec.treeRest > 0 && this.geo.perches.length > 0 && this.forageRng() < spec.treeRest)
           for (let i = 0; i < this.geo.perches.length / 2; i++) {
             const distance = Math.hypot(
               this.geo.perches[i * 2]! - flock.x,
@@ -3331,7 +3388,8 @@ export class TileLife {
               reach = distance;
             }
           }
-        if (nearest >= 0 && this.forageRng() < spec.treeRest) {
+        if (nearest >= 0) {
+          this.beginDeparture(flock);
           flock.home = flock.roost;
           flock.landed = flock.perched = flock.landing = false;
           flock.perch = nearest;
@@ -3343,20 +3401,15 @@ export class TileLife {
     const terrain = this.forageTerrain;
     if (!terrain) return;
     const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
-    const context = {
-      x: flock.x,
-      y: flock.y,
-      lx: flock.lx,
-      ly: flock.ly,
-      perMeter: this.perMeter,
-      ok: (from: Point, to: Point) => {
-        this.forageCheckCount++;
-        return (
-          forageMovement(flock.species, habitat, from, to, terrain, this.perMeter) &&
-          (!this.forageGuard || this.forageGuard(from, to))
-        );
-      },
-    };
+    const context = this.forageContext;
+    context.x = flock.x;
+    context.y = flock.y;
+    context.lx = flock.lx;
+    context.ly = flock.ly;
+    context.perMeter = this.perMeter;
+    context.species = flock.species;
+    context.habitat = habitat;
+    context.terrain = terrain;
     for (const bird of flock.birds)
       if (isForager(bird)) stepForager(bird, spec, dt, this.forageRng, context);
     rebaseForagers(flock, flock.birds, spec.patch * this.perMeter);
@@ -3429,6 +3482,8 @@ export class TileLife {
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (flock.departureBlend)
+        flock.departureBlend = Math.max(0, flock.departureBlend - dt / FORAGE.settleSeconds);
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
@@ -3450,10 +3505,11 @@ export class TileLife {
               continue;
             }
           }
+          this.beginDeparture(flock);
           flock.perched = false;
           flock.landed = false;
           if (flushed) flock.scatter = PERCH.scatter;
-          this.pickDestination(flock);
+          this.pickDestination(flock, { prepare: !flushed });
           // Flushed, it keeps clear a while (circling a roost, or hovering where it is if the
           // tile has none) before settling again.
           if (flushed) {
@@ -4585,19 +4641,16 @@ export class LifeWorld {
       const current = this.groundTerrain;
       const at = current?.origins.get(life);
       if (!current || !at) return false;
-      const dx = (to.x - from.x) / life.perMeter;
-      const dy = (to.y - from.y) / life.perMeter;
-      const length = Math.hypot(dx, dy);
-      return !current.blocked.hits([
-        {
-          x: at.x + ((from.x + to.x) / (2 * life.perMeter)) * at.scale,
-          y: at.y + ((from.y + to.y) / (2 * life.perMeter)) * at.scale,
-          hx: length ? dx / length : 1,
-          hy: length ? dy / length : 0,
-          length: (length + 0.01) * at.scale,
-          width: 0.01 * at.scale,
-        },
-      ]);
+      const body = segmentBody(
+        { x: from.x / life.perMeter, y: from.y / life.perMeter },
+        { x: to.x / life.perMeter, y: to.y / life.perMeter },
+        0.01,
+      );
+      body.x = at.x + body.x * at.scale;
+      body.y = at.y + body.y * at.scale;
+      body.length *= at.scale;
+      body.width *= at.scale;
+      return !current.blocked.hits([body]);
     });
     life.reconcileSeasonalActors(
       (owner) => {
@@ -5631,8 +5684,14 @@ export class LifeWorld {
           const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
           const ox = bird.ox * cos - bird.oy * sin;
           const oy = bird.ox * sin + bird.oy * cos;
-          const x = flock.x + ox + ((bird.gx ?? ox) - ox) * blend;
-          const y = flock.y + oy + ((bird.gy ?? oy) - oy) * blend;
+          let x = ox + ((bird.gx ?? ox) - ox) * blend;
+          let y = oy + ((bird.gy ?? oy) - oy) * blend;
+          if (bird.departure && flock.departureBlend) {
+            x += (bird.departure.x - x) * flock.departureBlend;
+            y += (bird.departure.y - y) * flock.departureBlend;
+          }
+          x += flock.x;
+          y += flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
           const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
           const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;

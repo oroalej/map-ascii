@@ -3,7 +3,7 @@ import { Habitat, type BirdSpecies } from './birds';
 import { FORAGE } from './config';
 import { complete } from './cooperate';
 import { inTile, type LifeGeometry } from './geometry';
-import { PolygonIndex, type Body, type Point, type Polygon } from './occupancy';
+import { PolygonIndex, segmentBody, type Point, type Polygon } from './occupancy';
 import { between } from './random';
 import { prepareRoadTerrainSteps, transformPolygon, type RoadAccess } from './terrain';
 
@@ -326,16 +326,7 @@ export function forageMovement(
   const dx = b.x - a.x,
     dy = b.y - a.y,
     length = Math.hypot(dx, dy);
-  const bodies: Body[] = [
-    {
-      x: (a.x + b.x) / 2,
-      y: (a.y + b.y) / 2,
-      hx: length ? dx / length : 1,
-      hy: length ? dy / length : 0,
-      length: length + 0.01,
-      width: 0.01,
-    },
-  ];
+  const bodies = [segmentBody(a, b, 0.01)];
   if (terrain.blocked.hits(bodies) || !terrain.roads.allows(bodies, false)) return false;
   if (habitat === Habitat.water && spec.edge) {
     const radius = Math.max(spec.edge.wet, spec.edge.dry);
