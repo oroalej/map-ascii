@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { resolve, join, dirname, basename } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { currentSourceHash, snapshotRevision } from './snapshot';
 
 vi.mock('node:child_process', () => ({
@@ -15,7 +16,7 @@ vi.mock('node:child_process', () => ({
     return 'export const shared = "frozen-shared";';
   }),
 }));
-const workspace = resolve('test-results');
+const workspace = tmpdir();
 let temporary: string | undefined;
 afterEach(async () => {
   if (

@@ -1,6 +1,6 @@
 ---
 name: implement-handoff
-description: Take a handoff plan (.plans/<status>/<task>/handoff.md) from review to PR. A separate Sol 6.1 max-effort run reviews the handoff for gaps and wrong assumptions, every proposed amendment is applied, then this session implements it, commits and pushes, merges origin/main, opens a PR to main, and runs $review-pr (review loop and CI gate). Never merges. Use when the user invokes $implement-handoff [--fast] <task or handoff path>.
+description: Take a handoff plan (.plans/<status>/<task>/handoff.md) from review to PR. A separate Sol 6.1 max-effort run reviews the handoff for gaps and wrong assumptions, every proposed amendment is applied, then this session implements it, commits and pushes, opens a PR to main, and runs $review-pr (main synchronization, review loop and CI gate). Never merges the PR. Use when the user invokes $implement-handoff [--fast] <task or handoff path>.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
@@ -12,8 +12,8 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - editing its `handoff.md` with review amendments
 - creating its worktree if the handoff says it's a new task
 - implementing it, committing and pushing
-- merging `main` into its branch and opening a PR to `main`
-- running `$review-pr`, which commits and pushes fixes and CI fixes
+- opening a PR to `main`
+- running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
 Don't ask for confirmation between steps. Stop only where this skill or the handoff says to stop. Never merge the PR.
 
@@ -23,9 +23,9 @@ Always pass these explicitly. Never change them or fall back to another model.
 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
-| This session: amends the handoff, implements, commits, merges `main`, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+| This session: amends the handoff, implements, commits, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 | Codex #1: reviews the handoff (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
-| Codex #2: runs `$review-pr` | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
+| Codex #2: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
 | Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
 
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$implement-handoff` again from a session with those settings.
@@ -99,10 +99,11 @@ Work in `<wt>`, following the amended handoff:
 
 ## 4. Land the branch
 
-Follow steps 1–3 of `<skill-dir>/../sync-review/SKILL.md` for this one branch and worktree, with these adjustments:
+Follow steps 1 and 3 of `<skill-dir>/../sync-review/SKILL.md` for this one branch and worktree, with these adjustments. Don't merge `origin/main` here: `$review-pr` does it first, in step 5.
+
+For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
 
 - **Step 1 (commit and push):** usually only pushes, since step 3 already committed. Anything uncommitted at this point is either work the handoff missed (commit it) or not this task's (hold it back and report it). A held-back file or rejected push → pause and stop.
-- **Step 2 (merge `origin/main`):** as written, including its conflict rules and its abort cases. An abort → pause and stop.
 - **Step 3 (PR):** if there's no PR, create one. Take the body from the handoff's Goal & context, its steps, and its Verification results (what actually ran). Add a "Handoff review amendments" section listing the design amendments.
 
 ## 5. Run $review-pr
@@ -116,14 +117,14 @@ codex exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o
 Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`.
 
 - `clean` (review clean and CI green): the task is done.
-- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`): the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
+- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for a `merge conflict` with `main` it couldn't resolve: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
 
 ## 6. Report and clean up
 
 Report, following the handoff's "Report back" section, and add:
 
 - **Handoff review:** the verdict and every amendment, with the design amendments listed first.
-- **The PR URL**, and the `$review-pr` result: rounds, final status, the CI status, and anything it skipped or noticed.
+- **The PR URL**, and the `$review-pr` result: the main merge (`mainMerge`), review rounds (`roundCount` of 3), final status, the CI status, and anything it skipped or noticed.
 - Which checks ran locally, and which were left to CI.
 - The speed the Codex instances ran at (fast or normal).
 
@@ -132,4 +133,4 @@ Then, per `AGENTS.md`:
 - **Task status:**
   - `clean`: move `<task-dir>` to `.plans/done/`, and set its row to Complete, with the PR # and the final commit.
   - Paused or not clean: leave the folder where step 2–5 put it, with the row's Next step saying why.
-- **Cleanup:** delete everything in `<task-dir>` except `handoff.md` and the files the handoff marks **keep**. That includes `handoff-review.md`, `review.md`, `review.json` and `status-baseline.txt`. List what was deleted and what was kept.
+- **Scratch:** leave it in `<task-dir>`. `$merge-pr` deletes it with `pnpm plans:clean` when the PR merges, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands: Codex rejects recursive deletes as "blocked by policy".
