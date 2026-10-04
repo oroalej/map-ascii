@@ -54,6 +54,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  TERMINAL,
   PEDESTRIAN,
   FILLET,
   JUNCTION,
@@ -166,9 +167,10 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
-// Conservative broad phase: ordinary-speed vehicles cannot need terminal braking outside it.
-const TERMINAL_CRUISE_MPS = 12;
 let terminalLookaheadM: number | undefined;
+function terminalReach(velocity: number, length: number, brake: number) {
+  return (velocity * velocity) / (2 * brake) + length / 2 + FOLLOW.minGap + TERMINAL.pad;
+}
 
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
@@ -755,6 +757,7 @@ export class TileLife {
   private junctions: { x: number; y: number; radius: number }[] = [];
 
   private pedestrianCrossings!: PedestrianCrossings;
+  private readonly pathScratch: { cursor: Mover; at: Pose; next: Pose }[] = [];
   private stoppedPaths?: WeakMap<
     Mover,
     {
@@ -962,23 +965,16 @@ export class TileLife {
   }
 
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
-  offsetOf(m: Mover): number {
+  offsetOf(m: Mover, sceneOwner = m): number {
     if (isWalker(m.kind)) return this.scenes.visits.has(m) ? 0 : (m.avoid ?? 0);
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
     const normal = laneOffset(road, spec.width, m.lane, spec.curb);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
-    return this.scenes.offset(m, normal, curb);
-  }
-
-  private lookaheadOffset(m: Mover, sceneOwner: Mover): number {
-    if (m.kind !== 'vehicle' || !m.vehicle) return this.offsetOf(m);
-    const spec = VEHICLES[m.vehicle];
-    const road = this.roadWidth(m.line);
-    const normal = laneOffset(road, spec.width, m.lane, spec.curb);
-    const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
-    return this.scenes.offsetAt(sceneOwner, m, normal, curb);
+    return sceneOwner === m
+      ? this.scenes.offset(m, normal, curb)
+      : this.scenes.offsetAt(sceneOwner, m, normal, curb);
   }
 
   private corner(m: Mover, vertex: number, sceneOwner = m): Curve | undefined {
@@ -1011,9 +1007,7 @@ export class TileLife {
     if (!li || !lo) return;
     const offset = (line: number) =>
       line === m.line
-        ? sceneOwner === m
-          ? this.offsetOf(m)
-          : this.lookaheadOffset(m, sceneOwner)
+        ? this.offsetOf(m, sceneOwner)
         : m.kind === 'vehicle'
           ? laneOffset(
               this.roadWidth(line),
@@ -1039,8 +1033,7 @@ export class TileLife {
 
   /** Pure render/clearance pose; the route cursor stays on the centreline. */
   pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }, sceneOwner = m): Pose {
-    const offset =
-      (sceneOwner === m ? this.offsetOf(m) : this.lookaheadOffset(m, sceneOwner)) * this.perMeter;
+    const offset = this.offsetOf(m, sceneOwner) * this.perMeter;
     out.x = m.x - m.hy * offset;
     out.y = m.y + m.hx * offset;
     out.hx = m.hx;
@@ -1099,7 +1092,7 @@ export class TileLife {
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
     const reach = FILLET.maxM * pm;
     if (
-      !this.scenes.hasCurbScenes &&
+      this.scenes.curbSite(m) === undefined &&
       remaining >= range * pm &&
       (!this.curvable[m.line] || (m.d > reach && remaining - range * pm > reach))
     ) {
@@ -1116,121 +1109,165 @@ export class TileLife {
       };
       return;
     }
-    const exits = m.junctionRoute?.exits ?? [m.routing?.plan?.exit ?? m.next];
-    const curbScenes = this.scenes.hasCurbScenes;
+    const exits = m.junctionRoute?.exits;
+    const firstExit = m.routing?.plan?.exit ?? m.next;
+    const curbScenes = this.scenes.curbSite(m) !== undefined;
     let exitIndex = 0;
-    const cursor: Mover = { ...m, routing: undefined, next: exits[0] };
-    let at = this.pose(cursor, undefined, m),
-      ahead = 0;
-    let curveLine = -1,
-      curveFrom = -1,
-      curveDir = 0,
-      curveNext: number | undefined,
-      curveCame: number | undefined,
-      offset = 0,
-      behind: Curve | undefined,
-      front: Curve | undefined;
-    while (ahead < range - 1e-7) {
-      const end = cursor.dir === 1 ? this.last(cursor.line) : this.first(cursor.line);
-      let vertex = cursor.from + cursor.dir;
-      let remaining =
-        vertex >= this.first(cursor.line) && vertex <= this.last(cursor.line)
-          ? this.segment(cursor.from, vertex) - cursor.d
-          : 0;
-      if (remaining <= 1e-9) {
-        if (
-          vertex !== end &&
-          vertex >= this.first(cursor.line) &&
-          vertex <= this.last(cursor.line)
-        ) {
-          cursor.from = vertex;
-          cursor.d = 0;
-        } else {
-          const code = exits[exitIndex++];
-          if (code === undefined || code < 0) break;
-          cursor.came = cursor.line * 2 + (cursor.dir === 1 ? 1 : 0);
-          cursor.line = code >> 1;
-          cursor.dir = code & 1 ? -1 : 1;
-          cursor.from = cursor.dir === 1 ? this.first(cursor.line) : this.last(cursor.line);
-          cursor.d = 0;
-          cursor.next = exits[exitIndex];
+    const scratch: { cursor: Mover; at: Pose; next: Pose } = this.pathScratch.pop() ?? {
+      cursor: {
+        kind: 'vehicle',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 0,
+        speed: 0,
+        paint: 0,
+        lane: 0,
+        pause: 0,
+        rank: 0,
+        x: 0,
+        y: 0,
+        hx: 1,
+        hy: 0,
+      },
+      at: { x: 0, y: 0, hx: 0, hy: 0 },
+      next: { x: 0, y: 0, hx: 0, hy: 0 },
+    };
+    const cursor = scratch.cursor;
+    Object.assign(cursor, {
+      kind: m.kind,
+      vehicle: m.vehicle,
+      line: m.line,
+      from: m.from,
+      dir: m.dir,
+      d: m.d,
+      x: m.x,
+      y: m.y,
+      hx: m.hx,
+      hy: m.hy,
+      lane: m.lane,
+      came: m.came,
+      next: exits ? exits[0] : firstExit,
+      momentFacing: m.momentFacing,
+    });
+    try {
+      let at = this.pose(cursor, scratch.at, m),
+        next = scratch.next,
+        ahead = 0;
+      let curveLine = -1,
+        curveFrom = -1,
+        curveDir = 0,
+        curveNext: number | undefined,
+        curveCame: number | undefined,
+        offset = 0,
+        behind: Curve | undefined,
+        front: Curve | undefined;
+      while (ahead < range - 1e-7) {
+        const end = cursor.dir === 1 ? this.last(cursor.line) : this.first(cursor.line);
+        let vertex = cursor.from + cursor.dir;
+        let remaining =
+          vertex >= this.first(cursor.line) && vertex <= this.last(cursor.line)
+            ? this.segment(cursor.from, vertex) - cursor.d
+            : 0;
+        if (remaining <= 1e-9) {
+          if (
+            vertex !== end &&
+            vertex >= this.first(cursor.line) &&
+            vertex <= this.last(cursor.line)
+          ) {
+            cursor.from = vertex;
+            cursor.d = 0;
+          } else {
+            const code = exits ? exits[exitIndex++] : exitIndex++ === 0 ? firstExit : undefined;
+            if (code === undefined || code < 0) break;
+            cursor.came = cursor.line * 2 + (cursor.dir === 1 ? 1 : 0);
+            cursor.line = code >> 1;
+            cursor.dir = code & 1 ? -1 : 1;
+            cursor.from = cursor.dir === 1 ? this.first(cursor.line) : this.last(cursor.line);
+            cursor.d = 0;
+            cursor.next = exits?.[exitIndex];
+          }
+          vertex = cursor.from + cursor.dir;
+          remaining = this.segment(cursor.from, vertex);
+          if (remaining <= 1e-9) continue;
         }
-        vertex = cursor.from + cursor.dir;
-        remaining = this.segment(cursor.from, vertex);
-        if (remaining <= 1e-9) continue;
-      }
-      const dx = c[vertex * 2]! - c[cursor.from * 2]!,
-        dy = c[vertex * 2 + 1]! - c[cursor.from * 2 + 1]!;
-      const full = Math.hypot(dx, dy);
-      cursor.hx = dx / full;
-      cursor.hy = dy / full;
-      if (
-        curbScenes ||
-        curveLine !== cursor.line ||
-        curveFrom !== cursor.from ||
-        curveDir !== cursor.dir ||
-        curveNext !== cursor.next ||
-        curveCame !== cursor.came
-      ) {
-        curveLine = cursor.line;
-        curveFrom = cursor.from;
-        curveDir = cursor.dir;
-        curveNext = cursor.next;
-        curveCame = cursor.came;
-        offset = this.lookaheadOffset(cursor, m) * pm;
-        behind = this.curvable[cursor.line] ? this.corner(cursor, cursor.from, m) : undefined;
-        front = this.curvable[cursor.line] ? this.corner(cursor, vertex, m) : undefined;
-      }
-      let delta = Math.min(remaining, (range - ahead) * pm);
-      // Reusing a longer courtesy path must retain the physical query's exact final chord.
-      if (physicalRange < range && ahead < physicalRange - 1e-7)
-        delta = Math.min(delta, (physicalRange - ahead) * pm);
-      if (this.curvable[cursor.line]) {
-        if (behind && cursor.d < behind.length - 1e-9)
-          delta = Math.min(delta, pm, behind.length - cursor.d);
-        else if (front && remaining <= front.length + 1e-9) delta = Math.min(delta, pm);
-        else if (front) delta = Math.min(delta, remaining - front.length);
-      }
-      if (delta <= 1e-9) delta = Math.min(remaining, pm);
-      cursor.d += delta;
-      cursor.x = c[cursor.from * 2]! + cursor.hx * cursor.d;
-      cursor.y = c[cursor.from * 2 + 1]! + cursor.hy * cursor.d;
-      // With no curb scene, lane offsets and fillets are constant over this route segment.
-      const next = curbScenes
-        ? this.pose(cursor, undefined, m)
-        : {
-            x: cursor.x - cursor.hy * offset,
-            y: cursor.y + cursor.hx * offset,
-            hx: cursor.hx,
-            hy: cursor.hy,
+        const dx = c[vertex * 2]! - c[cursor.from * 2]!,
+          dy = c[vertex * 2 + 1]! - c[cursor.from * 2 + 1]!;
+        const full = Math.hypot(dx, dy);
+        cursor.hx = dx / full;
+        cursor.hy = dy / full;
+        if (
+          curbScenes ||
+          curveLine !== cursor.line ||
+          curveFrom !== cursor.from ||
+          curveDir !== cursor.dir ||
+          curveNext !== cursor.next ||
+          curveCame !== cursor.came
+        ) {
+          curveLine = cursor.line;
+          curveFrom = cursor.from;
+          curveDir = cursor.dir;
+          curveNext = cursor.next;
+          curveCame = cursor.came;
+          offset = this.offsetOf(cursor, m) * pm;
+          behind = this.curvable[cursor.line] ? this.corner(cursor, cursor.from, m) : undefined;
+          front = this.curvable[cursor.line] ? this.corner(cursor, vertex, m) : undefined;
+        }
+        let delta = Math.min(remaining, (range - ahead) * pm);
+        // Reusing a longer courtesy path must retain the physical query's exact final chord.
+        if (physicalRange < range && ahead < physicalRange - 1e-7)
+          delta = Math.min(delta, (physicalRange - ahead) * pm);
+        if (this.curvable[cursor.line]) {
+          if (behind && cursor.d < behind.length - 1e-9)
+            delta = Math.min(delta, pm, behind.length - cursor.d);
+          else if (front && remaining <= front.length + 1e-9) delta = Math.min(delta, pm);
+          else if (front) delta = Math.min(delta, remaining - front.length);
+        }
+        if (delta <= 1e-9) delta = Math.min(remaining, pm);
+        cursor.d += delta;
+        cursor.x = c[cursor.from * 2]! + cursor.hx * cursor.d;
+        cursor.y = c[cursor.from * 2 + 1]! + cursor.hy * cursor.d;
+        // With no curb scene, lane offsets and fillets are constant over this route segment.
+        if (curbScenes) this.pose(cursor, next, m);
+        else {
+          next.x = cursor.x - cursor.hy * offset;
+          next.y = cursor.y + cursor.hx * offset;
+          next.hx = cursor.hx;
+          next.hy = cursor.hy;
+        }
+        if (!curbScenes) {
+          if (behind && cursor.d <= behind.length) curvePose(behind, cursor.d, next);
+          else if (front && full - cursor.d <= front.length)
+            curvePose(front, -(full - cursor.d), next);
+        }
+        const vx = (next.x - at.x) / pm,
+          vy = (next.y - at.y) / pm,
+          length = Math.hypot(vx, vy);
+        if (length > 1e-9) {
+          yield {
+            x: at.x / pm,
+            y: at.y / pm,
+            hx: vx / length,
+            hy: vy / length,
+            length: Math.min(length, range - ahead),
+            ahead,
+            line: cursor.line,
           };
-      if (!curbScenes) {
-        if (behind && cursor.d <= behind.length) curvePose(behind, cursor.d, next);
-        else if (front && full - cursor.d <= front.length)
-          curvePose(front, -(full - cursor.d), next);
+          ahead += length;
+        }
+        const previous = at;
+        at = next;
+        next = previous;
       }
-      const vx = (next.x - at.x) / pm,
-        vy = (next.y - at.y) / pm,
-        length = Math.hypot(vx, vy);
-      if (length > 1e-9) {
-        yield {
-          x: at.x / pm,
-          y: at.y / pm,
-          hx: vx / length,
-          hy: vy / length,
-          length: Math.min(length, range - ahead),
-          ahead,
-          line: cursor.line,
-        };
-        ahead += length;
-      }
-      at = next;
+    } finally {
+      cursor.momentFacing = undefined;
+      this.pathScratch.push(scratch);
     }
   }
 
   /** Only route geometry is cached; pedestrian positions and crossing timers stay live. */
   private pedestrianSegments(m: Mover, range: number, physicalRange: number) {
-    if (m.v !== 0 || this.scenes.hasCurbScenes || m.momentFacing)
+    if (m.v !== 0 || this.scenes.curbSite(m) !== undefined || m.momentFacing)
       return [...this.pedestrianPath(m, range, physicalRange)];
     const previous = this.stoppedPaths?.get(m);
     const at = previous?.at;
@@ -1305,6 +1342,7 @@ export class TileLife {
         k,
         dt,
         m.pedestrianHolds,
+        (m.v ?? m.speed) / this.perMeter,
       );
     m.pedestrianHolds = crossing?.holds;
     return pedestrianLimit(
@@ -1316,7 +1354,6 @@ export class TileLife {
       k,
       this.perMeter,
       dt,
-      undefined,
       range,
     );
   }
@@ -1334,6 +1371,7 @@ export class TileLife {
           hy: a.hy,
           length: Math.max(length, minimum),
           width: Math.max(width, minimum),
+          kind: i === 0 ? BODY_KIND.fixed : BODY_KIND.human,
         });
       };
       put(0, a.x / this.perMeter, a.y / this.perMeter, cart.length, cart.width);
@@ -1352,7 +1390,7 @@ export class TileLife {
       const train = this.birthBodies(a);
       out.length = train.length;
       train.forEach((b, i) => {
-        out[i] = { ...b, length: Math.max(b.length, minimum) };
+        out[i] = { ...b, length: Math.max(b.length, minimum), kind: BODY_KIND.vehicle };
       });
       return out;
     }
@@ -1369,6 +1407,7 @@ export class TileLife {
         hy: a.hy,
         length: Math.max(size.length, minimum),
         width: Math.max(size.width, minimum),
+        kind: BODY_KIND.animal,
       });
       out.length = 1;
       return out;
@@ -1381,6 +1420,7 @@ export class TileLife {
       b.y /= this.perMeter;
       b.length = Math.max(s.length, minimum);
       b.width = s.width;
+      b.kind = BODY_KIND.vehicle;
       out.length = 1;
       return out;
     }
@@ -1396,6 +1436,7 @@ export class TileLife {
       b.hy = hy;
       b.length = Math.max(memberSize(w.figure).length, minimum);
       b.width = Math.max(memberSize(w.figure).width, minimum);
+      b.kind = BODY_KIND.human;
     }
     out.length = walkers.length;
     return out;
@@ -2383,17 +2424,26 @@ export class TileLife {
 
   private exitOptions(m: Mover, vertex: number): number[] {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
-    const usable = usableLines[m.kind];
-    return (this.ends.get(this.endKey(vertex)) ?? []).filter(
-      (code) =>
-        code !== arrived &&
-        usable.includes(this.geo.kinds[code >> 1]! as LifeLine) &&
-        !(
-          m.kind === 'vehicle' &&
-          this.geo.oneway?.[code >> 1] &&
-          this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
-        ),
+    return (this.ends.get(this.endKey(vertex)) ?? []).filter((code) =>
+      this.legalExit(m, code, arrived),
     );
+  }
+  private legalExit(m: Mover, code: number, arrived: number): boolean {
+    return (
+      code !== arrived &&
+      usableLines[m.kind].includes(this.geo.kinds[code >> 1]! as LifeLine) &&
+      !(
+        m.kind === 'vehicle' &&
+        this.geo.oneway?.[code >> 1] &&
+        this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
+      )
+    );
+  }
+  private hasExit(m: Mover, vertex: number): boolean {
+    const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
+    for (const code of this.ends.get(this.endKey(vertex)) ?? [])
+      if (this.legalExit(m, code, arrived)) return true;
+    return false;
   }
 
   private newRouting(index: number): VehicleRouting {
@@ -3007,10 +3057,9 @@ export class TileLife {
     const pm = this.perMeter;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const k = kinematicsOf(m.vehicle);
-    const stopping = (m.v ?? m.speed) ** 2 / (2 * k.brake * pm);
     if (
-      remaining >= stopping + (VEHICLES[m.vehicle].length / 2 + FOLLOW.minGap + 4) * pm ||
-      this.exitOptions(m, end).length
+      remaining >= terminalReach((m.v ?? m.speed) / pm, VEHICLES[m.vehicle].length, k.brake) * pm ||
+      this.hasExit(m, end)
     )
       return target;
     const room = Math.max(0, remaining - (VEHICLES[m.vehicle].length / 2 + FOLLOW.minGap) * pm);
@@ -3125,12 +3174,8 @@ export class TileLife {
   private terminalLimits(speeds: Float64Array) {
     const pm = this.perMeter;
     const lookahead = (terminalLookaheadM ??= Math.max(
-      ...VEHICLE_TYPES.map(
-        (type) =>
-          TERMINAL_CRUISE_MPS ** 2 / (2 * kinematicsOf(type).brake) +
-          VEHICLES[type].length / 2 +
-          FOLLOW.minGap +
-          4,
+      ...VEHICLE_TYPES.map((type) =>
+        terminalReach(TERMINAL.cruise, VEHICLES[type].length, kinematicsOf(type).brake),
       ),
     ));
     for (const group of this.trafficGroups.values())
@@ -3139,7 +3184,7 @@ export class TileLife {
         if (m.kind !== 'vehicle' || !m.vehicle) continue;
         const remaining =
           (m.dir === 1 ? this.along[this.last(m.line)]! / pm : 0) - this.progress[i]!;
-        if (remaining <= lookahead || (m.v ?? m.speed) > TERMINAL_CRUISE_MPS * pm)
+        if (remaining <= lookahead || (m.v ?? m.speed) > TERMINAL.cruise * pm)
           speeds[i] = this.terminalTarget(m, speeds[i]!, remaining * pm);
       }
   }
@@ -3508,12 +3553,10 @@ export class TileLife {
     )
       return EMPTY_PEDESTRIANS;
     const occupied = new Occupancy();
-    const add = (owner: GroundAgent, attendant = false) => {
+    const add = (owner: GroundAgent) => {
       if (near && !near(owner.x, owner.y)) return;
       const bodies = this.groundBodies(owner);
-      const humans = attendant ? bodies.slice(1) : bodies;
-      for (const b of humans) b.kind = BODY_KIND.human;
-      occupied.set(owner, humans);
+      occupied.set(owner, bodies);
     };
     for (const m of this.movers)
       if (
@@ -3524,7 +3567,7 @@ export class TileLife {
         add(m);
     for (const g of this.gatherers) if (!env?.levels || g.rank < env.levels.places[g.place]) add(g);
     for (const s of this.stalls)
-      if (s.open !== false && (!env?.levels || s.rank < env.levels.person)) add(s, true);
+      if (s.open !== false && (!env?.levels || s.rank < env.levels.person)) add(s);
     return pedestrianView(occupied, 0);
   }
 
@@ -4806,6 +4849,8 @@ export class LifeWorld {
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const reservations = new Map<GroundAgent, readonly Body[]>();
+    // Ordinary attendants are visible query bodies, but are not collision reservations.
+    let queryOnly: Occupancy | undefined;
     const key = this.terrainKey([...this.tiles.keys()]);
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
@@ -4837,20 +4882,7 @@ export class LifeWorld {
     const bodies = (life: TileLife, owner: GroundAgent, out: Body[]) => {
       const o = origin(life);
       life.groundBodies(owner, minimum, out);
-      const moverKind = 'kind' in owner ? owner.kind : undefined;
-      const kind = moverKind
-        ? moverKind === 'person'
-          ? BODY_KIND.human
-          : isWalker(moverKind)
-            ? BODY_KIND.animal
-            : BODY_KIND.vehicle
-        : undefined;
-      const gatherer = 'walker' in owner;
-      for (let i = 0; i < out.length; i++) {
-        const b = out[i]!;
-        b.kind = kind ?? (gatherer || i > 0 ? BODY_KIND.human : BODY_KIND.fixed);
-        toRef(o, b);
-      }
+      for (const b of out) toRef(o, b);
       return out;
     };
     if (rebuild) this.revalidateTerrain();
@@ -4891,7 +4923,13 @@ export class LifeWorld {
         ) {
           if (allBodies || life.seasonalStalls.includes(s)) {
             if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
-          } else standing(s, 'cart');
+          } else {
+            standing(s, 'cart');
+            if (inView(s) && this.owns(life, s)) {
+              const attendant = life.groundBodies(s, minimum)[1]!;
+              (queryOnly ??= new Occupancy()).set(s, [toRef(o, attendant)]);
+            }
+          }
         }
       }
       if (fresh?.has(life)) continue;
@@ -5003,6 +5041,7 @@ export class LifeWorld {
         }
       }
       if (reserve) {
+        queryOnly?.delete(identity);
         const reserved = reservations.get(identity);
         occupied.set(identity, reserved ? [...next, ...reserved] : next);
         pair.trial = pair.live;
@@ -5012,6 +5051,7 @@ export class LifeWorld {
     };
     const remove = (owner: object) => {
       occupied.delete(owner);
+      queryOnly?.delete(owner);
       reservations.delete(owner as GroundAgent);
     };
     const reserveSeam = (life: TileLife, preview: Mover, identity: Mover) => {
@@ -5022,7 +5062,8 @@ export class LifeWorld {
     const views = new Map<TileLife, PedestrianView>();
     const pedestrians = (life: TileLife) => {
       let view = views.get(life);
-      if (!view) views.set(life, (view = pedestrianView(occupied, minimum, origin(life))));
+      if (!view)
+        views.set(life, (view = pedestrianView(occupied, minimum, origin(life), queryOnly)));
       return view;
     };
     if (!this.profiler) return Object.assign(check, { remove, reserveSeam, pedestrians });

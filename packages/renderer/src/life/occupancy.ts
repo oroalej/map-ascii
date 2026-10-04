@@ -47,7 +47,7 @@ export function boundsOf(points: readonly Point[]): [number, number, number, num
 /** Spatial-hash bin size, m. */
 const BIN_M = 12;
 /** The bins `points` span, padded by `pad` m, row by row. Keys are numeric (bins within ±32768). */
-function binKeys(points: readonly Point[], pad = 0, out: number[] = []): number[] {
+export function binKeys(points: readonly Point[], pad = 0, out: number[] = []): number[] {
   let x0 = Infinity,
     y0 = Infinity,
     x1 = -Infinity,

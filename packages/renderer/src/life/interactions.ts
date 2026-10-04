@@ -22,6 +22,8 @@ export const INTERACTIONS = {
   terminalQueue: 3,
   /** Begin service only after the vehicle has completed its approach, m/s. */
   arrivalSpeed: 0.1,
+  /** Blend a transit vehicle from its ordinary lane toward the curb over this distance, m. */
+  curbBlend: 20,
   /** Seconds a vehicle serves a stop, and a customer spends at a stall. */
   dwell: [8, 15],
   purchase: [3, 6],
@@ -640,24 +642,24 @@ export class LocalScenes {
     return this.graph.clear(from, to);
   }
   offset(m: Mover, normal: number, curb: number): number {
-    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
-    if (!site) return normal;
-    const blend = Math.max(0, 1 - dist(m, site) / (20 * this.perMeter));
-    return normal + (curb - normal) * blend;
+    return this.offsetAt(m, m, normal, curb);
+  }
+  curbSite(m: Mover): WalkPoint | undefined {
+    return this.services.get(m)?.site ?? this.stopCooldown.get(m);
   }
   /** Evaluate a future pose without substituting a copy for the service owner. */
   offsetAt(m: Mover, at: WalkPoint, normal: number, curb: number): number {
-    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
+    const site = this.curbSite(m);
     if (!site) return normal;
-    const blend = Math.max(0, 1 - dist(at, site) / (20 * this.perMeter));
+    const blend = Math.max(0, 1 - dist(at, site) / (INTERACTIONS.curbBlend * this.perMeter));
     return normal + (curb - normal) * blend;
   }
   get hasCurbScenes(): boolean {
     return this.services.size > 0 || this.stopCooldown.size > 0;
   }
   merging(m: Mover): boolean {
-    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
-    return !!site && dist(m, site) < 20 * this.perMeter;
+    const site = this.curbSite(m);
+    return !!site && dist(m, site) < INTERACTIONS.curbBlend * this.perMeter;
   }
   hidden(m: Mover): boolean {
     return this.visits.get(m)?.state === 'aboard';

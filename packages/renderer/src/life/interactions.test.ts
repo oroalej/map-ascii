@@ -54,6 +54,23 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('keeps curb-service ownership and offset blending local to the vehicle', () => {
+    const scene = setup(),
+      bus = { ...person(40, 'vehicle'), vehicle: 'bus' as const };
+    const other = { ...bus };
+    const site = scene.sites[0]!;
+    scene.services.set(bus, { site, time: 0, boarded: 0, arriving: false });
+    expect(scene.hasCurbScenes).toBe(true);
+    expect(scene.curbSite(bus)).toBe(site);
+    expect(scene.curbSite(other)).toBeUndefined();
+    expect(scene.offset(bus, 1, 3)).toBe(scene.offsetAt(bus, bus, 1, 3));
+    expect(scene.offsetAt(bus, site, 1, 3)).toBe(3);
+    expect(scene.offsetAt(other, site, 1, 3)).toBe(1);
+    scene.step(0.1, [bus], {});
+    expect(scene.services.has(bus)).toBe(false);
+    expect(scene.curbSite(bus)).toBe(site);
+    expect(scene.curbSite(other)).toBeUndefined();
+  });
   it('waits for accepted arrival speed before starting transit dwell', () => {
     const scene = setup(),
       bus = { ...person(45, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const, v: 3 };

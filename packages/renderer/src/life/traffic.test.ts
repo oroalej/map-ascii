@@ -46,6 +46,17 @@ function corner(split: boolean) {
 }
 
 describe('curved traffic', () => {
+  it('distinguishes legal exits from incoming-only roads without terminal option arrays', () => {
+    const { life, m } = corner(true);
+    const terminal = life as unknown as {
+      terminalTarget(m: Mover, target: number, remaining: number): number;
+    };
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBe(8 * pm);
+    life.geo.oneway![1] = -1;
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBeLessThan(8 * pm);
+    life.geo.oneway![1] = 1;
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBe(8 * pm);
+  });
   it('starts an uninitialized vehicle at its safe target before a closed one-way endpoint', () => {
     const { life, m } = corner(false);
     life.geo.oneway![0] = 1;

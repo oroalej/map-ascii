@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LifeWorld, type TileLife, type Mover, type WorldGroundGuard } from './simulate';
+import {
+  LifeWorld,
+  type TileLife,
+  type Mover,
+  type Stall,
+  type Gatherer,
+  type WorldGroundGuard,
+} from './simulate';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import { FrameProfiler } from '../profile';
 import { frameBetween } from './frames';
@@ -61,6 +68,188 @@ function guard(world: LifeWorld) {
   return (world as unknown as { groundGuard(minimum: number): WorldGroundGuard }).groundGuard(0.9);
 }
 describe('live pedestrian readers', () => {
+  it('reuses prepared conversions across readers but converts mutable query geometry again', () => {
+    const f = crossingFixture(),
+      frame = { x: 10, y: 20, scale: 2 };
+    const crossing = [...f.crossings.along(f.path, 1.2).keys()][0]!;
+    const local = f.body(0, 3.5),
+      owner = {},
+      occupied = new Occupancy();
+    const body = {
+      ...local,
+      x: frame.x + local.x * frame.scale,
+      y: frame.y + local.y * frame.scale,
+      length: local.length * frame.scale,
+      width: local.width * frame.scale,
+    };
+    occupied.set(owner, [body]);
+    const calls = vi.spyOn(occupied, 'someInArea');
+    for (let i = 0; i < 2; i++) {
+      const reader = pedestrianView(occupied, 0.9, frame);
+      expect(
+        reader.walkersInArea(crossing.polygon, (b) => b.x === local.x && b.width === local.width),
+      ).toBe(true);
+    }
+    expect(calls.mock.calls[1]![0]).toBe(calls.mock.calls[0]![0]);
+    const mutable = crossing.polygon.map((ring) => ring.map((p) => ({ ...p })));
+    const reader = pedestrianView(occupied, 0.9, frame);
+    expect(reader.walkersInArea(mutable)).toBe(true);
+    for (const ring of mutable) for (const p of ring) p.x += 100;
+    expect(reader.walkersInArea(mutable)).toBe(false);
+    expect(calls.mock.calls[3]![0]).not.toBe(calls.mock.calls[2]![0]);
+    body.x += 100 * frame.scale;
+    occupied.set(owner, [body]);
+    expect(reader.walkersInArea(crossing.polygon)).toBe(false);
+  });
+  it('queries distant humans once and retains footprint and bend intersections after live updates', () => {
+    const occupied = new Occupancy(),
+      view = pedestrianView(occupied, 0.9);
+    const owner = {},
+      body: Body = { x: 100, y: 100, hx: 1, hy: 0, length: 1, width: 1, kind: BODY_KIND.human };
+    occupied.set(owner, [body]);
+    const path: PedestrianSegment[] = [
+      { x: 0, y: 0, hx: 1, hy: 0, length: 15, ahead: 0, line: 0 },
+      { x: 15, y: 0, hx: 0, hy: 1, length: 15, ahead: 15, line: 0 },
+    ];
+    const regions = vi.spyOn(occupied, 'someInArea'),
+      corridors = vi.spyOn(occupied, 'nearestInCorridor');
+    expect(pedestrianLimit(view, path, 1.2, 4.4, 8, kinematicsOf('car'), 1, 0.1, 30)).toBe(8);
+    expect(regions).toHaveBeenCalledTimes(1);
+    expect(corridors).not.toHaveBeenCalled();
+    body.x = 15;
+    body.y = 5;
+    occupied.set(owner, [body]);
+    expect(view.walkersAlong!(path, 1.2, 30)).toBeCloseTo(19.5);
+    body.x = 32;
+    body.y = 0;
+    body.length = 8;
+    occupied.set(owner, [body]);
+    expect(view.walkersAlong!([{ ...path[0]!, length: 30 }], 1.2, 30)).toBeCloseTo(28);
+    occupied.delete(owner);
+    expect(view.walkersAlong!(path, 1.2, 30)).toBe(Infinity);
+    expect(view.empty).toBe(true);
+  });
+  it('rewrites body tags in reused buffers and filters animals through both readers', () => {
+    const {
+      world,
+      lives: [life],
+    } = population();
+    const human = person(life!),
+      out: Body[] = [];
+    for (const kind of ['cat', 'dog'] as const) {
+      const animal = { ...human, kind, group: undefined };
+      life!.movers.push(animal);
+      expect(life!.groundBodies(animal, 0.9, out)[0]?.kind).toBe(BODY_KIND.animal);
+      const local = (
+        life as unknown as { standalonePedestrians(): PedestrianView }
+      ).standalonePedestrians();
+      for (const view of [guard(world).pedestrians(life!), local])
+        expect(
+          view.walkersAhead(human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
+        ).toBe(Infinity);
+      life!.movers.length = 0;
+    }
+    expect(life!.groundBodies(human, 0.9, out)[0]?.kind).toBe(BODY_KIND.human);
+    const stall: Stall = {
+      x: human.x,
+      y: human.y,
+      hx: 1,
+      hy: 0,
+      side: 1,
+      rank: 0,
+      paint: 0,
+      shirt: 0,
+    };
+    expect(life!.groundBodies(stall, 0.9, out).map((b) => b.kind)).toEqual([
+      BODY_KIND.fixed,
+      BODY_KIND.human,
+    ]);
+    const gatherer: Gatherer = {
+      x: human.x,
+      y: human.y,
+      hx: 1,
+      hy: 0,
+      speed: 0,
+      pause: 100,
+      rank: 0,
+      place: 'bench',
+      behavior: 'sit',
+      cx: human.x,
+      cy: human.y,
+      inner: 0,
+      outer: 0,
+      tx: human.x,
+      ty: human.y,
+      walked: 0,
+      walker: human.group![0]!,
+      rx: 0,
+      ry: 0,
+      sign: 1,
+    };
+    expect(life!.groundBodies(gatherer, 0.9, out)[0]?.kind).toBe(BODY_KIND.human);
+    life!.gatherers.push(gatherer);
+    const local = (
+      life as unknown as { standalonePedestrians(): PedestrianView }
+    ).standalonePedestrians();
+    for (const view of [guard(world).pedestrians(life!), local])
+      expect(
+        view.walkersAhead(human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
+      ).toBeCloseTo(9.55);
+  });
+  it('exposes an ordinary attendant to both readers without adding collision footprints', () => {
+    const { world, life, car, human } = pedestrianWorld(-9.5);
+    life.movers.splice(life.movers.indexOf(human), 1);
+    const stall: Stall = {
+      x: human.x + 1.3 * life.perMeter,
+      y: human.y,
+      hx: 0,
+      hy: 1,
+      side: 1,
+      rank: 0,
+      paint: 0,
+      shirt: 0,
+    };
+    life.stalls.push(stall);
+    expect(life.canIdle(stall)).toBe(true);
+    const g = guard(world),
+      view = g.pedestrians(life);
+    const local = (
+      life as unknown as { standalonePedestrians(): PedestrianView }
+    ).standalonePedestrians();
+    for (const reader of [view, local]) {
+      expect(
+        reader.walkersAhead(human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 0.1, 30),
+      ).toBeCloseTo(9.5);
+      expect(
+        reader.walkersAhead(
+          stall.x / life.perMeter - 10,
+          stall.y / life.perMeter - 1,
+          1,
+          0,
+          0.05,
+          30,
+        ),
+      ).toBe(Infinity);
+    }
+    // The original movement guard reserves the cart alone, so this legal attendant overlap stays legal.
+    expect(g(life, human)).toBe(true);
+    g.remove(human);
+    const snapshot = structuredClone(stall);
+    world.step(0.1, undefined, 18);
+    expect(car.pedestrianHolds).toHaveLength(1);
+    expect(car.v! / life.perMeter).toBeLessThan(8);
+    expect(stall).toEqual(snapshot);
+    g.remove(stall);
+    expect(
+      view.walkersAhead(human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 1, 30),
+    ).toBe(Infinity);
+    stall.open = false;
+    expect(guard(world).pedestrians(life).empty).toBe(true);
+    expect(
+      (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians()
+        .empty,
+    ).toBe(true);
+  });
   it('reads a returning person when the world view starts empty', () => {
     const { world, life, car, human } = pedestrianWorld(3.5);
     let hidden = true;
@@ -179,18 +368,6 @@ function brakingFixture(craft: 'car' | 'bus' = 'car', distance = 15) {
     LifeLine.roadMajor,
     14,
   );
-  const pm = 1 / metersPerUnit(tile);
-  // A legal stationary footprint: crossing-entry behavior has separate full-width fixtures.
-  const x = 1000 + distance * pm,
-    y = 2000 + laneOffset(14, VEHICLES[craft].width, 0) * pm;
-  builder.area('crossing', [
-    [
-      { x: x - 0.55 * pm, y: y - 0.6 * pm },
-      { x: x + 0.55 * pm, y: y - 0.6 * pm },
-      { x: x + 0.55 * pm, y: y + 0.6 * pm },
-      { x: x - 0.55 * pm, y: y + 0.6 * pm },
-    ],
-  ]);
   const world = new LifeWorld();
   world.sync([{ key: 'braking', tile, life: builder.finish() }]);
   const life = worldTiles(world).get('braking')!;
@@ -221,6 +398,7 @@ describe('pedestrian braking targets', () => {
       for (let frame = 0; frame < hz * 6; frame++) {
         world.step(1 / hz, undefined, 18, undefined, undefined, undefined, 0.9);
         const v = car.v! / life.perMeter;
+        expect(car.pedestrianHolds).toBeUndefined();
         expect(before - v).toBeLessThanOrEqual(kinematicsOf('car').maxBrake / hz + 1e-6);
         expect(bodiesOverlap(life.groundBodies(car)[0]!, life.groundBodies(human)[0]!, 0)).toBe(
           false,
@@ -257,7 +435,7 @@ describe('pedestrian braking targets', () => {
   it('retains curb-service identity while predicting the actual lane path', () => {
     const { life, car } = brakingFixture();
     const original = structuredClone(car);
-    const curbScene = vi.spyOn(life.scenes, 'hasCurbScenes', 'get').mockReturnValue(true);
+    const curbScene = vi.spyOn(life.scenes, 'curbSite').mockReturnValue(car);
     const offset = vi
       .spyOn(life.scenes, 'offsetAt')
       .mockImplementation((owner, at, normal, curb) =>
@@ -328,11 +506,24 @@ describe('pedestrian braking targets', () => {
       pedestrianPath(m: Mover, range: number, physicalRange?: number): Iterable<PedestrianSegment>;
     };
     const path = [...tracer.pedestrianPath(car, 20)];
-    const uncached = vi.spyOn(life.scenes, 'hasCurbScenes', 'get').mockReturnValue(true);
+    const other = { ...car, d: car.d - life.perMeter, x: car.x - life.perMeter };
+    const expectedOther = [...tracer.pedestrianPath(other, 20)];
+    const a = tracer.pedestrianPath(car, 20)[Symbol.iterator]();
+    const first = a.next();
+    if (first.done) throw new Error('Expected a curved lookahead segment');
+    expect([...tracer.pedestrianPath(other, 20)]).toEqual(expectedOther);
+    const rest: PedestrianSegment[] = [];
+    for (let step = a.next(); !step.done; step = a.next()) rest.push(step.value);
+    expect([first.value, ...rest]).toEqual(path);
+    const uncached = vi.spyOn(life.scenes, 'curbSite').mockReturnValue(car);
+    const unchangedOffset = vi
+      .spyOn(life.scenes, 'offsetAt')
+      .mockImplementation((_, __, normal) => normal);
     try {
       expect(path).toEqual([...tracer.pedestrianPath(car, 20)]);
     } finally {
       uncached.mockRestore();
+      unchangedOffset.mockRestore();
     }
     expect(path.some((p) => p.line === 1)).toBe(true);
     expect(path.some((p) => p.hx > 0.1 && p.hy > 0.1)).toBe(true);
@@ -356,7 +547,6 @@ describe('pedestrian braking targets', () => {
         kinematicsOf('car'),
         life.perMeter,
         1 / 30,
-        undefined,
         range,
       );
       return calls;
@@ -387,6 +577,13 @@ describe('pedestrian braking targets', () => {
     };
     car.v = 0;
     expect(stopped.pedestrianSegments(car, 20, 20)).toEqual(path);
+    const cached = stopped.pedestrianSegments(car, 20, 20);
+    const unrelated = vi.spyOn(life.scenes, 'hasCurbScenes', 'get').mockReturnValue(true);
+    try {
+      expect(stopped.pedestrianSegments(car, 20, 20)).toBe(cached);
+    } finally {
+      unrelated.mockRestore();
+    }
     // A stopped vehicle can receive a new committed exit without moving.
     car.next = -1;
     expect(stopped.pedestrianSegments(car, 20, 20)).toEqual([...tracer.pedestrianPath(car, 20)]);
@@ -449,6 +646,44 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   return { pm, crossings, path, occupied, view, body, limit };
 }
 describe('unsignalised pedestrian crossings', () => {
+  for (const [centre, speed] of [
+    [0, 3],
+    [-3.2, 3],
+    [-6, 8],
+  ] as const)
+    it(`clears a late crossing arrival from ${centre} m at ${speed} m/s`, () => {
+      const { world, life, car } = pedestrianWorld(-9.5);
+      car.x = car.d = 2000 + centre * life.perMeter;
+      car.v = speed * life.perMeter;
+      const start = car.x;
+      world.step(0.1, undefined, 18);
+      expect(car.pedestrianHolds?.[0]?.committed).toBe(true);
+      const record = car.pedestrianHolds![0]!;
+      for (let i = 0; i < 40; i++) {
+        const previous = car.v / life.perMeter;
+        world.step(0.1, undefined, 18);
+        expect(car.v / life.perMeter).toBeGreaterThan(0);
+        expect(Math.abs(car.v / life.perMeter - previous)).toBeLessThanOrEqual(
+          kinematicsOf('car').maxBrake * 0.1 + 1e-6,
+        );
+        if (car.pedestrianHolds) expect(car.pedestrianHolds[0]?.committed).toBe(true);
+      }
+      expect(record.committed).toBe(true);
+      expect(car.x).toBeGreaterThan(start + 10 * life.perMeter);
+      expect(car.pedestrianHolds).toBeUndefined();
+      expect(life.motionStats.hardCaps).toBe(0);
+    });
+  it('keeps lane braking active for a committed crossing', () => {
+    const f = crossingFixture();
+    f.path[0]!.x += 12;
+    f.occupied.set({}, [f.body(0, -9.5), f.body(10, 3.5)]);
+    const crossing = f.limit();
+    expect(crossing.holds?.[0]?.committed).toBe(true);
+    expect(crossing.target).toBe(8 * f.pm);
+    expect(
+      pedestrianLimit(f.view, f.path, 1.2, 4.4, crossing.target, kinematicsOf('car'), f.pm, 0.1),
+    ).toBeLessThan(crossing.target);
+  });
   it('matches direct and indexed road associations for rotated and reverse lookahead', () => {
     const pm = 1 / metersPerUnit(tile),
       angle = Math.PI / 4,
@@ -629,6 +864,7 @@ describe('unsignalised pedestrian crossings', () => {
       owner = {};
     f.occupied.set(owner, [f.body(0, -9.5)]);
     const held = f.limit();
+    const saved = structuredClone(held);
     expect(held.holds).toHaveLength(1);
     const shortened = f.crossings.limit(
       f.view,
@@ -642,6 +878,7 @@ describe('unsignalised pedestrian crossings', () => {
       held.holds,
     );
     expect(shortened.holds?.[0]?.elapsed).toBe(0.2);
+    expect(held).toEqual(saved);
     f.occupied.set(owner, [f.body(0, -9.5, 0, -1)]);
     const released = f.limit(held.holds);
     expect(released.target / f.pm).toBe(8);
