@@ -469,7 +469,25 @@ describe('birds and the world', () => {
 
   it('lands pigeons on the ground, and flushes them when someone walks by', () => {
     const { life, flock } = withFlock('pigeon');
-    Object.assign(flock, { landed: true, x: park[0], y: park[1], stay: 1000 });
+    Object.assign(flock, {
+      landed: true,
+      x: park[0],
+      y: park[1],
+      lx: park[0],
+      ly: park[1],
+      feeding: true,
+      bout: 20,
+      stay: 1000,
+    });
+    for (const bird of flock.birds)
+      Object.assign(bird, {
+        gx: bird.ox,
+        gy: bird.oy,
+        tx: bird.ox,
+        ty: bird.oy,
+        face: bird.phase * 6,
+        wait: 1,
+      });
     const levels = activityLevels(1);
     life.step(0.1, undefined, onlyBirds, undefined, { levels, rain: 0 });
     expect(flock.landed).toBe(true);
