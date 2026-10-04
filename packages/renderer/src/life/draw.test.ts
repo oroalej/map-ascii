@@ -59,13 +59,94 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
-  it.fails('draws two miniature cars sharing a cell when an adjacent cell is available', () => {
+  it('translates a small speaking group rigidly, retaining bytes, members, focus and candle clocks', () => {
+    const a: VisibleAgent = {
+      kind: 'person',
+      lng: 2.5,
+      lat: 2.5,
+      flap: 0,
+      candle: true,
+      effectClock: 10,
+      speech: { id: 'retry', exchangeId: 'retry', line: 0, member: 1 },
+      people: [
+        { figure: 'adult', paint: 1, lateral: 0, back: 0, flap: 0 },
+        { figure: 'adult', paint: 2, lateral: 1, back: 0, flap: 1 },
+      ],
+    };
+    const blocker = {
+      kind: 'vehicle' as const,
+      vehicle: 'car' as const,
+      lng: 2.5,
+      lat: 2.5,
+      flap: 0,
+    };
+    const isolated = new Uint8Array(200),
+      translated = isolated.slice();
+    const speakers = { members: new Uint8Array(50), points: new Map<number, [number, number]>() };
+    const owners = new Uint32Array(50),
+      clocked: number[] = [];
+    packLife(isolated, { ...grid, speakers }, [a], themes.dark, glyphIndex, null, undefined, {
+      owners,
+      focus: new Set(['people']),
+      clockCells: clocked,
+    });
+    const originalCells = [...owners.entries()]
+      .filter(([, owner]) => owner === 1)
+      .map(([cell]) => cell);
+    const point = speakers.points.get(1)!;
+    const members = speakers.members.slice();
+    const originalClocks = clocked.slice();
+    expect(
+      packLife(
+        translated,
+        {
+          ...grid,
+          speakers,
+          allowsGroundCell: (agent, _col, row) => agent === blocker || row === 1,
+        },
+        [blocker, a],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners, focus: new Set(['people']), clockCells: clocked },
+      ),
+    ).toBe(3);
+    for (const cell of originalCells) {
+      const shifted = cell - grid.cols;
+      expect(translated.slice(shifted * 4, shifted * 4 + 4)).toEqual(
+        isolated.slice(cell * 4, cell * 4 + 4),
+      );
+      expect(owners[shifted]).toBe(2);
+      expect(speakers.members[shifted]).toBe(members[cell]);
+    }
+    expect(speakers.points.get(2)).toEqual([point[0], point[1] - 1]);
+    expect(clocked).toEqual(originalClocks.map((cell) => cell - grid.cols));
+    // No room: every failed candidate leaves the original blocker and metadata intact.
+    expect(
+      packLife(
+        translated,
+        { ...grid, speakers, allowsGroundCell: (agent) => agent === blocker },
+        [blocker, a],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners, clockCells: clocked },
+      ),
+    ).toBe(1);
+    expect(speakers.points.has(2)).toBe(false);
+    expect(speakers.members.every((member) => member === 0)).toBe(true);
+    expect(clocked).toEqual([]);
+    expect([...owners].filter(Boolean)).toEqual([1]);
+  });
+  it('draws two miniature cars sharing a cell when an adjacent cell is available', () => {
     const a: VisibleAgent = { kind: 'vehicle', vehicle: 'car', lng: 2.2, lat: 2.2, flap: 0 };
     const b = { ...a, lng: 2.4 };
     const out = new Uint8Array(200);
     expect(packLife(out, grid, [a, b], themes.dark, glyphIndex)).toBe(2);
   });
-  it.fails('draws a curbside walker when an adjacent permitted cell is available', () => {
+  it('draws a curbside walker when an adjacent permitted cell is available', () => {
     const out = new Uint8Array(200);
     const person: VisibleAgent = { kind: 'person', lng: 4.8, lat: 2, flap: 0 };
     expect(
@@ -90,7 +171,8 @@ describe('packLife', () => {
       b = a.slice();
     const ga = {
       ...grid,
-      allowsGroundCell: (_agent: VisibleAgent, col: number) => col < 5,
+      allowsGroundCell: (agent: VisibleAgent, col: number, row: number) =>
+        agent === agents[2] ? false : agent === agents[1] ? col === 2 && row === 2 : col < 5,
       owners: new Uint32Array(50),
     };
     const gb = { ...ga, owners: new Uint32Array(50), outcomes };
@@ -154,8 +236,13 @@ describe('packLife', () => {
     const out = new Uint8Array(200),
       owners = new Uint32Array(50);
     const plain = new Uint8Array(200);
-    packLife(plain, grid, agents, themes.dark, glyphIndex);
-    packLife(out, grid, agents, themes.dark, glyphIndex, null, undefined, { owners });
+    const confined = {
+      ...grid,
+      allowsGroundCell: (agent: VisibleAgent, col: number, row: number) =>
+        agent !== agents[2] || (col === 2 && row === 1),
+    };
+    packLife(plain, confined, agents, themes.dark, glyphIndex);
+    packLife(out, confined, agents, themes.dark, glyphIndex, null, undefined, { owners });
     expect(out).toEqual(plain);
     expect(owners[12]).toBe(1);
     expect(owners[17]).toBe(2);
@@ -418,12 +505,12 @@ describe('packLife dogs and shadows', () => {
     });
     const out = new Uint8Array(big.cols * big.rows * 4);
     for (const pet of [dog(0.5), { ...dog(0.5), kind: 'cat' as const }]) {
-      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(1);
+      expect(packLife(out, big, [pet, car(20)], themes.dark, glyphIndex)).toBe(2);
       expect(cellOf(out, 20, 15)[1]).toBe(classId('life_person'));
-      expect(packLife(out, big, [car(20), pet], themes.dark, glyphIndex)).toBe(1);
+      expect(packLife(out, big, [car(20), pet], themes.dark, glyphIndex)).toBe(2);
       expect(cellOf(out, 20, 15)[1]).toBe(classId('life_vehicle'));
     }
-    expect(packLife(out, big, [car(20), car(20.2)], themes.dark, glyphIndex)).toBe(1);
+    expect(packLife(out, big, [car(20), car(20.2)], themes.dark, glyphIndex)).toBe(2);
   });
 
   it('stamps a dog at its real size up close', () => {

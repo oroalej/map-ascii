@@ -49,7 +49,10 @@ it('keeps people and parked cars separate even when they collapse into one ASCII
     side: [15, 15.1] as [number, number],
   };
   const person: VisibleAgent = { kind: 'person', lng: 15, lat: 15, flap: 0 };
-  expect(draw([person, car])).toEqual(draw([car]));
+  const together = draw([person, car]);
+  expect(together.count).toBe(2);
+  const at = (15 * grid.cols + 15) * 4;
+  expect(together.out.slice(at, at + 4)).toEqual(draw([car]).out.slice(at, at + 4));
 });
 
 it('preserves separate people and cars that fit beside each other', () => {
@@ -87,7 +90,7 @@ it('rejects the complete walking group when one member touches a forbidden road 
   expect(
     packLife(
       out,
-      { ...grid, allowsGroundCell: (_agent, _col, row) => row < 17 },
+      { ...grid, allowsGroundCell: (_agent, _col, row) => row < 16 },
       [person],
       themes.dark,
       () => 1,

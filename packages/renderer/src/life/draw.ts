@@ -133,6 +133,7 @@ function writeCell(
 let groundCells = new Uint8Array(0);
 let drawingSpeakers: SpeakerGrid | undefined;
 let drawingMember = 0;
+let drawingMini = false;
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
@@ -220,6 +221,8 @@ export function packLife(
           agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
         drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
         drawingMember = 0;
+        drawingMini = false;
+        const clockStart = clockCells?.length ?? 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
@@ -244,14 +247,77 @@ export function packLife(
                 : PackingOutcome.outside;
         if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
-        else if (journal.denied)
+        else if (journal.denied) {
+          const retry =
+            n > 0 &&
+            journal.before.size <= 4 &&
+            !agent.parked &&
+            !agent.aboard &&
+            !agent.vehicle?.includes('cart') &&
+            !agent.prop &&
+            !agent.line &&
+            !agent.people?.some((look) => look.figure === 'seated') &&
+            (drawingMini || (isWalker(agent.kind) && !agent.vehicle));
+          // Save the already projected raster; retrying drawAgent would change its scale
+          // and heading under an anisotropic projection.
+          const payload = retry
+            ? [...journal.before.keys()].map((at) => ({
+                at,
+                bytes: out.slice(at, at + 4),
+                member: drawingSpeakers?.members[at / 4] ?? 0,
+              }))
+            : undefined;
+          const point = drawingSpeakers?.points.get(drawingOwner);
+          const clocked = retry ? clockCells?.slice(clockStart) : undefined;
+          if (clockCells) clockCells.length = clockStart;
+          drawingSpeakers?.points.delete(drawingOwner);
           for (const [at, previous] of journal.before) {
             // The fifth journal value is CPU ownership, never a fifth texture byte.
             for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
             if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
             if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
           }
-        else {
+          if (payload) {
+            const [col, row] = grid.toCell(agent.lng, agent.lat);
+            const offsets = [
+              [1, 0],
+              [-1, 0],
+              [0, 1],
+              [0, -1],
+            ] as const;
+            const distance = ([dx, dy]: readonly [number, number]) =>
+              (Math.floor(col) + dx + 0.5 - col) ** 2 + (Math.floor(row) + dy + 0.5 - row) ** 2;
+            for (const [dx, dy] of [...offsets].sort((a, b) => distance(a) - distance(b))) {
+              if (
+                !payload.every(({ at }) => {
+                  const c = ((at / 4) % grid.cols) + dx,
+                    r = Math.floor(at / 4 / grid.cols) + dy;
+                  return (
+                    c >= 0 &&
+                    r >= 0 &&
+                    c < grid.cols &&
+                    r < grid.rows &&
+                    !groundCells[r * grid.cols + c] &&
+                    (!grid.allowsGroundCell || grid.allowsGroundCell(agent, c, r))
+                  );
+                })
+              )
+                continue;
+              for (const { at, bytes, member } of payload) {
+                const shifted = at + (dy * grid.cols + dx) * 4;
+                out.set(bytes, shifted);
+                groundCells[shifted / 4] = 1;
+                if (drawingOwners) drawingOwners[shifted / 4] = drawingOwner;
+                if (drawingSpeakers) drawingSpeakers.members[shifted / 4] = member;
+              }
+              if (point) drawingSpeakers?.points.set(drawingOwner, [point[0] + dx, point[1] + dy]);
+              if (clocked) for (const cell of clocked) clockCells!.push(cell + dy * grid.cols + dx);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += n;
+              break;
+            }
+          }
+        } else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
         }
@@ -265,6 +331,7 @@ export function packLife(
     drawingFocus = 0;
     drawingSpeakers = undefined;
     drawingMember = 0;
+    drawingMini = false;
   }
 }
 
@@ -364,6 +431,7 @@ function drawAgent(
   const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
   if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
+  drawingMini = agent.kind === 'vehicle';
   rememberGroundCell(out, at);
   writeCell(
     out,
