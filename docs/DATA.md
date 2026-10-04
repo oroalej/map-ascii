@@ -457,7 +457,7 @@ Generated files are gitignored (never commit tiles), so builds get them from Git
 
 - `pnpm data:publish [-- --city <slug>]` uploads a city's `apps/web/public/tiles/<slug>.*` (the output of `pnpm data:build`) as a new release `tiles-<slug>-<YYYYMMDD-HHMM>` (not marked latest), then writes `packages/content/cities/<slug>/tiles.lock.json`: the repository, the tag, and each file's sha256. Commit the lock. It needs the GitHub CLI logged in with write access, and does nothing if the files match the current lock.
 - `pnpm data:fetch [-- --city <slug>] [--force]` downloads each locked city's missing files and checks each against its sha256 before writing it. Files that exist but differ from the lock (a local rebuild) are kept with a warning, unless `--force`. A city without a lock only warns. The web app's `build` fetches before rebuilding; unchanged exports skip both fetching and building. CI and Vercel fetch missing tiles on their own.
-- Downloads use `GITHUB_TOKEN` (or `GH_TOKEN`, or the GitHub CLI's login). A private repository needs one: CI passes the workflow's token, and the Vercel project needs a read-only token in its environment.
+- Downloads use `GITHUB_TOKEN` (or `GH_TOKEN`, or the GitHub CLI's login) when available. This repository is public: without a token, downloads use public release URLs; with one, they use the GitHub API, which is required for private repositories. CI passes the workflow's token; Vercel needs a read-only token in its environment only for private repositories.
 - The lock is validated with the city pack (`TilesLock` in `packages/shared`).
 ### Traffic enrichment
 
