@@ -15,6 +15,7 @@ import {
   LIFE_SHADOW,
   lifeClassFor,
   isWalker,
+  UMBRELLA_MOTION,
   type AgentKind,
 } from './config';
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
@@ -382,6 +383,7 @@ function drawPeople(
   let [fx, fy] = [0, -1];
   let along: [number, number] = [0, 0];
   let right: [number, number] = [0, 0];
+  let cellsPerMeter = 1;
   let fits = looks.map(() => figureFit('adult', 1));
   if (agent.ahead) {
     const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
@@ -397,7 +399,7 @@ function drawPeople(
     } else {
       right = [-y / cellWidth, x / cellHeight];
     }
-    const cellsPerMeter = Math.hypot(x, y) / cellWidth;
+    cellsPerMeter = Math.hypot(x, y) / cellWidth;
     fits = looks.map((look) => figureFit(look.figure, FIGURE_SIZE_M[look.figure] * cellsPerMeter));
   }
   const across = fx !== 0;
@@ -409,7 +411,7 @@ function drawPeople(
   // the other end of the stroke (life/people.ts `ROWER`).
   const turned = fx < 0 || fy > 0;
   const stageOf = (look: PersonLook): 0 | 1 | undefined =>
-    look.canopy ? (look.canopy.open < 0.5 ? 0 : 1) : undefined;
+    look.canopy ? (look.canopy.open < UMBRELLA_MOTION.stageCutoff ? 0 : 1) : undefined;
   const byteOf = (look: PersonLook, tone = false) => {
     const umbrella = look.figure === 'umbrella';
     const part = tone
@@ -473,11 +475,33 @@ function drawPeople(
         const under = look.canopy
           ? { ...look, figure: look.canopy.figure, paint: look.canopy.paint }
           : look;
-        any = stampFigure(out, grid, [cx, cy], along, right, under, stroke, glyphIndex, (tone) => [
-          cls,
-          bits,
-          byteOf(under, tone),
-        ]);
+        const underFit = figureFit(under.figure, FIGURE_SIZE_M[under.figure] * cellsPerMeter);
+        if (underFit === 'stamp') {
+          any = stampFigure(
+            out,
+            grid,
+            [cx, cy],
+            along,
+            right,
+            under,
+            stroke,
+            glyphIndex,
+            (tone) => [cls, bits, byteOf(under, tone)],
+          );
+        } else if (underFit === 'big') {
+          any = putBig(under, Math.round(cx) - 1, Math.round(cy) - 1);
+        } else {
+          const glyph = figureGlyph(
+            under.figure,
+            across,
+            frame,
+            { scale: underFit },
+            0,
+            headingOf(fx, fy),
+            under.pose,
+          );
+          any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(under));
+        }
         if (look.canopy) {
           const canopy = stampFigure(
             out,
@@ -489,7 +513,8 @@ function drawPeople(
             stroke,
             glyphIndex,
             (tone) => [cls, bits, byteOf(look, tone)],
-            (0.3 + 0.7 * look.canopy.open) * FIGURE_SIZE_M.umbrella,
+            (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
+              FIGURE_SIZE_M.umbrella,
           );
           any = canopy || any;
         }

@@ -92,6 +92,21 @@ describe('UmbrellaMotion', () => {
     expect(f.motion.look(f.w, false, 2 * UMBRELLA_MOTION.lost + 0.02)).toBe(0);
   });
 
+  it('snaps both endpoints after reset without comparing owner and world clocks', () => {
+    for (const want of [false, true]) {
+      const f = fixture(!want, Object.freeze(walker()));
+      f.at(0, want);
+      const clock = delay(f.w) + UMBRELLA_MOTION.open / 2;
+      const attained = f.at(clock, want);
+      expect(attained).toBeGreaterThan(0);
+      expect(attained).toBeLessThan(1);
+      f.motion.reset();
+      expect(f.motion.look(f.w, want, clock)).toBe(Number(want));
+      expect(f.motion.look(f.w, !want, clock)).toBe(Number(want));
+      expect(f.motion.look(f.w, !want, clock + 0.1)).toBe(Number(want));
+    }
+  });
+
   it('reverses continuously from the attained openness after the new delay', () => {
     for (const opening of [true, false]) {
       const f = fixture(!opening);

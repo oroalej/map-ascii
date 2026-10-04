@@ -3407,6 +3407,7 @@ type GroundTerrain = {
 
 export class LifeWorld {
   private readonly umbrellas = new UmbrellaMotion();
+  private umbrellaMotionVisible = false;
   private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
   setShopSchedule(shops: ShopSchedule | undefined) {
     this.cityLife = shops ? { schedules: { shops } } : undefined;
@@ -5034,6 +5035,26 @@ export class LifeWorld {
     return this.clock;
   }
 
+  /** Fill a walker's ordinary look with its realised canopy, preserving seated figures. */
+  private umbrellaLook(
+    look: PersonLook,
+    walker: Walker,
+    share: number,
+    zoom: number,
+    clock: number,
+  ): PersonLook {
+    if (walker.figure !== 'adult') return look;
+    const want = walker.umbrella < share;
+    const open =
+      zoom >= UMBRELLA_MOTION.zoom ? this.umbrellas.look(walker, want, clock) : Number(want);
+    if (open > 0) {
+      if (open < 1) look.canopy = { open, figure: look.figure, paint: look.paint };
+      look.figure = 'umbrella';
+      look.paint = walker.canopy;
+    }
+    return look;
+  }
+
   /**
    * The agents to draw at `zoom` and time of day: those whose kind shows at the zoom and who
    * are out (config.ts `activityLevels`), movers only inside their own tile (tiles overlap in their
@@ -5050,6 +5071,9 @@ export class LifeWorld {
     crowd = 1,
     maxAgents = MAX_VISIBLE_AGENTS,
   ): VisibleAgent[] {
+    const umbrellaMotionVisible = zoom >= UMBRELLA_MOTION.zoom;
+    if (umbrellaMotionVisible && !this.umbrellaMotionVisible) this.umbrellas.reset();
+    this.umbrellaMotionVisible = umbrellaMotionVisible;
     // A bare number is the daylight, with no clock (config.ts `activityLevels`).
     const levels =
       typeof levelsOrDaylight === 'number' ? activityLevels(levelsOrDaylight) : levelsOrDaylight;
@@ -5123,26 +5147,24 @@ export class LifeWorld {
           });
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
-          const people = m.group.map((w, member): PersonLook => {
-            const want = w.figure === 'adult' && w.umbrella < umbrellas;
-            const open =
-              w.figure === 'adult' && zoom >= UMBRELLA_MOTION.zoom
-                ? this.umbrellas.look(w, want, inspection?.clock(m, this.clock) ?? this.clock)
-                : Number(want);
-            return {
-              figure: open > 0 ? 'umbrella' : w.figure,
-              paint: open > 0 ? w.canopy : w.shirt,
-              lateral: w.lateral,
-              back: w.back,
-              // Standing still, feet together.
-              flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
-              pose: life.momentHost.pose(m, member),
-              ...(open > 0 &&
-                open < 1 && {
-                  canopy: { open, figure: w.figure, paint: w.shirt },
-                }),
-            };
-          });
+          const clock = inspection?.clock(m, this.clock) ?? this.clock;
+          const people = m.group.map((w, member) =>
+            this.umbrellaLook(
+              {
+                figure: w.figure,
+                paint: w.shirt,
+                lateral: w.lateral,
+                back: w.back,
+                // Standing still, feet together.
+                flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+                pose: life.momentHost.pose(m, member),
+              },
+              w,
+              umbrellas,
+              zoom,
+              clock,
+            ),
+          );
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
@@ -5225,23 +5247,23 @@ export class LifeWorld {
           if (!this.owns(life, g)) continue;
           if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
-          const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
-          const open =
-            w.figure === 'adult' && zoom >= UMBRELLA_MOTION.zoom
-              ? this.umbrellas.look(w, shaded, inspection?.clock(g, this.clock) ?? this.clock)
-              : Number(shaded);
           const figure = g.behavior === 'sit' ? 'seated' : w.figure;
           const still = g.pause > 0 || g.behavior === 'sit';
-          const look: PersonLook = {
-            figure: open > 0 ? 'umbrella' : figure,
-            paint: open > 0 ? w.canopy : w.shirt,
-            lateral: 0,
-            back: 0,
-            // Standing still (or sitting), feet together.
-            flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
-            pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
-            ...(open > 0 && open < 1 && { canopy: { open, figure, paint: w.shirt } }),
-          };
+          const look = this.umbrellaLook(
+            {
+              figure,
+              paint: w.shirt,
+              lateral: 0,
+              back: 0,
+              // Standing still (or sitting), feet together.
+              flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+              pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
+            },
+            w,
+            umbrellas,
+            zoom,
+            inspection?.clock(g, this.clock) ?? this.clock,
+          );
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
             // The carabao a pace ahead, its farmer walking beside it.

@@ -12,6 +12,7 @@
  */
 import { doubled, inkAt, turnedPixels, type Heading } from './masters';
 import { Paint } from './vehicles';
+import { UMBRELLA_MOTION } from './config';
 
 /** Walking or seated people, a child, an umbrella, or a paddler with their paddle. */
 export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated';
@@ -454,7 +455,7 @@ export function personGlyphs(): string[] {
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
   if (g.figure === 'umbrella' && g.stage !== undefined) {
-    const rows = canopy(box, g.stage === 0 ? 0.45 : 0.75);
+    const rows = canopy(box, UMBRELLA_MOTION.stages[g.stage]);
     return (x, y) => rows[y]?.[x] ?? '.';
   }
   const posed = poseMasters(g.figure, g.pose);

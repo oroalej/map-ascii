@@ -790,6 +790,39 @@ describe('packLife people', () => {
       }
   });
 
+  it('retains adult and seated slice glyphs beneath a canopy at mixed-fit density', () => {
+    for (const figure of ['adult', 'seated'] as const) {
+      const ordinary = look({ figure, flap: 1, pose: 'gesture' });
+      const before = pack(person(1, 0, 3.9, { people: [ordinary], candle: true }));
+      expect(before.cells).toHaveLength(4);
+      const during = pack(
+        person(1, 0, 3.9, {
+          people: [
+            {
+              ...ordinary,
+              figure: 'umbrella',
+              paint: Paint.blue,
+              canopy: { open: 0.000001, figure, paint: ordinary.paint },
+            },
+          ],
+          candle: true,
+        }),
+      );
+      expect(during.drawn).toBe(1);
+      const uncovered = during.cells.filter((c) => (c.texel[3]! & 15) === Paint.red);
+      expect(uncovered.length).toBeGreaterThan(0);
+      for (const c of uncovered) {
+        expect(c.texel).toEqual(
+          before.cells.find((b) => b.col === c.col && b.row === c.row)!.texel,
+        );
+        expect(figureOf(glyphs[packedGlyph(c.texel)]!)).toMatchObject({ figure });
+      }
+      const canopy = during.cells.filter((c) => (c.texel[3]! & 15) === Paint.blue);
+      expect(canopy.length).toBeGreaterThan(0);
+      for (const c of canopy) expect(sextantGlyphs).toContain(glyphs[packedGlyph(c.texel)]);
+    }
+  });
+
   it('grows a stamped canopy over the underlying figure and preserves whole-agent rollback', () => {
     const packs = [0.2, 0.9].map((open) => {
       const [g, agent] = person(1, 0, 12, {

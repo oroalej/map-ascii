@@ -1466,16 +1466,69 @@ describe('people', () => {
       expect(wet.map((p) => p.figure)).toEqual(['umbrella', 'umbrella', 'adult', 'child']);
       expect(wet.every((p) => !Object.hasOwn(p, 'canopy'))).toBe(true);
       expect(looks(0)).toEqual(wet);
-      let folding = false;
+      const folding = new Map<number, number>();
+      const closingProgress = new Map<number, number>();
       const closingFrames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
       for (let frame = 0; frame < closingFrames; frame++) {
         world.step(0.05);
         const closed = looks(0);
-        folding ||= closed.some((p) => !!p.canopy);
+        const elapsed = (frame + 1) * 0.05;
+        closed.forEach((look, i) => {
+          if (i > 1) {
+            expect(look).toEqual(wet[i]);
+            return;
+          }
+          const delay = ((m.group![i]!.umbrella * 7919.123) % 1) * UMBRELLA_MOTION.stagger;
+          if (elapsed <= delay) expect(look).toEqual(wet[i]);
+          else if (elapsed < delay + UMBRELLA_MOTION.close) {
+            expect(look.canopy).toBeDefined();
+            if (!folding.has(i)) {
+              expect(elapsed).toBeLessThanOrEqual(delay + 0.05);
+              folding.set(i, elapsed);
+            }
+          } else expect(look).toEqual(dry[i]);
+          const open = look.canopy?.open ?? Number(look.figure === 'umbrella');
+          expect(open).toBeLessThanOrEqual(closingProgress.get(i) ?? 1);
+          closingProgress.set(i, open);
+        });
         if (frame === closingFrames - 1) expect(closed).toEqual(dry);
       }
-      expect(folding).toBe(true);
+      expect(folding.size).toBe(2);
     }
+  });
+
+  it('snaps rapid and same-clock close-view reentries to the distant weather in both directions', () => {
+    for (const initialRain of [0, 1])
+      for (const gap of [0, 0.1]) {
+        const world = new LifeWorld();
+        world.sync([{ key: 'reentry', tile, life: across(LifeLine.path) }]);
+        const life = worldTiles(world).get('reentry')!;
+        const m = life.movers.find((m) => m.group)!;
+        life.movers.splice(0, life.movers.length, m);
+        life.stalls.length = 0;
+        life.flocks.length = 0;
+        m.pause = 100;
+        m.rank = 0;
+        m.group = [{ ...m.group![0]!, figure: 'adult', umbrella: 0.23, lateral: 0, back: 0 }];
+        const looks = (zoom: number, rain: number) =>
+          world.visible(zoom, 1, center, { rain, sunAltitude: 20 })[0]!.people!;
+        const original = looks(19, initialRain);
+        expect(looks(19, 1 - initialRain)).toEqual(original);
+        const distant = looks(18, 1 - initialRain);
+        expect(distant[0]!.figure).toBe(initialRain ? 'adult' : 'umbrella');
+        if (gap) world.step(gap);
+        expect(looks(19, 1 - initialRain)).toEqual(distant);
+        expect(looks(19, initialRain)).toEqual(distant);
+        let animated = false;
+        const frames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
+        for (let frame = 0; frame < frames; frame++) {
+          world.step(0.05);
+          const people = looks(19, initialRain);
+          animated ||= !!people[0]!.canopy;
+          if (frame === frames - 1) expect(people).toEqual(original);
+        }
+        expect(animated).toBe(true);
+      }
   });
 
   it('sets up carts beside walking paths, more of them near a market, and omits road vendors', () => {

@@ -281,6 +281,49 @@ describe('per-item inspection', () => {
     expect(resumed).toBeLessThan(1);
   });
 
+  it('snaps close-view reentry after inspection has offset the owner clock', () => {
+    for (const initialRain of [0, 1]) {
+      const s = makeScenario('rain', 1, false, 1, ItemWorld);
+      const world = s.world;
+      const life = [...worldTiles(world).values()][0]!;
+      const m = life.movers.find((m) => m.group)!;
+      life.movers.splice(0, life.movers.length, m);
+      life.stalls.length = 0;
+      life.flocks.length = 0;
+      m.rank = 0;
+      m.pause = 100;
+      m.group = [{ ...m.group![0]!, figure: 'adult', umbrella: 0.23, lateral: 0, back: 0 }];
+      const look = (zoom: number, rain: number) =>
+        world.visible(zoom, s.levels, s.center, { rain, sunAltitude: 20 })[0]!;
+      const original = look(19, initialRain);
+      const id = original.inspectionId!;
+      world.inspection!.select({ id, revision: 1, time: world.signalClock }, world.signalClock);
+      for (let frame = 0; frame < 20; frame++) {
+        world.step(0.05);
+        expect(look(19, initialRain).people).toEqual(original.people);
+      }
+      world.inspection!.select(
+        { id: null, revision: 2, time: world.signalClock },
+        world.signalClock,
+      );
+      const ownerClock = world.inspection!.clock(m, world.signalClock);
+      expect(world.signalClock - ownerClock).toBeGreaterThan(UMBRELLA_MOTION.lost);
+      const distant = look(18, 1 - initialRain);
+      world.step(0.1);
+      expect(look(19, 1 - initialRain).people).toEqual(distant.people);
+      expect(look(19, initialRain).people).toEqual(distant.people);
+      let animated = false;
+      const frames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
+      for (let frame = 0; frame < frames; frame++) {
+        world.step(0.05);
+        const agent = look(19, initialRain);
+        animated ||= !!agent.people![0]!.canopy;
+        if (frame === frames - 1) expect(agent.people).toEqual(original.people);
+      }
+      expect(animated).toBe(true);
+    }
+  });
+
   it('applies the same commands and poses in the inline and worker APIs', async () => {
     const s = makeScenario('crossroads', 1);
     const world = new ItemWorld();

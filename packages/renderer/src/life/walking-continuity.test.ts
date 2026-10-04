@@ -6,6 +6,7 @@ import { LifeLine } from './geometry';
 import { frameBetween } from './frames';
 import { activityLevels } from './config';
 import { tileToLngLat } from '../raster/geometry';
+import type { PersonLook } from './people';
 
 function group(size: number): Walker[] {
   return Array.from({ length: size }, (_, i) => ({
@@ -200,7 +201,7 @@ it('carries attained canopy openness through a mid-transition tile handoff', () 
   };
   world.visible(20, activityLevels(1), center, { rain: 0, sunAltitude: 20 });
   look(1);
-  let before;
+  let before: PersonLook | undefined;
   for (let frame = 0; frame < 45; frame++) {
     world.step(0.05);
     const next = look(1);
@@ -209,7 +210,7 @@ it('carries attained canopy openness through a mid-transition tile handoff', () 
       break;
     }
   }
-  expect(before?.canopy).toBeDefined();
+  if (!before?.canopy) throw new Error('no mid-transition canopy');
   const members = m.group;
   world.sync([p, a]);
   const target = worldTiles(world).get(a.key)!;
@@ -217,5 +218,5 @@ it('carries attained canopy openness through a mid-transition tile handoff', () 
   expect(m.group).toBe(members);
   expect(look(1)).toEqual(before);
   world.step(0.05);
-  expect(look(1)!.canopy!.open).toBeGreaterThan(before.canopy!.open);
+  expect(look(1)!.canopy!.open).toBeGreaterThan(before.canopy.open);
 });

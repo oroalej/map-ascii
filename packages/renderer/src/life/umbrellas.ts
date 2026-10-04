@@ -5,7 +5,12 @@ type Motion = { open: boolean; from: number; at: number; seen: number };
 
 /** Canopy state follows immutable group members through tile handoff without changing them. */
 export class UmbrellaMotion {
-  private readonly states = new WeakMap<Walker, Motion>();
+  private states = new WeakMap<Walker, Motion>();
+
+  /** A close-view reentry starts from the weather already shown at distant zooms. */
+  reset() {
+    this.states = new WeakMap();
+  }
 
   /** Realised openness, including unchanged endpoints while waiting for the person's delay. */
   look(walker: Walker, want: boolean, clock: number): number {
