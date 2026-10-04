@@ -1265,8 +1265,10 @@ export const CityLife = z.strictObject({
     .superRefine((seasons, ctx) => {
       const byId = new Map(seasons.map((season) => [season.id, season]));
       for (const [index, season] of seasons.entries()) {
+        if (!season.includes) continue;
         const seen = new Set<string>();
-        for (const [includeIndex, id] of (season.includes ?? []).entries()) {
+        const installations = [...(season.installations ?? [])];
+        for (const [includeIndex, id] of season.includes.entries()) {
           const included = byId.get(id);
           const message = !included
             ? 'included season must exist'
@@ -1283,8 +1285,21 @@ export const CityLife = z.strictObject({
               path: [index, 'includes', includeIndex],
               message,
             });
+          else if (included) installations.push(...(included.installations ?? []));
           seen.add(id);
         }
+        if (new Set(installations.map((i) => i.id)).size !== installations.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: 'composed installations must have unique ids',
+          });
+        if (installations.length > 32)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: 'a composed season accepts at most 32 installations',
+          });
       }
     })
     .optional(),

@@ -238,6 +238,52 @@ describe('season content validation', () => {
     ).toBe(false);
     expect(parse([next, { ...season, includes: ['new-year'] }]).success).toBe(false);
   });
+  describe('composed installations', () => {
+    const tree = (id: string) => ({
+      id,
+      anchor: 'osm:way/1',
+      label: 'Tree',
+      kind: 'christmas-tree',
+      radius_m: 4,
+      sources: season.sources,
+    });
+    const parse = (seasons: unknown[]) => CityLife.safeParse({ source: 'Calendar', seasons });
+
+    it.each(['own', 'sibling'])('rejects installation ids shared with %s content', (origin) => {
+      const base = { ...season, installations: [tree('shared')] };
+      const next = {
+        ...season,
+        id: 'new-year',
+        includes: origin === 'own' ? ['winter'] : ['winter', 'feast'],
+        installations: origin === 'own' ? [tree('shared')] : undefined,
+      };
+      const sibling = { ...base, id: 'feast' };
+      for (const authored of [base, next, sibling])
+        expect(Season.safeParse(authored).success).toBe(true);
+      expect(parse([next, base, ...(origin === 'sibling' ? [sibling] : [])]).success).toBe(false);
+    });
+
+    it.each([32, 33])('bounds the composed list with %s installations', (count) => {
+      const base = {
+        ...season,
+        installations: Array.from({ length: count - 1 }, (_, i) => tree(`tree-${i}`)),
+      };
+      const next = {
+        ...season,
+        id: 'new-year',
+        includes: ['winter'],
+        installations: [tree('own-tree')],
+      };
+      expect(Season.safeParse(base).success).toBe(true);
+      expect(Season.safeParse(next).success).toBe(true);
+      expect(parse([next, base]).success).toBe(count === 32);
+    });
+
+    it('allows installation id reuse between unrelated seasons', () => {
+      const base = { ...season, installations: [tree('shared')] };
+      expect(parse([base, { ...base, id: 'feast' }]).success).toBe(true);
+    });
+  });
   it('rejects unknown keys, impossible dates, duplicate IDs, and incomplete placement filters', () => {
     expect(Season.safeParse({ ...season, extra: true }).success).toBe(false);
     expect(
