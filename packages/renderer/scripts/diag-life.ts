@@ -6,24 +6,68 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCityPacks } from '@atlas/content';
 import { CityMeta, dialogueChoices, runtimeDialogueCatalog } from '@atlas/shared';
-import { project, unproject, viewportFor } from '../src/camera';
-import { DEFAULT_CELLS, cellStep, stepCell } from '../src/density';
-import { metersPerCssPx, placeGrid } from '../src/grid';
-import { spawnMargin } from '../src/life/births';
-import { atCityMinutes, cityTime } from '../src/life/clock';
-import { activityLevels, MAX_VISIBLE_AGENTS } from '../src/life/config';
-import { LifeDiagnostics } from '../src/life/diagnostics';
-import { buildLifeGlyphs, packLife } from '../src/life/draw';
-import { LifeWorld, type LifeTile } from '../src/life/simulate';
-import { daylight, solarPosition } from '../src/life/sun';
-import { FrameProfiler } from '../src/profile';
-import { themes } from '../src/theme';
-import { tileKey, viewTiles } from '../src/tiles';
+import * as workingCamera from '../src/camera';
+import * as workingDensity from '../src/density';
+import * as workingGrid from '../src/grid';
+import * as workingBirths from '../src/life/births';
+import * as workingClock from '../src/life/clock';
+import * as workingConfig from '../src/life/config';
+import * as workingDiagnostics from '../src/life/diagnostics';
+import * as workingDraw from '../src/life/draw';
+import * as workingSimulate from '../src/life/simulate';
+import type { LifeTile } from '../src/life/simulate';
+import * as workingSun from '../src/life/sun';
+import * as workingProfile from '../src/profile';
+import * as workingTheme from '../src/theme';
+import * as workingTiles from '../src/tiles';
+import * as workingGeometry from '../src/raster/geometry';
 import { decodeLifeTiles, openArchive } from './archive';
+import { snapshotRevision, currentSourceHash } from './snapshot';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
 const prefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
+const baseline = process.argv.find((arg) => arg.startsWith('--baseline='))?.slice(11);
+if (baseline && !output)
+  throw new Error('--baseline requires --output so snapshots stay beside the report');
+const snapshot = baseline
+  ? await snapshotRevision(root, baseline, resolve(dirname(output!), `diag-source-${Date.now()}`))
+  : undefined;
+async function moduleAt<T>(path: string, current: T): Promise<T> {
+  return snapshot ? ((await import(snapshot.path(path))) as T) : current;
+}
+const [
+  { project, unproject, viewportFor },
+  { DEFAULT_CELLS, cellStep, stepCell },
+  { metersPerCssPx, placeGrid },
+  { spawnMargin },
+  { atCityMinutes, cityTime },
+  { activityLevels, MAX_VISIBLE_AGENTS },
+  { LifeDiagnostics },
+  { buildLifeGlyphs, packLife },
+  { LifeWorld },
+  { daylight, solarPosition },
+  { FrameProfiler },
+  { themes },
+  { tileKey, viewTiles },
+  { buildTileGeometry },
+] = await Promise.all([
+  moduleAt('camera.ts', workingCamera),
+  moduleAt('density.ts', workingDensity),
+  moduleAt('grid.ts', workingGrid),
+  moduleAt('life/births.ts', workingBirths),
+  moduleAt('life/clock.ts', workingClock),
+  moduleAt('life/config.ts', workingConfig),
+  moduleAt('life/diagnostics.ts', workingDiagnostics),
+  moduleAt('life/draw.ts', workingDraw),
+  moduleAt('life/simulate.ts', workingSimulate),
+  moduleAt('life/sun.ts', workingSun),
+  moduleAt('profile.ts', workingProfile),
+  moduleAt('theme.ts', workingTheme),
+  moduleAt('tiles.ts', workingTiles),
+  moduleAt('raster/geometry.ts', workingGeometry),
+]);
+const sourceHash = snapshot?.hash ?? (await currentSourceHash(root));
 const { packs, errors } = await loadCityPacks(resolve(root, 'packages/content'), { only: 'naga' });
 if (errors.length || !packs[0]) throw new Error(JSON.stringify(errors));
 const pack = packs[0],
@@ -37,11 +81,16 @@ const dt = 1 / 30,
   warmup = 30,
   seconds = 300;
 const runtime = runtimeDialogueCatalog(pack.dialogue);
-const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const dirty = !!execFileSync('git', ['status', '--porcelain'], {
+const revision = execFileSync('git', ['rev-parse', baseline ?? 'HEAD'], {
   cwd: root,
   encoding: 'utf8',
 }).trim();
+const dirty =
+  !baseline &&
+  !!execFileSync('git', ['status', '--porcelain'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
 const cache = new Map<string, LifeTile | null>();
 const inputs = {
   archive: archive.hash,
@@ -72,11 +121,12 @@ const cases: {
   clock: ReturnType<typeof cityTime>;
   sun: ReturnType<typeof solarPosition>;
   runtimeSeconds: number;
-  report: ReturnType<LifeDiagnostics['report']>;
+  report: ReturnType<workingDiagnostics.LifeDiagnostics['report']>;
 }[] = [];
 async function save(complete: boolean) {
   const report = {
     revision,
+    sourceHash,
     dirty,
     complete,
     inputHash: hash(JSON.stringify(inputs)),
@@ -171,7 +221,7 @@ try {
             const missing = ids.filter((id) => !cache.has(tileKey(id)));
             if (missing.length) {
               for (const id of missing) cache.set(tileKey(id), null);
-              for (const tile of await decodeLifeTiles(archive.archive, missing))
+              for (const tile of await decodeLifeTiles(archive.archive, missing, buildTileGeometry))
                 cache.set(tile.key, tile);
               if (frame === 0)
                 console.log(
