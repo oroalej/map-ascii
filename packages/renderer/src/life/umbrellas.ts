@@ -15,16 +15,16 @@ export class UmbrellaMotion {
   /** Realised openness, including unchanged endpoints while waiting for the person's delay. */
   look(walker: Walker, want: boolean, clock: number): number {
     let state = this.states.get(walker);
-    if (!state) {
-      state = { open: want, from: Number(want), at: -Infinity, seen: clock };
-      this.states.set(walker, state);
-      return state.from;
-    }
-    if (clock - state.seen > UMBRELLA_MOTION.lost) {
-      state.open = want;
-      state.from = Number(want);
-      state.at = -Infinity;
-      state.seen = clock;
+    if (!state || clock - state.seen > UMBRELLA_MOTION.lost) {
+      if (!state) {
+        state = { open: want, from: Number(want), at: -Infinity, seen: clock };
+        this.states.set(walker, state);
+      } else {
+        state.open = want;
+        state.from = Number(want);
+        state.at = -Infinity;
+        state.seen = clock;
+      }
       return state.from;
     }
 

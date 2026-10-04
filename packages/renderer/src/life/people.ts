@@ -222,7 +222,11 @@ const poseMasters = (figure: PersonFigure, pose?: PersonPose) =>
 
 /** An umbrella's canopy: an octagon, its ribs crossing to the tip (just the tip when small). */
 function canopy(n: number, share = 1): string[] {
-  const m = Math.min(n, Math.max(3, Math.round(n * share)));
+  let m = Math.min(n, Math.max(3, Math.round(n * share)));
+  // Larger boxes have room for two distinct, centered insets. Compact stages keep their
+  // minimum ink width even when that requires a half-pixel offset.
+  if (share < 1 && n >= 7)
+    m = Math.max(n % 2 === 0 ? 4 : 3, Math.min(n - 2, n - 2 * Math.round((n - n * share) / 2)));
   const offset = Math.floor((n - m) / 2);
   const cut = Math.max(1, Math.round(m / 5));
   const tip0 = Math.floor((m - 1) / 2);

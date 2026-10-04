@@ -92,6 +92,18 @@ describe('UmbrellaMotion', () => {
     expect(f.motion.look(f.w, false, 2 * UMBRELLA_MOTION.lost + 0.02)).toBe(0);
   });
 
+  it('reuses its motion state after a lost gap', () => {
+    const motion = new UmbrellaMotion();
+    const w = walker();
+    // Verify the allocation promise at the actual WeakMap boundary without exposing internals.
+    const states = (motion as unknown as { states: WeakMap<Walker, object> }).states;
+    motion.look(w, false, 0);
+    const state = states.get(w);
+    expect(state).toBeDefined();
+    expect(motion.look(w, true, UMBRELLA_MOTION.lost + 0.01)).toBe(1);
+    expect(states.get(w)).toBe(state);
+  });
+
   it('snaps both endpoints after reset without comparing owner and world clocks', () => {
     for (const want of [false, true]) {
       const f = fixture(!want, Object.freeze(walker()));

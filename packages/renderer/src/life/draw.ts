@@ -6,6 +6,7 @@
 import { classId } from '../classes';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
+import { drawProcedural } from '../glyphs/atlas';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
 import {
@@ -129,6 +130,39 @@ function writeCell(
 let groundCells = new Uint8Array(0);
 let drawingSpeakers: SpeakerGrid | undefined;
 let drawingMember = 0;
+/** Reused while one transitioning person's underlying figure is drawn synchronously. */
+const figureCoverage = new Map<number, number>();
+const figureMasks = new Map<string, number>();
+let coverageWidth = 0;
+let coverageHeight = 0;
+let coveragePixels = new Uint8Array(0);
+
+/** Conservative sixths of the actual procedural glyph, cached at the current atlas size. */
+function figureCellMask(glyph: string, w: number, h: number): number {
+  if (w !== coverageWidth || h !== coverageHeight) {
+    coverageWidth = w;
+    coverageHeight = h;
+    coveragePixels = new Uint8Array(w * h);
+    figureMasks.clear();
+  }
+  const cached = figureMasks.get(glyph);
+  if (cached !== undefined) return cached;
+  coveragePixels.fill(0);
+  drawProcedural({ data: coveragePixels, stride: w, x0: 0, y0: 0, w, h }, glyph);
+  let mask = 0;
+  const middle = Math.round(w / 2);
+  const top = Math.round(h / 3);
+  const bottom = Math.round((2 * h) / 3);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!coveragePixels[y * w + x]) continue;
+      const row = y < top ? 0 : y < bottom ? 1 : 2;
+      mask |= 1 << (row * 2 + Number(x >= middle));
+    }
+  figureMasks.set(glyph, mask);
+  return mask;
+}
+
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
@@ -412,6 +446,7 @@ function drawPeople(
   const turned = fx < 0 || fy > 0;
   const stageOf = (look: PersonLook): 0 | 1 | undefined =>
     look.canopy ? (look.canopy.open < UMBRELLA_MOTION.stageCutoff ? 0 : 1) : undefined;
+  let coverage: Map<number, number> | undefined;
   const byteOf = (look: PersonLook, tone = false) => {
     const umbrella = look.figure === 'umbrella';
     const part = tone
@@ -429,6 +464,7 @@ function drawPeople(
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
     writeCell(out, at, index, cls, bits, byte);
+    coverage?.set(at, figureCellMask(glyph, cellWidth, cellHeight));
     return true;
   };
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
@@ -452,6 +488,35 @@ function drawPeople(
     }
     return any;
   };
+  const drawFit = (look: PersonLook, fit: ReturnType<typeof figureFit>, cx: number, cy: number) => {
+    if (fit === 'stamp')
+      return stampFigure(
+        out,
+        grid,
+        [cx, cy],
+        along,
+        right,
+        look,
+        stroke,
+        glyphIndex,
+        (tone) => [cls, bits, byteOf(look, tone)],
+        undefined,
+        undefined,
+        coverage,
+      );
+    if (fit === 'big') return putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
+    const glyph = figureGlyph(
+      look.figure,
+      across,
+      look.flap === 1 ? 1 : 0,
+      { scale: fit },
+      0,
+      headingOf(fx, fy),
+      look.pose,
+      stageOf(look),
+    );
+    return put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
+  };
   let drawn = 0;
 
   if (fits.includes('stamp')) {
@@ -469,69 +534,36 @@ function drawPeople(
       if (agent.speech && (agent.speech.member ?? 0) === i)
         drawingSpeakers?.points.set(drawingOwner, [cx, cy]);
       const fit = fits[i]!;
-      const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
-      if (fit === 'stamp') {
-        const under = look.canopy
-          ? { ...look, figure: look.canopy.figure, paint: look.canopy.paint }
-          : look;
+      if (fit === 'stamp' && look.canopy) {
+        const under = {
+          ...look,
+          figure: look.canopy.figure,
+          paint: look.canopy.paint,
+          canopy: undefined,
+        };
         const underFit = figureFit(under.figure, FIGURE_SIZE_M[under.figure] * cellsPerMeter);
-        if (underFit === 'stamp') {
-          any = stampFigure(
-            out,
-            grid,
-            [cx, cy],
-            along,
-            right,
-            under,
-            stroke,
-            glyphIndex,
-            (tone) => [cls, bits, byteOf(under, tone)],
-          );
-        } else if (underFit === 'big') {
-          any = putBig(under, Math.round(cx) - 1, Math.round(cy) - 1);
-        } else {
-          const glyph = figureGlyph(
-            under.figure,
-            across,
-            frame,
-            { scale: underFit },
-            0,
-            headingOf(fx, fy),
-            under.pose,
-          );
-          any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(under));
-        }
-        if (look.canopy) {
-          const canopy = stampFigure(
-            out,
-            grid,
-            [cx, cy],
-            along,
-            right,
-            look,
-            stroke,
-            glyphIndex,
-            (tone) => [cls, bits, byteOf(look, tone)],
-            (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
-              FIGURE_SIZE_M.umbrella,
-          );
-          any = canopy || any;
-        }
-      } else if (fit === 'big') {
-        any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
-      } else {
-        const glyph = figureGlyph(
-          look.figure,
-          across,
-          frame,
-          { scale: fit },
-          0,
-          headingOf(fx, fy),
-          look.pose,
-          stageOf(look),
+        figureCoverage.clear();
+        coverage = figureCoverage;
+        any = drawFit(under, underFit, cx, cy);
+        coverage = undefined;
+        const canopy = stampFigure(
+          out,
+          grid,
+          [cx, cy],
+          along,
+          right,
+          look,
+          stroke,
+          glyphIndex,
+          (tone) => [cls, bits, byteOf(look, tone)],
+          (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
+            FIGURE_SIZE_M.umbrella,
+          figureCoverage,
         );
-        any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
+        any = canopy || any;
+      } else {
+        any = drawFit(look, fit, cx, cy);
       }
       if (any) drawn++;
     });
@@ -598,6 +630,8 @@ function stampFigure(
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
   size = FIGURE_SIZE_M[look.figure],
+  underneath?: ReadonlyMap<number, number>,
+  coverage?: Map<number, number>,
 ): boolean {
   const frame = look.flap === 1 ? 1 : 0;
   // A canopy's thin ribs show in a cell where they are a third of its ink.
@@ -613,6 +647,8 @@ function stampFigure(
     toneShare,
     glyphIndex,
     texel,
+    underneath,
+    coverage,
   );
 }
 
@@ -635,6 +671,8 @@ function stampMaster(
   toneShare: number,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
+  underneath?: ReadonlyMap<number, number>,
+  coverage?: Map<number, number>,
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
@@ -668,11 +706,13 @@ function stampMaster(
       }
       if (mask === 0) continue;
       const [cls, bits, byte] = texel(tone > inked * toneShare);
+      const at = (r * cols + c) * 4;
+      mask |= underneath?.get(at) ?? 0;
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > MAX_GLYPHS) continue;
-      const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, index, cls, bits, byte);
+      coverage?.set(at, mask);
       any = true;
     }
   }

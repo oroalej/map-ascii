@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
+import { drawProcedural } from '../glyphs/atlas';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
@@ -821,6 +822,75 @@ describe('packLife people', () => {
       expect(canopy.length).toBeGreaterThan(0);
       for (const c of canopy) expect(sextantGlyphs).toContain(glyphs[packedGlyph(c.texel)]);
     }
+  });
+
+  it('preserves underlying adult and seated ink where partial canopy cells overlap it', () => {
+    for (const figure of ['adult', 'seated'] as const)
+      for (const scale of [3.9, 5.5, 12])
+        for (const [cellWidth, cellHeight] of [
+          [5, 9],
+          [10, 18],
+          [15, 27],
+        ]) {
+          const ordinary = look({ figure, flap: 1, pose: 'gesture' });
+          const [base, agent] = person(1, 0, scale, { people: [ordinary], candle: true });
+          const g = { ...base, cellWidth: cellWidth!, cellHeight: cellHeight! };
+          const before = pack([g, agent]);
+          const transitioning = {
+            ...agent,
+            people: [
+              {
+                ...ordinary,
+                figure: 'umbrella' as const,
+                paint: Paint.blue,
+                canopy: { open: 0.2, figure, paint: ordinary.paint },
+              },
+            ],
+          };
+          const during = pack([g, transitioning]);
+          const pixels = (texel: number[]) => {
+            const data = new Uint8Array(g.cellWidth * g.cellHeight);
+            expect(
+              drawProcedural(
+                { data, stride: g.cellWidth, x0: 0, y0: 0, w: g.cellWidth, h: g.cellHeight },
+                glyphs[packedGlyph(texel)]!,
+              ),
+            ).toBe(true);
+            return data;
+          };
+          let overlaps = 0;
+          for (const original of before.cells) {
+            const next = during.cells.find((c) => c.col === original.col && c.row === original.row);
+            expect(next).toBeDefined();
+            const previousInk = pixels(original.texel);
+            const currentInk = pixels(next!.texel);
+            for (let i = 0; i < previousInk.length; i++)
+              if (previousInk[i]) expect(currentInk[i]).toBeGreaterThan(0);
+            if ((next!.texel[3]! & 15) === Paint.blue) overlaps++;
+          }
+          expect(overlaps).toBeGreaterThan(0);
+          const owners = new Uint32Array(g.cols * g.rows);
+          const out = new Uint8Array(owners.length * 4);
+          expect(
+            packLife(out, g, [transitioning], themes.dark, glyphIndex, null, undefined, { owners }),
+          ).toBe(1);
+          for (const c of during.cells) expect(owners[c.row * g.cols + c.col]).toBe(1);
+          const denied = during.cells.find((c) => (c.texel[3]! & 15) === Paint.blue)!;
+          expect(
+            packLife(
+              out,
+              { ...g, allowsGroundCell: (_a, c, r) => c !== denied.col || r !== denied.row },
+              [transitioning],
+              themes.dark,
+              glyphIndex,
+              null,
+              undefined,
+              { owners },
+            ),
+          ).toBe(0);
+          expect(out.every((byte) => byte === 0)).toBe(true);
+          expect(owners.every((owner) => owner === 0)).toBe(true);
+        }
   });
 
   it('grows a stamped canopy over the underlying figure and preserves whole-agent rollback', () => {

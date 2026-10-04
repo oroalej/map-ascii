@@ -174,4 +174,21 @@ describe('people', () => {
       expect(counts[0]).toBeLessThan(counts[1]!);
     }
   });
+
+  it('centers both stages when the pixel box has room for distinct symmetric insets', () => {
+    for (const box of [7, 8, 9, 10, 11, 15, 20, 30])
+      for (const stage of [0, 1] as const) {
+        const pixels = figurePixels({ figure: 'umbrella', across: false, frame: 0, stage }, box);
+        const xs: number[] = [],
+          ys: number[] = [];
+        for (let y = 0; y < box; y++)
+          for (let x = 0; x < box; x++)
+            if (pixels(x, y) !== '.') {
+              xs.push(x);
+              ys.push(y);
+            }
+        expect(Math.min(...xs) + Math.max(...xs)).toBe(box - 1);
+        expect(Math.min(...ys) + Math.max(...ys)).toBe(box - 1);
+      }
+  });
 });

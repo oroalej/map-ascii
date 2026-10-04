@@ -1682,9 +1682,20 @@ describe('people at places', () => {
     }
     expect(look(1)).toMatchObject({ figure: 'umbrella', paint: gatherer.walker.canopy });
     expect(look(1).canopy).toBeUndefined();
+    const folding: PersonLook[] = [];
+    let previous = 1;
     for (let frame = 0; frame < 50; frame++) {
       world.step(0.05);
-      look(0);
+      const next = look(0);
+      const open = next.canopy?.open ?? Number(next.figure === 'umbrella');
+      expect(open).toBeLessThanOrEqual(previous);
+      previous = open;
+      if (next.canopy) folding.push(next);
+    }
+    expect(folding.length).toBeGreaterThan(0);
+    for (const stage of folding) {
+      expect(stage.canopy!.figure).toBe('seated');
+      expect(stage.canopy!.paint).toBe(dry.paint);
     }
     expect(look(0)).toEqual(dry);
   });
