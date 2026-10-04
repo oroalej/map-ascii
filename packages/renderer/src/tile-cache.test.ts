@@ -13,6 +13,7 @@ vi.mock('./tiles', async (importOriginal) => {
     request = vi.fn<(tile: TileId) => void>();
     want = vi.fn((wanted: readonly TileId[]) => wanted.forEach((t) => this.request(t)));
     destroy = vi.fn();
+    setFireworksActive = vi.fn();
     constructor(_url: string, handlers: TileSourceHandlers) {
       sources.push({ handlers, request: this.request });
     }
@@ -48,6 +49,50 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('backfills detailed tiles loaded before activation and remembers computed-empty sites', () => {
+    const { cache, source } = setup();
+    const tile = { z: 16, x: 55193, y: 30261 };
+    source.handlers.tile(tileKey(tile), geometry);
+    expect(cache.get(tile)?.residential).toBeUndefined();
+    expect(cache.residentialSitesFor(camera, size, false, [tile])).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([]);
+    expect(source.request).toHaveBeenCalledExactlyOnceWith(tile);
+    const sites = new Float64Array();
+    source.handlers.residential!(`residential/${tileKey(tile)}`, sites);
+    expect(cache.get(tile)?.residential).toBe(sites);
+    source.request.mockClear();
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([{ tile, sites }]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, false, [tile])).toEqual([]);
+    expect(cache.residentialSitesFor(camera, size, true, [tile])).toEqual([{ tile, sites }]);
+    expect(source.request).not.toHaveBeenCalled();
+  });
+  it('retains decoded residential anchors separately from the GPU and Life data', () => {
+    const { cache, source } = setup();
+    const tile = { z: 16, x: 55193, y: 30261 };
+    const residential = new Float64Array([1, 1500, 2000]);
+    source.handlers.tile(tileKey(tile), { labels: [], residential } as never);
+    expect(cache.get(tile)?.residential).toBe(residential);
+  });
+  it('requests bounded cold coarse coverage only when selected and never uploads hidden meshes', () => {
+    const { cache, source } = setup();
+    const camera = { lat: 13.62, lng: 123.19, zoom: 8 };
+    expect(cache.residentialSitesFor(camera, size, false)).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    expect(cache.residentialSitesFor(camera, size, true)).toEqual([]);
+    const requested = source.request.mock.calls.map(([tile]) => tile);
+    expect(requested.length).toBeGreaterThan(0);
+    expect(requested.length).toBeLessThanOrEqual(16);
+    expect(requested.every((tile) => tile.z === 12)).toBe(true);
+    const tile = requested[0]!,
+      sites = new Float64Array([1, 1500, 2000]);
+    source.handlers.residential!(`residential/${tileKey(tile)}`, sites);
+    expect(cache.size).toBe(0);
+    expect(cache.residentialSitesFor(camera, size, true)).toContainEqual({ tile, sites });
+    expect(cache.residentialSitesFor(camera, size, false)).toEqual([]);
+    cache.destroy();
+  });
   it('retains upload timings between callbacks, including context restoration', () => {
     let now = 0;
     const profiler = new FrameProfiler(() => now++);

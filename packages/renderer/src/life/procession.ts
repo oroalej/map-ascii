@@ -10,8 +10,8 @@
  * boats setting off first and the pagoda and the flotilla following a moment later, and every
  * boat swaying a little on its own.
  */
-import type { ProcessionRoute, ProcessionSchedule } from '@atlas/shared';
-import { dayNumber, localTime } from './clock';
+import { nthWeekdayDay, type ProcessionRoute, type ProcessionSchedule } from '@atlas/shared';
+import { localTime } from './clock';
 import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
 import { hashString, random } from './random';
@@ -693,11 +693,7 @@ export class ProcessionScene {
 
 /** The day a schedule falls on in `year`, as days since 1970-01-01. */
 export function scheduledDay(schedule: ProcessionSchedule, year: number): number {
-  const first = dayNumber(year, schedule.month, 1);
-  // 1970-01-01 was a Thursday (4).
-  const firstWeekday = (first + 4) % 7;
-  const nth = first + ((schedule.weekday - firstWeekday + 7) % 7) + (schedule.nth - 1) * 7;
-  return nth + schedule.offset_days;
+  return nthWeekdayDay(schedule, year);
 }
 
 /**

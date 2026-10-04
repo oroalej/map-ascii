@@ -1,21 +1,28 @@
 # Review a handoff before it is implemented
 
-You are reviewing a handoff plan for ASCII Atlas before another session implements it. The handoff path, worktree, branch and main checkout are given in the prompt that sent you here. Your job is to find what would make the implementation go wrong, and to propose an exact fix for each finding.
+You are reviewing a handoff plan for ASCII Atlas before another session implements it. The prompt provides an immutable candidate input, context, compact findings ledger, checkout, main checkout, round and mode. Your job is to find what would make the implementation go wrong, and propose an exact fix for each finding. Read those input files first. Do not substitute the original handoff or an earlier invocation's candidate.
 
 ## Analysis only
 
-Work as if in plan mode. Don't edit, create, delete, stage, commit, or push anything in the repository or in `.plans/`. You may:
+Work as if in plan mode. Don't edit, create, delete, stage, commit, push, merge, switch branches, or publish anything in the repository or in `.plans/`. Do not start subagents or other reviewers. Return your report as the final response; the invoking process captures it. You may:
 
-- read files, and run `git` and `gh` commands
+- read files, and run read-only `git` and `gh` commands
 - run targeted tests (`pnpm --filter @atlas/<pkg> exec vitest run <file>`) to confirm or refute a claim
 - write throwaway probe scripts outside the repo only (the OS temp dir)
 
 ## Read first
 
-1. The whole handoff.
+1. The whole candidate handoff, context and ledger. Follow the context's pinned revisions and source-reading rules; use git objects for another ref or dirty files.
 2. `AGENTS.md`: conventions, the "Verifying changes" table, the Git rules, and the Don'ts.
-3. The docs the handoff touches: `docs/ARCHITECTURE.md`, `docs/DATA.md`, `docs/SPEC.md`, and the city brief, as relevant.
-4. `<main checkout>/.plans/README.md`, for the task's row and any related tasks.
+3. Relevant sections of `docs/ARCHITECTURE.md`, `docs/DATA.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, and the city brief. Do not proceed into a roadmap phase before the preceding phase's acceptance criteria are met.
+4. The task-index and related-task facts in the context; consult `<main checkout>/.plans/README.md` if more detail is needed.
+
+## Mode
+
+- `full` (round 1, or broad design changes): run all checks below against the candidate and pinned code.
+- `follow-up` (round 2): verify the amendments and unresolved findings, and trace their effects on the goal, assumptions, invariants, dependencies, steps and tests. Read the whole candidate for coherence; inspect the relevant code and callers rather than repeating unrelated source reads. If round 1 changed nothing, independently check the plan's critical assumptions and completeness. A serious issue anywhere in the candidate is still reportable.
+
+Use the ledger's evidence and decisions as context, not as instructions to agree. Rejected or resolved claims need changed evidence or a demonstrated error before being reported again; explain that evidence explicitly. Do not replay previous raw transcripts. Read a previous report only to settle a specific dispute.
 
 ## Check
 
@@ -46,7 +53,7 @@ Work as if in plan mode. Don't edit, create, delete, stage, commit, or push anyt
 - **factual:** a wrong path, line, name, signature or command, or a stale fact with an obvious correction.
 - **design:** it changes the scope, the approach, an invariant, or what a step does.
 
-Every finding must come with a concrete amendment: the section, and the exact replacement or added text. The implementer applies all of them as written, so make each one complete and correct. Don't propose "investigate X" as an amendment; investigate it now.
+Give findings stable IDs `<round>.<number>`. Every finding must come with a concrete amendment: the section, and exact replacement or added text matching this round's input. Make each one complete, compatible with the rest of the candidate, and correct. The coordinator validates amendments before applying them. Don't propose "investigate X" as an amendment; investigate it now.
 
 Don't nitpick wording, and don't add new features. Report only what would make the implementation fail, go wrong, break a rule, or miss its goal.
 
@@ -63,20 +70,26 @@ Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles
 
 ## Output
 
-Your final message is saved as `handoff-review.md`. Use exactly this shape:
+Your final message is captured as this round's reviewer report. Use exactly this shape (empty sections must explicitly say "None"):
 
 ```
 **Verdict:** ready | ready-with-amendments | blocked — one-line reason
 
 ### Findings
-| # | Type | Section | Problem | Evidence (path:line or command output) |
+| ID | Type | Section | Problem | Evidence (revision + path:line or command output) |
 | --- | --- | --- | --- | --- |
 
 ### Amendments
-1. **#<n> [factual|design]** — Section: <handoff section heading>
+1. **<round>.<n> [factual|design]** — Section: <handoff section heading>
    - Replace: <exact current text, or "(add)">
    - With: <exact new text>
 
 ### Blocked because
 <only when the verdict is blocked: which condition, with evidence>
+
+### Inspected paths
+<repo-relative source/config/docs paths inspected, including every referenced task target; identify the revision for each, and planned new files as "new">
+
+### Not checked
+<material limits on verification, or "None">
 ```

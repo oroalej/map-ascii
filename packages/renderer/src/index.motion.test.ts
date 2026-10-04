@@ -34,12 +34,13 @@ import type * as GpuModule from './gpu';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { TileCache, type LoadedTile } from './tile-cache';
-import { LifeBuilder } from './life/geometry';
+import { LifeBuilder, LifeLine } from './life/geometry';
 import type { TileMesh } from './gpu';
 import { Readback } from './readback';
 import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
+import * as FireworkSites from './fireworks-sites';
 
 /** Label cases opt into the real CPU overlay; motion cases keep their original empty map. */
 const labelFixture = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ const labelFixture = vi.hoisted(() => ({
   reply: undefined as ((result: PickResult) => void) | undefined,
   arrive: undefined as (() => void) | undefined,
   requests: vi.fn(),
+  residentialRequests: vi.fn(),
 }));
 
 vi.mock('./gpu-context', () => ({
@@ -61,6 +63,7 @@ vi.mock('./gpu-context', () => ({
   deleteMapGlyphs: vi.fn(),
   deleteLabelGlyphs: vi.fn(),
 }));
+vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
   createCellTargets: (
@@ -103,6 +106,7 @@ vi.mock('./tile-cache', () => ({
       featureById: (id: string) => (labelFixture.enabled ? { id, class: 'landmark' } : undefined),
       pendingCount: 0,
       decodeMsAverage: 0,
+      setFireworksActive: vi.fn(),
     };
     size = labelFixture.enabled ? 1 : 0;
     constructor(_gl: unknown, _url: string, arrive: () => void) {
@@ -113,6 +117,20 @@ vi.mock('./tile-cache', () => ({
     }
     regionTilesFor() {
       return labelFixture.enabled && labelFixture.region ? [{ z: 11, x: 1024, y: 1024 }] : [];
+    }
+    residentialSitesFor(
+      _camera: unknown,
+      _size: unknown,
+      active: boolean,
+      tiles: readonly { z: number }[] = [],
+    ) {
+      labelFixture.residentialRequests(active, tiles);
+      return active
+        ? tiles.flatMap((tile) => {
+            const loaded = this.get(tile);
+            return loaded?.residential ? [{ tile, sites: loaded.residential }] : [];
+          })
+        : [];
     }
     get(tile: { z: number }) {
       return labelFixture.enabled
@@ -258,6 +276,122 @@ describe('live motion preference', () => {
     vi.unstubAllGlobals();
   });
 
+  it('compiles residential samplers only while a fireworks season is selected', () => {
+    atlas.destroy();
+    labelFixture.enabled = true;
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: new LifeBuilder().finish(),
+      residential: new Float64Array([1, 1000, 2000]),
+    };
+    const compile = vi.spyOn(FireworkSites, 'residentialFireworkSites');
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'new-year',
+            title: { en: 'New Year' },
+            status: 'draft',
+            note: 'TODO(verify)',
+            window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          },
+        ],
+      },
+      life: { season: 'auto' },
+      now: () => new Date('2026-06-01T12:00:00Z'),
+    });
+    draw(100);
+    expect(compile).not.toHaveBeenCalled();
+    expect(labelFixture.residentialRequests).toHaveBeenLastCalledWith(false, [
+      { z: 16, x: 32768, y: 32768 },
+    ]);
+    atlas.setLife({ season: 'new-year' });
+    expect(vi.mocked(prewarmGlyphPrograms).mock.calls.at(-1)?.slice(3)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    draw(200);
+    expect(compile).toHaveBeenCalledTimes(1);
+    expect(labelFixture.residentialRequests).toHaveBeenLastCalledWith(true, [
+      { z: 16, x: 32768, y: 32768 },
+    ]);
+    atlas.setCamera({ lng: 0.00001 });
+    draw(300);
+    expect(compile).toHaveBeenCalledTimes(1);
+    atlas.setLife({ season: 'auto' });
+    draw(400);
+    labelFixture.loaded = {
+      ...labelFixture.loaded,
+      residential: new Float64Array([2, 2000, 3000]),
+    };
+    labelFixture.arrive?.();
+    draw(500);
+    expect(compile).toHaveBeenCalledTimes(1);
+    atlas.setLife({ season: 'new-year' });
+    draw(600);
+    expect(compile).toHaveBeenCalledTimes(2);
+  });
+  it('prepares bunting as its fade becomes visible without a tile arrival', () => {
+    atlas.destroy();
+    labelFixture.enabled = true;
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+    );
+    b.place({ x: 2000, y: 2000 }, 'worship', 20);
+    labelFixture.loaded = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: b.finish(),
+    };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 17.5 },
+      year: 2026,
+      life: { season: 'feast' },
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'feast',
+            title: { en: 'Feast' },
+            status: 'draft',
+            note: 'TODO(verify)',
+            window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
+            bunting: { label: 'Rows', near: ['worship'], radius_m: 300, spacing_m: 30 },
+          },
+        ],
+      },
+    });
+    const hasBunting = () =>
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-bunting');
+    draw(100);
+    expect(hasBunting()).toBe(false);
+    atlas.setCamera({ zoom: 17.75 });
+    draw(200);
+    expect(hasBunting()).toBe(true);
+    atlas.setCamera({ zoom: 17.5 });
+    draw(300);
+    expect(hasBunting()).toBe(false);
+  });
+
   it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
@@ -292,6 +426,8 @@ describe('live motion preference', () => {
       expect.anything(),
       expect.any(Function),
       true,
+      false,
+      false,
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
@@ -355,6 +491,7 @@ describe('live motion preference', () => {
       return true;
     });
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      invalidateFrame() {},
       sync() {},
       clearTiles() {},
       request,
@@ -509,6 +646,7 @@ describe('live motion preference', () => {
     let latest = original;
     const request = vi.fn<(input: FrameInput) => boolean>(() => true);
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      invalidateFrame() {},
       sync() {},
       clearTiles() {},
       request,
@@ -561,6 +699,7 @@ describe('live motion preference', () => {
       cellGuard: () => undefined,
     };
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+      invalidateFrame() {},
       sync() {},
       clearTiles() {},
       request: () => true,
@@ -855,6 +994,118 @@ describe('live motion preference', () => {
     atlas.setCamera({ zoom: 18 });
     draw(200);
     expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
+  });
+  it('releases inspection when the real calendar changes season without user input', () => {
+    atlas.destroy();
+    let date = new Date('2026-12-31T04:00:00Z');
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 19 },
+      year: 2026,
+      lifeWorker: false,
+      now: () => date,
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'winter',
+            title: { en: 'Winter' },
+            status: 'draft',
+            note: 'TODO(verify)',
+            window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+            lanterns: { label: 'Lanterns', shape: 'star' },
+          },
+        ],
+      },
+    });
+    const hovered = vi.fn();
+    atlas.on('lifehover', hovered);
+    hoverAgent();
+    expect(hovered).toHaveBeenLastCalledWith({ label: 'Person (simulated)', point: [2, 3] });
+    date = new Date('2027-01-02T04:00:00Z');
+    draw(1100);
+    expect(atlas.getSeason()).toBeNull();
+    expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
+  });
+  it('resolves the real city date immediately, independently of year/time, and changes fixtures without moving', () => {
+    atlas.destroy();
+    let date = new Date('2026-11-30T16:01:00Z');
+    const tile = { z: 16, x: 32768, y: 32768 },
+      builder = new LifeBuilder();
+    builder.addLamps([2000, 2000, 0, 7, 2010, 2000, 2020, 2000]);
+    const loaded: LoadedTile = {
+      mesh: { crowns: { count: 0 } } as TileMesh,
+      labels: [],
+      life: builder.finish(),
+    };
+    vi.spyOn(TileCache.prototype, 'tilesToDraw').mockReturnValue([tile]);
+    vi.spyOn(TileCache.prototype, 'get').mockReturnValue(loaded);
+    const winter = {
+      id: 'winter',
+      title: { en: 'Winter' },
+      status: 'draft' as const,
+      note: 'TODO(verify)',
+      sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
+      window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
+      lanterns: { label: 'Stars', shape: 'star' as const },
+    };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 19 },
+      year: 1900,
+      now: () => date,
+      timezone: 'Asia/Manila',
+      cityLife: { source: 'Synthetic calendar', seasons: [winter] },
+      life: { enabled: false, time: 1320 },
+    });
+    expect(atlas.getSeason()?.id).toBe('winter');
+    expect(atlas.getSeason()).toBe(atlas.getSeason());
+    const events = vi.fn();
+    atlas.on('seasonchange', events);
+    draw(10);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
+    const camera = atlas.getCamera();
+    date = new Date('2027-01-07T04:00:00Z');
+    draw(1100);
+    expect(atlas.getSeason()).toBe(null);
+    expect(events).toHaveBeenCalledWith(null);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(false);
+    atlas.setLife({ season: 'winter' });
+    expect(atlas.getSeason()?.id).toBe('winter');
+    draw(1200);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
+    atlas.setLife({ season: 'unknown' });
+    expect(atlas.getSeason()).toBe(null);
+    expect(atlas.getCamera()).toEqual(camera);
+    atlas.setLife({ season: 'winter' });
+    atlas.setCamera({ zoom: 14 });
+    draw(1300);
+    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
+    atlas.setCamera({ zoom: 19 });
+    draw(1400);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
   });
 
   it('leaves profiling disabled by default and resets enabled profiles on context loss', () => {
