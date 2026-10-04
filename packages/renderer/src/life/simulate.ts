@@ -5252,28 +5252,30 @@ export class LifeWorld {
     }
     const [cx, cy] = center;
     // Each one's distance worked out once, not in every comparison.
-    const groups = new Map<object, { agents: VisibleAgent[]; d: number }>();
-    for (const agent of out) {
+    const groups = new Map<object, { agents: VisibleAgent[]; d: number; index: number }>();
+    for (const [index, agent] of out.entries()) {
       const key = agent.consist ?? agent;
       const d = (agent.lng - cx) ** 2 + (agent.lat - cy) ** 2;
       const group = groups.get(key);
       if (group) {
         group.agents.push(agent);
         group.d = Math.min(group.d, d);
-      } else groups.set(key, { agents: [agent], d });
+      } else groups.set(key, { agents: [agent], d, index });
     }
     const nearest = [...groups.values()].sort((a, b) => a.d - b.d);
     const kept = staged.slice();
+    const selected: (typeof nearest)[number][] = [];
     let count = 0;
     for (const group of nearest) {
       if (group.agents[0]!.kind === 'train') {
-        kept.push(...group.agents);
+        selected.push(group);
         continue;
       }
       if (count + group.agents.length > maxAgents) continue;
-      kept.push(...group.agents);
+      selected.push(group);
       count += group.agents.length;
     }
+    for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
     const result = withBalls(kept);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);

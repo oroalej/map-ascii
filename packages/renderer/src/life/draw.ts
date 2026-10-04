@@ -438,7 +438,7 @@ function drawAgent(
     at,
     index,
     classId(cls),
-    agentBit[agent.kind],
+    agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind],
     spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
   );
   return people + 1;

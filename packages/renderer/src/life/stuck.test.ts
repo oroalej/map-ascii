@@ -4,6 +4,8 @@ import { LifeWorld, type Mover, type Walker, type WorldGroundGuard } from './sim
 import { worldTiles } from './testing/scenarios';
 import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
+import { packLife } from './draw';
+import { themes } from '../theme';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
@@ -165,6 +167,33 @@ it('rolls back rejected vehicle recoveries, retains routing identity, and admits
   expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, lines)).toBe(false);
   life.geo.oneway![0] = 1;
   expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, new Set())).toBe(false);
+});
+
+it('keeps admitted ordinary packing priority stable when camera distance reverses', () => {
+  const { world, life } = fixture(LifeLine.roadMajor, 8);
+  const a = mover('vehicle', 70, 1),
+    b = mover('vehicle', 71, 1),
+    far = mover('vehicle', 150, 1);
+  a.paint = 1;
+  b.paint = 2;
+  far.paint = 3;
+  life.movers.push(a, b, far);
+  const grid = {
+    cols: 10,
+    rows: 10,
+    cellWidth: 10,
+    cellHeight: 18,
+    toCell: () => [5.5, 5.5] as [number, number],
+  };
+  const out: Uint8Array[] = [];
+  for (const center of [tileToLngLat(tile, a), tileToLngLat(tile, b)]) {
+    const agents = world.visible(18, 1, center, undefined, undefined, undefined, 2);
+    expect(agents.map((agent) => agent.paint)).toEqual([1, 2]);
+    const bytes = new Uint8Array(400);
+    packLife(bytes, grid, agents, themes.dark, () => 1);
+    out.push(bytes);
+  }
+  expect(out[0]).toEqual(out[1]);
 });
 
 it('keeps a two-person group moving after switching from minimum 1.45 to 2.9', () => {

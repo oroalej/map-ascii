@@ -5,6 +5,7 @@ import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
 import { PackingOutcome } from './diagnostics';
+import { lifeVisibleOnSurface } from './surface-visibility';
 import { catGlyphs } from './cats';
 import { DOG_LENGTH_M, dogGlyph, dogGlyphs } from './dogs';
 import { Heading } from './masters';
@@ -59,6 +60,32 @@ const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
 
 describe('packLife', () => {
+  it('gives miniature cars the detailed road/open-ground mask while preserving surface occlusion', () => {
+    const out = new Uint8Array(200);
+    packLife(
+      out,
+      grid,
+      [{ kind: 'vehicle', vehicle: 'car', lng: 2.5, lat: 1.5, flap: 0 }],
+      themes.dark,
+      glyphIndex,
+    );
+    const bits = out[12 * 4 + 2]!;
+    expect(bits).toBe(CellBit.vehicle | CellBit.person);
+    for (const cls of ['road_major', 'paving', 'grass'] as const)
+      expect(
+        lifeVisibleOnSurface(classId('life_vehicle'), bits, classId(cls), classId(cls), 0),
+      ).toBe(true);
+    for (const cls of ['building', 'water_area', 'tree', 'tree_crown', 'trees'] as const)
+      expect(
+        lifeVisibleOnSurface(
+          classId('life_vehicle'),
+          bits,
+          classId(cls),
+          classId(cls),
+          cls === 'building' ? 5 : 0,
+        ),
+      ).toBe(false);
+  });
   it('translates a small speaking group rigidly, retaining bytes, members, focus and candle clocks', () => {
     const a: VisibleAgent = {
       kind: 'person',
@@ -307,7 +334,7 @@ describe('packLife', () => {
       ).toBe(1);
       const [lo, packed, bits, byte] = cell(out, 2, 1);
       expect(unpackGlyph(lo!, packed!)).toEqual({ glyph, cls: classId('life_vehicle') });
-      expect(bits).toBe(agentBit.vehicle);
+      expect(bits).toBe(CellBit.vehicle | CellBit.person);
       expect(byte).toBe(255);
     }
   });
@@ -610,7 +637,7 @@ describe('packLife vehicles', () => {
         texel: [
           glyphIndex('▬'),
           classId('life_vehicle'),
-          agentBit.vehicle,
+          CellBit.vehicle | CellBit.person,
           vehicleByte(Paint.red, VehiclePart.mini),
         ],
       },
