@@ -1,11 +1,11 @@
 ---
 name: review-pr
-description: Review the current branch's pull request until it's clean and CI is green. First merges origin/main into the branch, resolving conflicts. Each round, Claude Code (Opus 5.5, high effort) reviews with the repo's review-pr skill, a separate Sol 6.1 max-effort run validates every finding, and this session fixes, commits and pushes the valid ones; up to 3 rounds. Then failing CI is fixed. Never merges. Use when the user invokes $review-pr (optionally with --fast) or asks Codex to get a Claude review of this branch's PR and fix what holds up.
+description: Review a pull request (by PR number or branch, or the current branch's) until it's clean and CI is green, working in that PR's worktree (created if missing) whatever directory it was started from. First merges origin/main into the branch, resolving conflicts. Each round, Claude Code (Opus 5.5, high effort) reviews with the repo's review-pr skill, a separate Sol 6.1 max-effort run validates every finding, and this session fixes, commits and pushes the valid ones; up to 3 rounds. Then failing CI is fixed. Never merges. Use when the user invokes $review-pr [--fast] [<PR number | branch>] or asks Codex to get a Claude review of this branch's PR and fix what holds up.
 ---
 
 # Claude review → Codex validation → fixes, until clean, then CI
 
-Treat invocation of `$review-pr` as authorization to run the whole flow: merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish` when tiles conflict) and pushing, up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
+Treat invocation of `$review-pr` as authorization to run the whole flow: creating the PR branch's worktree if it has none, merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish` when tiles conflict) and pushing, up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
 
 ## Models
 
@@ -21,7 +21,7 @@ Always pass these explicitly. Never change them or fall back to another model.
 
 ## Inputs (all optional)
 
-The PR is always the current branch's PR. No input selects a different one.
+- `<PR number | branch>`: the PR to review: `22`, `#22`, `codex/x` or `origin/codex/x`. Without it, the current branch's PR (step 1.2). `$sync-review` and `$implement-handoff` pass none; they start Codex with `-C <wt>`, so the current branch is the PR's.
 
 - `--fast`: every Codex instance this skill starts runs in fast mode. Today that's Codex #1, in every round. Set `<speed>` once, and pass it to every `<codex> exec` this skill runs:
   - with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
@@ -33,6 +33,7 @@ The PR is always the current branch's PR. No input selects a different one.
 ## Rules
 
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`.
+- **Work in the PR's worktree.** Moving to the PR means working in its worktree (step 1.3), never checking its branch out somewhere else. Run every command from step 1.3 on with `<pr-checkout>` as its working directory (`git -C <pr-checkout>`, `pnpm -C <pr-checkout>`, `<codex> exec -C <pr-checkout>`, or the shell tool's working-directory option), never the directory the session started in.
 - **Windows:** stdout is captured with `Out-File -Encoding utf8`, never a plain `>`, which writes UTF-16.
 - **Long commands:** if the shell tool can't hold a command for its timeout, start it in the background with output going to a log in `<scratch>`, and poll until it exits.
 - **On "stop with `<status>`"**, skip straight to step 7 with that status and a `stopReason`.
@@ -40,10 +41,17 @@ The PR is always the current branch's PR. No input selects a different one.
 ## 1. Resolve the branch's PR
 
 1. Confirm the repo has the Claude skill: `.claude/skills/review-pr/SKILL.md`. If it is missing, stop with `error`.
-2. Run `git branch --show-current`, then `gh pr view --json number,title,headRefName,headRefOid,baseRefName,url`.
-   - If the branch has no PR, stop with `error` (`No PR for <branch>`). Never fall back to another PR, a branch diff, or a PR number from anywhere else.
-3. Find the checkout with this branch: `git worktree list`. Call it `<pr-checkout>`.
-4. The main checkout is the first entry of `git worktree list`. Create the review root `<main-checkout>/.plans/active/pr<N>-review-fixes/` if needed, then create a **new, unique invocation folder** beneath it (for example `run-<timestamp>-<uuid>/`). Set `<scratch>` to that fresh folder, refusing any already-existing invocation path. `.plans/` is gitignored. Put this invocation's baseline, rounds, rejected entries, logs and results there. Never reuse earlier round output or delete another invocation's files. Earlier runs remain available until `$merge-pr` cleans the review root.
+2. Find the PR. The fields are `number,title,headRefName,headRefOid,baseRefName,url,state`.
+   - **With a `<PR number | branch>` argument:** strip a leading `#` or `origin/`, then `gh pr view <arg> --json <fields>`. If there's no PR, or its `state` isn't `OPEN`, stop with `error` (`No open PR for <arg>`).
+   - **Without one:** run `git branch --show-current`, then `gh pr view --json <fields>`.
+     - If the current branch isn't `main` and has no PR, stop with `error` (`No PR for <branch>`). Never fall back to another PR: a caller running in a task worktree must get its own branch's PR or nothing.
+     - If the current branch is `main` (the user started it from the main checkout), run `gh pr list --state open --json number,headRefName,title`. If exactly one open PR's head branch has a worktree in `git worktree list`, use that PR and say so. Otherwise stop with `error`, listing the open PRs as `$review-pr <N>  # <branch> — <title>` lines to rerun with.
+3. Go to the PR's worktree. `<main-checkout>` is the first entry of `git worktree list --porcelain`. `<pr-checkout>` is the entry whose branch is `headRefName`.
+   - If `headRefName` is checked out in `<main-checkout>`, stop with `error` (the main checkout stays on `main`).
+   - If no worktree has it, create one as AGENTS.md's Git section says. `<short>` is `headRefName` without `codex/` and with `/` replaced by `-`. Run `git -C <main-checkout> fetch origin <headRefName>`. Then, if the local branch exists: `git -C <main-checkout> worktree add <main-checkout>/worktrees/<short> <headRefName>`. Otherwise: `git -C <main-checkout> worktree add --track -b <headRefName> <main-checkout>/worktrees/<short> origin/<headRefName>`. In the new worktree, run `pnpm install --frozen-lockfile --prefer-offline`, `pnpm data:fetch` and `pnpm exec tsx scripts/claude-worktree-settings.ts`. If the path already exists, stop with `error` rather than reuse a folder of unknown origin.
+   - If the local branch is behind `origin/<headRefName>` and the worktree is clean, `git -C <pr-checkout> merge --ff-only origin/<headRefName>`.
+   - Say which PR (#, branch) and `<pr-checkout>` this run uses, in the first lines of output.
+4. Create the review root `<main-checkout>/.plans/active/pr<N>-review-fixes/` if needed, then create a **new, unique invocation folder** beneath it (for example `run-<timestamp>-<uuid>/`). Set `<scratch>` to that fresh folder, refusing any already-existing invocation path. `.plans/` is gitignored. Put this invocation's baseline, rounds, rejected entries, logs and results there. Never reuse earlier round output or delete another invocation's files. Earlier runs remain available until `$merge-pr` cleans the review root.
 5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
 6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used. Then resolve the binaries (PowerShell; `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`). `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`):
 
@@ -54,13 +62,13 @@ The PR is always the current branch's PR. No input selects a different one.
 
    Check `$LASTEXITCODE` immediately after each command. If either fails, stop with `error`. Set `<codex>` and `<claude>` to the absolute paths each prints on stdout, and retain them in session context, like `<scratch>` and `<speed>`. Each prints `<tool> <version> <path>` on stderr; note both versions for the report. Shell variables do not survive separate tool calls: replace these placeholders with the resolved paths in every later command, keeping the single quotes around them for paths containing spaces.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. Every flow merges `main` with this one procedure: `$implement-handoff` before implementing, `$sync-review` through this skill, and `$merge-pr` when `main` moves again before the merge. Work in `<pr-checkout>`.
-   1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
+   1. `git -C <pr-checkout> fetch origin main`. If `git -C <pr-checkout> merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
    2. If the merge would touch a file listed in the baseline, stop with `stopped` (`merge blocked by uncommitted <files>`) without merging. This isn't a conflict: those are another session's uncommitted edits, git refuses to overwrite them, and merging over them would destroy that work.
-   3. `git merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
+   3. `git -C <pr-checkout> merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
       - `<scope>` is the most common scope among the branch's recent commits.
       - `<topic>` is the branch name without `codex/`, written in words (e.g. `sync landmark details with main`).
    4. Resolve every conflict. Never stop because a conflict is hard; work it out. One file at a time:
-      - Understand both sides first. Read `git log --oneline origin/main...HEAD -- <file>` and the commits behind each side. If `<main-checkout>/.plans/README.md` lists the branch, read that task's `handoff.md`.
+      - Understand both sides first. Read `git -C <pr-checkout> log --oneline origin/main...HEAD -- <file>` and the commits behind each side. If `<main-checkout>/.plans/README.md` lists the branch, read that task's `handoff.md`.
       - Combine both sides' intent. Take one side wholesale only when the other is clearly superseded, and name the commit that supersedes it.
       - `pnpm-lock.yaml`: take `main`'s version, then run `pnpm install --lockfile-only`.
       - Generated data (`apps/web/public/tiles/**`, `**/tiles.lock.json`, or anything the data pipeline writes): never hand-merge it; regenerate it. Resolve every other file first. Then, for each conflicting `packages/content/cities/<slug>/tiles.lock.json`:
