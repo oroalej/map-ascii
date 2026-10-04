@@ -1,15 +1,16 @@
 ---
 name: implement-handoff
-description: Take a handoff plan (.plans/<status>/<task>/handoff.md) from review to PR. A separate Sol 6.1 max-effort run reviews the handoff for gaps and wrong assumptions, every proposed amendment is applied, then this session implements it, commits and pushes, opens a PR to main, and runs $review-pr (main synchronization, review loop and CI gate). Never merges the PR. Use when the user invokes $implement-handoff [--fast] <task or handoff path>.
+description: Take an ASCII Atlas handoff from two-round review to PR. Run $review-handoff --apply (Codex first, then Claude with Codex validation), implement only a ready handoff, commit and push, open a PR to main, then run $review-pr for synchronization, review and CI. Never merges the PR. Use when invoked as $implement-handoff [--fast] with a task name or handoff path.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
 
-Usage: `$implement-handoff [--fast] <task | path to handoff.md>`
+Usage: `$implement-handoff [--fast] [--candidate <prior candidate path>] <task | path to handoff.md>`
 
 Invoking `$implement-handoff` authorizes these actions for this one task:
 
 - editing its `handoff.md` with review amendments
+- running `$review-handoff --apply` with its two-round limit
 - creating its worktree if the handoff says it's a new task
 - implementing it, committing and pushing
 - merging `origin/main` into its branch, resolving every conflict (including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`)
@@ -25,11 +26,12 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
 | This session: amends the handoff, implements, commits, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
-| Codex #1: reviews the handoff (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
-| Codex #2: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
+| Inside `$review-handoff`: round 1 review / round 2 validation | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
+| Inside `$review-handoff`: round 2 review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
+| PR review coordinator: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
 | Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
 
-**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.1. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-pr` resolves its own `codex` and `claude`.
+**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.1. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-handoff` and `$review-pr` resolve their own newest `codex` and `claude`.
 
 This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, stop and ask the user to start `$implement-handoff` again from a session with those settings.
 
@@ -38,19 +40,19 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 - with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
 - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
-`--fast` is also forwarded to `$review-pr`. It doesn't change Claude, or this session's own speed.
+`--fast` is also forwarded to `$review-handoff` and `$review-pr`. It doesn't change Claude, or this session's own speed.
 
 ## Rules
 
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`.
-- **Main moves on; keep going.** Other sessions merge into `main` all the time. Until implementation starts, pull `origin/main` into the branch (steps 0.4 and 3.0). After that, `$review-pr` merges it (step 5). A handoff written against an older `main` gets amended, never blocked: the review step exists to catch that drift.
+- **Main moves on.** Pull `origin/main` before handoff review and once more before implementing (steps 0.4 and 3.0). Review amends stale assumptions; drift is never an unfixable `blocked` premise. If the final pull changes reviewed inputs, pause with `stale` instead of silently exceeding the handoff's two-round budget. After implementation starts, `$review-pr` handles synchronization.
 - **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
 - **Long commands:** the `$review-pr` run can take several hours. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<scratch>`, and poll until it exits.
-- **To pause:** move the task folder to `.plans/paused/`, set its `.plans/README.md` row's Next step to the reason and what needs a human, then go to step 6.
+- **To pause:** move the task folder to `.plans/paused/`, rebase task-local path variables as step 0.5 describes, set its `.plans/README.md` row's Next step to the reason and what needs a human, then go to step 6. Historical review records remain unchanged; report their relocated artifact paths.
 
 ## 0. Resolve the handoff
 
-1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Resolve the newest installed Codex (PowerShell):
+1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Resolve an explicitly supplied `--candidate` path against the invocation directory and retain its absolute path for the handoff review; it is not the original handoff path and never triggers an automatic retry. Resolve the newest installed Codex (PowerShell):
 
    ```
    pnpm.cmd -C <repo> --silent cli:latest codex
@@ -65,13 +67,13 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    `<task-dir>` is the folder holding the handoff. Use it as `<scratch>`: every file this skill writes goes there.
 3. Read the whole handoff, and `AGENTS.md`.
 4. From the handoff's §1 (Goal & context), take the branch and worktree:
-   - **It names an existing worktree** (a follow-up): use it. Confirm with `git worktree list` that the worktree is on that branch.
+   - **It names an existing worktree** (a follow-up): use it. Confirm with `git worktree list` that the worktree is on that branch. If cleanup removed it, restore the original branch/path using AGENTS.md's retained-remote procedure: fetch the task branch, reuse its local branch if present, or recreate it tracking `origin/<branch>`. Never invent a replacement branch/path or overwrite an occupied directory. In the restored worktree run `pnpm install --frozen-lockfile --prefer-offline`, `pnpm data:fetch` and the Claude worktree-settings initializer from this skill's checkout. These restoration steps are authorized by this invocation.
    - **It's a new task:** run `pnpm worktree:new <short> <topic>` from `<main-checkout>`, with the names the handoff gives. If it gives none, derive them from the task folder name. If the script fails after creating the worktree, run `pnpm install --frozen-lockfile --prefer-offline` and `pnpm data:fetch` in it yourself.
 
    `<wt>` is that worktree.
 
    Then pull `origin/main` into it (see "Pull main" below).
-5. Move `<task-dir>` to `<main-checkout>/.plans/active/` (update `<task-dir>`). Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`.
+5. Move `<task-dir>` to `<main-checkout>/.plans/active/` if it is not already there. Before moving, verify resolved old/new paths stay within this task's main-checkout `.plans/` locations and that the destination is unoccupied. Retain each task-local path's suffix relative to the old task directory. After moving, rebase `<task-dir>`, `<scratch>`, a supplied task-local `--candidate`, and any result/artifact variables onto the new directory. Verify the relocated candidate and its adjacent canonical result still exist before forwarding them; preserve historical JSON records unchanged. Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`.
 6. Save the baseline: `git -C <wt> status --porcelain` → `<scratch>/status-baseline.txt`.
 
 ### Pull main
@@ -85,38 +87,27 @@ Bring the branch up to date with `main` before the review and again before the f
 
 The merge commit is pushed with the rest of the branch in step 4.
 
-## 1. Review the handoff (Codex #1: Sol 6.1, max, analysis only)
+## 1. Run $review-handoff
 
-Run from `<wt>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is the absolute folder of this `SKILL.md`.
+Load [the sibling review-handoff skill](../review-handoff/SKILL.md) from this skill's checkout and follow it exactly. Missing skill or reference files stop with `error`. Use this session as its coordinator. Always pass `--apply` and the absolute `<task-dir>/handoff.md` path; forward `--fast` and `--candidate` only when explicitly supplied. Do not start another coordinator CLI session.
 
-```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <wt> -o <scratch>/handoff-review.md "Follow <skill-dir>/references/handoff-review-prompt.md exactly. Handoff: <task-dir>/handoff.md. Worktree: <wt>, branch <branch>. Main checkout: <main-checkout>."
-```
+The standalone skill owns the reviewer prompts, models, evidence checks, candidate, ledger and unique invocation scratch. Its sequence is Codex round 1, then Claude review and Codex validation in round 2. The handoff budget is two rounds, independent of `$review-pr`'s three-round budget later.
 
-- Never change the model, effort or speed flags, and never skip this run to review the handoff in this session instead.
-- Afterwards, compare `git -C <wt> status --porcelain` with the baseline. If anything changed, report the difference and stop. Do not revert it.
-- If `handoff-review.md` is missing, or has no verdict line, stop and report.
+Retain its fresh JSON result path as `<handoff-result>` and read it. Do not reuse prior invocation output. The result and candidate stay inside this task's scratch even when the task folder is moved later.
 
-## 2. Apply the amendments
+## 2. Require a ready, applied handoff
 
-Read `handoff-review.md`.
+- Require `status: ready`, `roundCount: 2`, `applied: true`, this task's handoff/branch/checkout identity, and a candidate hash matching the saved original handoff. Require its baseline inventory and `inspectedPaths` to cover the reviewed paths and every referenced task target. Missing or contradictory result fields stop with `error`.
+- For `capped`, `stalled`, `blocked`, `stale` or `error`, pause and report the exact status, reason and artifact paths before code changes. Never implement a scratch candidate or automatically start another review invocation.
+- Read the ready original handoff in full. Its validated amendments are now the spec. Design amendments must remain visible in its review-amendments record and in the eventual PR description.
 
-- **Verdict `blocked`:** pause and stop before any code changes. This verdict is used only when no amendment can make the handoff implementable:
-  - one of its own "Stop and report if" conditions that is about outcomes or premises (measured numbers, a premise proven false) is already true, and no amendment can fix the handoff, or
-  - its work has already landed on `main`, or
-  - the branch or worktree it names belongs to a different task.
-
-  Drift on `main` is never a blocker: moved or changed `path:line` citations, functions, files or assumptions are fixed by amendments. If the only reason given is drift (including a handoff's own "a `path:line` no longer matches" stop condition), the verdict is wrong: treat it as `ready-with-amendments` and apply its amendments.
-- **Otherwise:** apply every finding's proposed amendment, factual and design alike, to `<task-dir>/handoff.md`:
-  - Edit the affected sections in place, using the replacement text the review proposes.
-  - Append (or extend) a `## Review amendments` section at the end. List each finding as `<n>. [factual|design] <section> — <problem> → <what changed>`. Mark design amendments in **bold**.
-  - Then re-read the amended handoff in full. From here on, it's the spec.
+Do not apply additional amendments here: the standalone skill already saved the exact ready candidate. Any substantive edit after readiness invalidates that approval.
 
 ## 3. Implement
 
 Work in `<wt>`, following the amended handoff:
 
-0. Pull `origin/main` once more ("Pull main" in step 0), then re-check the amended handoff's citations against any files that pull changed. This is the last pull; from here on `$review-pr` merges `main`.
+0. Fetch `origin/main` and pin the fetched SHA as `<sync-main-sha>`, then perform the freshness preflight **before** merging, resolving conflicts, rebuilding/publishing data or making code edits. Recheck the handoff hash and compare every `inspectedPaths` input (including planned new/deleted targets) between the result's `branchSha` and current HEAD, and between its `mainSha` and `<sync-main-sha>`. Also compare each reviewed input's live bytes/existence against the saved baseline inventory, and check its staged and unstaged differences: dirty reviewed git inputs or changed nongit inputs are `stale` even when HEAD is unchanged. Planned absent targets must still be absent. If any reviewed input changed, pause with `stale`, naming the files and leaving them untouched; do not run a hidden third round. If the preflight passes, synchronize with steps 2–4 of "Pull main", skipping its fetch and substituting `<sync-main-sha>` for `origin/main` throughout that merge and its delegated conflict instructions. Repeat all revision, live-file, dirty-file and handoff-hash checks before implementing, including checking current `origin/main`, since another session or conflict decision may have changed reviewed inputs. If only unrelated files changed, record the comparisons and refreshed revisions alongside `<handoff-result>` without changing its original review record. Re-read the ready handoff without editing it. This is the last synchronization; from here on `$review-pr` merges `main`.
 1. Do its steps in order. After each step, run that step's targeted test. Fix failures before moving on.
 2. Obey its "Stop and report if" section. A drift condition (cited code moved or changed) isn't a stop: find where the code went and continue. Stop for it only if the step's change no longer applies to the code at all. If any other condition is hit, commit nothing further, then pause and stop. Leave any commits already made local and unpushed, and list them in the report.
 3. Respect its Invariants and Out of scope sections, and `AGENTS.md`.
@@ -134,7 +125,7 @@ For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SK
 
 ## 5. Run $review-pr
 
-Start it once, in a fresh Codex #2, with a shell timeout of at least 4 hours:
+Start it once, in a fresh Codex PR-review coordinator, with a shell timeout of at least 4 hours:
 
 ```
 & '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <scratch>/review.md 'Use the review-pr skill at <skill-dir>/../review-pr/SKILL.md, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <scratch>/review.json.'
@@ -149,10 +140,10 @@ Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block 
 
 Report, following the handoff's "Report back" section, and add:
 
-- **Handoff review:** the verdict and every amendment, with the design amendments listed first.
+- **Handoff review:** the status, round count (of 2), Codex then Claude → Codex sequence, result path, whether applied, and every amendment (design first). Include any freshness stop. Never describe capped or stale review as ready.
 - **The PR URL**, and the `$review-pr` result: the main merge (`mainMerge`), review rounds (`roundCount` of 3), final status, the CI status, and anything it skipped or noticed.
 - Which checks ran locally, and which were left to CI.
-- The speed the Codex instances ran at (fast or normal), and the `codex` version from step 0.1.
+- The speed the Codex instances ran at (fast or normal), and the resolved `codex`/`claude` versions from the handoff and PR reviews.
 
 Then, per `AGENTS.md`:
 
