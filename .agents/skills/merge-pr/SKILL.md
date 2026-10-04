@@ -11,7 +11,8 @@ Usage: `$merge-pr [<branch>] [Head: <sha>]`. Without a branch, it uses the curre
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 
-- merging `origin/main` into its branch and pushing, whenever `main` has moved (step 2.3)
+- merging `origin/main` into its branch and pushing, whenever `main` has moved (step 2.3), resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`
+- commenting on its PR with the conflict decisions that merge made
 - merging its PR into `main`, which deploys to production through Vercel
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
 - deleting its local branch and its worktree folder
@@ -45,7 +46,7 @@ Check every condition. If one fails, stop with `stopped`, naming it.
 2. `git -C <wt> fetch origin <branch>`, then `git -C <wt> rev-parse HEAD` equals `origin/<branch>` and the PR's `headRefOid`. Everything local is pushed.
    - With `Head: <sha>`, `headRefOid` must equal `<sha>`, or every commit in `git -C <wt> rev-list <sha>..HEAD` must be a main-sync merge: a merge commit whose message starts with `🔀 merge(` and whose second parent is an ancestor of `origin/main` (such as one an earlier, stopped `$merge-pr` run pushed). Anything else was pushed after the caller's review: stop.
    - Call this SHA `<gated-sha>`.
-3. **Sync with main.** `git -C <wt> fetch origin main`. If `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise follow `<skill-dir>/../review-pr/SKILL.md` step 1.7 (items 2–7) in `<wt>` as `<pr-checkout>`, with an empty baseline (gate 1 confirmed a clean worktree). It merges `origin/main`, resolves conflicts and pushes. If it aborts, stop with `stopped` and its `merge conflict: <files> — <why>` stopReason. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`. `<skill-dir>` is the absolute folder of this `SKILL.md`.
+3. **Sync with main.** `git -C <wt> fetch origin main`. If `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise follow `<skill-dir>/../review-pr/SKILL.md` step 1.7 (items 2–7) in `<wt>` as `<pr-checkout>`, with an empty baseline (gate 1 confirmed a clean worktree). It merges `origin/main`, resolves every conflict and pushes. It aborts only when a tool the resolution needs can't run; then stop with `stopped` and its `merge tool unavailable: <tool> — <files>` stopReason. This merge comes after the PR's review, so if its commit has a `Conflict decisions:` body, post that list as a PR comment (`gh pr comment <N> --body-file <file>`, the file in the OS temp folder) and include it in the report. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`. `<skill-dir>` is the absolute folder of this `SKILL.md`.
 4. CI passes on `<gated-sha>`. Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. Any failing check stops the run. This skill doesn't fix CI; `$review-pr` does. When the failing head is this run's main-sync merge, use the stopReason `ci red after main sync: <check>`, so the caller knows to fix CI and rerun.
 5. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. If it shows `CONFLICTING`, `main` moved again: go back to gate 3. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; §3 step 1 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
 
@@ -146,5 +147,5 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
 
 - `status`: `merged` (the PR is merged, even if some cleanup failed), `stopped` (a step-2 gate or the head-commit match failed; nothing merged into `main`, though a main-sync merge may have been pushed to the branch), or `error`.
 - `headSha`: the `<gated-sha>` that was merged.
-- `mainSyncs`: how many times gate 3 merged `origin/main` into the branch.
+- `mainSyncs`: how many times gate 3 merged `origin/main` into the branch. The report lists each sync's `Conflict decisions:`, if any.
 - A cleanup entry that failed or was skipped says why, e.g. `"worktree": "partially deleted: in use by another process"` or `"plans": ["skipped: codex/x has local commits after the merge"]`.

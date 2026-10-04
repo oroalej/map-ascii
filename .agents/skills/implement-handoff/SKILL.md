@@ -12,6 +12,7 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - editing its `handoff.md` with review amendments
 - creating its worktree if the handoff says it's a new task
 - implementing it, committing and pushing
+- merging `origin/main` into its branch, resolving every conflict (including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`)
 - opening a PR to `main`
 - running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
@@ -79,7 +80,7 @@ Bring the branch up to date with `main` before the review and again before the f
 
 1. `git -C <wt> fetch origin main`. If `git -C <wt> merge-base --is-ancestor origin/main HEAD` succeeds, it's already current.
 2. Otherwise `git -C <wt> merge origin/main -m "🔀 merge(<scope>): sync <topic> with main"` (same `<scope>`/`<topic>` rule as `<skill-dir>/../review-pr/SKILL.md` step 1.7.3). A branch with no commits of its own just fast-forwards.
-3. On conflicts, resolve them as `review-pr` step 1.7.4–1.7.5 says. Abort (`git merge --abort`) only for its reasons (generated data, or no clear resolution), then pause and stop with `merge conflict: <files> — <why>`.
+3. Resolve every conflict as `review-pr` step 1.7.4–1.7.5 says: regenerate tiles, decide incompatible behaviors with `main` as the baseline, record `Conflict decisions:` in the merge commit, and fix what the tests catch. Never stop for a conflict. Only its step 1.7.6 case (a tool the resolution needs can't run) aborts the merge; then pause and stop with `merge tool unavailable: <tool> — <files>`. List any conflict decisions in the step 6 report.
 4. If git refuses because the merge would overwrite uncommitted files, those are another session's edits: pause and stop, naming them. Don't touch them.
 
 The merge commit is pushed with the rest of the branch in step 4.
@@ -142,7 +143,7 @@ Start it once, in a fresh Codex #2, with a shell timeout of at least 4 hours:
 Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`.
 
 - `clean` (review clean and CI green): the task is done.
-- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for a `merge conflict` with `main` it couldn't resolve: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
+- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for `merge tool unavailable`: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
 
 ## 6. Report and clean up
 

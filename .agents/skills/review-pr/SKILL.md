@@ -5,7 +5,7 @@ description: Review the current branch's pull request until it's clean and CI is
 
 # Claude review → Codex validation → fixes, until clean, then CI
 
-Treat invocation of `$review-pr` as authorization to run the whole flow: merging `origin/main` into the PR's branch (resolving conflicts) and pushing, up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
+Treat invocation of `$review-pr` as authorization to run the whole flow: merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish` when tiles conflict) and pushing, up to 3 review rounds (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate (CI fixes, commits and pushes). Do not ask for confirmation between steps. Stop only where this skill says to stop. Never merge the PR.
 
 ## Models
 
@@ -55,21 +55,25 @@ The PR is always the current branch's PR. No input selects a different one.
    Check `$LASTEXITCODE` immediately after each command. If either fails, stop with `error`. Set `<codex>` and `<claude>` to the absolute paths each prints on stdout, and retain them in session context, like `<scratch>` and `<speed>`. Each prints `<tool> <version> <path>` on stderr; note both versions for the report. Shell variables do not survive separate tool calls: replace these placeholders with the resolved paths in every later command, keeping the single quotes around them for paths containing spaces.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. Every flow merges `main` with this one procedure: `$implement-handoff` before implementing, `$sync-review` through this skill, and `$merge-pr` when `main` moves again before the merge. Work in `<pr-checkout>`.
    1. `git -C <pr-checkout> fetch origin main`. If `git merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
-   2. If the merge would touch a file listed in the baseline (another session's uncommitted edits), stop with `stopped` (`merge blocked by uncommitted <files>`) without merging.
+   2. If the merge would touch a file listed in the baseline, stop with `stopped` (`merge blocked by uncommitted <files>`) without merging. This isn't a conflict: those are another session's uncommitted edits, git refuses to overwrite them, and merging over them would destroy that work.
    3. `git merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
       - `<scope>` is the most common scope among the branch's recent commits.
       - `<topic>` is the branch name without `codex/`, written in words (e.g. `sync landmark details with main`).
-   4. Resolve conflicts one file at a time:
+   4. Resolve every conflict. Never stop because a conflict is hard; work it out. One file at a time:
       - Understand both sides first. Read `git log --oneline origin/main...HEAD -- <file>` and the commits behind each side. If `<main-checkout>/.plans/README.md` lists the branch, read that task's `handoff.md`.
       - Combine both sides' intent. Take one side wholesale only when the other is clearly superseded, and name the commit that supersedes it.
       - `pnpm-lock.yaml`: take `main`'s version, then run `pnpm install --lockfile-only`.
-      - Generated data (`apps/web/public/tiles/**`, `**/tiles.lock.json`, or anything the data pipeline writes): don't hand-merge it. Abort.
-      - If the right resolution is unclear (two incompatible behaviors and no clear winner), abort. Don't guess.
+      - Generated data (`apps/web/public/tiles/**`, `**/tiles.lock.json`, or anything the data pipeline writes): never hand-merge it; regenerate it. Resolve every other file first. Then, for each conflicting `packages/content/cities/<slug>/tiles.lock.json`:
+        - If the branch's version (`git show :2:<path>`) equals the merge base's (`git show :1:<path>`), only `main` changed the tiles: take `main`'s lock (`git restore --theirs -- <path>`, then `git add <path>`).
+        - Otherwise both sides changed the city's data. From the merged tree, run `pnpm data:build -- --city <slug>`, then `pnpm data:publish -- --city <slug>`. That publishes a release built from both sides' inputs and writes a fresh lock. Stage that lock as the resolution.
+        - Other pipeline output follows the same rule: rebuild it from the merged inputs.
+      - Two incompatible behaviors with no obvious winner: decide, don't stop. `main`'s behavior is the baseline, because it's merged and reviewed. Reapply the branch's intent on top of it, guided by the branch's commits and its handoff. Keep both behaviors where the code allows it (both fields, both cases, both options). Otherwise keep `main`'s semantics and adapt the branch's change to fit them.
+      - Record every resolution that took judgment (anything beyond keeping both sides' lines or taking a clearly superseded side) in a `Conflict decisions:` list in the merge commit body: `<file> — kept <what>, because <why>`.
    5. Before committing:
       - Confirm no conflict markers remain: run `git diff --check`, and search the resolved files for `<<<<<<<`, `=======` and `>>>>>>>`.
-      - Run `pnpm run test --changed`, plus `pnpm --filter @atlas/<pkg> typecheck` for every package with a resolved file. If a failure comes from the resolution, fix it. If it still fails, abort.
-      - Commit the merge with the message from 3.
-   6. To abort: run `git merge --abort`, then stop with `stopped` and stopReason `merge conflict: <files> — <why>`. Set `mainMerge` to `aborted`.
+      - Run `pnpm run test --changed`, plus `pnpm --filter @atlas/<pkg> typecheck` for every package with a resolved file. Fix every failure the resolution causes, and rerun until they pass. A failure that also happens on plain `origin/main` (check its CI with `gh run list --branch main`) isn't from the merge: note it for the report and continue.
+      - Commit the merge with the message from 3, plus its `Conflict decisions:` body when there is one.
+   6. Abort only when a tool the resolution needs can't run: tippecanoe/Docker for `data:build`, `gh` auth for `data:publish`, or the network for a first download. Run `git merge --abort`, then stop with `stopped` and stopReason `merge tool unavailable: <tool> — <files>`. Set `mainMerge` to `aborted`. A conflict alone is never a reason to abort.
    7. `git push`. Set `mainMerge` to `merged` (or `resolved <n> files` when there were conflicts).
 
 ## 2. Round k: Claude reviews the PR
@@ -149,7 +153,7 @@ Nits are fixed when they come up. New nits alone never start another round, beca
 
 Report:
 
-- `Main merge: <mainMerge>` (from step 1.7)
+- `Main merge: <mainMerge>` (from step 1.7), with its `Conflict decisions:` list and any failures that also happen on `main`
 - `Review rounds: <k> of 3`, counting every round, including one run after a CI fix. Then one line per round with its outcome (`clean`, `fixed`, `stalled` or `stopped`)
 - Each round: Claude's verdict, and the validation table (# / Claude's severity / verdict / evidence / final severity)
 - Fixed entries, with the commit hashes
@@ -202,7 +206,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
 - `cli`: the versions step 1.6 resolved (`null` for one not resolved).
-- `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted`, or `not-run` (stopped before step 1.7).
+- `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (stopped before step 1.7).
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
 - `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity.
 - `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), `red`, or `not-run` (the run stopped before step 6).
