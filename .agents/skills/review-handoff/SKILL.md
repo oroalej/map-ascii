@@ -27,7 +27,7 @@ Resolve the newest installed binaries once with `pnpm.cmd -C <repo> --silent cli
 
 `<speed>` is `-c 'service_tier="fast"' --enable fast_mode` with `--fast`, otherwise `--disable fast_mode`. Pass it explicitly to both Codex runs. Claude remains at normal speed.
 
-On Windows, quote paths and use single-quoted prompt strings, or put the exact prompt in a scratch file and pass `(Get-Content -Raw '<prompt-path>')`. Capture stdout with `Out-File -Encoding utf8`, never plain `>`. Capture native exit codes immediately. If a run needs a background process, use `Start-Process -WindowStyle Hidden`, capture its exit code, and poll with short waits while providing progress updates.
+All reviewer and validator launches, including background launches, use `<checkout>` as their working directory. On Windows, quote paths and use single-quoted prompt strings, or put the exact prompt in a scratch file and pass `(Get-Content -Raw '<prompt-path>')`. Capture stdout with `Out-File -Encoding utf8`, never plain `>`. Capture native exit codes immediately. If a run needs a background process, use `Start-Process -WindowStyle Hidden`, capture its exit code, and poll with short waits while providing progress updates.
 
 ## 1. Resolve and snapshot
 
@@ -80,6 +80,8 @@ Create `<scratch>/round2/` and copy the amended candidate to immutable `input.md
 ### Claude
 
 Write a prompt naming the shared `handoff-review-prompt.md`, round `2`, and the absolute input/context/ledger/checkout/main-checkout paths. Use mode `follow-up`: inspect round 1's amendments, unresolved/rejected claims where evidence changed, and their effects on the handoff's goal, invariants, dependencies, steps and verification. If round 1 changed scope, architecture or core assumptions, use mode `full`. When round 1 changed nothing, perform an independent check of the plan's critical assumptions and completeness. Read the whole candidate for coherence in every case, and inspect repository files relevant to the claims rather than repeating unrelated source reads.
+
+Run from `<checkout>`:
 
 ```powershell
 & '<claude>' -p (Get-Content -Raw '<scratch>/round2/claude-prompt.txt') --model claude-opus-5-5 --effort high --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 '<scratch>/round2/claude-review.md'
