@@ -5,7 +5,7 @@ import { LifeWorld, type VisibleAgent } from './simulate';
 import { makeScenario, worldTiles } from './testing/scenarios';
 import { createInlineHost } from './host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
-import { RETIRE } from './config';
+import { RETIRE, UMBRELLA_MOTION } from './config';
 
 class ItemWorld extends LifeWorld {
   constructor(traffic?: TrafficMix) {
@@ -247,6 +247,38 @@ describe('per-item inspection', () => {
       expect(baseline.some((agent) => Object.hasOwn(agent, 'inspectionId'))).toBe(false);
       expect(strip(item.step(frame))).toEqual(strip(baseline));
     }
+  });
+
+  it('holds a changing canopy beyond lost and resumes from its attained openness', () => {
+    const s = makeScenario('rain', 1, false, 1, ItemWorld);
+    const world = s.world;
+    const look = (rain: number) => world.visible(19, s.levels, s.center, { rain, sunAltitude: 20 });
+    look(0);
+    look(1);
+    let selected: VisibleAgent | undefined;
+    for (let frame = 0; frame < 45 && !selected; frame++) {
+      world.step(0.05);
+      selected = look(1).find((a) =>
+        a.people?.some((p) => p.canopy && p.canopy.open > 0.2 && p.canopy.open < 0.8),
+      );
+    }
+    expect(selected).toBeDefined();
+    const id = selected!.inspectionId!;
+    const member = selected!.people!.findIndex((p) => !!p.canopy);
+    const attained = selected!.people![member]!.canopy!.open;
+    world.inspection!.select({ id, revision: 1, time: world.signalClock }, world.signalClock);
+    for (let frame = 0; frame < Math.ceil(UMBRELLA_MOTION.lost / 0.05) + 10; frame++) {
+      world.step(0.05);
+      expect(look(1).find((a) => a.inspectionId === id)!.people).toEqual(selected!.people);
+    }
+    world.inspection!.select({ id: null, revision: 2, time: world.signalClock }, world.signalClock);
+    expect(look(1).find((a) => a.inspectionId === id)!.people![member]!.canopy!.open).toBeCloseTo(
+      attained,
+    );
+    world.step(0.05);
+    const resumed = look(1).find((a) => a.inspectionId === id)!.people![member]!.canopy!.open;
+    expect(resumed).toBeGreaterThan(attained);
+    expect(resumed).toBeLessThan(1);
   });
 
   it('applies the same commands and poses in the inline and worker APIs', async () => {

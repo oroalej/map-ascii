@@ -408,6 +408,8 @@ function drawPeople(
   // A paddler's glyphs head up or right; turned half round, they are the other side's paddler at
   // the other end of the stroke (life/people.ts `ROWER`).
   const turned = fx < 0 || fy > 0;
+  const stageOf = (look: PersonLook): 0 | 1 | undefined =>
+    look.canopy ? (look.canopy.open < 0.5 ? 0 : 1) : undefined;
   const byteOf = (look: PersonLook, tone = false) => {
     const umbrella = look.figure === 'umbrella';
     const part = tone
@@ -442,6 +444,7 @@ function drawPeople(
         pull,
         headingOf(fx, fy),
         look.pose,
+        stageOf(look),
       );
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
@@ -467,11 +470,29 @@ function drawPeople(
       const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
       if (fit === 'stamp') {
-        any = stampFigure(out, grid, [cx, cy], along, right, look, stroke, glyphIndex, (tone) => [
+        const under = look.canopy
+          ? { ...look, figure: look.canopy.figure, paint: look.canopy.paint }
+          : look;
+        any = stampFigure(out, grid, [cx, cy], along, right, under, stroke, glyphIndex, (tone) => [
           cls,
           bits,
-          byteOf(look, tone),
+          byteOf(under, tone),
         ]);
+        if (look.canopy) {
+          const canopy = stampFigure(
+            out,
+            grid,
+            [cx, cy],
+            along,
+            right,
+            look,
+            stroke,
+            glyphIndex,
+            (tone) => [cls, bits, byteOf(look, tone)],
+            (0.3 + 0.7 * look.canopy.open) * FIGURE_SIZE_M.umbrella,
+          );
+          any = canopy || any;
+        }
       } else if (fit === 'big') {
         any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
       } else {
@@ -483,6 +504,7 @@ function drawPeople(
           0,
           headingOf(fx, fy),
           look.pose,
+          stageOf(look),
         );
         any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
       }
@@ -522,6 +544,7 @@ function drawPeople(
         0,
         headingOf(fx, fy),
         look.pose,
+        stageOf(look),
       );
       // In a 2×2 slot: its cell nearest the first of the group.
       const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
@@ -549,6 +572,7 @@ function stampFigure(
   stroke: 0 | 1,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
+  size = FIGURE_SIZE_M[look.figure],
 ): boolean {
   const frame = look.flap === 1 ? 1 : 0;
   // A canopy's thin ribs show in a cell where they are a third of its ink.
@@ -559,7 +583,7 @@ function stampFigure(
     center,
     along,
     right,
-    FIGURE_SIZE_M[look.figure],
+    size,
     (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
     toneShare,
     glyphIndex,

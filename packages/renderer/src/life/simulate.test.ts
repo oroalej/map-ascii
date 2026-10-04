@@ -13,6 +13,7 @@ import {
   PARKED,
   ROAD_MARGIN_M,
   UMBRELLA,
+  UMBRELLA_MOTION,
   VENDORS,
 } from './config';
 import { BirdPose, Habitat } from './birds';
@@ -31,6 +32,8 @@ import {
   type Train,
 } from './simulate';
 import { BOAT_PAINTS_AVOID, resolveTraffic, VEHICLES } from './vehicles';
+import { worldTiles } from './testing/scenarios';
+import type { PersonLook } from './people';
 
 /** A z16 tile over Naga's Centro (about 600 m across). */
 const tile = { z: 16, x: 55192, y: 30266 };
@@ -1416,6 +1419,65 @@ describe('people', () => {
     expect(share(0, -10)).toBeLessThanOrEqual(UMBRELLA.base + 0.1);
   });
 
+  it('staggers close-up opening and closing while preserving distant instant changes', () => {
+    for (const zoom of [18, 19]) {
+      const world = new LifeWorld();
+      world.sync([{ key: 'motion', tile, life: across(LifeLine.path) }]);
+      const life = worldTiles(world).get('motion')!;
+      const m = life.movers.find((m) => m.group)!;
+      life.movers.splice(0, life.movers.length, m);
+      life.stalls.length = 0;
+      life.flocks.length = 0;
+      m.pause = 100;
+      m.rank = 0;
+      m.group = [0.1, 0.4, 0.8, 0.1].map((umbrella, i) => ({
+        figure: i === 3 ? 'child' : 'adult',
+        umbrella,
+        shirt: i + 1,
+        canopy: i + 5,
+        lateral: i % 2,
+        back: Math.floor(i / 2),
+        step: 0,
+      }));
+      const looks = (rain: number) =>
+        world.visible(zoom, 1, center, { rain, sunAltitude: 20 })[0]!.people!;
+      const dry = looks(0);
+      let wet = looks(1);
+      if (zoom === 18) {
+        expect(wet.map((p) => p.figure)).toEqual(['umbrella', 'umbrella', 'adult', 'child']);
+        expect(looks(0)).toEqual(dry);
+        continue;
+      }
+      expect(wet).toEqual(dry);
+      const progress = new Map<number, number>();
+      const frames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.open) / 0.05) + 1;
+      for (let frame = 0; frame < frames; frame++) {
+        world.step(0.05);
+        wet = looks(1);
+        wet.forEach((look, i) => {
+          if (!look.canopy) return;
+          expect(look.canopy.open).toBeGreaterThanOrEqual(progress.get(i) ?? 0);
+          expect(look.canopy.figure).toBe('adult');
+          expect(look.canopy.paint).toBe(m.group![i]!.shirt);
+          progress.set(i, look.canopy.open);
+        });
+      }
+      expect(progress.size).toBe(2);
+      expect(wet.map((p) => p.figure)).toEqual(['umbrella', 'umbrella', 'adult', 'child']);
+      expect(wet.every((p) => !Object.hasOwn(p, 'canopy'))).toBe(true);
+      expect(looks(0)).toEqual(wet);
+      let folding = false;
+      const closingFrames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
+      for (let frame = 0; frame < closingFrames; frame++) {
+        world.step(0.05);
+        const closed = looks(0);
+        folding ||= closed.some((p) => !!p.canopy);
+        if (frame === closingFrames - 1) expect(closed).toEqual(dry);
+      }
+      expect(folding).toBe(true);
+    }
+  });
+
   it('sets up carts beside walking paths, more of them near a market, and omits road vendors', () => {
     const road = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
     expect(road.stalls).toHaveLength(0);
@@ -1538,6 +1600,40 @@ describe('people at places', () => {
     expect(before.length).toBeLessThanOrEqual(2);
     for (let i = 0; i < 100; i++) life.step(0.1);
     expect(life.gatherers.map((g) => [g.x, g.y])).toEqual(before);
+  });
+
+  it('opens and folds over a seated adult without losing the seated figure or shirt', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'bench-motion', tile, life: withPlaces([['bench', 0]]) }]);
+    const life = worldTiles(world).get('bench-motion')!;
+    const gatherer = life.gatherers.find((g) => g.walker.figure === 'adult')!;
+    expect(gatherer).toBeDefined();
+    life.gatherers.splice(0, life.gatherers.length, gatherer);
+    gatherer.rank = 0;
+    gatherer.walker = { ...gatherer.walker, umbrella: 0.23 };
+    const look = (rain: number): PersonLook =>
+      world.visible(19, 1, center, { rain, sunAltitude: 20 })[0]!.people![0]!;
+    const dry = look(0);
+    expect(dry.figure).toBe('seated');
+    expect(look(1)).toEqual(dry);
+    const stages: PersonLook[] = [];
+    for (let frame = 0; frame < 50; frame++) {
+      world.step(0.05);
+      const next = look(1);
+      if (next.canopy) stages.push(next);
+    }
+    expect(stages.length).toBeGreaterThan(0);
+    for (const stage of stages) {
+      expect(stage.canopy!.figure).toBe('seated');
+      expect(stage.canopy!.paint).toBe(dry.paint);
+    }
+    expect(look(1)).toMatchObject({ figure: 'umbrella', paint: gatherer.walker.canopy });
+    expect(look(1).canopy).toBeUndefined();
+    for (let frame = 0; frame < 50; frame++) {
+      world.step(0.05);
+      look(0);
+    }
+    expect(look(0)).toEqual(dry);
   });
 
   it('work the fields with carabao in the morning, not at night', () => {

@@ -30,6 +30,8 @@ export type PersonLook = {
   flap: number;
   /** Stationary social pose; age, clothing and physical size remain the same. */
   pose?: PersonPose;
+  /** A partly open canopy over the person's own figure and shirt. */
+  canopy?: { open: number; figure: PersonFigure; paint: number };
 };
 
 /**
@@ -218,12 +220,24 @@ const poseMasters = (figure: PersonFigure, pose?: PersonPose) =>
   pose && (figure === 'adult' || figure === 'child') ? POSE_MASTERS[figure][pose] : undefined;
 
 /** An umbrella's canopy: an octagon, its ribs crossing to the tip (just the tip when small). */
-function canopy(n: number): string[] {
-  const cut = Math.max(1, Math.round(n / 5));
+function canopy(n: number, share = 1): string[] {
+  const m = Math.min(n, Math.max(3, Math.round(n * share)));
+  const offset = Math.floor((n - m) / 2);
+  const cut = Math.max(1, Math.round(m / 5));
+  const tip0 = Math.floor((m - 1) / 2);
+  const tip1 = Math.ceil((m - 1) / 2);
   return Array.from({ length: n }, (_, y) =>
     Array.from({ length: n }, (_, x) => {
-      if (Math.min(x, n - 1 - x) + Math.min(y, n - 1 - y) < cut) return '.';
-      const rib = n >= 8 ? x === y || x + y === n - 1 : x === y && 2 * x === n - 1;
+      const cx = x - offset;
+      const cy = y - offset;
+      if (cx < 0 || cy < 0 || cx >= m || cy >= m) return '.';
+      if (Math.min(cx, m - 1 - cx) + Math.min(cy, m - 1 - cy) < cut) return '.';
+      const rib =
+        m >= 8
+          ? cx === cy || cx + cy === m - 1
+          : share === 1
+            ? cx === cy && 2 * cx === m - 1
+            : cx >= tip0 && cx <= tip1 && cy >= tip0 && cy <= tip1;
       return rib ? 'o' : '#';
     }).join(''),
   );
@@ -322,6 +336,7 @@ export type FigureGlyph = {
   /** Seated figures are directional, unlike the symmetric walking silhouettes. */
   heading?: Heading;
   pose?: PersonPose;
+  stage?: 0 | 1;
 };
 
 /** Where a figure glyph goes: one cell at a scale, or one cell of a 2×2 figure. */
@@ -378,10 +393,29 @@ for (const figure of ['adult', 'child'] as const)
           glyphTable.push({ figure, pose, heading, across: false, frame: 0, slice });
     }
 
-const keyOf = ({ figure, across, frame, scale, slice, stroke, heading, pose }: FigureGlyph) => {
+// Append canopy stages after poses, preserving every previous Private Use character.
+for (const stage of [0, 1] as const) {
+  for (const scale of [0, 1, 2] as const)
+    glyphTable.push({ figure: 'umbrella', across: false, frame: 0, stage, scale });
+  for (const slice of [0, 1, 2, 3] as const)
+    glyphTable.push({ figure: 'umbrella', across: false, frame: 0, stage, slice });
+}
+
+const keyOf = ({
+  figure,
+  across,
+  frame,
+  scale,
+  slice,
+  stroke,
+  heading,
+  pose,
+  stage,
+}: FigureGlyph) => {
   const at = slice === undefined ? `s${scale}` : `c${slice}`;
   if (poseMasters(figure, pose)) return `${figure}:${pose}:${heading ?? (across ? 1 : 0)}:${at}`;
-  if (figure === 'umbrella') return `umbrella:${at}`;
+  if (figure === 'umbrella')
+    return stage === undefined ? `umbrella:${at}` : `umbrella:${stage}:${at}`;
   if (figure === 'seated') return `seated:${heading ?? (across ? 1 : 0)}:${at}`;
   return `${figure}:${+across}:${frame}:${at}:${stroke ?? 0}`;
 };
@@ -400,8 +434,9 @@ export function figureGlyph(
   stroke: 0 | 1 = 0,
   heading?: Heading,
   pose?: PersonPose,
+  stage?: 0 | 1,
 ): string {
-  return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading, pose }))!;
+  return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading, pose, stage }))!;
 }
 
 /** Which figure a glyph draws, if it is one. */
@@ -418,6 +453,10 @@ export function personGlyphs(): string[] {
  * mirrored for its heading and step.
  */
 export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number) => string {
+  if (g.figure === 'umbrella' && g.stage !== undefined) {
+    const rows = canopy(box, g.stage === 0 ? 0.45 : 0.75);
+    return (x, y) => rows[y]?.[x] ?? '.';
+  }
   const posed = poseMasters(g.figure, g.pose);
   if (posed) return turnedPixels(posed, box, g.heading ?? (g.across ? 1 : 0));
   if (g.figure === 'seated') return turnedPixels(SEATED, box, g.heading ?? (g.across ? 1 : 0));

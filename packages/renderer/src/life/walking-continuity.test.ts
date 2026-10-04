@@ -5,6 +5,7 @@ import { worldTiles } from './testing/scenarios';
 import { LifeLine } from './geometry';
 import { frameBetween } from './frames';
 import { activityLevels } from './config';
+import { tileToLngLat } from '../raster/geometry';
 
 function group(size: number): Walker[] {
   return Array.from({ length: size }, (_, i) => ({
@@ -176,4 +177,45 @@ it('keeps gait and umbrella appearance while children load in stages and the par
   expect(
     [...worldTiles(world).values()].flatMap((life) => life.movers).filter((value) => value === m),
   ).toHaveLength(1);
+});
+
+it('carries attained canopy openness through a mid-transition tile handoff', () => {
+  const world = new LifeWorld();
+  const p = continuityTile(parent, LifeLine.path);
+  const a = continuityTile(left, LifeLine.path);
+  world.sync([p]);
+  const source = worldTiles(world).get(p.key)!;
+  const m = walker(source, 1);
+  m.group![0]!.umbrella = 0.23;
+  Object.freeze(m.group![0]!);
+  m.pause = 100;
+  source.movers.splice(0, source.movers.length, m);
+  const center: [number, number] = [123, 13];
+  const look = (rain: number) => {
+    const owner = [...worldTiles(world).values()].find((life) => life.movers.includes(m))!;
+    const [lng, lat] = tileToLngLat(owner.tile, owner.pose(m));
+    return world
+      .visible(20, activityLevels(1), center, { rain, sunAltitude: 20 })
+      .find((agent) => agent.lng === lng && agent.lat === lat && agent.people)?.people![0];
+  };
+  world.visible(20, activityLevels(1), center, { rain: 0, sunAltitude: 20 });
+  look(1);
+  let before;
+  for (let frame = 0; frame < 45; frame++) {
+    world.step(0.05);
+    const next = look(1);
+    if (next?.canopy && next.canopy.open > 0.2 && next.canopy.open < 0.8) {
+      before = next;
+      break;
+    }
+  }
+  expect(before?.canopy).toBeDefined();
+  const members = m.group;
+  world.sync([p, a]);
+  const target = worldTiles(world).get(a.key)!;
+  expect(target.movers).toContain(m);
+  expect(m.group).toBe(members);
+  expect(look(1)).toEqual(before);
+  world.step(0.05);
+  expect(look(1)!.canopy!.open).toBeGreaterThan(before.canopy!.open);
 });

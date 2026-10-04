@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { UMBRELLA, umbrellaShare } from './config';
 import { Heading } from './masters';
 import {
@@ -33,9 +34,9 @@ describe('people', () => {
       expect(g.charCodeAt(0)).toBeLessThan(0xf900);
       const f = figureOf(g)!;
       const at = f.slice === undefined ? { scale: f.scale! } : { slice: f.slice };
-      expect(figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0, f.heading, f.pose)).toBe(
-        g,
-      );
+      expect(
+        figureGlyph(f.figure, f.across, f.frame, at, f.stroke ?? 0, f.heading, f.pose, f.stage),
+      ).toBe(g);
     }
     expect(figureOf('☺')).toBeUndefined();
   });
@@ -105,7 +106,7 @@ describe('people', () => {
   });
 
   it('appends age-preserving stationary poses with distinct cardinal directions and stamp ink', () => {
-    expect(personGlyphs()).toHaveLength(187);
+    expect(personGlyphs()).toHaveLength(201);
     for (const figure of ['adult', 'child'] as const)
       for (const pose of ['attentive', 'gesture'] as const)
         for (const box of [5, 10, 20]) {
@@ -129,5 +130,48 @@ describe('people', () => {
             figureOf(figureGlyph(figure, true, 1, { scale: 2 }, 0, Heading.left, pose)),
           ).toMatchObject({ figure, pose, heading: Heading.left });
         }
+  });
+  it('preserves every legacy descriptor and full canopy while appending fourteen stage glyphs', () => {
+    const glyphs = personGlyphs();
+    // Frozen pre-change descriptors and masters protect packed glyph meanings, including poses.
+    const hash = (value: unknown) =>
+      createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    expect(hash(glyphs.slice(0, 187).map(figureOf))).toBe(
+      '64b2c30eabe6d6d56b84887e670ef71b10d6f21d77b046b9a0be174bc092b3d4',
+    );
+    expect(hash(FIGURE_MASTERS.umbrella)).toBe(
+      'e41f2a96577ec044a1e3114c7aa3f0f5966e9ff8b109e8a04630b98a836d708e',
+    );
+    glyphs.forEach((glyph, index) => expect(glyph.charCodeAt(0)).toBe(0xe000 + index));
+    for (const stage of [0, 1] as const) {
+      const added = glyphs.slice(187 + stage * 7, 194 + stage * 7).map(figureOf);
+      expect(added.map((g) => g!.stage)).toEqual(new Array(7).fill(stage));
+      expect(added.slice(0, 3).map((g) => g!.scale)).toEqual([0, 1, 2]);
+      expect(added.slice(3).map((g) => g!.slice)).toEqual([0, 1, 2, 3]);
+    }
+  });
+
+  it('keeps both stage inks inside the full canopy across small and large pixel boxes', () => {
+    for (const box of [5, 6, 8, 9, 10, 15, 20, 30]) {
+      const full = figurePixels({ figure: 'umbrella', across: false, frame: 0 }, box);
+      const counts: number[] = [];
+      for (const stage of [0, 1] as const) {
+        const pixels = figurePixels({ figure: 'umbrella', across: false, frame: 0, stage }, box);
+        const marks: string[] = [];
+        let fullCount = 0;
+        for (let y = 0; y < box; y++)
+          for (let x = 0; x < box; x++) {
+            if (full(x, y) !== '.') fullCount++;
+            if (pixels(x, y) === '.') continue;
+            expect(full(x, y)).not.toBe('.');
+            marks.push(pixels(x, y));
+          }
+        expect(marks).toContain('#');
+        expect(marks).toContain('o');
+        expect(marks.length).toBeLessThan(fullCount);
+        counts.push(marks.length);
+      }
+      expect(counts[0]).toBeLessThan(counts[1]!);
+    }
   });
 });

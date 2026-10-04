@@ -73,6 +73,7 @@ import {
   spawnRules,
   TRAIN,
   umbrellaShare,
+  UMBRELLA_MOTION,
   usableLines,
   VENDORS,
   COMMERCE,
@@ -99,6 +100,7 @@ import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
 import { LifeInspection } from './inspection';
+import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
@@ -3404,6 +3406,7 @@ type GroundTerrain = {
 };
 
 export class LifeWorld {
+  private readonly umbrellas = new UmbrellaMotion();
   private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
   setShopSchedule(shops: ShopSchedule | undefined) {
     this.cityLife = shops ? { schedules: { shops } } : undefined;
@@ -5120,15 +5123,26 @@ export class LifeWorld {
           });
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
-          const people = m.group.map((w, member): PersonLook => ({
-            figure: w.figure === 'adult' && w.umbrella < umbrellas ? 'umbrella' : w.figure,
-            paint: w.figure === 'adult' && w.umbrella < umbrellas ? w.canopy : w.shirt,
-            lateral: w.lateral,
-            back: w.back,
-            // Standing still, feet together.
-            flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
-            pose: life.momentHost.pose(m, member),
-          }));
+          const people = m.group.map((w, member): PersonLook => {
+            const want = w.figure === 'adult' && w.umbrella < umbrellas;
+            const open =
+              w.figure === 'adult' && zoom >= UMBRELLA_MOTION.zoom
+                ? this.umbrellas.look(w, want, inspection?.clock(m, this.clock) ?? this.clock)
+                : Number(want);
+            return {
+              figure: open > 0 ? 'umbrella' : w.figure,
+              paint: open > 0 ? w.canopy : w.shirt,
+              lateral: w.lateral,
+              back: w.back,
+              // Standing still, feet together.
+              flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+              pose: life.momentHost.pose(m, member),
+              ...(open > 0 &&
+                open < 1 && {
+                  canopy: { open, figure: w.figure, paint: w.shirt },
+                }),
+            };
+          });
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
@@ -5212,15 +5226,21 @@ export class LifeWorld {
           if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
           const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
+          const open =
+            w.figure === 'adult' && zoom >= UMBRELLA_MOTION.zoom
+              ? this.umbrellas.look(w, shaded, inspection?.clock(g, this.clock) ?? this.clock)
+              : Number(shaded);
+          const figure = g.behavior === 'sit' ? 'seated' : w.figure;
           const still = g.pause > 0 || g.behavior === 'sit';
           const look: PersonLook = {
-            figure: shaded ? 'umbrella' : g.behavior === 'sit' ? 'seated' : w.figure,
-            paint: shaded ? w.canopy : w.shirt,
+            figure: open > 0 ? 'umbrella' : figure,
+            paint: open > 0 ? w.canopy : w.shirt,
             lateral: 0,
             back: 0,
             // Standing still (or sitting), feet together.
             flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
             pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
+            ...(open > 0 && open < 1 && { canopy: { open, figure, paint: w.shirt } }),
           };
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {

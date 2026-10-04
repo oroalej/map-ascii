@@ -762,6 +762,87 @@ describe('packLife people', () => {
     expect(cells[0]!.texel[3]).toBe(personByte(Paint.red, PersonPart.canopy));
   });
 
+  it('uses staged canopy glyphs for one-cell and two-by-two transitions', () => {
+    for (const [open, stage] of [
+      [0.2, 0],
+      [0.9, 1],
+    ] as const)
+      for (const scale of [1, 2]) {
+        const transitioning = look({
+          figure: 'umbrella',
+          paint: Paint.blue,
+          canopy: { open, figure: 'adult', paint: Paint.red },
+        });
+        const packed = pack(person(1, 0, scale, { people: [transitioning] }));
+        expect(packed.drawn).toBe(1);
+        expect(packed.cells).toHaveLength(scale === 1 ? 1 : 4);
+        for (const c of packed.cells) {
+          const figure = figureOf(glyphs[packedGlyph(c.texel)]!)!;
+          expect(figure).toMatchObject({ figure: 'umbrella', stage });
+          expect(c.texel[3]).toBe(personByte(Paint.blue, PersonPart.canopy));
+        }
+        if (scale === 1)
+          expect(figureOf(glyphs[packedGlyph(packed.cells[0]!.texel)]!)!.scale).toBe(2);
+        else
+          expect(packed.cells.map((c) => figureOf(glyphs[packedGlyph(c.texel)]!)!.slice)).toEqual([
+            0, 1, 2, 3,
+          ]);
+      }
+  });
+
+  it('grows a stamped canopy over the underlying figure and preserves whole-agent rollback', () => {
+    const packs = [0.2, 0.9].map((open) => {
+      const [g, agent] = person(1, 0, 12, {
+        people: [
+          look({
+            figure: 'umbrella',
+            paint: Paint.blue,
+            canopy: { open, figure: 'adult', paint: Paint.red },
+          }),
+        ],
+        candle: true,
+      });
+      const packed = pack([g, agent]);
+      expect(packed.drawn).toBe(1);
+      for (const cell of packed.cells) expect(cell.texel[3]! & CANDLE_BIT).toBe(CANDLE_BIT);
+      const owners = new Uint32Array(g.cols * g.rows);
+      const out = new Uint8Array(owners.length * 4);
+      const denied = packed.cells[0]!;
+      expect(
+        packLife(
+          out,
+          { ...g, allowsGroundCell: (_a, c, r) => c !== denied.col || r !== denied.row },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners },
+        ),
+      ).toBe(0);
+      expect(out.every((byte) => byte === 0)).toBe(true);
+      expect(owners.every((owner) => owner === 0)).toBe(true);
+      return packed;
+    });
+    const part = (texel: number[]) => (texel[3]! >> 4) & 7;
+    const canopyCells = (packed: (typeof packs)[number]) =>
+      packed.cells.filter(
+        (c) => part(c.texel) === PersonPart.canopy || part(c.texel) === PersonPart.rib,
+      );
+    expect(canopyCells(packs[0]!).length).toBeLessThan(canopyCells(packs[1]!).length);
+    expect(new Set(packs[0]!.cells.map((c) => part(c.texel)))).toEqual(
+      new Set([PersonPart.figure, PersonPart.skin, PersonPart.canopy, PersonPart.rib]),
+    );
+    for (const c of packs[0]!.cells) {
+      const paint = c.texel[3]! & 15;
+      expect(paint).toBe(
+        part(c.texel) === PersonPart.canopy || part(c.texel) === PersonPart.rib
+          ? Paint.blue
+          : Paint.red,
+      );
+    }
+  });
+
   it('draws static seated people at every size and heading, retaining whole-agent rollback', () => {
     for (const theme of Object.values(themes))
       for (const scale of [0.2, 3, 8])
