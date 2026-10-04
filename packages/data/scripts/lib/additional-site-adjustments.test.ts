@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { Landcover, Landmark, SiteDetail, type LngLat } from '@atlas/shared';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
@@ -7,7 +6,16 @@ import { intersection } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
-import { mergeSiteDetails, seatingFootprint } from './site-detail';
+import { mergeSiteDetails } from './site-detail';
+import {
+  areaFor,
+  coordinates as coords,
+  distanceMeters as dist,
+  mappedFootprints,
+  readFixture,
+  readPack as pack,
+} from './landmark-detail.geometry';
+import { localFrame } from './geo';
 import { parkedVehicleParts } from './parked-vehicles';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
@@ -17,11 +25,7 @@ import.meta.glob(
 import.meta.glob('../../../content/cities/naga/details/bicol-state-campus.json');
 import.meta.glob('../../../content/cities/naga/landcover/saint-joseph-school.json');
 
-const read = (path: string): unknown =>
-  JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as unknown;
-const pack = (folder: string, slug: string) =>
-  read(`../../../content/cities/naga/${folder}/${slug}.json`);
-const source = read('../__fixtures__/additional-site-parents.json') as AtlasFeature[];
+const source = readFixture('additional-site-parents.json') as AtlasFeature[];
 const slugs = [
   'naga-college-foundation',
   'csnhs-liboton-annex',
@@ -36,15 +40,23 @@ const details = [...slugs, 'bicol-central-station'].map((slug) =>
 const covers = [...slugs, 'bicol-central-station'].map((slug) =>
   Landcover.parse(pack('landcover', slug)),
 );
-const dist = (a: LngLat, b: LngLat) =>
-  Math.hypot((a[0] - b[0]) * 111320 * Math.cos((b[1] * Math.PI) / 180), (a[1] - b[1]) * 111320);
-const area = (detail: SiteDetail): Polygon | MultiPolygon =>
-  detail.extent || detail.grounds
-    ? { type: 'Polygon', coordinates: [detail.extent ?? detail.grounds!] }
-    : (source.find((f) => f.properties.id === detail.osm_id)!.geometry as Polygon | MultiPolygon);
-const coords = (g: Polygon | MultiPolygon) => g.coordinates as LngLat[][] | LngLat[][][];
+const area = (detail: SiteDetail): Polygon | MultiPolygon => areaFor(detail, source);
 
 describe('additional landmark references', () => {
+  it('checks the complete two-metre corridor of an unwidth-tagged path', () => {
+    const frame = localFrame([0, 0]);
+    const path: AtlasFeature = {
+      ...source[0]!,
+      properties: { id: 'osm:way/path-margin', class: 'path' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [frame.toLngLat([-10, 0]), frame.toLngLat([10, 0])],
+      },
+    };
+    const [corridor] = mappedFootprints([path], { water: true });
+    expect(inside(frame.toLngLat([0, 0.9]), corridor!)).toBe(true);
+    expect(inside(frame.toLngLat([0, 1.1]), corridor!)).toBe(false);
+  });
   it('keeps the annex, schools and seminaries distinct with sourced draft selection', () => {
     const landmarks = slugs.map((slug) => Landmark.parse(pack('landmarks', slug)));
     expect(new Set(landmarks.map((l) => l.osm_id)).size).toBe(6);
@@ -72,25 +84,7 @@ describe('additional landmark references', () => {
         expect(f.properties.detail_parent).toBe(detail.osm_id);
   });
   it('adds sparse crowns outside full roads, paths, standing roofs and mapped trunks', () => {
-    const obstacles = source.flatMap((f) => {
-      if (
-        (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
-        ((f.properties.class.startsWith('building') && (f.properties.height ?? 0) > 0) ||
-          f.properties.class.startsWith('water'))
-      )
-        return [f.geometry];
-      if (
-        f.geometry.type === 'LineString' &&
-        (f.properties.class.startsWith('road') || f.properties.class === 'path')
-      )
-        return [
-          seatingFootprint(
-            f.geometry.coordinates as LngLat[],
-            f.properties.width ?? (f.properties.class === 'path' ? 1.5 : 6),
-          ),
-        ];
-      return [];
-    });
+    const obstacles = mappedFootprints(source, { water: true });
     for (const [i, cover] of covers.entries()) {
       expect(cover.trees.length, cover.id).toBeGreaterThanOrEqual(i === 0 ? 4 : 6);
       for (const tree of cover.trees) {

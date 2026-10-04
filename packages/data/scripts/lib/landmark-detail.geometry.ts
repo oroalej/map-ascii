@@ -1,4 +1,5 @@
-import type { BBox, LngLat } from '@atlas/shared';
+import { readFileSync } from 'node:fs';
+import type { BBox, LngLat, SiteDetail } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import type { Polygon, MultiPolygon } from 'geojson';
@@ -8,12 +9,33 @@ import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
 import { geometryAudit } from './geometry-audit';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import type * as LandmarkFixtures from './landmark-detail.fixtures';
+import { isStandingBuilding } from './obstacles';
 
 type Area = Polygon | MultiPolygon;
 type Fixtures = Pick<
   typeof LandmarkFixtures,
   'covers' | 'source' | 'areaFor' | 'newDetails' | 'nearby'
 >;
+
+/** Lightweight loaders retain each regression file's own explicitly declared inputs. */
+export const readPack = (folder: string, slug: string): unknown =>
+  JSON.parse(
+    readFileSync(
+      new URL(`../../../content/cities/naga/${folder}/${slug}.json`, import.meta.url),
+      'utf8',
+    ),
+  ) as unknown;
+export const readFixture = (name: string): unknown =>
+  JSON.parse(readFileSync(new URL(`../__fixtures__/${name}`, import.meta.url), 'utf8')) as unknown;
+export function areaFor(detail: SiteDetail, source: readonly AtlasFeature[]): Area {
+  if (detail.extent || detail.grounds)
+    return { type: 'Polygon', coordinates: [detail.extent ?? detail.grounds!] };
+  const geometry = source.find((feature) => feature.properties.id === detail.osm_id)?.geometry;
+  if (geometry?.type !== 'Polygon' && geometry?.type !== 'MultiPolygon')
+    throw Error(`missing area fixture: ${detail.id}`);
+  return geometry;
+}
+export const coordinates = (geometry: Area) => geometry.coordinates as LngLat[][] | LngLat[][][];
 
 export const distanceMeters = (a: readonly number[], b: readonly number[]) =>
   Math.hypot(...localFrame([a[0]!, a[1]!], (a[1]! + b[1]!) / 2).toMeters([b[0]!, b[1]!]));
@@ -49,8 +71,7 @@ export function mappedFootprints(
       p = feature.properties;
     if (
       (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
-      ((p.class.startsWith('building') && (p.height ?? 0) > 0 && !p.detail_overhead) ||
-        (water && p.class.startsWith('water')))
+      (isStandingBuilding(feature) || (water && p.class.startsWith('water')))
     )
       return [g];
     if (g.type === 'LineString' && (p.class.startsWith('road') || (paths && p.class === 'path')))

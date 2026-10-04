@@ -39,19 +39,12 @@ describe('browser shape guards agree with the schemas', () => {
   it('city meta', () => {
     expect(CityMeta.safeParse(meta).success).toBe(true);
     expect(isCityMeta(meta)).toBe(true);
-    const layouts = { 'detail/fixture': 'a'.repeat(64) };
-    expect(CityMeta.safeParse({ ...meta, detail_layouts: layouts }).success).toBe(true);
-    expect(isCityMeta({ ...meta, detail_layouts: layouts })).toBe(true);
     for (const broken of [
       { ...meta, slug: '' },
       { ...meta, name: { fil: 'no English' } },
       { ...meta, regionBounds: [0, 1, 4] },
       { ...meta, defaultCamera: { ...meta.defaultCamera, zoom: 30 } },
       { ...meta, yearRange: '1900-2026' },
-      { ...meta, detail_layouts: null },
-      { ...meta, detail_layouts: [] },
-      { ...meta, detail_layouts: { fixture: 'a'.repeat(64) } },
-      { ...meta, detail_layouts: { 'detail/fixture': 'not-a-hash' } },
       null,
     ]) {
       expect(CityMeta.safeParse(broken).success).toBe(false);

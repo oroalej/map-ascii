@@ -5,7 +5,8 @@ import inside from '@turf/boolean-point-in-polygon';
 import type { Polygon, MultiPolygon } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature } from '../03-normalize';
 import { bboxesOverlap, bufferBbox, clearanceWidth, localFrame } from './geo';
-import { detailSelectionOf, seatingFootprint } from './site-detail';
+import { detailSelectionOf } from './site-detail';
+import { isStandingBuilding, nearbyRoadFootprints } from './obstacles';
 import { interiorPoint } from './frontage';
 
 type Segment = { a: LngLat; b: LngLat; bounds: [number, number, number, number] };
@@ -137,35 +138,14 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
       let shape: Polygon | MultiPolygon;
       if (
         (g.type === 'Polygon' || g.type === 'MultiPolygon') &&
-        ((p.class.startsWith('building') && (p.height ?? 0) > 0 && !p.detail_overhead) ||
+        (isStandingBuilding(f) ||
           p.class.startsWith('water') ||
           (p.detail_parent === pack.osm_id &&
             !p.detail_overhead &&
             (p.class === 'paving' || p.class === 'pitch')))
       )
         shape = g;
-      else if (g.type === 'LineString' && (p.class.startsWith('road') || p.class === 'path')) {
-        // Capsules cover the complete carriageway, including bends and end caps. Splitting
-        // long roads keeps each plot's clipping operation local to a short road segment.
-        return g.coordinates.slice(1).flatMap((end, i) => {
-          const start = g.coordinates[i]!;
-          if (start[0] === end[0] && start[1] === end[1]) return [];
-          const segmentBounds = bufferBbox(
-            [
-              Math.min(start[0]!, end[0]!),
-              Math.min(start[1]!, end[1]!),
-              Math.max(start[0]!, end[0]!),
-              Math.max(start[1]!, end[1]!),
-            ],
-            padding,
-          );
-          if (!bboxesOverlap(bounds, segmentBounds)) return [];
-          const shape = seatingFootprint([start, end] as LngLat[], clearanceWidth(p, 0.1));
-          return [
-            { ...prepare(clip(shape)), bounds: bbox(shape) as [number, number, number, number] },
-          ];
-        });
-      } else if (g.type === 'Point' && (p.class === 'tree' || p.class === 'monument'))
+      else if (g.type === 'Point' && (p.class === 'tree' || p.class === 'monument'))
         shape = trunk(g.coordinates as LngLat);
       else return [];
       const obstacleBounds = bbox(shape) as [number, number, number, number];
@@ -173,6 +153,8 @@ export function mergeCemeteries(source: readonly AtlasFeature[], packs: readonly
         ? [{ ...prepare(clip(shape)), bounds: obstacleBounds }]
         : [];
     });
+    for (const road of nearbyRoadFootprints(source, bounds, 0.1))
+      obstacles.push({ ...prepare(clip(road.geometry)), bounds: road.bounds });
     const parent = {
       ...original,
       properties: { ...original.properties, name: pack.title, landmark: true },

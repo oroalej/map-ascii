@@ -11,7 +11,7 @@ apps/web/public/tiles
 # Hand-authored prose; keep as written
 *.md
 
-# Generated PR #14 fixtures; retain compact JSON
+# Compact source snapshots and authored reference fixtures
 packages/data/scripts/__fixtures__/additional-site-parents.json
 packages/data/scripts/__fixtures__/ateneo-vegetation.json
 packages/data/scripts/__fixtures__/balatas-school-parents.json

@@ -9,75 +9,17 @@ import {
 } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
-import { union } from 'polyclip-ts';
 import type { Polygon, MultiPolygon, LineString, Position } from 'geojson';
 import { TILE_ZOOMS, type AtlasFeature, type AtlasProperties } from '../03-normalize';
 import { layerFor } from './classify';
-import { bboxesOverlap, bufferBbox, clearanceWidth, inBbox, localFrame as frame } from './geo';
+import { bboxesOverlap, inBbox, localFrame as frame } from './geo';
+import { seatingFootprint } from './footprints';
+export { seatingFootprint } from './footprints';
+import { isStandingBuilding, nearbyRoadFootprints } from './obstacles';
 import { parkedVehicleParts } from './parked-vehicles';
 import { geometryAudit } from './geometry-audit';
 
-type MultiPoly = ReturnType<typeof union>;
 const distance = (a: Position, b: Position) => Math.hypot(...frame(a as LngLat).toMeters(b));
-
-function strokePieces(points: LngLat[], width: number): LngLat[][][] {
-  const half = width / 2;
-  const pieces: LngLat[][][] = points.map(([x, y]) => {
-    const ring = Array.from({ length: 17 }, (_, i): LngLat => {
-      const a = ((i % 16) * Math.PI) / 8;
-      return [x + Math.cos(a) * half, y + Math.sin(a) * half];
-    });
-    return [ring];
-  });
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1]!,
-      b = points[i]!;
-    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (length === 0) continue;
-    const nx = (-(b[1] - a[1]) / length) * half,
-      ny = ((b[0] - a[0]) / length) * half;
-    pieces.push([
-      [
-        [a[0] + nx, a[1] + ny],
-        [b[0] + nx, b[1] + ny],
-        [b[0] - nx, b[1] - ny],
-        [a[0] - nx, a[1] - ny],
-        [a[0] + nx, a[1] + ny],
-      ],
-    ]);
-  }
-  return pieces;
-}
-
-/** Union rim and wider bench sections in one meter frame, retaining the planted hole. */
-export function seatingFootprint(
-  line: LngLat[],
-  width: number,
-  spans: SiteDetail['seating'][number]['bench_spans'] = [],
-): MultiPolygon {
-  const f = frame(line[0]!);
-  const points = line.map(f.toMeters);
-  const pieces = strokePieces(points, width);
-  for (const span of spans)
-    pieces.push(...strokePieces(points.slice(span.start, span.end + 1), span.width_m));
-  // A balanced union avoids thousands of near-coincident edges in one sweep.
-  // Round local coordinates to micrometers before clipping (far below tile precision).
-  let merged: MultiPoly[] = pieces.map((piece) => [
-    piece.map((ring) =>
-      ring.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6] as LngLat),
-    ),
-  ]);
-  while (merged.length > 1) {
-    const next: MultiPoly[] = [];
-    for (let i = 0; i < merged.length; i += 2)
-      next.push(i + 1 < merged.length ? union(merged[i]!, merged[i + 1]!) : merged[i]!);
-    merged = next;
-  }
-  return {
-    type: 'MultiPolygon',
-    coordinates: merged[0]!.map((p) => p.map((r) => r.map((p) => f.toLngLat(p)))),
-  };
-}
 
 function feature(
   id: string,
@@ -190,12 +132,29 @@ export function detailSelectionOf(p: AtlasProperties) {
   });
 }
 
-/** Enrich a site's ground without replacing its buildings or canonical landmark identity. */
-export function mergeSiteDetails(
-  input: AtlasFeature[],
-  packs: readonly SiteDetail[],
-  subdivisions: readonly SubdivisionArea[] = [],
-) {
+/** Refresh aliased metadata once final classes, names and heights are known. */
+export function finalizeDetailSelections(features: AtlasFeature[]): void {
+  const byId = new Map<string, AtlasFeature>();
+  for (const feature of features)
+    if (!byId.has(feature.properties.id)) byId.set(feature.properties.id, feature);
+  const selections = new Map<string, string>();
+  for (const { properties } of features) {
+    if (!properties.detail_selection || !properties.detail_parent) continue;
+    let selection = selections.get(properties.detail_parent);
+    if (!selection) {
+      const parent = byId.get(properties.detail_parent);
+      if (!parent)
+        throw new Error(
+          properties.id + ': missing canonical detail parent ' + properties.detail_parent,
+        );
+      selection = JSON.stringify(detailSelectionOf(parent.properties));
+      selections.set(properties.detail_parent, selection);
+    }
+    properties.detail_selection = selection;
+  }
+}
+
+function prepareDetailSites(input: AtlasFeature[], packs: readonly SiteDetail[]) {
   const features = input.map((f) => ({ ...f, properties: { ...f.properties } }));
   const byId = new Map<string, AtlasFeature>();
   for (const feature of features)
@@ -220,12 +179,7 @@ export function mergeSiteDetails(
       ? { target, shape: target.geometry, height: target.properties.height! }
       : undefined;
   };
-  const warnings: string[] = [];
   const parents = new Set<string>();
-  const relocated = new Set<string>();
-  const roofTargets = new Set<string>();
-  const buildingTargets = new Set<string>();
-  const roadFootprints = new Map<AtlasFeature, MultiPolygon>();
   // Validate every anchor before mutation; overlap decisions must not depend on pack order.
   const sites = packs.map((pack) => {
     const parent = byId.get(pack.osm_id);
@@ -283,42 +237,18 @@ export function mergeSiteDetails(
       )
         throw new Error(`${a.pack.id}: grounds overlap ${b.pack.id}`);
   }
-  const blocked = input
-    .filter(
-      (f) =>
-        !f.properties.detail_overhead &&
-        isArea(f.geometry) &&
-        (f.properties.detail_blocked ||
-          f.properties.class === 'building_part' ||
-          (f.properties.class.startsWith('building') && (f.properties.height ?? 0) > 0)),
-    )
-    .map((f) => ({ feature: f, bounds: bbox(f) as [number, number, number, number] }));
-  for (const { pack, parent, area, selectionId, metadata } of sites) {
+  return { features, byId, auditFor, standingTarget, sites };
+}
+
+function applySiteOverrides({
+  sites,
+  standingTarget,
+  auditFor,
+}: ReturnType<typeof prepareDetailSites>) {
+  const buildingTargets = new Set<string>();
+  const roofTargets = new Set<string>();
+  for (const { pack, area } of sites) {
     const audit = auditFor(area);
-    const siteBounds = bbox(area) as [number, number, number, number];
-    const roads = pack.structures.some((part) => part.ground_override)
-      ? input.filter(
-          (f) =>
-            f.geometry.type === 'LineString' &&
-            f.properties.class.startsWith('road') &&
-            bboxesOverlap(
-              siteBounds,
-              bufferBbox(
-                bbox(f) as [number, number, number, number],
-                clearanceWidth(f.properties) / 1000,
-              ),
-            ),
-        )
-      : [];
-    const requireInside = (points: Position[], item: string) => {
-      if (points.some((p) => !inside(p, area)))
-        throw new Error(`${pack.id} ${item}: outside parent footprint`);
-    };
-    const prefix = `detail:${pack.id.slice(7)}`;
-    const link = {
-      detail_parent: selectionId,
-      ...(metadata && { detail_selection: metadata }),
-    };
     for (const building of pack.building_overrides) {
       const standing = standingTarget(building.osm_id);
       if (buildingTargets.has(building.osm_id))
@@ -341,6 +271,203 @@ export function mergeSiteDetails(
       roofTargets.add(roof.osm_id);
       standing.target.properties.variant = roof.shape;
     }
+  }
+}
+
+function emitDetailStructures(
+  { pack, area, metadata }: ReturnType<typeof prepareDetailSites>['sites'][number],
+  input: AtlasFeature[],
+  blocked: { feature: AtlasFeature; bounds: [number, number, number, number] }[],
+  { auditFor, standingTarget }: ReturnType<typeof prepareDetailSites>,
+  prefix: string,
+  link: { detail_parent: string; detail_selection?: string },
+  requireInside: (points: Position[], item: string) => void,
+) {
+  const audit = auditFor(area);
+  const siteBounds = bbox(area) as [number, number, number, number];
+  const roads =
+    pack.parked_vehicles.length || pack.structures.some((part) => part.ground_override)
+      ? nearbyRoadFootprints(input, siteBounds)
+      : [];
+  const seating = pack.seating.map((seat) => ({
+    seat,
+    shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
+  }));
+  const inventory = pack.parked_vehicles.map((vehicle) => ({
+    vehicle,
+    parts: parkedVehicleParts(vehicle),
+  }));
+  const vehicleParts = inventory.flatMap(({ parts }) => parts);
+  const partShapes = new Map(
+    [...pack.structures, ...vehicleParts].map(
+      (part): [SiteDetail['structures'][number], Polygon] => [
+        part,
+        { type: 'Polygon', coordinates: [part.ring, ...(part.holes ?? [])] },
+      ],
+    ),
+  );
+  const shapeOf = (part: SiteDetail['structures'][number]) => partShapes.get(part)!;
+  const vehicleIds = new Set(vehicleParts.map((part) => part.id));
+  const vehicleKinds = new Map(
+    inventory.flatMap(({ vehicle, parts }) =>
+      parts.map((part) => [part.id, vehicle.kind] as const),
+    ),
+  );
+  if (pack.structures.some((part) => vehicleIds.has(part.id)))
+    throw new Error(`${pack.id}: duplicate parked vehicle structure id`);
+  const vehicleFootprints = inventory.map(({ parts }) => audit.union(parts.map(shapeOf)));
+  const vehicleBounds = vehicleFootprints.map(
+    (shape) => bbox(shape) as [number, number, number, number],
+  );
+  const parkingObstacles = vehicleParts.length
+    ? [
+        ...roads.filter((road) =>
+          vehicleBounds.some((bounds) => bboxesOverlap(bounds, road.bounds)),
+        ),
+        ...input
+          .filter(
+            (f) =>
+              f.properties.class.startsWith('water') &&
+              isArea(f.geometry) &&
+              bboxesOverlap(siteBounds, bbox(f) as [number, number, number, number]),
+          )
+          .map((f) => ({ id: f.properties.id, geometry: f.geometry as Polygon | MultiPolygon })),
+      ]
+    : [];
+  for (const part of vehicleParts) {
+    for (const obstacle of parkingObstacles)
+      if (audit.overlaps(shapeOf(part), obstacle.geometry))
+        throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
+    for (const roof of pack.structures.filter((part) => part.material === 'roof'))
+      if (audit.overlaps(shapeOf(part), shapeOf(roof)))
+        throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
+  }
+  for (const [i, footprint] of vehicleFootprints.entries()) {
+    // A contained union proves all seven parts fit, including wheels and parent holes.
+    if (!audit.contains(footprint)) {
+      const part = inventory[i]!.parts.find((part) => !audit.contains(shapeOf(part)))!;
+      throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+    }
+    if (vehicleFootprints.slice(0, i).some((other) => audit.overlaps(footprint, other)))
+      throw new Error(`${pack.id}: overlapping parked vehicles`);
+  }
+  const structures = [...pack.structures, ...vehicleParts].map((part) => {
+    const shape = shapeOf(part);
+    const outer: Polygon = { type: 'Polygon', coordinates: [part.ring] };
+    const holes = (part.holes ?? []).map((ring): Polygon => ({
+      type: 'Polygon',
+      coordinates: [ring],
+    }));
+    for (const [i, hole] of holes.entries()) {
+      if (
+        !auditFor(outer).contains(hole) ||
+        holes.slice(0, i).some((other) => audit.overlaps(hole, other)) ||
+        auditFor(hole).contains(outer)
+      )
+        throw new Error(`${pack.id} structure ${part.id}: invalid or overlapping interior`);
+    }
+    requireInside(part.ring, `structure ${part.id}`);
+    // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
+    if (!vehicleIds.has(part.id) && !audit.contains(shape))
+      throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
+    // Ground replacements must clear complete mapped carriageways in every city pack.
+    if (part.ground_override)
+      for (const road of roads.filter((road) => road.class !== 'path')) {
+        if (audit.overlaps(shape, road.geometry))
+          throw new Error(pack.id + ' structure ' + part.id + ': crosses ' + road.id);
+      }
+    if (part.roof_osm_id) {
+      const roof = standingTarget(part.roof_osm_id);
+      if (!roof || !auditFor(roof.shape).contains(shape) || part.height_m <= roof.height)
+        throw new Error(
+          `${pack.id} structure ${part.id}: roof wing must fit above ${part.roof_osm_id}`,
+        );
+    }
+    // Opt-in ground replacements must not paint a court through a standing footprint.
+    // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
+    if (
+      vehicleIds.has(part.id) ||
+      part.ground_override ||
+      ['pitch', 'water'].includes(part.material)
+    )
+      for (const obstacle of blocked)
+        if (audit.overlaps(shape, obstacle.feature.geometry as Polygon | MultiPolygon))
+          throw new Error(
+            `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
+          );
+    if (part.material === 'water')
+      for (const water of input.filter(
+        (f) => f.properties.class === 'water_area' && isArea(f.geometry),
+      ))
+        if (audit.overlaps(shape, water.geometry as Polygon | MultiPolygon))
+          throw new Error(`${pack.id} structure ${part.id}: duplicates ${water.properties.id}`);
+    return feature(`${prefix}/structure-${part.id}`, shape, {
+      class: part.roof_shape
+        ? // Roof surfaces have no independent school/market activity; selection uses link.
+          'building'
+        : part.material === 'water'
+          ? 'water_area'
+          : part.material === 'pitch'
+            ? 'pitch'
+            : part.material === 'paving'
+              ? 'paving'
+              : part.material === 'wood'
+                ? 'building_woodwork'
+                : 'building_part',
+      height: part.height_m,
+      ...(vehicleIds.has(part.id) && {
+        kind: `parked_vehicle=${vehicleKinds.get(part.id)!}`,
+      }),
+      ...(part.material === 'water' && { kind: 'leisure=swimming_pool' }),
+      variant:
+        part.roof_shape ??
+        (part.material === 'paving'
+          ? part.ground_override
+            ? 'terrace_override'
+            : 'terrace'
+          : 'flat'),
+      detail_overhead: part.overhead,
+      ...((part.material === 'paving' || metadata) && link),
+      ...(!part.overhead &&
+        !['paving', 'pitch'].includes(part.material) && { detail_blocked: true }),
+    });
+  });
+  return { seating, structures };
+}
+
+/** Enrich a site's ground without replacing its buildings or canonical landmark identity. */
+export function mergeSiteDetails(
+  input: AtlasFeature[],
+  packs: readonly SiteDetail[],
+  subdivisions: readonly SubdivisionArea[] = [],
+) {
+  const context = prepareDetailSites(input, packs);
+  const { features, byId, sites } = context;
+  applySiteOverrides(context);
+  const warnings: string[] = [];
+  const relocated = new Set<string>();
+  const blocked = input
+    .filter(
+      (f) =>
+        !f.properties.detail_overhead &&
+        isArea(f.geometry) &&
+        (f.properties.detail_blocked ||
+          f.properties.class === 'building_part' ||
+          isStandingBuilding(f)),
+    )
+    .map((f) => ({ feature: f, bounds: bbox(f) as [number, number, number, number] }));
+  for (const { pack, parent, area, selectionId, metadata } of sites) {
+    const siteBounds = bbox(area) as [number, number, number, number];
+    const nearbyBlocked = blocked.filter((obstacle) => bboxesOverlap(obstacle.bounds, siteBounds));
+    const requireInside = (points: Position[], item: string) => {
+      if (points.some((p) => !inside(p, area)))
+        throw new Error(`${pack.id} ${item}: outside parent footprint`);
+    };
+    const prefix = `detail:${pack.id.slice(7)}`;
+    const link = {
+      detail_parent: selectionId,
+      ...(metadata && { detail_selection: metadata }),
+    };
     if (pack.surface === 'paving') {
       if (pack.grounds || pack.extent)
         features.push(feature(`${prefix}/grounds`, area, { class: 'paving', ...link }));
@@ -353,168 +480,18 @@ export function mergeSiteDetails(
       }
     }
     if (selectionId !== pack.osm_id) Object.assign(parent.properties, link);
-    const seating = pack.seating.map((seat) => ({
-      seat,
-      shape: seatingFootprint(seat.line, seat.width_m, seat.bench_spans),
-    }));
-    const inventory = pack.parked_vehicles.map((vehicle) => ({
-      vehicle,
-      parts: parkedVehicleParts(vehicle),
-    }));
-    const vehicleParts = inventory.flatMap(({ parts }) => parts);
-    const partShapes = new Map(
-      [...pack.structures, ...vehicleParts].map(
-        (part): [SiteDetail['structures'][number], Polygon] => [
-          part,
-          { type: 'Polygon', coordinates: [part.ring, ...(part.holes ?? [])] },
-        ],
-      ),
+    const { seating, structures } = emitDetailStructures(
+      { pack, parent, area, selectionId, metadata },
+      input,
+      nearbyBlocked,
+      context,
+      prefix,
+      link,
+      requireInside,
     );
-    const shapeOf = (part: SiteDetail['structures'][number]) => partShapes.get(part)!;
-    const vehicleIds = new Set(vehicleParts.map((part) => part.id));
-    const vehicleKinds = new Map(
-      inventory.flatMap(({ vehicle, parts }) =>
-        parts.map((part) => [part.id, vehicle.kind] as const),
-      ),
-    );
-    if (pack.structures.some((part) => vehicleIds.has(part.id)))
-      throw new Error(`${pack.id}: duplicate parked vehicle structure id`);
-    const vehicleFootprints = inventory.map(({ parts }) => audit.union(parts.map(shapeOf)));
-    const vehicleBounds = vehicleFootprints.map(
-      (shape) => bbox(shape) as [number, number, number, number],
-    );
-    const parkingObstacles = (vehicleParts.length ? input : []).flatMap((f) => {
-      if (!bboxesOverlap(bbox(f) as [number, number, number, number], siteBounds)) return [];
-      if (f.properties.class.startsWith('water') && isArea(f.geometry))
-        return [{ id: f.properties.id, geometry: f.geometry }];
-      if (
-        f.geometry.type !== 'LineString' ||
-        (!f.properties.class.startsWith('road') && f.properties.class !== 'path')
-      )
-        return [];
-      // Test nearby capsules rather than unioning an entire city-spanning road. Their
-      // union is the same carriageway, including bend/end caps and repeated vertices.
-      const coordinates = f.geometry.coordinates;
-      const width = clearanceWidth(f.properties);
-      return coordinates.slice(1).flatMap((end, i) => {
-        const line = [coordinates[i]!, end] as LngLat[];
-        const bounds = bufferBbox(
-          bbox({ type: 'LineString', coordinates: line }) as [number, number, number, number],
-          width / 1000,
-        );
-        if (!vehicleBounds.some((vehicle) => bboxesOverlap(vehicle, bounds))) return [];
-        return [{ id: f.properties.id, geometry: seatingFootprint(line, width) }];
-      });
-    });
-    for (const part of vehicleParts) {
-      for (const obstacle of parkingObstacles)
-        if (audit.overlaps(shapeOf(part), obstacle.geometry))
-          throw new Error(`${pack.id} structure ${part.id}: crosses ${obstacle.id}`);
-      for (const roof of pack.structures.filter((part) => part.material === 'roof'))
-        if (audit.overlaps(shapeOf(part), shapeOf(roof)))
-          throw new Error(`${pack.id} structure ${part.id}: crosses reference roof ${roof.id}`);
-    }
-    for (const [i, footprint] of vehicleFootprints.entries()) {
-      // A contained union proves all seven parts fit, including wheels and parent holes.
-      if (!audit.contains(footprint)) {
-        const part = inventory[i]!.parts.find((part) => !audit.contains(shapeOf(part)))!;
-        throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
-      }
-      if (vehicleFootprints.slice(0, i).some((other) => audit.overlaps(footprint, other)))
-        throw new Error(`${pack.id}: overlapping parked vehicles`);
-    }
-    const structures = [...pack.structures, ...vehicleParts].map((part) => {
-      const shape = shapeOf(part);
-      const outer: Polygon = { type: 'Polygon', coordinates: [part.ring] };
-      const holes = (part.holes ?? []).map((ring): Polygon => ({
-        type: 'Polygon',
-        coordinates: [ring],
-      }));
-      for (const [i, hole] of holes.entries()) {
-        if (
-          !auditFor(outer).contains(hole) ||
-          holes.slice(0, i).some((other) => audit.overlaps(hole, other)) ||
-          auditFor(hole).contains(outer)
-        )
-          throw new Error(`${pack.id} structure ${part.id}: invalid or overlapping interior`);
-      }
-      requireInside(part.ring, `structure ${part.id}`);
-      // Vertices alone miss a footprint crossing a concavity or covering a parent hole.
-      if (!vehicleIds.has(part.id) && !audit.contains(shape))
-        throw new Error(`${pack.id} structure ${part.id}: outside parent footprint`);
-      // Ground replacements must clear complete mapped carriageways in every city pack.
-      if (part.ground_override)
-        for (const road of roads) {
-          let footprint = roadFootprints.get(road);
-          if (!footprint) {
-            footprint = seatingFootprint(
-              (road.geometry as LineString).coordinates as LngLat[],
-              clearanceWidth(road.properties),
-            );
-            roadFootprints.set(road, footprint);
-          }
-          if (audit.overlaps(shape, footprint))
-            throw new Error(`${pack.id} structure ${part.id}: crosses ${road.properties.id}`);
-        }
-      if (part.roof_osm_id) {
-        const roof = standingTarget(part.roof_osm_id);
-        if (!roof || !auditFor(roof.shape).contains(shape) || part.height_m <= roof.height)
-          throw new Error(
-            `${pack.id} structure ${part.id}: roof wing must fit above ${part.roof_osm_id}`,
-          );
-      }
-      // Opt-in ground replacements must not paint a court through a standing footprint.
-      // Test polygon interiors, including obstacles wholly enclosed by the proposed court.
-      if (
-        vehicleIds.has(part.id) ||
-        part.ground_override ||
-        ['pitch', 'water'].includes(part.material)
-      )
-        for (const obstacle of blocked)
-          if (audit.overlaps(shape, obstacle.feature.geometry as Polygon | MultiPolygon))
-            throw new Error(
-              `${pack.id} structure ${part.id}: crosses ${obstacle.feature.properties.id}`,
-            );
-      if (part.material === 'water')
-        for (const water of input.filter(
-          (f) => f.properties.class === 'water_area' && isArea(f.geometry),
-        ))
-          if (audit.overlaps(shape, water.geometry as Polygon | MultiPolygon))
-            throw new Error(`${pack.id} structure ${part.id}: duplicates ${water.properties.id}`);
-      return feature(`${prefix}/structure-${part.id}`, shape, {
-        class: part.roof_shape
-          ? // Roof surfaces have no independent school/market activity; selection uses link.
-            'building'
-          : part.material === 'water'
-            ? 'water_area'
-            : part.material === 'pitch'
-              ? 'pitch'
-              : part.material === 'paving'
-                ? 'paving'
-                : part.material === 'wood'
-                  ? 'building_woodwork'
-                  : 'building_part',
-        height: part.height_m,
-        ...(vehicleIds.has(part.id) && {
-          kind: `parked_vehicle=${vehicleKinds.get(part.id)!}`,
-        }),
-        ...(part.material === 'water' && { kind: 'leisure=swimming_pool' }),
-        variant:
-          part.roof_shape ??
-          (part.material === 'paving'
-            ? part.ground_override
-              ? 'terrace_override'
-              : 'terrace'
-            : 'flat'),
-        detail_overhead: part.overhead,
-        ...((part.material === 'paving' || metadata) && link),
-        ...(!part.overhead &&
-          !['paving', 'pitch'].includes(part.material) && { detail_blocked: true }),
-      });
-    });
     features.push(...structures);
     const obstacles = [
-      ...blocked.filter((f) => bboxesOverlap(f.bounds, siteBounds)).map((f) => f.feature),
+      ...nearbyBlocked.map((f) => f.feature),
       ...seating.map(({ seat, shape }) =>
         feature(`${prefix}/seating-${seat.id}`, shape, { detail_blocked: true }),
       ),
@@ -672,6 +649,7 @@ export function mergeSiteDetails(
       );
     }
   }
+  finalizeDetailSelections(features);
   return { features, warnings };
 }
 

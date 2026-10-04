@@ -2,6 +2,8 @@ import { labelCandidate } from './label-candidates';
 import { expect, it, vi } from 'vitest';
 import {
   overlayPass,
+  cellPass,
+  crownPass,
   placeGrid,
   prepareCrowns,
   selectPass,
@@ -9,7 +11,7 @@ import {
   type View,
 } from './passes';
 import * as twgl from 'twgl.js';
-import { classId, classVisibility } from './classes';
+import { classId, classVisibility, groundFlags } from './classes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import type { TileLabel } from './raster/geometry';
@@ -26,6 +28,46 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('uploads the complete ground array to both base and crown draws', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = Object.fromEntries(
+    [
+      'enable',
+      'disable',
+      'depthFunc',
+      'useProgram',
+      'bindFramebuffer',
+      'viewport',
+      'clearBufferfv',
+      'clearBufferfi',
+      'bindVertexArray',
+      'readBuffer',
+      'drawBuffers',
+      'blitFramebuffer',
+    ].map((name) => [name, vi.fn()]),
+  ) as unknown as GL;
+  const raster = { fbo: {}, width: 83, height: 37 };
+  const targets = { cols: 83, rows: 37, base: raster, subBase: raster, sub: raster } as CellTargets;
+  const programs = { cell: { program: {} } } as unknown as Programs;
+  const placement = placeGrid(view, view.cellDev, 83, 37);
+  try {
+    cellPass(gl, programs, targets, view, placement, { region: [], tiles: [] });
+    crownPass(gl, programs, targets, view, placement, [], 0, { from: 0, strength: 0, dir: [1, 0] });
+    const groundUploads = uniforms.mock.calls
+      .map(([, values]) => (values as Record<string, unknown>).u_ground)
+      .filter((ground): ground is Int32Array => ground instanceof Int32Array);
+    expect(groundUploads).toHaveLength(2);
+    for (const ground of groundUploads) {
+      expect(ground).toEqual(groundFlags());
+      expect(ground[classId('building_hospital')]).toBe(1);
+      expect(ground[classId('building_station')]).toBe(1);
+      expect(ground[classId('road_major')]).toBe(0);
+    }
+  } finally {
+    uniforms.mockRestore();
+  }
+});
 
 it('allows paving edge sampling only where the cell pass can rasterize paving', () => {
   const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});

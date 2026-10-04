@@ -27,6 +27,21 @@ const car = { id: 'one', at: p(15, 15), bearing: 0, kind: 'car' as const };
 const bus = { id: 'bus', at: p(30, 30), bearing: 90, kind: 'bus' as const };
 
 describe('fixed plan-view parking', () => {
+  it('rejects a road corridor whose centreline is outside the site', () => {
+    const road: AtlasFeature = {
+      ...parent,
+      properties: { id: 'osm:way/outside-road', class: 'road_minor', width: 6 },
+      geometry: { type: 'LineString', coordinates: [p(0, 51), p(0, 51), p(50, 51)] },
+    };
+    const pack = SiteDetail.parse({
+      ...base,
+      parked_vehicles: [{ ...car, at: p(25, 47.4), bearing: 90 }],
+    });
+    expect(() => mergeSiteDetails([parent, road], [pack])).toThrow('crosses osm:way/outside-road');
+    expect(() =>
+      mergeSiteDetails([parent, road], [{ ...pack, parked_vehicles: [{ ...car, at: p(25, 40) }] }]),
+    ).not.toThrow();
+  });
   it('retains bend and endpoint clearance when distant road segments are skipped', () => {
     const road: AtlasFeature = {
       ...parent,

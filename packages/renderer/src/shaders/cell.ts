@@ -35,7 +35,7 @@ uniform float u_depth[${MAX_CLASSES}];
 uniform float u_vis[${MAX_CLASSES}]; // 0-1 per class id
 uniform float u_zoom;
 uniform int u_roadMask; // carriageway class ids
-uniform int u_groundMask;   // classes.ts groundClasses (bitmask)
+uniform int u_ground[${MAX_CLASSES}]; // classes.ts groundClasses
 uniform float u_groundDepth; // their height-less features' depth
 uniform int u_crownClass;   // tree crowns, which sway in the wind
 uniform float u_time;       // seconds
@@ -80,7 +80,7 @@ void main() {
     depth = ${float(pavingOverrideDepth())};
   if ((int(a_meta.z + 0.5) & ${Flags.crossing}) != 0) depth -= ${TIER_STEP * 0.01};
   // Grounds (no height) go under the grass, parks, and water on them.
-  if (maskBit(u_groundMask, cls) == 1 && a_meta.y == 0.0) depth = u_groundDepth;
+  if (u_ground[cls] == 1 && a_meta.y == 0.0) depth = u_groundDepth;
   // Classes outside their zoom band are pushed out of the depth range (clipped).
   float vis = u_vis[cls];
   if (vis <= 0.0) depth = 2.0;

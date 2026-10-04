@@ -10,7 +10,7 @@ import { planParts } from './lib/plan';
 import { enrichRoofs } from './lib/roofs';
 import { landcoverFeatures, applyLandcoverTreeOverrides } from './lib/landcover';
 import { mergeCemeteries } from './lib/cemeteries';
-import { mergeSiteDetails } from './lib/site-detail';
+import { finalizeDetailSelections, mergeSiteDetails } from './lib/site-detail';
 import { mergeLifeSites } from './lib/life-sites';
 import { mergeTraffic } from './lib/traffic';
 import { applyRoadExclusions } from './lib/streets';
@@ -141,6 +141,7 @@ export const step: Step = {
       console.warn(`  warning: ${warning}`);
     }
     const roofs = enrichRoofs(cemeteries.features);
+    finalizeDetailSelections(cemeteries.features);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
     await writeFeatures(join(buildDir, files.merged), cemeteries.features);
     console.log(

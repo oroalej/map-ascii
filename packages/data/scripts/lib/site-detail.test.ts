@@ -1,9 +1,15 @@
-import { SiteDetail } from '@atlas/shared';
+import { Cemetery, SiteDetail } from '@atlas/shared';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import type { Polygon } from 'geojson';
-import { detailSelectionOf, mergeSiteDetails, seatingFootprint } from './site-detail';
+import {
+  detailSelectionOf,
+  finalizeDetailSelections,
+  mergeSiteDetails,
+  seatingFootprint,
+} from './site-detail';
+import { mergeCemeteries } from './cemeteries';
 
 const m = 111_320;
 const p = (x: number, y: number): [number, number] => [x / m, y / m];
@@ -42,6 +48,175 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('checks roof wings against all final height overrides independent of pack order', () => {
+    const building: AtlasFeature = {
+      ...parent,
+      properties: {
+        id: 'osm:way/2',
+        class: 'building_school',
+        height: 6,
+        landmark_id: 'landmark/roof',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[p(10, 10), p(40, 10), p(40, 40), p(10, 40), p(10, 10)]],
+      },
+    };
+    const campus = { ...parent, properties: { ...parent.properties, id: 'osm:way/3' } };
+    const wing = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      selection_osm_id: building.properties.id,
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'wing',
+          ring: [p(12, 12), p(30, 12), p(30, 20), p(12, 20), p(12, 12)],
+          height_m: 10,
+          material: 'roof',
+          overhead: true,
+          roof_shape: 'gabled',
+          roof_osm_id: building.properties.id,
+        },
+      ],
+    });
+    const override = SiteDetail.parse({
+      ...detail,
+      id: 'detail/other',
+      osm_id: campus.properties.id,
+      surface: 'keep',
+      walks: [],
+      seating: [],
+      lamps: [],
+      building_overrides: [{ osm_id: building.properties.id, height_m: 12 }],
+    });
+    for (const packs of [
+      [wing, override],
+      [override, wing],
+    ])
+      expect(() => mergeSiteDetails([parent, campus, building], packs)).toThrow('roof wing');
+    override.building_overrides[0]!.height_m = 9;
+    for (const packs of [
+      [wing, override],
+      [override, wing],
+    ]) {
+      const output = mergeSiteDetails([parent, campus, building], packs).features;
+      const selected = output.find((f) => f.properties.id === 'detail:test/structure-wing')!;
+      expect(JSON.parse(selected.properties.detail_selection!)).toMatchObject({
+        id: building.properties.id,
+        height: 9,
+      });
+    }
+    expect(building.properties.height).toBe(6);
+  });
+
+  it('finalizes every existing descriptor after cemetery names change', () => {
+    const cemeteryParent = {
+      ...parent,
+      properties: { ...parent.properties, class: 'grass' as const, kind: 'landuse=cemetery' },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: [
+        {
+          id: 'marker',
+          ring: [p(5, 5), p(7, 5), p(7, 7), p(5, 7), p(5, 5)],
+          material: 'stone',
+          overhead: false,
+          height_m: 1,
+        },
+      ],
+    });
+    const cemetery = Cemetery.parse({
+      id: 'cemetery/test',
+      osm_id: parent.properties.id,
+      title: 'Final cemetery name',
+      rows: [
+        {
+          id: 'one',
+          line: [p(20, 20), p(25, 20)],
+          count: 1,
+          kind: 'slab',
+          width_m: 1,
+          length_m: 2,
+          height_m: 0.2,
+        },
+      ],
+      status: 'draft',
+      credit: 'Survey',
+      sources: [{ title: 'Survey' }],
+    });
+    const output = mergeCemeteries(mergeSiteDetails([cemeteryParent], [pack]).features, [
+      cemetery,
+    ]).features;
+    finalizeDetailSelections(output);
+    const aliases = output.filter((f) => f.properties.detail_selection);
+    expect(aliases.length).toBeGreaterThan(1);
+    for (const alias of aliases)
+      expect(JSON.parse(alias.properties.detail_selection!)).toMatchObject({
+        id: parent.properties.id,
+        name: cemetery.title,
+      });
+  });
+
+  it('does not prepare distant standing footprints again for each site structure', () => {
+    const reads = (withPitch: boolean) => {
+      let count = 0;
+      const distant = Array.from({ length: 20 }, (_, i): AtlasFeature => {
+        const geometry: Polygon = {
+          type: 'Polygon',
+          coordinates: [
+            [
+              p(1000 + i * 10, 0),
+              p(1005 + i * 10, 0),
+              p(1005 + i * 10, 5),
+              p(1000 + i * 10, 5),
+              p(1000 + i * 10, 0),
+            ],
+          ],
+        };
+        const coordinates = geometry.coordinates;
+        Object.defineProperty(geometry, 'coordinates', {
+          get: () => {
+            count++;
+            return coordinates;
+          },
+        });
+        return {
+          ...parent,
+          geometry,
+          properties: { id: 'osm:way/distant-' + i, class: 'building', height: 6 },
+        };
+      });
+      const pack = SiteDetail.parse({
+        ...detail,
+        walks: [],
+        seating: [],
+        lamps: [],
+        structures: withPitch
+          ? [
+              {
+                id: 'court',
+                ring: [p(10, 10), p(20, 10), p(20, 20), p(10, 20), p(10, 10)],
+                material: 'pitch',
+                overhead: false,
+                height_m: 0.15,
+              },
+            ]
+          : [],
+      });
+      mergeSiteDetails([parent, ...distant], [pack]);
+      return count;
+    };
+    expect(reads(true)).toBe(reads(false));
+  });
+
   it('builds shared selection metadata with optional fields and only finite positive heights', () => {
     const bare = { id: 'osm:way/2', class: 'grass' as const };
     for (const height of [undefined, 0, -1, Infinity, NaN])

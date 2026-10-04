@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { SiteDetail } from '@atlas/shared';
+import { DetailLayouts, type SiteDetail } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { detailLayoutKey } from '../../../packages/data/scripts/lib/detail-layout';
 import { isCityMeta } from '../lib/guards';
@@ -47,10 +47,13 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const meta: unknown = await response.json();
       if (!isCityMeta(meta)) throw new Error(`${city.slug}: invalid served city meta`);
       // Credits survive layout edits, so also match the exact current geometry/selection.
-      const currentLayout = meta.detail_layouts?.[detail.id] === detailLayoutKey(detail);
+      const layoutResponse = await page.request.get(`/tiles/${city.slug}.detail-layouts.json`);
+      const layouts = layoutResponse.ok() ? DetailLayouts.parse(await layoutResponse.json()) : {};
+      const currentLayout = layouts[detail.id] === detailLayoutKey(detail);
       if (process.env.ATLAS_REQUIRE_DETAILS === '1') {
         expect(meta.attribution).toContain(detail.credit);
-        expect(currentLayout, 'Locally rebuilt tiles must match this detail layout').toBe(true);
+        expect(layoutResponse.ok(), 'Tiles must include detail-layout fingerprints').toBe(true);
+        expect(currentLayout, 'Served tiles must match this detail layout').toBe(true);
       }
       test.skip(
         !meta.attribution.includes(detail.credit) || !currentLayout,

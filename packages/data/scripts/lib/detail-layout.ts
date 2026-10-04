@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SiteDetail } from '@atlas/shared';
+import { DetailLayouts, SiteDetail } from '@atlas/shared';
 import type { StepContext } from '../step';
 import { files } from '../step';
 import { readJson, writeJson } from './io';
@@ -65,5 +65,13 @@ export async function readDetailLayouts(ctx: StepContext): Promise<Record<string
     JSON.stringify(snapshot.layouts) !== JSON.stringify(layoutKeys(ctx.content.details))
   )
     throw stale();
-  return snapshot.layouts as Record<string, string>;
+  return DetailLayouts.parse(snapshot.layouts);
+}
+
+/** Keep smoke-only fingerprints separate from metadata loaded by the map. */
+export async function publishDetailLayouts(
+  { city, outDir }: Pick<StepContext, 'city' | 'outDir'>,
+  layouts: unknown,
+): Promise<void> {
+  await writeJson(join(outDir, `${city.slug}.detail-layouts.json`), DetailLayouts.parse(layouts));
 }

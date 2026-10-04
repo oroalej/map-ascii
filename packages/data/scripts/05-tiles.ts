@@ -11,7 +11,7 @@ import { landcoverCredits } from './lib/landcover';
 import { cemeteryCredits } from './lib/cemeteries';
 import { planCredits } from './lib/plan';
 import { detailCredits } from './lib/site-detail';
-import { readDetailLayouts } from './lib/detail-layout';
+import { publishDetailLayouts, readDetailLayouts } from './lib/detail-layout';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
 
@@ -36,7 +36,6 @@ export function buildMeta(
   geography: Geography,
   years: [number, number],
   credits: readonly string[] = [],
-  detailLayouts?: Readonly<Record<string, string>>,
 ): CityMeta {
   return CityMeta.parse({
     slug: city.slug,
@@ -48,11 +47,10 @@ export function buildMeta(
     defaultCamera: { ...geography.center, zoom: geography.zoom },
     yearRange: years,
     attribution: [...new Set([...(geography.attribution ?? []), ...credits])],
-    detail_layouts: detailLayouts,
   });
 }
 
-// Build <city>.pmtiles with tippecanoe and write <city>.meta.json
+// Build <city>.pmtiles with tippecanoe and write the city's metadata and detail fingerprints.
 export const step: Step = {
   name: '05-tiles',
   async run(ctx) {
@@ -61,18 +59,12 @@ export const step: Step = {
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
     const years = await yearRange(merged, new Date().getFullYear());
-    const meta = buildMeta(
-      city,
-      geography,
-      years,
-      [
-        ...landcoverCredits(content.landcover),
-        ...cemeteryCredits(content.cemeteries),
-        ...detailCredits(content.details),
-        ...planCredits(content.plans),
-      ],
-      layouts,
-    );
+    const meta = buildMeta(city, geography, years, [
+      ...landcoverCredits(content.landcover),
+      ...cemeteryCredits(content.cemeteries),
+      ...detailCredits(content.details),
+      ...planCredits(content.plans),
+    ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     const base = city.streets?.utilities?.derive
@@ -109,12 +101,13 @@ export const step: Step = {
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
     await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+    await publishDetailLayouts(ctx, layouts);
     // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
     const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
     await writeJson(join(outDir, `${city.slug}.subdivisions.json`), areas);
     const mb = (await stat(pmtiles)).size / 1e6;
     console.log(
-      `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, and .subdivisions.json to ${outDir}`,
+      `  wrote ${city.slug}.pmtiles (${mb.toFixed(1)} MB), .meta.json, .detail-layouts.json, and .subdivisions.json to ${outDir}`,
     );
     if (mb > 40)
       console.warn(`  ! ${city.slug}.pmtiles is over the 40 MB budget (ARCHITECTURE.md §8)`);

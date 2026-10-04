@@ -3,14 +3,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import { SiteDetail, type City, type CityArt } from '@atlas/shared';
+import { SiteDetail, type City, type CityArt, type LngLat } from '@atlas/shared';
+import type { Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, step as tileStep } from './05-tiles';
 import { readFeatures, readJson } from './lib/io';
-import { detailLayoutKey, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
+import {
+  detailLayoutKey,
+  publishDetailLayouts,
+  readDetailLayouts,
+  writeDetailLayouts,
+} from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
 // A fixture city that is not tied to any real place (ARCHITECTURE.md §9).
@@ -108,6 +114,45 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('writes aliases using the canonical parent final surface class', async () => {
+    const parent = features.find((f) => f.properties.id === 'osm:way/105')!;
+    const detail = SiteDetail.parse({
+      id: 'detail/finalized',
+      osm_id: parent.properties.id,
+      selection_osm_id: parent.properties.id,
+      title: 'Fixture court',
+      surface: 'paving',
+      structures: [
+        {
+          id: 'terrace',
+          ring: (parent.geometry as Polygon).coordinates[0] as LngLat[],
+          height_m: 0.15,
+          material: 'paving',
+          overhead: false,
+        },
+      ],
+      status: 'draft',
+      credit: 'Fixture survey',
+      sources: [{ title: 'Fixture survey' }],
+    });
+    try {
+      await mergeContent.run({ ...ctx, content: { ...content, details: [detail] } });
+      let aliases = 0;
+      for await (const feature of readFeatures(join(ctx.buildDir, files.merged))) {
+        const p = (feature as AtlasFeature).properties;
+        if (p.id === 'detail:finalized/structure-terrace') {
+          aliases++;
+          expect(JSON.parse(p.detail_selection!)).toMatchObject({
+            id: parent.properties.id,
+            class: 'paving',
+          });
+        }
+      }
+      expect(aliases).toBe(1);
+    } finally {
+      await mergeContent.run(ctx);
+    }
+  });
   it('classifies features into layers and drops unmapped ones', () => {
     const summary = features
       .map((f) => [f.properties.id, f.properties.class, f.tippecanoe.layer])
@@ -197,7 +242,7 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(credited.attribution).toEqual(['DEM', 'Imagery']);
   });
 
-  it('records only the supplied detail layouts while accepting legacy metadata calls', async () => {
+  it('publishes validated detail fingerprints separately from startup metadata', async () => {
     const geography = await readJson<Geography>(join(ctx.buildDir, files.geography));
     const detail = SiteDetail.parse({
       id: 'detail/fixture',
@@ -208,15 +253,13 @@ describe('pipeline (02–04) on the fixture extract', () => {
       credit: 'Fixture survey',
       sources: [{ title: 'Fixture survey' }],
     });
-    expect(buildMeta(city, geography, [1890, 2026]).detail_layouts).toBeUndefined();
-    expect(buildMeta(city, geography, [1890, 2026], [], {}).detail_layouts).toEqual({});
-    expect(
-      buildMeta(city, geography, [1890, 2026], [], {
-        [detail.id]: detailLayoutKey(detail),
-      }).detail_layouts,
-    ).toEqual({
-      [detail.id]: detailLayoutKey(detail),
-    });
+    expect(buildMeta(city, geography, [1890, 2026])).not.toHaveProperty('detail_layouts');
+    const layouts = { [detail.id]: detailLayoutKey(detail) };
+    await publishDetailLayouts(ctx, layouts);
+    const output = join(ctx.outDir, `${city.slug}.detail-layouts.json`);
+    expect(await readJson(output)).toEqual(layouts);
+    await expect(publishDetailLayouts(ctx, { [detail.id]: 'invalid' })).rejects.toThrow();
+    expect(await readJson(output)).toEqual(layouts);
   });
 
   it('rejects changed-pack step-05 inputs before invoking the tile compiler', async () => {

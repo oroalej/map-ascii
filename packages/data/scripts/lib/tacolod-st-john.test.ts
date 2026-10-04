@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Polygon } from 'geojson';
 import bbox from '@turf/bbox';
 import { City, type BBox, type LngLat } from '@atlas/shared';
-import { bboxesOverlap, bufferBbox } from './geo';
+import { bboxesOverlap, bufferBbox, localFrame } from './geo';
 import { covers, details, source, areaFor } from './landmark-detail.fixtures';
 import { clearanceAssertions, mappedFootprints, distanceMeters } from './landmark-detail.geometry';
 import { landcoverFeatures } from './landcover';
@@ -53,14 +53,11 @@ describe('Tacolod school grounds', () => {
         audit.clear(shape, [...obstacles, ...paths], patch.cover);
       }
       for (const tree of cover.trees) {
-        const mx = 111320 * Math.cos((tree.at[1] * Math.PI) / 180);
+        const frame = localFrame(tree.at);
         const radius = tree.crown_m! / 2;
         const ring: LngLat[] = Array.from({ length: 32 }, (_, i) => {
           const angle = (i * 2 * Math.PI) / 32;
-          return [
-            tree.at[0] + (radius * Math.cos(angle)) / mx,
-            tree.at[1] + (radius * Math.sin(angle)) / 111320,
-          ];
+          return frame.toLngLat([radius * Math.cos(angle), radius * Math.sin(angle)]);
         });
         ring.push(ring[0]!);
         const shape: Polygon = { type: 'Polygon', coordinates: [ring] };
@@ -127,11 +124,12 @@ describe('Tacolod school grounds', () => {
     const cover = covers.find((c) => c.id === 'landcover/tacolod-elementary-school-main')!;
     // A conservative reserved envelope, rather than an invented standing roof.
     const angle = (29 * Math.PI) / 180;
-    const mx = 111320 * Math.cos((13.6315 * Math.PI) / 180);
-    const at = ([x, y]: LngLat): LngLat => [
-      123.17022 + (x * Math.cos(angle) - y * Math.sin(angle)) / mx,
-      13.6315 + (x * Math.sin(angle) + y * Math.cos(angle)) / 111320,
-    ];
+    const frame = localFrame([123.17022, 13.6315]);
+    const at = ([x, y]: LngLat): LngLat =>
+      frame.toLngLat([
+        x * Math.cos(angle) - y * Math.sin(angle),
+        x * Math.sin(angle) + y * Math.cos(angle),
+      ]);
     const canopy: Polygon = {
       type: 'Polygon',
       coordinates: [

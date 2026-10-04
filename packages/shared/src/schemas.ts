@@ -1236,14 +1236,14 @@ export const CityMeta = z.object({
   yearRange: z.tuple([Year, Year]),
   /** Extra credits this city's layers need, beyond OpenStreetMap. */
   attribution: z.array(z.string().min(1)),
-  /** Optional layout fingerprints; older pinned archives omit them. */
-  detail_layouts: z
-    .record(z.string().regex(/^detail\/[a-z0-9-]+$/), z.string().regex(/^[0-9a-f]{64}$/))
-    .optional(),
 });
 export type CityMeta = z.infer<typeof CityMeta>;
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/, 'expected a hex sha256');
+
+/** `<city>.detail-layouts.json`: geometry/selection fingerprints used by smoke tests. */
+export const DetailLayouts = z.record(z.string().regex(/^detail\/[a-z0-9-]+$/), Sha256);
+export type DetailLayouts = z.infer<typeof DetailLayouts>;
 
 /**
  * A city pack's `tiles.lock.json` (DATA.md §9): which GitHub release holds the city's generated

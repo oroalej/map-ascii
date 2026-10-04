@@ -1,4 +1,4 @@
-import { SiteDetail } from '@atlas/shared';
+import { DetailLayouts, SiteDetail } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { detailLayoutKey } from './detail-layout';
 
@@ -28,6 +28,14 @@ const detail = {
 };
 
 describe('detail layout fingerprints', () => {
+  it('validates a separate record of detail ids and SHA-256 fingerprints', () => {
+    expect(DetailLayouts.parse({ [detail.id]: detailLayoutKey(detail) })).toEqual({
+      [detail.id]: detailLayoutKey(detail),
+    });
+    expect(DetailLayouts.parse({})).toEqual({});
+    for (const broken of [null, [], { fixture: 'a'.repeat(64) }, { [detail.id]: 'not-a-hash' }])
+      expect(DetailLayouts.safeParse(broken).success).toBe(false);
+  });
   it('matches raw and parsed content, property order, default values and annotation edits', () => {
     const parsed = SiteDetail.parse(detail);
     const reordered = Object.fromEntries(Object.entries(detail).reverse());

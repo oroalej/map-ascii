@@ -3,6 +3,7 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   isRoofBuilding,
+  ROOF_BUILDING_CLASSES,
   RoofShape,
   type AtlasClass,
 } from '@atlas/shared';
@@ -145,14 +146,14 @@ export const priority: readonly (readonly RenderClass[])[] = [
  * than buildings. Grounds are drawn under everything on them but terrain (`groundDepth`), so a
  * lawn, garden, or pond inside a campus shows.
  */
-export const groundClasses: readonly RenderClass[] = [
-  'building',
-  'building_religious',
-  'building_school',
-  'building_hospital',
-  'building_market',
-  'building_station',
-];
+export const groundClasses: readonly RenderClass[] = ROOF_BUILDING_CLASSES;
+
+/** Per-class ground admission, including building ids outside 32-bit masks. */
+export function groundFlags(): Int32Array {
+  const flags = new Int32Array(MAX_CLASSES);
+  for (const cls of groundClasses) flags[classId(cls)] = 1;
+  return flags;
+}
 
 /** Surfaces crowns may cover: roads (1), or roofs only when the crown is taller (2). */
 export function crownSurfaces(): Int32Array {

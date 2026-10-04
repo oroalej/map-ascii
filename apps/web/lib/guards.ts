@@ -42,13 +42,7 @@ export function isCityMeta(v: unknown): v is CityMeta {
     isCamera(v.defaultCamera) &&
     isNumbers(v.yearRange, 2) &&
     Array.isArray(v.attribution) &&
-    v.attribution.every(isText) &&
-    (v.detail_layouts === undefined ||
-      (isRecord(v.detail_layouts) &&
-        Object.entries(v.detail_layouts).every(
-          ([id, key]) =>
-            /^detail\/[a-z0-9-]+$/.test(id) && isText(key) && /^[0-9a-f]{64}$/.test(key),
-        )))
+    v.attribution.every(isText)
   );
 }
 

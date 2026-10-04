@@ -18,7 +18,7 @@ import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import { mergeCemeteries } from './cemeteries';
 import { geometryAudit, polygonComponents } from './geometry-audit';
 import { clearanceWidth } from './geo';
-import { lineDistance as distances } from './landmark-detail.geometry';
+import { distanceMeters, lineDistance as distances } from './landmark-detail.geometry';
 
 // Declare disk-read content dependencies so targeted runs include this test on pack edits.
 import.meta.glob(
@@ -88,9 +88,7 @@ describe('owner placement corrections', () => {
       [123.198478193, 13.620680267],
       [123.198466581, 13.620634728],
     ] as LngLat[]) {
-      const tree = trees.trees.find(
-        (t) => Math.hypot((t.at[0] - point[0]) * 108185, (t.at[1] - point[1]) * 111320) < 1,
-      )!;
+      const tree = trees.trees.find((t) => distanceMeters(t.at, point) < 1)!;
       expect(tree).toBeDefined();
       expect(tree.height_m).toBe(5);
       expect(inside(tree.at, { type: 'Polygon', coordinates: [court.ring] })).toBe(false);

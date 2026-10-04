@@ -54,7 +54,8 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Exclude pipeline-only `highway` properties from ordinary tiles. For cities opting into utilities, read retained lamp supports from that base archive, bake the network from the complete merged features, tile a separate max-zoom `utilities` layer, and merge/audit it before copying the final archive.
    - Zoom ranges: Region layers z6–z11; detail layers z12–z16 (overzoom to z19 in the client).
    - Output `<city>.pmtiles` (via `pmtiles convert` if needed) and copy it to `apps/web/public/tiles/`.
-   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution. Optional `detail_layouts` maps detail ids to SHA-256 fingerprints of parsed geometry and selection fields. Smoke fixtures match these fingerprints before testing an exposed surface; unchanged credits alone cannot establish tile freshness. Older pinned archives remain readable, but their unmatched detail smoke cases skip unless `ATLAS_REQUIRE_DETAILS=1` requires locally rebuilt layouts.
+   - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
+   - Write the separately validated `<city>.detail-layouts.json`, mapping detail ids to SHA-256 fingerprints of parsed geometry and selection fields. Only smoke tests load this asset; unchanged credits alone cannot establish tile freshness. Older pinned archives remain readable and unmatched local smoke cases skip. CI sets `ATLAS_REQUIRE_DETAILS=1`, requiring published fingerprints that match the current pack.
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 7. **`07-processions`**
@@ -418,10 +419,11 @@ Validation rules:
 
 ## 6. Attribution (always visible in the UI)
 
-"© OpenStreetMap contributors" is always shown outside the bounded, keyboard-accessible scrolling region for additional map credits. The other credits are added only when their layer is active:
-- DEM: "Copernicus DEM"
-- Satellite underlays: "Esri Wayback" or "Copernicus Sentinel-2"
-- Each photo and historic map: its own credit, in the info panel
+"© OpenStreetMap contributors" is always shown outside the bounded, keyboard-accessible scrolling region for additional map credits. Credits for base-map geometry, including curated vegetation and landmark details, remain available in that region at every zoom and with Life off or on. DEM attribution is retained when the generated base map uses it.
+
+Credits for optional underlays and displayed media accompany that content:
+- Satellite underlays: "Esri Wayback" or "Copernicus Sentinel-2" while the underlay is active
+- Each photo and historic map: its own credit in the info panel while displayed
 
 ## 7. Research backlog
 
