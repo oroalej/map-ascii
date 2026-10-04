@@ -220,8 +220,10 @@ export function admitBirths(context: BirthContext, dt: number) {
       if (distance !== undefined) {
         const placed = life.placeSeed(m, distance);
         const full = placed ? life.birthBodies(placed) : [];
-        // Route endpoints are explicit entrances; viewport entries start fully offscreen.
-        const endpoint = index === distances.length - 1;
+        // Vehicles enter connected road ends offscreen; other route endpoints stay explicit entrances.
+        const endpoint =
+          index === distances.length - 1 &&
+          (m.kind !== 'vehicle' || !life.continuesRoad(m.line, m.dir === 1));
         if (
           placed &&
           inTile(placed) &&

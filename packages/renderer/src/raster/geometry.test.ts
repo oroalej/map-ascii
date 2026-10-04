@@ -1154,6 +1154,49 @@ describe('buildTileGeometry', () => {
 describe('buildTileGeometry life', () => {
   const tile = { z: 16, x: 55192, y: 30266 };
 
+  it('makes shared interior road vertices routable in production geometry', () => {
+    const { life } = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_mid', id: 'through', width: 10, oneway: 1 }, [
+            [
+              [100, 200],
+              [200, 200],
+              [300, 200],
+            ],
+          ]),
+          feature(2, { class: 'road_mid', id: 'cross', width: 8, oneway: -1 }, [
+            [
+              [200, 100],
+              [200, 200],
+              [200, 300],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const roads = Array.from(life.kinds.keys()).filter(
+      (line) => life.kinds[line] === LifeLine.roadMid,
+    );
+    expect(roads).toHaveLength(4);
+    expect(roads.map((line) => life.lineIds![line])).toEqual([
+      hashString('through'),
+      hashString('through'),
+      hashString('cross'),
+      hashString('cross'),
+    ]);
+    expect(roads.map((line) => life.widths[line])).toEqual([10, 10, 8, 8]);
+    expect(roads.map((line) => life.oneway![line])).toEqual([1, 1, -1, -1]);
+    for (const line of roads) {
+      const ends = [life.starts[line]!, life.starts[line + 1]! - 1];
+      expect(ends.some((v) => life.coords[v * 2] === 200 && life.coords[v * 2 + 1] === 200)).toBe(
+        true,
+      );
+    }
+  });
+
   it('keeps roads, paths, and rivers as life lines, and parks as plazas and roosts', () => {
     const g = buildTileGeometry(
       {

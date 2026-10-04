@@ -101,6 +101,8 @@ export type LifeGeometry = {
   signalLayouts?: (SignalLayout | undefined)[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
+  /** Original population line per routing piece; splitting must not reshuffle spawn streams. */
+  spawnGroups?: Uint32Array;
   /** Lot boundaries and solid ground obstacles, including polygon holes. */
   areas?: LifeArea[];
   /** Interaction sites: x, y, kind (0 stop, 1 terminal, 2 shelter), mode bits, covered. */
@@ -200,6 +202,8 @@ export class LifeBuilder {
   }
   private signals: number[] = [];
   private signalLayouts: (SignalLayout | undefined)[] = [];
+  private signalMembers: TilePoint[][] = [];
+  private spawnGroups?: number[];
   signal(
     p: TilePoint,
     radius: number,
@@ -266,6 +270,7 @@ export class LifeBuilder {
     this.widths.push(width);
     this.oneways.push(oneway);
     this.lineIds.push(id);
+    this.spawnGroups?.push(this.kinds.length - 1);
     for (const p of points) this.coords.push(p.x, p.y);
   }
 
@@ -274,6 +279,7 @@ export class LifeBuilder {
     project: (position: [number, number]) => TilePoint,
     identify: (id: string) => number,
   ) {
+    this.signalMembers = this.signalLayouts.map((layout) => layout?.members.map(project) ?? []);
     const members = this.signalLayouts
       .flatMap((layout) => layout?.arms ?? [])
       .map((arm) => ({ ...project(arm.junction), id: identify(arm.road_id) }));
@@ -283,13 +289,15 @@ export class LifeBuilder {
       kinds = this.kinds,
       widths = this.widths,
       ids = this.lineIds,
-      flows = this.oneways;
+      flows = this.oneways,
+      groups = this.spawnGroups;
     this.coords = [];
     this.starts = [];
     this.kinds = [];
     this.widths = [];
     this.lineIds = [];
     this.oneways = [];
+    this.spawnGroups = groups && [];
     for (let line = 0; line < kinds.length; line++) {
       const junctions = members.filter((m) => m.id === ids[line]);
       const original: TilePoint[] = [];
@@ -337,6 +345,7 @@ export class LifeBuilder {
             ids[line],
             flows[line] as -1 | 0 | 1,
           );
+          if (this.spawnGroups) this.spawnGroups[this.kinds.length - 1] = groups![line]!;
           points = [p];
         }
       }
@@ -347,6 +356,80 @@ export class LifeBuilder {
         ids[line],
         flows[line] as -1 | 0 | 1,
       );
+      if (this.spawnGroups) this.spawnGroups[this.kinds.length - 1] = groups![line]!;
+    }
+  }
+
+  /** Shared road vertices become endpoints so traffic can choose an exit at each junction. */
+  splitRoadJunctions(perMeter: number, signalClearanceM: number) {
+    const keyOf = (x: number, y: number) => `${Math.round(x)}/${Math.round(y)}`;
+    const owners = new Map<string, number>();
+    const starts = [...this.starts, this.coords.length / 2];
+    for (let line = 0; line < this.kinds.length; line++) {
+      if (this.kinds[line]! > LifeLine.roadMinor) continue;
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
+        const key = keyOf(this.coords[v * 2]!, this.coords[v * 2 + 1]!);
+        const owner = owners.get(key);
+        owners.set(key, owner === undefined || owner === line ? line : -1);
+      }
+    }
+    const splits = new Set<string>();
+    for (const [key, owner] of owners) {
+      if (owner !== -1) continue;
+      const [x, y] = key.split('/').map(Number) as [number, number];
+      let protectedApproach = false;
+      for (let s = 0; s < this.signals.length; s += 6) {
+        const clearance = (signalClearanceM + this.signals[s + 2]!) * perMeter + 2;
+        if (
+          Math.hypot(x - this.signals[s]!, y - this.signals[s + 1]!) <= clearance ||
+          this.signalMembers[s / 6]?.some((p) => Math.hypot(x - p.x, y - p.y) <= clearance)
+        ) {
+          protectedApproach = true;
+          break;
+        }
+      }
+      if (!protectedApproach) splits.add(key);
+    }
+    if (!splits.size) return;
+    const coords = this.coords,
+      kinds = this.kinds,
+      widths = this.widths,
+      ids = this.lineIds,
+      flows = this.oneways,
+      groups = this.spawnGroups;
+    this.coords = [];
+    this.starts = [];
+    this.kinds = [];
+    this.widths = [];
+    this.lineIds = [];
+    this.oneways = [];
+    this.spawnGroups = [];
+    const piece = (points: TilePoint[], line: number) => {
+      this.line(
+        points,
+        kinds[line]! as LifeLine,
+        widths[line],
+        ids[line],
+        flows[line] as -1 | 0 | 1,
+      );
+      this.spawnGroups![this.kinds.length - 1] = groups?.[line] ?? line;
+    };
+    for (let line = 0; line < kinds.length; line++) {
+      let points: TilePoint[] = [];
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
+        const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
+        points.push(p);
+        if (
+          kinds[line]! <= LifeLine.roadMinor &&
+          points.length > 1 &&
+          v < starts[line + 1]! - 1 &&
+          splits.has(keyOf(p.x, p.y))
+        ) {
+          piece(points, line);
+          points = [p];
+        }
+      }
+      piece(points, line);
     }
   }
 
@@ -418,6 +501,7 @@ export class LifeBuilder {
       signalLayouts: this.signalLayouts,
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
+      spawnGroups: this.spawnGroups && Uint32Array.from(this.spawnGroups),
       areas: this.areas,
       sites: Float32Array.from(this.sites),
       obstacles: Float32Array.from(this.obstacles),
@@ -454,6 +538,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
+  ...(g.spawnGroups ? [g.spawnGroups.buffer as ArrayBuffer] : []),
   ...(g.oneway ? [g.oneway.buffer as ArrayBuffer] : []),
   g.sites.buffer as ArrayBuffer,
   g.obstacles.buffer as ArrayBuffer,

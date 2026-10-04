@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { LifeWorld, type WorldGroundGuard } from './simulate';
+import { LifeWorld, TileLife, type Mover, type WorldGroundGuard } from './simulate';
 import { continuityTile, continuityMover, left, parent } from './testing/continuity';
 import { completeScenarioState, worldTiles, retiredTiles } from './testing/scenarios';
 import { tileToLngLat } from '../raster/geometry';
-import { BIRTHS, outsideView, spawnMargin, type LifeViewContext } from './births';
+import { BIRTHS, admitBirths, outsideView, spawnMargin, type LifeViewContext } from './births';
 import { LifeBuilder, LifeLine } from './geometry';
 import { FrameProfiler } from '../profile';
 import { activityLevels } from './config';
@@ -37,6 +37,154 @@ function prepared(view = context(), profiler?: FrameProfiler, internalEndpoints 
   world.sync([boot, entry], undefined, view);
   return { world, boot, entry, life: worldTiles(world).get(entry.key)!, view };
 }
+
+function endpointAdmission(
+  kind: 'split' | 'different-way' | 'disconnected' | 'offscreen' | 'person',
+) {
+  const b = new LifeBuilder();
+  const junction = kind === 'offscreen' ? 1000 : 2000;
+  b.line(
+    [
+      { x: 800, y: 2000 },
+      { x: junction, y: 2000 },
+    ],
+    LifeLine.roadMajor,
+    6,
+    77,
+  );
+  b.line(
+    [
+      { x: junction, y: 2000 },
+      { x: 3200, y: 2000 },
+    ],
+    LifeLine.roadMajor,
+    6,
+    77,
+  );
+  let line = 1;
+  if (kind === 'different-way' || kind === 'person') {
+    b.line(
+      [
+        { x: junction, y: 2000 },
+        { x: junction, y: 3200 },
+      ],
+      kind === 'person' ? LifeLine.path : LifeLine.roadMinor,
+      6,
+      88,
+    );
+    line = 2;
+  }
+  if (kind === 'disconnected') {
+    b.line(
+      [
+        { x: 1200, y: 2200 },
+        { x: 3000, y: 2200 },
+      ],
+      LifeLine.roadMinor,
+      6,
+      99,
+    );
+    line = 2;
+  }
+  const life = new TileLife(left, b.finish(), 4);
+  life.movers.length = 0;
+  const traveler: Mover = {
+    ...continuityMover(life, junction, kind === 'person' ? 'person' : 'vehicle'),
+    line,
+    from: life.geo.starts[line]!,
+    dir: 1,
+    d: 0,
+    speed: 0,
+    v: 0,
+  };
+  if (kind === 'person')
+    traveler.group = [
+      { figure: 'adult', shirt: 0, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 },
+    ];
+  const m = life.placeSeed(traveler, kind === 'offscreen' ? 1100 : 100)!;
+  const view = kind === 'offscreen' ? context(1500, 2500) : context(0, 4096);
+  expect(life.birthBodies(m).length).toBeGreaterThan(0);
+  expect(outsideView(life, life.birthBodies(m), view, 12)).toBe(false);
+  for (let frame = 0; frame < 11; frame++) life.step(0.1);
+  life.birthCredit = 1;
+  life.pending.push({ mover: m, at: 0 });
+  // Isolate entrance policy from terrain/collision admission, covered by the world tests below.
+  const walkable =
+    kind === 'person' ? vi.spyOn(life.scenes, 'walkable').mockReturnValue(true) : undefined;
+  admitBirths(
+    {
+      view,
+      lives: [life],
+      credit: 4,
+      cursor: 0,
+      owns: () => true,
+      guard: () => Object.assign(() => true, { remove: () => {}, reserveSeam: () => {} }),
+      boatRoom: () => true,
+    },
+    0.1,
+  );
+  walkable?.mockRestore();
+  return { life, m, view };
+}
+
+it('rejects in-view endpoint births at a same-way split and a different-way T-junction', () => {
+  for (const kind of ['split', 'different-way'] as const) {
+    const { life, m } = endpointAdmission(kind);
+    expect(life.continuesRoad(m.line, true)).toBe(true);
+    expect(life.movers).not.toContain(m);
+    expect(life.pending[0]!.mover).toBe(m);
+  }
+});
+
+it('retains the in-view exemption at a disconnected road end', () => {
+  const { life, m, view } = endpointAdmission('disconnected');
+  expect(life.continuesRoad(m.line, true)).toBe(false);
+  expect(life.movers).toContain(m);
+  expect(outsideView(life, life.birthBodies(m), view, 0)).toBe(false);
+});
+
+it('admits a connected endpoint offscreen and preserves non-vehicle endpoint admission', () => {
+  const outside = endpointAdmission('offscreen');
+  expect(outside.life.continuesRoad(outside.m.line, true)).toBe(true);
+  expect(outside.life.movers).toContain(outside.m);
+  expect(outsideView(outside.life, outside.life.birthBodies(outside.m), outside.view, 0)).toBe(
+    true,
+  );
+  const person = endpointAdmission('person');
+  expect(person.life.continuesRoad(person.m.line, true)).toBe(true);
+  expect(person.life.movers).toContain(person.m);
+  expect(outsideView(person.life, person.life.birthBodies(person.m), person.view, 0)).toBe(false);
+});
+
+it('recognizes the other end of a closed road while ignoring connected paths', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 1000, y: 2000 },
+      { x: 2000, y: 2000 },
+      { x: 1000, y: 2000 },
+    ],
+    LifeLine.roadMinor,
+  );
+  b.line(
+    [
+      { x: 2000, y: 2200 },
+      { x: 3000, y: 2200 },
+    ],
+    LifeLine.roadMinor,
+  );
+  b.line(
+    [
+      { x: 3000, y: 2200 },
+      { x: 3000, y: 3200 },
+    ],
+    LifeLine.path,
+  );
+  const life = new TileLife(left, b.finish(), 4);
+  expect(life.continuesRoad(0, true)).toBe(true);
+  expect(life.continuesRoad(0, false)).toBe(true);
+  expect(life.continuesRoad(1, false)).toBe(false);
+});
 
 it('keeps eager compatibility and bootstrap, then admits inert seeds entirely outside the view', () => {
   const eager = new LifeWorld();

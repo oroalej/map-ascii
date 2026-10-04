@@ -92,6 +92,66 @@ describe('random', () => {
   });
 });
 
+describe('road population across routing splits', () => {
+  it('preserves counts, positions, attributes and later spawn draws for the same seed', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 2000, y: 2000 },
+        { x: 4095, y: 2000 },
+      ],
+      LifeLine.roadMid,
+      8,
+      77,
+    );
+    b.line(
+      [
+        { x: 2000, y: 0 },
+        { x: 2000, y: 2000 },
+        { x: 2000, y: 4095 },
+      ],
+      LifeLine.roadMid,
+      8,
+      88,
+      1,
+    );
+    b.line(
+      [
+        { x: 300, y: 300 },
+        { x: 1700, y: 300 },
+      ],
+      LifeLine.path,
+      3,
+      99,
+    );
+    const original = b.finish();
+    b.splitRoadJunctions(perMeter, 40);
+    const split = b.finish();
+    const sample = (life: TileLife) =>
+      life.movers.map((m) => ({
+        kind: m.kind,
+        id: life.geo.lineIds![m.line],
+        dir: m.dir,
+        vehicle: m.vehicle,
+        paint: m.paint,
+        lane: m.lane,
+        rank: m.rank,
+        speed: m.speed,
+        x: m.x,
+        y: m.y,
+        hx: m.hx,
+        hy: m.hy,
+        routing: m.routing,
+        group: m.group,
+      }));
+    for (let seed = 0; seed < 8; seed++)
+      expect(sample(new TileLife(tile, split, seed))).toEqual(
+        sample(new TileLife(tile, original, seed)),
+      );
+  });
+});
+
 describe('inactive walkers', () => {
   for (const kind of ['person', 'dog', 'cat'] as const)
     it(`freezes an inactive ${kind} without clearance work and resumes when active`, () => {
@@ -948,6 +1008,82 @@ describe('parked vehicles', () => {
     ],
   ]);
   const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
+
+  const splitWay = () => {
+    const b = new LifeBuilder();
+    for (const [a, z] of [
+      [0, 1500],
+      [1500, 2800],
+      [2800, 4095],
+    ])
+      b.line(
+        [
+          { x: a!, y: 2048 },
+          { x: z!, y: 2048 },
+        ],
+        LifeLine.roadMajor,
+        14,
+        77,
+      );
+    return b.finish();
+  };
+
+  it('uses one curb-parking decision for all pieces of a way', () => {
+    const decisions: boolean[] = [];
+    for (const seed of seeds) {
+      const life = new TileLife(tile, splitWay(), seed);
+      const offsets = [0, 1, 2].map((line) =>
+        life.offsetOf({ kind: 'vehicle', vehicle: 'car', line, lane: 0 } as Mover),
+      );
+      expect(new Set(offsets).size).toBe(1);
+      const parked = offsets[0] === laneOffset(14 - 2 * PARKED.strip, VEHICLES.car.width, 0);
+      decisions.push(parked);
+      for (const [a, z] of [
+        [0, 1500],
+        [1500, 2800],
+        [2800, 4095],
+      ])
+        expect(life.parked.some((p) => p.x > a! && p.x < z!)).toBe(parked);
+    }
+    expect(new Set(decisions).size).toBe(2);
+  });
+
+  it('keeps the lane offset and lateral pose when a car crosses a parked straight split', () => {
+    const life = seeds
+      .map((seed) => new TileLife(tile, splitWay(), seed))
+      .find((life) => life.parked.length)!;
+    expect(life).toBeDefined();
+    life.movers.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const d = 1500 - 20 * perMeter;
+    const m: Mover = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d,
+      speed: 2 * perMeter,
+      v: 2 * perMeter,
+      paint: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+      x: d,
+      y: 2048,
+      hx: 1,
+      hy: 0,
+    };
+    life.movers.push(m);
+    const offset = life.offsetOf(m),
+      y = life.pose(m).y;
+    for (let frame = 0; frame < 200 && m.line === 0; frame++) {
+      life.step(0.1);
+      expect(life.offsetOf(m)).toBe(offset);
+      expect(life.pose(m).y).toBeCloseTo(y, 8);
+    }
+    expect(m.line).toBe(1);
+  });
 
   it('park along the curbs of some wide roads only, and narrow the lanes there', () => {
     const parkedOn = seeds.map((seed) => new TileLife(tile, wide, seed));

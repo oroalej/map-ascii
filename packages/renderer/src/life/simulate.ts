@@ -631,7 +631,13 @@ export class TileLife {
     yield* this.findJunctions();
     yield* this.spawnParked(random(seed ^ 0x9e3779b9));
     yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
-    for (let line = 0; line < lines; line++) yield* this.spawnOn(line);
+    for (let line = 0; line < lines;) {
+      let end = line + 1;
+      const group = geo.spawnGroups?.[line];
+      while (group !== undefined && end < lines && geo.spawnGroups![end] === group) end++;
+      yield* this.spawnOn(line, false, end);
+      line = end;
+    }
     // Dogs last, on their own stream: they don't change who else is out.
     for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
     yield* this.spawnStalls();
@@ -672,6 +678,18 @@ export class TileLife {
     else this.ends.set(key, [code]);
   }
 
+  /** Connected road ends are off-screen entrances, never in-view replacement spawn points. */
+  continuesRoad(line: number, atStart: boolean): boolean {
+    const vertex = atStart ? this.first(line) : this.last(line);
+    const endpoint = line * 2 + (atStart ? 0 : 1);
+    return (
+      this.ends
+        .get(this.endKey(vertex))
+        ?.some((code) => code !== endpoint && this.geo.kinds[code >> 1]! <= LifeLine.roadMinor) ??
+      false
+    );
+  }
+
   private segment(a: number, b: number) {
     const { coords } = this.geo;
     return Math.hypot(coords[b * 2]! - coords[a * 2]!, coords[b * 2 + 1]! - coords[a * 2 + 1]!);
@@ -683,11 +701,13 @@ export class TileLife {
   }
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
-  private *spawnOn(line: number, dogs = false): Generator<void, void, void> {
+  private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
-    const meters = this.lineLength(line) / this.perMeter;
+    let length = 0;
+    for (let piece = line; piece < endLine; piece++) length += this.lineLength(piece);
+    const meters = length / this.perMeter;
     if (!rules || meters === 0) return;
     const rng = dogs ? this.dogRng : this.rng;
     for (const rule of rules) {
@@ -744,8 +764,18 @@ export class TileLife {
           mover.walked = this.looks() * 2 * PEOPLE.stride;
         }
         if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
-        // Start somewhere along the line.
-        this.advance(mover, rng() * this.lineLength(line), false);
+        // Routing splits keep the original population and random draws in their original order.
+        let distance = rng() * length;
+        let piece = dir === 1 ? line : endLine - 1;
+        for (let count = 1; count < endLine - line; count++) {
+          const size = this.lineLength(piece);
+          if (distance < size) break;
+          distance -= size;
+          piece += dir;
+        }
+        mover.line = piece;
+        mover.from = dir === 1 ? this.first(piece) : this.last(piece);
+        this.advance(mover, distance, false);
         if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
@@ -1608,11 +1638,19 @@ export class TileLife {
         park(x, y, hx, hy, vehicle);
       }
     }
+    const curbParking = new Map<number, boolean>();
     for (let line = 0; line < geo.kinds.length; line++) {
       const road = trafficRoadFor[geo.kinds[line]! as LifeLine];
       const width = geo.widths[line] ?? 0;
       const onWater = road === 'river' || road === 'canal';
-      if (!road || onWater || width < PARKED.minWidth || rng() >= PARKED.chance) continue;
+      if (!road || onWater || width < PARKED.minWidth) continue;
+      const id = geo.lineIds?.[line] ?? 0;
+      let chosen = id ? curbParking.get(id) : undefined;
+      if (chosen === undefined) {
+        chosen = rng() < PARKED.chance;
+        if (id) curbParking.set(id, chosen);
+      }
+      if (!chosen) continue;
       this.parkingLines.add(line);
       const length = this.along[this.last(line)]!;
       for (const side of [1, -1]) {
@@ -2040,7 +2078,8 @@ export class TileLife {
       code =
         options[
           Math.floor(
-            (hashString(`${this.routingSeed}/${m.line}/${m.dir}`) / 0x1_0000_0000) * options.length,
+            (hashString(`${this.routingSeed}/${m.rank}/${m.line}/${m.dir}`) / 0x1_0000_0000) *
+              options.length,
           )
         ];
       m.next = code;
@@ -2070,7 +2109,8 @@ export class TileLife {
         this.plannedExit(future, vertex, next)?.exit ??
         next[
           Math.floor(
-            (hashString(`${this.routingSeed}/${line}/${dir}`) / 0x1_0000_0000) * next.length,
+            (hashString(`${this.routingSeed}/${future.rank}/${line}/${dir}`) / 0x1_0000_0000) *
+              next.length,
           )
         ]!;
     }

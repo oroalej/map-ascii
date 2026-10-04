@@ -6,6 +6,8 @@ import { tileFixtures } from './fixtures';
 import { TileLife, type Mover } from './simulate';
 import { signalState } from './signals';
 import { JunctionTable, compatible } from './junctions';
+import { FILLET, SIGNAL } from './config';
+import { VEHICLES } from './vehicles';
 
 const tile = { z: 16, x: 55194, y: 30264 },
   pm = 1 / metersPerUnit(tile);
@@ -113,6 +115,100 @@ const clockFor = (life: TileLife, group: 'a' | 'b', color: 'green' | 'red' | 'am
   )!;
 
 describe('authoritative signal approaches', () => {
+  it('varies the final linked-signal exit per bicycle while retaining a forced connector', () => {
+    const route = (rank: number) => {
+      const { life, geo, p, q, car } = fixture();
+      const connector = Array.from(geo.lineIds!).findIndex((id, line) => {
+        const first = geo.starts[line]!,
+          last = geo.starts[line + 1]! - 1;
+        return (
+          id === hashString('road/1') &&
+          Math.hypot(geo.coords[first * 2]! - p.x, geo.coords[first * 2 + 1]! - p.y) < 2 &&
+          Math.hypot(geo.coords[last * 2]! - q.x, geo.coords[last * 2 + 1]! - q.y) < 2
+        );
+      });
+      expect(connector).toBeGreaterThanOrEqual(0);
+      const m = car(0);
+      m.vehicle = 'bicycle';
+      m.rank = rank;
+      m.next = connector * 2;
+      life.movers.push(m);
+      life.prepareTraffic(() => true);
+      expect(m.junctionRoute?.exits[0]).toBe(connector * 2);
+      const final = m.junctionRoute?.exits.at(-1);
+      expect(final).toBeDefined();
+      const arm = life.junctionIndex.junctions[0]!.arms.find(
+        (a) => a.line === final! >> 1 && a.out === (final! & 1 ? -1 : 1),
+      );
+      expect(arm?.outbound).not.toBe(false);
+      expect(arm).toBeDefined();
+      return final!;
+    };
+    const exits = Array.from({ length: 12 }, (_, i) => route(i / 12));
+    expect(new Set(exits).size).toBe(2);
+    expect(route(5 / 12)).toBe(exits[5]);
+  });
+  it('retains red-light braking when a shared road vertex is just beyond the old split clearance', () => {
+    const builder = () => {
+      const b = new LifeBuilder();
+      const y = 2000,
+        center = 2000,
+        junction = center - 47 * pm;
+      b.line(
+        [
+          { x: center - 100 * pm, y },
+          { x: junction, y },
+          { x: center, y },
+          { x: center + 100 * pm, y },
+        ],
+        LifeLine.roadMid,
+        10,
+        77,
+      );
+      b.line(
+        [
+          { x: junction, y },
+          { x: junction, y: y + 100 * pm },
+        ],
+        LifeLine.roadMinor,
+        6,
+        88,
+      );
+      b.signal({ x: center, y }, 6, 90, 0, true);
+      return b;
+    };
+    const before = new TileLife(tile, builder().finish(), 1);
+    const b = builder();
+    const clearance =
+      Math.max(SIGNAL.lookahead, FILLET.lookaheadM) +
+      SIGNAL.gap +
+      Math.max(...Object.values(VEHICLES).map((v) => v.length / 2));
+    b.splitRoadJunctions(pm, clearance);
+    const after = new TileLife(tile, b.finish(), 1);
+    const m: Mover = {
+      kind: 'vehicle',
+      vehicle: 'bus',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d: 50 * pm,
+      x: 2000 - 50 * pm,
+      y: 2000,
+      hx: 1,
+      hy: 0,
+      speed: 20 * pm,
+      v: 20 * pm,
+      paint: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+    };
+    const red = clockFor(before, 'a', 'red');
+    const limit = before.signals.vehicleSpeed(m, 1 / 30, red);
+    expect(limit).toBeLessThan(m.speed);
+    expect(after.geo.kinds).toHaveLength(before.geo.kinds.length);
+    expect(after.signals.vehicleSpeed(m, 1 / 30, red)).toBeCloseTo(limit);
+  });
   it('restores a shared through-road vertex removed by tile simplification', () => {
     const { life, car, q } = fixture(false, true);
     expect(life.signals.signals[0]!.approaches).toHaveLength(4);
