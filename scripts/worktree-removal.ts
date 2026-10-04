@@ -21,6 +21,7 @@ import { TilesLock } from '../packages/shared/src/schemas';
 import { sha256 } from '../packages/data/scripts/lib/tiles-release';
 import { git, gitRaw, gitSucceeds, listWorktrees, mainCheckout } from './git';
 import { withCleanupError } from './fs-cleanup';
+import { claudeSettingsPath, isGeneratedClaudeSettings } from './claude-worktree-settings';
 
 export { listWorktrees } from './git';
 
@@ -153,8 +154,8 @@ function emptyIgnoredTree(path: string): boolean {
   }
 }
 
-/** Published artifacts are reproducible when they match a lock reachable from the captured head. */
-function createPublishedArtifactChecker(
+/** Accept pristine generated setup and artifacts pinned by a lock reachable from the head. */
+function createGeneratedFileChecker(
   main: string,
   worktree: string,
   head: string,
@@ -196,6 +197,7 @@ function createPublishedArtifactChecker(
     }
   };
   return (path) => {
+    if (path === claudeSettingsPath) return isGeneratedClaudeSettings(main, worktree);
     if (path === 'apps/web/next-env.d.ts') {
       return lstatSync(join(worktree, path)).isFile();
     }
@@ -409,15 +411,15 @@ export function removeWorktree({
     ) {
       throw new Error(`Cannot establish safe status for ${worktree}: branch ownership differs`);
     }
-    const isPublishedArtifact = createPublishedArtifactChecker(main, path, head);
+    const isGeneratedFile = createGeneratedFileChecker(main, path, head);
     const changes = worktreeStatus(main, metadata, path).filter((entry) => {
       if (entry.startsWith('!! '))
         return (
           !disposableIgnored(entry.slice(3)) &&
           !emptyIgnoredTree(join(path, entry.slice(3))) &&
-          !isPublishedArtifact(entry.slice(3))
+          !isGeneratedFile(entry.slice(3))
         );
-      if (entry.startsWith('?? ')) return !isPublishedArtifact(entry.slice(3));
+      if (entry.startsWith('?? ')) return !isGeneratedFile(entry.slice(3));
       return !(allowDeleted && entry.slice(0, 2) === ' D');
     });
     if (changes.length) {

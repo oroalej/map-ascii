@@ -13,7 +13,7 @@ export const git = (cwd: string, ...args: string[]) =>
     { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
-export function worktreeRemovalFixture() {
+export function worktreeRemovalFixture(layout: 'sibling' | 'nested' = 'sibling') {
   let root: string, repo: string, wt: string;
   let templateRoot: string, template: string;
   const branches = () => git(repo, 'branch', '--format=%(refname:short)').trim().split('\n');
@@ -62,7 +62,7 @@ export function worktreeRemovalFixture() {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'worktree-removal-'));
     repo = join(root, 'repo');
-    wt = join(root, 'repo-topic');
+    wt = layout === 'nested' ? join(repo, 'worktrees', 'topic') : join(root, 'repo-topic');
     git(root, 'clone', '-q', '--local', template, repo);
     git(repo, 'worktree', 'add', '-q', wt, '-b', branch, '--no-track', `origin/${branch}`);
   });
