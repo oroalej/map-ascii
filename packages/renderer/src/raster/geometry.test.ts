@@ -1154,6 +1154,77 @@ describe('buildTileGeometry', () => {
 describe('buildTileGeometry life', () => {
   const tile = { z: 16, x: 55192, y: 30266 };
 
+  it('starts junction splitting at the existing z13 Life tile boundary', () => {
+    for (const z of [12, 13]) {
+      const { life } = buildTileGeometry(
+        {
+          roads: layer([
+            feature(2, { class: 'road_mid', id: 'through', width: 10 }, [
+              [
+                [100, 200],
+                [200, 200],
+                [300, 200],
+              ],
+            ]),
+            feature(2, { class: 'road_minor', id: 'side', width: 6 }, [
+              [
+                [200, 200],
+                [200, 300],
+              ],
+            ]),
+          ]),
+        },
+        createIdRegistry(),
+        { z, x: tile.x >> (16 - z), y: tile.y >> (16 - z) },
+      );
+      expect(life.kinds).toHaveLength(z === 12 ? 2 : 3);
+      expect(life.spawnGroups === undefined).toBe(z === 12);
+    }
+  });
+
+  it('protects production signal lookahead beyond the weaker 40-metre clearance', () => {
+    const junction = 1000 + 62 / metersPerUnit(tile);
+    const { life } = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_mid', id: 'through', width: 10 }, [
+            [
+              [500, 2000],
+              [junction, 2000],
+              [3000, 2000],
+            ],
+          ]),
+          feature(2, { class: 'road_minor', id: 'side', width: 6 }, [
+            [
+              [junction, 1000],
+              [junction, 2000],
+              [junction, 3000],
+            ],
+          ]),
+        ]),
+        poi: layer([
+          feature(
+            1,
+            {
+              id: 'signal',
+              class: 'furniture',
+              variant: 'signals',
+              signal_radius: 6,
+              signal_a: 90,
+              signal_b: 0,
+              life_signal: 'mapped',
+            },
+            [[[1000, 2000]]],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(life.kinds)).toEqual([LifeLine.roadMid, LifeLine.roadMinor]);
+    expect(life.spawnGroups).toBeUndefined();
+  });
+
   it('makes shared interior road vertices routable in production geometry', () => {
     const { life } = buildTileGeometry(
       {

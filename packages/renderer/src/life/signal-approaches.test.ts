@@ -6,8 +6,7 @@ import { tileFixtures } from './fixtures';
 import { TileLife, type Mover } from './simulate';
 import { signalState } from './signals';
 import { JunctionTable, compatible } from './junctions';
-import { FILLET, SIGNAL } from './config';
-import { VEHICLES } from './vehicles';
+import { ROAD_SPLIT_CLEARANCE_M } from './config';
 
 const tile = { z: 16, x: 55194, y: 30264 },
   pm = 1 / metersPerUnit(tile);
@@ -179,11 +178,7 @@ describe('authoritative signal approaches', () => {
     };
     const before = new TileLife(tile, builder().finish(), 1);
     const b = builder();
-    const clearance =
-      Math.max(SIGNAL.lookahead, FILLET.lookaheadM) +
-      SIGNAL.gap +
-      Math.max(...Object.values(VEHICLES).map((v) => v.length / 2));
-    b.splitRoadJunctions(pm, clearance);
+    b.splitRoadJunctions(pm, ROAD_SPLIT_CLEARANCE_M);
     const after = new TileLife(tile, b.finish(), 1);
     const m: Mover = {
       kind: 'vehicle',

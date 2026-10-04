@@ -93,6 +93,84 @@ describe('random', () => {
 });
 
 describe('road population across routing splits', () => {
+  it('preserves complete path stalls after split minor-road candidates across fixed seeds', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 1000 },
+        { x: 1000, y: 1000 },
+        { x: 2200, y: 1000 },
+        { x: 4095, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      77,
+    );
+    for (const x of [1000, 2200])
+      b.line(
+        [
+          { x, y: 1000 },
+          { x, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        10,
+        x,
+      );
+    b.line(
+      [
+        { x: 100, y: 3000 },
+        { x: 4095, y: 3000 },
+      ],
+      LifeLine.path,
+      3,
+      99,
+    );
+    b.market({ x: 2000, y: 1000 });
+    const original = b.finish();
+    b.splitRoadJunctions(perMeter, 40);
+    const split = b.finish();
+    let stalls = 0;
+    for (let seed = 0; seed < 20; seed++) {
+      const before = new TileLife(tile, original, seed);
+      const after = new TileLife(tile, split, seed);
+      stalls += after.stalls.length;
+      expect(after.stalls).toEqual(before.stalls);
+    }
+    expect(stalls).toBeGreaterThan(0);
+  });
+
+  for (const flow of [-1, 1] as const)
+    it(`preserves near-junction one-way placements in ${flow} flow`, () => {
+      const b = new LifeBuilder();
+      const vertices = Array.from({ length: 9 }, (_, i) => ({ x: 100 + i * 480, y: 2000 }));
+      b.line(vertices, LifeLine.roadMajor, 12, 77, flow);
+      for (const [i, p] of vertices.slice(1, -1).entries())
+        b.line([{ x: p.x, y: 100 }, p, { x: p.x, y: 3900 }], LifeLine.roadMinor, 6, 100 + i);
+      const original = b.finish();
+      b.splitRoadJunctions(perMeter, 40);
+      const split = b.finish();
+      const sample = (life: TileLife) =>
+        life.movers.map((m) => ({
+          id: life.geo.lineIds![m.line],
+          dir: m.dir,
+          x: m.x,
+          y: m.y,
+          vehicle: m.vehicle,
+          rank: m.rank,
+        }));
+      for (let seed = 0; seed < 40; seed++) {
+        const before = sample(new TileLife(tile, original, seed));
+        const after = sample(new TileLife(tile, split, seed));
+        expect(after).toHaveLength(before.length);
+        after.forEach(({ x, y, ...attributes }, i) => {
+          const { x: bx, y: by, ...expected } = before[i]!;
+          expect(attributes).toEqual(expected);
+          expect(x).toBeCloseTo(bx, 10);
+          expect(y).toBeCloseTo(by, 10);
+        });
+      }
+    });
+
   it('preserves counts, positions, attributes and later spawn draws for the same seed', () => {
     const b = new LifeBuilder();
     b.line(

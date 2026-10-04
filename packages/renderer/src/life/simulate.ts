@@ -84,7 +84,14 @@ import {
   pickSpecies,
   type BirdSpecies,
 } from './birds';
-import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import {
+  inTile,
+  LifeLine,
+  PLACE_CODES,
+  PLACE_STRIDE,
+  vertexKey,
+  type LifeGeometry,
+} from './geometry';
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
@@ -456,6 +463,7 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private readonly sharedRoadVertices = new Set<number>();
   private inspected?: object;
   readonly momentHost: MomentHost;
   private readonly walkerRng: () => number;
@@ -606,11 +614,21 @@ export class TileLife {
   *prepare(): Generator<void, TileLife, void> {
     const { tile, geo, routingSeed: seed } = this;
     const lines = geo.kinds.length;
+    const roadOwners = new Map<number, number>();
+    const recordRoadVertex = (vertex: number, line: number) => {
+      if (geo.kinds[line]! > LifeLine.roadMinor) return;
+      const key = this.endKey(vertex);
+      const owner = roadOwners.get(key);
+      if (owner !== undefined && owner !== line) this.sharedRoadVertices.add(key);
+      else roadOwners.set(key, line);
+    };
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
+      recordRoadVertex(this.first(line), line);
       for (let v = this.first(line) + 1; v <= this.last(line); v++) {
+        recordRoadVertex(v, line);
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
         if ((v & 127) === 0) yield;
       }
@@ -632,9 +650,7 @@ export class TileLife {
     yield* this.spawnParked(random(seed ^ 0x9e3779b9));
     yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
     for (let line = 0; line < lines;) {
-      let end = line + 1;
-      const group = geo.spawnGroups?.[line];
-      while (group !== undefined && end < lines && geo.spawnGroups![end] === group) end++;
+      const end = this.populationEnd(line);
       yield* this.spawnOn(line, false, end);
       line = end;
     }
@@ -666,9 +682,7 @@ export class TileLife {
   }
 
   private endKey(vertex: number) {
-    const x = Math.round(this.geo.coords[vertex * 2]!) + 32768;
-    const y = Math.round(this.geo.coords[vertex * 2 + 1]!) + 32768;
-    return x * 65536 + y;
+    return vertexKey(this.geo.coords[vertex * 2]!, this.geo.coords[vertex * 2 + 1]!);
   }
 
   private addEnd(vertex: number, code: number) {
@@ -683,9 +697,12 @@ export class TileLife {
     const vertex = atStart ? this.first(line) : this.last(line);
     const endpoint = line * 2 + (atStart ? 0 : 1);
     return (
-      this.ends
-        .get(this.endKey(vertex))
-        ?.some((code) => code !== endpoint && this.geo.kinds[code >> 1]! <= LifeLine.roadMinor) ??
+      (this.sharedRoadVertices.has(this.endKey(vertex)) ||
+        this.ends
+          .get(this.endKey(vertex))
+          ?.some(
+            (code) => code !== endpoint && this.geo.kinds[code >> 1]! <= LifeLine.roadMinor,
+          )) ??
       false
     );
   }
@@ -698,6 +715,18 @@ export class TileLife {
   /** A line's length in tile units. */
   lineLength(line: number) {
     return this.along[this.last(line)]!;
+  }
+
+  private populationEnd(line: number): number {
+    let end = line + 1;
+    const group = this.geo.spawnGroups?.[line];
+    while (
+      group !== undefined &&
+      end < this.geo.kinds.length &&
+      this.geo.spawnGroups![end] === group
+    )
+      end++;
+    return end;
   }
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
@@ -1328,17 +1357,27 @@ export class TileLife {
       return false;
     };
     const paints = VEHICLES.cart.paints;
-    for (let line = 0; line < geo.kinds.length; line++) {
+    for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
+      end = this.populationEnd(line);
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
-      const length = this.along[this.last(line)]!;
+      let length = 0;
+      for (let piece = line; piece < end; piece++) length += this.lineLength(piece);
       if (!spacing || length === 0) continue;
-      const middle = this.pointAt(line, length / 2);
+      const point = (distance: number) => {
+        let piece = line;
+        while (piece < end - 1 && distance >= this.lineLength(piece)) {
+          distance -= this.lineLength(piece);
+          piece++;
+        }
+        return this.pointAt(piece, distance);
+      };
+      const middle = point(length / 2);
       const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
       const count = Math.floor(((length / perMeter) * boost) / spacing + looks());
       for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
         yield;
-        const p = this.pointAt(line, looks() * length);
+        const p = point(looks() * length);
         const side = looks() < 0.5 ? 1 : -1;
         // Right of the line's direction for `side` 1; the vendor stands on the far side.
         const o = VENDORS.beside * perMeter * side;
@@ -1898,14 +1937,29 @@ export class TileLife {
   }
 
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
-  private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
+  private oneWayEndRoom(m: Mover): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
     if (this.seamLimits?.get(m)?.crossing) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
-    if (junctions && this.exitOptions(m, end).length) return;
+    if (this.exitOptions(m, end).length) return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
     const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
     return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
+  }
+
+  /** Initial settlement follows the original line without choosing a random junction exit. */
+  private continuePopulation(m: Mover): boolean {
+    const group = this.geo.spawnGroups?.[m.line];
+    const line = m.line + m.dir;
+    if (group === undefined || this.geo.spawnGroups?.[line] !== group) return false;
+    const vertex = m.dir === 1 ? this.first(line) : this.last(line);
+    if (this.endKey(m.from) !== this.endKey(vertex)) return false;
+    if (!this.exitOptions(m, m.from).includes(line * 2 + (m.dir === 1 ? 0 : 1))) return false;
+    m.line = line;
+    m.from = vertex;
+    m.next = undefined;
+    if (m.routing) m.routing = { ...m.routing, plan: undefined };
+    return true;
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
@@ -1917,7 +1971,7 @@ export class TileLife {
     for (let guard = 0; guard < 256 && left > 0; guard++) {
       // Also protects initial placement, oversized steps, and collision retries. Re-evaluate
       // after each junction in case this step enters a one-way line ending at a dead end.
-      const room = this.oneWayEndRoom(m, junctions);
+      const room = this.oneWayEndRoom(m);
       if (room !== undefined) left = Math.min(left, room);
       if (left <= 0) break;
       const to = m.from + m.dir;
@@ -1947,7 +2001,14 @@ export class TileLife {
           break;
         }
         if (junctions) this.turn(m);
-        else m.dir = m.dir === 1 ? -1 : 1;
+        else if (!this.continuePopulation(m)) {
+          if (m.kind === 'vehicle' && this.geo.oneway?.[m.line]) {
+            m.from -= m.dir;
+            m.d = length;
+            break;
+          }
+          m.dir = m.dir === 1 ? -1 : 1;
+        }
         // A train at the end of the track stops there (`step` turns it round).
         if (m.train?.reverse || m.train?.edge) break;
       }

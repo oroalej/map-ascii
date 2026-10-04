@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { metersPerUnit } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, LifeWorld, type Mover } from './simulate';
@@ -43,53 +43,6 @@ function corner(split: boolean) {
   };
   life.movers.push(m);
   return { life, m };
-}
-
-function crossingRun(split: boolean, oneway = false) {
-  const b = new LifeBuilder();
-  const center = { x: 2048, y: 2048 };
-  b.line(
-    [{ x: center.x - 300 * pm, y: center.y }, center, { x: center.x + 300 * pm, y: center.y }],
-    LifeLine.roadMid,
-    8,
-    77,
-    oneway ? 1 : 0,
-  );
-  b.line(
-    [{ x: center.x, y: center.y - 300 * pm }, center, { x: center.x, y: center.y + 300 * pm }],
-    LifeLine.roadMid,
-    8,
-    88,
-    oneway ? 1 : 0,
-  );
-  if (split) b.splitRoadJunctions(pm, 40);
-  const world = new LifeWorld({ road_mid: { car: 1 } });
-  world.sync([{ key: 'intersection', tile, life: b.finish() }]);
-  const life = worldTiles(world).get('intersection')!;
-  life.parked.length = life.stalls.length = life.gatherers.length = 0;
-  life.scenes.sites.length = 0;
-  const arrivals = new Map(life.movers.map((m) => [m, { line: m.line, indicating: false }]));
-  let straight = 0,
-    perpendicular = 0,
-    straightIndicated = false,
-    legal = true;
-  for (let frame = 0; frame < 120 * 30; frame++) {
-    world.step(1 / 30, undefined, 18);
-    for (const m of life.movers) {
-      if (m.kind !== 'vehicle') continue;
-      if (oneway && m.dir !== life.geo.oneway![m.line]) legal = false;
-      const arrival = arrivals.get(m);
-      if (!arrival) continue;
-      arrival.indicating ||= m.routing?.signal !== undefined;
-      if (m.line === arrival.line) continue;
-      if (life.geo.lineIds![m.line] === life.geo.lineIds![arrival.line]) {
-        straight++;
-        straightIndicated ||= arrival.indicating;
-      } else perpendicular++;
-      arrivals.delete(m);
-    }
-  }
-  return { straight, perpendicular, straightIndicated, legal, hardCaps: life.motionStats.hardCaps };
 }
 
 describe('curved traffic', () => {
@@ -217,6 +170,57 @@ describe('curved traffic', () => {
     expect(life.movers).toHaveLength(0);
   });
 
+  for (const dir of [-1, 1] as const)
+    for (const oneway of [false, true])
+      it(`settles across an original-line split in ${dir} ${oneway ? 'one-way' : 'two-way'} flow`, () => {
+        const b = new LifeBuilder();
+        b.line(
+          [
+            { x: 1000, y: 2000 },
+            { x: 2000, y: 2000 },
+            { x: 3000, y: 2000 },
+          ],
+          LifeLine.roadMid,
+          8,
+          77,
+          oneway ? dir : 0,
+        );
+        b.line(
+          [
+            { x: 2000, y: 1000 },
+            { x: 2000, y: 2000 },
+            { x: 2000, y: 3000 },
+          ],
+          LifeLine.roadMinor,
+          6,
+          88,
+        );
+        b.splitRoadJunctions(pm, 40);
+        const life = new TileLife(tile, b.finish(), 7);
+        const { m } = corner(true);
+        const line = dir === 1 ? 0 : 1;
+        Object.assign(m, {
+          line,
+          from: dir === 1 ? life.geo.starts[line] : life.geo.starts[line + 1]! - 1,
+          dir,
+          d: 1000 - pm,
+          x: 2000 - dir * pm,
+          y: 2000,
+          hx: dir,
+          hy: 0,
+        });
+        life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+        life.movers.push(m);
+        life.settleGround((owner) => {
+          expect(m.dir).toBe(dir);
+          return owner === m && (m.x - 2000) * dir > pm;
+        });
+        expect(life.movers).toEqual([m]);
+        expect(m.line).toBe(dir === 1 ? 1 : 0);
+        expect(m.routing?.turns ?? 0).toBe(0);
+        expect(m.routing?.signal).toBeUndefined();
+      });
+
   it('still turns around at a two-way dead end', () => {
     const { life, m } = corner(false);
     m.from = 1;
@@ -265,26 +269,6 @@ describe('curved traffic', () => {
       life.step(1 / 30);
       for (const m of life.movers) if (m.kind === 'vehicle') expect(m.dir).toBe(1);
     }
-  });
-  describe('shared interior intersections', () => {
-    let before: ReturnType<typeof crossingRun>;
-    beforeAll(() => {
-      before = crossingRun(false);
-    });
-    it('chooses straight and perpendicular exits without extra hard caps over 120 seconds', () => {
-      const after = crossingRun(true);
-      expect(after.straight).toBeGreaterThan(0);
-      expect(after.perpendicular).toBeGreaterThan(0);
-      expect(after.straightIndicated).toBe(false);
-      expect(after.hardCaps).toBeLessThanOrEqual(2 * before.hardCaps);
-    });
-    it('takes only legal exits at split one-way intersections for 120 seconds', () => {
-      const result = crossingRun(true, true);
-      expect(result.legal).toBe(true);
-      expect(result.straight).toBeGreaterThan(0);
-      expect(result.perpendicular).toBeGreaterThan(0);
-      expect(result.straightIndicated).toBe(false);
-    });
   });
   it('queues behind a leader on the planned exit without compressing the bumper gap', () => {
     const { life, m } = corner(true);

@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
-import { FILLET, SIGNAL } from './config';
-import { VEHICLES } from './vehicles';
+import { ROAD_SPLIT_CLEARANCE_M } from './config';
 
-const clearance =
-  Math.max(SIGNAL.lookahead, FILLET.lookaheadM) +
-  SIGNAL.gap +
-  Math.max(...Object.values(VEHICLES).map((v) => v.length / 2));
+const clearance = ROAD_SPLIT_CLEARANCE_M;
 const points = (geo: LifeGeometry, line: number) =>
   Array.from({ length: geo.starts[line + 1]! - geo.starts[line]! }, (_, i) => {
     const v = geo.starts[line]! + i;
@@ -98,6 +94,17 @@ describe('shared road junction splits', () => {
     b.splitRoadJunctions(1, clearance);
     const g = b.finish();
     expect(g.kinds).toHaveLength(3);
+    expect([points(g, 0), points(g, 1)]).toEqual([
+      [
+        [0, 100],
+        [100, 100],
+      ],
+      [
+        [100, 100],
+        [200, 100],
+      ],
+    ]);
+    expect(Array.from(g.lineIds!)).toEqual([77, 77, 88]);
     expect(points(g, 2)).toEqual([
       [100, 100],
       [100, 200],
@@ -148,7 +155,7 @@ describe('shared road junction splits', () => {
   });
 
   it('protects signal approaches beyond the original 40-metre lookahead clearance', () => {
-    const b = crossing(47, 0);
+    const b = crossing(62, 0);
     b.signal({ x: 0, y: 0 }, 6, 0, 90, true);
     const before = b.finish();
     b.splitRoadJunctions(1, clearance);
@@ -156,7 +163,7 @@ describe('shared road junction splits', () => {
   });
 
   it('protects a linked controller member even when it has no local signal arms', () => {
-    const b = crossing(247, 0);
+    const b = crossing(262, 0);
     b.signal({ x: 0, y: 0 }, 6, 0, 90, true, {
       members: [
         [0, 0],
@@ -173,27 +180,28 @@ describe('shared road junction splits', () => {
     expect(b.finish()).toEqual(before);
   });
 
-  it('uses tile-unit rounding for connections without moving their vertices', () => {
-    const b = new LifeBuilder();
-    b.line(
-      [
-        { x: 0, y: 100.1 },
-        { x: 100.1, y: 100.1 },
-        { x: 200, y: 100.1 },
-      ],
-      LifeLine.roadMid,
-    );
-    b.line(
-      [
-        { x: 100.2, y: 100.2 },
-        { x: 100.2, y: 200 },
-      ],
-      LifeLine.roadMinor,
-    );
-    b.splitRoadJunctions(1, clearance);
-    const g = b.finish();
-    expect(g.kinds).toHaveLength(3);
-    expect(points(g, 0).at(-1)![0]).toBeCloseTo(100.1);
-    expect(points(g, 2)[0]![0]).toBeCloseTo(100.2);
-  });
+  for (const x of [100.1, -511.9, 4608.1])
+    it(`uses tile-unit rounding at buffered x=${x} without moving vertices`, () => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: x - 100, y: 100.1 },
+          { x, y: 100.1 },
+          { x: x + 100, y: 100.1 },
+        ],
+        LifeLine.roadMid,
+      );
+      b.line(
+        [
+          { x: x + 0.1, y: 100.2 },
+          { x: x + 0.1, y: 200 },
+        ],
+        LifeLine.roadMinor,
+      );
+      b.splitRoadJunctions(1, clearance);
+      const g = b.finish();
+      expect(g.kinds).toHaveLength(3);
+      expect(points(g, 0).at(-1)![0]).toBeCloseTo(x);
+      expect(points(g, 2)[0]![0]).toBeCloseTo(x + 0.1);
+    });
 });
