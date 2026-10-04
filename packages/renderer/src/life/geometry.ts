@@ -500,17 +500,23 @@ export class LifeBuilder {
     const { coords, kinds, addPiece } = this.takeLines(true);
     for (let line = 0; line < kinds.length; line++) {
       let points: TilePoint[] = [];
+      let hasLength = false;
       for (let v = starts[line]!; v < starts[line + 1]!; v++) {
         const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
+        const previous = points.at(-1);
+        hasLength ||= !!previous && (previous.x !== p.x || previous.y !== p.y);
         points.push(p);
+        const key = vertexKey(p.x, p.y);
         if (
           kinds[line]! <= LifeLine.roadMinor &&
-          points.length > 1 &&
+          hasLength &&
           v < starts[line + 1]! - 1 &&
-          splits.has(vertexKey(p.x, p.y))
+          splits.has(key) &&
+          key !== vertexKey(coords[(v + 1) * 2]!, coords[(v + 1) * 2 + 1]!)
         ) {
           addPiece(points, line);
           points = [p];
+          hasLength = false;
         }
       }
       addPiece(points, line);

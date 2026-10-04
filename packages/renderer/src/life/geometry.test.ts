@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { VEHICLE_TYPES } from '@atlas/shared';
 import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
-import { ROAD_SPLIT_CLEARANCE_M } from './config';
+import { JUNCTION, ROAD_SPLIT_CLEARANCE_M, SIGNAL } from './config';
+import { VEHICLES } from './vehicles';
 
 const clearance = ROAD_SPLIT_CLEARANCE_M;
 const points = (geo: LifeGeometry, line: number) =>
@@ -36,6 +38,13 @@ function crossing(x = 100, y = 100) {
 }
 
 describe('shared road junction splits', () => {
+  it('covers linked route preparation plus the full front-bumper allowance', () => {
+    for (const vehicle of VEHICLE_TYPES)
+      expect(clearance).toBeGreaterThanOrEqual(
+        JUNCTION.linkedLookaheadM + SIGNAL.gap + VEHICLES[vehicle].length / 2,
+      );
+  });
+
   it('splits both arms of an X while preserving vertices and road attributes', () => {
     const b = crossing();
     b.splitRoadJunctions(1, clearance);
@@ -109,6 +118,93 @@ describe('shared road junction splits', () => {
       [100, 100],
       [100, 200],
     ]);
+  });
+
+  it.each([
+    {
+      name: 'interior',
+      road: [
+        [0, 100],
+        [100, 100],
+        [100, 100],
+        [200, 100],
+      ],
+      pieces: [
+        [
+          [0, 100],
+          [100, 100],
+          [100, 100],
+        ],
+        [
+          [100, 100],
+          [200, 100],
+        ],
+      ],
+    },
+    {
+      name: 'leading',
+      road: [
+        [100, 100],
+        [100, 100],
+        [200, 100],
+      ],
+      pieces: [
+        [
+          [100, 100],
+          [100, 100],
+          [200, 100],
+        ],
+      ],
+    },
+    {
+      name: 'trailing',
+      road: [
+        [0, 100],
+        [100, 100],
+        [100, 100],
+      ],
+      pieces: [
+        [
+          [0, 100],
+          [100, 100],
+          [100, 100],
+        ],
+      ],
+    },
+  ])('keeps $name duplicate shared vertices within nonzero routing pieces', ({ road, pieces }) => {
+    const b = new LifeBuilder();
+    b.line(
+      road.map(([x, y]) => ({ x: x!, y: y! })),
+      LifeLine.roadMid,
+      10,
+      77,
+      1,
+    );
+    b.line(
+      [
+        { x: 100, y: 100 },
+        { x: 100, y: 200 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      88,
+      -1,
+    );
+    b.splitRoadJunctions(1, clearance);
+    const g = b.finish();
+    expect(Array.from({ length: pieces.length }, (_, line) => points(g, line))).toEqual(pieces);
+    expect(Array.from(g.kinds)).toEqual([
+      ...pieces.map(() => LifeLine.roadMid),
+      LifeLine.roadMinor,
+    ]);
+    expect(Array.from(g.lineIds!)).toEqual([...pieces.map(() => 77), 88]);
+    expect(Array.from(g.widths)).toEqual([...pieces.map(() => 10), 8]);
+    expect(Array.from(g.oneway!)).toEqual([...pieces.map(() => 1), -1]);
+    expect(Array.from(g.spawnGroups!)).toEqual([...pieces.map(() => 0), 1]);
+    for (let line = 0; line < g.kinds.length; line++) {
+      const vertices = points(g, line);
+      expect(vertices.some(([x, y]) => x !== vertices[0]![0] || y !== vertices[0]![1])).toBe(true);
+    }
   });
 
   it('leaves geometric crossings, non-road meetings and repeated own vertices unchanged', () => {

@@ -2343,7 +2343,7 @@ export class TileLife {
 
   private prepareSignalRoute(m: Mover) {
     if (!this.junctionIndex.hasLinked || m.kind !== 'vehicle' || m.junctionRoute) return;
-    const movement = this.junctionIndex.movement(m, 60 * this.perMeter);
+    const movement = this.junctionIndex.movement(m, JUNCTION.linkedLookaheadM * this.perMeter);
     if (!movement?.junction.linked || movement.ahead < 0) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const options = this.exitOptions(m, end);
