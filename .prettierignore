@@ -35,3 +35,6 @@ packages/data/scripts/__fixtures__/school-hospital-parents.json
 packages/data/scripts/__fixtures__/seven-site-parents.json
 packages/data/scripts/__fixtures__/shrine-concepcion-sabang-parents.json
 packages/data/scripts/__fixtures__/tarosanan-parents.json
+
+# nested agent worktrees (see AGENTS.md "Git")
+/worktrees
