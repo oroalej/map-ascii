@@ -5295,8 +5295,10 @@ export class LifeWorld {
       };
       const physicalScore = (sample: readonly Body[]) =>
         occupied.conflicts(identity, physicalSample(sample), ignore, physicalShape);
-      const oldScore = before ? occupied.conflicts(identity, previous, ignore) : 0;
       const endScore = occupied.conflicts(identity, next, ignore);
+      // A clear destination needs no inherited-overlap score. Intermediate
+      // poses still compare against the complete previous bodies below.
+      const oldScore = before && endScore > 0 ? occupied.conflicts(identity, previous, ignore) : 0;
       let physicalOnly = false;
       let oldPhysicalScore = 0;
       let physicalBefore: Body[] | undefined;

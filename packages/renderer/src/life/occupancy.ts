@@ -250,14 +250,18 @@ export class Occupancy {
         }
       let hits = 0;
       for (const other of neighbors) {
-        for (const [index, a] of bodies.entries())
-          for (const [i, b] of this.entries.get(other)!.bodies.entries()) {
+        const otherBodies = this.entries.get(other)!.bodies;
+        for (let index = 0; index < bodies.length; index++) {
+          const a = bodies[index]!;
+          for (let i = 0; i < otherBodies.length; i++) {
+            const b = otherBodies[i]!;
             const body = project ? project(other, b, i) : b;
             const depth = overlapDepth(a, body);
             hits += previous
               ? Math.max(0, depth - overlapDepth(previous[index]!, body) - 1e-6)
               : depth;
           }
+        }
       }
       return hits;
     } finally {
