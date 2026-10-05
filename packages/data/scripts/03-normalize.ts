@@ -62,6 +62,8 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   motorcar?: string;
   motorcycle?: string;
   hgv?: string;
+  bridge?: string;
+  event_path_width?: number;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
@@ -284,6 +286,7 @@ export function normalize(
         'motorcar',
         'motorcycle',
         'hgv',
+        'bridge',
       ] as const)
         if (tags[tag]) properties[tag] = tags[tag];
     }
@@ -313,7 +316,7 @@ export function normalize(
     if (width !== undefined) properties.width = width;
     if (cls === 'path') {
       const pathWidth = Number.parseFloat(tags.width ?? '');
-      if (Number.isFinite(pathWidth) && pathWidth > 0) properties.width = pathWidth;
+      if (Number.isFinite(pathWidth) && pathWidth > 0) properties.event_path_width = pathWidth;
     }
     if (cls.startsWith('road_')) {
       const sidewalk = sidewalkOf(tags);

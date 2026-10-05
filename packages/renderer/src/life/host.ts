@@ -21,6 +21,7 @@ import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import { EMPTY_PUFFS } from './exhaust';
+import { groundsForRoutes } from './ground-events';
 let nextGeneration = 0;
 
 export type FrameView = {
@@ -92,6 +93,7 @@ export function createInlineHost(
             { roads: terrain.roads, forbidden: terrain.forbidden },
             terrain.trees,
             toCell,
+            terrain.events,
           ),
       };
       preparation.schedule();
@@ -132,6 +134,7 @@ export function createWorkerHost(
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
+  const eventGrounds = groundsForRoutes(processions);
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
@@ -278,7 +281,13 @@ export function createWorkerHost(
                 signalClock: view?.signalClock ?? 0,
                 cellGuard: (toCell) =>
                   cellTerrain &&
-                  makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+                  makeCellGuard(
+                    cellTerrain.ref,
+                    cellTerrain.access,
+                    cellTerrain.trees,
+                    toCell,
+                    eventGrounds,
+                  ),
               };
             return;
           }
@@ -297,7 +306,13 @@ export function createWorkerHost(
             signalClock: result.signalClock,
             cellGuard: (toCell) =>
               cellTerrain &&
-              makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+              makeCellGuard(
+                cellTerrain.ref,
+                cellTerrain.access,
+                cellTerrain.trees,
+                toCell,
+                eventGrounds,
+              ),
           };
           if (result.profile) profiler?.merge(result.profile);
         })

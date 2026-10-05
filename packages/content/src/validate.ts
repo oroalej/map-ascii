@@ -8,6 +8,8 @@ import {
   type DialogueCatalog,
   TilesLock,
   processionReferenceErrors,
+  resolveProcessionSchedules,
+  ProcessionScheduleError,
 } from '@atlas/shared';
 import type { z } from 'zod';
 
@@ -178,8 +180,17 @@ export async function loadCityPacks(
       }
     }
 
-    for (const issue of processionReferenceErrors(content.processions, city.life?.seasons ?? []))
+    const references = processionReferenceErrors(content.processions, city.life?.seasons ?? []);
+    for (const issue of references)
       errors.push({ file: seenIds.get(issue.id) ?? configFile, message: issue.message });
+    if (references.length === 0) {
+      try {
+        resolveProcessionSchedules(content.processions);
+      } catch (error) {
+        if (!(error instanceof ProcessionScheduleError)) throw error;
+        errors.push({ file: seenIds.get(error.id) ?? configFile, message: error.message });
+      }
+    }
 
     const dialoguePath = join(dir, 'dialogue.json');
     const dialogue = (await exists(dialoguePath))

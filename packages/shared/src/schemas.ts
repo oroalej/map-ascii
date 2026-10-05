@@ -37,6 +37,11 @@ import {
   VEHICLE_TYPES,
   YEAR_RANGE,
   RoofShape,
+  PROCESSION_LIMITS,
+  PROCESSION_DEFAULTS,
+  PROCESSION_VEHICLES,
+  CLOCK_TIME_PATTERN,
+  TIME_ZONE_PATTERN,
   type TrafficMix,
 } from './constants';
 
@@ -595,9 +600,7 @@ export type Cemetery = z.infer<typeof Cemetery>;
 
 /** When a procession runs (the `Procession` schema's `schedule`). */
 /** An IANA time zone, e.g. "Asia/Manila". */
-export const TimeZone = z
-  .string()
-  .regex(/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/, 'expected an IANA time zone');
+export const TimeZone = z.string().regex(TIME_ZONE_PATTERN, 'expected an IANA time zone');
 
 export const ProcessionSchedule = z.strictObject({
   month: z.int().min(1).max(12),
@@ -608,7 +611,7 @@ export const ProcessionSchedule = z.strictObject({
   /** Days after that weekday; -1 is the day before. */
   offset_days: z.int().min(-31).max(31),
   /** Local start time, HH:MM. */
-  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM'),
+  start: z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM'),
   duration_min: z
     .int()
     .positive()
@@ -619,31 +622,38 @@ export const ProcessionSchedule = z.strictObject({
 export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
 
 /** A procession's boats: paddle-boat columns and ranks ahead of the pagoda, and escorts. */
+const formationCount = (range: readonly [number, number]) => z.int().min(range[0]).max(range[1]);
 export const ProcessionFormation = z.strictObject({
-  columns: z.int().min(1).max(6).optional(),
-  ranks: z.int().min(1).max(20).optional(),
-  escorts: z.int().min(0).max(40).optional(),
+  columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
+  ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
+  escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
 });
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
-
 export const FollowingSchedule = z.strictObject({
   follows: z.string().regex(/^procession\/[a-z0-9-]+$/),
   duration_min: z.int().positive().max(1440),
 });
 export const StreetFormation = z.strictObject({
-  bearers: z.int().min(4).max(24).default(8),
-  ranks: z.int().min(1).max(20).default(12),
-  marshals: z.int().min(0).max(12).default(4),
+  bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
+    PROCESSION_DEFAULTS.procession.bearers,
+  ),
+  ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
+    PROCESSION_DEFAULTS.procession.ranks,
+  ),
+  marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
+    PROCESSION_DEFAULTS.procession.marshals,
+  ),
 });
 export const ParadeFormation = z.strictObject({
-  contingents: z.int().min(1).max(6).default(3),
-  ranks: z.int().min(1).max(10).default(4),
-  band: z.int().min(0).max(24).default(12),
-  color_guard: z.int().min(0).max(8).default(4),
-  vehicles: z
-    .array(z.enum(['car', 'truck', 'motorcycle']))
-    .max(4)
-    .default([]),
+  contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
+    PROCESSION_DEFAULTS.parade.contingents,
+  ),
+  ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
+  band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
+  color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
+    PROCESSION_DEFAULTS.parade.color_guard,
+  ),
+  vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
 });
 const EventPoint = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
 const EventRing = z
@@ -657,7 +667,7 @@ export const ProcessionSite = z.strictObject({
   id: OsmId,
   location: EventPoint,
   anchor: EventPoint,
-  radius_m: z.number().positive().max(500),
+  radius_m: z.number().positive().max(PROCESSION_LIMITS.radius),
   grounds: z.array(EventRing).min(1),
   blocked: z.array(EventRing),
   approaches: z.array(z.array(EventPoint).min(2)).min(1),
@@ -922,7 +932,7 @@ export function contentSchemas(languages?: readonly string[]) {
         kind: z.literal('mass'),
         site: OsmId,
         grounds: z.array(OsmAreaId).min(1),
-        radius_m: z.number().positive().max(500),
+        radius_m: z.number().positive().max(PROCESSION_LIMITS.radius),
       }),
     ])
     .superRefine((p, ctx) => {
@@ -1008,6 +1018,8 @@ const streetEventBase = {
     )
     .min(1),
   blocked: z.array(EventRing),
+  water: z.array(EventRing).optional(),
+  bridges: z.array(EventRing).optional(),
 };
 export const CityProcessions = z.object({
   processions: z.array(
@@ -1146,7 +1158,7 @@ const RhythmCurve = z
     message: 'hours must be ascending',
   });
 
-const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
+const ClockTime = z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM');
 const Weekdays = z
   .array(z.int().min(0).max(6))
   .min(1)

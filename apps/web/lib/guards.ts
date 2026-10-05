@@ -5,6 +5,10 @@
  */
 import {
   CAMERA_RANGES,
+  PROCESSION_LIMITS,
+  PROCESSION_VEHICLES,
+  CLOCK_TIME_PATTERN,
+  TIME_ZONE_PATTERN,
   type CameraState,
   type CityMeta,
   type CityProcessions,
@@ -64,17 +68,17 @@ const only = (v: Record<string, unknown>, keys: string[]) =>
 function eventFormation(p: Record<string, unknown>): boolean {
   if (p.formation === undefined) return true;
   if (!isRecord(p.formation) || p.kind === 'mass') return false;
-  const limits: Record<string, [number, number]> =
+  const limits: Readonly<Record<string, readonly [number, number]>> =
     p.kind === 'fluvial'
-      ? { columns: [1, 6], ranks: [1, 20], escorts: [0, 40] }
+      ? PROCESSION_LIMITS.fluvial
       : p.kind === 'procession'
-        ? { bearers: [4, 24], ranks: [1, 20], marshals: [0, 12] }
-        : { contingents: [1, 6], ranks: [1, 10], band: [0, 24], color_guard: [0, 8] };
+        ? PROCESSION_LIMITS.procession
+        : PROCESSION_LIMITS.parade;
   return Object.entries(p.formation).every(([k, v]) =>
     k === 'vehicles' && p.kind === 'parade'
       ? Array.isArray(v) &&
-        v.length <= 4 &&
-        v.every((x: unknown) => typeof x === 'string' && ['car', 'truck', 'motorcycle'].includes(x))
+        v.length <= PROCESSION_LIMITS.vehicles &&
+        v.every((x: unknown) => PROCESSION_VEHICLES.some((vehicle) => vehicle === x))
       : !!limits[k] && integer(v, ...limits[k]),
   );
 }
@@ -116,9 +120,9 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       !integer(s.offset_days, -31, 31) ||
       !integer(s.duration_min, 1, 1440) ||
       !isText(s.start) ||
-      !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.start) ||
+      !CLOCK_TIME_PATTERN.test(s.start) ||
       !isText(s.timezone) ||
-      !/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/.test(s.timezone)
+      !TIME_ZONE_PATTERN.test(s.timezone)
     )
       return false;
     const base = [
@@ -153,7 +157,7 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
         point(site.anchor) &&
         isNumber(site.radius_m) &&
         site.radius_m > 0 &&
-        site.radius_m <= 500 &&
+        site.radius_m <= PROCESSION_LIMITS.radius &&
         rings(site.grounds) &&
         (site.grounds as unknown[]).length > 0 &&
         rings(site.blocked) &&
@@ -181,8 +185,19 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
             p.banks.every((b: unknown) => isNumbers(b, 2) && b.every((x) => x >= 0))))
       );
     return (
-      only(p, [...base, 'route', 'length_m', 'segments', 'blocked', 'formation']) &&
+      only(p, [
+        ...base,
+        'route',
+        'length_m',
+        'segments',
+        'blocked',
+        'water',
+        'bridges',
+        'formation',
+      ]) &&
       rings(p.blocked) &&
+      (p.water === undefined || rings(p.water)) &&
+      (p.bridges === undefined || rings(p.bridges)) &&
       Array.isArray(p.segments) &&
       p.segments.length === (p.route as unknown[]).length - 1 &&
       p.segments.every(

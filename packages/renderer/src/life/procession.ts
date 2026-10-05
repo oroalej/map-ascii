@@ -10,7 +10,12 @@
  * boats setting off first and the pagoda and the flotilla following a moment later, and every
  * boat swaying a little on its own.
  */
-import { nthWeekdayDay, type FluvialRoute, type ProcessionSchedule } from '@atlas/shared';
+import {
+  nthWeekdayDay,
+  PROCESSION_DEFAULTS,
+  type FluvialRoute,
+  type ProcessionSchedule,
+} from '@atlas/shared';
 import { localTime } from './clock';
 import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
@@ -27,10 +32,10 @@ export const PROCESSION = {
   eventActors: 300,
   eventSpectators: 90,
   playSeconds: 180,
-  columns: 3,
-  ranks: 8,
+  columns: PROCESSION_DEFAULTS.fluvial.columns,
+  ranks: PROCESSION_DEFAULTS.fluvial.ranks,
   /** Escorts ahead of the formation, and small boats following the pagoda. */
-  escorts: 6,
+  escorts: PROCESSION_DEFAULTS.fluvial.escorts,
   /** Tow ropes are this much longer than the gap they span at rest, m, so they sag at halts. */
   ropeSlack: 1.5,
   /** Poles along the pagoda's sides, leaning out: how many, and how long seen from above, m. */
@@ -172,6 +177,18 @@ export function profileAt(table: Float64Array, u: number): number {
   const x = Math.min(1, Math.max(0, u)) * PROFILE_SAMPLES;
   const i = Math.min(PROFILE_SAMPLES - 1, Math.floor(x));
   return table[i]! + (table[i + 1]! - table[i]!) * (x - i);
+}
+
+/** Index of the first endpoint at or beyond a distance, clamped to a route segment. */
+export function segmentIndex(along: ArrayLike<number>, distance: number): number {
+  let lo = 1,
+    hi = along.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (along[mid]! < distance) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** One procession's boats and crowds along its route. */
@@ -355,13 +372,7 @@ export class ProcessionScene {
   private at(s: number) {
     const { points, along } = this;
     // The first point at least `s` along (the last, past the end): `along` only grows.
-    let i = 1;
-    let hi = points.length - 1;
-    while (i < hi) {
-      const mid = (i + hi) >> 1;
-      if (along[mid]! < s) i = mid + 1;
-      else hi = mid;
-    }
+    const i = segmentIndex(along, s);
     const [ax, ay] = points[i - 1]!;
     const [bx, by] = points[i]!;
     const length = along[i]! - along[i - 1]! || 1;
@@ -523,12 +534,7 @@ export class ProcessionScene {
     return this.lineAgent(points, [Paint.cream]);
   }
 
-  /**
-   * What to draw `progress` (0–1) of the way through, `time` s into it (for sway and jitter):
-   * the boats between the start and the landing (with `crews`, the voyadores' paddlers), and,
-   * from `PROCESSION.crowdZoom`, the crowds. With `bounds`, the crowds and crews outside the view
-   * are left out.
-   */
+  /** Crowd candidates for an arrival gathering, retaining their occurrence identity. */
   arrivalCrowd(
     progress: number,
     time: number,
@@ -549,6 +555,12 @@ export class ProcessionScene {
     );
   }
 
+  /**
+   * What to draw `progress` (0–1) of the way through, `time` s into it (for sway and jitter):
+   * the boats between the start and the landing (with `crews`, the voyadores' paddlers), and,
+   * from `PROCESSION.crowdZoom`, the crowds. With `bounds`, the crowds and crews outside the view
+   * are left out.
+   */
   agents(
     progress: number,
     time: number,

@@ -574,6 +574,8 @@ export const CellBit = {
    */
   grounds: 128,
 } as const;
+/** Unique permission pattern for bounded event walkers; ordinary vehicles/exhaust use 3. */
+export const EVENT_PERSON_BITS = CellBit.person | CellBit.vehicle | CellBit.train;
 
 /**
  * Streetlights (life/lights.ts) along major and secondary roads, always at the roadside: shown

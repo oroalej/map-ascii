@@ -109,6 +109,22 @@ export type TrafficMix = Partial<
 
 /** The years the content can name (the `Year` schema). */
 export const YEAR_RANGE = [1000, 3000] as const;
+/** Zod-free event validation and formation defaults, shared by authoring and runtime. */
+export const PROCESSION_LIMITS = {
+  fluvial: { columns: [1, 6], ranks: [1, 20], escorts: [0, 40] },
+  procession: { bearers: [4, 24], ranks: [1, 20], marshals: [0, 12] },
+  parade: { contingents: [1, 6], ranks: [1, 10], band: [0, 24], color_guard: [0, 8] },
+  radius: 500,
+  vehicles: 4,
+} as const;
+export const PROCESSION_DEFAULTS = {
+  fluvial: { columns: 3, ranks: 8, escorts: 6 },
+  procession: { bearers: 8, ranks: 12, marshals: 4 },
+  parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4 },
+} as const;
+export const PROCESSION_VEHICLES = ['car', 'truck', 'motorcycle'] as const;
+export const CLOCK_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const TIME_ZONE_PATTERN = /^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/;
 
 /** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
 export const artChars = (row: string): string[] => [...row];

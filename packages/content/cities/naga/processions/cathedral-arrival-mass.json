@@ -33,7 +33,7 @@
     {
       "title": "OpenStreetMap: event anchors and grounds",
       "url": "https://www.openstreetmap.org/way/23666715",
-      "note": "Mapped anchors: osm:way/23666715, osm:way/1203045057. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "note": "Mapped anchors: osm:way/23666715, osm:way/1203045057. The named church and grounds seed a connected outdoor gathering within the authored radius; this event has no snapped route endpoints. Grounds, road overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
     }
   ]
 }

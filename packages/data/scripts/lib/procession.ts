@@ -415,7 +415,6 @@ export function routeProcessions(
         ? { banks: banks.map(([l, r]) => [Math.round(l * 2) / 2, Math.round(r * 2) / 2]) }
         : {}),
       ...(p.formation ? { formation: p.formation } : {}),
-      ...(p.sources ? { sources: p.sources } : {}),
     });
   }
   return { routes, warnings };

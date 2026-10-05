@@ -40,6 +40,36 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   type: 'FeatureCollection',
   features,
 });
+it('keeps event access/bridge metadata and separates path clearance from ordinary widths', () => {
+  const street = road('way/road', 'residential', 0.002),
+    path = road('way/path', 'footway', 0.004);
+  street.properties = {
+    ...street.properties,
+    width: '8',
+    foot: 'yes',
+    access: 'private',
+    motor_vehicle: 'yes',
+    motorcar: 'no',
+    motorcycle: 'yes',
+    hgv: 'no',
+    bridge: 'yes',
+  };
+  path.properties = { ...path.properties, width: '5', foot: 'yes' };
+  const records = normalize(collection(street, path), boundary, 10).features;
+  expect(records.find((f) => f.properties.id === 'osm:way/road')?.properties).toMatchObject({
+    width: 8,
+    foot: 'yes',
+    access: 'private',
+    motor_vehicle: 'yes',
+    motorcar: 'no',
+    motorcycle: 'yes',
+    hgv: 'no',
+    bridge: 'yes',
+  });
+  const walking = records.find((f) => f.properties.id === 'osm:way/path')!.properties;
+  expect(walking.event_path_width).toBe(5);
+  expect(walking.width).toBeUndefined();
+});
 
 it('preserves hospital footprints, identity and roof metadata while distinguishing heightless grounds', () => {
   const roof: Feature = {

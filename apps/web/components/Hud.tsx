@@ -389,7 +389,7 @@ function LifeControls({
 
 /**
  * Event captions survive season changes; season-less records keep a generic play fallback.
- * way, what it is and whether it is live. A draft says its route and schedule aren't verified.
+ * Captions identify the event and live/play status; drafts disclose unverified arrangements.
  */
 function ProcessionControls() {
   const processions = useUiStore((s) => s.processions);

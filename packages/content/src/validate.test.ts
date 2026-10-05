@@ -12,6 +12,30 @@ vi.mock('node:fs/promises', async (load) => {
 });
 
 describe('loadCityPacks', () => {
+  it('reports inherited schedule overflow at the dependent event file', async () => {
+    const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+    vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      const text = await original(...args);
+      if (
+        typeof args[0] !== 'string' ||
+        !args[0].replaceAll('\\', '/').endsWith('/processions/penafrancia-traslacion.json')
+      )
+        return text;
+      const value = JSON.parse(String(text)) as { schedule: Record<string, unknown> };
+      value.schedule = { ...value.schedule, offset_days: 31, start: '23:30', duration_min: 90 };
+      return JSON.stringify(value);
+    });
+    try {
+      const { packs, errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+      expect(packs).toEqual([]);
+      expect(errors).toContainEqual({
+        file: 'cities/naga/processions/cathedral-arrival-mass.json',
+        message: expect.stringContaining('resolved offset 32') as string,
+      });
+    } finally {
+      vi.mocked(fs.readFile).mockImplementation(original);
+    }
+  });
   it.each(['season', 'missing', 'self', 'cycle'] as const)(
     'reports an invalid %s reference at its procession file',
     async (kind) => {

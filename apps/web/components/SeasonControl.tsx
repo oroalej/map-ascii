@@ -65,11 +65,9 @@ export function SeasonEvents({
   const now = new Date();
   const events = processions
     .filter((p) => p.season === shown.id)
-    .sort(
-      (a, b) =>
-        eventOccurrence(a.schedule, now).startMs - eventOccurrence(b.schedule, now).startMs ||
-        a.id.localeCompare(b.id),
-    );
+    .map((p) => ({ p, start: eventOccurrence(p.schedule, now).startMs }))
+    .sort((a, b) => a.start - b.start || a.p.id.localeCompare(b.p.id))
+    .map(({ p }) => p);
   if (!events.length) return null;
   return (
     <div className={styles.row}>

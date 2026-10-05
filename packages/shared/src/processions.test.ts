@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Procession } from './schemas';
 import {
   eventOccurrence,
@@ -76,5 +76,21 @@ describe('event occurrence and dependency resolution', () => {
     expect(new Date(eventOccurrence(schedule, new Date('2026-06-01')).startMs).toISOString()).toBe(
       '2026-09-19T11:00:00.000Z',
     );
+  });
+  it('reuses a zone formatter as the played minute advances', () => {
+    const spy = vi.spyOn(Intl, 'DateTimeFormat');
+    try {
+      const timing = {
+        startMs: Date.parse('2026-01-01T04:00:00Z'),
+        duration_min: 60,
+        timezone: 'Etc/GMT+4',
+      };
+      expect(eventTime(timing, 0).time).toBe('00:00');
+      expect(eventTime(timing, 0.5).time).toBe('00:30');
+      expect(eventTime(timing, 1).time).toBe('01:00');
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

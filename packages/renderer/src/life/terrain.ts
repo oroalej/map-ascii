@@ -353,5 +353,3 @@ export class WorldRoadCache {
     return world;
   }
 }
-
-export { eventGroundAllows, type EventGround } from './ground-events';

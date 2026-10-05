@@ -44,7 +44,7 @@
     {
       "title": "OpenStreetMap: event anchors and grounds",
       "url": "https://www.openstreetmap.org/way/606888524",
-      "note": "Mapped anchors: osm:way/606888524, osm:way/23666715. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "note": "Mapped anchors: osm:way/606888524, osm:way/23666715. Street endpoints are snapped within 200 m; a roof-safe endpoint may move up to 50 m beyond its nearest safe road position. Mapped bridge decks and directly connected approaches inform bounded water permissions. Paths, formation, sidewalks and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
     }
   ]
 }

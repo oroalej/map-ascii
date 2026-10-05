@@ -10,7 +10,8 @@ import { MOMENTS } from './moments';
  */
 import { makeCellGuard } from './cell-guard';
 import { GroundProcessionScene } from './procession-street';
-import type { EventGround } from './ground-events';
+import { eventBridgeAllows, groundsForRoutes } from './ground-events';
+import { ProcessionGlyph } from './procession-glyphs';
 import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
@@ -4632,7 +4633,7 @@ export type VisibleAgent = {
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
   prop?: 'ball' | 'event';
   eventActor?: string;
-  eventGround?: EventGround;
+  eventGround?: string;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -5042,6 +5043,7 @@ export class LifeWorld {
   private played: { id: string; start: number; elapsed: number; timing?: EventTiming } | undefined;
   private eventAgents: VisibleAgent[] = [];
   private eventOwners = new Map<string, object>();
+  private eventGrounds = groundsForRoutes([]);
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
@@ -5731,8 +5733,11 @@ export class LifeWorld {
     bounds?: LngLatBounds,
     allBodies = false,
     region?: ReadonlySet<TileLife>,
+    admitEvents = false,
   ) {
-    return complete(this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false));
+    return complete(
+      this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false, admitEvents),
+    );
   }
 
   private *groundGuardSteps(
@@ -5742,6 +5747,7 @@ export class LifeWorld {
     allBodies = false,
     region?: ReadonlySet<TileLife>,
     cooperative = true,
+    admitEvents = false,
   ): Generator<void, WorldGroundGuard, void> {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
@@ -5854,21 +5860,27 @@ export class LifeWorld {
     }
     const run = this.procession();
     const scene = run && this.scenes.get(run.id);
-    for (const life of this.tiles.values()) life.eventPopulation = 0;
-    this.eventAgents = [];
+    if (admitEvents) {
+      for (const life of this.tiles.values()) life.eventPopulation = 0;
+      this.eventAgents = [];
+    }
     if (ref && run && scene instanceof GroundProcessionScene) {
       const scope = run.live
         ? `live/${this.live?.occurrence ?? run.id}`
         : `play/${this.played?.start}`;
-      const candidates = scene.agents(run.progress, this.clock, {
-        scope,
-        inspection: this.inspection,
-        owner: (id) => {
-          let owner = this.eventOwners.get(id);
-          if (!owner) this.eventOwners.set(id, (owner = {}));
-          return owner;
-        },
-      });
+      const candidates = admitEvents
+        ? scene.agents(run.progress, this.clock, {
+            scope,
+            inspection: this.inspection,
+            owner: (id) => {
+              let owner = this.eventOwners.get(id);
+              if (!owner) this.eventOwners.set(id, (owner = {}));
+              return owner;
+            },
+          })
+        : this.eventAgents;
+      const acceptedBodies: { token: object; body: Body }[] = [];
+      const arrivals = scene.route.kind === 'mass' ? new Occupancy() : undefined;
       const tiles = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
       const toMetric = (q: [number, number]) => {
         const at = lngLatToTile(ref.tile, q[0], q[1]);
@@ -5879,7 +5891,7 @@ export class LifeWorld {
           const at = lngLatToTile(life.tile, agent.lng, agent.lat);
           return at.x >= 0 && at.x < EXTENT && at.y >= 0 && at.y < EXTENT && this.owns(life, at);
         });
-        if (!owner || owner.population >= MAX_TILE_AGENTS) continue;
+        if (!owner || (admitEvents && owner.population >= MAX_TILE_AGENTS)) continue;
         const at = toMetric([agent.lng, agent.lat]),
           ahead = toMetric(agent.ahead!),
           dx = ahead.x - at.x,
@@ -5890,20 +5902,47 @@ export class LifeWorld {
           ...at,
           hx: dx / d,
           hy: dy / d,
-          length: spec ? spec.length : agent.prop ? 3 : 0.9,
-          width: spec ? spec.width : agent.prop ? 2.4 : 1,
+          length: spec ? spec.length : agent.glyph === ProcessionGlyph.andas ? 3 : 0.9,
+          width: spec ? spec.width : agent.glyph === ProcessionGlyph.andas ? 2.4 : 1,
           kind: agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human,
         };
         let token = this.eventOwners.get(agent.eventActor!);
         if (!token) this.eventOwners.set(agent.eventActor!, (token = {}));
-        if (occupied.conflicts(token, [body]) > 0 || blocked.hits([body]) || water.hits([body]))
+        const bridge = () => {
+          const points: [number, number][] = [];
+          for (const longitudinal of [-1, 1])
+            for (const lateral of [-1, 1]) {
+              const x =
+                body.x +
+                (longitudinal * body.hx * body.length) / 2 -
+                (lateral * body.hy * body.width) / 2;
+              const y =
+                body.y +
+                (longitudinal * body.hy * body.length) / 2 +
+                (lateral * body.hx * body.width) / 2;
+              points.push(tileToLngLat(ref.tile, { x: x * ref.perMeter, y: y * ref.perMeter }));
+            }
+          return eventBridgeAllows(scene.ground, points);
+        };
+        if (
+          admitEvents &&
+          (occupied.conflicts(token, [body]) > 0 ||
+            arrivals?.conflicts(token, [body]) ||
+            blocked.hits([body]) ||
+            (water.hits([body]) && !bridge()))
+        )
           continue;
-        occupied.set(token, [body]);
-        owner.eventPopulation++;
-        this.eventAgents.push(agent);
+        acceptedBodies.push({ token, body });
+        arrivals?.set(token, [body]);
+        if (admitEvents) {
+          owner.eventPopulation++;
+          this.eventAgents.push(agent);
+        }
       }
-      const retained = new Set(this.eventAgents.map((a) => a.eventActor!));
-      for (const id of this.eventOwners.keys()) if (!retained.has(id)) this.eventOwners.delete(id);
+      // Dense formations are authored as one group; compare them against ordinary actors,
+      // then reserve every member. Mass entrants still retain individual clearance.
+      for (const { token, body } of acceptedBodies) occupied.set(token, [body]);
+      // Occurrence owners survive temporary crowding, keeping inspection identities stable.
       // Human-class reservations feed existing pedestrian braking and all movement guards.
       for (const span of scene.spans(run.progress)) {
         const a = toMetric(span.a),
@@ -6065,6 +6104,7 @@ export class LifeWorld {
     if (!ref || !terrain) return undefined;
     return {
       version: terrain,
+      events: this.eventGrounds,
       ref: { tile: ref.tile, perMeter: ref.perMeter },
       forbidden: terrain.roadAccess.forbidden,
       roads: terrain.roadAccess.roads,
@@ -6077,7 +6117,7 @@ export class LifeWorld {
     const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
-    return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell);
+    return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell, this.eventGrounds);
   }
 
   /**
@@ -6132,7 +6172,16 @@ export class LifeWorld {
       ...weather,
       cityLife: this.cityLife,
     };
-    const guard = this.groundGuard(cellMeters, undefined, bounds);
+    const event = this.procession();
+    const groundEvent = event && this.scenes.get(event.id) instanceof GroundProcessionScene;
+    const guard = this.groundGuard(
+      cellMeters,
+      undefined,
+      groundEvent ? undefined : bounds,
+      !!groundEvent,
+      undefined,
+      true,
+    );
     this.junctions.begin(new Set(this.tiles.values()));
     const eligibility = new Map<TileLife, (m: Mover) => boolean>();
     for (const tile of this.tiles.values()) {
@@ -6506,6 +6555,7 @@ export class LifeWorld {
 
   /** The city's processions (its `<slug>.processions.json`). */
   setProcessions(routes: readonly ProcessionRoute[]) {
+    this.eventGrounds = groundsForRoutes(routes);
     this.scenes.clear();
     for (const route of routes)
       this.scenes.set(

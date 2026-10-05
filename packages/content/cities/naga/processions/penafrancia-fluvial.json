@@ -45,7 +45,7 @@
     {
       "title": "OpenStreetMap: event anchors and grounds",
       "url": "https://www.openstreetmap.org/node/6791580317",
-      "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. River endpoints are snapped within 300 m to mapped waterways. The river route, bank crowds, formation and density are illustrative TODO(verify), not surveyed festival arrangements."
     }
   ],
   "season": "penafrancia-fiesta",

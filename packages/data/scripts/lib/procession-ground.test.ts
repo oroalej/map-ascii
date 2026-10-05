@@ -3,6 +3,7 @@ import { CityProcessions, Procession } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { routeProcessions } from './procession';
 import { requiredFormationWidth } from './procession-ground';
+import { localFrame } from './geo';
 
 type F = Feature<Geometry, Record<string, unknown>>;
 const point = (id: string, at: number[]): F => ({
@@ -14,6 +15,22 @@ const road = (id: string, coordinates: number[][], extra: Record<string, unknown
   type: 'Feature',
   properties: { id, class: 'road_minor', highway: 'residential', width: 8, ...extra },
   geometry: { type: 'LineString', coordinates },
+});
+const area = (id: string, cls: string, w: number, s: number, e: number, n: number): F => ({
+  type: 'Feature',
+  properties: { id, class: cls, ...(cls.startsWith('building') && { height: 5 }) },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [w, s],
+        [e, s],
+        [e, n],
+        [w, n],
+        [w, s],
+      ],
+    ],
+  },
 });
 const base = {
   id: 'procession/street',
@@ -52,6 +69,61 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it('follows pinned via ways despite a shorter admissible road', () => {
+    const r = routeProcessions(
+      [
+        ...features.slice(0, 3),
+        road('osm:way/4', [
+          [0, 0],
+          [0.002, 0],
+        ]),
+      ],
+      [Procession.parse({ ...base, route: { ...base.route, via: ['osm:way/3'] } })],
+    ).routes[0]!;
+    if (r.kind !== 'procession') throw Error();
+    expect(new Set(r.segments.map((s) => s.id))).toEqual(new Set(['osm:way/3']));
+    expect(r.length_m).toBeGreaterThan(300);
+  });
+  it('reroutes around a roof and never drops the roof exclusion wholesale', () => {
+    const r = routeProcessions(
+      [
+        features[0]!,
+        features[1]!,
+        features[2]!,
+        road('osm:way/4', [
+          [0, 0],
+          [0.002, 0],
+        ]),
+        area('osm:way/9', 'building', 0.0008, -0.0001, 0.0012, 0.0001),
+      ],
+      [Procession.parse(base)],
+    ).routes[0]!;
+    if (r.kind !== 'procession') throw Error();
+    expect(new Set(r.segments.map((s) => s.id))).toEqual(new Set(['osm:way/3']));
+  });
+  it('bakes only local bridge permission and trims water to the event corridor', () => {
+    const source = [
+      features[0]!,
+      features[1]!,
+      road(
+        'osm:way/4',
+        [
+          [0, 0],
+          [0.002, 0],
+        ],
+        { bridge: 'yes' },
+      ),
+      area('osm:way/9', 'water_area', 0.0008, -0.01, 0.0012, 0.01),
+    ];
+    const r = routeProcessions(source, [Procession.parse(base)]).routes[0]!;
+    if (r.kind !== 'procession') throw Error();
+    expect(r.bridges!.length).toBeGreaterThan(0);
+    expect(r.water!.length).toBeGreaterThan(0);
+    expect(r.water!.flat().every((q) => Math.abs(q[1]) < 0.0001)).toBe(true);
+    expect(CityProcessions.safeParse({ processions: [r] }).success).toBe(true);
+    source[2]!.properties.bridge = 'no';
+    expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow('not near');
+  });
   it('uses the admissible detour, preserves metadata and aligns samples and source widths', () => {
     const p = Procession.parse(base);
     const r = routeProcessions(features, [p]).routes[0]!;
@@ -156,6 +228,9 @@ describe('street event routing', () => {
     expect(r.site.anchor).not.toEqual(r.site.location);
     expect(r.site.approaches.length).toBeGreaterThan(0);
     expect(r.site.grounds.length).toBeGreaterThan(5);
+    const frame = localFrame(r.site.location);
+    for (const q of r.site.grounds.flat())
+      expect(Math.hypot(...frame.toMeters(q))).toBeLessThanOrEqual(r.site.radius_m + 1e-6);
     expect(r.site.blocked).toContainEqual(
       (church.geometry as { coordinates: number[][][] }).coordinates[0],
     );

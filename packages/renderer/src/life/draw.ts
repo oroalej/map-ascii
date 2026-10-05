@@ -13,6 +13,7 @@ import {
   agentBit,
   BIRD_SHADOW,
   CellBit,
+  EVENT_PERSON_BITS,
   LIFE_SHADOW,
   lifeClassFor,
   isWalker,
@@ -355,7 +356,7 @@ function drawAgent(
       at,
       index,
       classId(lifeClassFor.person),
-      agent.eventGround ? CellBit.person | CellBit.vehicle : CellBit.person,
+      agent.eventGround ? EVENT_PERSON_BITS : CellBit.person,
       personByte(agent.paint ?? PAINT_NONE, PersonPart.figure),
     );
     return 1;
@@ -499,11 +500,7 @@ function drawPeople(
   const across = fx !== 0;
   const cls = classId(lifeClassFor.person);
   // People in a boat stand over the water; others where people may.
-  const bits = agent.aboard
-    ? CellBit.boat
-    : agent.eventGround
-      ? CellBit.person | CellBit.vehicle
-      : CellBit.person;
+  const bits = agent.aboard ? CellBit.boat : agent.eventGround ? EVENT_PERSON_BITS : CellBit.person;
   const stroke = agent.stroke ?? 0;
   // A paddler's glyphs head up or right; turned half round, they are the other side's paddler at
   // the other end of the stroke (life/people.ts `ROWER`).

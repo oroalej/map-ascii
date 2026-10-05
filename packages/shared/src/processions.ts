@@ -1,6 +1,17 @@
 /** Event dependency and occurrence arithmetic; safe to import without Zod in the browser. */
-import { nthWeekdayDay } from './seasons';
+import { nthWeekdayDay, epochDay } from './seasons';
+import { localDateParts } from './clock';
 import type { Procession, ProcessionSchedule } from './schemas';
+
+export class ProcessionScheduleError extends Error {
+  constructor(
+    readonly id: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ProcessionScheduleError';
+  }
+}
 
 export function processionReferenceErrors(
   records: readonly Procession[],
@@ -46,7 +57,11 @@ export function resolveProcessionSchedules(
       const [h, m] = parent.start.split(':').map(Number);
       const end = h! * 60 + m! + parent.duration_min;
       const offset_days = parent.offset_days + Math.floor(end / 1440);
-      if (offset_days < -31 || offset_days > 31) throw new Error(`Unrepresentable schedule ${id}`);
+      if (offset_days < -31 || offset_days > 31)
+        throw new ProcessionScheduleError(
+          id,
+          `Unrepresentable schedule ${id}: resolved offset ${offset_days} is outside -31…31`,
+        );
       const minute = end % 1440;
       schedule = {
         ...parent,
@@ -71,25 +86,7 @@ export type EventTime = {
   date: string;
   time: string;
 };
-export function eventLocalParts(instant: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(instant);
-  const n = (type: string) => Number(parts.find((p) => p.type === type)!.value);
-  return {
-    year: n('year'),
-    month: n('month'),
-    date: n('day'),
-    hour: n('hour'),
-    minute: n('minute'),
-  };
-}
+export const eventLocalParts = localDateParts;
 
 /** Resolve in the actual local year, including zone offsets at the occurrence, not today. */
 export function eventOccurrence(schedule: ProcessionSchedule, now: Date): EventTiming {
@@ -112,7 +109,7 @@ export function eventTime(timing: EventTiming, progress: number): EventTime {
   const pad = (v: number) => String(v).padStart(2, '0');
   return {
     instantMs,
-    day: Math.floor(Date.UTC(p.year, p.month - 1, p.date) / 86400000),
+    day: epochDay(p.year, p.month, p.date),
     minute: p.hour * 60 + p.minute,
     date: `${p.year}-${pad(p.month)}-${pad(p.date)}`,
     time: `${pad(p.hour)}:${pad(p.minute)}`,

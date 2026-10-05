@@ -1,5 +1,10 @@
 /** Complete-source street and church-ground event geography. */
-import { pointInPolygon, type Procession, type ProcessionRoute } from '@atlas/shared';
+import {
+  pointInPolygon,
+  PROCESSION_DEFAULTS,
+  type Procession,
+  type ProcessionRoute,
+} from '@atlas/shared';
 import type { Feature, Geometry, Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { localFrame } from './geo';
@@ -7,6 +12,8 @@ import { lines, width } from './road-geometry';
 import { roadGraph } from './road-graph';
 import { featurePoint, PROCESSION_CLEARANCE } from './procession';
 import { isStandingBuilding } from './obstacles';
+import { intersection, union } from 'polyclip-ts';
+import { seatingFootprint } from './footprints';
 
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
@@ -16,10 +23,58 @@ const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
 const polygons = (g: Geometry): Position[][][] =>
   g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
 const asPoints = (ring: Position[]) => ring.map((p) => [p[0]!, p[1]!] as Point);
+const featureBoxes = new WeakMap<F, [number, number, number, number]>();
+function featureBox(f: F) {
+  const saved = featureBoxes.get(f);
+  if (saved) return saved;
+  const positions = polygons(f.geometry)
+    .flat(2)
+    .concat(lines(f as AtlasFeature).flat());
+  const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const q of positions) {
+    box[0] = Math.min(box[0], q[0]!);
+    box[1] = Math.min(box[1], q[1]!);
+    box[2] = Math.max(box[2], q[0]!);
+    box[3] = Math.max(box[3], q[1]!);
+  }
+  featureBoxes.set(f, box);
+  return box;
+}
+const sourceIndexes = new WeakMap<readonly F[], { bins: Map<string, F[]>; large: F[] }>();
+function nearbyFeatures(features: readonly F[], bounds: [number, number, number, number]) {
+  let index = sourceIndexes.get(features);
+  if (!index) {
+    index = { bins: new Map(), large: [] };
+    for (const f of features) {
+      const box = featureBox(f),
+        x0 = Math.floor(box[0] * 1000),
+        y0 = Math.floor(box[1] * 1000),
+        x1 = Math.floor(box[2] * 1000),
+        y1 = Math.floor(box[3] * 1000);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > 1024) {
+        index.large.push(f);
+        continue;
+      }
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const key = `${x}/${y}`;
+          let bin = index.bins.get(key);
+          if (!bin) index.bins.set(key, (bin = []));
+          bin.push(f);
+        }
+    }
+    sourceIndexes.set(features, index);
+  }
+  const selected = new Set(index.large);
+  for (let y = Math.floor(bounds[1] * 1000); y <= Math.floor(bounds[3] * 1000); y++)
+    for (let x = Math.floor(bounds[0] * 1000); x <= Math.floor(bounds[2] * 1000); x++)
+      for (const f of index.bins.get(`${x}/${y}`) ?? []) selected.add(f);
+  return selected;
+}
 
 export function requiredFormationWidth(p: Street): number {
   if (p.kind === 'procession') {
-    const bearers = p.formation?.bearers ?? 8;
+    const bearers = p.formation?.bearers ?? PROCESSION_DEFAULTS.procession.bearers;
     return (
       Math.max(
         PROCESSION_CLEARANCE.andasWidth,
@@ -43,32 +98,28 @@ function obstacles(
   features: readonly F[],
   frame: ReturnType<typeof localFrame>,
   bounds: [number, number, number, number],
+  clip?: ReturnType<typeof union>,
+  water?: Point[][],
+  ignoreWater = false,
 ): Point[][] {
   const out: Point[][] = [];
-  for (const f of features) {
-    const positions = polygons(f.geometry)
-      .flat(2)
-      .concat(lines(f as AtlasFeature).flat());
-    if (!positions.length) continue;
-    let w = Infinity,
-      s = Infinity,
-      e = -Infinity,
-      n = -Infinity;
-    for (const q of positions) {
-      w = Math.min(w, q[0]!);
-      s = Math.min(s, q[1]!);
-      e = Math.max(e, q[0]!);
-      n = Math.max(n, q[1]!);
-    }
+  for (const f of nearbyFeatures(features, bounds)) {
+    const [w, s, e, n] = featureBox(f);
     if (e < bounds[0] || w > bounds[2] || n < bounds[1] || s > bounds[3]) continue;
     const cls = String(f.properties.class);
+    if (ignoreWater && cls.startsWith('water')) continue;
     if (
       isStandingBuilding(f as AtlasFeature) ||
       cls.startsWith('water') ||
       cls === 'barrier' ||
       f.properties.detail_blocked
     ) {
-      for (const poly of polygons(f.geometry)) out.push(asPoints(poly[0]!));
+      const target = cls.startsWith('water') && water ? water : out;
+      const save = (poly: Point[][]) => {
+        if (clip) for (const part of intersection(poly, clip)) target.push(asPoints(part[0]!));
+        else target.push(poly[0]!);
+      };
+      for (const poly of polygons(f.geometry)) save(poly.map(asPoints));
       if (cls === 'barrier' || f.properties.detail_blocked)
         for (const line of lines(f as AtlasFeature))
           for (let i = 1; i < line.length; i++) {
@@ -85,7 +136,7 @@ function obstacles(
               [a[0] - nx, a[1] - ny],
               [a[0] + nx, a[1] + ny],
             ];
-            out.push(ring.map(frame.toLngLat));
+            save([ring.map(frame.toLngLat)]);
           }
     }
   }
@@ -109,7 +160,8 @@ export function routeStreet(features: readonly F[], p: Street) {
       (blockedAccess(tags.access) && tags.foot !== 'yes')
     )
       return false;
-    const effective = tags.class === 'path' ? Number(tags.width ?? 0) : width(f as AtlasFeature);
+    const effective =
+      tags.class === 'path' ? Number(tags.event_path_width ?? 0) : width(f as AtlasFeature);
     if (!Number.isFinite(effective) || effective < needed) return false;
     if (p.kind === 'parade' && p.formation?.vehicles.length) {
       if (tags.class === 'path' || blockedAccess(tags.motor_vehicle)) return false;
@@ -121,7 +173,51 @@ export function routeStreet(features: readonly F[], p: Street) {
   }) as AtlasFeature[];
   if (!roads.length) throw new Error(`${p.id}: no admissible roads for ${needed} m formation`);
   const byId = new Map(features.map((f) => [String(f.properties.id), f as AtlasFeature]));
-  const { selected, dist, root, unproject, project } = roadGraph(byId, roads, p.route, p.id, false);
+  // Reject unsafe graph edges before shortest-path selection, so a roof conflict reroutes
+  // rather than silently making the moving formation disappear midway through its path.
+  const exclusions = features.filter(
+    (f) =>
+      isStandingBuilding(f as AtlasFeature) ||
+      String(f.properties.class).startsWith('water') ||
+      f.properties.class === 'barrier' ||
+      f.properties.detail_blocked,
+  );
+  const bridgeEnds = roads
+    .filter((r) => r.properties.bridge && r.properties.bridge !== 'no')
+    .flatMap((r) => lines(r).flatMap((line) => [line[0]!, line.at(-1)!]));
+  const bridgeAllowed = (road: AtlasFeature, a: Point, b: Point) => {
+    if (road.properties.bridge && road.properties.bridge !== 'no') return true;
+    // OSM water banks can extend just beyond the tagged deck. Only a directly connected
+    // approach's first 25 m receives the same bounded carriageway permission.
+    return bridgeEnds.some(
+      (end) =>
+        lines(road).some((line) =>
+          [line[0]!, line.at(-1)!].some((q) => q[0] === end[0] && q[1] === end[1]),
+        ) && [a, b].every((q) => Math.hypot(...localFrame(end as Point).toMeters(q)) <= 25),
+    );
+  };
+  const allows = (road: AtlasFeature, a: Point, b: Point) => {
+    const footprint = seatingFootprint([a, b], needed).coordinates as Point[][][];
+    const points = footprint.flat(2);
+    const bounds: [number, number, number, number] = [
+      Math.min(...points.map((q) => q[0])),
+      Math.min(...points.map((q) => q[1])),
+      Math.max(...points.map((q) => q[0])),
+      Math.max(...points.map((q) => q[1])),
+    ];
+    return (
+      obstacles(exclusions, localFrame(a), bounds, footprint, undefined, bridgeAllowed(road, a, b))
+        .length === 0
+    );
+  };
+  const { selected, dist, root, unproject, project } = roadGraph(
+    byId,
+    roads,
+    p.route,
+    p.id,
+    false,
+    allows,
+  );
   const ordered = selected
     .slice()
     .sort(
@@ -152,7 +248,38 @@ export function routeStreet(features: readonly F[], p: Street) {
     Math.max(...route.map((q) => q[0])) + 0.001,
     Math.max(...route.map((q) => q[1])) + 0.001,
   ];
-  return { route, length_m, segments, blocked: obstacles(features, frame, bounds) };
+  const corridors = ordered.map(
+    (e) =>
+      seatingFootprint(
+        [e.a.at, e.b.at],
+        e.width + 2 * Number(byId.get(e.road)!.properties.sidewalk_width ?? 1),
+      ).coordinates as Point[][][],
+  );
+  // Balance clipping, rounding far below source precision, as seatingFootprint does.
+  let merged = corridors.map((poly) =>
+    poly.map((p) =>
+      p.map((r) =>
+        r.map(([x, y]) => [Math.round(x * 1e9) / 1e9, Math.round(y * 1e9) / 1e9] as Point),
+      ),
+    ),
+  );
+  while (merged.length > 1) {
+    const next: ReturnType<typeof union>[] = [];
+    for (let i = 0; i < merged.length; i += 2)
+      next.push(i + 1 < merged.length ? union(merged[i]!, merged[i + 1]!) : merged[i]!);
+    merged = next;
+  }
+  const corridor = merged[0]!;
+  const water: Point[][] = [];
+  const blocked = obstacles(features, frame, bounds, corridor, water);
+  const bridges = ordered
+    .filter((e) => {
+      return bridgeAllowed(byId.get(e.road)!, e.a.at, e.b.at);
+    })
+    .flatMap((e) =>
+      seatingFootprint([e.a.at, e.b.at], e.width).coordinates.map((poly) => asPoints(poly[0]!)),
+    );
+  return { route, length_m, segments, blocked, water, bridges };
 }
 
 /** Connected 2 m outdoor cells; row compaction gives small geographic permission polygons. */
@@ -193,7 +320,10 @@ export function bakeMassSite(
     .flatMap((f) =>
       lines(f as AtlasFeature)
         .filter(nearby)
-        .map((line) => ({ line: asPoints(line), width_m: Number(f.properties.width ?? 2) })),
+        .map((line) => ({
+          line: asPoints(line),
+          width_m: Number(f.properties.event_path_width ?? 2),
+        })),
     );
   const corridors = [...roads, ...paths].map((r) => ({ ...r, xy: r.line.map(frame.toMeters) }));
   const nearLine = (q: Point) =>
@@ -225,10 +355,10 @@ export function bakeMassSite(
       if (
         [
           [0, 0],
-          [-0.9, -0.9],
-          [-0.9, 0.9],
-          [0.9, -0.9],
-          [0.9, 0.9],
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
         ].every(([dx, dy]) => safe([xy[0] + dx!, xy[1] + dy!]))
       )
         cells.set(key(x, y), xy);
