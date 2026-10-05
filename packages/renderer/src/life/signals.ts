@@ -3,7 +3,12 @@ import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
 import { SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
-import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
+import {
+  LifeLine,
+  SIGNAL_STRIDE,
+  TILE_QUANTIZATION_TOLERANCE,
+  type LifeGeometry,
+} from './geometry';
 import { placeSeed } from './lights';
 import type { Mover } from './simulate';
 import { VEHICLES } from './vehicles';
@@ -170,7 +175,7 @@ export class SignalControl {
             a.arm.inbound &&
             a.line === m.line &&
             a.arm.direction === m.dir &&
-            Math.hypot(a.x - x, a.y - y) <= 2,
+            Math.hypot(a.x - x, a.y - y) <= TILE_QUANTIZATION_TOLERANCE,
         );
         if (!entry) continue;
         const state = signalState(s.seed, clock, s.a < 0)[entry.arm.group];
