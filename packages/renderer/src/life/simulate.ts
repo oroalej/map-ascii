@@ -220,7 +220,7 @@ export type WorldGroundGuard = ((
   ): boolean;
   contact(life: TileLife, mover: Mover, trial?: Mover): void;
   yielding(mover: Mover): Mover | undefined;
-  holding(life: TileLife, mover: Mover): boolean;
+  holding(life: TileLife, mover: Mover, changedOnly?: boolean): boolean;
   passing(mover: Mover): boolean;
   cancelYield(mover: Mover): void;
 };
@@ -4355,6 +4355,7 @@ export class LifeWorld {
       clearance: number;
       anchor: readonly Body[];
       travelled: number;
+      route?: readonly { x: number; y: number }[];
     }
   >();
   private roadCache = new WorldRoadCache();
@@ -5602,10 +5603,12 @@ export class LifeWorld {
       }
       return decision.priority;
     };
-    const holding = (life: TileLife, m: Mover) => {
+    const holding = (life: TileLife, m: Mover, changedOnly = false) => {
       const decision = this.yieldingActors.get(m);
       const priorityLife = decision && owners.get(decision.priority);
       if (!decision || !priorityLife) return true;
+      const route = priorityLife.scenes.visits.get(decision.priority)?.path;
+      if (changedOnly && decision.route === route) return true;
       const waiting = life.groundBodies(m).map((body) => toRef(origin(life), body));
       const moving = priorityLife
         .groundBodies(decision.priority)
@@ -5675,6 +5678,7 @@ export class LifeWorld {
         previous = point;
         heading = { hx, hy };
       }
+      decision.route = route;
       return true;
     };
     const passing = (m: Mover) => {
@@ -5953,7 +5957,8 @@ export class LifeWorld {
             guard(tile, owner, before, undefined, reserve),
           {
             contact: (mover: Mover, trial?: Mover) => guard.contact(tile, mover, trial),
-            holding: (mover: Mover) => guard.holding(tile, mover),
+            holding: (mover: Mover, changedOnly?: boolean) =>
+              guard.holding(tile, mover, changedOnly),
             passing: (mover: Mover) => guard.passing(mover),
             cancelYield: (mover: Mover) => guard.cancelYield(mover),
             yielding: guard.yielding,

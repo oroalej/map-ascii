@@ -78,7 +78,7 @@ type Service = {
 type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) & {
   contact?: (mover: Mover, trial?: Mover) => void;
   yielding?: (mover: Mover) => Mover | undefined;
-  holding?: (mover: Mover) => boolean;
+  holding?: (mover: Mover, changedOnly?: boolean) => boolean;
   passing?: (mover: Mover) => boolean;
   cancelYield?: (mover: Mover) => void;
 };
@@ -685,9 +685,22 @@ export class LocalScenes {
   ): boolean {
     if (!guard || !isWalker(m.kind)) return false;
     this.yieldHeld.delete(m);
-    const priority = guard.yielding?.(m);
+    let priority = guard.yielding?.(m);
     let state = this.yielding.get(m);
     if (!state && !priority) return false;
+    if (
+      state &&
+      priority &&
+      !state.returning &&
+      state.next >= state.path.length &&
+      guard.holding &&
+      !guard.holding(m, true)
+    ) {
+      // A retained visitor can replan while its counterpart is already holding.
+      // Withdraw the old decision through the checked return path before retrying.
+      guard.cancelYield?.(m);
+      priority = undefined;
+    }
     if (!state) {
       const anchor = snapshotMover(m);
       const heading = anchor.momentFacing ?? anchor;
@@ -695,7 +708,9 @@ export class LocalScenes {
       const admissible = (previous: Mover, target: WalkPoint) => {
         m.x = target.x;
         m.y = target.y;
-        const bodies = this.walkingBodies(m, m, lane, true);
+        // Holding translations preserve physical facing. The swept guard proves
+        // every actual footprint; an all-heading square would reject narrow curbs.
+        const bodies = this.walkingBodies(m, m, lane);
         return (
           inTile(m) &&
           (!owns || owns(m)) &&
@@ -713,7 +728,7 @@ export class LocalScenes {
               x: anchor.x - heading.hx * retreat * this.perMeter,
               y: anchor.y - heading.hy * retreat * this.perMeter,
             };
-            if (!admissible(anchor, back)) continue;
+            if (retreat !== 0 && !admissible(anchor, back)) continue;
             const previous = snapshotMover(m);
             const holding = {
               x: back.x - heading.hy * side * offset * this.perMeter,
@@ -758,6 +773,10 @@ export class LocalScenes {
     }
     const target = state.path[state.next]!,
       d = dist(m, target);
+    if (d <= 1e-8 * this.perMeter) {
+      state.next++;
+      return true;
+    }
     const previous = snapshotMover(m);
     const requested = Math.min(d, m.speed * dt);
     const step = walkLimit ? walkLimit(m, target, requested) : requested;
@@ -767,7 +786,7 @@ export class LocalScenes {
       m.y += ((target.y - m.y) * step) / d;
       m.walked = (m.walked ?? 0) + step / this.perMeter;
     }
-    const bodies = this.walkingBodies(m, m, this.visits.has(m) ? 0 : (m.avoid ?? 0), true);
+    const bodies = this.walkingBodies(m, m, this.visits.has(m) ? 0 : (m.avoid ?? 0));
     if (
       !inTile(m) ||
       (owns && !owns(m)) ||

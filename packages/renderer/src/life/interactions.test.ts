@@ -54,6 +54,95 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('withdraws through its checked path when a replan invalidates the holding spot', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] },
+      priority = person(45);
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(p),
+      trail = structuredClone(visit.trail),
+      group = p.group;
+    let active = true,
+      valid = true,
+      cancelled = 0;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) => {
+        if (reserve)
+          expect(Math.hypot(next.x - before.x, next.y - before.y)).toBeLessThanOrEqual(
+            p.speed * 0.1 + 1e-8,
+          );
+        return true;
+      },
+      {
+        yielding: () => (active ? priority : undefined),
+        holding: () => valid,
+        cancelYield: () => {
+          active = false;
+          cancelled++;
+        },
+      },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    valid = false;
+    for (let frame = 0; frame < 12; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(cancelled).toBe(1);
+    expect(p).toEqual({ ...anchor, walked: p.walked });
+    expect(p.walked).toBeGreaterThan(0);
+    expect(p.group).toBe(group);
+    expect(visit.trail).toEqual(trail);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
+  it('checks the actual footprint of a facing-preserving translation on a narrow crossing', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 40, y: 25 },
+        { x: 40, y: 40 },
+      ],
+      LifeLine.path,
+      1,
+    );
+    b.line(
+      [
+        { x: 0, y: 30 },
+        { x: 100, y: 30 },
+      ],
+      LifeLine.roadMajor,
+      20,
+    );
+    b.area('crossing', [
+      [
+        { x: 39.5, y: 24 },
+        { x: 40.5, y: 24 },
+        { x: 40.5, y: 41 },
+        { x: 39.5, y: 41 },
+        { x: 39.5, y: 24 },
+      ],
+    ]);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = { ...person(), group: [{ ...walker }] };
+    let checked = 0;
+    const guard = Object.assign(
+      (next: Mover, before: Mover) => {
+        checked++;
+        expect(next.hx).toBe(before.hx);
+        expect(next.hy).toBe(before.hy);
+        return true;
+      },
+      { yielding: () => person(45), holding: () => true },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(checked).toBeGreaterThan(0);
+    expect(p.x).toBe(40);
+    expect(p.y).toBeCloseTo(30.65);
+    expect(p.hx).toBe(1);
+    expect(p.group).toHaveLength(1);
+  });
+
   it('reports a denied trial after restoring its actual pose and retained route cursor', () => {
     const scene = setup(),
       p = person();
