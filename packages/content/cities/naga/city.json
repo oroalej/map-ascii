@@ -301,9 +301,13 @@
         },
         "sources": [
           {
+            "title": "Project owner: seasonal emoji moods",
+            "note": "Christmas emoji and the December 24 Noche Buena feast mood are illustrative simulation choices, not records of real people or a verified event schedule. Drinking moods are restricted to adults in evening hours."
+          },
+          {
             "title": "City of Naga: The Merriest of Seasons is Here (December 7, 2022)",
             "url": "https://www2.naga.gov.ph/the-merriest-season-is-here/",
-            "note": "Supports a month-long December celebration and illuminated plazas, not the January endpoint or individual decoration positions. Emoji are illustrative simulated moods, not records of real people."
+            "note": "Supports a month-long December celebration and illuminated plazas, not the January endpoint or individual decoration positions."
           },
           {
             "title": "City of Naga: Ordinance No. 2019-098 — Kamundagan Food, Agri and Trade Fair",
@@ -1239,9 +1243,13 @@
         },
         "sources": [
           {
+            "title": "Project owner: seasonal emoji moods",
+            "note": "Fiesta emoji are illustrative simulated moods, not records of real people or claims about religious activities. Drinking moods are authored simulation choices restricted to adults in evening hours."
+          },
+          {
             "title": "Archdiocese of Caceres: 2026 religious events calendar",
             "url": "https://www.archdioceseofcaceres.org/caceresevents",
-            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified. Emoji are illustrative simulated moods, not records of real people."
+            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified."
           },
           {
             "title": "Naga City Tourism: Peñafrancia Fiesta Major Civic and Religious Events Schedule for 2026",

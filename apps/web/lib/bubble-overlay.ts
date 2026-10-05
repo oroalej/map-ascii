@@ -30,7 +30,9 @@ export function layoutBubbles(
     const emoji = group[0]!.kind === 'emoji';
     if (emoji && !labelsAdded) {
       occupied.push(
-        ...labels.map((b) => ({ ...b, left: b.left + origin.left, top: b.top + origin.top })),
+        ...(origin.left === 0 && origin.top === 0
+          ? labels
+          : labels.map((b) => ({ ...b, left: b.left + origin.left, top: b.top + origin.top }))),
       );
       labelsAdded = true;
     }

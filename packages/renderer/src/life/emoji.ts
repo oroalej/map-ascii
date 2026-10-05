@@ -1,6 +1,7 @@
 /** Read-only moods. All randomness, timers and identities belong to this observer. */
 import {
   EMOJI_ZOOM,
+  EMOJI_EVENING,
   type EmojiMood,
   type EmojiSubject,
   type SeasonEmojiEntry,
@@ -9,6 +10,7 @@ import { random } from './random';
 import type { Gatherer, LifeEnv, Mover, Stall } from './simulate';
 import type { Visit } from './interactions';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
 export const EMOJI = {
   tick: 0.5,
   capacity: 4,
@@ -18,6 +20,18 @@ export const EMOJI = {
   chance: 0.35,
   ambientWindow: 60,
   ambientChance: 0.15,
+  seasonalChance: 0.2,
+  followupChance: 0.25,
+  playfulShare: 0.5,
+  maxFollowups: 4,
+  maxCats: 6,
+  stoppedSpeed: 0.3,
+  cruiseFraction: 0.85,
+  hotAltitude: 45,
+  rainThreshold: 0.5,
+  driver: { angryWait: 6, angryStop: 25, impatientWait: 2, boredStop: 8, coolCruise: 8 },
+  person: { impatientWait: 12, blockedWait: 3 },
+  pet: { blockedWait: 1.5, rest: { day: 20, night: 10 } },
   standoff: 4,
   firstAttempt: [2, 12] as const,
   pairReach: 3,
@@ -62,7 +76,7 @@ export const inHours = (minutes: number | undefined, [from, to]: readonly [numbe
   (to < from ? minutes >= from || minutes < to : minutes >= from && minutes < to);
 export function eveningDate(env: Pick<LifeEnv, 'date' | 'minutes'>) {
   if (!env.date || env.minutes === undefined) return;
-  const d = new Date((env.date.epochDay - Number(env.minutes < 360)) * 86400000);
+  const d = new Date((env.date.epochDay - Number(env.minutes < EMOJI_EVENING.end)) * DAY_MS);
   return { month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 export type EmojiObservation = {
@@ -124,21 +138,21 @@ export function ambientPool(
   if (
     inHours(env.minutes, EMOJI.hours.hot) &&
     env.rain === 0 &&
-    (env.sunAltitude ?? -90) >= 45 &&
+    (env.sunAltitude ?? -90) >= EMOJI.hotAltitude &&
     (subject === 'person' ||
       (subject === 'driver' && open) ||
       ((subject === 'dog' || subject === 'cat') && o.still))
   )
     add('hot');
   if (
-    env.rain >= 0.5 &&
+    env.rain >= EMOJI.rainThreshold &&
     ((subject === 'person' && o.visit?.state !== 'shelter') ||
       (subject === 'driver' && (m?.vehicle === 'motorcycle' || m?.vehicle === 'bicycle')))
   )
     add('rained');
   if (subject === 'person' && (env.windPreset === 'gusty' || env.windPreset === 'storm'))
     add('windy');
-  if (subject === 'driver' && cruise >= 8) add('cool', 1);
+  if (subject === 'driver' && cruise >= EMOJI.driver.coolCruise) add('cool', 1);
   if (subject === 'person' && m?.group?.length === 1) add('bored', 1);
   if (g) {
     if (g.behavior === 'play') add('playful', 1);
@@ -322,7 +336,7 @@ export class EmojiObserver {
       this.memory.retire(g);
       return;
     }
-    source.groups.delete(g);
+    g.index.groups.delete(g);
     this.groups.add(g);
     g.index = this;
   }
@@ -412,7 +426,9 @@ export class EmojiObserver {
     }
     const night = inHours(env.minutes, EMOJI.hours.night);
     for (const o of observations) {
-      const t = this.memory.track(o.owner, this.epoch, this.rng, this.ownerRng);
+      const existing = this.memory.get(o.owner);
+      if (!o.eligible && !existing) continue;
+      const t = existing ?? this.memory.track(o.owner, this.epoch, this.rng, this.ownerRng);
       t.eligible = o.eligible;
       t.speaking = o.speaking;
       const gap =
@@ -450,8 +466,8 @@ export class EmojiObserver {
         !!o.still &&
         !m?.grooming &&
         (o.subject === 'cat' || (o.subject === 'dog' && (!!m?.lying || o.visit?.state === 'rest')));
-      const stopped = m?.v !== undefined && m.v / this.perMeter < 0.3;
-      const cruising = m?.v !== undefined && m.v >= 0.85 * m.speed;
+      const stopped = m?.v !== undefined && m.v / this.perMeter < EMOJI.stoppedSpeed;
+      const cruising = m?.v !== undefined && m.v >= EMOJI.cruiseFraction * m.speed;
       t.rest = resting ? (!gap && t.resting ? t.rest + dt : 0) : 0;
       t.stop = stopped ? (!gap && t.stopped ? t.stop + dt : 0) : 0;
       t.cruise = cruising ? (!gap && t.cruising ? t.cruise + dt : 0) : 0;
@@ -464,16 +480,19 @@ export class EmojiObserver {
           : 0;
       let conditions = 0;
       if (o.subject === 'driver') {
-        if ((m?.waiting ?? 0) >= 6 || t.stop + 1e-8 >= 25) conditions |= CONDITIONS.angry;
-        if ((m?.waiting ?? 0) >= 2) conditions |= CONDITIONS.impatient;
+        if ((m?.waiting ?? 0) >= EMOJI.driver.angryWait || t.stop + 1e-8 >= EMOJI.driver.angryStop)
+          conditions |= CONDITIONS.angry;
+        if ((m?.waiting ?? 0) >= EMOJI.driver.impatientWait) conditions |= CONDITIONS.impatient;
         if (!gap && o.passenger && o.passenger !== t.passenger) {
           t.edges.add('happy');
           t.replies.set('happy', o.passenger);
         }
-        if (t.stop + 1e-8 >= 8 && !o.held) conditions |= CONDITIONS.bored;
+        if (t.stop + 1e-8 >= EMOJI.driver.boredStop && !o.held) conditions |= CONDITIONS.bored;
       } else if (o.subject === 'dog' || o.subject === 'cat') {
-        if (o.subject === 'dog' && (m?.waiting ?? 0) >= 1.5) conditions |= CONDITIONS.angry;
-        if (t.rest + 1e-8 >= (night ? 10 : 20)) conditions |= CONDITIONS.sleeping;
+        if (o.subject === 'dog' && (m?.waiting ?? 0) >= EMOJI.pet.blockedWait)
+          conditions |= CONDITIONS.angry;
+        if (t.rest + 1e-8 >= (night ? EMOJI.pet.rest.night : EMOJI.pet.rest.day))
+          conditions |= CONDITIONS.sleeping;
         if (
           night &&
           ((!t.lying && m?.lying) || (o.subject === 'cat' && !t.paused && (m?.pause ?? 0) > 0))
@@ -486,8 +505,17 @@ export class EmojiObserver {
         )
           conditions |= CONDITIONS.happy;
       } else if (!o.vendor) {
-        if (t.wait + 1e-8 >= 12 || (m?.waiting ?? 0) >= 3) conditions |= CONDITIONS.impatient;
-        if (!gap && o.visit?.state === 'shelter' && t.visit?.state !== 'shelter' && env.rain >= 0.5)
+        if (
+          t.wait + 1e-8 >= EMOJI.person.impatientWait ||
+          (m?.waiting ?? 0) >= EMOJI.person.blockedWait
+        )
+          conditions |= CONDITIONS.impatient;
+        if (
+          !gap &&
+          o.visit?.state === 'shelter' &&
+          t.visit?.state !== 'shelter' &&
+          env.rain >= EMOJI.rainThreshold
+        )
           t.edges.add('rained');
         if (!gap && o.arrival && o.visit?.state === 'wait') t.edges.add('happy');
       }
@@ -524,7 +552,7 @@ export class EmojiObserver {
         for (const c of completions)
           if (c.owners.includes(o.owner) && !t.seen.has(c.token)) {
             t.seen.add(c.token);
-            if (t.followups.length < 4) t.followups.push(c.token);
+            if (t.followups.length < EMOJI.maxFollowups) t.followups.push(c.token);
           }
       }
     }
@@ -540,7 +568,9 @@ export class EmojiObserver {
     if (this.clock + 1e-8 < this.nextTick) return;
     this.nextTick = (Math.floor((this.clock + 1e-8) / EMOJI.tick) + 1) * EMOJI.tick;
     // Pair opportunities precede all solo admissions. Cat scans are deliberately bounded.
-    const cats = observations.filter((o) => o.subject === 'cat' && o.eligible).slice(0, 6);
+    const cats = observations
+      .filter((o) => o.subject === 'cat' && o.eligible)
+      .slice(0, EMOJI.maxCats);
     for (const dog of observations.filter((o) => o.subject === 'dog' && o.eligible)) {
       const t = this.memory.get(dog.owner)!;
       const cat = cats.find(
@@ -576,7 +606,8 @@ export class EmojiObserver {
       'bored',
     ];
     for (const o of observations) {
-      const t = this.memory.get(o.owner)!;
+      const t = this.memory.get(o.owner);
+      if (!t) continue;
       for (const mood of priorities) {
         if (!t.edges.has(mood)) continue;
         let reply = t.replies.get(mood),
@@ -584,7 +615,7 @@ export class EmojiObserver {
         if (
           o.subject === 'driver' &&
           (mood === 'impatient' || mood === 'angry') &&
-          (o.mover?.waiting ?? 0) >= 2
+          (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
         ) {
           const m = o.mover!;
           reply = observations
@@ -608,15 +639,16 @@ export class EmojiObserver {
       if (!o.vendor)
         for (let i = 0; i < t.followups.length; i++) {
           const adjustment = this.chance(o, 'playful') / EMOJI.chance;
-          if (t.rng() < 0.25 * adjustment)
-            this.admit(o, t.rng() < 0.5 ? 'playful' : 'thumbs', observations);
+          if (t.rng() < EMOJI.followupChance * adjustment)
+            this.admit(o, t.rng() < EMOJI.playfulShare ? 'playful' : 'thumbs', observations);
         }
       t.followups.length = 0;
       if (!o.eligible || t.attemptAt === undefined || this.clock + 1e-8 < t.attemptAt) continue;
       t.attemptAt = this.clock + EMOJI.ambientWindow;
       const pool = ambientPool(o, env, this.entries, t.cruise);
       const applicable = seasonalPool(o, env, this.entries).length > 0;
-      if (t.rng() >= (applicable ? 0.2 : EMOJI.ambientChance) || !pool.length) continue;
+      if (t.rng() >= (applicable ? EMOJI.seasonalChance : EMOJI.ambientChance) || !pool.length)
+        continue;
       let pick = t.rng() * pool.reduce((sum, p) => sum + p.weight, 0);
       const mood = pool.find((p) => (pick -= p.weight) < 0)?.mood ?? pool.at(-1)!.mood;
       if (!o.vendor) this.admit(o, mood, observations);

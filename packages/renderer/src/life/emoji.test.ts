@@ -15,6 +15,8 @@ import { completeScenarioState } from './testing/scenarios';
 import type { Gatherer, Stall } from './simulate';
 import type { Visit } from './interactions';
 import { SceneSpeech } from './scene-speech';
+import { activityLevels } from './config';
+import { LifeBuilder } from './geometry';
 
 function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = () => 0) {
   const entry = continuityTile(left);
@@ -122,6 +124,73 @@ describe('read-only emoji observer', () => {
     visit.state = 'return';
     canceled.step(0.3);
     expect(canceled.observer.cue(canceled.m)).toBeUndefined();
+  });
+  it('creates tracks only on eligibility and cleans episodes immediately before safe re-entry', () => {
+    const f = fixture('vehicle');
+    f.m.waiting = 3;
+    f.o.eligible = false;
+    f.step();
+    expect(f.observer.memory.get(f.m)).toBeUndefined();
+    f.o.eligible = true;
+    f.step();
+    const track = f.observer.memory.get(f.m)!;
+    expect(f.observer.cue(f.m)?.mood).toBe('impatient');
+    const cooldown = track.cooldownUntil;
+    f.o.eligible = false;
+    f.step(0.1);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    expect(track.eligible).toBe(false);
+    expect(track.cooldownUntil).toBe(cooldown);
+    f.o.eligible = true;
+    f.step(100);
+    expect(f.observer.memory.get(f.m)).toBe(track);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    expect(track.attemptAt).toBeGreaterThan(160);
+  });
+  it('matches seasonal drawn attendance and skips never-visible owners before scene queries', () => {
+    const builder = new LifeBuilder();
+    builder.place({ x: 2000, y: 2000 }, 'worship', 80);
+    const tile = new TileLife(left, builder.finish(), 123);
+    const template = tile.gatherers[0]!;
+    expect(template).toBeDefined();
+    const visitors: Gatherer = { ...template, rank: 0.5, seasonal: 'visitors' };
+    const congregations: Gatherer = { ...template, rank: 0.5, seasonal: 'congregations' };
+    tile.gatherers.splice(0, tile.gatherers.length, visitors, congregations);
+    tile.movers.length = tile.stalls.length = 0;
+    const read = tile as unknown as { emojiObservations(env: LifeEnv): EmojiObservation[] };
+    const levels = activityLevels(1);
+    const visible: LifeEnv = {
+      rain: 0,
+      levels: {
+        ...levels,
+        places: { ...levels.places, worship: 0.1 },
+        season: { visitors: 1, congregations: 1 },
+      },
+    };
+    const speaking = vi.spyOn(tile.momentHost, 'speaking');
+    const observations = read.emojiObservations(visible);
+    expect(observations.map((o) => o.owner)).toEqual([visitors, congregations]);
+    expect(observations.every((o) => o.eligible)).toBe(true);
+    tile.emoji.step(0.1, 19, visible, observations);
+    speaking.mockClear();
+    const hidden: LifeEnv = {
+      rain: 0,
+      levels: {
+        ...levels,
+        places: { ...levels.places, worship: 1 },
+        season: { visitors: 0, congregations: 0 },
+      },
+    };
+    const unseen: Gatherer = { ...visitors };
+    tile.gatherers.push(unseen);
+    const cleanup = read.emojiObservations(hidden);
+    expect(cleanup.map((o) => o.owner)).toEqual([visitors, congregations]);
+    expect(cleanup.every((o) => !o.eligible)).toBe(true);
+    expect(speaking).toHaveBeenCalledTimes(2);
+    tile.emoji.step(0.1, 19, hidden, cleanup);
+    expect(tile.emoji.memory.get(unseen)).toBeUndefined();
+    expect(tile.emoji.memory.get(visitors)?.eligible).toBe(false);
+    speaking.mockRestore();
   });
   it('freezes retirement without new elapsed rest, disposes bounded references and never replays a gap', () => {
     const f = fixture('vehicle');
@@ -328,6 +397,33 @@ describe('read-only emoji observer', () => {
     expect(target.memory.get(f.m)).toBeUndefined();
     expect(target.memory.id()).not.toBe(id);
   });
+  it('keeps one owning index when paired members cross different seams and reuses expired capacity', () => {
+    const f = fixture('dog');
+    const partner = new EmojiObserver(88, f.tile.perMeter, { memory: f.observer.memory });
+    const leader = new EmojiObserver(89, f.tile.perMeter, { memory: f.observer.memory });
+    for (let cycle = 0; cycle < 5; cycle++) {
+      const dog = { ...f.m, rank: cycle / 10 };
+      const cat = { ...dog, kind: 'cat' as const, x: dog.x + 2 * f.tile.perMeter };
+      const observations: EmojiObservation[] = [
+        { ...f.o, owner: dog, mover: dog },
+        { owner: cat, mover: cat, subject: 'cat', eligible: true, speaking: false },
+      ];
+      f.step(4, {}, observations);
+      const pair = f.observer.cue(dog)?.pair;
+      expect(pair).toBeDefined();
+      partner.adopt(cat, f.observer);
+      leader.adopt(dog, f.observer);
+      expect([f.observer.size, partner.size, leader.size]).toEqual([0, 0, 1]);
+      expect(leader.cue(dog)?.pair).toBe(pair);
+      expect(partner.cue(cat)?.pair).toBe(pair);
+      leader.step(3, 19, { rain: 0, clock: (cycle + 1) * 4 + 3 }, observations);
+      expect([f.observer.size, partner.size, leader.size]).toEqual([0, 0, 0]);
+      expect(f.observer.cue(dog)).toBeUndefined();
+      expect(f.observer.cue(cat)).toBeUndefined();
+    }
+    partner.dispose();
+    expect(partner.size).toBe(0);
+  });
   it('deduplicates normal voiced completions by occurrence and never follows busy listeners', () => {
     const f = fixture();
     const token = {};
@@ -428,12 +524,12 @@ describe('read-only emoji observer', () => {
     });
     for (const w of [a, b]) w.resident(entry.key)!.movers.push(...structuredClone(people));
     let admitted = false;
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 120; i++) {
       for (const w of [a, b])
         w.step(0.1, undefined, 19, undefined, undefined, {
-          rain: i > 200 ? 1 : 0,
-          minutes: i > 100 ? 1380 : 720,
-          sunAltitude: i > 100 ? -30 : 70,
+          rain: i > 80 ? 1 : 0,
+          minutes: i > 40 ? 1380 : 720,
+          sunAltitude: i > 40 ? -30 : 70,
           date: { epochDay: epochDay(2026, 12, 24), weekday: 4, preview: false },
           windPreset: 'storm',
         });

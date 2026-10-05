@@ -224,6 +224,7 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
   return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
@@ -4438,44 +4439,56 @@ export class TileLife {
     const eligible = (p: { x: number; y: number }) =>
       inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
     const observations: EmojiObservation[] = [];
+    const arrivals = new Set<Mover>();
+    for (const event of this.scenes.speechEvents)
+      if (event.kind === 'arrival') arrivals.add(event.mover);
     for (const m of this.movers) {
-      if (m.train || !['person', 'vehicle', 'dog', 'cat'].includes(m.kind)) continue;
+      if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
       const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
       if (subject === 'person' && !m.group) continue;
+      const admitted =
+        eligible(m) && (!levels || m.rank < levels[m.kind] * crowd) && !this.scenes.hidden(m);
+      if (!admitted && !this.emoji.memory.get(m)) continue;
       observations.push({
         owner: m,
         mover: m,
         subject,
         figure: m.group?.[0]?.figure,
-        eligible:
-          eligible(m) && (!levels || m.rank < levels[m.kind] * crowd) && !this.scenes.hidden(m),
+        eligible: admitted,
         speaking: this.momentHost.speaking(m),
         visit: this.scenes.visits.get(m),
         held: this.scenes.held(m),
         passenger: this.scenes.services.get(m)?.passenger,
-        arrival: this.scenes.speechEvents.some((e) => e.kind === 'arrival' && e.mover === m),
+        arrival: arrivals.has(m),
         still: m.pause > 0 || this.scenes.still(m),
       });
     }
-    for (const g of this.gatherers)
-      if (g.carabao === undefined)
-        observations.push({
-          owner: g,
-          gatherer: g,
-          subject: 'person',
-          figure: g.walker.figure,
-          eligible: eligible(g) && (!levels || g.rank < levels.places[g.place] * crowd),
-          speaking: this.momentHost.speaking(g),
-        });
-    for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls)
+    for (const g of this.gatherers) {
+      if (g.carabao !== undefined) continue;
+      const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
+      if (!admitted && !this.emoji.memory.get(g)) continue;
+      observations.push({
+        owner: g,
+        gatherer: g,
+        subject: 'person',
+        figure: g.walker.figure,
+        eligible: admitted,
+        speaking: this.momentHost.speaking(g),
+      });
+    }
+    for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls) {
+      const admitted =
+        eligible(s) && s.open !== false && (!levels || s.rank < levels.person * crowd);
+      if (!admitted && !this.emoji.memory.get(s)) continue;
       observations.push({
         owner: s,
         subject: 'person',
         figure: 'adult',
         vendor: true,
-        eligible: eligible(s) && s.open !== false && (!levels || s.rank < levels.person * crowd),
+        eligible: admitted,
         speaking: this.momentHost.speaking(s),
       });
+    }
     return observations;
   }
   private stepFrame(

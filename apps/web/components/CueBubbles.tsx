@@ -123,7 +123,7 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
         records,
         { width: window.innerWidth, height: window.innerHeight },
         obstacles,
-        moods.length ? (atlas.getLabelObstacles?.() ?? []) : [],
+        moods.length ? atlas.getLabelObstacles() : [],
         origin,
       );
       for (const cue of records) {

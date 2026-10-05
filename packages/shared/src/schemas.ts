@@ -27,7 +27,13 @@ import {
   type SeasonGrounds,
   type SeasonWindow,
 } from './seasons';
-import { EMOJI_SUBJECTS, EMOJI_MOODS, DRINKING_MOODS, type SeasonEmojiEntry } from './emoji';
+import {
+  EMOJI_SUBJECTS,
+  EMOJI_MOODS,
+  DRINKING_MOODS,
+  EMOJI_EVENING,
+  type SeasonEmojiEntry,
+} from './emoji';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
@@ -1080,8 +1086,8 @@ export const SeasonEmojiEntrySchema = z
         !person ||
         entry.figure !== 'adult' ||
         !hours ||
-        hours[0] < 960 ||
-        (hours[1] < hours[0] && hours[1] > 360)
+        hours[0] < EMOJI_EVENING.start ||
+        (hours[1] < hours[0] && hours[1] > EMOJI_EVENING.end)
       )
         ctx.addIssue({
           code: 'custom',
