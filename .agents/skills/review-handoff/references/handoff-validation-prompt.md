@@ -16,7 +16,7 @@ Read the candidate, context, ledger, Claude's report and `AGENTS.md`. Validate e
 4. Classify it as `valid`, `partly valid` or `invalid`. For partly valid findings, supply complete corrected amendment text. For rejected findings, give the specific evidence and reason. Correct factual/design classification when necessary.
 5. Check prior ledger decisions. If a supposedly resolved claim recurs or an amendment reverses an earlier accepted change, state whether changed evidence or an earlier validation error explains it. Unexplained recurrence/reversal is a stalled conflict.
 
-Inspect a Claude `blocked` claim as strictly as any other finding. Main drift is amendable and cannot justify `blocked`. A confirmed unfixable outcome/premise condition, work already landed on main, or a branch/worktree owned by another task can justify it. An unsupported blocked claim can be rejected and validated as ready when no other required issues remain.
+Inspect a Claude `blocked` claim as strictly as any other finding. Main drift and tripped outcome/premise conditions are amendable and cannot justify `blocked`; for a tripped condition, supply the amendment that solves it (a revised approach, or a step that diagnoses, fixes and re-measures). Only work already landed on main, or a branch/worktree owned by another task, can justify it. An unsupported blocked claim can be rejected and validated as ready when no other required issues remain.
 
 Do not turn this validation into another full audit. If you notice a serious omission outside Claude's findings, list it as unresolved under "Noticed" with evidence. It prevents ready. Do not silently fix or omit it.
 
@@ -24,7 +24,7 @@ The verdict describes the immutable input you just checked:
 
 - `ready`: no valid required amendments, no serious noticed/unresolved issues, no unexplained contradiction, and no confirmed blocked premise.
 - `ready-with-amendments`: valid/partly valid findings need the exact amendments below, or serious noticed issues remain. The coordinator can save proposed amendments, but the input is not ready.
-- `blocked`: a confirmed unfixable premise, with evidence.
+- `blocked`: the work already landed on main, or the branch/worktree belongs to another task, with evidence.
 - `stalled`: unexplained recurrence/reversal of an earlier accepted amendment.
 
 The coordinator must not claim that amendments applied after your review have themselves been reviewed. This is the last validation process in the two-round budget.

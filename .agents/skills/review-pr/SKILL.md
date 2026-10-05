@@ -114,10 +114,10 @@ Run from `<pr-checkout>`, with a shell timeout of at least 30 minutes. `<skill-d
 
 ## 4. Round k: implement the valid entries
 
-Read `validation.md`, and check these before editing anything:
+Read `validation.md`. A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round, just as if Claude had reported it. Add it to this round's entries (`claudeSeverity: null`, `verdict: "valid"`, the validator's severity as `finalSeverity`) and fix it with the others; never stop for it. Then check these before editing anything:
 
-- **No valid blocker or should-fix:** the round is **clean**. Fix any valid nits as below, then go to step 6.
-- **A fix step needs files outside the PR's diff, and the step doesn't explain why:** stop with `stopped`.
+- **No valid blocker or should-fix** (including noticed ones): the round is **clean**. Fix any valid nits as below, then go to step 6.
+- **A fix step needs files outside the PR's diff:** that's allowed. Find out why the fix reaches them (a caller, a shared helper, a test fixture), keep the change scoped to the entry, and record the reason in the commit message and in the entry's `outOfDiff` field.
 - **Stall** (round 2 and later, compared with `<scratch>/round<k-1>/result.json`): stop with `stalled`, without editing.
   - **Repeat:** a valid blocker or should-fix has the same `path` and the same claim as an entry the previous round marked `fixed`.
   - **Oscillation:** applying a fix would revert, fully or partly, one of the previous round's commits. Check with `git show <commit>`.
@@ -166,7 +166,7 @@ Report:
 - Each round: Claude's verdict, and the validation table (# / Claude's severity / verdict / evidence / final severity)
 - Fixed entries, with the commit hashes
 - Skipped entries, each with its reason
-- Anything under "Noticed, not in Claude's review", with its severity, for the user to decide on (not fixed). A noticed blocker or should-fix makes the status `stopped` (see `status` below)
+- Anything under "Noticed, not in Claude's review", with its severity. Noticed blockers and should-fix items were fixed as entries (step 4); noticed nits are listed for the user
 - The CI gate: reruns, fix attempts and fix commits, and the final check state
 - Which checks ran locally, and which were left to CI
 - The PR URL, the speed Codex #1 ran at (fast or normal), the `codex` and `claude` versions from step 1.6, and the final status
@@ -197,7 +197,8 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
           "verdict": "valid",
           "outcome": "fixed",
           "commit": "abc1234",
-          "skipReason": null
+          "skipReason": null,
+          "outOfDiff": null
         }
       ],
       "commits": ["abc1234"]
@@ -211,20 +212,22 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 }
 ```
 
-- `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`.
+- `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `skipped` or `none`. `claudeSeverity` is `null` for an entry promoted from "Noticed". `outOfDiff` is `null`, or the files outside the PR's diff that the fix touched and why.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
 - `cli`: the versions step 1.6 resolved (`null` for one not resolved).
 - `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (stopped before step 1.7).
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
-- `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity.
+- `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity. Blockers and should-fix items among them also appear as that round's entries.
 - `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), `red`, or `not-run` (the run stopped before step 6).
 - `status`:
-  - `clean`: the last round was clean, CI passed (`ci.status` is `green` or `fixed`), and `noticed` has no `blocker` or `should-fix`.
+  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included) and CI passed (`ci.status` is `green` or `fixed`).
   - `capped`: still had valid blockers or should-fix items after round 3.
   - `stalled`: a repeat or an oscillation was found. Nothing was edited in that round.
-  - `stopped`: a fix needed files outside the PR's diff without a reason, a valid blocker or should-fix was skipped, or the validator noticed a blocker or should-fix that Claude's review missed (`stopReason`: `validator noticed: <path:line — claim>`).
+  - `stopped`: a valid blocker or should-fix was skipped because its fix couldn't be made to pass (`stopReason`: `skipped: <path:line — claim — why>`), or step 1.7 couldn't merge `main` (another session's uncommitted files, or `merge tool unavailable`).
   - `ci-red`: CI still failed after 3 fix attempts.
   - `error`: no PR, Claude or Codex #1 failed, or a `git status` check found unexpected changes.
 - If a `Result file` was given, also write the same JSON object to that path. Write only the object, without the fence.
+
+Then, in `<main-checkout>/.plans/README.md`, set the **PR review** cell of every row whose Evidence names the PR's branch or `#<N>` (the original task row and this `pr<N>-review-fixes` row) to `<status> <roundCount>/3 · CI <ci.status> · <short headSha> · <YYYY-MM-DD>` (for example `clean 2/3 · CI green · d0c7322 · 2026-10-05`). Add the `pr<N>-review-fixes` row if it's missing. Change no other cell; the caller owns Status and Next step.
 
 Leave this invocation's `<scratch>` in place. `$merge-pr` deletes the entire `pr<N>-review-fixes/` root, including all invocation folders, with `pnpm plans:clean` after the PR merges. Never delete it with shell commands: Codex rejects recursive deletes as "blocked by policy".
