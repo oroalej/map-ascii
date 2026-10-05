@@ -1006,6 +1006,199 @@ describe('packLife people', () => {
     ...over,
   });
 
+  it('places complete second-ring figures with original bytes, members, speech and clock cells', () => {
+    const [g, agent] = person(1, 0, 3, {
+      lng: 20,
+      lat: 15,
+      ahead: [21, 15],
+      people: [look(), look({ lateral: 2, paint: 3 })],
+      candle: true,
+      effectClock: 12,
+      speech: { id: 'second-ring', exchangeId: 'second-ring', line: 0, member: 1 },
+    });
+    const out = new Uint8Array(g.cols * g.rows * 4),
+      plain = out.slice(),
+      owners = new Uint32Array(g.cols * g.rows),
+      members = new Uint8Array(owners.length),
+      points = new Map<number, [number, number]>(),
+      clocks: number[] = [];
+    const allowsGroundCell = (_agent: VisibleAgent, col: number) => col === 17 || col === 18;
+    let retries = 0;
+    expect(
+      packLife(
+        out,
+        { ...g, allowsGroundCell, speakers: { members, points } },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        {
+          owners,
+          clockCells: clocks,
+          focus: new Set(['people']),
+          groupRetry: (result) => {
+            retries++;
+            expect(result.offsets).toEqual([
+              [-2, 0],
+              [-2, 0],
+            ]);
+          },
+        },
+      ),
+    ).toBe(2);
+    expect(
+      packLife(
+        plain,
+        { ...g, allowsGroundCell },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { focus: new Set(['people']) },
+      ),
+    ).toBe(2);
+    expect(plain).toEqual(out);
+    expect(retries).toBe(1);
+    expect([...members].filter((m) => m === 1)).toHaveLength(4);
+    expect([...members].filter((m) => m === 2)).toHaveLength(4);
+    expect([...owners].filter(Boolean)).toHaveLength(8);
+    expect(new Set(clocks)).toEqual(
+      new Set([...owners.entries()].filter(([, owner]) => owner).map(([at]) => at)),
+    );
+    expect(points.get(1)).toEqual([18, 19]);
+    for (let i = 0; i < owners.length; i++)
+      if (owners[i]) {
+        expect(out[i * 4 + 2]! & LIFE_FOCUS_BIT).toBe(LIFE_FOCUS_BIT);
+        expect(i % g.cols === 17 || i % g.cols === 18).toBe(true);
+        expect(out[i * 4 + 3]).toBe(
+          personByte(members[i] === 1 ? Paint.red : 3, PersonPart.figure, true),
+        );
+        const cls = unpackGlyph(out[i * 4]!, out[i * 4 + 1]!).cls,
+          bits = out[i * 4 + 2]!;
+        for (const surface of ['building', 'water_area', 'tree_crown'] as const)
+          expect(
+            lifeVisibleOnSurface(
+              cls,
+              bits,
+              classId(surface),
+              classId(surface),
+              surface === 'building' ? 5 : 0,
+            ),
+          ).toBe(false);
+        expect(lifeVisibleOnSurface(cls, bits, classId('paving'), classId('paving'), 0)).toBe(true);
+      }
+  });
+
+  it('assigns a complete coherent group when no common second-ring translation fits', () => {
+    const [g, agent] = person(1, 0, 0.2, { people: [look(), look({ lateral: 2, paint: 3 })] });
+    const out = new Uint8Array(g.cols * g.rows * 4),
+      owners = new Uint32Array(g.cols * g.rows),
+      members = new Uint8Array(owners.length);
+    const permits = (_agent: VisibleAgent, c: number, r: number) =>
+      (c === 22 && r === 15) || (c === 21 && r === 17);
+    expect(
+      packLife(
+        out,
+        { ...g, allowsGroundCell: permits, speakers: { members, points: new Map() } },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(2);
+    expect(members[15 * g.cols + 22]).toBe(1);
+    expect(members[17 * g.cols + 21]).toBe(2);
+    expect([...owners].filter(Boolean)).toHaveLength(2);
+  });
+
+  it('preserves a first-ring member assignment without entering the new tier', () => {
+    const [g, agent] = person(1, 0, 0.2, { people: [look(), look({ lateral: 0.2 })] });
+    const out = new Uint8Array(g.cols * g.rows * 4);
+    let work = 0;
+    expect(
+      packLife(out, g, [agent], themes.dark, glyphIndex, null, undefined, {
+        groupRetry: () => work++,
+      }),
+    ).toBe(2);
+    expect(work).toBe(0);
+  });
+
+  it('retains packing order and preserves earlier owners when the complete group cannot fit', () => {
+    const [g, group] = person(1, 0, 0.2, { people: [look(), look({ lateral: 2 })] });
+    const lone = { ...group, lng: 30, people: [look({ paint: 4 })] };
+    const permits = (_agent: VisibleAgent, c: number, r: number) =>
+      (c === 22 && r === 15) || (c === 21 && r === 17);
+    const out = new Uint8Array(g.cols * g.rows * 4),
+      owners = new Uint32Array(g.cols * g.rows),
+      outcomes = new Uint8Array(2),
+      isolated = out.slice();
+    expect(
+      packLife(
+        out,
+        { ...g, allowsGroundCell: permits, outcomes },
+        [group, lone],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(2);
+    expect([...outcomes]).toEqual([PackingOutcome.drawn, PackingOutcome.collision]);
+    expect([...owners].filter(Boolean)).toEqual([1, 1]);
+    expect(
+      packLife(isolated, { ...g, allowsGroundCell: permits }, [lone], themes.dark, glyphIndex),
+    ).toBe(1);
+    expect(
+      packLife(
+        out,
+        { ...g, allowsGroundCell: permits, outcomes },
+        [lone, group],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(1);
+    expect(out).toEqual(isolated);
+    expect([...owners].filter(Boolean)).toEqual([1]);
+    expect(outcomes[0]).toBe(PackingOutcome.drawn);
+    expect(outcomes[1]).not.toBe(PackingOutcome.drawn);
+  });
+
+  it('keeps lone, stationary, detailed and oversized people at their existing retry bounds', () => {
+    for (const [scale, extra] of [
+      [0.2, { people: [look()] }],
+      [0.2, { people: [look(), look({ lateral: 2 })], parked: true }],
+      [0.2, { people: [look(), look({ lateral: 2 })], aboard: true }],
+      [0.2, { people: [look({ figure: 'seated' }), look({ lateral: 2 })] }],
+      [6, { people: [look(), look({ lateral: 2 })] }],
+      [0.2, { people: Array.from({ length: 5 }, (_, lateral) => look({ lateral })) }],
+    ] as const) {
+      const [g, agent] = person(1, 0, scale, { ...extra, people: [...extra.people] });
+      const out = new Uint8Array(g.cols * g.rows * 4);
+      let work = 0;
+      packLife(
+        out,
+        { ...g, allowsGroundCell: () => false },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { groupRetry: () => work++ },
+      );
+      expect(work).toBe(0);
+      // Boats preserve their existing permissions and do not use a ground journal.
+      if (!agent.aboard) expect(out.every((byte) => byte === 0)).toBe(true);
+    }
+  });
+
   it('packs fractional rotated slots as complete integer member rasters with metadata parity', () => {
     for (const people of [
       [

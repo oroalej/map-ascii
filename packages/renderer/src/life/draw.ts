@@ -34,6 +34,7 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
+import { placeCoarseGroup, type GroupPlacement } from './group-placement';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -128,6 +129,8 @@ let drawingClockCells: number[] | undefined;
 let clockCells: number[] | undefined;
 
 export type LifePackMetadata = {
+  /** Observe only the new rejection tier; never used to select a placement. */
+  groupRetry?: (result: GroupPlacement) => void;
   owners?: Uint32Array;
   focus?: ReadonlySet<LifeFocus>;
   /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
@@ -404,7 +407,39 @@ export function packLife(
               });
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn += members.length;
+              placed = true;
             }
+          }
+          if (!placed && eligible && journal.members && journal.members.length >= 2) {
+            const members = journal.members;
+            const result = placeCoarseGroup(
+              members,
+              grid,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
+            );
+            if (result.offsets) {
+              members.forEach((member, i) => {
+                const [dx, dy] = result.offsets![i]!;
+                for (const { col, row, bytes } of member.cells) {
+                  const cell = (row + dy) * grid.cols + col + dx;
+                  out.set(bytes, cell * 4);
+                  groundCells[cell] = 1;
+                  if (drawingOwners) drawingOwners[cell] = drawingOwner;
+                  if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
+                  drawingClockCells?.push(cell);
+                }
+                if (member.point)
+                  drawingSpeakers?.points.set(drawingOwner, [
+                    member.point[0] + dx,
+                    member.point[1] + dy,
+                  ]);
+              });
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += members.length;
+            }
+            metadata.groupRetry?.(result);
           }
         } else {
           drawn += n;

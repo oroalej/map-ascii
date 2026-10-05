@@ -174,6 +174,17 @@ const cases: {
   clock: ReturnType<typeof cityTime>;
   sun: ReturnType<typeof solarPosition>;
   runtimeSeconds: number;
+  packingCpu?: {
+    medianMs: number;
+    p95Ms: number;
+    samples: number;
+    secondRingCalls: number;
+    secondRingPlacements: number;
+    exhausted: number;
+    rigidAttempts: number;
+    assignmentAttempts: number;
+    maxAssignmentAttempts: number;
+  };
   flickerSamples?: unknown[];
   report: ReturnType<workingDiagnostics.LifeDiagnostics['report']>;
   owners?: ReturnType<workingDiagnostics.LifeDiagnostics['longestStuck']>;
@@ -366,6 +377,28 @@ try {
             });
           else world.setProcessions(inputs.worldConfiguration.processions);
           const flickerSamples: unknown[] = [];
+          const packingTimes: number[] = [];
+          const packingWork = {
+            secondRingCalls: 0,
+            secondRingPlacements: 0,
+            exhausted: 0,
+            rigidAttempts: 0,
+            assignmentAttempts: 0,
+            maxAssignmentAttempts: 0,
+          };
+          let measuring = false;
+          const groupRetry: NonNullable<workingDraw.LifePackMetadata['groupRetry']> = (result) => {
+            if (!measuring) return;
+            packingWork.secondRingCalls++;
+            packingWork.secondRingPlacements += Number(!!result.offsets);
+            packingWork.exhausted += Number(result.exhausted);
+            packingWork.rigidAttempts += result.rigidAttempts;
+            packingWork.assignmentAttempts += result.assignmentAttempts;
+            packingWork.maxAssignmentAttempts = Math.max(
+              packingWork.maxAssignmentAttempts,
+              result.assignmentAttempts,
+            );
+          };
           let camera = { ...meta.defaultCamera, zoom };
           const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
           const cellMeters = metersPerCssPx(camera) * cell.width;
@@ -465,6 +498,8 @@ try {
             const outcomes = new Uint8Array(agents.length);
             const denials = new Uint8Array(agents.length);
             const cellGuard = world.groundCellGuard(placement.toCell);
+            measuring = frame >= warmup / dt;
+            const packingStart = performance.now();
             packLife(
               texels,
               {
@@ -482,7 +517,9 @@ try {
               glyphIndex,
               sun,
               lifeGlyphs,
+              { groupRetry },
             );
+            if (measuring) packingTimes.push(performance.now() - packingStart);
             classifyTerminalStops(world, diagnostics);
             if (frame >= warmup / dt && flickerSamples.length < 100) {
               // Read-only examples supplement the common observer's counters. They
@@ -548,6 +585,7 @@ try {
                 `${key}: ${(frame + 1) / 30}s simulated, ${((performance.now() - caseStart) / 1000).toFixed(1)}s elapsed`,
               );
           }
+          packingTimes.sort((a, b) => a - b);
           cases.push({
             key,
             zoom,
@@ -560,6 +598,12 @@ try {
             clock,
             sun,
             runtimeSeconds: (performance.now() - caseStart) / 1000,
+            packingCpu: {
+              medianMs: packingTimes[Math.floor(packingTimes.length * 0.5)] ?? 0,
+              p95Ms: packingTimes[Math.floor(packingTimes.length * 0.95)] ?? 0,
+              samples: packingTimes.length,
+              ...packingWork,
+            },
             flickerSamples,
             report: diagnostics.report(),
             owners: diagnostics.longestStuck(50, (owner) =>
