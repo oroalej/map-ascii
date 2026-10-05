@@ -240,13 +240,23 @@ export class Occupancy {
       neighbors.clear();
     }
   }
-  /** Diagnostic-only first blocker, with the same exclusions as conflicts. */
-  firstConflict(owner: object, bodies: readonly Body[], ignore?: object): object | undefined {
+  /** Reject-only first blocker, with the same exclusions and optional physical projection. */
+  firstConflict(
+    owner: object,
+    bodies: readonly Body[],
+    ignore?: object,
+    project?: (owner: object, body: Body, index: number) => Body,
+  ): object | undefined {
     for (const a of bodies)
       for (const key of this.keys(a))
         for (const other of this.bins.get(key) ?? []) {
           if (other === owner || other === ignore) continue;
-          if (this.entries.get(other)!.bodies.some((b) => bodiesOverlap(a, b))) return other;
+          if (
+            this.entries
+              .get(other)!
+              .bodies.some((b, i) => bodiesOverlap(a, project ? project(other, b, i) : b))
+          )
+            return other;
         }
     return undefined;
   }

@@ -5,7 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCityPacks } from '@atlas/content';
-import { CityMeta, dialogueChoices, runtimeDialogueCatalog } from '@atlas/shared';
+import { activeSeason, CityMeta, dialogueChoices, runtimeDialogueCatalog } from '@atlas/shared';
 import * as workingCamera from '../src/camera';
 import * as workingDensity from '../src/density';
 import * as workingGrid from '../src/grid';
@@ -28,6 +28,8 @@ import * as workingGeometry from '../src/raster/geometry';
 import { decodeLifeTiles, openArchive } from './archive';
 import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
 import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
+import { simulationSeasons } from '../src/life/seasonal-simulation';
+import { configureLifeWorld } from '../src/life/worker-api';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
@@ -132,6 +134,13 @@ const inputs = {
   config: hash(JSON.stringify(config)),
   dialogue: hash(JSON.stringify(runtime ?? null)),
   date: '2026-10-04',
+  worldConfiguration: {
+    version: 1,
+    shopSchedule: config.life?.schedules?.shops ?? null,
+    seasons: simulationSeasons(config.life?.seasons),
+    seasonSelection: 'auto at the pinned local date',
+    processions: config.processions ?? [],
+  },
   size,
   dt,
   warmup,
@@ -180,6 +189,8 @@ async function save(complete: boolean) {
     expectedCases,
     selectedCases,
     measurementVersion: MEASUREMENT_VERSION,
+    configurationAdapter:
+      typeof LifeWorld.prototype.setShopSchedule === 'function' ? 'installed-v1' : 'legacy-step-v1',
     observerHash,
     probe: !!probe,
     inputHash: hash(JSON.stringify(inputs)),
@@ -322,6 +333,13 @@ try {
             dialogue: runtime && dialogueChoices(runtime),
             periods: runtime?.periods,
           });
+          if (typeof world.setShopSchedule === 'function')
+            configureLifeWorld(world, {
+              shopSchedule: inputs.worldConfiguration.shopSchedule ?? undefined,
+              seasons: inputs.worldConfiguration.seasons,
+              processions: inputs.worldConfiguration.processions,
+            });
+          else world.setProcessions(inputs.worldConfiguration.processions);
           const flickerSamples: unknown[] = [];
           let camera = { ...meta.defaultCamera, zoom };
           const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
@@ -344,6 +362,11 @@ try {
           const zone = { timezone: config.timezone, lng: camera.lng };
           const date = atCityMinutes(new Date('2026-10-04T12:00:00Z'), zone, minutes);
           const clock = cityTime(date, zone);
+          const season = activeSeason(config.life?.seasons, clock.year, clock.day)?.id ?? null;
+          if (season && typeof world.setSeasons !== 'function')
+            throw new Error(
+              'Legacy PRE cannot reproduce an active seasonal calendar; use an observability-only PRE from current main',
+            );
           const sun = solarPosition(date, camera.lng, camera.lat);
           const levels = activityLevels(daylight(sun.altitude), {
             minutes,
@@ -408,7 +431,7 @@ try {
               zoom,
               bounds,
               undefined,
-              { rain: 0, minutes, cityLife: config.life },
+              { rain: 0, minutes, cityLife: config.life, season },
               cellMeters,
               cell.height / cell.width,
             );
@@ -416,6 +439,7 @@ try {
             const placement = placeGrid({ camera, ...size, dpr: 1 }, cellDev, cols, rows);
             const outcomes = new Uint8Array(agents.length);
             const denials = new Uint8Array(agents.length);
+            const cellGuard = world.groundCellGuard(placement.toCell);
             packLife(
               texels,
               {
@@ -424,7 +448,7 @@ try {
                 cellWidth: cell.width,
                 cellHeight: cell.height,
                 toCell: placement.toCell,
-                allowsGroundCell: world.groundCellGuard(placement.toCell),
+                allowsGroundCell: cellGuard,
                 outcomes,
                 denials,
               },
@@ -477,6 +501,18 @@ try {
                     cell: placement.toCell(agent.lng, agent.lat),
                   },
                   details: describeOwner(world, owner, cellMeters),
+                  allowedNeighbors:
+                    cellGuard &&
+                    Array.from({ length: 9 }, (_, index) => {
+                      const [col, row] = placement.toCell(agent.lng, agent.lat);
+                      const dx = (index % 3) - 1,
+                        dy = Math.floor(index / 3) - 1;
+                      return {
+                        dx,
+                        dy,
+                        allowed: cellGuard(agent, Math.floor(col) + dx, Math.floor(row) + dy),
+                      };
+                    }),
                 });
                 if (flickerSamples.length >= 100) break;
               }

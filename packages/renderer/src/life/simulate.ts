@@ -158,7 +158,12 @@ export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
-type GroundGuard = (owner: GroundAgent, before?: GroundAgent, reserve?: boolean) => boolean;
+type GroundGuard = ((owner: GroundAgent, before?: GroundAgent, reserve?: boolean) => boolean) & {
+  contact?: (mover: Mover) => void;
+  yielding?: (mover: Mover) => Mover | undefined;
+  holding?: (mover: Mover) => boolean;
+  passing?: (mover: Mover) => boolean;
+};
 type SuppressedActors<T extends object> = {
   hidden: T[];
   order: WeakMap<T, number>;
@@ -205,6 +210,10 @@ export type WorldGroundGuard = ((
 ) => boolean) & {
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
+  contact(life: TileLife, mover: Mover): void;
+  yielding(mover: Mover): Mover | undefined;
+  holding(life: TileLife, mover: Mover): boolean;
+  passing(mover: Mover): boolean;
 };
 type SeamLimit = {
   room: number;
@@ -539,6 +548,16 @@ export class TileLife {
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
   private readonly recoveryProgress = new WeakMap<Mover, number>();
+  private readonly recoveryLeaders = new Map<number, Mover>();
+  private readonly blockedProgress = new WeakMap<
+    Mover,
+    { x: number; y: number; hx: number; hy: number }
+  >();
+  private readonly walkerRecoveryProgress = new WeakMap<Mover, number>();
+  private readonly recoveryApproaches = new WeakMap<
+    Mover,
+    { line: number; from: number; dir: 1 | -1; d: number; shift: number }
+  >();
   signals!: SignalControl;
   scenes!: LocalScenes;
   private readonly catRng: () => number;
@@ -707,6 +726,9 @@ export class TileLife {
     m.hy = preview.hy;
     m.speed = preview.speed;
     m.v = preview.v;
+    m.roadShift = preview.roadShift;
+    m.curveLengthM = preview.curveLengthM;
+    m.curveCorner = preview.curveCorner;
     m.next = preview.next;
     m.came = preview.came;
     m.entered = preview.entered;
@@ -723,6 +745,10 @@ export class TileLife {
     if (index >= 0) this.movers.splice(index, 1);
     this.scenes.release(m);
     this.localJunctions.release(m);
+    this.recoveryApproaches.delete(m);
+    this.blockedProgress.delete(m);
+    this.walkerRecoveryProgress.delete(m);
+    if (this.recoveryLeaders.get(m.line) === m) this.recoveryLeaders.delete(m.line);
   }
   /** Tile units per meter. */
   readonly perMeter: number;
@@ -3115,6 +3141,32 @@ export class TileLife {
       if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
       if (this.scenes.visits.has(m)) continue;
       env?.diagnostics?.eligible(m, m.kind);
+      if (
+        isWalker(m.kind) &&
+        this.scenes.yieldStep(
+          m,
+          dt,
+          guard,
+          (owner, target, distance) =>
+            this.signals.walkDistance(owner, target, distance, clock, env?.diagnostics),
+          pass?.owns,
+        )
+      )
+        continue;
+      const maneuver = m.vehicle && this.recoveryLeaders.get(m.line);
+      if (
+        maneuver &&
+        maneuver !== m &&
+        maneuver.dir !== m.dir &&
+        Math.hypot(m.x - maneuver.x, m.y - maneuver.y) <
+          ((VEHICLES[m.vehicle!].length + VEHICLES[maneuver.vehicle!].length) / 2 + 2) *
+            this.perMeter
+      ) {
+        // The opposed actor retains its route while the selected recovery makes
+        // room to rotate; advancing into the vacated retreat space would cancel it.
+        m.v = 0;
+        continue;
+      }
       let intentionalHold = false;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
@@ -3266,6 +3318,20 @@ export class TileLife {
         if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
       const distance = speeds[i]! * dt;
+      if (this.recoveryApproaches.has(m)) {
+        // Retain the selected retreat instead of returning to the blocked nose
+        // between attempts. Signal/service holds freeze it. A following cap
+        // limits forward travel, while this already selected retreat stays swept.
+        if (guard && m.speed > 0 && !intentionalHold) {
+          recoveredLines ??= new Set();
+          if (this.recoverVehicle(m, guard, table, recoveredLines, pass?.owns, dt)) {
+            pass?.recovered?.(m);
+            env?.diagnostics?.recovery(m, 'vehicle');
+          }
+        }
+        m.v = 0;
+        continue;
+      }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
       if (m.vehicle && (!guard || m.kind !== 'vehicle')) {
         m.v = this.advance(m, distance) / dt;
@@ -3290,6 +3356,7 @@ export class TileLife {
             this.roadTerrain.access.allows(this.groundBodies(next))));
       if (m.kind === 'vehicle' || walking) {
         let fits = fitsGround(m, before);
+        if (!fits && distance > 0) guard?.contact?.(m);
         const correctingCurve =
           m.curveLengthM !== undefined &&
           m.vehicle &&
@@ -3433,13 +3500,38 @@ export class TileLife {
           moved = 0;
         }
         const commanded = distance;
-        m.waiting =
-          !intentionalHold &&
-          commanded > 1e-8 * this.perMeter &&
-          Math.max(moved, curveForward) < commanded * 0.25
-            ? (before.waiting ?? 0) + dt
-            : 0;
-        if ((m.kind === 'person' || m.kind === 'dog') && m.waiting >= WALK.blockedTurnSeconds) {
+        if (!guard) {
+          m.waiting =
+            !intentionalHold &&
+            commanded > 1e-8 * this.perMeter &&
+            Math.max(moved, curveForward) < commanded * 0.25
+              ? (before.waiting ?? 0) + dt
+              : 0;
+        } else if (!intentionalHold && commanded > 1e-8 * this.perMeter) {
+          let progress = this.blockedProgress.get(m);
+          if (!progress && Math.max(moved, curveForward) < commanded * 0.25) {
+            const pose = this.pose(before, undefined, m);
+            progress = { x: pose.x, y: pose.y, hx: before.hx, hy: before.hy };
+            this.blockedProgress.set(m, progress);
+          }
+          const pose = progress && this.pose(m);
+          if (
+            progress &&
+            pose &&
+            (pose.x - progress.x) * progress.hx + (pose.y - progress.y) * progress.hy <
+              0.5 * this.perMeter
+          ) {
+            m.waiting = (before.waiting ?? 0) + dt;
+          } else {
+            m.waiting = 0;
+            this.blockedProgress.delete(m);
+          }
+        } else m.waiting = before.waiting ?? 0;
+        if (
+          (m.kind === 'person' || m.kind === 'dog') &&
+          m.waiting >= WALK.blockedTurnSeconds &&
+          !this.walkerRecoveryProgress.has(m)
+        ) {
           const snapshot = { ...m };
           const slots = m.group?.map((w) => ({ lateral: w.lateral, back: w.back }));
           const guardBefore = m.group
@@ -3478,7 +3570,9 @@ export class TileLife {
             recovered = fitsGround(m, guardBefore);
           }
           if (recovered) {
-            m.waiting = 0;
+            this.walkerRecoveryProgress.set(m, 0);
+            const pose = this.pose(m);
+            this.blockedProgress.set(m, { x: pose.x, y: pose.y, hx: m.hx, hy: m.hy });
             env?.diagnostics?.recovery(m, 'walker');
           } else {
             restoreMover(m, snapshot);
@@ -3489,9 +3583,14 @@ export class TileLife {
           m.pause = CAT.blockedPause;
           this.turnBack(m);
         }
-        if (m.kind === 'vehicle' && m.waiting >= JUNCTION.giveUp) {
+        if (
+          m.kind === 'vehicle' &&
+          m.waiting >= JUNCTION.giveUp &&
+          !intentionalHold &&
+          distance > 1e-8 * this.perMeter
+        ) {
           recoveredLines ??= new Set();
-          if (this.recoverVehicle(m, fitsGround, table, recoveredLines, pass?.owns)) {
+          if (this.recoverVehicle(m, fitsGround, table, recoveredLines, pass?.owns, dt)) {
             moved = 0;
             curveForward = 0;
             pass?.recovered?.(m);
@@ -3500,6 +3599,12 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = Math.max(0, moved, curveForward) / dt;
+      const walkingRecovery = this.walkerRecoveryProgress.get(m);
+      if (walkingRecovery !== undefined && moved > 0) {
+        const travel = walkingRecovery + moved / this.perMeter;
+        if (travel >= 0.5) this.walkerRecoveryProgress.delete(m);
+        else this.walkerRecoveryProgress.set(m, travel);
+      }
       const recoveryProgress = this.recoveryProgress.get(m);
       if (recoveryProgress !== undefined && moved > 0) {
         const travel = recoveryProgress + moved / this.perMeter;
@@ -3524,12 +3629,14 @@ export class TileLife {
     table: JunctionTable,
     lines: Set<number>,
     owns?: (p: { x: number; y: number }) => boolean,
+    dt = 1 / 30,
   ): boolean {
     if (
       m.kind !== 'vehicle' ||
       !m.vehicle ||
       this.geo.oneway?.[m.line] ||
-      lines.has(m.line) ||
+      (lines.has(m.line) && !this.recoveryApproaches.has(m)) ||
+      (this.recoveryLeaders.has(m.line) && this.recoveryLeaders.get(m.line) !== m) ||
       this.recoveryProgress.has(m)
     )
       return false;
@@ -3546,44 +3653,113 @@ export class TileLife {
     )
       return false;
     const before = { ...m };
-    const sourceOwned = () =>
+    const sourceOwned = (previous = m) =>
       inTile(m) &&
       (!owns || owns(m)) &&
-      this.groundBodies(m).every((b) => {
+      this.groundBodies(m).every((b, index) => {
+        const old = this.groundBodies(previous)[index]!;
         const p = { x: b.x * this.perMeter, y: b.y * this.perMeter };
-        return inTile(p) && (!owns || owns(p));
+        const radius = (Math.hypot(b.length, b.width) * this.perMeter) / 2;
+        return (
+          inTile(p) &&
+          (!owns || owns(p)) &&
+          !this.junctionIndex.junctions.some(
+            (j) =>
+              Math.min(old.x * this.perMeter, p.x) - radius <= j.x + j.radius &&
+              Math.max(old.x * this.perMeter, p.x) + radius >= j.x - j.radius &&
+              Math.min(old.y * this.perMeter, p.y) - radius <= j.y + j.radius &&
+              Math.max(old.y * this.perMeter, p.y) + radius >= j.y - j.radius,
+          )
+        );
       });
-    let accepted = false;
-    // Bumpers may be only the normal following gap apart. A bounded retreat gives
-    // the rotating footprint room, checked with the same swept guard as every move.
-    for (const retreat of [0, 0.5, 1, 2]) {
-      restoreMover(m, before);
-      if (retreat * this.perMeter > m.d) continue;
-      m.d -= retreat * this.perMeter;
-      this.advance(m, 0, false);
-      if (retreat > 0 && (!sourceOwned() || !guard(m, before, false))) continue;
-      const retreated = { ...m };
+    const reverse = () => {
       this.turnBack(m);
       delete m.next;
       delete m.came;
+      delete m.entered;
       delete m.junctionRoute;
       if (m.routing) m.routing = { seed: m.routing.seed, turns: m.routing.turns };
       this.advance(m, 0, false);
-      if (sourceOwned() && guard(m, retreated)) {
-        accepted = true;
-        break;
-      }
+    };
+    let candidate = this.recoveryApproaches.get(m);
+    if (
+      candidate &&
+      (candidate.line !== m.line || candidate.from !== m.from || candidate.dir !== m.dir)
+    ) {
+      this.recoveryApproaches.delete(m);
+      if (this.recoveryLeaders.get(candidate.line) === m)
+        this.recoveryLeaders.delete(candidate.line);
+      return false;
     }
-    if (!accepted) {
+    if (!candidate) {
+      // Reject-only whole-corridor inspection, including usable departure space.
+      // The actual translation is executed in subsequent speed-bounded steps.
+      for (const retreat of [0, 0.5, 1, 2]) {
+        for (const shift of [...new Set([before.roadShift ?? 0, 0])]) {
+          restoreMover(m, before);
+          if (retreat * this.perMeter > m.d) continue;
+          m.d -= retreat * this.perMeter;
+          m.roadShift = shift;
+          this.advance(m, 0, false);
+          if (!sourceOwned(before) || !guard(m, before, false)) continue;
+          const approach = { ...m };
+          reverse();
+          if (!sourceOwned(approach) || !guard(m, approach, false)) continue;
+          const reversed = { ...m };
+          const departure = VEHICLES[m.vehicle!].length * this.perMeter;
+          if (this.segment(m.from, m.from + m.dir) - m.d < departure) continue;
+          this.advance(m, departure, false);
+          if (!sourceOwned(reversed) || !guard(m, reversed, false)) continue;
+          candidate = {
+            line: before.line,
+            from: before.from,
+            dir: before.dir,
+            d: approach.d,
+            shift,
+          };
+          break;
+        }
+        if (candidate) break;
+      }
+      restoreMover(m, before);
+      if (!candidate) return false;
+      this.recoveryApproaches.set(m, candidate);
+      this.recoveryLeaders.set(m.line, m);
+    }
+    lines.add(m.line);
+    const dx = (candidate.d - m.d) / this.perMeter,
+      dy = candidate.shift - (m.roadShift ?? 0);
+    const distance = Math.hypot(dx, dy);
+    const share = distance
+      ? Math.min(1, (dt * Math.min(0.6, m.speed / this.perMeter)) / distance)
+      : 1;
+    m.d += dx * this.perMeter * share;
+    m.roadShift = (m.roadShift ?? 0) + dy * share;
+    this.advance(m, 0, false);
+    if (!sourceOwned(before) || !guard(m, before, false)) {
       restoreMover(m, before);
       return false;
     }
+    if (share < 1) {
+      guard(m, m);
+      return false;
+    }
+    const approached = { ...m };
+    reverse();
+    if (!sourceOwned(approached) || !guard(m, approached)) {
+      restoreMover(m, before);
+      return false;
+    }
+    this.recoveryApproaches.delete(m);
+    this.recoveryLeaders.delete(m.line);
     table.release(m);
     lines.add(m.line);
     m.v = 0;
-    m.waiting = 0;
+    m.waiting = before.waiting ?? 0;
     // Rearm only after sustained accepted travel clears the previous vehicle footprint.
     this.recoveryProgress.set(m, 0);
+    const pose = this.pose(m);
+    this.blockedProgress.set(m, { x: pose.x, y: pose.y, hx: m.hx, hy: m.hy });
     return true;
   }
 
@@ -4149,6 +4325,18 @@ export class LifeWorld {
   private birthCursor = 0;
   private birthCredit = 0;
   private readonly junctions = new JunctionTable();
+  private readonly reciprocalBlockers = new WeakMap<Mover, { other: Mover; at: number }>();
+  private readonly passingActors = new WeakMap<Mover, Mover>();
+  private readonly yieldingActors = new WeakMap<
+    Mover,
+    {
+      priority: Mover;
+      tile: TileId;
+      x: number;
+      y: number;
+      clearance: number;
+    }
+  >();
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
@@ -5230,7 +5418,117 @@ export class LifeWorld {
       reservations.set(identity, reserved);
       occupied.set(identity, [...occupied.bodies(identity), ...reserved]);
     };
-    if (!this.profiler) return Object.assign(check, { remove, reserveSeam });
+    const contact = (life: TileLife, m: Mover) => {
+      if (this.inspection?.owner === m || m.speed <= 0) return;
+      const physical = life.groundBodies(m).map((b) => toRef(origin(life), b));
+      const blocker = occupied.firstConflict(m, physical, undefined, physicalShape);
+      if (!blocker || !('kind' in blocker) || !('speed' in blocker)) return;
+      const other = blocker as Mover,
+        otherLife = owners.get(other);
+      if (!otherLife || this.inspection?.owner === other || other.speed <= 0 || other.pause > 0)
+        return;
+      const visiting = otherLife.scenes.visits.get(other);
+      if (visiting && visiting.state !== 'approach' && visiting.state !== 'return') return;
+      const ownVisit = life.scenes.visits.get(m);
+      if (ownVisit && ownVisit.state !== 'approach' && ownVisit.state !== 'return') return;
+      if (otherLife.scenes.held(other) || life.scenes.held(m)) return;
+      this.reciprocalBlockers.set(m, { other, at: this.clock });
+      const reciprocal = this.reciprocalBlockers.get(other);
+      if (
+        reciprocal?.other !== m ||
+        this.clock - reciprocal.at > 0.25 ||
+        this.yieldingActors.has(m) ||
+        this.yieldingActors.has(other)
+      )
+        return;
+      const age = (owner: Mover, tile: TileLife) =>
+        Math.max(owner.waiting ?? 0, tile.scenes.visits.get(owner)?.blocked ?? 0);
+      const key = (owner: Mover, tile: TileLife) =>
+        `${tile.tile.z}/${tile.tile.x}/${tile.tile.y}/${String(tile.movers.indexOf(owner)).padStart(5, '0')}`;
+      const first =
+        Number(this.junctions.granted(m)) - Number(this.junctions.granted(other)) ||
+        age(m, life) - age(other, otherLife) ||
+        -key(m, life).localeCompare(key(other, otherLife));
+      const priority = first >= 0 ? m : other,
+        yielder = first >= 0 ? other : m;
+      // A road vehicle retains its committed route; a walker searches a holding
+      // corridor. Two vehicles retain their existing checked recovery controller.
+      if (!isWalker(yielder.kind)) return;
+      const priorityLife = first >= 0 ? life : otherLife;
+      const radius = (actor: Mover, tile: TileLife) => {
+        const pose = tile.pose(actor);
+        return Math.max(
+          ...tile
+            .groundBodies(actor)
+            .map(
+              (body) =>
+                Math.hypot(body.x - pose.x / tile.perMeter, body.y - pose.y / tile.perMeter) +
+                Math.hypot(body.length, body.width) / 2,
+            ),
+        );
+      };
+      const point = priorityLife.pose(priority);
+      this.yieldingActors.set(yielder, {
+        priority,
+        tile: priorityLife.tile,
+        x: point.x,
+        y: point.y,
+        clearance: 2 * (radius(m, life) + radius(other, otherLife)) + 0.5,
+      });
+      this.passingActors.set(priority, yielder);
+    };
+    const yielding = (m: Mover) => {
+      const decision = this.yieldingActors.get(m);
+      if (!decision) return;
+      const life = owners.get(decision.priority);
+      if (!life) {
+        this.yieldingActors.delete(m);
+        return;
+      }
+      const point = life.pose(decision.priority),
+        frame = frameBetween(life.tile, decision.tile);
+      const pm = 1 / metersPerUnit(decision.tile);
+      if (
+        Math.hypot(
+          frame.x + point.x * frame.scale - decision.x,
+          frame.y + point.y * frame.scale - decision.y,
+        ) >
+        decision.clearance * pm
+      ) {
+        this.yieldingActors.delete(m);
+        return;
+      }
+      return decision.priority;
+    };
+    const holding = (life: TileLife, m: Mover) => {
+      const decision = this.yieldingActors.get(m);
+      const priorityLife = decision && owners.get(decision.priority);
+      if (!decision || !priorityLife) return true;
+      const waiting = life.groundBodies(m).map((body) => toRef(origin(life), body));
+      const moving = priorityLife
+        .groundBodies(decision.priority)
+        .map((body) => toRef(origin(priorityLife), body));
+      const direction = priorityLife.scenes.travelHeading(decision.priority, true);
+      // Check the complete priority footprint through the holding actor's region.
+      // This is a reject-only geometric trial, never a future reservation.
+      for (let travel = 0; travel <= decision.clearance; travel += 0.2) {
+        for (const body of moving) {
+          const sample = {
+            ...body,
+            x: body.x + direction.hx * travel,
+            y: body.y + direction.hy * travel,
+          };
+          if (waiting.some((other) => bodiesOverlap(sample, other))) return false;
+        }
+      }
+      return true;
+    };
+    const passing = (m: Mover) => {
+      const other = this.passingActors.get(m);
+      return !!other && yielding(other) === m;
+    };
+    if (!this.profiler)
+      return Object.assign(check, { remove, reserveSeam, contact, yielding, holding, passing });
     return Object.assign(
       (...args: Parameters<typeof check>) => {
         const start = this.profiler!.time();
@@ -5241,7 +5539,7 @@ export class LifeWorld {
           this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
         }
       },
-      { remove, reserveSeam },
+      { remove, reserveSeam, contact, yielding, holding, passing },
     );
   }
 
@@ -5480,7 +5778,16 @@ export class LifeWorld {
         shows,
         near,
         env,
-        (owner, before, reserve) => guard(tile, owner, before, undefined, reserve),
+        Object.assign(
+          (owner: GroundAgent, before?: GroundAgent, reserve?: boolean) =>
+            guard(tile, owner, before, undefined, reserve),
+          {
+            contact: (mover: Mover) => guard.contact(tile, mover),
+            holding: (mover: Mover) => guard.holding(tile, mover),
+            passing: (mover: Mover) => guard.passing(mover),
+            yielding: guard.yielding,
+          },
+        ),
         {
           junctions: this.junctions,
           trains,

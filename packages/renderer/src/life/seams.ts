@@ -29,9 +29,10 @@ export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], r
     if (from === end) {
       const exit = life.seamExit(m, line, dir);
       if (exit === undefined) break;
+      const target = life.directedExit(exit, from);
       line = exit >> 1;
       dir = exit & 1 ? -1 : 1;
-      from = dir === 1 ? starts[line]! : starts[line + 1]! - 1;
+      from = target.vertex;
       distance = 0;
       x = coords[from * 2]!;
       y = coords[from * 2 + 1]!;

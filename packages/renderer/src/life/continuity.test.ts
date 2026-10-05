@@ -239,6 +239,93 @@ describe('cross-zoom continuity', () => {
 });
 
 describe('transactional adoption', () => {
+  it('remaps a quantized curve and linked exits by identity before adopting their local frame', () => {
+    const sourceTile = { z: 16, x: 55192, y: 30266 };
+    const targetTile = { ...sourceTile, x: sourceTile.x + 1 };
+    const a = new LifeBuilder(),
+      b = new LifeBuilder();
+    a.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4200, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      8,
+      77,
+    );
+    a.line(
+      [
+        { x: 4200, y: 2000 },
+        { x: 4200, y: 3000 },
+      ],
+      LifeLine.roadMajor,
+      8,
+      88,
+      1,
+    );
+    b.line(
+      [
+        { x: 1000, y: 500 },
+        { x: 1500, y: 500 },
+      ],
+      LifeLine.roadMinor,
+      6,
+      99,
+    );
+    b.line(
+      [
+        { x: -4096, y: 2000.2 },
+        { x: 104.4, y: 2000.2 },
+      ],
+      LifeLine.roadMajor,
+      8,
+      77,
+    );
+    b.line(
+      [
+        { x: 104.4, y: 2000.2 },
+        { x: 104.4, y: 3000 },
+      ],
+      LifeLine.roadMajor,
+      8,
+      88,
+      1,
+    );
+    const source = new TileLife(sourceTile, a.finish(), 1),
+      target = new TileLife(targetTile, b.finish(), 2);
+    source.movers.length = target.movers.length = 0;
+    const m = continuityMover(source, 4090);
+    m.d = 4090;
+    m.curveLengthM = 2;
+    m.curveCorner = { x: 4200, y: 2000 };
+    m.roadShift = 0.2;
+    m.waiting = 17;
+    m.junctionRoute = { key: 'retained-world-zone', exits: [2] };
+    m.routing = {
+      seed: 10,
+      turns: 7,
+      indicating: true,
+      plan: { line: 0, dir: 1, vertex: 1, exit: 2, target: source.directedExit(2, 1), radius: 4 },
+    };
+    source.movers.push(m);
+    const before = structuredClone(m);
+    const preview = target.projectFrom(m, source)!;
+    expect(preview.curveCorner).toEqual({ x: target.geo.coords[6]!, y: target.geo.coords[7]! });
+    expect(preview.junctionRoute).toEqual({ key: 'retained-world-zone', exits: [4] });
+    expect(preview.routing?.plan?.target).toEqual(target.directedExit(4, 3));
+    expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+    expect(m).toEqual(before);
+    expect(source.movers).toContain(m);
+    expect(target.adoptFrom(m, source)).toBe(true);
+    expect(m.curveCorner).toEqual(preview.curveCorner);
+    expect(m.curveLengthM).toBe(2);
+    expect(m.roadShift).toBe(0.2);
+    expect(m.junctionRoute).toEqual(preview.junctionRoute);
+    expect(m.waiting).toBe(17);
+    expect(m.routing?.turns).toBe(7);
+    expect(source.movers).not.toContain(m);
+    expect(target.movers).toContain(m);
+  });
   it('hands a split road vehicle across a tile seam onto the matching way piece', () => {
     const entries = [left, right].map((tile) => {
       const b = new LifeBuilder();

@@ -51,6 +51,8 @@ export type Visit = {
   seat: number;
   sheltering: boolean;
   blocked: number;
+  retryAt?: number;
+  progress?: { x: number; y: number; hx: number; hy: number };
   /** Preferred side for checked detours; independent of the ordinary route's avoidance. */
   sidestep?: 1 | -1;
   /** Keep an accepted bypass waypoint until reached, instead of aiming back at the blocker. */
@@ -73,7 +75,12 @@ type Service = {
   arriving: boolean;
   passenger?: Mover;
 };
-type MoveGuard = (mover: Mover, before: Mover) => boolean;
+type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) & {
+  contact?: (mover: Mover) => void;
+  yielding?: (mover: Mover) => Mover | undefined;
+  holding?: (mover: Mover) => boolean;
+  passing?: (mover: Mover) => boolean;
+};
 const dist = (a: WalkPoint, b: WalkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 /** How far `p` lies ahead of a mover along its heading (negative: behind it). */
 const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.hy;
@@ -101,6 +108,16 @@ export class LocalScenes {
   private readonly rng: () => number;
   private readonly cooldown = new Map<Mover, number>();
   private returnAfterInspection?: WeakSet<Mover>;
+  private readonly yielding = new WeakMap<
+    Mover,
+    {
+      anchor: Mover;
+      path: WalkPoint[];
+      next: number;
+      returning: boolean;
+    }
+  >();
+  private readonly yieldHeld = new WeakSet<Mover>();
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
   private scan = 0;
@@ -215,6 +232,8 @@ export class LocalScenes {
     this.visits.delete(m);
     this.cooldown.delete(m);
     this.stopCooldown.delete(m);
+    this.yielding.delete(m);
+    this.yieldHeld.delete(m);
   }
 
   private *attachRoad(site: Site, geo: LifeGeometry): Generator<void, void, void> {
@@ -300,7 +319,12 @@ export class LocalScenes {
     visit.path = [{ x: m.x, y: m.y }, ...visit.trail.slice().reverse()];
     visit.next = 1;
     visit.state = 'return';
-    visit.blocked = 0;
+    if (visit.blocked > 0) {
+      const target = visit.path[1]!,
+        d = dist(m, target);
+      if (d > 1e-8 * this.perMeter)
+        visit.progress = { x: m.x, y: m.y, hx: (target.x - m.x) / d, hy: (target.y - m.y) / d };
+    }
     visit.returnPending = false;
     delete visit.bypass;
     m.pause = 0;
@@ -355,11 +379,18 @@ export class LocalScenes {
     dt: number,
     guard?: MoveGuard,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
+    owns?: (p: WalkPoint) => boolean,
   ) {
+    if (guard?.passing?.(m)) this.clearBypass(m);
+    if (this.yieldStep(m, dt, guard, walkLimit, owns)) {
+      if (!this.yieldHeld.has(m)) visit.blocked += dt;
+      return false;
+    }
     const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
     let left = m.speed * dt;
+    let held = false;
     while (left > 0 && visit.next < visit.path.length) {
       const target = visit.path[visit.next]!;
       const d = dist(m, target);
@@ -372,12 +403,15 @@ export class LocalScenes {
       }
       const dx = (target.x - m.x) / d;
       const dy = (target.y - m.y) / d;
+      let step = Math.min(d, left);
+      if (isWalker(m.kind) && walkLimit) step = walkLimit(m, target, step);
+      if (step <= 0 && d > 0.001) {
+        held = true;
+        break;
+      }
       if (d > 0.001 && visit.bypass?.side !== target && visit.bypass?.retreat !== target) {
         faceGroup(m, (target.x - m.x) / d, (target.y - m.y) / d);
       }
-      let step = Math.min(d, left);
-      if (isWalker(m.kind) && walkLimit) step = walkLimit(m, target, step);
-      if (step <= 0 && d > 0.001) break;
       m.x += dx * step;
       m.y += dy * step;
       m.walked = (m.walked ?? 0) + step / this.perMeter;
@@ -393,6 +427,18 @@ export class LocalScenes {
     const changed =
       before && (m.x !== before.x || m.y !== before.y || m.hx !== before.hx || m.hy !== before.hy);
     if (changed && guard && !guard(m, before)) {
+      if (dist(before, m) > 1e-8 * this.perMeter) guard.contact?.(m);
+      if (!visit.progress) {
+        const target = visit.path[next]!,
+          length = dist(before, target);
+        if (length > 1e-8 * this.perMeter)
+          visit.progress = {
+            x: before.x,
+            y: before.y,
+            hx: (target.x - before.x) / length,
+            hy: (target.y - before.y) / length,
+          };
+      }
       const trial = snapshotMover(m);
       const trialNext = visit.next;
       const addedTrail = visit.trail.slice(trailLength);
@@ -411,7 +457,7 @@ export class LocalScenes {
         if (guard(m, before)) {
           visit.next = trialNext;
           visit.trail.push(...addedTrail);
-          visit.blocked = 0;
+          this.blockedProgress(m, visit, dt);
           return visit.next >= visit.path.length;
         }
         restoreMover(m, before);
@@ -421,7 +467,7 @@ export class LocalScenes {
       // cursor and is checked through the production swept footprint guard.
       const dx = trial.x - before.x,
         dy = trial.y - before.y;
-      if (Math.hypot(dx, dy) > 1e-8 && !visit.bypass) {
+      if (Math.hypot(dx, dy) > 1e-8 && !visit.bypass && !guard.passing?.(m)) {
         const a = visit.path[Math.max(0, next - 1)]!,
           b = visit.path[next]!;
         const vx = b.x - a.x,
@@ -502,7 +548,7 @@ export class LocalScenes {
               };
               break;
             }
-            visit.blocked = forward > 1e-8 * this.perMeter ? 0 : visit.blocked + dt;
+            this.blockedProgress(m, visit, dt);
             if (visit.state !== 'return') visit.trail.push({ x: m.x, y: m.y });
             return false;
           }
@@ -512,30 +558,180 @@ export class LocalScenes {
       visit.blocked += dt;
       // Give an approaching group time to clear; abandoned visits release their queue slot.
       if (visit.blocked >= 8 && visit.state !== 'return') this.returning(m, visit);
-      else if (visit.blocked >= 16 && visit.state === 'return') {
+      else if (visit.blocked >= (visit.retryAt ?? 16) && visit.state === 'return') {
         const path = this.route(m, visit.trail[0]!);
         if (path?.every(inTile)) {
           visit.path = path;
           visit.next = 1;
           delete visit.bypass;
         }
-        visit.blocked = 0;
+        visit.retryAt = visit.blocked + 16;
       }
       return false;
     }
+    if (held && !changed) return false;
     const bypass = visit.bypass;
     if (bypass) {
       const progress = (m.x - bypass.start.x) * bypass.hx + (m.y - bypass.start.y) * bypass.hy;
       if (progress > bypass.progress + 1e-8 * this.perMeter) {
         bypass.progress = progress;
-        visit.blocked = 0;
+        this.blockedProgress(m, visit, dt);
       } else visit.blocked += dt;
-    } else visit.blocked = 0;
+    } else if (visit.progress) this.blockedProgress(m, visit, dt);
+    else visit.blocked = 0;
     if (visit.returnPending && this.canIdle(m)) {
       this.returning(m, visit);
       return false;
     }
     return visit.next >= visit.path.length;
+  }
+
+  private blockedProgress(m: Mover, visit: Visit, dt: number) {
+    const p = visit.progress;
+    if (!p) {
+      visit.blocked = 0;
+      return;
+    }
+    if (p && (m.x - p.x) * p.hx + (m.y - p.y) * p.hy >= 0.5 * this.perMeter) {
+      visit.blocked = 0;
+      delete visit.progress;
+      delete visit.retryAt;
+    } else visit.blocked += dt;
+  }
+
+  /** A negotiated passing actor resumes its retained route, without a pose jump. */
+  clearBypass(m: Mover) {
+    const visit = this.visits.get(m),
+      bypass = visit?.bypass;
+    if (!visit || !bypass) return;
+    const rest = visit.path
+      .slice(visit.next)
+      .filter(
+        (point) => point !== bypass.target && point !== bypass.side && point !== bypass.retreat,
+      );
+    visit.path.splice(visit.next, visit.path.length - visit.next, ...rest);
+    delete visit.bypass;
+  }
+
+  travelHeading(m: Mover, retained = false) {
+    const visit = this.visits.get(m),
+      bypass = visit?.bypass;
+    const target =
+      retained && bypass
+        ? visit!.path
+            .slice(visit!.next)
+            .find(
+              (point) =>
+                point !== bypass.side && point !== bypass.retreat && point !== bypass.target,
+            )
+        : visit?.path[visit.next];
+    const d = target && dist(m, target);
+    return target && d && d > 1e-8 * this.perMeter
+      ? { hx: (target.x - m.x) / d, hy: (target.y - m.y) / d }
+      : { hx: m.hx, hy: m.hy };
+  }
+
+  /** Checked temporary holding paths retain navigation, visit anchors and reservations. */
+  yieldStep(
+    m: Mover,
+    dt: number,
+    guard?: MoveGuard,
+    walkLimit?: (m: Mover, target: WalkPoint, distance: number) => number,
+    owns?: (p: WalkPoint) => boolean,
+  ): boolean {
+    if (!guard || !isWalker(m.kind)) return false;
+    this.yieldHeld.delete(m);
+    const priority = guard.yielding?.(m);
+    let state = this.yielding.get(m);
+    if (!state && !priority) return false;
+    if (!state) {
+      const anchor = snapshotMover(m);
+      const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
+      const admissible = (previous: Mover, target: WalkPoint) => {
+        m.x = target.x;
+        m.y = target.y;
+        const bodies = this.walkingBodies(m, m, lane, true);
+        return (
+          inTile(m) &&
+          (!owns || owns(m)) &&
+          bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
+          this.graph.allowsBodies(bodies, true) &&
+          this.graph.clear(previous, m) &&
+          guard(m, previous, false)
+        );
+      };
+      for (const retreat of [0.5, 1, 2, 3, 4]) {
+        for (const side of [1, -1]) {
+          for (const offset of [0.65, 1, 1.2, 1.5]) {
+            restoreMover(m, anchor);
+            const back = {
+              x: anchor.x - anchor.hx * retreat * this.perMeter,
+              y: anchor.y - anchor.hy * retreat * this.perMeter,
+            };
+            if (!admissible(anchor, back)) continue;
+            const previous = snapshotMover(m);
+            const holding = {
+              x: back.x - anchor.hy * side * offset * this.perMeter,
+              y: back.y + anchor.hx * side * offset * this.perMeter,
+            };
+            if (
+              !this.graph.route(anchor, holding) ||
+              !admissible(previous, holding) ||
+              (guard.holding && !guard.holding(m))
+            )
+              continue;
+            state = { anchor, path: [back, holding], next: 0, returning: false };
+            break;
+          }
+          if (state) break;
+        }
+        if (state) break;
+      }
+      restoreMover(m, anchor);
+      if (!state) return true;
+      this.yielding.set(m, state);
+    }
+    if (!priority && !state.returning) {
+      state.path = [
+        ...state.path.slice(0, state.next).reverse(),
+        { x: state.anchor.x, y: state.anchor.y },
+      ];
+      state.next = 0;
+      state.returning = true;
+    }
+    if (state.next >= state.path.length) {
+      if (state.returning) {
+        const walked = m.walked;
+        restoreMover(m, state.anchor);
+        m.walked = walked;
+        this.yielding.delete(m);
+      }
+      return true;
+    }
+    const target = state.path[state.next]!,
+      d = dist(m, target);
+    const previous = snapshotMover(m);
+    const requested = Math.min(d, m.speed * dt);
+    const step = walkLimit ? walkLimit(m, target, requested) : requested;
+    if (requested > 0 && step <= 0) this.yieldHeld.add(m);
+    if (d > 1e-8 * this.perMeter && step > 0) {
+      m.x += ((target.x - m.x) * step) / d;
+      m.y += ((target.y - m.y) * step) / d;
+      m.walked = (m.walked ?? 0) + step / this.perMeter;
+    }
+    const bodies = this.walkingBodies(m, m, this.visits.has(m) ? 0 : (m.avoid ?? 0), true);
+    if (
+      !inTile(m) ||
+      (owns && !owns(m)) ||
+      !bodies.every((body) => inTile(body) && (!owns || owns(body))) ||
+      !this.graph.clear(previous, m) ||
+      !guard(m, previous)
+    ) {
+      restoreMover(m, previous);
+      return true;
+    }
+    if (step >= d) state.next++;
+    return true;
   }
 
   step(
@@ -605,7 +801,7 @@ export class LocalScenes {
         this.requestReturn(m, visit);
       if (visit.returnPending && this.canIdle(m)) this.returning(m, visit);
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
-        if (!this.move(m, visit, dt, guard, walkLimit)) continue;
+        if (!this.move(m, visit, dt, guard, walkLimit, owns)) continue;
         if (visit.state === 'return') {
           const end = m.from + m.dir;
           const dx = this.geo.coords[end * 2]! - this.geo.coords[m.from * 2]!;

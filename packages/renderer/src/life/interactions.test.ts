@@ -93,7 +93,8 @@ describe('local interaction scenes', () => {
     scene.step(0.1, [p], {}, undefined, undefined, () => false);
     expect(scene.visits.get(p)).toBe(visit);
     expect([p.x, p.y]).toEqual([48, 30]);
-    expect(visit.blocked).toBe(0);
+    expect(visit.blocked).toBeCloseTo(16.05);
+    expect(visit.retryAt).toBeCloseTo(32.05);
     expect(visit.next).toBe(1);
     expect(visit.path.every((point) => point.y === 30)).toBe(true);
     scene.step(0.1, [p], {}, undefined, undefined, () => true);

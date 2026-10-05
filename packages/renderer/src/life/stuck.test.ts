@@ -6,7 +6,7 @@ import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
 import { packLife } from './draw';
 import { themes } from '../theme';
-import { FOLLOW } from './config';
+import { FOLLOW, WALK } from './config';
 import { VEHICLES } from './vehicles';
 import { snapshotMover } from './mover-pose';
 import { bodiesOverlap, PolygonIndex } from './occupancy';
@@ -422,11 +422,18 @@ it.each([
       });
     }
     life.movers.push(...people);
+    const groups = people.map((m) => m.group);
+    const trails = people.map((m) => life.scenes.visits.get(m)!.trail);
+    const anchors = structuredClone(trails);
     const returned = new Set<Mover>();
     for (let frame = 0; frame < 900; frame++) {
       const before = people.map((m) => ({ x: m.x, y: m.y }));
       const visiting = people.map((m) => life.scenes.visits.has(m));
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+      const physical = people.map((m) => life.groundBodies(m));
+      expect(physical[0]!.some((a) => physical[1]!.some((b) => bodiesOverlap(a, b, 0)))).toBe(
+        false,
+      );
       for (const [i, m] of people.entries()) {
         if (visiting[i])
           expect(Math.hypot(m.x - before[i]!.x, m.y - before[i]!.y) / pm).toBeLessThan(0.2);
@@ -436,6 +443,8 @@ it.each([
     }
     expect(returned.size).toBe(2);
     expect(people.every((m) => (m.walked ?? 0) > 10)).toBe(true);
+    expect(trails).toEqual(anchors);
+    people.forEach((m, i) => expect(m.group).toBe(groups[i]));
   },
 );
 
@@ -479,9 +488,10 @@ it('backs away before reversing beside a physical wall, while retaining the swep
   world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
   expect(m.hx).toBe(-1);
   expect((m.x - 1000) / pm).toBeLessThan(70);
-  expect(m.waiting).toBe(0);
+  expect(m.waiting).toBeGreaterThanOrEqual(WALK.blockedTurnSeconds);
   for (let frame = 0; frame < 150; frame++)
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+  expect(m.waiting).toBe(0);
   expect((m.x - 1000) / pm).toBeLessThan(65);
 });
 
@@ -660,6 +670,33 @@ it('requires accepted travel before rearming a vehicle recovery', () => {
     life.step(1 / 30, undefined, undefined, undefined, {}, () => true);
   expect(Math.abs(m.x - recovered.x) / pm).toBeGreaterThan(4.4);
   expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(true);
+});
+
+it('executes a selected recovery retreat in bounded steps before reversing', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8);
+  const m = mover('vehicle', 70, 1),
+    start = m.x;
+  m.waiting = 30;
+  life.movers.push(m);
+  let rotations = 0;
+  const guard: Parameters<typeof life.recoverVehicle>[1] = (next) => {
+    if ('kind' in next && next.kind === 'vehicle' && next.dir === -1) {
+      rotations++;
+      return next.x <= start - 0.5 * pm + 1e-8;
+    }
+    return true;
+  };
+  let reversed = false;
+  for (let frame = 0; frame < 30 && !reversed; frame++) {
+    const before = m.x;
+    reversed = life.recoverVehicle(m, guard, new JunctionTable(), new Set(), undefined, 1 / 30);
+    if (!reversed) expect(Math.abs(m.x - before) / pm).toBeLessThanOrEqual(0.6 / 30 + 1e-8);
+    if (frame < 20) expect(m.dir).toBe(1);
+  }
+  expect(rotations).toBeGreaterThan(0);
+  expect(reversed).toBe(true);
+  expect(m.waiting).toBe(30);
+  expect((start - m.x) / pm).toBeCloseTo(0.5);
 });
 
 it('rolls back rejected vehicle recoveries, retains routing identity, and admits one per line', () => {

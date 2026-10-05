@@ -201,11 +201,65 @@ export function projectMover(
   };
   if (m.roadShift !== undefined) preview.roadShift = m.roadShift;
   if (m.curveLengthM !== undefined) preview.curveLengthM = m.curveLengthM;
-  if (m.curveCorner)
-    preview.curveCorner = {
-      x: frame.x + m.curveCorner.x * frame.scale,
-      y: frame.y + m.curveCorner.y * frame.scale,
-    };
+  if (m.curveCorner) {
+    const x = frame.x + m.curveCorner.x * frame.scale;
+    const y = frame.y + m.curveCorner.y * frame.scale;
+    for (let v = target.geo.starts[s.line]!; v < target.geo.starts[s.line + 1]!; v++) {
+      const point = { x: target.geo.coords[v * 2]!, y: target.geo.coords[v * 2 + 1]! };
+      if (Math.hypot(point.x - x, point.y - y) <= 2) {
+        preview.curveCorner = point;
+        break;
+      }
+    }
+    if (!preview.curveCorner) delete preview.curveLengthM;
+  }
+  if (m.junctionRoute) {
+    const exits: number[] = [];
+    let shared = m.dir === 1 ? source.geo.starts[m.line + 1]! - 1 : source.geo.starts[m.line]!;
+    for (const code of m.junctionRoute.exits) {
+      const old = source.directedExit(code, shared),
+        id = source.geo.lineIds?.[old.line];
+      if (!id) break;
+      const x = frame.x + source.geo.coords[old.vertex * 2]! * frame.scale;
+      const y = frame.y + source.geo.coords[old.vertex * 2 + 1]! * frame.scale;
+      const hx =
+        source.geo.coords[(old.vertex + old.dir) * 2]! - source.geo.coords[old.vertex * 2]!;
+      const hy =
+        source.geo.coords[(old.vertex + old.dir) * 2 + 1]! - source.geo.coords[old.vertex * 2 + 1]!;
+      let mapped: number | undefined;
+      for (let line = 0; line < target.geo.kinds.length && mapped === undefined; line++) {
+        if (target.geo.lineIds?.[line] !== id) continue;
+        for (
+          let v = target.geo.starts[line]!;
+          v < target.geo.starts[line + 1]! && mapped === undefined;
+          v++
+        ) {
+          if (Math.hypot(target.geo.coords[v * 2]! - x, target.geo.coords[v * 2 + 1]! - y) > 2)
+            continue;
+          for (const direction of [1, -1] as const) {
+            const next = v + direction;
+            if (
+              next < target.geo.starts[line]! ||
+              next >= target.geo.starts[line + 1]! ||
+              (target.geo.oneway?.[line] && target.geo.oneway[line] !== direction)
+            )
+              continue;
+            const dx = target.geo.coords[next * 2]! - target.geo.coords[v * 2]!;
+            const dy = target.geo.coords[next * 2 + 1]! - target.geo.coords[v * 2 + 1]!;
+            if (hx * dx + hy * dy > 0) {
+              mapped = line * 2 + (direction === 1 ? 0 : 1);
+              break;
+            }
+          }
+        }
+      }
+      if (mapped === undefined) break;
+      exits.push(mapped);
+      shared = old.dir === 1 ? source.geo.starts[old.line + 1]! - 1 : source.geo.starts[old.line]!;
+    }
+    if (exits.length === m.junctionRoute.exits.length)
+      preview.junctionRoute = { key: m.junctionRoute.key, exits };
+  }
   if (m.entered) {
     const x = frame.x + source.geo.coords[m.entered.vertex * 2]! * frame.scale;
     const y = frame.y + source.geo.coords[m.entered.vertex * 2 + 1]! * frame.scale;

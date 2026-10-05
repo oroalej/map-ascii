@@ -99,6 +99,7 @@ export type LifeGlyphs = { parts: Uint16Array };
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
 type MemberRaster = {
+  expected: number;
   cells: { col: number; row: number; bytes: readonly number[] }[];
   point?: [number, number];
 };
@@ -353,7 +354,7 @@ export function packLife(
             const candidates = members.map((member) =>
               offsets.filter(
                 ([dx, dy]) =>
-                  member.cells.length > 0 &&
+                  member.cells.length === member.expected &&
                   member.cells.every(({ col, row }) => {
                     const c = col + dx,
                       r = row + dy;
@@ -601,8 +602,10 @@ function drawPeople(
   let captured: MemberRaster | undefined;
   const put = (c: number, r: number, glyph: string, byte: number) => {
     const index = glyphIndex(glyph);
-    if (!Number.isInteger(c) || !Number.isInteger(r) || index <= 0 || index > MAX_GLYPHS)
+    if (!Number.isInteger(c) || !Number.isInteger(r) || index <= 0 || index > MAX_GLYPHS) {
+      if (captured && journal) journal.denied = journal.incomplete = true;
       return false;
+    }
     captured?.cells.push({
       col: c,
       row: r,
@@ -701,7 +704,7 @@ function drawPeople(
     journal.members = [];
   looks.forEach((look, i) => {
     drawingMember = i + 1;
-    captured = journal?.members ? { cells: [] } : undefined;
+    captured = journal?.members ? { cells: [], expected: fits[i] === 'big' ? 4 : 1 } : undefined;
     if (captured) journal!.members!.push(captured);
     const lateral =
       clearance > 0 && look.lateral !== 0

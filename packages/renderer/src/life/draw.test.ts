@@ -1104,6 +1104,18 @@ describe('packLife people', () => {
     }
   });
 
+  it('rolls back a complete coarse member when one glyph of its figure is unavailable', () => {
+    const [grid, agent] = person(1, 1, 2, { people: [look()] });
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const missing = figureGlyph('adult', false, 0, { slice: 2 });
+    expect(
+      packLife(out, grid, [agent], themes.dark, (glyph) =>
+        glyph === missing ? 0 : glyphIndex(glyph),
+      ),
+    ).toBe(0);
+    expect(out.every((byte) => byte === 0)).toBe(true);
+  });
+
   it('turns a figure with its heading, steps with its stride, and lights its candle', () => {
     const across = pack(person(1, 0, 0.2, { flap: 1, paint: Paint.blue, candle: true }));
     expect(across.cells).toHaveLength(1);
