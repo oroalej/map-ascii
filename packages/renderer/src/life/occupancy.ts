@@ -394,6 +394,18 @@ export class PolygonIndex {
       }
     return false;
   }
+  /** Exact translated footprint, used only to prove rejected holding corridors. */
+  sweptHits(body: Body, target: Point): boolean {
+    const hull = bodyTranslationHull(body, target);
+    const tested = new Set<Polygon>();
+    for (const key of binKeys(hull))
+      for (const polygon of this.bins.get(key) ?? []) {
+        if (tested.has(polygon)) continue;
+        tested.add(polygon);
+        if (bodyHitsPolygon(body, polygon, hull)) return true;
+      }
+    return false;
+  }
   hits(bodies: readonly Body[]): boolean {
     const tested = this.tested;
     try {
@@ -421,6 +433,25 @@ export class PolygonIndex {
       tested.clear();
     }
   }
+}
+
+/** Exact swept convex footprint of a fixed-orientation translation. */
+export function bodyTranslationHull(body: Body, target: Point): Point[] {
+  const points = [...bodyCorners(body), ...bodyCorners({ ...body, ...target })].sort(
+    (a, b) => a.x - b.x || a.y - b.y,
+  );
+  const cross = (a: Point, b: Point, c: Point) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const half = (ordered: readonly Point[]) => {
+    const hull: Point[] = [];
+    for (const point of ordered) {
+      while (hull.length >= 2 && cross(hull.at(-2)!, hull.at(-1)!, point) <= 0) hull.pop();
+      hull.push(point);
+    }
+    hull.pop();
+    return hull;
+  };
+  return [...half(points), ...half([...points].reverse())];
 }
 
 export type FlatPolygonIndex = {

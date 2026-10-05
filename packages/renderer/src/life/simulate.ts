@@ -221,6 +221,7 @@ export type WorldGroundGuard = ((
   contact(life: TileLife, mover: Mover, trial?: Mover): void;
   yielding(mover: Mover): Mover | undefined;
   holding(life: TileLife, mover: Mover, changedOnly?: boolean): boolean;
+  holdingCorridor(life: TileLife, mover: Mover, before: Mover): boolean;
   passing(mover: Mover): boolean;
   cancelYield(mover: Mover): void;
 };
@@ -5681,6 +5682,19 @@ export class LifeWorld {
       decision.route = route;
       return true;
     };
+    const holdingCorridor = (life: TileLife, m: Mover, before: Mover) => {
+      const previous = life.groundBodies(before, 0, [], m).map((body) => toRef(origin(life), body));
+      return life.groundBodies(m).every((body, i) => {
+        const next = toRef(origin(life), body),
+          old = previous[i]!;
+        return (
+          Math.hypot(next.hx - old.hx, next.hy - old.hy) < 1e-8 &&
+          !blocked.sweptHits(old, next) &&
+          !water.sweptHits(old, next) &&
+          !roadAccess.forbidden.sweptHits(old, next)
+        );
+      });
+    };
     const passing = (m: Mover) => {
       const other = this.passingActors.get(m);
       return !!other && yielding(other) === m;
@@ -5699,6 +5713,7 @@ export class LifeWorld {
         contact,
         yielding,
         holding,
+        holdingCorridor,
         passing,
         cancelYield,
       });
@@ -5712,7 +5727,17 @@ export class LifeWorld {
           this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
         }
       },
-      { remove, reserveSeam, clearSeam, contact, yielding, holding, passing, cancelYield },
+      {
+        remove,
+        reserveSeam,
+        clearSeam,
+        contact,
+        yielding,
+        holding,
+        holdingCorridor,
+        passing,
+        cancelYield,
+      },
     );
   }
 
@@ -5959,6 +5984,8 @@ export class LifeWorld {
             contact: (mover: Mover, trial?: Mover) => guard.contact(tile, mover, trial),
             holding: (mover: Mover, changedOnly?: boolean) =>
               guard.holding(tile, mover, changedOnly),
+            holdingCorridor: (mover: Mover, before: Mover) =>
+              guard.holdingCorridor(tile, mover, before),
             passing: (mover: Mover) => guard.passing(mover),
             cancelYield: (mover: Mover) => guard.cancelYield(mover),
             yielding: guard.yielding,

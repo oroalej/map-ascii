@@ -79,6 +79,7 @@ type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) &
   contact?: (mover: Mover, trial?: Mover) => void;
   yielding?: (mover: Mover) => Mover | undefined;
   holding?: (mover: Mover, changedOnly?: boolean) => boolean;
+  holdingCorridor?: (mover: Mover, before: Mover) => boolean;
   passing?: (mover: Mover) => boolean;
   cancelYield?: (mover: Mover) => void;
 };
@@ -724,31 +725,40 @@ export class LocalScenes {
           bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
           this.graph.allowsBodies(bodies, true) &&
           this.graph.clear(physicalPoint(previous), physicalPoint(m)) &&
+          (!guard.holdingCorridor || guard.holdingCorridor(m, previous)) &&
           guard(m, previous, false)
         );
       };
-      for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
-        for (const side of [1, -1]) {
-          for (const offset of [0.65, 1, 1.2, 1.5]) {
-            restoreMover(m, anchor);
-            const back = {
-              x: anchor.x - heading.hx * retreat * this.perMeter,
-              y: anchor.y - heading.hy * retreat * this.perMeter,
-            };
-            if (retreat !== 0 && !admissible(anchor, back)) continue;
-            const previous = snapshotMover(m);
-            const holding = {
-              x: back.x - heading.hy * side * offset * this.perMeter,
-              y: back.y + heading.hx * side * offset * this.perMeter,
-            };
-            if (
-              !this.graph.route(physicalPoint(anchor), physicalPoint({ ...m, ...holding })) ||
-              !admissible(previous, holding) ||
-              (guard.holding && !guard.holding(m))
-            )
-              continue;
-            state = { anchor, path: [back, holding], next: 0, returning: false };
-            break;
+      for (const direct of [false, true]) {
+        for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
+          for (const side of [1, -1]) {
+            for (const offset of [0.65, 1, 1.2, 1.5]) {
+              restoreMover(m, anchor);
+              const back = {
+                x: anchor.x - heading.hx * retreat * this.perMeter,
+                y: anchor.y - heading.hy * retreat * this.perMeter,
+              };
+              if (!direct && retreat !== 0 && !admissible(anchor, back)) continue;
+              const previous = snapshotMover(m);
+              const holding = {
+                x: back.x - heading.hy * side * offset * this.perMeter,
+                y: back.y + heading.hx * side * offset * this.perMeter,
+              };
+              if (
+                !this.graph.route(physicalPoint(anchor), physicalPoint({ ...m, ...holding })) ||
+                !admissible(previous, holding) ||
+                (guard.holding && !guard.holding(m))
+              )
+                continue;
+              state = {
+                anchor,
+                path: direct ? [holding] : [back, holding],
+                next: 0,
+                returning: false,
+              };
+              break;
+            }
+            if (state) break;
           }
           if (state) break;
         }
@@ -799,6 +809,7 @@ export class LocalScenes {
       (owns && !owns(m)) ||
       !bodies.every((body) => inTile(body) && (!owns || owns(body))) ||
       !this.graph.clear(physicalPoint(previous), physicalPoint(m)) ||
+      (guard.holdingCorridor && !guard.holdingCorridor(m, previous)) ||
       !guard(m, previous)
     ) {
       restoreMover(m, previous);

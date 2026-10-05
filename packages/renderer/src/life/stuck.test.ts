@@ -519,6 +519,64 @@ it.each([3, 12])('rejects a holding spot on a later bend beyond %s metres', (dis
   expect(guard.holding(life, yielding)).toBe(true);
 });
 
+it('takes a checked diagonal holding corridor when both axis approaches meet walls', () => {
+  const x = 1000 + 70 * pm,
+    y = 2048;
+  const rectangle = (b: LifeBuilder, x0: number, y0: number, x1: number, y1: number) =>
+    b.area('blocked', [
+      [
+        { x: x + x0 * pm, y: y + y0 * pm },
+        { x: x + x1 * pm, y: y + y0 * pm },
+        { x: x + x1 * pm, y: y + y1 * pm },
+        { x: x + x0 * pm, y: y + y1 * pm },
+        { x: x + x0 * pm, y: y + y0 * pm },
+      ],
+    ]);
+  const { world, life } = fixture(LifeLine.path, 3, false, (b) => {
+    rectangle(b, -1.3, -1, -0.5, -0.5);
+    rectangle(b, 0, 1, 1, 3);
+    rectangle(b, -0.4, -3, 1, -1);
+  });
+  const yielding = mover('person', 70, 1),
+    priority = mover('person', 71.06, -1);
+  yielding.waiting = 4;
+  priority.waiting = 5;
+  life.movers.push(priority, yielding);
+  const guard = guardFor(world, 2.9);
+  guard.contact(life, priority, { ...priority, x: priority.x - 0.02 * pm });
+  guard.contact(life, yielding, { ...yielding, x: yielding.x + 0.02 * pm });
+  expect(guard.yielding(yielding)).toBe(priority);
+  const start = { x: yielding.x, y: yielding.y };
+  for (let frame = 0; frame < 150; frame++) {
+    const before = snapshotMover(yielding);
+    life.scenes.yieldStep(
+      yielding,
+      1 / 30,
+      Object.assign(
+        (next: Mover, old: Mover, reserve = true) =>
+          guard(life, next, old, undefined, reserve, yielding),
+        {
+          yielding: (m: Mover) => guard.yielding(m),
+          holding: (m: Mover) => guard.holding(life, m),
+          holdingCorridor: (m: Mover, before: Mover) => guard.holdingCorridor(life, m, before),
+          cancelYield: (m: Mover) => guard.cancelYield(m),
+        },
+      ),
+    );
+    expect(Math.hypot(yielding.x - before.x, yielding.y - before.y)).toBeLessThanOrEqual(
+      yielding.speed / 30 + 1e-8,
+    );
+    expect(guard(life, yielding, yielding, undefined, false)).toBe(true);
+    expect(
+      life
+        .groundBodies(yielding)
+        .some((a) => life.groundBodies(priority).some((b) => bodiesOverlap(a, b, 0))),
+    ).toBe(false);
+  }
+  expect(yielding.x).toBeLessThan(start.x - pm);
+  expect(yielding.y).toBeGreaterThan(start.y + pm);
+});
+
 it('clears a committed turning jeepney past a curbside group with retained physical facing', () => {
   const b = new LifeBuilder();
   b.line(

@@ -27,6 +27,19 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 
 describe('ground footprints', () => {
+  it('checks the exact translated footprint against narrow corners and polygon holes', () => {
+    const terrain = new PolygonIndex();
+    terrain.add([ring(0, 1, 1, 2)]);
+    const start = box(0, 0, 0.9, 1),
+      target = { x: -0.5, y: 1.2 };
+    expect(terrain.hits([start, { ...start, ...target }])).toBe(false);
+    expect(terrain.sweptHits(start, target)).toBe(true);
+    expect(terrain.sweptHits(start, { x: -2, y: 1.2 })).toBe(false);
+    const holed = new PolygonIndex();
+    holed.add([ring(-10, -10, 20, 20), ring(-8, -8, 16, 16)]);
+    expect(holed.sweptHits(box(-5, -5, 1, 1), { x: 5, y: 5 })).toBe(false);
+    expect(holed.sweptHits(box(-5, -5, 1, 1), { x: 9, y: 5 })).toBe(true);
+  });
   it('detects an intermediate swept collision with clear endpoints', () => {
     const moving = box(-10, 0),
       target = { x: 10, y: 0 },
