@@ -211,7 +211,7 @@
         "sources": [
           {
             "title": "Project owner: animated New Year season (2026-10-03)",
-            "note": "Requests fireworks with several variants and smoke. Display and two-day calendar are illustrative, not a verified local event schedule."
+            "note": "Requests fireworks with several variants and smoke. Display and two-day calendar are illustrative, not a verified local event schedule. Emoji are illustrative simulated moods, not records of real people."
           },
           {
             "title": "Project owner: retain Christmas decorations during New Year (recorded 2026-10-05)",
@@ -228,7 +228,45 @@
             "note": "Documents Philippine New Year fireworks and particles affected by wind and dispersion. Provides general seasonal context, not a Naga launch location or a physical smoke/air-quality model."
           }
         ],
-        "includes": ["christmas"]
+        "includes": ["christmas"],
+        "emoji": [
+          {
+            "mood": "fireworks",
+            "subjects": ["person", "driver"],
+            "weight": 3,
+            "hours": [1200, 120],
+            "days": [
+              {
+                "month": 12,
+                "day": 31
+              }
+            ]
+          },
+          {
+            "mood": "party",
+            "subjects": ["person"],
+            "weight": 2,
+            "hours": [1200, 120],
+            "days": [
+              {
+                "month": 12,
+                "day": 31
+              }
+            ]
+          },
+          {
+            "mood": "scared",
+            "subjects": ["dog", "cat"],
+            "weight": 3,
+            "hours": [1320, 120],
+            "days": [
+              {
+                "month": 12,
+                "day": 31
+              }
+            ]
+          }
+        ]
       },
       {
         "id": "christmas",
@@ -265,7 +303,7 @@
           {
             "title": "City of Naga: The Merriest of Seasons is Here (December 7, 2022)",
             "url": "https://www2.naga.gov.ph/the-merriest-season-is-here/",
-            "note": "Supports a month-long December celebration and illuminated plazas, not the January endpoint or individual decoration positions."
+            "note": "Supports a month-long December celebration and illuminated plazas, not the January endpoint or individual decoration positions. Emoji are illustrative simulated moods, not records of real people."
           },
           {
             "title": "City of Naga: Ordinance No. 2019-098 — Kamundagan Food, Agri and Trade Fair",
@@ -1052,6 +1090,47 @@
               }
             ]
           }
+        ],
+        "emoji": [
+          {
+            "mood": "gift",
+            "subjects": ["person"],
+            "weight": 2,
+            "hours": [480, 1320]
+          },
+          {
+            "mood": "love",
+            "subjects": ["person", "driver", "dog", "cat"],
+            "weight": 1
+          },
+          {
+            "mood": "tree",
+            "subjects": ["person"],
+            "weight": 1
+          },
+          {
+            "mood": "star",
+            "subjects": ["person"],
+            "weight": 1,
+            "hours": [1020, 1440]
+          },
+          {
+            "mood": "music",
+            "subjects": ["driver"],
+            "weight": 1
+          },
+          {
+            "mood": "feast",
+            "subjects": ["person"],
+            "weight": 3,
+            "hours": [1080, 120],
+            "days": [
+              {
+                "month": 12,
+                "day": 24
+              }
+            ]
+          }
         ]
       },
       {
@@ -1162,7 +1241,7 @@
           {
             "title": "Archdiocese of Caceres: 2026 religious events calendar",
             "url": "https://www.archdioceseofcaceres.org/caceresevents",
-            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified."
+            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified. Emoji are illustrative simulated moods, not records of real people."
           },
           {
             "title": "Naga City Tourism: Peñafrancia Fiesta Major Civic and Religious Events Schedule for 2026",
@@ -1173,6 +1252,50 @@
             "title": "Basilica Minore Bulletin: Fr. Juan Pablo Z. Carpio on the Peñafrancia feast calendar (2021)",
             "url": "https://www.basilicaminorebulletin.com/2021/09/katekismo-corner-on-celebrating-feast.html",
             "note": "Explains that the solemnity follows September 15 on a Sunday, between September 16 and 22, and that the preceding nine days form the novena. This supports the recurring feast rule, not decoration or stall positions."
+          }
+        ],
+        "emoji": [
+          {
+            "mood": "party",
+            "subjects": ["person"],
+            "weight": 2
+          },
+          {
+            "mood": "festive",
+            "subjects": ["person", "driver"],
+            "weight": 1
+          },
+          {
+            "mood": "music",
+            "subjects": ["person", "driver"],
+            "weight": 1
+          },
+          {
+            "mood": "pray",
+            "subjects": ["person"],
+            "weight": 1,
+            "hours": [300, 1200]
+          },
+          {
+            "mood": "cheers",
+            "subjects": ["person"],
+            "weight": 1,
+            "hours": [1020, 1440],
+            "figure": "adult"
+          },
+          {
+            "mood": "beer",
+            "subjects": ["person"],
+            "weight": 1,
+            "hours": [1080, 1440],
+            "figure": "adult"
+          },
+          {
+            "mood": "balloon",
+            "subjects": ["person"],
+            "weight": 1,
+            "hours": [480, 1200],
+            "figure": "child"
           }
         ]
       }
