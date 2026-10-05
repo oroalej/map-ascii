@@ -1,16 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as MomentsModule from './moments';
-import { continuityTile, left, parent, right } from './testing/continuity';
+import { continuityMover, continuityTile, left, parent, right } from './testing/continuity';
 import { createInlineHost } from './host';
 import { LifePreparation } from './preparation';
 import { LifeWorld } from './simulate';
-import { makeScenario } from './testing/scenarios';
+import { completeScenarioState, makeScenario, worldTiles } from './testing/scenarios';
+import { pedestrianEntry, seedPedestrians } from './testing/pedestrians';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
 import type { DialogueChoice, ProcessionRoute } from '@atlas/shared';
 import { LifeBuilder } from './geometry';
 import { activityLevels } from './config';
+import { ensureVehicleEffects } from './vehicle-effects';
+import { emitter } from './exhaust';
+import { BRAKE } from './lamps';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
 vi.mock('./moments', async (load) => {
@@ -27,6 +31,80 @@ vi.mock('./moments', async (load) => {
 });
 
 describe('life worker protocol', () => {
+  it('matches braking, crossing expiry and release in worker and inline complete state', () => {
+    const entry = pedestrianEntry(),
+      worlds: LifeWorld[] = [];
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- apply below supplies the intercepted world.
+    const sync = LifeWorld.prototype.sync;
+    const intercept = vi.spyOn(LifeWorld.prototype, 'sync').mockImplementation(function (
+      this: LifeWorld,
+      ...args
+    ) {
+      sync.apply(this, args);
+      if (!worlds.includes(this) && args[0].some((entry) => entry.key === 'pedestrian-crossing')) {
+        worlds.push(this);
+        seedPedestrians(this, 1.75);
+      }
+    });
+    try {
+      const direct = new LifeWorld();
+      direct.sync([entry]);
+      const api = createLifeWorkerApi();
+      api.init({ processions: [] });
+      api.sync([structuredClone(entry)]);
+      expect(worlds).toHaveLength(2);
+      const fixtures = worlds.map((world) => {
+        const life = worldTiles(world).get(entry.key)!;
+        return { car: life.movers[0]!, human: life.movers[1]! };
+      });
+      const center = tileToLngLat(entry.tile, { x: 2000, y: 2000 });
+      let braked = false,
+        held = false,
+        expired = false,
+        released = false;
+      for (let frame = 0; frame < 300; frame++) {
+        const input: FrameInput = {
+          gust: {
+            camera: { lng: center[0], lat: center[1], zoom: 18 },
+            size: { width: 800, height: 600 },
+            cssCell: { w: 5, h: 7.5 },
+            time: frame / 10,
+            wind: { dir: [1, 0], strength: 0 },
+          },
+          step: {
+            dt: 0.1,
+            zoom: 18,
+            bounds: undefined,
+            wind: undefined,
+            weather: { rain: 0 },
+            cellMeters: 0.9,
+          },
+          visible: [18, activityLevels(1), center],
+        };
+        expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+        const car = fixtures[0]!.car;
+        braked ||= car.v! < car.speed;
+        held ||= !!car.pedestrianHolds?.length;
+        expired ||= !!car.pedestrianHolds?.[0]?.expired;
+        released ||= expired && fixtures.every(({ car }) => car.pedestrianHolds === undefined);
+        if (frame === 220)
+          for (const world of worlds) {
+            const life = worldTiles(world).get(entry.key)!;
+            life.movers.splice(1, 1);
+          }
+      }
+      expect({ braked, held, expired, released }).toEqual({
+        braked: true,
+        held: true,
+        expired: true,
+        released: true,
+      });
+      for (const { car } of fixtures) expect(car.pedestrianHolds).toBeUndefined();
+      expect(completeScenarioState(worlds[1]!)).toEqual(completeScenarioState(direct));
+    } finally {
+      intercept.mockRestore();
+    }
+  });
   it.each([false, true])(
     'transfers speech, poses and balls with inline parity (profiles=%s)',
     (profiles) => {
@@ -295,6 +373,102 @@ describe('life worker protocol', () => {
     expect(() => api.sync([{ key: 'missing', tile: { x: 0, y: 0, z: 16 } }])).toThrow('geometry');
   });
 
+  it('clones identical brake, hazard and exhaust frames through the worker protocol', () => {
+    const tile = continuityTile(left);
+    const center = tileToLngLat(left, { x: 1200, y: 2000 });
+    const build = () => {
+      const world = new LifeWorld();
+      world.sync([tile]);
+      const life = [...worldTiles(world).values()][0]!;
+      life.movers.length = life.parked.length = life.flocks.length = life.stalls.length = 0;
+      const bus = continuityMover(life, 1000),
+        car = continuityMover(life, 1500);
+      bus.vehicle = 'bus';
+      bus.v = car.v = 0;
+      car.pause = 10;
+      life.movers.push(bus, car);
+      life.scenes.services.set(bus, {
+        time: 20,
+        boarded: 0,
+        arriving: false,
+        site: {
+          x: bus.x,
+          y: bus.y,
+          kind: 'terminal',
+          modes: 3,
+          covered: false,
+          queue: [],
+          capacity: 3,
+          hx: 1,
+          hy: 0,
+          road: 0,
+          roadWidth: 12,
+          direction: 1,
+        },
+      });
+      const state = ensureVehicleEffects(bus);
+      state.exhaust = emitter(42, 0);
+      state.exhaust.stoppedSince = 0;
+      state.exhaust.nextIdle = 0.2;
+      ensureVehicleEffects(car).brake = BRAKE.hold;
+      return world;
+    };
+    const direct = build(),
+      api = createLifeWorkerApi(undefined, build);
+    api.init({ processions: [] });
+    api.sync([structuredClone(tile)]);
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: center[0], lat: center[1], zoom: 20 },
+        size: { width: 640, height: 480 },
+        cssCell: { w: 6, h: 11 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0.2 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 20,
+        bounds: undefined,
+        wind: { dir: [1, 0], strength: 0.2 },
+        weather: { minutes: 720, rain: 0 },
+        cellMeters: 0,
+      },
+      visible: [20, 1, center],
+    };
+    const seen = { brake: false, hazard: false, puff: false };
+    for (let frame = 0; frame < 20; frame++) {
+      input.gust.time = frame / 10;
+      const expected = runLifeFrame(direct, input);
+      for (const agent of expected.agents) delete agent.consist;
+      const actual = api.frame(input);
+      expect(actual.agents).toEqual(expected.agents);
+      expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
+        true,
+      );
+      if (actual.puffs.length) {
+        const delivered = structuredClone(actual, {
+          transfer: [actual.puffs.buffer as ArrayBuffer],
+        });
+        expect(actual.puffs.byteLength).toBe(0);
+        expect(delivered.puffs.length).toBe(expected.puffs.length);
+        seen.puff = true;
+      }
+      expect(actual.signalClock).toBe(expected.signalClock);
+      for (const agent of actual.agents) {
+        seen.brake ||= agent.lamps?.kind === 'brake';
+        seen.hazard ||= agent.lamps?.kind === 'hazard';
+      }
+      if (seen.brake && seen.hazard && seen.puff) break;
+    }
+    expect(seen).toEqual({ brake: true, hazard: true, puff: true });
+    const nextExpected = runLifeFrame(direct, input),
+      nextActual = api.frame(input);
+    expect(nextActual.agents).toEqual(nextExpected.agents);
+    expect(
+      Buffer.from(nextActual.puffs.buffer).equals(Buffer.from(nextExpected.puffs.buffer)),
+    ).toBe(true);
+  });
+
   it('matches inline zoom ownership, cloned revival and hard clearing', () => {
     const scenario = makeScenario('sparse', 1, false);
     const input: FrameInput = {
@@ -329,6 +503,9 @@ describe('life worker protocol', () => {
         for (const agent of expected.agents) delete agent.consist;
         const actual = api.frame(input);
         expect(actual.agents).toEqual(expected.agents);
+        expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
+          true,
+        );
         expect(actual.signalClock).toBe(expected.signalClock);
       }
     }

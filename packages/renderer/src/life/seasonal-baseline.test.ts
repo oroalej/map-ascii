@@ -12,7 +12,6 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 const inactive: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
   sources: [{ title: 'Synthetic', url: 'https://example.com/' }],
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   stalls: { label: 'Carts', near: ['worship'], radius_m: 300, per_tile: 12 },

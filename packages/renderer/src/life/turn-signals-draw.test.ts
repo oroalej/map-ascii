@@ -3,7 +3,7 @@ import { packLife, type LifeGrid } from './draw';
 import type { VisibleAgent } from './simulate';
 import { themes } from '../theme';
 import { SIGNAL_VEHICLES, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
-import { type CraftType, Paint } from './vehicles';
+import { type CraftType, Paint, VehiclePart } from './vehicles';
 
 const grid: LifeGrid = {
   cols: 100,
@@ -58,7 +58,9 @@ describe('turn signal stamps', () => {
             const y = Math.floor(at / 4 / grid.cols) + 0.5 - car.lat;
             const right = -dy! * x + dx! * y;
             expect(side === 'left' ? right < 0 : right > 0).toBe(true);
-            expect(out[at + 3]! & 15).toBe(Paint.red);
+            expect(out[at + 3]! & 15).toBe(
+              ((out[at + 3]! >> 4) & 7) === VehiclePart.taillight ? Paint.red & ~1 : Paint.red,
+            );
             expect(out[at]! + ((out[at + 1]! >> 6) << 8)).toBe(300);
             return dx! * x + dy! * y;
           });

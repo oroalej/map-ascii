@@ -7,6 +7,10 @@ import { BIRTHS, admitBirths, outsideView, spawnMargin, type LifeViewContext } f
 import { LifeBuilder, LifeLine } from './geometry';
 import { FrameProfiler } from '../profile';
 import { activityLevels, ROAD_SPLIT_CLEARANCE_M } from './config';
+import { Occupancy } from './occupancy';
+import { pedestrianView } from './pedestrians';
+
+const pedestrians = () => pedestrianView(new Occupancy(), 0.9);
 
 function context(x0 = 1500, x1 = 2500): LifeViewContext {
   const nw = tileToLngLat(left, { x: x0, y: 1500 }),
@@ -127,7 +131,8 @@ function endpointAdmission(
       credit: 4,
       cursor: 0,
       owns: () => true,
-      guard: () => Object.assign(() => true, { remove: () => {}, reserveSeam: () => {} }),
+      guard: () =>
+        Object.assign(() => true, { remove: () => {}, reserveSeam: () => {}, pedestrians }),
       boatRoom: () => true,
     },
     0.1,
@@ -178,6 +183,7 @@ for (const dir of [-1, 1] as const)
         {
           remove: () => {},
           reserveSeam: () => {},
+          pedestrians,
         },
       );
       life.pending.push({ mover: m, at: 0 });
@@ -275,7 +281,8 @@ it.each([1, -1] as const)(
         credit: 4,
         cursor: 0,
         owns: () => true,
-        guard: () => Object.assign(() => true, { remove: () => {}, reserveSeam: () => {} }),
+        guard: () =>
+          Object.assign(() => true, { remove: () => {}, reserveSeam: () => {}, pedestrians }),
         boatRoom: () => true,
       },
       0.1,

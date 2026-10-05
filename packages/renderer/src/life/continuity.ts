@@ -5,6 +5,7 @@ import { VEHICLES } from './vehicles';
 import type { Mover, TileLife } from './simulate';
 import type { ContinuityRejection } from './diagnostics';
 import { EXTENT } from '../raster/geometry';
+import { copyVehicleEffects } from './vehicle-effects';
 
 export type AdoptionOptions = {
   snapM?: number;
@@ -192,6 +193,7 @@ export function projectMover(
     vehicle: m.vehicle,
     paint: m.paint,
     lane: m.lane,
+    roadShift: m.roadShift,
     pause: m.pause,
     rank: m.rank,
     group: m.group,
@@ -374,6 +376,7 @@ export function projectMover(
       return;
     }
   }
+  copyVehicleEffects(m, preview);
   return preview;
 }
 

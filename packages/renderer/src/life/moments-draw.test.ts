@@ -10,6 +10,7 @@ import {
   PAINT_NONE,
   PersonPart,
   personByte,
+  personGlyphs,
   type PersonLook,
 } from './people';
 import type { VisibleAgent } from './simulate';
@@ -123,10 +124,25 @@ function draw(
   const drawn = packLife(out, grid, [agent], themes.dark, index);
   return { out, agent, drawn, cells: cells(out) };
 }
+it('keeps canopy stages after all existing map glyphs in both themes', () => {
+  const stages = personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined);
+  expect(stages).toHaveLength(14);
+  for (const theme of Object.values(themes)) {
+    const glyphs = mapGlyphs(theme),
+      start = glyphs.indexOf(stages[0]!);
+    expect(glyphs.slice(start, start + stages.length)).toEqual(stages);
+    expect(start).toBeGreaterThan(Math.max(...ACCESS_GLYPHS.map((glyph) => glyphs.indexOf(glyph))));
+  }
+});
+
 it('packs attentive and gesturing adults and children at one-cell, big and stamp sizes', () => {
-  // Seasonal symbols and parking labels follow every original human-moment glyph.
-  expect(mapGlyphs(themes.dark)).toHaveLength(383 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length);
-  expect(mapGlyphs(themes.light)).toHaveLength(383 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length);
+  // Seasonal symbols, parking labels and fourteen canopy stages extend the original glyph set.
+  expect(mapGlyphs(themes.dark)).toHaveLength(
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+  );
+  expect(mapGlyphs(themes.light)).toHaveLength(
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+  );
   for (const figure of ['adult', 'child'] as const)
     for (const pose of ['attentive', 'gesture'] as const)
       for (const scale of [0.5, 3, 8])

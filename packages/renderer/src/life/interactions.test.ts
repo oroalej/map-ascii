@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { activityLevels } from './config';
+import { describe, expect, it, vi } from 'vitest';
+import { activityLevels, RUN } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LocalScenes } from './interactions';
 import { stripRing } from './terrain';
@@ -329,6 +329,46 @@ describe('local interaction scenes', () => {
     expect(visit.path[0]).toEqual({ x: 48, y: 30.2 });
     p.x = 47;
     expect(visit.path[0]!.x).toBe(48);
+  });
+  it('keeps curb-service ownership and offset blending local to the vehicle', () => {
+    const scene = setup(),
+      bus = { ...person(40, 'vehicle'), vehicle: 'bus' as const };
+    const other = { ...bus };
+    const site = scene.sites[0]!;
+    scene.services.set(bus, { site, time: 0, boarded: 0, arriving: false });
+    expect(scene.hasCurbScenes).toBe(true);
+    expect(scene.curbSite(bus)).toBe(site);
+    expect(scene.curbSite(other)).toBeUndefined();
+    expect(scene.offset(bus, 1, 3)).toBe(scene.offsetAt(bus, bus, 1, 3));
+    expect(scene.offsetAt(bus, site, 1, 3)).toBe(3);
+    expect(scene.offsetAt(other, site, 1, 3)).toBe(1);
+    scene.step(0.1, [bus], {});
+    expect(scene.services.has(bus)).toBe(false);
+    expect(scene.curbSite(bus)).toBe(site);
+    expect(scene.curbSite(other)).toBeUndefined();
+  });
+  it('waits for accepted arrival speed before starting transit dwell', () => {
+    const scene = setup(),
+      bus = { ...person(45, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const, v: 3 };
+    for (let i = 0; i < 12; i++) scene.step(0.1, [bus], {});
+    bus.x = bus.d = 50;
+    scene.step(0.1, [bus], {});
+    expect(scene.services.get(bus)?.arriving).toBe(true);
+    expect(scene.held(bus)).toBe(false);
+    bus.v = 0.05;
+    scene.step(0.1, [bus], {});
+    expect(scene.held(bus)).toBe(true);
+    expect(bus.pause).toBeGreaterThan(0);
+  });
+  it('skips a stop selected too late for comfortable braking', () => {
+    const scene = setup(),
+      bus = { ...person(49, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const, v: 8 };
+    run(scene, [bus], 2);
+    expect(scene.services.has(bus)).toBe(false);
+    bus.x = bus.d = 40;
+    bus.v = 3;
+    run(scene, [bus], 2);
+    expect(scene.services.get(bus)?.arriving).toBe(true);
   });
   it('lets a bus leave a held boarding visitor and safely returns the visitor on release', () => {
     const scene = setup(),
@@ -753,6 +793,107 @@ describe('local interaction scenes', () => {
     run(scene, [dog], 12, 0);
     expect(scene.visits.has(dog)).toBe(false);
     expect(dog.lying).toBe(false);
+  });
+  it('runs those with no umbrella to shelter and walks them back after the rain', () => {
+    const scene = setup(2);
+    const caught = { ...person(), group: [walker] };
+    const dry = { ...person(), group: [{ ...walker, umbrella: 0 }] };
+    const other = setup(2);
+    scene.step(0.1, [], { rain: 1 });
+    other.step(0.1, [], { rain: 1 });
+    expect(scene.reserve(caught, 0)).toBe(true);
+    expect(other.reserve(dry, 0)).toBe(true);
+    scene.step(0.5, [caught], { rain: 1 });
+    other.step(0.5, [dry], { rain: 1 });
+    expect(caught.x - 40).toBeGreaterThan(RUN.dash[0] * 0.5 - 1e-9);
+    expect(dry.x - 40).toBeCloseTo(dry.speed * 0.5);
+    run(scene, [caught], 6, 1);
+    expect(scene.visits.get(caught)!.state).toBe('shelter');
+    run(scene, [caught], 1, 0);
+    const from = caught.x;
+    scene.step(0.5, [caught], { rain: 0 });
+    expect(scene.visits.get(caught)!.state).toBe('return');
+    expect(from - caught.x).toBeCloseTo(caught.speed * 0.5);
+  });
+  it('runs a cancelled vendor customer back while the storm continues', () => {
+    const stall: Stall = { x: 65, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]);
+    const p = { ...person(), group: [walker] };
+    expect(scene.reserve(p, 1)).toBe(true);
+    scene.step(2, [p], { rain: 0 });
+    const visit = scene.visits.get(p)!;
+    expect(visit.state).toBe('approach');
+    expect(visit.sheltering).toBe(false);
+    const walked = p.walked ?? 0;
+    scene.step(0.1, [p], { rain: 1 });
+    expect(visit.state).toBe('return');
+    expect(visit.site.queue).toHaveLength(0);
+    expect((p.walked ?? 0) - walked).toBeGreaterThanOrEqual(RUN.dash[0] * 0.1);
+  });
+  it('runs back from an abandoned shelter approach while the storm continues', () => {
+    const scene = setup(2);
+    const p = { ...person(), group: [walker] };
+    scene.step(0, [], { rain: 1 });
+    expect(scene.reserve(p, 0)).toBe(true);
+    scene.step(1, [p], { rain: 1 });
+    const visit = scene.visits.get(p)!;
+    expect(visit.state).toBe('approach');
+    for (let i = 0; i < 90 && visit.state === 'approach'; i++)
+      scene.step(0.1, [p], { rain: 1 }, undefined, undefined, () => false);
+    expect(visit.state).toBe('return');
+    expect(visit.site.queue).toHaveLength(0);
+    const walked = p.walked ?? 0;
+    scene.step(0.1, [p], { rain: 1 });
+    expect((p.walked ?? 0) - walked).toBeGreaterThanOrEqual(RUN.dash[0] * 0.1);
+  });
+  it('sends those with no umbrella to cover from further away', () => {
+    const reservesShelter = (umbrellaRoll: number) => {
+      const scene = setup(2);
+      const p = { ...person(), x: 2, d: 2, group: [{ ...walker, umbrella: umbrellaRoll }] };
+      run(scene, [p], 20, 1);
+      return scene.visits.has(p);
+    };
+    expect(reservesShelter(1)).toBe(true);
+    expect(reservesShelter(0)).toBe(false);
+  });
+
+  const rainShelters = (fallback = false) => {
+    const b = new LifeBuilder();
+    for (const y of [30, 81])
+      b.line(
+        [
+          { x: 0, y },
+          { x: 200, y },
+        ],
+        LifeLine.path,
+      );
+    b.site({ x: 50, y: 81 }, 2, 0, true);
+    if (fallback) b.site({ x: 105, y: 30 }, 2, 0, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []);
+    (scene as unknown as { rng: () => number }).rng = () => 0;
+    return scene;
+  };
+
+  it('waits five seconds before retrying unreachable cover for a caught walker', () => {
+    const scene = rainShelters();
+    const p = { ...person(50), group: [walker] };
+    const reserve = vi.spyOn(scene, 'reserve');
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(scene.visits.has(p)).toBe(false);
+    for (let i = 0; i < 4; i++) scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(1);
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(2);
+  });
+
+  it('tries reachable fallback cover before applying a failed-search cooldown', () => {
+    const scene = rainShelters(true);
+    const p = { ...person(50), group: [walker] };
+    const reserve = vi.spyOn(scene, 'reserve');
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve.mock.calls.map(([, index]) => index)).toEqual([0, 1]);
+    expect(scene.visits.get(p)?.site).toBe(scene.sites[1]);
   });
   it('freezes unseen visits and resumes them without accumulating time', () => {
     const scene = setup();

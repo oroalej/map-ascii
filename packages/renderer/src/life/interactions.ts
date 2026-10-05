@@ -10,11 +10,12 @@ import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometr
 import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
-import { isWalker, usableLines, type Activity } from './config';
+import { isWalker, RUN, usableLines, kinematicsOf, type Activity } from './config';
+import { exposed, runPace } from './running';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
-import { approach, type MotionLimit } from './motion';
+import { stopBefore, stoppingReach, type MotionLimit } from './motion';
 import { complete } from './cooperate';
 import type { LifeDiagnostics } from './diagnostics';
 
@@ -22,11 +23,22 @@ export const INTERACTIONS = {
   stopQueue: 6,
   vendorQueue: 4,
   terminalQueue: 3,
+  /** Begin service only after the vehicle has completed its approach, m/s. */
+  arrivalSpeed: 0.1,
+  /** Blend a transit vehicle from its ordinary lane toward the curb over this distance, m. */
+  curbBlend: 20,
+  /** Extra distance for selecting an approaching service stop, m. */
+  stopPad: 4,
   /** Seconds a vehicle serves a stop, and a customer spends at a stall. */
   dwell: [8, 15],
   purchase: [3, 6],
   rainOn: 0.5,
   rainOff: 0.2,
+  /** Default site search radius, m; caught walkers use `RUN.shelter.reach`. */
+  reach: 35,
+  /** Per-scan admission chances for covered sites in rain and visits in dry weather. */
+  shelterChance: 0.7,
+  visitChance: 0.12,
 } as const;
 type Site = WalkPoint & {
   kind: LifeSiteKind | 'vendor' | 'rest';
@@ -122,6 +134,7 @@ export class LocalScenes {
   private readonly yieldHeld = new WeakSet<Mover>();
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
+  private rain = 0;
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
@@ -378,6 +391,28 @@ export class LocalScenes {
     else this.returning(m, visit);
   }
 
+  /** Whether it is raining hard enough to shelter (hysteresis: `INTERACTIONS.rainOn`/`rainOff`). */
+  get raining(): boolean {
+    return this.wet;
+  }
+
+  /** Whether this person is caught in sheltering weather with no umbrella over the group. */
+  caught(m: Mover): boolean {
+    return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
+  }
+
+  /** A caught person's dash pace, or undefined when the group stays dry. */
+  dashPace(m: Mover): number | undefined {
+    return this.caught(m) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+  }
+
+  /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
+  private pace(m: Mover, visit: Visit): number {
+    return visit.state === 'approach' || visit.state === 'return'
+      ? (this.dashPace(m) ?? m.speed)
+      : m.speed;
+  }
+
   private move(
     m: Mover,
     visit: Visit,
@@ -397,7 +432,7 @@ export class LocalScenes {
     const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
-    let left = m.speed * dt;
+    let left = this.pace(m, visit) * dt;
     let held = false;
     while (left > 0 && visit.next < visit.path.length) {
       const target = visit.path[visit.next]!;
@@ -838,6 +873,7 @@ export class LocalScenes {
     diagnostics?: LifeDiagnostics,
   ) {
     const rain = env.rain ?? 0;
+    this.rain = rain;
     this.speechEvents.length = 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
@@ -959,6 +995,7 @@ export class LocalScenes {
         )
           continue;
         if (Math.abs(ahead(service.site, m)) > 0.8 * this.perMeter) continue;
+        if ((m.v ?? 0) > INTERACTIONS.arrivalSpeed * this.perMeter) continue;
         service.arriving = false;
         for (const person of service.site.queue) {
           const visit = this.visits.get(person);
@@ -1039,6 +1076,13 @@ export class LocalScenes {
         if (!modes || this.services.has(m)) continue;
         const previous = this.stopCooldown.get(m);
         if (previous && dist(m, previous) > 40 * this.perMeter) this.stopCooldown.delete(m);
+        const velocity = m.v ?? 0;
+        const brakingRoom = stoppingReach(
+          velocity,
+          kinematicsOf(m.vehicle).brake * this.perMeter,
+          0,
+          velocity * dt,
+        );
         for (const site of this.sites) {
           if (
             (owns && !owns(site)) ||
@@ -1046,8 +1090,9 @@ export class LocalScenes {
             !(site.modes & modes) ||
             site.road !== m.line ||
             site.direction !== m.dir ||
-            dist(m, site) > 15 * this.perMeter ||
-            ahead(site, m) < 0
+            dist(m, site) >
+              Math.max(15 * this.perMeter, brakingRoom + INTERACTIONS.stopPad * this.perMeter) ||
+            ahead(site, m) < brakingRoom
           )
             continue;
           const services = [...this.services].filter(
@@ -1068,12 +1113,15 @@ export class LocalScenes {
         !this.visits.has(m) &&
         !this.cooldown.has(m)
       ) {
+        // Those caught with no umbrella look further for cover, and are surer to go.
+        const caught = this.caught(m);
+        const reach = caught ? RUN.shelter.reach : INTERACTIONS.reach;
         const candidates = this.sites
           .map((site, index) => ({ site, index, d: dist(m, site) }))
           .filter(
             ({ site, d }) =>
               (!owns || owns(site)) &&
-              d < 35 * this.perMeter &&
+              d < reach * this.perMeter &&
               (this.wet
                 ? site.covered
                 : m.kind === 'person'
@@ -1085,8 +1133,17 @@ export class LocalScenes {
           )
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);
-        if (this.rng() < (this.wet ? 0.7 : 0.12))
-          for (const { index } of candidates) if (this.reserve(m, index)) break;
+        if (
+          this.rng() <
+          (caught
+            ? RUN.shelter.chance
+            : this.wet
+              ? INTERACTIONS.shelterChance
+              : INTERACTIONS.visitChance)
+        ) {
+          const reserved = candidates.some(({ index }) => this.reserve(m, index));
+          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, RUN.shelter.retry);
+        }
       }
     }
   }
@@ -1105,17 +1162,31 @@ export class LocalScenes {
     const service = this.services.get(m);
     if (!service) return;
     const distance = service.arriving ? Math.max(0, ahead(service.site, m)) : 0;
-    out.target = Math.min(out.target, approach(distance, 0, brake));
+    out.target = Math.min(out.target, stopBefore(distance, 0, brake, 0, brake * dt * dt));
     out.cap = Math.min(out.cap, distance / Math.max(dt, 0.001));
   }
   walkable(from: WalkPoint, to: WalkPoint): boolean {
     return this.graph.clear(from, to);
   }
   offset(m: Mover, normal: number, curb: number, pose = m): number {
-    const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
+    return this.offsetAt(m, pose, normal, curb);
+  }
+  curbSite(m: Mover): WalkPoint | undefined {
+    return this.services.get(m)?.site ?? this.stopCooldown.get(m);
+  }
+  /** Evaluate a future pose without substituting a copy for the service owner. */
+  offsetAt(m: Mover, at: WalkPoint, normal: number, curb: number): number {
+    const site = this.curbSite(m);
     if (!site) return normal;
-    const blend = Math.max(0, 1 - dist(pose, site) / (20 * this.perMeter));
+    const blend = Math.max(0, 1 - dist(at, site) / (INTERACTIONS.curbBlend * this.perMeter));
     return normal + (curb - normal) * blend;
+  }
+  get hasCurbScenes(): boolean {
+    return this.services.size > 0 || this.stopCooldown.size > 0;
+  }
+  merging(m: Mover): boolean {
+    const site = this.curbSite(m);
+    return !!site && dist(m, site) < INTERACTIONS.curbBlend * this.perMeter;
   }
   hidden(m: Mover): boolean {
     return this.visits.get(m)?.state === 'aboard';

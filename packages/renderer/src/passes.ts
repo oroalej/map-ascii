@@ -60,7 +60,15 @@ import {
 import { packLife, type LifeGrid } from './life/draw';
 import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
-import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lights';
+import {
+  packBeams,
+  packBrakeGlow,
+  packCandles,
+  packLights,
+  createConePackingScratch,
+  type ConePackingScratch,
+  type VisibleLamp,
+} from './life/lights';
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
@@ -541,6 +549,10 @@ type Texels = {
   revision: number;
   light: Uint8Array;
   lamps: Uint8Array | null;
+  stampedVehicles: Uint8Array;
+  stampedAgents?: readonly VisibleAgent[];
+  beamCones: ConePackingScratch;
+  brakeCones: ConePackingScratch;
 };
 const texelsOf = new WeakMap<CellTargets, Texels>();
 const texels = (targets: CellTargets): Texels => {
@@ -553,6 +565,9 @@ const texels = (targets: CellTargets): Texels => {
       revision: 0,
       light: new Uint8Array(size),
       lamps: null,
+      stampedVehicles: new Uint8Array(0),
+      beamCones: createConePackingScratch(),
+      brakeCones: createConePackingScratch(),
     };
     texelsOf.set(targets, found);
   }
@@ -590,6 +605,7 @@ export function lifePass(
   /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
   heldFrame?: object,
   speakers?: LifeGrid['speakers'],
+  puffs?: Float64Array,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -618,6 +634,8 @@ export function lifePass(
     return buffers.held.drawn;
   buffers.held = undefined;
   const lifeTexels = buffers.life;
+  if (buffers.stampedVehicles.length < agents.length)
+    buffers.stampedVehicles = new Uint8Array(agents.length);
   const packStart = profiler?.time();
   buffers.candles = buffers.clockCandidates = false;
   for (const agent of agents) {
@@ -642,6 +660,7 @@ export function lifePass(
       toCell: placement.toCell,
       allowsGroundCell,
       speakers,
+      stampedVehicles: buffers.stampedVehicles,
     },
     agents,
     theme,
@@ -650,7 +669,9 @@ export function lifePass(
     sun,
     themeRes.map.lifeGlyphs,
     { owners: buffers.owners, focus, clockCells: buffers.clockCells },
+    puffs,
   );
+  buffers.stampedAgents = agents;
   buffers.revision++;
   if (buffers.clocks) {
     buffers.clocks.begin(0);
@@ -669,7 +690,7 @@ export function lifePass(
 }
 
 /**
- * Put the streetlights and floodlights, the moving vehicles' headlight beams, and the candles
+ * Put the streetlights and floodlights, the moving vehicles' headlight beams and brake glow, and the candles
  * people carry on the cell grid (life/lights.ts) and upload them to the light texture. The lamps
  * are packed again only with `repack` (the grid moved, or they came on or went) or when the
  * grid's size changed.
@@ -694,7 +715,9 @@ export function lightPass(
   const lampTexels = buffers.lamps;
   if (repack) packLights(lampTexels, grid, lamps);
   lightTexels.set(lampTexels);
-  packBeams(lightTexels, grid, agents);
+  packBeams(lightTexels, grid, agents, buffers.beamCones);
+  if (buffers.stampedAgents === agents)
+    packBrakeGlow(lightTexels, grid, agents, buffers.stampedVehicles, buffers.brakeCones);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
   const clocks = buffers.clocks;

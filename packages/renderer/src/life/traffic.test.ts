@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { metersPerUnit } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, LifeWorld, type Mover } from './simulate';
 import { compatible, type JunctionTable } from './junctions';
-import { FOLLOW } from './config';
+import { FOLLOW, JUNCTION, kinematicsOf } from './config';
 import { worldTiles } from './testing/scenarios';
 import { VEHICLES } from './vehicles';
 
@@ -46,6 +46,104 @@ function corner(split: boolean) {
 }
 
 describe('curved traffic', () => {
+  it('distinguishes legal exits from incoming-only roads without terminal option arrays', () => {
+    const { life, m } = corner(true);
+    const terminal = life as unknown as {
+      terminalTarget(m: Mover, target: number, remaining: number): number;
+    };
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBe(8 * pm);
+    life.geo.oneway![1] = -1;
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBeLessThan(8 * pm);
+    life.geo.oneway![1] = 1;
+    expect(terminal.terminalTarget(m, 8 * pm, pm)).toBe(8 * pm);
+  });
+  it('starts an uninitialized vehicle at its safe target before a closed one-way endpoint', () => {
+    const { life, m } = corner(false);
+    life.geo.oneway![0] = 1;
+    Object.assign(m, {
+      from: 1,
+      d: 99 * pm,
+      x: 1000 + 100 * pm,
+      y: 1000 + 99 * pm,
+      hx: 0,
+      hy: 1,
+      v: undefined,
+      speed: 8 * pm,
+    });
+    life.step(0.1, undefined, undefined, undefined, undefined, () => true);
+    expect(m.v).toBe(0);
+    expect(life.motionStats.hardCaps).toBe(0);
+    expect(m.dir).toBe(1);
+  });
+  it('slows before a two-way dead-end U-turn with bounded braking', () => {
+    const { life, m } = corner(false);
+    Object.assign(m, {
+      from: 1,
+      d: 70 * pm,
+      x: 1000 + 100 * pm,
+      y: 1000 + 70 * pm,
+      hx: 0,
+      hy: 1,
+      speed: 10 * pm,
+      v: 10 * pm,
+    });
+    let previous = 10,
+      turned = false;
+    for (let frame = 0; frame < 200; frame++) {
+      life.step(0.1, undefined, undefined, undefined, undefined, () => true);
+      const v = m.v! / pm;
+      expect(previous - v).toBeLessThanOrEqual(kinematicsOf('car').maxBrake * 0.1 + 1e-7);
+      if (m.dir === -1) {
+        expect(v).toBeLessThanOrEqual(1.3);
+        turned = true;
+        break;
+      }
+      previous = v;
+    }
+    expect(turned).toBe(true);
+    expect(life.motionStats.hardCaps).toBe(0);
+  });
+  it('still brakes fast vehicles outside the ordinary terminal broad phase', () => {
+    const { life, m } = corner(false);
+    Object.assign(m, {
+      from: 1,
+      d: 20 * pm,
+      x: 1000 + 100 * pm,
+      y: 1000 + 20 * pm,
+      hx: 0,
+      hy: 1,
+      speed: 30 * pm,
+      v: 30 * pm,
+    });
+    life.step(0.1, undefined, undefined, undefined, undefined, () => true);
+    expect(m.v! / pm).toBeLessThan(30);
+    expect(30 - m.v! / pm).toBeLessThanOrEqual(kinematicsOf('car').maxBrake * 0.1 + 1e-7);
+    expect(life.motionStats.hardCaps).toBe(0);
+  });
+  it('brakes for a leader approaching the lane from the curb before footprints touch', () => {
+    const { life, m } = corner(false);
+    life.geo.widths[0] = 14;
+    m.speed = m.v = 8 * pm;
+    const leader = { ...m, d: m.d + 14 * pm, x: m.x + 14 * pm, v: 0, speed: 0 };
+    life.movers.push(leader);
+    const offset = vi
+      .spyOn(life.scenes, 'offset')
+      .mockImplementation((owner, normal) => (owner === leader ? 6 : normal));
+    const curb = vi.spyOn(life.scenes, 'hasCurbScenes', 'get').mockReturnValue(true);
+    const merging = vi
+      .spyOn(life.scenes, 'merging')
+      .mockImplementation((owner) => owner === leader);
+    try {
+      life.step(0.1);
+    } finally {
+      offset.mockRestore();
+      curb.mockRestore();
+      merging.mockRestore();
+    }
+    expect(m.v / pm).toBeLessThan(8);
+    expect(8 - m.v / pm).toBeLessThanOrEqual(kinematicsOf('car').maxBrake * 0.1 + 1e-7);
+    expect(life.motionStats.hardCaps).toBe(0);
+  });
   for (const split of [false, true])
     it(`keeps pose and clearance continuous across ${split ? 'line ends' : 'interior bends'}`, () => {
       const { life, m } = corner(split);
@@ -352,6 +450,121 @@ describe('curved traffic', () => {
 });
 
 describe('crossroads traffic', () => {
+  it('retains a human-blocked physical occupant beyond holdMax and releases all approaches', () => {
+    const b = new LifeBuilder(),
+      cx = 2048,
+      cy = 2048;
+    b.line(
+      [
+        { x: 0, y: cy },
+        { x: cx, y: cy },
+        { x: 4096, y: cy },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    b.line(
+      [
+        { x: cx, y: 0 },
+        { x: cx, y: cy },
+        { x: cx, y: 4096 },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    const stripe = cx + 3 * pm;
+    b.line(
+      [
+        { x: stripe, y: cy - 12 * pm },
+        { x: stripe, y: cy + 12 * pm },
+      ],
+      LifeLine.path,
+      3,
+    );
+    b.area('crossing', [
+      [
+        { x: stripe - 1.5 * pm, y: cy - 7 * pm },
+        { x: stripe + 1.5 * pm, y: cy - 7 * pm },
+        { x: stripe + 1.5 * pm, y: cy + 7 * pm },
+        { x: stripe - 1.5 * pm, y: cy + 7 * pm },
+      ],
+    ]);
+    const world = new LifeWorld();
+    world.sync([{ key: 'human-junction', tile, life: b.finish() }]);
+    const life = worldTiles(world).get('human-junction')!;
+    // This junction-hold fixture needs a stationary human rather than a spontaneous runner.
+    (life as unknown as { runRng: () => number }).runRng = () => 1;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const car: Mover = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d: cx - 5 * pm,
+      x: cx - 5 * pm,
+      y: cy,
+      hx: 1,
+      hy: 0,
+      speed: 2 * pm,
+      v: 2 * pm,
+      paint: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+    };
+    const waiter: Mover = {
+      ...car,
+      line: 1,
+      from: 3,
+      d: cy - 20 * pm,
+      x: cx,
+      y: cy - 20 * pm,
+      hx: 0,
+      hy: 1,
+      v: 0,
+    };
+    life.movers.push(car, waiter);
+    world.step(0.1, undefined, 18);
+    const table = (world as unknown as { junctions: JunctionTable }).junctions;
+    expect(table.snapshot().find((r) => r.index === 0)?.inside).toBe(true);
+    const human: Mover = {
+      ...car,
+      kind: 'person',
+      vehicle: undefined,
+      line: 2,
+      from: 6,
+      d: (12 + life.offsetOf(car)) * pm,
+      x: stripe,
+      y: cy + life.offsetOf(car) * pm,
+      hx: 0,
+      hy: 1,
+      speed: 0,
+      v: undefined,
+      pause: 100,
+      group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
+    };
+    life.movers.push(human);
+    for (let i = 0; i < (JUNCTION.holdMax + 2) * 10; i++) {
+      world.step(0.1, undefined, 18, undefined, undefined, undefined, 0.9);
+      expect(table.granted(car)).toBe(true);
+      expect(table.granted(waiter)).toBe(false);
+    }
+    expect(car.v).toBe(0);
+    expect(table.snapshot().find((r) => r.index === 1)).toMatchObject({
+      ready: true,
+      inside: false,
+    });
+    expect(waiter.v! / pm).toBeCloseTo(0, 6);
+    const pending = table.movement(waiter);
+    if (!pending) throw new Error('Expected a ready waiter at the stop line');
+    expect(Math.abs(pending.ahead / pm)).toBeLessThan(0.01);
+    life.movers.splice(life.movers.indexOf(human), 1);
+    for (let i = 0; i < 180; i++) world.step(0.1, undefined, 18);
+    expect(car.x).toBeGreaterThan(cx + 20 * pm);
+    expect(waiter.y).toBeGreaterThan(cy + 10 * pm);
+  });
   it.each([0, 2.9, 7])(
     'clears every arm with compatible holds, safe stops and bounded waits over 180 seconds at minimum %s',
     (minimum) => {

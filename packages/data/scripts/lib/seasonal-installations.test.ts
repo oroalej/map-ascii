@@ -60,8 +60,6 @@ const shared = {
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: shared.sources,
   installations: [
@@ -220,6 +218,153 @@ it('clips dense canopy rows around holes and concave access gaps, and validates 
       ).toBe(true);
   }
 });
+it('trims only crown intersections and keeps both outside ends, with stable defaults and ordering', () => {
+  const meters = (x: number, y: number): SeasonalPoint => [x / 111320, y / 111320];
+  const ground: AtlasFeature = {
+    ...area,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[meters(0, 0), meters(100, 0), meters(100, 10), meters(0, 10), meters(0, 0)]],
+    },
+  };
+  const config: SeasonConfig = {
+    ...season,
+    installations: [
+      {
+        ...shared,
+        id: 'canopy',
+        kind: 'light-string',
+        layout: 'canopy',
+        spacing_m: 10,
+        mount: 'canopy',
+        exclude_tree_crowns: true,
+      },
+    ],
+  };
+  const tree = (id: string, x: number, y = 5, crown = 8): AtlasFeature => ({
+    ...features[3]!,
+    properties: { id, class: 'tree', crown },
+    geometry: { type: 'Point', coordinates: meters(x, y) },
+  });
+  const uncut = generateSeasonalInstallations([ground], [config]);
+  expect(uncut.records).toHaveLength(1);
+  for (const [trees, count] of [
+    [[tree('tree/a', 50)], 2],
+    [[tree('tree/a', 40), tree('tree/b', 45)], 2],
+    [[tree('tree/a', 40), tree('tree/b', 60)], 3],
+    [[tree('tree/a', -1)], 1],
+    [[tree('tree/a', 50, 30)], 1],
+    [[tree('tree/a', 1)], 1],
+    [[tree('tree/a', 5)], 2],
+  ] as const) {
+    const inputs = [ground, ...trees];
+    const clipped = generateSeasonalInstallations(inputs, [config]);
+    expect(clipped.records).toHaveLength(count);
+    expect(generateSeasonalInstallations([...inputs].reverse(), [config])).toEqual(clipped);
+    expect(generateSeasonalInstallations([...inputs, ...trees], [config])).toEqual(clipped);
+    const defaultConfig: SeasonConfig = {
+      ...config,
+      installations: config.installations!.map((i) => ({ ...i, exclude_tree_crowns: false })),
+    };
+    expect(generateSeasonalInstallations(inputs, [defaultConfig])).toEqual(uncut);
+    for (const record of clipped.records) {
+      if (record.kind !== 'light-string') throw new Error('expected string');
+      for (const feature of trees) {
+        if (feature.geometry.type !== 'Point') throw new Error('expected tree');
+        const [x, y] = feature.geometry.coordinates;
+        for (let i = 0; i <= 20; i++) {
+          const at = [
+            record.from[0] + ((record.to[0] - record.from[0]) * i) / 20,
+            record.from[1] + ((record.to[1] - record.from[1]) * i) / 20,
+          ];
+          expect(Math.hypot(at[0]! - x!, at[1]! - y!) * 111320).toBeGreaterThanOrEqual(4 - 1e-6);
+        }
+      }
+    }
+    if (trees[0].geometry.type === 'Point' && trees[0].geometry.coordinates[1]! > 0.0002)
+      expect(clipped).toEqual(uncut);
+  }
+  const covered = tree('tree/a', 50, 5, 100);
+  const shortGround: AtlasFeature = {
+    ...ground,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[meters(40, 0), meters(60, 0), meters(60, 10), meters(40, 10), meters(40, 0)]],
+    },
+  };
+  expect(() => generateSeasonalInstallations([shortGround, covered], [config])).toThrow(
+    'no light-string geometry',
+  );
+});
+it('keeps unique clipped IDs for centimeter survivors before a perimeter corner', () => {
+  const meters = (x: number, y: number): SeasonalPoint => [x / 111320, y / 111320];
+  const ground: AtlasFeature = {
+    ...area,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          meters(0.0035, 0),
+          meters(20.0035, 0),
+          meters(20.0035, 20),
+          meters(0.0035, 20),
+          meters(0.0035, 0),
+        ],
+      ],
+    },
+  };
+  const config = Season.parse({
+    ...season,
+    installations: [
+      {
+        ...shared,
+        id: 'perimeter',
+        kind: 'light-string',
+        layout: 'perimeter',
+        spacing_m: 3,
+        exclude_tree_crowns: true,
+      },
+    ],
+  });
+  const uncut = generateSeasonalInstallations([ground], [config]);
+  const span = uncut.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      r.from[1] === r.to[1] &&
+      r.from[0] < r.to[0] &&
+      r.to[0] * 111320 > 18,
+  );
+  if (!span || span.kind !== 'light-string') throw new Error('expected corner span');
+  const next = uncut.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      Math.hypot(r.from[0] - span.to[0], r.from[1] - span.to[1]) * 111320 < 1e-8,
+  );
+  if (!next) throw new Error('expected next perimeter segment');
+  const crownExit: SeasonalPoint = [span.to[0] - 0.01005 / 111320, span.to[1]];
+  expect(`season:winter/perimeter/${crownExit[0].toFixed(7)}/${crownExit[1].toFixed(7)}`).toBe(
+    next.id,
+  );
+  const tree: AtlasFeature = {
+    ...features[3]!,
+    properties: { id: 'osm:node/2', class: 'tree', crown: 4 },
+    geometry: { type: 'Point', coordinates: [crownExit[0] - 2 / 111320, crownExit[1]] },
+  };
+  const result = generateSeasonalInstallations([ground, tree], [config]);
+  expect(new Set(result.records.map((r) => r.id)).size).toBe(result.records.length);
+  expect(generateSeasonalInstallations([tree, ground], [config])).toEqual(result);
+  for (const untouched of uncut.records)
+    if (untouched !== span)
+      expect(result.records.find((r) => r.id === untouched.id)).toEqual(untouched);
+  const survivor = result.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      Math.abs(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) * 111320 - 0.01005) < 1e-6,
+  );
+  expect(survivor).toBeDefined();
+  expect(survivor?.id).not.toBe(next.id);
+});
+
 it('keeps deterministic tree footprints away from paths, monuments and each other; retains mapped crowns', () => {
   const a = generateSeasonalInstallations(features, [season]);
   expect(generateSeasonalInstallations([...features].reverse(), [season])).toEqual(a);
@@ -247,6 +392,39 @@ it('keeps deterministic tree footprints away from paths, monuments and each othe
   });
   expect(a.records.filter((r) => r.kind === 'light-string').length).toBeGreaterThan(10);
 });
+it('selects overlapping crowns outside the grounds once, without changing center-inside defaults', () => {
+  const outside: AtlasFeature = {
+    ...features[3]!,
+    properties: { id: 'osm:node/5', class: 'tree', crown: 16 },
+    geometry: { type: 'Point', coordinates: [-0.00005, 0.0002] },
+  };
+  const distant: AtlasFeature = {
+    ...outside,
+    properties: { ...outside.properties, id: 'osm:node/6' },
+    geometry: { type: 'Point', coordinates: [-0.0002, 0.0002] },
+  };
+  const crowns = { ...shared, id: 'crowns', kind: 'decorated-canopy' as const };
+  const config = { ...season, installations: [crowns] };
+  const source = [...features, outside, outside, distant];
+  const original = generateSeasonalInstallations(source, [config]).records;
+  expect(original).toHaveLength(1);
+  expect(original[0]).toMatchObject({ at: [0.0002, 0.0002], radius_m: 4 });
+  expect(
+    generateSeasonalInstallations(source, [
+      { ...config, installations: [{ ...crowns, trees: 'inside' }] },
+    ]).records,
+  ).toEqual(original);
+  const overlapping = { ...config, installations: [{ ...crowns, trees: 'overlapping' as const }] };
+  const result = generateSeasonalInstallations(source, [overlapping]);
+  expect(result.records).toHaveLength(2);
+  expect(result.records.find((record) => record.id.endsWith('/osm:node/5'))).toMatchObject({
+    at: [-0.00005, 0.0002],
+    radius_m: 8,
+  });
+  expect(new Set(result.records.map((record) => record.id)).size).toBe(result.records.length);
+  expect(generateSeasonalInstallations([...source].reverse(), [overlapping])).toEqual(result);
+});
+
 it('fails loudly for missing anchors, impossible footprints and unavailable mapped trees', () => {
   const run = (change: Partial<SeasonConfig>) =>
     generateSeasonalInstallations(features, [{ ...season, ...change }]);

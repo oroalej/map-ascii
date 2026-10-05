@@ -148,6 +148,25 @@ export class SignalControl {
     this.vehicleLimit(m, dt, clock, out);
     return Math.min(out.target, out.cap);
   }
+  /** The extra entrance hold belongs only to crossings without an existing controller. */
+  controlsCrossing(line: number, centre: Point): boolean {
+    for (const s of this.signals) {
+      const reach = (s.radius + SIGNAL.crossingMargin) * this.perMeter;
+      if (s.approaches?.length) {
+        if (
+          s.approaches.some(
+            (a) => a.line === line && Math.hypot(a.x - centre.x, a.y - centre.y) <= reach,
+          )
+        )
+          return true;
+      } else if (
+        this.stops.get(line)?.some((stop) => stop.signal === s) &&
+        (s.members ?? [s]).some((p) => Math.hypot(p.x - centre.x, p.y - centre.y) <= reach)
+      )
+        return true;
+    }
+    return false;
+  }
   vehicleLimit(
     m: Mover,
     dt: number,

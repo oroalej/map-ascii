@@ -1,6 +1,13 @@
 import { DEFAULT_ROAD_WIDTH_M } from './config';
 import { LifeLine, type LifeGeometry } from './geometry';
-import { boundsOf, PolygonIndex, type Body, type Point, type Polygon } from './occupancy';
+import {
+  boundsOf,
+  PolygonIndex,
+  segmentBody,
+  type Body,
+  type Point,
+  type Polygon,
+} from './occupancy';
 import { complete } from './cooperate';
 
 /** The same rectangular segment footprint used by the road rasterizer. */
@@ -189,17 +196,7 @@ export class RoadAccess {
   }
 
   clear(a: Point, b: Point): boolean {
-    const length = Math.hypot(b.x - a.x, b.y - a.y);
-    return this.allows([
-      {
-        x: (a.x + b.x) / 2,
-        y: (a.y + b.y) / 2,
-        hx: length ? (b.x - a.x) / length : 1,
-        hy: length ? (b.y - a.y) / length : 0,
-        length: Math.max(length, 0.01),
-        width: 0.01,
-      },
-    ]);
+    return this.allows([segmentBody(a, b)]);
   }
 }
 

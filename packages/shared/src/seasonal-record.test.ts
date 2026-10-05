@@ -163,8 +163,6 @@ it('accepts corridors in the season schema and rejects duplicate corridor identi
   const s = {
     id: 'feast',
     title: { en: 'Feast' },
-    status: 'draft',
-    note: 'TODO(verify)',
     sources: [{ title: 'Reference', url: 'https://example.com/calendar' }],
     window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
     bunting: {

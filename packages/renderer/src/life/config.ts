@@ -79,7 +79,24 @@ export function laneOffset(
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
  * side on water may overlap by `squeeze` (m); road vehicles retain the physical 0.15 m gap.
  */
-export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
+export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+/** Required distance from a vehicle centre to a stop edge, m. */
+export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
+/** Conservative broad phase for ordinary terminal approaches, m/s and m. */
+export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
+/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
+export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
+/** Turn back after this many active seconds attempting a blocked walking route. */
+export const WALK_RECOVERY = { seconds: 3 } as const;
+/** Distances are metres; holdMax counts active simulation seconds. */
+export const PEDESTRIAN = {
+  corridorPad: 0.3,
+  lookaheadPad: 4,
+  maxRange: 30,
+  curbReach: 2,
+  holdMax: 20,
+  holdMatch: 2,
+} as const;
 
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
@@ -244,6 +261,18 @@ export const PEOPLE = { groups: [0.62, 0.88, 0.97, 1] as const, child: 0.4, stri
  */
 export const UMBRELLA = { base: 0.02, rain: 0.75, sun: 0.3, sunFrom: 35, sunFull: 65 } as const;
 
+/** Close-up canopy timing (seconds) and widths; distant figures keep their instant look. */
+export const UMBRELLA_MOTION = {
+  zoom: 19,
+  open: 0.7,
+  close: 0.9,
+  stagger: 1.5,
+  lost: 0.5,
+  folded: 0.3,
+  stageCutoff: 0.5,
+  stages: [0.45, 0.75],
+} as const;
+
 /** The share of adults under an umbrella for `rain` (0–1) and the sun's altitude (degrees). */
 export function umbrellaShare(rain: number, sunAltitude: number): number {
   const sun = Math.min(
@@ -252,6 +281,30 @@ export function umbrellaShare(rain: number, sunAltitude: number): number {
   );
   return Math.max(UMBRELLA.base, rain * UMBRELLA.rain, sun * UMBRELLA.sun);
 }
+
+/** Whether this adult carries an umbrella for the current share. */
+export function underUmbrella(
+  walker: { figure: 'adult' | 'child'; umbrella: number },
+  share: number,
+): boolean {
+  return walker.figure === 'adult' && walker.umbrella < share;
+}
+
+/**
+ * People running (life/running.ts): now and then someone walking alone runs at `speed` m/s for
+ * `seconds` (`chance` per second), at most `maxPerTile` at once. In the rain those with no
+ * umbrella run at `dash` m/s, on their way or to a covered shelter within `shelter.reach` m,
+ * which they head for with `shelter.chance` (life/interactions.ts). Unreachable cover waits
+ * `shelter.retry` seconds before another route search.
+ */
+export const RUN = {
+  chance: 0.004,
+  seconds: [3, 8] as const,
+  speed: [2.6, 3.4] as const,
+  maxPerTile: 2,
+  dash: [2.8, 3.6] as const,
+  shelter: { reach: 60, chance: 0.9, retry: 5 },
+} as const;
 
 /**
  * Street vendors with their carts: one per this many meters of line (`spacing`), `marketBoost`
@@ -367,6 +420,16 @@ export const BIRDS = {
   flocksPerTile: 5,
   stay: [15, 45] as const,
 };
+
+/** Ground feeding: bounded spot searches, visit seconds, nearby tree rests and landing blend. */
+export const FORAGE = {
+  attempts: 8,
+  /** Search radius in metres for both reachable shoreline and a nearby resting tree. */
+  reach: 40,
+  visit: [60, 180],
+  returnChance: 0.8,
+  settleSeconds: 1,
+} as const;
 
 /**
  * Birds in trees: a flock picking where to go next lands in a tree (a perch, raster/geometry.ts)
@@ -621,6 +684,8 @@ export const SIGNAL = {
   lookahead: 40,
   brake: 3,
   walkMin: 5,
+  /** Additional radius for associating crossing quads with signal controllers, m. */
+  crossingMargin: 3.5,
 } as const;
 
 /** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */

@@ -168,8 +168,6 @@ export { cityTime, type LocalTime } from './life/clock';
 export type SeasonState = Readonly<{
   id: string;
   title: string;
-  status: 'draft' | 'verified';
-  note?: string;
   labels: Readonly<{
     lanterns?: string;
     bunting?: string;
@@ -481,8 +479,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? Object.freeze({
           id: season.id,
           title: season.title.en,
-          status: season.status,
-          ...(season.note ? { note: season.note } : {}),
           labels: Object.freeze({
             ...(season.fireworks ? { fireworks: season.fireworks.label } : {}),
             ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
@@ -974,6 +970,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             wind: worldWind(time),
             weather: { rain: currentRain(), minutes: cityMinutes, season: season?.id ?? null },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
+            effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
           },
           visible: [
             camera.zoom,
@@ -1016,6 +1013,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       focus.life,
       itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
       trackSpeech ? speechSpeakers : undefined,
+      drawnLife?.puffs,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;

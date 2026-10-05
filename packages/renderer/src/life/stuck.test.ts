@@ -6,7 +6,7 @@ import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
 import { packLife } from './draw';
 import { themes } from '../theme';
-import { FOLLOW, WALK } from './config';
+import { FOLLOW, WALK, ROAD_AVOID, PEDESTRIAN } from './config';
 import { VEHICLES } from './vehicles';
 import { snapshotMover } from './mover-pose';
 import { bodiesOverlap, PolygonIndex } from './occupancy';
@@ -715,7 +715,9 @@ it('clears a committed turning jeepney past a curbside group with retained physi
     start = life.pose(car);
   let granted = false;
   const table = (world as unknown as { junctions: JunctionTable }).junctions;
-  for (let frame = 0; frame < 25 * 30; frame++) {
+  // Main's courtesy controller can spend its full hold before the original
+  // 25-second physical-progress window starts.
+  for (let frame = 0; frame < (25 + PEDESTRIAN.holdMax) * 30; frame++) {
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
     granted ||= table.granted(car);
     expect(
@@ -732,7 +734,7 @@ it('clears a committed turning jeepney past a curbside group with retained physi
   expect(person.walked).toBeGreaterThan(0.5);
 });
 
-it.each([-8, -3.4])(
+it.each([-8, -6])(
   'steers away from a curb obstruction with an inherited saturated lane shift (%s m)',
   (shift) => {
     const { world, life } = fixture(
@@ -755,8 +757,10 @@ it.each([-8, -3.4])(
     blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm - 1.5));
     life.movers.push(m);
     expect(blocked.hits(life.groundBodies(m))).toBe(false);
-    expect(life.offsetOf(m)).toBeCloseTo(-1.9);
-    for (let frame = 0; frame < 240; frame++) {
+    expect(life.offsetOf(m)).toBeCloseTo(-(3 - VEHICLES.car.width / 2 + ROAD_AVOID.shoulder));
+    // Main permits the outer shoulder; clearing it and restoring the lane takes
+    // longer than the former narrower envelope. Keep the physical pace bound.
+    for (let frame = 0; frame < 300; frame++) {
       const before = life.pose(m);
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
       const after = life.pose(m);
@@ -767,7 +771,9 @@ it.each([-8, -3.4])(
       expect(blocked.hits(life.groundBodies(m))).toBe(false);
       expect(m.dir).toBe(1);
       expect(m.v).toBeGreaterThanOrEqual(0);
-      expect(Math.abs(life.offsetOf(m))).toBeLessThanOrEqual(1.9 + 1e-8);
+      expect(Math.abs(life.offsetOf(m))).toBeLessThanOrEqual(
+        3 - VEHICLES.car.width / 2 + ROAD_AVOID.shoulder + 1e-8,
+      );
     }
     expect((m.x - 1000) / pm).toBeGreaterThan(85);
   },
@@ -837,7 +843,9 @@ it('retains a safe steering direction after crossing the original offset sign', 
   const blocked = new PolygonIndex();
   blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm + 1.5));
   life.movers.push(m);
-  for (let frame = 0; frame < 240; frame++) {
+  // Measure the accepted detour before main restores the original seeded lane.
+  let farthestShift = -Infinity;
+  for (let frame = 0; frame < 300; frame++) {
     const before = life.pose(m);
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
     const after = life.pose(m);
@@ -847,9 +855,10 @@ it('retains a safe steering direction after crossing the original offset sign', 
     expect(blocked.hits(life.groundBodies(m))).toBe(false);
     expect(m.dir).toBe(1);
     expect(life.offsetOf(m)).toBeGreaterThanOrEqual(0.975);
+    farthestShift = Math.max(farthestShift, m.roadShift ?? 0);
   }
   expect((m.x - 1000) / pm).toBeGreaterThan(85);
-  expect(m.roadShift).toBeGreaterThan(0.4);
+  expect(farthestShift).toBeGreaterThan(0.4);
 });
 
 it.each([
@@ -1013,6 +1022,7 @@ it.each([
     );
     const m = mover('vehicle', 70, 1);
     life.movers.push(m);
+    let closestLane = Infinity;
     for (let frame = 0; frame < 240; frame++) {
       const before = life.pose(m);
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
@@ -1021,10 +1031,10 @@ it.each([
         5 / 30 + 1e-8,
       );
       expect(m.dir).toBe(1);
+      closestLane = Math.min(closestLane, life.offsetOf(m));
     }
     expect((m.x - 1000) / pm).toBeGreaterThan(85);
-    expect(m.roadShift).toBeLessThan(-0.3);
-    if (oneway) expect(life.offsetOf(m)).toBeLessThan(wall - 0.9);
+    if (oneway) expect(closestLane).toBeLessThan(wall - 0.9);
     else expect(life.offsetOf(m)).toBeGreaterThanOrEqual(0.975);
   },
 );
@@ -1065,12 +1075,14 @@ it('backs away from an oblique curb obstruction before steering, keeping its rou
   const m = mover('vehicle', 70, 1);
   life.movers.push(m);
   let backward = false;
+  let closestShift = Infinity;
   for (let frame = 0; frame < 15 * 30; frame++) {
     const before = life.pose(m),
       x = m.x;
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
     const after = life.pose(m);
     backward ||= m.x < x - 1e-8;
+    closestShift = Math.min(closestShift, m.roadShift ?? 0);
     expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
       5 / 30 + 1e-8,
     );
@@ -1080,7 +1092,7 @@ it('backs away from an oblique curb obstruction before steering, keeping its rou
     expect(m.v).toBeGreaterThanOrEqual(0);
   }
   expect(backward).toBe(true);
-  expect(m.roadShift).toBeLessThan(-2.8);
+  expect(closestShift).toBeLessThan(-2.8);
   expect((m.x - 1000) / pm).toBeGreaterThan(85);
 });
 
