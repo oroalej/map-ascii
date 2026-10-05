@@ -118,7 +118,7 @@ import {
 } from './forage';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
-import { exposed, runPace } from './running';
+import { runPace } from './running';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
@@ -3152,29 +3152,24 @@ export class TileLife {
           (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
           a.i - b.i,
       );
-    const rain = env?.rain ?? 0;
+    const steps = (m: Mover) =>
+      m !== this.inspected &&
+      (!pass?.owns || pass.owns(m)) &&
+      (!shows || shows(m.kind)) &&
+      (!near || !!m.train || near(m.x, m.y)) &&
+      (!env?.levels || !!m.train || m.rank < env.levels[m.kind]) &&
+      !this.scenes.visits.has(m);
     // Frozen runners retain their timer. On resuming, runs share the cap in stable mover order.
     let running = 0;
     for (const m of this.movers)
       if ((m.run ?? 0) <= 0) continue;
       else if (this.scenes.visits.has(m)) m.run = 0;
-      else if (
-        m !== this.inspected &&
-        (!pass?.owns || pass.owns(m)) &&
-        (!shows || shows(m.kind)) &&
-        (!near || near(m.x, m.y)) &&
-        (!env?.levels || m.rank < env.levels[m.kind])
-      ) {
+      else if (steps(m)) {
         if (running < RUN.maxPerTile) running++;
         else this.stopRun(m);
       }
     for (const { i, m } of order) {
-      if (this.inspected === m) continue;
-      if (pass?.owns && !pass.owns(m)) continue;
-      if (shows && !shows(m.kind)) continue;
-      if (near && !m.train && !near(m.x, m.y)) continue;
-      if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
-      if (this.scenes.visits.has(m)) continue;
+      if (!steps(m)) continue;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
@@ -3262,7 +3257,7 @@ export class TileLife {
           continue;
         }
         const idle = this.canIdle(m);
-        const dashing = this.scenes.raining && exposed(m.group, rain);
+        const dashing = this.scenes.caught(m);
         if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
@@ -3285,7 +3280,7 @@ export class TileLife {
           }
         }
         const was = (m.run ?? 0) > 0;
-        const pace = this.runSpeed(m, dt, rain, running < RUN.maxPerTile);
+        const pace = this.runSpeed(m, dt, running < RUN.maxPerTile);
         running += Number((m.run ?? 0) > 0) - Number(was);
         if (pace !== undefined) speeds[i] = pace;
       }
@@ -3411,14 +3406,15 @@ export class TileLife {
    * seconds, while there is `room` (fewer than `RUN.maxPerTile` in the tile running). A run ends
    * early when they are held up.
    */
-  private runSpeed(m: Mover, dt: number, rain: number, room: boolean): number | undefined {
+  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
     if (this.scenes.raining) {
       if (m.run) m.run = 0;
-      return exposed(m.group, rain) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+      return this.scenes.caught(m) ? runPace(m, RUN.dash, this.perMeter) : undefined;
     }
     if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
     else if (
       room &&
+      (m.waiting ?? 0) <= 0 &&
       m.group?.length === 1 &&
       m.group[0]!.figure === 'adult' &&
       this.runRng() < RUN.chance * dt

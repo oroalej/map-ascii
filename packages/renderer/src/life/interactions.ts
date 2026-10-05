@@ -325,12 +325,14 @@ export class LocalScenes {
     return this.wet;
   }
 
+  /** Whether this person is caught in sheltering weather with no umbrella over the group. */
+  caught(m: Mover): boolean {
+    return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
+  }
+
   /** A person with no umbrella runs for the shelter they are headed to; everyone else walks. */
   private pace(m: Mover, visit: Visit): number {
-    return visit.sheltering &&
-      visit.state === 'approach' &&
-      m.kind === 'person' &&
-      exposed(m.group, this.rain)
+    return visit.sheltering && visit.state === 'approach' && this.caught(m)
       ? runPace(m, RUN.dash, this.perMeter)
       : m.speed;
   }
@@ -609,7 +611,7 @@ export class LocalScenes {
         !this.cooldown.has(m)
       ) {
         // Those caught with no umbrella look further for cover, and are surer to go.
-        const caught = this.wet && m.kind === 'person' && exposed(m.group, rain);
+        const caught = this.caught(m);
         const reach = caught ? RUN.shelter.reach : 35;
         const candidates = this.sites
           .map((site, index) => ({ site, index, d: dist(m, site) }))
@@ -628,8 +630,15 @@ export class LocalScenes {
           )
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);
-        if (this.rng() < (caught ? RUN.shelter.chance : this.wet ? 0.7 : 0.12))
-          for (const { index } of candidates) if (this.reserve(m, index)) break;
+        if (this.rng() < (caught ? RUN.shelter.chance : this.wet ? 0.7 : 0.12)) {
+          let reserved = false;
+          for (const { index } of candidates)
+            if (this.reserve(m, index)) {
+              reserved = true;
+              break;
+            }
+          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, 5);
+        }
       }
     }
   }

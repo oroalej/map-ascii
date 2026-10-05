@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { activityLevels, RUN } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LocalScenes } from './interactions';
@@ -500,14 +500,53 @@ describe('local interaction scenes', () => {
     expect(from - caught.x).toBeCloseTo(caught.speed * 0.5);
   });
   it('sends those with no umbrella to cover from further away', () => {
-    const covered = (umbrella: number) => {
+    const reservesShelter = (umbrellaRoll: number) => {
       const scene = setup(2);
-      const p = { ...person(), x: 2, d: 2, group: [{ ...walker, umbrella }] };
+      const p = { ...person(), x: 2, d: 2, group: [{ ...walker, umbrella: umbrellaRoll }] };
       run(scene, [p], 20, 1);
       return scene.visits.has(p);
     };
-    expect(covered(1)).toBe(true);
-    expect(covered(0)).toBe(false);
+    expect(reservesShelter(1)).toBe(true);
+    expect(reservesShelter(0)).toBe(false);
+  });
+
+  const rainShelters = (fallback = false) => {
+    const b = new LifeBuilder();
+    for (const y of [30, 81])
+      b.line(
+        [
+          { x: 0, y },
+          { x: 200, y },
+        ],
+        LifeLine.path,
+      );
+    b.site({ x: 50, y: 81 }, 2, 0, true);
+    if (fallback) b.site({ x: 105, y: 30 }, 2, 0, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []);
+    (scene as unknown as { rng: () => number }).rng = () => 0;
+    return scene;
+  };
+
+  it('waits five seconds before retrying unreachable cover for a caught walker', () => {
+    const scene = rainShelters();
+    const p = { ...person(50), group: [walker] };
+    const reserve = vi.spyOn(scene, 'reserve');
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(scene.visits.has(p)).toBe(false);
+    for (let i = 0; i < 4; i++) scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(1);
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve).toHaveBeenCalledTimes(2);
+  });
+
+  it('tries reachable fallback cover before applying a failed-search cooldown', () => {
+    const scene = rainShelters(true);
+    const p = { ...person(50), group: [walker] };
+    const reserve = vi.spyOn(scene, 'reserve');
+    scene.step(1, [p], { rain: 1 });
+    expect(reserve.mock.calls.map(([, index]) => index)).toEqual([0, 1]);
+    expect(scene.visits.get(p)?.site).toBe(scene.sites[1]);
   });
   it('freezes unseen visits and resumes them without accumulating time', () => {
     const scene = setup();

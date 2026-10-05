@@ -21,7 +21,7 @@ const adult = (umbrella: number): Walker => ({
 const child: Walker = { ...adult(0.99), figure: 'child', lateral: 1 };
 
 /** A tile with one long path and only `groups` walking it, spread along it. */
-const street = (groups: Walker[][], seed = 1) => {
+const street = (groups: Walker[][], seed = 1, shelter = false) => {
   const b = new LifeBuilder();
   b.line(
     [
@@ -31,6 +31,7 @@ const street = (groups: Walker[][], seed = 1) => {
     LifeLine.path,
     4,
   );
+  if (shelter) b.site({ x: 420, y: 2048 }, 2, 0, true);
   const life = new TileLife(tile, b.finish(), seed);
   life.movers.length = 0;
   life.flocks.length = 0;
@@ -135,6 +136,43 @@ describe('random runners', () => {
     expect(m.run).toBe(0);
   });
 
+  it('does not start a random run while collision waiting', () => {
+    const life = street([[adult(0.5)]]);
+    streams(life).walkerRng = () => 1;
+    streams(life).runRng = () => 1;
+    const m = life.movers[0]!;
+    life.step(0.1, undefined, undefined, undefined, { rain: 0 }, () => false);
+    expect(m.waiting).toBeGreaterThan(0);
+    const runRng = vi.fn<() => number>().mockReturnValue(0);
+    streams(life).runRng = runRng;
+    life.step(0.1, undefined, undefined, undefined, { rain: 0 }, () => false);
+    expect(m.run ?? 0).toBe(0);
+    expect(runRng).not.toHaveBeenCalled();
+  });
+
+  it('ends a live run when the person turns back', () => {
+    const life = street([[adult(0.5)]]);
+    streams(life).walkerRng = vi.fn<() => number>().mockReturnValueOnce(1).mockReturnValue(0);
+    streams(life).runRng = () => 1;
+    const m = life.movers[0]!;
+    m.run = 5;
+    life.step(0.1, undefined, undefined, undefined, { rain: 0 });
+    expect(m.dir).toBe(-1);
+    expect(m.run).toBe(0);
+  });
+
+  it('ends a live run when the person starts a scene visit', () => {
+    const life = street([[adult(0.5)]], 1, true);
+    streams(life).walkerRng = () => 1;
+    streams(life).runRng = () => 1;
+    const m = life.movers[0]!;
+    m.run = 5;
+    expect(life.scenes.reserve(m, 0)).toBe(true);
+    life.step(0.1, undefined, undefined, undefined, { rain: 0 });
+    expect(life.scenes.visits.has(m)).toBe(true);
+    expect(m.run).toBe(0);
+  });
+
   it('expires at zero and never frees a slot twice when the former runner pauses', () => {
     const life = street(Array.from({ length: 4 }, () => [adult(0.5)]));
     const rng = streams(life);
@@ -228,10 +266,14 @@ describe('random runners', () => {
   it('replays exactly for the same seed', () => {
     const a = street(singles(), 9);
     const b = street(singles(), 9);
+    let starts = 0;
     for (let t = 0; t < 600; t++) {
+      const wasRunning = a.movers.map((m) => (m.run ?? 0) > 0);
       a.step(0.1, undefined, undefined, undefined, { rain: 0 });
       b.step(0.1, undefined, undefined, undefined, { rain: 0 });
+      starts += a.movers.filter((m, i) => !wasRunning[i] && (m.run ?? 0) > 0).length;
     }
+    expect(starts).toBeGreaterThan(0);
     expect(a.movers).toEqual(b.movers);
   });
 });
