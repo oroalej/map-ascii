@@ -711,7 +711,7 @@ export class LocalScenes {
     };
     if (!state) {
       const anchor = snapshotMover(m);
-      const heading = anchor.momentFacing ?? anchor;
+      const heading = this.travelHeading(m, true);
       const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
       const admissible = (previous: Mover, target: WalkPoint) => {
         m.x = target.x;

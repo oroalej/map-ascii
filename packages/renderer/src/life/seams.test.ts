@@ -350,13 +350,20 @@ describe('runtime geographic seam handover', () => {
       target = lives[1]!;
     const m = continuityMover(source, 4095);
     m.roadShift = -1;
+    m.roadSteering = 1;
     source.movers.push(m);
     const old = source.pose(m),
       frame = frameBetween(source.tile, target.tile);
     const preview = target.projectFrom(m, source);
     expect(preview?.roadShift).toBe(-1);
+    expect(preview?.roadSteering).toBe(1);
     expect(m.roadShift).toBe(-1);
     expect(target.pose(preview!).y).toBeCloseTo(frame.y + old.y * frame.scale);
+    const original = structuredClone(m);
+    expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+    expect(m).toEqual(original);
+    expect(target.adoptFrom(m, source)).toBe(true);
+    expect(m.roadSteering).toBe(1);
     for (let i = 0; i < 10 && source.movers.includes(m); i++) world.step(0.1);
     expect(target.movers).toContain(m);
     expect(m.roadShift).toBe(-1);

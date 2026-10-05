@@ -200,6 +200,7 @@ export function projectMover(
     waiting: m.waiting,
   };
   if (m.roadShift !== undefined) preview.roadShift = m.roadShift;
+  if (m.roadSteering !== undefined) preview.roadSteering = m.roadSteering;
   if (m.curveLengthM !== undefined) preview.curveLengthM = m.curveLengthM;
   if (m.curveCorner) {
     const x = frame.x + m.curveCorner.x * frame.scale;

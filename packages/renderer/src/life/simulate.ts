@@ -290,6 +290,8 @@ export type Mover = {
   lane: number;
   /** Checked within-road steering, in metres, relative to the seeded lane. */
   roadShift?: number;
+  /** Retained direction of accepted steering during a forward-blocked episode. */
+  roadSteering?: 1 | -1;
   /** A checked shorter turn curve, in metres, after a blocked default arc. */
   curveLengthM?: number;
   curveCorner?: { x: number; y: number };
@@ -737,6 +739,7 @@ export class TileLife {
     m.speed = preview.speed;
     m.v = preview.v;
     m.roadShift = preview.roadShift;
+    m.roadSteering = preview.roadSteering;
     m.curveLengthM = preview.curveLengthM;
     m.curveCorner = preview.curveCorner;
     m.next = preview.next;
@@ -3403,20 +3406,25 @@ export class TileLife {
             !intentionalHold &&
             this.scenes.transferable(m)
           ) {
-            const length = before.curveLengthM ?? FILLET.maxM;
+            const vertex =
+                before.d <= FILLET.maxM * this.perMeter && this.corner(before, before.from, m)
+                  ? before.from
+                  : before.from + before.dir,
+              corner = {
+                x: this.geo.coords[vertex * 2]!,
+                y: this.geo.coords[vertex * 2 + 1]!,
+              },
+              length =
+                !before.curveCorner ||
+                (before.curveCorner.x === corner.x && before.curveCorner.y === corner.y)
+                  ? (before.curveLengthM ?? FILLET.maxM)
+                  : FILLET.maxM;
             if (length > 2) {
               const oldPose = this.pose(before, undefined, m);
               for (const share of [1, 0.25, 0]) {
                 restoreMover(m, before);
                 m.curveLengthM = Math.max(2, length - dt * steeringSpeed);
-                const vertex =
-                  before.d <= FILLET.maxM * this.perMeter && this.corner(before, before.from, m)
-                    ? before.from
-                    : before.from + before.dir;
-                m.curveCorner = {
-                  x: this.geo.coords[vertex * 2]!,
-                  y: this.geo.coords[vertex * 2 + 1]!,
-                };
+                m.curveCorner = corner;
                 moved = this.advance(m, distance * share);
                 const pose = this.pose(m),
                   spec = VEHICLES[m.vehicle!];
@@ -3468,7 +3476,7 @@ export class TileLife {
             !intentionalHold &&
             this.scenes.transferable(m)
           ) {
-            const side = Math.sign(before.roadShift ?? 0) || -1;
+            const side = before.roadSteering ?? (Math.sign(before.roadShift ?? 0) || -1);
             tries = [
               [side, 0.5],
               [side, 0],
@@ -3510,7 +3518,10 @@ export class TileLife {
               })
             )
               continue;
-            if ((fits = fitsGround(m, before))) break;
+            if ((fits = fitsGround(m, before))) {
+              if (!walking && side) m.roadSteering = side as 1 | -1;
+              break;
+            }
           }
         }
         if (!fits) {
@@ -3527,7 +3538,10 @@ export class TileLife {
               : 0;
         } else if (!intentionalHold && commanded > 1e-8 * this.perMeter) {
           let progress = this.blockedProgress.get(m);
-          if (!progress && Math.max(moved, curveForward) < commanded * 0.25) {
+          if (
+            !progress &&
+            (m.roadSteering !== undefined || Math.max(moved, curveForward) < commanded * 0.25)
+          ) {
             const pose = this.pose(before, undefined, m);
             progress = { x: pose.x, y: pose.y, hx: before.hx, hy: before.hy };
             this.blockedProgress.set(m, progress);
@@ -3543,6 +3557,7 @@ export class TileLife {
           } else {
             m.waiting = 0;
             this.blockedProgress.delete(m);
+            delete m.roadSteering;
           }
         } else m.waiting = before.waiting ?? 0;
         if (
@@ -3770,6 +3785,7 @@ export class TileLife {
     }
     this.recoveryApproaches.delete(m);
     this.recoveryLeaders.delete(m.line);
+    delete m.roadSteering;
     table.release(m);
     lines.add(m.line);
     m.v = 0;

@@ -54,6 +54,25 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('retreats against mapped travel while retaining a backward physical facing', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }], momentFacing: { hx: -1, hy: 0 } },
+      anchor = structuredClone(p);
+    const guard = Object.assign(
+      (next: Mover, before: Mover) => {
+        expect(next.hx).toBe(before.hx);
+        expect(next.hy).toBe(before.hy);
+        expect(next.momentFacing).toEqual(anchor.momentFacing);
+        return true;
+      },
+      { yielding: () => person(45), holding: (m: Mover) => m.x < anchor.x - 0.4 },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p.x).toBeCloseTo(anchor.x - 0.5);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    expect(p.momentFacing).toEqual(anchor.momentFacing);
+  });
+
   it('withdraws through its checked path when a replan invalidates the holding spot', () => {
     const scene = setup(),
       p = { ...person(), group: [{ ...walker }] },
