@@ -242,6 +242,18 @@ export const PEOPLE = { groups: [0.62, 0.88, 0.97, 1] as const, child: 0.4, stri
  */
 export const UMBRELLA = { base: 0.02, rain: 0.75, sun: 0.3, sunFrom: 35, sunFull: 65 } as const;
 
+/** Close-up canopy timing (seconds) and widths; distant figures keep their instant look. */
+export const UMBRELLA_MOTION = {
+  zoom: 19,
+  open: 0.7,
+  close: 0.9,
+  stagger: 1.5,
+  lost: 0.5,
+  folded: 0.3,
+  stageCutoff: 0.5,
+  stages: [0.45, 0.75],
+} as const;
+
 /** The share of adults under an umbrella for `rain` (0–1) and the sun's altitude (degrees). */
 export function umbrellaShare(rain: number, sunAltitude: number): number {
   const sun = Math.min(
