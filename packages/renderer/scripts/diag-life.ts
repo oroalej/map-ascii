@@ -15,24 +15,46 @@ import * as workingConfig from '../src/life/config';
 import * as workingDiagnostics from '../src/life/diagnostics';
 import * as workingDraw from '../src/life/draw';
 import * as workingSimulate from '../src/life/simulate';
-import type { LifeTile } from '../src/life/simulate';
+import type { LifeTile, TileLife, Mover, VisibleAgent } from '../src/life/simulate';
+import { PackingOutcome } from '../src/life/diagnostics';
+import type { Body, PolygonIndex } from '../src/life/occupancy';
+import type { RoadAccess } from '../src/life/terrain';
+import type { JunctionTable } from '../src/life/junctions';
 import * as workingSun from '../src/life/sun';
 import * as workingProfile from '../src/profile';
 import * as workingTheme from '../src/theme';
 import * as workingTiles from '../src/tiles';
 import * as workingGeometry from '../src/raster/geometry';
 import { decodeLifeTiles, openArchive } from './archive';
-import { snapshotRevision, currentSourceHash } from './snapshot';
+import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
+import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
 const prefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
 const baseline = process.argv.find((arg) => arg.startsWith('--baseline='))?.slice(11);
+const probe = process.argv.find((arg) => arg.startsWith('--probe-seconds='))?.slice(16);
+const resume = process.argv.includes('--resume');
+if (resume && !output) throw new Error('--resume requires an existing --output report');
+if (probe && (!prefix || baseline || ![30, 60].includes(Number(probe))))
+  throw new Error(
+    '--probe-seconds=30|60 requires a case prefix and the current engine; probes do not satisfy acceptance',
+  );
 if (baseline && !output)
   throw new Error('--baseline requires --output so snapshots stay beside the report');
+const snapshotDestination = output && resolve(dirname(output), `diag-source-${Date.now()}`);
 const snapshot = baseline
-  ? await snapshotRevision(root, baseline, resolve(dirname(output!), `diag-source-${Date.now()}`))
-  : undefined;
+  ? await snapshotRevision(root, baseline, snapshotDestination!)
+  : output
+    ? await snapshotWorkingTree(root, snapshotDestination!)
+    : undefined;
+const observerSnapshot =
+  baseline && output
+    ? await snapshotWorkingTree(root, resolve(dirname(output), `diag-observer-${Date.now()}`))
+    : snapshot;
+const { LifeDiagnostics } = observerSnapshot
+  ? ((await import(observerSnapshot.path('life/diagnostics.ts'))) as typeof workingDiagnostics)
+  : workingDiagnostics;
 async function moduleAt<T>(path: string, current: T): Promise<T> {
   return snapshot ? ((await import(snapshot.path(path))) as T) : current;
 }
@@ -43,7 +65,6 @@ const [
   { spawnMargin },
   { atCityMinutes, cityTime },
   { activityLevels, MAX_VISIBLE_AGENTS },
-  { LifeDiagnostics },
   { buildLifeGlyphs, packLife },
   { LifeWorld },
   { daylight, solarPosition },
@@ -58,7 +79,6 @@ const [
   moduleAt('life/births.ts', workingBirths),
   moduleAt('life/clock.ts', workingClock),
   moduleAt('life/config.ts', workingConfig),
-  moduleAt('life/diagnostics.ts', workingDiagnostics),
   moduleAt('life/draw.ts', workingDraw),
   moduleAt('life/simulate.ts', workingSimulate),
   moduleAt('life/sun.ts', workingSun),
@@ -68,6 +88,20 @@ const [
   moduleAt('raster/geometry.ts', workingGeometry),
 ]);
 const sourceHash = snapshot?.hash ?? (await currentSourceHash(root));
+const observerHash = createHash('sha256')
+  .update(
+    (await readFile(resolve(root, 'packages/renderer/src/life/diagnostics.ts'), 'utf8')).replace(
+      /\r\n/g,
+      '\n',
+    ),
+  )
+  .update(
+    (await readFile(resolve(root, 'packages/renderer/scripts/observe-life.ts'), 'utf8')).replace(
+      /\r\n/g,
+      '\n',
+    ),
+  )
+  .digest('hex');
 const { packs, errors } = await loadCityPacks(resolve(root, 'packages/content'), { only: 'naga' });
 if (errors.length || !packs[0]) throw new Error(JSON.stringify(errors));
 const pack = packs[0],
@@ -79,7 +113,7 @@ const hash = (data: string | Uint8Array) => createHash('sha256').update(data).di
 const size = { width: 1920, height: 1080 };
 const dt = 1 / 30,
   warmup = 30,
-  seconds = 300;
+  seconds = probe ? Number(probe) : 300;
 const runtime = runtimeDialogueCatalog(pack.dialogue);
 const revision = execFileSync('git', ['rev-parse', baseline ?? 'HEAD'], {
   cwd: root,
@@ -109,6 +143,15 @@ const inputs = {
   path: 'east-west at one horizontal cell/second; reflect at region longitude bounds',
 };
 const started = performance.now();
+const expectedCases = [17, 16, 18, 15, 19].flatMap((zoom) =>
+  [720, 1080].flatMap((minutes) =>
+    [1, 0.4].flatMap((crowd) =>
+      ['fixed', 'pan'].map((mode) => `z${zoom}/${minutes}/crowd${crowd}/${mode}`),
+    ),
+  ),
+);
+const selectedCases = expectedCases.filter((key) => key.startsWith(prefix));
+let priorRuntime = 0;
 const cases: {
   key: string;
   zoom: number;
@@ -121,23 +164,137 @@ const cases: {
   clock: ReturnType<typeof cityTime>;
   sun: ReturnType<typeof solarPosition>;
   runtimeSeconds: number;
+  flickerSamples?: unknown[];
   report: ReturnType<workingDiagnostics.LifeDiagnostics['report']>;
+  owners?: ReturnType<workingDiagnostics.LifeDiagnostics['longestStuck']>;
+  recoveryEvents?: ReturnType<workingDiagnostics.LifeDiagnostics['recentRecoveries']>;
 }[] = [];
 async function save(complete: boolean) {
   const report = {
     revision,
     sourceHash,
+    sourceSnapshot: snapshotDestination,
     dirty,
-    complete,
+    complete: complete && cases.length === expectedCases.length,
+    selectionComplete: complete && cases.length === selectedCases.length,
+    expectedCases,
+    selectedCases,
+    measurementVersion: MEASUREMENT_VERSION,
+    observerHash,
+    probe: !!probe,
     inputHash: hash(JSON.stringify(inputs)),
     inputs,
-    runtimeSeconds: (performance.now() - started) / 1000,
+    runtimeSeconds: priorRuntime + (performance.now() - started) / 1000,
     cases,
   };
   if (output) await writeFile(resolve(output), `${JSON.stringify(report, null, 2)}\n`);
   else if (complete) console.log(JSON.stringify(report, null, 2));
 }
+function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum: number) {
+  // Manual, read-only inspection of the same indexes used by the production guard.
+  const state = world as unknown as {
+    tiles: Map<string, TileLife>;
+    junctions: JunctionTable;
+    groundTerrain?: {
+      blocked: PolygonIndex;
+      water: PolygonIndex;
+      roadAccess: RoadAccess;
+      origins: Map<TileLife, { x: number; y: number; scale: number }>;
+    };
+  };
+  const life = [...state.tiles.values()].find((l) => l.movers.includes(owner as Mover));
+  const terrain = state.groundTerrain;
+  const origin = life && terrain?.origins.get(life);
+  if (!life || !terrain || !origin) return;
+  const m = owner as Mover;
+  const legal = (bodies: Body[]) => {
+    for (const b of bodies) {
+      b.x = origin.x + b.x * origin.scale;
+      b.y = origin.y + b.y * origin.scale;
+      b.length *= origin.scale;
+      b.width *= origin.scale;
+    }
+    return {
+      building: terrain.blocked.hits(bodies),
+      water: m.kind === 'person' && terrain.water.hits(bodies),
+      road: m.kind === 'person' && !terrain.roadAccess.allows(bodies, true),
+    };
+  };
+  const visit = life.scenes.visits.get(m);
+  return {
+    momentFacing: m.momentFacing,
+    roadShift: m.roadShift,
+    curveLengthM: m.curveLengthM,
+    junction: {
+      movement: state.junctions.movement(m),
+      granted: state.junctions.granted(m),
+      waited: state.junctions.waited(m),
+    },
+    physical: legal(life.groundBodies(m)),
+    inflated: legal(life.groundBodies(m, minimum)),
+    line: {
+      kind: life.geo.kinds[m.line],
+      width: life.geo.widths[m.line],
+      oneway: life.geo.oneway?.[m.line],
+      terminalRoom: (
+        life as unknown as { oneWayEndRoom: (m: Mover) => number | undefined }
+      ).oneWayEndRoom(m),
+      segment: Array.from(life.geo.coords.slice(m.from * 2, m.from * 2 + 2)),
+      target: Array.from(life.geo.coords.slice((m.from + m.dir) * 2, (m.from + m.dir) * 2 + 2)),
+    },
+    visit: visit && {
+      state: visit.state,
+      blocked: visit.blocked,
+      next: visit.next,
+      target: visit.path[visit.next],
+      start: visit.trail[0],
+    },
+  };
+}
 try {
+  if (resume) {
+    const previous = JSON.parse(await readFile(resolve(output!), 'utf8')) as {
+      revision?: unknown;
+      sourceHash?: unknown;
+      observerHash?: unknown;
+      measurementVersion?: unknown;
+      inputHash?: unknown;
+      probe?: unknown;
+      runtimeSeconds?: unknown;
+      cases?: typeof cases;
+    };
+    if (
+      previous.revision !== revision ||
+      previous.sourceHash !== sourceHash ||
+      previous.observerHash !== observerHash ||
+      previous.measurementVersion !== MEASUREMENT_VERSION ||
+      previous.inputHash !== hash(JSON.stringify(inputs)) ||
+      !!previous.probe !== !!probe ||
+      typeof previous.runtimeSeconds !== 'number' ||
+      !Number.isFinite(previous.runtimeSeconds) ||
+      previous.runtimeSeconds < 0 ||
+      !Array.isArray(previous.cases) ||
+      previous.cases.some(
+        (c) =>
+          !c?.key?.startsWith(prefix) ||
+          typeof c.report?.seconds !== 'number' ||
+          !Number.isFinite(c.report.seconds) ||
+          Math.abs(c.report.seconds - seconds) > 1e-6 ||
+          c.key !== `z${c.zoom}/${c.minutes}/crowd${c.crowd}/${c.mode}` ||
+          ![15, 16, 17, 18, 19].includes(c.zoom) ||
+          ![720, 1080].includes(c.minutes) ||
+          ![1, 0.4].includes(c.crowd) ||
+          !['fixed', 'pan'].includes(c.mode),
+      ) ||
+      new Set(previous.cases.map((c) => c.key)).size !== previous.cases.length
+    )
+      throw new Error(
+        'Cannot resume: diagnostic source, revision, inputs or completed cases differ',
+      );
+    cases.push(...previous.cases);
+    priorRuntime = previous.runtimeSeconds;
+    console.log(`Resuming ${cases.length} completed cases`);
+  }
   if (archive.hash !== pack.tilesLock?.files[`${config.slug}.pmtiles`])
     throw new Error('Archive hash does not match city tiles lock');
   const header = {
@@ -156,14 +313,16 @@ try {
         for (const mode of ['fixed', 'pan']) {
           const key = `z${zoom}/${minutes}/crowd${crowd}/${mode}`;
           if (!key.startsWith(prefix)) continue;
+          if (cases.some((c) => c.key === key)) continue;
           console.log(`${key}: preparing`);
           const caseStart = performance.now();
-          const diagnostics = new LifeDiagnostics();
+          const diagnostics = new LifeDiagnostics({ rawMotion: true });
           const profiler = new FrameProfiler(() => 0, diagnostics);
           const world = new LifeWorld(config.traffic, profiler, {
             dialogue: runtime && dialogueChoices(runtime),
             periods: runtime?.periods,
           });
+          const flickerSamples: unknown[] = [];
           let camera = { ...meta.defaultCamera, zoom };
           const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
           const cellMeters = metersPerCssPx(camera) * cell.width;
@@ -275,6 +434,53 @@ try {
               sun,
               lifeGlyphs,
             );
+            classifyTerminalStops(world, diagnostics);
+            if (frame >= warmup / dt && flickerSamples.length < 100) {
+              // Read-only examples supplement the common observer's counters. They
+              // never call movement guards or change the PRE/POST definitions.
+              const state = diagnostics as unknown as {
+                views: Map<VisibleAgent, object>;
+                candidates: Map<object, VisibleAgent>;
+                previousDrawn: Set<number>;
+                identities: WeakMap<object, number>;
+              };
+              const drawn = new Set<object>();
+              agents.forEach((agent, i) => {
+                const owner = state.views.get(agent);
+                if (owner && outcomes[i] === PackingOutcome.drawn) drawn.add(owner);
+              });
+              const seen = new Set<object>();
+              for (const [i, agent] of agents.entries()) {
+                const owner = state.views.get(agent);
+                const id = owner && state.identities.get(owner);
+                if (
+                  !owner ||
+                  id === undefined ||
+                  seen.has(owner) ||
+                  drawn.has(owner) ||
+                  !state.previousDrawn.has(id) ||
+                  !state.candidates.has(owner) ||
+                  (outcomes[i] !== PackingOutcome.collision &&
+                    outcomes[i] !== PackingOutcome.cellGuard)
+                )
+                  continue;
+                seen.add(owner);
+                flickerSamples.push({
+                  id,
+                  at: frame * dt - warmup,
+                  outcome: outcomes[i],
+                  denials: denials[i],
+                  view: {
+                    kind: agent.kind,
+                    vehicle: agent.vehicle,
+                    people: agent.people,
+                    cell: placement.toCell(agent.lng, agent.lat),
+                  },
+                  details: describeOwner(world, owner, cellMeters),
+                });
+                if (flickerSamples.length >= 100) break;
+              }
+            }
             diagnostics.finishFrame(agents, outcomes, denials);
             if ((frame + 1) % 900 === 0)
               console.log(
@@ -293,7 +499,12 @@ try {
             clock,
             sun,
             runtimeSeconds: (performance.now() - caseStart) / 1000,
+            flickerSamples,
             report: diagnostics.report(),
+            owners: diagnostics.longestStuck(50, (owner) =>
+              describeOwner(world, owner, cellMeters),
+            ),
+            recoveryEvents: diagnostics.recentRecoveries(),
           });
           world.clearTiles();
           await save(false);

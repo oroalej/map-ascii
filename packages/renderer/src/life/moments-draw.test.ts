@@ -74,8 +74,13 @@ it('preserves packed bytes and restores final ownership when a complete speaker 
   const legacy = new Uint8Array(grid.cols * grid.rows * 4),
     owned = new Uint8Array(legacy.length);
   const owners = new Uint32Array(grid.cols * grid.rows);
-  const n = packLife(legacy, grid, agents, themes.dark, index);
-  expect(packLife(owned, { ...grid, owners }, agents, themes.dark, index)).toBe(n);
+  const blocked = {
+    ...grid,
+    allowsGroundCell: (agent: VisibleAgent, col: number, row: number) =>
+      agent === agents[0] || (col === 40 && row === 40),
+  };
+  const n = packLife(legacy, blocked, agents, themes.dark, index);
+  expect(packLife(owned, { ...blocked, owners }, agents, themes.dark, index)).toBe(n);
   expect(owned).toEqual(legacy);
   expect([...owners].filter(Boolean)).toEqual([1]);
   packLife(owned, { ...grid, owners, allowsGroundCell: () => false }, agents, themes.dark, index);
@@ -96,7 +101,7 @@ it('preserves packed bytes and restores final ownership when a complete speaker 
       index,
     ),
   ).toThrow('guard');
-  expect(packLife(owned, grid, agents, themes.dark, index)).toBe(n);
+  expect(packLife(owned, blocked, agents, themes.dark, index)).toBe(n);
   expect(owned).toEqual(legacy);
 });
 function draw(

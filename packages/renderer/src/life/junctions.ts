@@ -87,7 +87,15 @@ export class JunctionIndex {
             dy = geo.coords[next * 2 + 1]! - y;
           const length = Math.hypot(dx, dy);
           if (length)
-            j.arms.push({ line, along: along[v]!, out, hx: dx / length, hy: dy / length });
+            j.arms.push({
+              line,
+              along: along[v]!,
+              out,
+              hx: dx / length,
+              hy: dy / length,
+              inbound: !geo.oneway?.[line] || geo.oneway[line] === -out,
+              outbound: !geo.oneway?.[line] || geo.oneway[line] === out,
+            });
         }
         vertices.set(key, j);
       }
@@ -180,7 +188,10 @@ export class JunctionIndex {
             a.outbound !== false,
         );
       }
-      if (!exit) exit = incoming; // Dead-end fallback is still a movement to protect.
+      if (!exit) {
+        if (incoming.outbound === false) continue;
+        exit = incoming; // A legal two-way dead-end fallback remains protected.
+      }
       const ahead =
         incoming.stopAlong !== undefined
           ? m.dir * (incoming.stopAlong - progress) - length / 2

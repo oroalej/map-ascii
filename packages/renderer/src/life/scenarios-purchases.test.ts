@@ -82,6 +82,7 @@ for (const seed of [1, 42]) {
     });
     world.visible(18, s.levels, s.center, undefined, s.bounds);
     const states = new Set<string>();
+    const expectedStates = ['wait', 'purchase', 'board', 'aboard', 'return'];
     let services = 0;
     for (let frame = 0; frame < 180 * 30; frame++) {
       world.step(1 / 30, undefined, 18, s.bounds, undefined, { rain: 0 }, 0.9);
@@ -89,10 +90,12 @@ for (const seed of [1, 42]) {
       for (const visit of tile.scenes.visits.values()) states.add(visit.state);
       services = Math.max(services, tile.scenes.services.size);
       if (frame % 60 === 0) valid(world);
+      // The long transit soak covers later frames; this test proves these flows.
+      if (services > 0 && expectedStates.every((state) => states.has(state))) break;
     }
     valid(world);
     expect(services).toBeGreaterThan(0);
-    for (const state of ['wait', 'purchase', 'board', 'aboard', 'return'])
+    for (const state of expectedStates)
       expect(states.has(state), `missing ${state}; observed ${[...states].join(', ')}`).toBe(true);
   });
 }

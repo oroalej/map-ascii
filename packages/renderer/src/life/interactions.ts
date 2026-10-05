@@ -13,6 +13,7 @@ import { VEHICLES } from './vehicles';
 import { isWalker, usableLines, type Activity } from './config';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
+import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { approach, type MotionLimit } from './motion';
 import { complete } from './cooperate';
 import type { LifeDiagnostics } from './diagnostics';
@@ -50,6 +51,18 @@ export type Visit = {
   seat: number;
   sheltering: boolean;
   blocked: number;
+  /** Preferred side for checked detours; independent of the ordinary route's avoidance. */
+  sidestep?: 1 | -1;
+  /** Keep an accepted bypass waypoint until reached, instead of aiming back at the blocker. */
+  bypass?: {
+    target: WalkPoint;
+    side: WalkPoint;
+    retreat?: WalkPoint;
+    start: WalkPoint;
+    hx: number;
+    hy: number;
+    progress: number;
+  };
   /** Cancellation waits for the full footprint to leave the crossing before reversing. */
   returnPending?: boolean;
 };
@@ -97,7 +110,7 @@ export class LocalScenes {
   private cityLife: CityLifeConfig | undefined;
 
   constructor(
-    geo: LifeGeometry,
+    private readonly geo: LifeGeometry,
     readonly perMeter: number,
     seed: number,
     stalls: readonly Stall[],
@@ -262,7 +275,7 @@ export class LocalScenes {
     if (!inTile(point)) return false;
     if (isWalker(m.kind) && !this.canIdle({ ...m, ...point, hx: site.hx, hy: site.hy, avoid: 0 }))
       return false;
-    const path = this.graph.route(m, point);
+    const path = this.route(m, point);
     if (!path || !path.every(inTile)) return false;
     site.queue.push(m);
     this.visits.set(m, {
@@ -289,28 +302,45 @@ export class LocalScenes {
     visit.state = 'return';
     visit.blocked = 0;
     visit.returnPending = false;
+    delete visit.bypass;
     m.pause = 0;
     m.lying = false;
+  }
+
+  private route(from: WalkPoint, to: WalkPoint) {
+    const start = { x: from.x, y: from.y };
+    const path = this.graph.route(start, { x: to.x, y: to.y });
+    // A tiny perpendicular attachment after a sidestep can force another in-place
+    // turn into the same blocker. Skip it only through an equally clear graph edge;
+    // the actual movement still passes the full swept footprint guard.
+    while (
+      path &&
+      path.length > 2 &&
+      dist(start, path[1]!) <= 1.5 * this.perMeter &&
+      this.graph.clear(start, path[2]!)
+    )
+      path.splice(1, 1);
+    return path;
   }
 
   private canIdle(m: Mover): boolean {
     if (this.idleGuard) return this.idleGuard(m);
     const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
-    return this.graph.allowsBodies(
-      (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => {
-        const size =
-          m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind) : memberSize(w.figure);
-        return {
-          x: m.x - m.hy * (w.lateral + lane) * this.perMeter - m.hx * w.back * this.perMeter,
-          y: m.y + m.hx * (w.lateral + lane) * this.perMeter - m.hy * w.back * this.perMeter,
-          hx: m.hx,
-          hy: m.hy,
-          length: size.length * this.perMeter,
-          width: size.width * this.perMeter,
-        };
-      }),
-      false,
-    );
+    return this.graph.allowsBodies(this.walkingBodies(m, m, lane), false);
+  }
+
+  private walkingBodies(m: Mover, point: WalkPoint, lane = 0, turning = false) {
+    return (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => {
+      const size = m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind) : memberSize(w.figure);
+      return {
+        x: point.x - m.hy * (w.lateral + lane) * this.perMeter - m.hx * w.back * this.perMeter,
+        y: point.y + m.hx * (w.lateral + lane) * this.perMeter - m.hy * w.back * this.perMeter,
+        hx: m.hx,
+        hy: m.hy,
+        length: (turning ? Math.hypot(size.length, size.width) : size.length) * this.perMeter,
+        width: (turning ? Math.hypot(size.length, size.width) : size.width) * this.perMeter,
+      };
+    });
   }
 
   private requestReturn(m: Mover, visit: Visit) {
@@ -326,49 +356,181 @@ export class LocalScenes {
     guard?: MoveGuard,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
   ) {
-    const before = guard && isWalker(m.kind) ? { ...m } : undefined;
+    const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
     let left = m.speed * dt;
     while (left > 0 && visit.next < visit.path.length) {
       const target = visit.path[visit.next]!;
       const d = dist(m, target);
-      if (d > 0.001) {
-        m.hx = (target.x - m.x) / d;
-        m.hy = (target.y - m.y) / d;
+      // Duplicate route attachments and round-off at the return anchor need no
+      // footprint movement or heading change. Substantive moves remain guarded.
+      if (d <= 1e-8 * this.perMeter) {
+        if (visit.bypass?.target === target) delete visit.bypass;
+        visit.next++;
+        continue;
+      }
+      const dx = (target.x - m.x) / d;
+      const dy = (target.y - m.y) / d;
+      if (d > 0.001 && visit.bypass?.side !== target && visit.bypass?.retreat !== target) {
+        faceGroup(m, (target.x - m.x) / d, (target.y - m.y) / d);
       }
       let step = Math.min(d, left);
       if (isWalker(m.kind) && walkLimit) step = walkLimit(m, target, step);
       if (step <= 0 && d > 0.001) break;
-      m.x += m.hx * step;
-      m.y += m.hy * step;
+      m.x += dx * step;
+      m.y += dy * step;
       m.walked = (m.walked ?? 0) + step / this.perMeter;
       left -= step;
       if (step >= d) {
         m.x = target.x;
         m.y = target.y;
         if (visit.state !== 'return') visit.trail.push({ ...target });
+        if (visit.bypass?.target === target) delete visit.bypass;
         visit.next++;
       } else break;
     }
-    if (before && guard && !guard(m, before)) {
-      Object.assign(m, before);
+    const changed =
+      before && (m.x !== before.x || m.y !== before.y || m.hx !== before.hx || m.hy !== before.hy);
+    if (changed && guard && !guard(m, before)) {
+      const trial = snapshotMover(m);
+      const trialNext = visit.next;
+      const addedTrail = visit.trail.slice(trailLength);
+      restoreMover(m, before);
       visit.next = next;
       visit.trail.length = trailLength;
+      // A pedestrian can take a checked backward/sideways step when a heading
+      // change has too little room. Keep the member frame and the exact route
+      // progress; this is bounded by the same speed and swept physical guard.
+      if (
+        Math.hypot(trial.x - before.x, trial.y - before.y) > 1e-8 * this.perMeter &&
+        Math.hypot(trial.hx - before.hx, trial.hy - before.hy) > 1e-8
+      ) {
+        restoreMover(m, trial);
+        faceGroup(m, before.hx, before.hy);
+        if (guard(m, before)) {
+          visit.next = trialNext;
+          visit.trail.push(...addedTrail);
+          visit.blocked = 0;
+          return visit.next >= visit.path.length;
+        }
+        restoreMover(m, before);
+      }
+      // Scene paths need the same opportunity to pass an oncoming walker as ordinary
+      // routes. A signal-held zero step never detours. Every trial keeps the route
+      // cursor and is checked through the production swept footprint guard.
+      const dx = trial.x - before.x,
+        dy = trial.y - before.y;
+      if (Math.hypot(dx, dy) > 1e-8 && !visit.bypass) {
+        const a = visit.path[Math.max(0, next - 1)]!,
+          b = visit.path[next]!;
+        const vx = b.x - a.x,
+          vy = b.y - a.y;
+        const length = vx * vx + vy * vy;
+        const preferred = visit.sidestep ?? 1;
+        for (const [side, share] of [
+          [preferred, 0.5],
+          [preferred, 0],
+          [preferred, -1],
+          [-preferred, 0.5],
+          [-preferred, 0],
+          [-preferred, -1],
+        ] as const) {
+          const forward = Math.hypot(dx, dy) * share;
+          const lateral =
+            (share < 0 ? 0 : side) *
+            Math.min(
+              1.5 * dt * this.perMeter,
+              Math.sqrt(Math.max(0, (m.speed * dt) ** 2 - forward ** 2)),
+            );
+          restoreMover(m, before);
+          m.x += dx * share - trial.hy * lateral;
+          m.y += dy * share + trial.hx * lateral;
+          faceGroup(m, share < 0 ? before.hx : trial.hx, share < 0 ? before.hy : trial.hy);
+          const t = length
+            ? Math.max(0, Math.min(1, ((m.x - a.x) * vx + (m.y - a.y) * vy) / length))
+            : 0;
+          if (Math.hypot(m.x - a.x - t * vx, m.y - a.y - t * vy) > 1.5 * this.perMeter) continue;
+          m.walked = (before.walked ?? 0) + dist(before, m) / this.perMeter;
+          if (this.graph.clear(before, m) && guard(m, before)) {
+            visit.sidestep = side as 1 | -1;
+            const span = Math.min(dist(before, b), 4 * this.perMeter);
+            const retreatDistance = Math.min(
+              2,
+              Math.max(
+                0.75,
+                ...(m.group ?? []).map(
+                  (w) => Math.abs(w.back) + memberSize(w.figure).length / 2 + 0.15,
+                ),
+              ),
+            );
+            const retreat =
+              share < 0
+                ? {
+                    x: before.x - trial.hx * retreatDistance * this.perMeter,
+                    y: before.y - trial.hy * retreatDistance * this.perMeter,
+                  }
+                : undefined;
+            for (const offset of [1.2, 1, 0.8, 0.65]) {
+              const base = retreat ?? { x: before.x + dx * share, y: before.y + dy * share };
+              const sidePoint = {
+                x: base.x - trial.hy * side * offset * this.perMeter,
+                y: base.y + trial.hx * side * offset * this.perMeter,
+              };
+              const target = {
+                x: sidePoint.x + trial.hx * span,
+                y: sidePoint.y + trial.hy * span,
+              };
+              if (
+                !inTile(target) ||
+                (retreat && !this.graph.clear(m, retreat)) ||
+                !this.graph.clear(retreat ?? m, sidePoint) ||
+                !this.graph.clear(sidePoint, target) ||
+                !this.graph.allowsBodies(this.walkingBodies(m, sidePoint, 0, true), true) ||
+                !this.graph.allowsBodies(this.walkingBodies(m, target, 0, true), true)
+              )
+                continue;
+              visit.path.splice(next, 0, ...(retreat ? [retreat] : []), sidePoint, target);
+              visit.bypass = {
+                target,
+                side: sidePoint,
+                retreat,
+                start: { x: before.x, y: before.y },
+                hx: trial.hx,
+                hy: trial.hy,
+                progress: 0,
+              };
+              break;
+            }
+            visit.blocked = forward > 1e-8 * this.perMeter ? 0 : visit.blocked + dt;
+            if (visit.state !== 'return') visit.trail.push({ x: m.x, y: m.y });
+            return false;
+          }
+        }
+        restoreMover(m, before);
+      }
       visit.blocked += dt;
       // Give an approaching group time to clear; abandoned visits release their queue slot.
       if (visit.blocked >= 8 && visit.state !== 'return') this.returning(m, visit);
       else if (visit.blocked >= 16 && visit.state === 'return') {
-        const path = this.graph.route(m, visit.trail[0]!);
-        if (path) {
+        const path = this.route(m, visit.trail[0]!);
+        if (path?.every(inTile)) {
           visit.path = path;
           visit.next = 1;
+          delete visit.bypass;
         }
         visit.blocked = 0;
       }
       return false;
     }
-    visit.blocked = 0;
+    const bypass = visit.bypass;
+    if (bypass) {
+      const progress = (m.x - bypass.start.x) * bypass.hx + (m.y - bypass.start.y) * bypass.hy;
+      if (progress > bypass.progress + 1e-8 * this.perMeter) {
+        bypass.progress = progress;
+        visit.blocked = 0;
+      } else visit.blocked += dt;
+    } else visit.blocked = 0;
     if (visit.returnPending && this.canIdle(m)) {
       this.returning(m, visit);
       return false;
@@ -440,6 +602,18 @@ export class LocalScenes {
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
         if (!this.move(m, visit, dt, guard, walkLimit)) continue;
         if (visit.state === 'return') {
+          const end = m.from + m.dir;
+          const dx = this.geo.coords[end * 2]! - this.geo.coords[m.from * 2]!;
+          const dy = this.geo.coords[end * 2 + 1]! - this.geo.coords[m.from * 2 + 1]!;
+          const length = Math.hypot(dx, dy);
+          if (length && Math.hypot(m.hx - dx / length, m.hy - dy / length) > 1e-8) {
+            const previous = snapshotMover(m);
+            faceGroup(m, dx / length, dy / length);
+            if (guard && !guard(m, previous)) {
+              restoreMover(m, previous);
+              continue;
+            }
+          }
           m.x = visit.trail[0]!.x;
           m.y = visit.trail[0]!.y;
           m.pause = 0;
@@ -451,15 +625,14 @@ export class LocalScenes {
           visit.time = 3;
           m.pause = 1;
         } else {
-          const before = { ...m };
+          const before = snapshotMover(m);
           visit.state = visit.sheltering ? 'shelter' : visit.site.kind === 'rest' ? 'rest' : 'wait';
           visit.time = visit.state === 'rest' ? 30 + this.rng() * 60 : 60 + this.rng() * 30;
-          m.hx = visit.site.hx;
-          m.hy = visit.site.hy;
+          faceGroup(m, visit.site.hx, visit.site.hy);
           m.pause = 1;
           m.lying = m.kind === 'dog';
           if (isWalker(m.kind) && (!this.canIdle(m) || (guard && !guard(m, before)))) {
-            Object.assign(m, before);
+            restoreMover(m, before);
             this.returning(m, visit);
           }
           if (visit.state === 'wait' || visit.state === 'shelter')
@@ -519,15 +692,26 @@ export class LocalScenes {
         const visit = this.visits.get(person)!;
         const width = VEHICLES[m.vehicle!].width;
         // The curb door, outside the vehicle body, approached on the walking graph.
+        // A diagonal adult reaches farther than half its width. Leave the full
+        // rotating footprint and collision gap outside the stopped vehicle.
+        const clearance = Math.max(
+          0.75,
+          ...(person.group ?? []).map((w) => {
+            const size = memberSize(w.figure);
+            return Math.hypot(w.lateral, w.back) + Math.hypot(size.length, size.width) / 2 + 0.17;
+          }),
+        );
         const right =
-          (vehicleOffset?.(m) ?? Math.max(0, service.site.roadWidth / 2 - width / 2 - 0.2)) +
-          width / 2 +
-          0.75;
+          Math.max(
+            (vehicleOffset?.(m) ?? Math.max(0, service.site.roadWidth / 2 - width / 2 - 0.2)) +
+              width / 2,
+            service.site.roadWidth / 2,
+          ) + clearance;
         const door = {
           x: m.x - m.hy * right * this.perMeter,
           y: m.y + m.hx * right * this.perMeter,
         };
-        const path = this.graph.route(person, door);
+        const path = this.route(person, door);
         if (path) {
           visit.state = 'board';
           visit.path = path;
@@ -641,10 +825,10 @@ export class LocalScenes {
   walkable(from: WalkPoint, to: WalkPoint): boolean {
     return this.graph.clear(from, to);
   }
-  offset(m: Mover, normal: number, curb: number): number {
+  offset(m: Mover, normal: number, curb: number, pose = m): number {
     const site = this.services.get(m)?.site ?? this.stopCooldown.get(m);
     if (!site) return normal;
-    const blend = Math.max(0, 1 - dist(m, site) / (20 * this.perMeter));
+    const blend = Math.max(0, 1 - dist(pose, site) / (20 * this.perMeter));
     return normal + (curb - normal) * blend;
   }
   hidden(m: Mover): boolean {

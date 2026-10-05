@@ -72,7 +72,7 @@ export function laneOffset(
 /**
  * Following: a vehicle or boat slows behind the one ahead in its lane, keeping this gap (m)
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
- * side may overlap this much (m) and still pass.
+ * side on water may overlap by `squeeze` (m); road vehicles retain the physical 0.15 m gap.
  */
 export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
 
@@ -201,7 +201,6 @@ export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
 /** A commanded walker with no useful path progress may safely reverse after this many seconds. */
 export const WALK = { blockedTurnSeconds: 4 } as const;
-export const VEHICLE_RECOVERY = { blockedTurnSeconds: 30 } as const;
 
 /**
  * Street dogs (askals): they stop to sniff often (chance per second, and how long in s), turn

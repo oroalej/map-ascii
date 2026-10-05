@@ -3,6 +3,12 @@ import { FrameProfiler, PROFILE_CAPACITY } from '../profile';
 import { makeScenario, completeScenarioState } from './testing/scenarios';
 import { displacement, LifeDiagnostics, PackingOutcome } from './diagnostics';
 import type { VisibleAgent } from './simulate';
+import { LifeWorld } from './simulate';
+import { classifyTerminalStops } from '../../scripts/observe-life';
+import { LifeBuilder, LifeLine } from './geometry';
+import { continuityMover, left } from './testing/continuity';
+import { worldTiles } from './testing/scenarios';
+import { FOLLOW } from './config';
 
 const bounds = [-1, -1, 1, 1];
 const view = (lng = 0): VisibleAgent => ({ kind: 'vehicle', vehicle: 'car', lng, lat: 0, flap: 0 });
@@ -127,6 +133,104 @@ it('propagates intentional queue holds and counts recovery only in the physical 
   expect(sink.report().recoveries.counts).toEqual({ blocked: 1 });
 });
 
+it('keeps walker recoveries out of the road-vehicle U-turn rate', () => {
+  const sink = new LifeDiagnostics(),
+    vehicle = {},
+    walker = {};
+  sink.beginFrame(30, bounds, 17, 1, true);
+  sink.eligible(vehicle, 'vehicle');
+  sink.eligible(walker, 'person');
+  sink.position(vehicle, 0, 0);
+  sink.position(walker, 0, 0);
+  sink.recovery(vehicle, 'vehicle');
+  sink.recovery(walker, 'walker');
+  sink.finishFrame([], new Uint8Array());
+  expect(sink.report().recoveries).toEqual({ counts: { vehicle: 1, walker: 1 }, perMinute: 2 });
+});
+
+it.each([false, true])(
+  'publishes raw terminal stalls and classifies only stopped followers (moving %s)',
+  (moving) => {
+    const sink = new LifeDiagnostics({ rawMotion: true }),
+      root = { v: 0 },
+      follower = { v: moving ? 0.1 : 0 };
+    for (let i = 0; i < 15; i++) {
+      sink.beginFrame(1, bounds, 17, 1, true);
+      sink.beginVisible();
+      const agents = [view(), view(0.1)];
+      for (const [j, owner] of [root, follower].entries()) {
+        sink.eligible(owner, 'vehicle');
+        sink.position(owner, agents[j]!.lng, 0);
+        sink.view(owner, agents[j]!);
+      }
+      sink.following(follower, root);
+      sink.classifyTerminal(root);
+      sink.admitted(agents);
+      sink.finishFrame(agents, Uint8Array.of(1, 1));
+    }
+    const r = sink.report();
+    expect(r.rawMotion?.vehicle).toMatchObject({ eligibleFrames: 30, stuckFrames: 10 });
+    expect(r.motion.vehicle).toMatchObject({
+      eligibleFrames: moving ? 15 : 0,
+      stuckFrames: moving ? 5 : 0,
+    });
+    expect(r.terminalHolds).toEqual({
+      population: moving ? 1 : 2,
+      frames: moving ? 15 : 30,
+      maxSeconds: 14,
+    });
+  },
+);
+
+it.each(['terminal', 'clipped', 'building'] as const)(
+  'classifies only a physically legal interior one-way endpoint (%s)',
+  (mode) => {
+    const b = new LifeBuilder(),
+      end = mode === 'clipped' ? 4096 : 2000;
+    b.line(
+      [
+        { x: 1000, y: 2000 },
+        { x: end, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+      1,
+    );
+    if (mode === 'building')
+      b.area('blocked', [
+        [
+          { x: 1800, y: 1900 },
+          { x: 2200, y: 1900 },
+          { x: 2200, y: 2200 },
+          { x: 1800, y: 2200 },
+          { x: 1800, y: 1900 },
+        ],
+      ]);
+    const world = new LifeWorld();
+    world.sync([{ key: 'terminal', tile: left, life: b.finish() }]);
+    const life = worldTiles(world).get('terminal')!;
+    life.movers.length = life.parked.length = life.gatherers.length = life.stalls.length = 0;
+    const m = continuityMover(life, end - (2.2 + FOLLOW.minGap) * life.perMeter);
+    m.d = m.x - 1000;
+    m.v = 0;
+    life.movers.push(m);
+    const before = structuredClone(m),
+      sink = new LifeDiagnostics({ rawMotion: true }),
+      agent = view();
+    sink.beginFrame(1, bounds, 17, 1, true);
+    sink.eligible(m, 'vehicle');
+    sink.position(m, 0, 0);
+    sink.beginVisible();
+    sink.view(m, agent);
+    sink.admitted([agent]);
+    classifyTerminalStops(world, sink);
+    sink.finishFrame([agent], Uint8Array.of(1));
+    expect(sink.report().holds.terminal ?? 0).toBe(mode === 'terminal' ? 1 : 0);
+    expect(m).toEqual(before);
+  },
+);
+
 it('keeps weak origin/incarnation/ordinal identities and a bounded chosen-traveler trace', () => {
   const p = new FrameProfiler(() => 0);
   const a = {},
@@ -158,7 +262,7 @@ it('keeps weak origin/incarnation/ordinal identities and a bounded chosen-travel
 });
 
 it('profiling preserves complete simulation state and worker delta counts are merged once', () => {
-  const sink = new LifeDiagnostics();
+  const sink = new LifeDiagnostics({ rawMotion: true });
   const p = new FrameProfiler(() => 0, sink);
   const plain = makeScenario('junction', 1);
   const profiled = makeScenario('junction', 1, false, 1, undefined, p);

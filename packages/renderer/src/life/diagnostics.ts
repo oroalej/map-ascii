@@ -1,4 +1,4 @@
-import type { VisibleAgent } from './simulate';
+import type { VisibleAgent, Mover } from './simulate';
 
 /** Optional profiling data. Identities are weak and never participate in simulation decisions. */
 export const CONTINUITY_EVENTS = [
@@ -35,7 +35,8 @@ export type ContinuitySample = {
 
 export const PackingOutcome = { outside: 0, drawn: 1, collision: 2, cellGuard: 3 } as const;
 export type MotionKind = 'vehicle' | 'person';
-export type LifeHold = 'inspection' | 'pause' | 'moment' | 'signal' | 'service' | 'visit';
+export type LifeHold =
+  'inspection' | 'pause' | 'moment' | 'signal' | 'service' | 'visit' | 'terminal';
 export type LifeRejection = 'occupancy' | 'building' | 'water' | 'road';
 export type MotionReport = {
   eligibleFrames: number;
@@ -50,7 +51,10 @@ type MotionFrame = {
   hold?: LifeHold;
   lng?: number;
   lat?: number;
+  tile?: string;
   tags: Set<string>;
+  rejection?: { reason: LifeRejection; blocker?: number; kind?: string; vehicle?: string };
+  firstRejection?: MotionFrame['rejection'];
 };
 type MotionHistory = {
   kind: MotionKind;
@@ -83,6 +87,15 @@ export function displacement(a: { lng: number; lat: number }, b: { lng: number; 
 
 /** Script-only sink: bounded frame/history maps and weak identities never affect simulation. */
 export class LifeDiagnostics {
+  private readonly raw?: LifeDiagnostics;
+  private terminalSeen = new WeakSet<object>();
+  private terminalEpisodes = new Map<object, number>();
+  private terminalPopulation = 0;
+  private terminalFrames = 0;
+  private terminalMaxSeconds = 0;
+  constructor(options?: { rawMotion?: boolean }) {
+    if (options?.rawMotion) this.raw = new LifeDiagnostics();
+  }
   readonly views = new Map<VisibleAgent, object>();
   private identities = new WeakMap<object, number>();
   private nextId = 1;
@@ -111,6 +124,18 @@ export class LifeDiagnostics {
     capDisappearances: 0,
   };
   private recoveryCounts = new Map<string, number>();
+  private vehicleRecoveries = 0;
+  private recoveryEvents: {
+    id: number;
+    at: number;
+    cause: string;
+    tile?: string;
+    vehicle?: string;
+    line?: number;
+    dir?: number;
+    lng: number;
+    lat: number;
+  }[] = [];
   private at = 0;
   private measuredSeconds = 0;
   private measured = false;
@@ -124,7 +149,12 @@ export class LifeDiagnostics {
     crowd: number,
     measured: boolean,
   ) {
-    if (measured && !this.measured) this.histories.clear();
+    this.raw?.beginFrame(dt, bounds, zoom, crowd, measured);
+    if (measured && !this.measured) {
+      this.histories.clear();
+      this.terminalSeen = new WeakSet();
+      this.terminalEpisodes.clear();
+    }
     this.at += dt;
     this.measured = measured;
     if (measured) this.measuredSeconds += dt;
@@ -137,26 +167,32 @@ export class LifeDiagnostics {
     this.followers.clear();
   }
   beginVisible() {
+    this.raw?.beginVisible();
     this.views.clear();
     this.candidates.clear();
     this.capped.clear();
   }
   eligible(owner: object, kind: string) {
+    this.raw?.eligible(owner, kind);
     if ((kind === 'vehicle' || kind === 'person') && !this.motion.has(owner))
       this.motion.set(owner, { kind, tags: this.pendingTags.get(owner) ?? new Set() });
   }
   following(owner: object, leader: object) {
+    this.raw?.following(owner, leader);
     this.followers.set(owner, leader);
   }
   hold(owner: object, cause: LifeHold) {
+    this.raw?.hold(owner, cause);
     const frame = this.motion.get(owner);
     if (frame) frame.hold = cause;
   }
-  position(owner: object, lng: number, lat: number) {
+  position(owner: object, lng: number, lat: number, tile?: string) {
+    this.raw?.position(owner, lng, lat, tile);
     const frame = this.motion.get(owner);
     if (frame) {
       frame.lng = lng;
       frame.lat = lat;
+      frame.tile = tile;
     }
     return !!frame && this.inView(lng, lat);
   }
@@ -169,6 +205,18 @@ export class LifeDiagnostics {
     if (!this.motion.has(owner)) this.pendingTags.set(owner, tags);
   }
   reject(owner: object, reason: LifeRejection, blocker?: object, tags: readonly string[] = []) {
+    this.raw?.reject(owner, reason, blocker, tags);
+    const frame = this.motion.get(owner);
+    if (frame) {
+      const body = blocker as { kind?: string; vehicle?: string } | undefined;
+      frame.rejection = {
+        reason,
+        blocker: blocker && this.id(blocker),
+        kind: body?.kind,
+        vehicle: body?.vehicle,
+      };
+      frame.firstRejection ??= frame.rejection;
+    }
     if (this.measured) {
       this.increment(this.rejectionCounts, reason);
       if (blocker) {
@@ -179,14 +227,17 @@ export class LifeDiagnostics {
     for (const tag of tags) this.tag(owner, tag);
   }
   view(owner: object, agent: VisibleAgent) {
+    this.raw?.view(owner, agent);
     this.views.set(agent, owner);
     if (this.inView(agent.lng, agent.lat)) this.candidates.set(owner, agent);
   }
   admitted(agents: readonly VisibleAgent[]) {
+    this.raw?.admitted(agents);
     const kept = new Set(agents.map((agent) => this.views.get(agent)));
     for (const owner of this.candidates.keys()) if (!kept.has(owner)) this.capped.add(owner);
   }
   recovery(owner: object, cause: string) {
+    this.raw?.recovery(owner, cause);
     this.recoveries.push({ owner, cause });
   }
   private id(owner: object) {
@@ -220,6 +271,7 @@ export class LifeDiagnostics {
     history.tags.clear();
   }
   finishFrame(agents: readonly VisibleAgent[], outcomes: Uint8Array, denials?: Uint8Array) {
+    this.raw?.finishFrame(agents, outcomes, denials);
     if (outcomes.length !== agents.length)
       throw new RangeError('Packing outcomes must match agents');
     if (denials && denials.length !== agents.length)
@@ -231,7 +283,13 @@ export class LifeDiagnostics {
       while (leader && !visited.has(leader)) {
         visited.add(leader);
         const hold = this.motion.get(leader)?.hold;
-        if (hold === 'signal' || hold === 'service' || hold === 'inspection') {
+        const stopped = (owner as Partial<Mover>).v;
+        if (
+          hold === 'signal' ||
+          hold === 'service' ||
+          hold === 'inspection' ||
+          (hold === 'terminal' && stopped !== undefined && Math.abs(stopped) < 1e-8)
+        ) {
           frame.hold = hold;
           break;
         }
@@ -239,10 +297,30 @@ export class LifeDiagnostics {
       }
     }
     const seen = new Set<number>();
+    const terminalSeen = new Set<object>();
     for (const [owner, frame] of this.motion) {
       const id = this.id(owner);
       const history = this.histories.get(id);
       const stats = this.stats[frame.kind];
+      if (
+        frame.hold === 'terminal' &&
+        this.candidates.has(owner) &&
+        frame.lng !== undefined &&
+        frame.lat !== undefined &&
+        this.inView(frame.lng, frame.lat)
+      ) {
+        terminalSeen.add(owner);
+        const start = this.terminalEpisodes.get(owner) ?? this.at;
+        this.terminalEpisodes.set(owner, start);
+        if (this.measured) {
+          this.terminalFrames++;
+          this.terminalMaxSeconds = Math.max(this.terminalMaxSeconds, this.at - start);
+          if (!this.terminalSeen.has(owner)) {
+            this.terminalSeen.add(owner);
+            this.terminalPopulation++;
+          }
+        }
+      }
       if (
         frame.hold ||
         !this.candidates.has(owner) ||
@@ -299,6 +377,8 @@ export class LifeDiagnostics {
         this.endEpisode(history, this.stats[history.kind]);
         this.histories.delete(id);
       }
+    for (const owner of this.terminalEpisodes.keys())
+      if (!terminalSeen.has(owner)) this.terminalEpisodes.delete(owner);
     const states = new Map<object, number>();
     const denied = new Map<object, number>();
     for (let i = 0; i < agents.length; i++) {
@@ -348,11 +428,28 @@ export class LifeDiagnostics {
           frame?.lng !== undefined &&
           frame.lat !== undefined &&
           this.inView(frame.lng, frame.lat)
-        )
+        ) {
           this.increment(this.recoveryCounts, cause);
+          if (frame.kind === 'vehicle') {
+            this.vehicleRecoveries++;
+            const m = owner as Partial<Mover>;
+            if (this.recoveryEvents.length === 200) this.recoveryEvents.shift();
+            this.recoveryEvents.push({
+              id: this.id(owner),
+              at: this.at,
+              cause,
+              tile: frame.tile,
+              vehicle: m.vehicle,
+              line: m.line,
+              dir: m.dir,
+              lng: frame.lng,
+              lat: frame.lat,
+            });
+          }
+        }
       }
   }
-  report() {
+  private motionReport() {
     const summarize = (kind: MotionKind): MotionReport => {
       const s = this.stats[kind];
       const durations = [
@@ -372,13 +469,22 @@ export class LifeDiagnostics {
         maxSeconds: s.maxSeconds,
       };
     };
+    return { vehicle: summarize('vehicle'), person: summarize('person') };
+  }
+  report() {
     const rate = (count: number) =>
       this.packing.drawnFrames ? (count * 1000) / this.packing.drawnFrames : null;
     const episodes = this.stats.vehicle.episodes + this.stats.person.episodes;
     const hiddenByCrowd = this.episodeTags.get('hiddenByCrowd') ?? 0;
     return {
       seconds: this.measuredSeconds,
-      motion: { vehicle: summarize('vehicle'), person: summarize('person') },
+      motion: this.motionReport(),
+      rawMotion: this.raw?.motionReport(),
+      terminalHolds: {
+        population: this.terminalPopulation,
+        frames: this.terminalFrames,
+        maxSeconds: this.terminalMaxSeconds,
+      },
       packing: {
         ...this.packing,
         disappearancesPer1000: rate(
@@ -397,12 +503,69 @@ export class LifeDiagnostics {
       },
       recoveries: {
         counts: Object.fromEntries(this.recoveryCounts),
-        perMinute: this.measuredSeconds
-          ? ([...this.recoveryCounts.values()].reduce((a, b) => a + b, 0) * 60) /
-            this.measuredSeconds
-          : 0,
+        perMinute: this.measuredSeconds ? (this.vehicleRecoveries * 60) / this.measuredSeconds : 0,
       },
       histories: this.histories.size,
     };
+  }
+
+  /** Bounded, detached examples for manual diagnosis, never read by simulation. */
+  recentRecoveries() {
+    return this.recoveryEvents.map((event) => ({ ...event }));
+  }
+
+  /** Script-only classification; never alters the raw motion observer or simulation. */
+  classifyTerminal(owner: object) {
+    const frame = this.motion.get(owner);
+    if (frame && !frame.hold) frame.hold = 'terminal';
+  }
+
+  /** Bounded, detached examples for manual diagnosis, never read by simulation. */
+  longestStuck(limit = 12, describe?: (owner: object) => unknown) {
+    const examples = [];
+    for (const [owner, frame] of this.motion) {
+      const id = this.identities.get(owner);
+      const h = id === undefined ? undefined : this.histories.get(id);
+      if (h?.episode === undefined) continue;
+      const m = owner as Partial<Mover>;
+      examples.push({
+        id,
+        seconds: this.at - h.episode,
+        kind: frame.kind,
+        lng: frame.lng,
+        lat: frame.lat,
+        tile: frame.tile,
+        tags: [...h.tags],
+        rejection: frame.rejection && { ...frame.rejection },
+        firstRejection: frame.firstRejection && { ...frame.firstRejection },
+        following: this.followers.get(owner) && this.id(this.followers.get(owner)!),
+        mover: {
+          line: m.line,
+          from: m.from,
+          dir: m.dir,
+          d: m.d,
+          x: m.x,
+          y: m.y,
+          hx: m.hx,
+          hy: m.hy,
+          vehicle: m.vehicle,
+          speed: m.speed,
+          v: m.v,
+          waiting: m.waiting,
+          avoid: m.avoid,
+          pause: m.pause,
+          group: m.group?.map((w) => ({ figure: w.figure, lateral: w.lateral, back: w.back })),
+        },
+      });
+    }
+    return examples
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, Math.max(0, Math.min(50, limit)))
+      .map((example) => ({
+        ...example,
+        details:
+          describe &&
+          describe([...this.motion.keys()].find((o) => this.identities.get(o) === example.id)!),
+      }));
   }
 }

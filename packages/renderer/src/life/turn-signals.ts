@@ -29,12 +29,15 @@ export const TURN_SIGNAL = {
 } as const;
 export type TurnSide = 'left' | 'right';
 export type TurnSignal = Readonly<{ side: TurnSide; on: boolean }>;
+/** A legal outgoing arm at an existing mapped vertex, including through-line interiors. */
+export type DirectedExit = Readonly<{ line: number; vertex: number; along: number; dir: 1 | -1 }>;
 
 export type VehicleTurnPlan = Readonly<{
   line: number;
   dir: 1 | -1;
   vertex: number;
   exit: number;
+  target?: DirectedExit;
   side?: TurnSide;
   /** Junction radius in meters. */
   radius: number;

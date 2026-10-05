@@ -25,11 +25,12 @@ export function fillet(
   offsetIn: number,
   offsetOut: number,
   pm: number,
+  maximumM: number = FILLET.maxM,
 ): Curve | undefined {
   const dot = Math.max(-1, Math.min(1, ux * wx + uy * wy));
   const theta = Math.acos(dot),
     degrees = (theta * 180) / Math.PI;
-  const length = Math.min(FILLET.maxM * pm, lenIn / 2, lenOut / 2);
+  const length = Math.min(maximumM * pm, lenIn / 2, lenOut / 2);
   if (
     degrees < FILLET.minAngle ||
     degrees > FILLET.maxAngle ||

@@ -209,7 +209,13 @@ export class Occupancy {
   bodies(owner: object): readonly Body[] {
     return this.entries.get(owner)?.bodies ?? [];
   }
-  conflicts(owner: object, bodies: readonly Body[], ignore?: object): number {
+  conflicts(
+    owner: object,
+    bodies: readonly Body[],
+    ignore?: object,
+    project?: (owner: object, body: Body, index: number) => Body,
+    previous?: readonly Body[],
+  ): number {
     const neighbors = this.neighbors;
     neighbors.clear();
     try {
@@ -220,8 +226,14 @@ export class Occupancy {
         }
       let hits = 0;
       for (const other of neighbors) {
-        for (const a of bodies)
-          for (const b of this.entries.get(other)!.bodies) hits += overlapDepth(a, b);
+        for (const [index, a] of bodies.entries())
+          for (const [i, b] of this.entries.get(other)!.bodies.entries()) {
+            const body = project ? project(other, b, i) : b;
+            const depth = overlapDepth(a, body);
+            hits += previous
+              ? Math.max(0, depth - overlapDepth(previous[index]!, body) - 1e-6)
+              : depth;
+          }
       }
       return hits;
     } finally {

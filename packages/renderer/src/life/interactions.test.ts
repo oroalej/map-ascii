@@ -100,6 +100,52 @@ describe('local interaction scenes', () => {
     expect(p.x).toBeLessThan(48);
     expect(scene.visits.get(p)).toBe(visit);
   });
+
+  it.each([0, 1e-12])(
+    'finishes a return at its route start within %s without a footprint move',
+    (residue) => {
+      const scene = setup(),
+        p = person();
+      expect(scene.reserve(p, 0)).toBe(true);
+      const visit = scene.visits.get(p)!;
+      visit.state = 'return';
+      visit.path = [
+        { x: p.x, y: p.y },
+        { x: p.x, y: p.y },
+      ];
+      visit.next = 1;
+      p.x += residue;
+      let checks = 0;
+      scene.step(0.1, [p], {}, undefined, undefined, () => {
+        checks++;
+        return false;
+      });
+      expect(checks).toBe(0);
+      expect(scene.visits.has(p)).toBe(false);
+      expect([p.x, p.y, p.d]).toEqual([40, 30, 40]);
+    },
+  );
+
+  it('replans past a nearby perpendicular attachment without retaining mutable route points', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    p.x = 48;
+    p.y = 30.2;
+    visit.state = 'return';
+    visit.path = [
+      { x: p.x, y: p.y },
+      { x: 40, y: 50 },
+    ];
+    visit.next = 1;
+    visit.blocked = 15.95;
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(visit.path[1]).toEqual({ x: 40, y: 30 });
+    expect(visit.path[0]).toEqual({ x: 48, y: 30.2 });
+    p.x = 47;
+    expect(visit.path[0]!.x).toBe(48);
+  });
   it('lets a bus leave a held boarding visitor and safely returns the visitor on release', () => {
     const scene = setup(),
       p = person(),
@@ -563,7 +609,8 @@ describe('local interaction scenes', () => {
     for (let i = 0; i < 90; i++) scene.step(0.1, [p], {}, undefined, undefined, () => false);
     expect(p.x).toBe(40);
     expect(scene.sites[0]!.queue).toHaveLength(0);
-    expect(scene.visits.get(p)?.state).toBe('return');
+    // The failed approach never left its route start, so its return completes safely.
+    expect(scene.visits.has(p)).toBe(false);
     scene.step(0.1, [p], {}, undefined, undefined, () => true);
     expect(scene.visits.size).toBe(0);
   });

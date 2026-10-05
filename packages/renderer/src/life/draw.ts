@@ -98,8 +98,27 @@ export type LifeGlyphs = { parts: Uint16Array };
  * whether one of them was already another ground agent's. A whole ground agent is omitted if
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
+type MemberRaster = {
+  cells: { col: number; row: number; bytes: readonly number[] }[];
+  point?: [number, number];
+};
+const adjacentCells = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+] as const;
 let journal:
-  | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
+  | {
+      before: Map<number, [number, number, number, number, number, number?]>;
+      denied: boolean;
+      incomplete?: boolean;
+      members?: MemberRaster[];
+    }
   | undefined;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
@@ -211,11 +230,12 @@ export function packLife(
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
-    // Parked cars reserve their cells before passing traffic or walkers.
-    for (const parked of [true, false])
+    // Fixed obstacles keep their cells as movers pass: parked cars, then vendors.
+    // Owner indices still refer to the caller's original array.
+    for (const priority of [0, 1, 2])
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
-        if (!!agent.parked !== parked) continue;
+        if ((agent.parked ? 0 : agent.vehicle === 'cart' ? 1 : 2) !== priority) continue;
         drawingOwner = index + 1;
         drawingClockCells =
           agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
@@ -248,16 +268,22 @@ export function packLife(
         if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
         else if (journal.denied) {
-          const retry =
-            n > 0 &&
-            journal.before.size <= 4 &&
+          const eligible =
+            (n > 0 || !!journal.members?.length) &&
             !agent.parked &&
             !agent.aboard &&
             !agent.vehicle?.includes('cart') &&
             !agent.prop &&
             !agent.line &&
             !agent.people?.some((look) => look.figure === 'seated') &&
-            (drawingMini || (isWalker(agent.kind) && !agent.vehicle));
+            ((agent.kind === 'vehicle' && drawingMini) ||
+              (agent.kind === 'person' && !agent.vehicle) ||
+              agent.kind === 'cat' ||
+              agent.kind === 'dog');
+          const retry =
+            eligible &&
+            !journal.incomplete &&
+            journal.before.size <= (agent.kind === 'person' ? 16 : 4);
           // Save the already projected raster; retrying drawAgent would change its scale
           // and heading under an anisotropic projection.
           const payload = retry
@@ -277,17 +303,12 @@ export function packLife(
             if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
             if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
           }
+          let placed = false;
           if (payload) {
             const [col, row] = grid.toCell(agent.lng, agent.lat);
-            const offsets = [
-              [1, 0],
-              [-1, 0],
-              [0, 1],
-              [0, -1],
-            ] as const;
             const distance = ([dx, dy]: readonly [number, number]) =>
               (Math.floor(col) + dx + 0.5 - col) ** 2 + (Math.floor(row) + dy + 0.5 - row) ** 2;
-            for (const [dx, dy] of [...offsets].sort((a, b) => distance(a) - distance(b))) {
+            for (const [dx, dy] of [...adjacentCells].sort((a, b) => distance(a) - distance(b))) {
               if (
                 !payload.every(({ at }) => {
                   const c = ((at / 4) % grid.cols) + dx,
@@ -314,7 +335,74 @@ export function packLife(
               if (clocked) for (const cell of clocked) clockCells!.push(cell + dy * grid.cols + dx);
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn += n;
+              placed = true;
               break;
+            }
+          }
+          if (
+            !placed &&
+            eligible &&
+            journal.members &&
+            journal.members.length <= 4 &&
+            journal.members.reduce((sum, m) => sum + m.cells.length, 0) <= 16
+          ) {
+            // Reconstruct from each original member, never from overwritten texels.
+            // Search only on rejection; every member stays within one cell of its anchor.
+            const members = journal.members;
+            const offsets = [[0, 0], ...adjacentCells] as const;
+            const candidates = members.map((member) =>
+              offsets.filter(
+                ([dx, dy]) =>
+                  member.cells.length > 0 &&
+                  member.cells.every(({ col, row }) => {
+                    const c = col + dx,
+                      r = row + dy;
+                    return (
+                      c >= 0 &&
+                      r >= 0 &&
+                      c < grid.cols &&
+                      r < grid.rows &&
+                      !groundCells[r * grid.cols + c] &&
+                      (!grid.allowsGroundCell || grid.allowsGroundCell(agent, c, r))
+                    );
+                  }),
+              ),
+            );
+            const selected: (readonly [number, number])[] = [];
+            const occupied = new Set<number>();
+            const assign = (i: number): boolean => {
+              if (i === members.length) return true;
+              for (const offset of candidates[i]!) {
+                const cells = members[i]!.cells.map(
+                  ({ col, row }) => (row + offset[1]) * grid.cols + col + offset[0],
+                );
+                if (cells.some((cell) => occupied.has(cell))) continue;
+                for (const cell of cells) occupied.add(cell);
+                selected[i] = offset;
+                if (assign(i + 1)) return true;
+                for (const cell of cells) occupied.delete(cell);
+              }
+              return false;
+            };
+            if (assign(0)) {
+              members.forEach((member, i) => {
+                const [dx, dy] = selected[i]!;
+                for (const { col, row, bytes } of member.cells) {
+                  const cell = (row + dy) * grid.cols + col + dx;
+                  out.set(bytes, cell * 4);
+                  groundCells[cell] = 1;
+                  if (drawingOwners) drawingOwners[cell] = drawingOwner;
+                  if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
+                  drawingClockCells?.push(cell);
+                }
+                if (member.point)
+                  drawingSpeakers?.points.set(drawingOwner, [
+                    member.point[0] + dx,
+                    member.point[1] + dy,
+                  ]);
+              });
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += members.length;
             }
           }
         } else {
@@ -510,10 +598,22 @@ function drawPeople(
         : PersonPart.figure;
     return personByte(look.paint, part, agent.candle);
   };
+  let captured: MemberRaster | undefined;
   const put = (c: number, r: number, glyph: string, byte: number) => {
     const index = glyphIndex(glyph);
-    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return false;
+    if (!Number.isInteger(c) || !Number.isInteger(r) || index <= 0 || index > MAX_GLYPHS)
+      return false;
+    captured?.cells.push({
+      col: c,
+      row: r,
+      bytes: [...packGlyph(index, cls), bits | drawingFocus, byte],
+    });
+    if (c < 0 || r < 0 || c >= cols || r >= rows) {
+      if (captured && journal) journal.denied = journal.incomplete = true;
+      return false;
+    }
     const at = (r * cols + c) * 4;
+    if (captured && journal?.before.has(at)) journal.denied = journal.incomplete = true;
     rememberGroundCell(out, at);
     writeCell(out, at, index, cls, bits, byte);
     return true;
@@ -589,18 +689,36 @@ function drawPeople(
     size === 2 ? [Math.round(col) - 1, Math.round(row) - 1] : [Math.floor(col), Math.floor(row)];
   // The cart's half-width in cells, across its heading.
   const clear = clearance * Math.hypot(...right);
+  if (
+    journal &&
+    !agent.vehicle &&
+    looks.length <= 4 &&
+    c0 >= 0 &&
+    r0 >= 0 &&
+    c0 < cols &&
+    r0 < rows
+  )
+    journal.members = [];
   looks.forEach((look, i) => {
     drawingMember = i + 1;
+    captured = journal?.members ? { cells: [] } : undefined;
+    if (captured) journal!.members!.push(captured);
     const lateral =
       clearance > 0 && look.lateral !== 0
         ? Math.sign(look.lateral) * Math.max(size, Math.ceil(clear + size / 2))
         : look.lateral * size;
     const back = look.back * size;
-    const c = c0 + rx * lateral - fx * back;
-    const r = r0 + ry * lateral - fy * back;
-    if (agent.speech && (agent.speech.member ?? 0) === i)
-      drawingSpeakers?.points.set(drawingOwner, [c + size / 2, r + size / 2]);
+    // Physical group rotations leave fractional slots (including tiny roundoff).
+    // Typed-array addresses must be integer cells; keep those physical slots intact.
+    const c = c0 + Math.round(rx * lateral - fx * back);
+    const r = r0 + Math.round(ry * lateral - fy * back);
     const fit = fits[i]!;
+    const [dc, dr] = fit !== 'big' && size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
+    if (agent.speech && (agent.speech.member ?? 0) === i) {
+      const point: [number, number] = fit === 'big' ? [c + 1, r + 1] : [c + dc + 0.5, r + dr + 0.5];
+      drawingSpeakers?.points.set(drawingOwner, point);
+      if (captured) captured.point = point;
+    }
     let any: boolean;
     if (fit === 'big') {
       any = putBig(look, c, r);
@@ -615,7 +733,6 @@ function drawPeople(
         look.pose,
       );
       // In a 2×2 slot: its cell nearest the first of the group.
-      const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
       any = put(c + dc, r + dr, glyph, byteOf(look));
     }
     if (any) drawn++;
