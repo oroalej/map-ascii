@@ -1,3 +1,4 @@
+import { project } from './camera';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
@@ -9,7 +10,7 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
-import { bandVisibility, CLASS_ZOOM } from '@atlas/shared';
+import { bandVisibility, CLASS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -63,9 +64,12 @@ import { packBeams, packCandles, packLights, type VisibleLamp } from './life/lig
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
+import { buntingWindResponse } from './life/bunting-motion';
 import { rainGlyphs, type Theme } from './theme';
 import {
   packFixtures,
+  createFixturePackingScratch,
+  type FixturePackingScratch,
   packSignalLights,
   updateFixtureSignals,
   updateFixtureFlags,
@@ -736,6 +740,8 @@ const fixturesOf = new WeakMap<
     lightTexels: Uint8Array;
     lightScores: Float32Array;
     utilityScratch: UtilityPackingScratch;
+    fixtureScratch: FixturePackingScratch;
+    seasonal: boolean;
     viewport: ReturnType<typeof screenArea>;
   }
 >();
@@ -769,6 +775,7 @@ export function fixturePass(
   ) {
     const area = viewport;
     const utilityScratch = cache?.utilityScratch ?? createUtilityPackingScratch();
+    const fixtureScratch = cache?.fixtureScratch ?? createFixturePackingScratch();
     const packed = packFixtures(
       cache?.packed.texels.length === targets.cols * targets.rows * 4
         ? cache.packed.texels
@@ -779,6 +786,21 @@ export function fixturePass(
         cellWidth: view.cellDev.w,
         cellHeight: view.cellDev.h,
         toCell: placement.toCell,
+        buntingProjection: {
+          scale: `${view.camera.zoom}/${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+          base: {
+            key: `${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+            scale: 2 ** (view.camera.zoom - (SEASON_ZOOM.bunting.min - ZOOM_FADE)),
+            toCell: (lng, lat) => {
+              const [x, y] = project(lng, lat, SEASON_ZOOM.bunting.min - ZOOM_FADE);
+              return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+            },
+          },
+          toCell: (lng, lat) => {
+            const [x, y] = project(lng, lat, view.camera.zoom);
+            return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+          },
+        },
         visible: (c, r) => c >= area.left && c <= area.right && r >= area.top && r <= area.bottom,
       },
       fixtures,
@@ -787,6 +809,7 @@ export function fixturePass(
       clock,
       motion,
       utilityScratch,
+      fixtureScratch,
     );
     cache = {
       packed,
@@ -805,6 +828,8 @@ export function fixturePass(
           ? cache.lightScores
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
+      fixtureScratch,
+      seasonal: (packed.seasonalCells ?? 0) > 0,
       viewport,
     };
     fixturesOf.set(targets, cache);
@@ -877,7 +902,13 @@ export function glyphPass(
   const { cellDev } = view;
   const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
   const hasEffectClocks = targets.effectClockTex !== undefined;
-  const program = glyphProgram(gl, programs, focused, hasEffectClocks);
+  const program = glyphProgram(
+    gl,
+    programs,
+    focused,
+    hasEffectClocks,
+    fixturesOf.get(targets)?.seasonal === true,
+  );
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.useProgram(program.program);
@@ -903,6 +934,8 @@ export function glyphPass(
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
+    u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
+    u_buntingWindDir: weather.wind?.dir ?? [0, 0],
     u_focus: focused,
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,

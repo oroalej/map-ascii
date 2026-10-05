@@ -2,8 +2,9 @@ import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
-import { personGlyphs } from './life/people';
+import { figureOf, personGlyphs } from './life/people';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
+import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
 
@@ -249,8 +250,14 @@ function makeTheme(background: number, c: Palette): Theme {
     accent: c.accent,
     fixturePaints:
       background > 0x7fffff
-        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f, 0x8d8a82, 0x34383e]
-        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87, 0xc9c5bb, 0x6f7782],
+        ? [
+            0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f, 0x8d8a82, 0x34383e,
+            0xb93340, 0xb8831a, 0x25785a,
+          ]
+        : [
+            0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87, 0xc9c5bb, 0x6f7782,
+            0xf05b5b, 0xffd26f, 0x7ccf9d,
+          ],
     vehiclePaints: c.vehiclePaints,
     awningPaints:
       background > 0x7fffff
@@ -551,7 +558,10 @@ export function mapGlyphs(theme: Theme): string[] {
     ...doubleWall,
     ...sextantGlyphs,
     ...vehicleGlyphs(),
-    ...personGlyphs(),
+    ...personGlyphs().filter((glyph) => {
+      const figure = figureOf(glyph)!;
+      return !figure.pose && figure.stage === undefined;
+    }),
     ...birdGlyphs(),
     ...dogGlyphs(),
     ...catGlyphs(),
@@ -559,6 +569,13 @@ export function mapGlyphs(theme: Theme): string[] {
     streetlightGlyph,
     ...fixtureGlyphs,
     ...arrowGlyphs,
+    ...SEASONAL_GLYPHS,
+    // New social poses follow all existing map glyphs, preserving hardware and season indices.
+    ...personGlyphs().filter((glyph) => figureOf(glyph)?.pose),
+    // Parking labels follow all existing glyphs so legacy atlas indices stay unchanged.
+    ...ACCESS_GLYPHS,
+    // Canopy stages follow all earlier glyphs, retaining fixture, pose and parking indices.
+    ...personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined),
   ];
   for (const g of extras) set.add(g);
   return [...set];

@@ -1,0 +1,701 @@
+{
+  "note": "Complete normalized OSM geometry around owner-marked carnival lot. Source LCC integration trees from concurrent completed codex/landmark-details 34f1e13; independent geography preserved. No imagery copied. All ride placement remains illustrative.",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1816143, 13.6212311],
+            [123.1814894, 13.6212769],
+            [123.1814113, 13.6210886],
+            [123.1810736, 13.6211669],
+            [123.1802696, 13.6209319],
+            [123.1801919, 13.6212515],
+            [123.1800895, 13.6212348],
+            [123.1800977, 13.6207117],
+            [123.1807258, 13.620704],
+            [123.1812937, 13.6204489],
+            [123.1816143, 13.6212311]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:relation/11525331",
+        "class": "building_school",
+        "name": "Sabang National High School",
+        "kind": "amenity=school",
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1801449, 13.6200792],
+            [123.1812643, 13.6200704],
+            [123.1815519, 13.6199976],
+            [123.1816657, 13.6202381],
+            [123.1807118, 13.6206511],
+            [123.180101, 13.6206432],
+            [123.1801449, 13.6200792]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:relation/11525333",
+        "class": "building_school",
+        "name": "Naga City School of Arts and Trades",
+        "kind": "amenity=school",
+        "old_name": "Sabang High School",
+        "addr:street": "Felix Plazo Street",
+        "operator": "Naga North District Naga City Schools Division, DepEd",
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true,
+        "start_year": 1993,
+        "certainty": "exact"
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.179228, 13.619641],
+            [123.179245, 13.619722],
+            [123.179189, 13.619734],
+            [123.179172, 13.619653],
+            [123.179228, 13.619641]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23663622",
+        "class": "building",
+        "kind": "building=yes",
+        "height": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.179147, 13.619664],
+            [123.179177, 13.61974],
+            [123.17907, 13.619779],
+            [123.17904, 13.619704],
+            [123.179147, 13.619664]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23664009",
+        "class": "building",
+        "kind": "building=yes",
+        "height": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1798529, 13.6181567],
+            [123.1803737, 13.6196788],
+            [123.179681, 13.6198827],
+            [123.1791977, 13.6183319],
+            [123.1798529, 13.6181567]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23665048",
+        "class": "building_market",
+        "frontage": "retail",
+        "shop_lng": 123.179776325,
+        "shop_lat": 13.619012525,
+        "shop_radius_m": 98.37777627661302,
+        "name": "LCC Mall Naga",
+        "kind": "shop=mall",
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1802011, 13.6210976],
+            [123.1801808, 13.6212431],
+            [123.1800921, 13.6212315],
+            [123.1801123, 13.621086],
+            [123.1802011, 13.6210976]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23674414",
+        "class": "building",
+        "kind": "building=school",
+        "height": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1803001, 13.6196871],
+            [123.179686, 13.6198674],
+            [123.1792206, 13.6183698],
+            [123.1798348, 13.6181895],
+            [123.1803001, 13.6196871]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/839260813",
+        "class": "building",
+        "frontage": "food",
+        "shop_lng": 123.179760375,
+        "shop_lat": 13.61902845,
+        "shop_radius_m": 93.73838573395774,
+        "kind": "building=retail",
+        "height": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [123.1801151, 13.6210778],
+            [123.1801533, 13.6207767],
+            [123.1802392, 13.6207872],
+            [123.1802009, 13.6210883],
+            [123.1801151, 13.6210778]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/839260823",
+        "class": "building",
+        "kind": "building=yes",
+        "height": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "buildings",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1809115, 13.619037],
+          [123.1807609, 13.6191453],
+          [123.1803212, 13.6193183],
+          [123.1804395, 13.6197071],
+          [123.1797828, 13.6199421],
+          [123.1796348, 13.6199904]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23519244",
+        "class": "road_minor",
+        "highway": "service",
+        "name": "LCC Road",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1772585, 13.6210583],
+          [123.1771083, 13.6205089],
+          [123.177056, 13.6204509],
+          [123.1770178, 13.6203486],
+          [123.1769806, 13.620232],
+          [123.1768535, 13.6199452],
+          [123.1767869, 13.619643],
+          [123.1762736, 13.619861],
+          [123.1763358, 13.6193162],
+          [123.1764044, 13.6188539],
+          [123.1764511, 13.6185927],
+          [123.1765027, 13.6183975],
+          [123.1765573, 13.6182442],
+          [123.1767039, 13.6181062],
+          [123.176895, 13.6179769],
+          [123.177429, 13.617538],
+          [123.1775852, 13.6174727],
+          [123.1779828, 13.6174355],
+          [123.1783415, 13.6174066],
+          [123.1786743, 13.6174078],
+          [123.1787647, 13.6174352],
+          [123.1788383, 13.6175431],
+          [123.1789018, 13.6176143],
+          [123.1789712, 13.6176881]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23519307",
+        "class": "road_minor",
+        "highway": "residential",
+        "kind": "highway=residential",
+        "width": 5,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1800433, 13.6210886],
+          [123.1800621, 13.6206829],
+          [123.1800972, 13.620675]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/23520915",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1800836, 13.6203798],
+          [123.1800972, 13.620675]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600544623",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1800182, 13.6200412],
+          [123.1800836, 13.6203798]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600544626",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1804766, 13.6198313],
+          [123.1800182, 13.6200412],
+          [123.1798529, 13.6200951],
+          [123.1800621, 13.6206829]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600544627",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1798906, 13.6206918],
+          [123.1800433, 13.6210886],
+          [123.1800651, 13.6211644],
+          [123.1802171, 13.6216662],
+          [123.1803353, 13.6220346],
+          [123.1804818, 13.6225315],
+          [123.1807763, 13.6233107]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600544642",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Felix Plazo Street",
+        "kind": "highway=secondary",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1787906, 13.6212898],
+          [123.1794905, 13.6209627],
+          [123.1795617, 13.6209987],
+          [123.1796962, 13.6210382],
+          [123.1798144, 13.6210453],
+          [123.1800651, 13.6211644]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600552811",
+        "class": "path",
+        "kind": "highway=footway",
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 15,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1783744, 13.6210564],
+          [123.1784209, 13.6211159],
+          [123.1785322, 13.6213556],
+          [123.1785389, 13.6214221],
+          [123.1785868, 13.6216712],
+          [123.1786953, 13.6219522],
+          [123.1787928, 13.6222082],
+          [123.1789225, 13.6224401],
+          [123.179125, 13.6226552],
+          [123.1793734, 13.6226761]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/600552823",
+        "class": "road_minor",
+        "highway": "residential",
+        "kind": "highway=residential",
+        "width": 6,
+        "oneway": 1,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1800972, 13.620675],
+          [123.180716, 13.6206732],
+          [123.1809753, 13.6205626],
+          [123.1813749, 13.6203864],
+          [123.1816838, 13.6202503]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/839260824",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Igualdad Interior",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1792871, 13.6188133],
+          [123.1796348, 13.6199904],
+          [123.1798906, 13.6206918]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/1053960480",
+        "class": "road_mid",
+        "highway": "secondary",
+        "name": "Felix Plazo Street",
+        "kind": "highway=secondary",
+        "width": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 10,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [123.1798529, 13.6200951],
+          [123.1797828, 13.6199421]
+        ]
+      },
+      "properties": {
+        "id": "osm:way/1165344765",
+        "class": "road_minor",
+        "highway": "service",
+        "kind": "highway=service",
+        "width": 6,
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "roads",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.1800774, 13.6197644]
+      },
+      "properties": {
+        "id": "osm:node/641652947",
+        "class": "building_market",
+        "frontage": "retail",
+        "shop_lng": 123.1800774,
+        "shop_lat": 13.6197644,
+        "shop_radius_m": 5,
+        "name": "LCC Mall",
+        "kind": "shop=supermarket",
+        "subdivision": "Sabang",
+        "subdivision_approx": true
+      },
+      "tippecanoe": {
+        "layer": "poi",
+        "minzoom": 12,
+        "maxzoom": 16
+      }
+    }
+  ],
+  "integrationTrees": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "integration/lcc/tree-0",
+        "class": "tree",
+        "crown": 6
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.179660236, 13.617821362]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "integration/lcc/tree-1",
+        "class": "tree",
+        "crown": 7
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.179511133, 13.617869551]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "integration/lcc/tree-2",
+        "class": "tree",
+        "crown": 8
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.179326947, 13.617929077]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "integration/lcc/tree-3",
+        "class": "tree",
+        "crown": 6
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.179154406, 13.618051108]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "integration/lcc/tree-4",
+        "class": "tree",
+        "crown": 8
+      },
+      "tippecanoe": {
+        "layer": "landuse",
+        "minzoom": 16,
+        "maxzoom": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [123.179807624, 13.620102555]
+      }
+    }
+  ]
+}

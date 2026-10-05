@@ -7,6 +7,106 @@ import { normalizeFocus } from './focus';
 import { themes } from './theme';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('labels atmospheric fireworks independently of Life and removes them below their zoom or in another season', () => {
+  const season = {
+    id: 'new-year',
+    title: 'New Year',
+    status: 'draft' as const,
+    labels: { fireworks: 'Fireworks and smoke' },
+  };
+  for (const theme of ['dark', 'light'] as const) {
+    const entry = legendEntries(theme, 7, [], { life: false, season }).find(
+      (e) => e.id === 'info:season-fireworks',
+    );
+    expect(entry).toMatchObject({ classes: [], label: 'Fireworks and smoke (illustrative)' });
+    for (const zoom of [7, 16, 19.99, 20, 20.999])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(true);
+    for (const zoom of [6, 21])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(false);
+    expect(
+      legendEntries(theme, 19, [], { season: null }).some((e) => e.id === 'info:season-fireworks'),
+    ).toBe(false);
+  }
+});
+it('names visible installations with Life off and drops the entry after leaving the site or season', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { installations: 'Christmas trees and lights' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: false, bunting: false, installations: true },
+  };
+  for (const theme of ['dark', 'light'] as const)
+    expect(
+      legendEntries(theme, 20, ['park'], { season, fixtures, life: false }).find(
+        (e) => e.id === 'info:season-installations',
+      )?.label,
+    ).toBe('Christmas trees and lights (illustrative)');
+  expect(
+    legendEntries('dark', 20, ['park'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { ...fixtures.seasonal, installations: false } },
+    }).some((e) => e.id === 'info:season-installations'),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['park'], { fixtures }).some(
+      (e) => e.id === 'info:season-installations',
+    ),
+  ).toBe(false);
+});
+it('reports seasonal hardware with Life off and temporary vendors only where paths can support them', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { lanterns: 'Parols', bunting: 'Pennants', stalls: 'Fair carts' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: true, bunting: true },
+  };
+  const entries = legendEntries('dark', 20, ['path'], { season, fixtures, life: false });
+  expect(entries.filter((e) => e.id.startsWith('info:season-')).map((e) => e.id)).toEqual([
+    'info:season-lanterns',
+    'info:season-bunting',
+  ]);
+  expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
+  for (const entry of entries.filter((e) => e.id.startsWith('info:season-')))
+    expect(entry.focus).toBeUndefined();
+  expect(
+    entries.filter((e) => e.id.startsWith('info:season-')).every((e) => e.classes.length === 0),
+  ).toBe(true);
+  expect(
+    legendEntries('light', 20, ['path'], { season, fixtures, life: true }).find(
+      (e) => e.id === 'info:season-stalls',
+    )?.label,
+  ).toBe('Fair carts (simulated)');
+  expect(
+    legendEntries('dark', 20, ['water_river'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 16, ['path'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['path'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { lanterns: false, bunting: false } },
+    }).some((e) => e.id.startsWith('info:season-')),
+  ).toBe(false);
+});
 
 it('merges visible hospital roofs and markers into a distinct, focusable category in both themes', () => {
   for (const theme of ['dark', 'light'] as const) {

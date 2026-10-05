@@ -187,6 +187,915 @@
         "modes": ["jeepney"],
         "source": "OpenStreetMap: Jeepney Station to Barangay Pacol. https://www.openstreetmap.org/node/4850042233"
       }
+    ],
+    "seasons": [
+      {
+        "id": "new-year",
+        "title": {
+          "en": "New Year"
+        },
+        "status": "draft",
+        "window": {
+          "from": {
+            "month": 12,
+            "day": 31
+          },
+          "to": {
+            "month": 1,
+            "day": 1
+          }
+        },
+        "note": "TODO(verify): owner-requested illustrative New Year display, December 31–January 1. Peony, chrysanthemum, ring and golden willow bursts, drifting smoke and timing are schematic atmospheric effects seen from above, not surveyed launch locations, a confirmed Naga event, or air-quality data. It takes precedence over the overlapping Christmas calendar. Preview remains visible at any chosen hour and with Life off; reduced motion holds a still burst.",
+        "fireworks": {
+          "label": "Fireworks and smoke",
+          "variants": ["peony", "chrysanthemum", "ring", "willow"]
+        },
+        "sources": [
+          {
+            "title": "Project owner: animated New Year season (2026-10-03)",
+            "note": "Requests fireworks with several variants and smoke. Display and two-day calendar are illustrative, not a verified local event schedule."
+          },
+          {
+            "title": "PBS A Capitol Fourth: Names of Fireworks",
+            "url": "https://www.pbs.org/a-capitol-fourth/fireworks-fun/firework-names/",
+            "note": "Visual terminology for spherical peony breaks, spark-tailed chrysanthemums, rings and long gold/silver willow trails. Top-down interpretation here is schematic."
+          },
+          {
+            "title": "Manila Observatory: New Year 2024 Particle Pollution Measurements",
+            "url": "https://www.observatory.ph/wp-content/uploads/2024/02/MO-AQ-NY2024.pdf",
+            "note": "Documents Philippine New Year fireworks and particles affected by wind and dispersion. Provides general seasonal context, not a Naga launch location or a physical smoke/air-quality model."
+          }
+        ]
+      },
+      {
+        "id": "christmas",
+        "title": {
+          "en": "Christmas"
+        },
+        "status": "draft",
+        "window": {
+          "from": {
+            "month": 12,
+            "day": 1
+          },
+          "to": {
+            "month": 1,
+            "day": 6
+          }
+        },
+        "note": "TODO(verify): December follows Kamundagan; January 6 is illustrative. Decorations combine references from several years, with schematic sizes and placements. The private Magsaysay display and Christmas perya beside LCC Mall Sabang were requested by the project owner; neither is a verified annual installation. Church-area banners and stalls are illustrative. This is not an exact historical or Christmas 2026 reconstruction.",
+        "lanterns": {
+          "label": "Parol lanterns",
+          "shape": "star"
+        },
+        "bunting": {
+          "label": "Christmas banners",
+          "near": ["worship"],
+          "radius_m": 300,
+          "spacing_m": 30
+        },
+        "stalls": {
+          "label": "Tiangge stalls",
+          "near": ["worship"],
+          "radius_m": 300,
+          "per_tile": 12
+        },
+        "sources": [
+          {
+            "title": "City of Naga: The Merriest of Seasons is Here (December 7, 2022)",
+            "url": "https://www2.naga.gov.ph/the-merriest-season-is-here/",
+            "note": "Supports a month-long December celebration and illuminated plazas, not the January endpoint or individual decoration positions."
+          },
+          {
+            "title": "City of Naga: Ordinance No. 2019-098 — Kamundagan Food, Agri and Trade Fair",
+            "url": "https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2019-098/",
+            "note": "Documents the December 14–24, 2019 fair and vendor tents. The simulation does not reconstruct the historical street closure or claim these stall positions."
+          },
+          {
+            "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+            "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+            "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+          },
+          {
+            "title": "City of Naga: October-December 2018 newsletter",
+            "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+            "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+          },
+          {
+            "title": "City of Naga: 2022 procurement monitoring report, project 22-10-1110-1061",
+            "url": "https://www2.naga.gov.ph/wp-content/uploads/2022/08/pmr-2-2022.pdf",
+            "note": "Christmas decorations for public plazas, parks and City Hall grounds. Exact type and placement at City Hall are illustrative."
+          },
+          {
+            "title": "Brigada News: Kamundagan displays varied in December 2022",
+            "url": "https://www.brigadanews.ph/dating-sigla-ng-kamundagan-festival-sa-naga-city-hindi-pa-naibalik/",
+            "note": "December 3, 2022: giant Plaza Quezon tree absent; Plaza Rizal and Quince Martires illuminated. Supports multi-year interpretation rather than claiming a current exact layout."
+          },
+          {
+            "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+            "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+          },
+          {
+            "title": "City Government of Davao: Perya sa Pasko Fiesta (2025-12-26)",
+            "url": "https://davaocity.gov.ph/tourism/hulagway-sa-pasko-fiesta-2025-winner-highlights-safe-joyful-christmas/",
+            "note": "Reference for Filipino Christmas carnival rides, festive colors and food stalls, not evidence for this Naga lot."
+          },
+          {
+            "title": "SM Prime: holiday rides and Grand Carousel (2025-12-23)",
+            "url": "https://www.smprime.com/company_releases/experience-holiday-magic-at-sm-where-moments-become-memories/",
+            "note": "Reference for illuminated holiday attractions and carousel design; ride dimensions and layout here are illustrative."
+          },
+          {
+            "title": "Philippine News Agency: Carnival preps (2021-12-03)",
+            "url": "https://www.pna.gov.ph/photos/51975",
+            "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
+          },
+          {
+            "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+            "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+          },
+          {
+            "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+            "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+          }
+        ],
+        "installations": [
+          {
+            "id": "rizal-tree",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "radius_m": 2.5
+          },
+          {
+            "id": "rizal-light-canopies",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "paths",
+            "spacing_m": 5
+          },
+          {
+            "id": "rizal-decorated-trees",
+            "anchor": "osm:way/201276956",
+            "label": "Christmas trees and lights",
+            "kind": "decorated-canopy",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ]
+          },
+          {
+            "id": "quezon-tree",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 5
+          },
+          {
+            "id": "quezon-small-tree-a",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 1.6
+          },
+          {
+            "id": "quezon-small-tree-b",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "christmas-tree",
+            "sources": [
+              {
+                "title": "City of Naga: October-December 2018 newsletter",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2025/12/2018-4Q-NSM.pdf",
+                "note": "The 2018 Kamundagan lighting ceremony included a giant Plaza Quezon Christmas tree. The PDF upload year is not the event year; this display is not asserted to recur every year."
+              }
+            ],
+            "radius_m": 1.6
+          },
+          {
+            "id": "quezon-perimeter-lights",
+            "anchor": "osm:way/201276958",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "perimeter",
+            "spacing_m": 5
+          },
+          {
+            "id": "quince-light-canopies",
+            "anchor": "osm:way/201276957",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ],
+            "layout": "paths",
+            "spacing_m": 5
+          },
+          {
+            "id": "quince-decorated-trees",
+            "anchor": "osm:way/201276957",
+            "label": "Christmas trees and lights",
+            "kind": "decorated-canopy",
+            "sources": [
+              {
+                "title": "Naga Christmas plaza photographs (December 2024; credited to Naga City Tourism)",
+                "url": "https://umahotel.ph/discover-the-magic-of-christmas-villages-near-uma-hotel-and-residences-in-naga-city/",
+                "note": "Warm strings, stars/bells, colored parols and illuminated trees. Reference-inspired placement, not a surveyed layout or a 2026 reconstruction."
+              }
+            ]
+          },
+          {
+            "id": "city-hall-perimeter-lights",
+            "anchor": "osm:way/177077167",
+            "label": "Christmas trees and lights",
+            "kind": "light-string",
+            "sources": [
+              {
+                "title": "City of Naga: 2022 procurement monitoring report, project 22-10-1110-1061",
+                "url": "https://www2.naga.gov.ph/wp-content/uploads/2022/08/pmr-2-2022.pdf",
+                "note": "Christmas decorations for public plazas, parks and City Hall grounds. Exact type and placement at City Hall are illustrative."
+              }
+            ],
+            "layout": "perimeter",
+            "spacing_m": 5
+          },
+          {
+            "anchor": "osm:way/23664053",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              }
+            ],
+            "label": "Christmas lights and ornaments",
+            "id": "magsaysay-orange-garlands",
+            "grounds": "magsaysay-orange-display",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.9,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm"
+          },
+          {
+            "anchor": "osm:way/23664053",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              }
+            ],
+            "label": "Christmas lights and ornaments",
+            "id": "magsaysay-house-lights",
+            "kind": "light-string",
+            "layout": "building-perimeter",
+            "spacing_m": 3,
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas"
+          },
+          {
+            "anchor": "osm:way/23664053",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              }
+            ],
+            "label": "Christmas lights and ornaments",
+            "id": "magsaysay-orange-border",
+            "grounds": "magsaysay-orange-display",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas"
+          },
+          {
+            "id": "sabang-christmas-perya",
+            "anchor": "osm:way/1053960480",
+            "label": "Christmas carnival",
+            "sources": [
+              {
+                "title": "Project owner: marked LCC Sabang Christmas carnival lot (2026-10-02)",
+                "url": "https://www.openstreetmap.org/way/1053960480",
+                "note": "Owner-requested illustrative perya west of Felix Plazo Street, northwest of LCC Mall Sabang. Boundary registered against the complete mapped road and mall roof; not a surveyed parcel, current-year inventory or verified annual venue."
+              },
+              {
+                "title": "City Government of Davao: Perya sa Pasko Fiesta (2025-12-26)",
+                "url": "https://davaocity.gov.ph/tourism/hulagway-sa-pasko-fiesta-2025-winner-highlights-safe-joyful-christmas/",
+                "note": "Reference for Filipino Christmas carnival rides, festive colors and food stalls, not evidence for this Naga lot."
+              },
+              {
+                "title": "SM Prime: holiday rides and Grand Carousel (2025-12-23)",
+                "url": "https://www.smprime.com/company_releases/experience-holiday-magic-at-sm-where-moments-become-memories/",
+                "note": "Reference for illuminated holiday attractions and carousel design; ride dimensions and layout here are illustrative."
+              },
+              {
+                "title": "Philippine News Agency: Carnival preps (2021-12-03)",
+                "url": "https://www.pna.gov.ph/photos/51975",
+                "note": "Reference for temporary Philippine perya rides, game booths and refreshments in an open lot, not this site."
+              }
+            ],
+            "grounds": "sabang-carnival-lot",
+            "kind": "carnival",
+            "components": [
+              {
+                "id": "midway",
+                "style": "midway",
+                "at": [123.17936048, 13.62038222],
+                "size_m": [36, 104],
+                "angle_deg": -20
+              },
+              {
+                "id": "carousel",
+                "style": "carousel",
+                "at": [123.17938385, 13.62064162],
+                "size_m": [18, 18],
+                "angle_deg": -20
+              },
+              {
+                "id": "wheel",
+                "style": "ferris-wheel",
+                "at": [123.1795485, 13.62062162],
+                "size_m": [7, 22],
+                "angle_deg": -20
+              },
+              {
+                "id": "bumper-cars",
+                "style": "bumper-cars",
+                "at": [123.1792171, 13.62022262],
+                "size_m": [16, 21],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-1",
+                "style": "booth",
+                "at": [123.17949868, 13.62040981],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-2",
+                "style": "booth",
+                "at": [123.17946707, 13.6203254],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-3",
+                "style": "booth",
+                "at": [123.17943546, 13.62024098],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-4",
+                "style": "booth",
+                "at": [123.17940384, 13.62015657],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "games-5",
+                "style": "booth",
+                "at": [123.17937223, 13.62007215],
+                "size_m": [5, 6],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-1",
+                "style": "booth",
+                "at": [123.17923492, 13.6203884],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-2",
+                "style": "booth",
+                "at": [123.17926653, 13.62047281],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-1",
+                "style": "booth",
+                "at": [123.17941984, 13.62082965],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-2",
+                "style": "booth",
+                "at": [123.17950236, 13.62080046],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              },
+              {
+                "id": "food-north-3",
+                "style": "booth",
+                "at": [123.17961093, 13.62076205],
+                "size_m": [6, 5],
+                "angle_deg": -20
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-island-tree-1",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-access-forecourt",
+            "kind": "christmas-tree",
+            "radius_m": 1,
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-west-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-west",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-middle-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-middle",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-east-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-east",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-red-tree",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-red-tree",
+            "kind": "christmas-tree",
+            "radius_m": 1.8,
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          }
+        ],
+        "grounds": [
+          {
+            "id": "magsaysay-orange-display",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19573371, 13.63244469],
+              [123.19575841, 13.63247705],
+              [123.19579004, 13.63250175],
+              [123.19581128, 13.63252985],
+              [123.19582861, 13.63253922],
+              [123.19582948, 13.63251027],
+              [123.19584031, 13.63248302],
+              [123.19584551, 13.632463],
+              [123.19583251, 13.63245449],
+              [123.19579351, 13.63243703],
+              [123.19576578, 13.63241872],
+              [123.19575364, 13.63241914],
+              [123.19574887, 13.63244043],
+              [123.19573371, 13.63244469]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              }
+            ]
+          },
+          {
+            "id": "sabang-carnival-lot",
+            "anchor": "osm:way/1053960480",
+            "ring": [
+              [123.17938, 13.62092],
+              [123.17976, 13.62083],
+              [123.17937, 13.61984],
+              [123.17898, 13.61997],
+              [123.17938, 13.62092]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: marked LCC Sabang Christmas carnival lot (2026-10-02)",
+                "url": "https://www.openstreetmap.org/way/1053960480",
+                "note": "Owner-requested illustrative perya west of Felix Plazo Street, northwest of LCC Mall Sabang. Boundary registered against the complete mapped road and mall roof; not a surveyed parcel, current-year inventory or verified annual venue."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-access-forecourt",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19572551, 13.63242899],
+              [123.19582086, 13.63254217],
+              [123.19585197, 13.63248416],
+              [123.19592028, 13.63242899],
+              [123.19600458, 13.63238796],
+              [123.1960104, 13.63236815],
+              [123.19586156, 13.63227619],
+              [123.19579092, 13.63233136],
+              [123.19572551, 13.63242899]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-walk-island",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19580894, 13.63238088],
+              [123.19586243, 13.63242389],
+              [123.19587348, 13.63242955],
+              [123.19588162, 13.63241767],
+              [123.19583104, 13.63237862],
+              [123.19581825, 13.63237183],
+              [123.19580894, 13.63238088]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-drive-island",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19584673, 13.63235796],
+              [123.19590982, 13.63240975],
+              [123.19596592, 13.63239305],
+              [123.19595807, 13.63237749],
+              [123.19587784, 13.63232769],
+              [123.19586243, 13.63231891],
+              [123.19584673, 13.63235796]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-west",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.1957642, 13.63242078],
+              [123.19581547, 13.63243376],
+              [123.19584238, 13.63241306],
+              [123.1958002, 13.63238639],
+              [123.1957642, 13.63242078]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-middle",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19580493, 13.63236464],
+              [123.19588529, 13.6324078],
+              [123.19589765, 13.63239131],
+              [123.19583329, 13.63235061],
+              [123.19580493, 13.63236464]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-yellow-east",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19590529, 13.63241622],
+              [123.19593802, 13.63243762],
+              [123.19598602, 13.63238569],
+              [123.19596493, 13.63237482],
+              [123.19590529, 13.63241622]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-red-tree",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19581826, 13.63241519],
+              [123.19587742, 13.63241519],
+              [123.19587742, 13.63247269],
+              [123.19581826, 13.63247269],
+              [123.19581826, 13.63241519]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "penafrancia-fiesta",
+        "title": {
+          "en": "Peñafrancia fiesta"
+        },
+        "status": "draft",
+        "window": {
+          "anchor": {
+            "month": 9,
+            "weekday": 6,
+            "nth": 3,
+            "offset_days": 1
+          },
+          "days_before": 9,
+          "days_after": 0
+        },
+        "note": "TODO(verify): The Basilica's calendar explanation places the feast on the Sunday after September 15, represented here as the day after the third Saturday. The 2026 calendar supports September 11–20, covering the novena and feast day. Decoration/stall positions remain unverified. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds. Dense red/yellow rectangular banderitas on selected Centro corridors were requested by the project owner on 2026-10-01 using a photograph and marked map references; 3 m rows and curb-to-curb spans are illustrative, not surveyed installations.",
+        "bunting": {
+          "label": "Fiesta banners",
+          "near": ["worship"],
+          "radius_m": 400,
+          "spacing_m": 30,
+          "corridors": [
+            {
+              "id": "panganiban-drive",
+              "ways": [
+                "osm:way/23518904",
+                "osm:way/23519164",
+                "osm:way/23519483",
+                "osm:way/23540253",
+                "osm:way/23540254",
+                "osm:way/252223485",
+                "osm:way/272595409",
+                "osm:way/721779874",
+                "osm:way/836685800",
+                "osm:way/836685805",
+                "osm:way/1553212752"
+              ],
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "general-luna",
+              "ways": [
+                "osm:way/596568240",
+                "osm:way/596568242",
+                "osm:way/755073153",
+                "osm:way/1053485826",
+                "osm:way/1373537377",
+                "osm:way/1553212757"
+              ],
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "caceres-link",
+              "ways": ["osm:way/23520783"],
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "elias-angeles",
+              "ways": [
+                "osm:way/596568239",
+                "osm:way/596568243",
+                "osm:way/724187422",
+                "osm:way/936923544",
+                "osm:way/1529540510",
+                "osm:way/1553212755",
+                "osm:way/1553212756",
+                "osm:way/1553218895",
+                "osm:way/1553218896",
+                "osm:way/1560123986"
+              ],
+              "to": "osm:way/23666715",
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "arana-link",
+              "ways": ["osm:way/23520170"],
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            },
+            {
+              "id": "penafrancia-avenue",
+              "ways": [
+                "osm:way/23519386",
+                "osm:way/23521401",
+                "osm:way/23521917",
+                "osm:way/838916319",
+                "osm:way/1529540511",
+                "osm:way/1529540512"
+              ],
+              "to": "osm:way/606888524",
+              "spacing_m": 3,
+              "style": "red-yellow-rectangles"
+            }
+          ]
+        },
+        "stalls": {
+          "label": "Tiangge stalls",
+          "near": ["worship"],
+          "radius_m": 400,
+          "per_tile": 24
+        },
+        "sources": [
+          {
+            "title": "Archdiocese of Caceres: 2026 religious events calendar",
+            "url": "https://www.archdioceseofcaceres.org/caceresevents",
+            "note": "Lists September 11 novenary activities and September 20 solemnity Masses. Decoration positions remain unverified."
+          },
+          {
+            "title": "Naga City Tourism: Peñafrancia Fiesta Major Civic and Religious Events Schedule for 2026",
+            "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
+            "note": "Supports the September 11 Traslación and September 19 fluvial procession, with civic and food events during the festivities."
+          },
+          {
+            "title": "Basilica Minore Bulletin: Fr. Juan Pablo Z. Carpio on the Peñafrancia feast calendar (2021)",
+            "url": "https://www.basilicaminorebulletin.com/2021/09/katekismo-corner-on-celebrating-feast.html",
+            "note": "Explains that the solemnity follows September 15 on a Sunday, between September 16 and 22, and that the preceding nine days form the novena. This supports the recurring feast rule, not decoration or stall positions."
+          }
+        ]
+      }
     ]
   },
   "climate": {
@@ -204,7 +1113,10 @@
         "strength": "breeze"
       }
     ],
-    "default": { "from": 90, "strength": "calm" },
+    "default": {
+      "from": 90,
+      "strength": "calm"
+    },
     "source": "PAGASA, Climate of the Philippines: the northeast monsoon (amihan) blows about November to March, the southwest monsoon (habagat) about June to September, with easterly trade winds between them. https://www.pagasa.dost.gov.ph/information/climate-philippines"
   }
 }

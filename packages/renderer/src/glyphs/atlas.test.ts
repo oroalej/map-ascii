@@ -1,5 +1,6 @@
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
+import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
 import {
   doubleLine,
   fixtureGlyphs,
@@ -18,7 +19,14 @@ import {
 import { birdGlyphs } from '../life/birds';
 import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
-import { FIGURE_TONE, figureGlyph, figureOf, MIN_FIGURE_PX, personGlyphs } from '../life/people';
+import {
+  FIGURE_TONE,
+  figureGlyph,
+  figureOf,
+  figurePixels,
+  MIN_FIGURE_PX,
+  personGlyphs,
+} from '../life/people';
 import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
 import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
 
@@ -212,6 +220,56 @@ describe('people', () => {
     for (const s of [0, 1, 2] as const) expect(inkWidth(canopy(s), 5, 9)).toBe(5);
   });
 
+  it('keeps staged canopies narrower at every scale and readable in five- and nine-pixel boxes', () => {
+    const stageGlyph = (stage: 0 | 1, scale: 0 | 1 | 2) =>
+      figureGlyph('umbrella', false, 0, { scale }, 0, undefined, undefined, stage);
+    for (const stage of [0, 1] as const)
+      for (const scale of [0, 1, 2] as const) {
+        const { rows } = pixels(stageGlyph(stage, scale), 10, 18);
+        const columns = rows[0]!.map((_, x) => rows.some((row) => row[x]! > 0));
+        expect(columns.lastIndexOf(true) - columns.indexOf(true) + 1).toBeLessThan(
+          [6, 8, 10][scale]!,
+        );
+        const small = new Set(pixels(stageGlyph(stage, scale), 5, 9).data);
+        expect(small.has(255) && small.has(FIGURE_TONE)).toBe(true);
+      }
+    const nine = new Set(pixels(stageGlyph(0, 0), 15, 27).data);
+    expect(nine.has(255) && nine.has(FIGURE_TONE)).toBe(true);
+  });
+
+  it('assembles all four staged slices into the intended smaller canopy', () => {
+    for (const stage of [0, 1] as const)
+      for (const [w, h] of sizes) {
+        const whole = Array.from({ length: 2 * h }, () => new Array<number>(2 * w).fill(0));
+        for (const slice of [0, 1, 2, 3] as const) {
+          const glyph = figureGlyph(
+            'umbrella',
+            false,
+            0,
+            { slice },
+            0,
+            undefined,
+            undefined,
+            stage,
+          );
+          const { rows, data } = pixels(glyph, w, h);
+          expect(data.some((value) => value > 0)).toBe(true);
+          rows.forEach((row, y) =>
+            row.forEach((value, x) => (whole[(slice >> 1) * h + y]![(slice & 1) * w + x] = value)),
+          );
+        }
+        const mark = figurePixels({ figure: 'umbrella', across: false, frame: 0, stage }, 2 * w);
+        const top = h - w;
+        const expected = whole.map((row, y) =>
+          row.map((_, x) => {
+            const ink = y >= top && y < top + 2 * w ? mark(x, y - top) : '.';
+            return ink === '#' ? 255 : ink === 'o' ? FIGURE_TONE : 0;
+          }),
+        );
+        expect(whole).toEqual(expected);
+      }
+  });
+
   it('steps by mirroring, and turns across the screen', () => {
     const [w, h] = [10, 18];
     const up = pixels(figureGlyph('adult', false, 0), w, h).rows;
@@ -257,6 +315,8 @@ describe('glyph set', () => {
       const expected = new Set([
         ...fixtureGlyphs,
         ...arrowGlyphs,
+        ...SEASONAL_GLYPHS,
+        ...ACCESS_GLYPHS,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,
         ...doubleWall,

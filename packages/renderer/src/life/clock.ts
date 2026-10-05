@@ -4,11 +4,12 @@
  * the visitor's own time zone.
  */
 
+import { epochDay } from '@atlas/shared';
+
 const DAY_MS = 86_400_000;
 
 /** A calendar day, as days since 1970-01-01. */
-export const dayNumber = (year: number, month: number, day: number) =>
-  Math.floor(Date.UTC(year, month - 1, day) / DAY_MS);
+export const dayNumber = epochDay;
 
 /** Where the city's clock is: an IANA time zone, else the sun's time at a longitude. */
 export type ClockZone = { timezone?: string | undefined; lng: number };

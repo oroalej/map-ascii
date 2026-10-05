@@ -45,6 +45,9 @@ import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
+import { buntingMotionGlsl } from '../life/bunting-motion';
+import { festivePulseGlsl } from '../life/seasonal-installations';
+import { carnivalMotionGlsl } from '../life/carnival-motion';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -58,7 +61,7 @@ const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
  * a fainter wash than open ground.
  */
 /** Compile inactive features away instead of branching through them at every pixel. */
-export function glyphFragmentFor({ focus = true, effectClocks = true } = {}) {
+export function glyphFragmentFor({ focus = true, effectClocks = true, seasonal = true } = {}) {
   return /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
@@ -85,6 +88,8 @@ uniform int u_labelColumns;
 uniform vec3 u_labelColor;
 uniform vec3 u_accent;
 uniform bool u_shimmer;
+uniform float u_buntingWind;
+uniform vec2 u_buntingWindDir;
 ${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
@@ -118,7 +123,7 @@ uniform int u_waterGlyphs[4];
 uniform sampler2D u_light;
 uniform float u_lampShow;
 uniform sampler2D u_fixtures;
-uniform vec3 u_fixturePaints[8];
+uniform vec3 u_fixturePaints[11];
 uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
@@ -378,15 +383,42 @@ vec3 signalGlow(vec2 grid, ivec2 cell, float night, bool allowed) {
   return u_fixturePaints[3 + min(phase, 2)] * (beam + halo) * fixture.a;
 }
 
+${seasonal ? buntingMotionGlsl : ''}
+${seasonal ? festivePulseGlsl : ''}
+${seasonal ? carnivalMotionGlsl : ''}
+
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
-vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo) {
-  if (!allowed || fixture.a == 0.0) return under + halo;
+vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
+  if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
+  ${
+    seasonal
+      ? /* glsl */ `
+  bool roofMounted = part == ${FixturePart.buildingLight} || part == ${FixturePart.buildingWire};
+  if (roofMounted) {
+    // Only explicitly mounted strings may draw above a standing building.
+    int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    if ((u_cellBits[cls] & ${CellBit.window}) == 0 || texelFetch(u_attr, cell, 0).r == 0.0) return under + halo;
+  } else if (!allowed) {
+    // Crown-mounted bulbs sit on the foliage; ordinary hardware stays beneath it.
+    int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
+    if ((part != ${FixturePart.festiveLight} && part != ${FixturePart.carnivalLight}) || !foliage) return under + halo;
+  }`
+      : 'if (!allowed) return under + halo;'
+  }
   int glyph = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
   int info = int(fixture.b * 255.0 + 0.5);
   ivec2 at = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
-  float ink = texelFetch(u_atlas, at + inCell, 0).r;
+  ${
+    seasonal
+      ? /* glsl */ `bool rideMotion = part >= ${FixturePart.carouselMotion} && part <= ${FixturePart.bumperMotion};
+  float buntingFold = 1.0;
+  float ink = part == ${FixturePart.bunting} ? buntingInk(at, inCell, cell, info >> 3, buntingFold) :
+    rideMotion ? 1.0 : texelFetch(u_atlas, at + inCell, 0).r;`
+      : 'float ink = texelFetch(u_atlas, at + inCell, 0).r;'
+  }
   vec3 color = lampLit(daylit(u_fixturePaints[0]), rainLight);
   if (part >= ${FixturePart.flagBlue} && part <= ${FixturePart.flagGold}) {
     vec3 paint = part == ${FixturePart.flagBlue} ? vec3(0.04, 0.22, 0.70) :
@@ -416,6 +448,68 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, bool allowed, vec3 halo
     color = lampLit(daylit(u_fixturePaints[6]), rainLight);
   if (part == ${FixturePart.cable} || part == ${FixturePart.tangle})
     color = max(daylit(u_fixturePaints[7]), u_fixturePaints[7] * 0.5);
+  ${
+    seasonal
+      ? /* glsl */ `if (part == ${FixturePart.lantern}) {
+    float lit = lampOn(info, u_time) * switchedOn(info);
+    color = mix(lampLit(daylit(u_fixturePaints[9]), rainLight), u_fixturePaints[2], lit);
+  }
+  if (part == ${FixturePart.bunting}) {
+    color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * buntingFold), rainLight);
+  }
+  if (part == ${FixturePart.festiveTree}) {
+    color = lampLit(daylit(vec3(0.08, 0.42, 0.22) * (0.65 + 0.35 * float(info) / 255.0)), rainLight);
+  }
+  if (part == ${FixturePart.carnivalRoof}) {
+    int tint = info & 7;
+    vec3 paint = carnivalPaint(tint);
+    // Local ride illumination keeps saturated paint readable at night.
+    color = max(lampLit(daylit(paint), rainLight), paint * 0.84);
+  }
+  if (part == ${FixturePart.carnivalGround}) {
+    vec3 paint = info == 1 ? vec3(0.64, 0.44, 0.24) : info == 2 ? vec3(0.07, 0.38, 0.43) :
+      info == 3 ? vec3(0.26, 0.12, 0.42) : vec3(0.16, 0.23, 0.24);
+    color = max(lampLit(daylit(paint), rainLight), paint * 0.75);
+    // A faint continuous floor connects the ASCII texture and delineates the aisle.
+    under = mix(under, color * 0.34, fixture.a);
+  }
+  if (part == ${FixturePart.accessSurface}) {
+    int style = info & 3, role = info >> 2;
+    vec3 paint = style == 0 ? vec3(0.38, 0.36, 0.31) : vec3(0.14, 0.16, 0.18);
+    vec3 ground = max(lampLit(daylit(paint), rainLight), paint * 0.28);
+    under = mix(under, ground * 0.22, fixture.a);
+    if (role == 1) paint = vec3(0.49, 0.48, 0.43);
+    if (role == 2) paint = vec3(0.24, 0.23, 0.20);
+    if (role == 3) paint = vec3(0.78, 0.80, 0.77);
+    color = max(lampLit(daylit(paint), rainLight), paint * (role == 3 ? 0.65 : 0.35));
+  }
+  if (part == ${FixturePart.carnivalFrame}) color = max(lampLit(daylit(vec3(0.61, 0.76, 0.78)), rainLight), vec3(0.43, 0.54, 0.55));
+  if (rideMotion) {
+    int local = (glyph << 8) | info;
+    vec2 uv = vec2(float(local & 511), float((local >> 9) & 511)) / 255.5 - 1.0;
+    vec4 surface = carnivalSurface(part, uv, u_shimmer ? u_time : 0.0);
+    color = max(lampLit(daylit(surface.rgb), rainLight), surface.rgb * 0.84);
+    if (surface.a < 0.5) {
+      under = mix(under, color * 0.34, fixture.a);
+      ink = (inCell.x + inCell.y) % 4 == 0 ? 1.0 : 0.0;
+    }
+  }
+  if (part == ${FixturePart.festiveWire} || part == ${FixturePart.buildingWire}) color = daylit(u_fixturePaints[7]);
+  if (part == ${FixturePart.festiveLight} || part == ${FixturePart.festiveOrnament} || part == ${FixturePart.buildingLight} || part == ${FixturePart.carnivalLight}) {
+    int tint = info & 7;
+    vec3 paint = tint == 1 ? vec3(1.0, 0.22, 0.17) : tint == 2 ? vec3(0.26, 0.95, 0.42) :
+      tint == 3 ? vec3(1.0, 0.28, 0.63) : tint == 4 ? vec3(0.70, 0.38, 1.0) :
+      tint == 5 ? vec3(1.0, 0.97, 0.86) : vec3(1.0, 0.77, 0.32);
+    color = mix(lampLit(daylit(paint * 0.78), rainLight), paint * festivePulse(info >> 3), darkness());
+    if (part == ${FixturePart.carnivalLight}) {
+      vec2 local = (vec2(inCell) + 0.5) / u_cell - 0.5;
+      float glow = (1.0 - smoothstep(0.0, 0.65, length(local))) * darkness();
+      under = max(under, vec3(0.04, 0.055, 0.06)) + paint * glow * 0.16;
+    }
+  }
+  `
+      : ''
+  }
   if (u_focus && !(part >= ${FixturePart.red} && part <= ${FixturePart.green}) && part != ${FixturePart.signal}) color *= ${float(FOCUS_DIM)};
   return mix(under, color, ink * fixture.a) + halo;
 }
@@ -610,12 +704,12 @@ void main() {
       color = (lifeFlags & ${LIFE_FOCUS_BIT}) != 0 ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
       if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     }
-    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
@@ -686,7 +780,7 @@ void main() {
     color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
     if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(u_colors[cls])) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(u_colors[cls])) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
-  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }
 `;
 }

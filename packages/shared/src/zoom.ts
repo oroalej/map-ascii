@@ -15,6 +15,13 @@ export type ZoomBand = { min: number; max?: number };
 /** Static overhead hardware and seeded close-up ornament detail. */
 export const UTILITY_ZOOM: ZoomBand = { min: 18.5 };
 export const UTILITY_DETAIL_ZOOM: ZoomBand = { min: 19.5 };
+/** Seasonal ink fades independently of fixture admission; installation light pools start at 18. */
+export const SEASON_ZOOM = {
+  lanterns: { min: 17 },
+  bunting: { min: 18 },
+  installations: { min: 18 },
+  installationLights: { min: 18 },
+} as const satisfies Record<string, ZoomBand>;
 
 /**
  * The one table of when each class shows (SPEC.md §2 zoom levels). The pipeline derives each
