@@ -10,7 +10,8 @@ import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometr
 import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
-import { isWalker, usableLines, type Activity } from './config';
+import { isWalker, RUN, usableLines, type Activity } from './config';
+import { exposed, runPace } from './running';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
 import { approach, type MotionLimit } from './motion';
@@ -25,6 +26,11 @@ export const INTERACTIONS = {
   purchase: [3, 6],
   rainOn: 0.5,
   rainOff: 0.2,
+  /** Default site search radius, m; caught walkers use `RUN.shelter.reach`. */
+  reach: 35,
+  /** Per-scan admission chances for covered sites in rain and visits in dry weather. */
+  shelterChance: 0.7,
+  visitChance: 0.12,
 } as const;
 type Site = WalkPoint & {
   kind: LifeSiteKind | 'vendor' | 'rest';
@@ -89,6 +95,7 @@ export class LocalScenes {
   private returnAfterInspection?: WeakSet<Mover>;
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
+  private rain = 0;
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
@@ -318,6 +325,28 @@ export class LocalScenes {
     else this.returning(m, visit);
   }
 
+  /** Whether it is raining hard enough to shelter (hysteresis: `INTERACTIONS.rainOn`/`rainOff`). */
+  get raining(): boolean {
+    return this.wet;
+  }
+
+  /** Whether this person is caught in sheltering weather with no umbrella over the group. */
+  caught(m: Mover): boolean {
+    return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
+  }
+
+  /** A caught person's dash pace, or undefined when the group stays dry. */
+  dashPace(m: Mover): number | undefined {
+    return this.caught(m) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+  }
+
+  /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
+  private pace(m: Mover, visit: Visit): number {
+    return visit.state === 'approach' || visit.state === 'return'
+      ? (this.dashPace(m) ?? m.speed)
+      : m.speed;
+  }
+
   private move(
     m: Mover,
     visit: Visit,
@@ -328,7 +357,7 @@ export class LocalScenes {
     const before = guard && isWalker(m.kind) ? { ...m } : undefined;
     const next = visit.next;
     const trailLength = visit.trail.length;
-    let left = m.speed * dt;
+    let left = this.pace(m, visit) * dt;
     while (left > 0 && visit.next < visit.path.length) {
       const target = visit.path[visit.next]!;
       const d = dist(m, target);
@@ -385,6 +414,7 @@ export class LocalScenes {
     inspecting?: object,
   ) {
     const rain = env.rain ?? 0;
+    this.rain = rain;
     this.speechEvents.length = 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
@@ -590,12 +620,15 @@ export class LocalScenes {
         !this.visits.has(m) &&
         !this.cooldown.has(m)
       ) {
+        // Those caught with no umbrella look further for cover, and are surer to go.
+        const caught = this.caught(m);
+        const reach = caught ? RUN.shelter.reach : INTERACTIONS.reach;
         const candidates = this.sites
           .map((site, index) => ({ site, index, d: dist(m, site) }))
           .filter(
             ({ site, d }) =>
               (!owns || owns(site)) &&
-              d < 35 * this.perMeter &&
+              d < reach * this.perMeter &&
               (this.wet
                 ? site.covered
                 : m.kind === 'person'
@@ -607,8 +640,17 @@ export class LocalScenes {
           )
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);
-        if (this.rng() < (this.wet ? 0.7 : 0.12))
-          for (const { index } of candidates) if (this.reserve(m, index)) break;
+        if (
+          this.rng() <
+          (caught
+            ? RUN.shelter.chance
+            : this.wet
+              ? INTERACTIONS.shelterChance
+              : INTERACTIONS.visitChance)
+        ) {
+          const reserved = candidates.some(({ index }) => this.reserve(m, index));
+          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, RUN.shelter.retry);
+        }
       }
     }
   }
