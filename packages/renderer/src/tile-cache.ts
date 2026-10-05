@@ -60,6 +60,7 @@ export class TileCache {
     profiler?: FrameProfiler,
     fireworks = false,
     fireworksActive = false,
+    memorials = false,
   ) {
     this.meshes = this.createCache();
     this.source = new TileSource(
@@ -102,6 +103,7 @@ export class TileCache {
       },
       fireworks,
       fireworksActive,
+      memorials,
     );
   }
 

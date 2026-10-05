@@ -1,7 +1,8 @@
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import { PROCESSION_GLYPHS } from '../life/procession-glyphs';
-import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
+import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
+import { createHash } from 'node:crypto';
 import {
   doubleLine,
   fixtureGlyphs,
@@ -311,6 +312,19 @@ describe('people', () => {
 });
 
 describe('glyph set', () => {
+  it('draws candles after the complete unchanged atlas prefix in both themes', () => {
+    expect(draw(CANDLE_GLYPHS[0]).drawn).toBe(true);
+    expect(draw(CANDLE_GLYPHS[0]).at(5, 12)).toBeGreaterThan(0);
+    for (const theme of Object.values(themes)) {
+      const glyphs = mapGlyphs(theme);
+      expect(glyphs.slice(408, 408 + CANDLE_GLYPHS.length)).toEqual([...CANDLE_GLYPHS]);
+      expect(
+        createHash('sha256')
+          .update(JSON.stringify(glyphs.slice(0, 408)))
+          .digest('hex'),
+      ).toBe('16ed7be0bf44a29753e324bbc1b56c503efd4d087d13e5bd67c71481ffe16a9b');
+    }
+  });
   it('fits every map glyph (styles, walls, sextants) in the 1024 slots the glyph table holds', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
@@ -320,6 +334,7 @@ describe('glyph set', () => {
         ...fixtureGlyphs,
         ...arrowGlyphs,
         ...SEASONAL_GLYPHS,
+        ...CANDLE_GLYPHS,
         ...ACCESS_GLYPHS,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,

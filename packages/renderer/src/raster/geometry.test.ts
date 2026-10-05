@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
-import { lifeTransferables } from '../life/geometry';
+import { graveSeed, lifeTransferables } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import { pointInside } from '../life/occupancy';
@@ -59,12 +59,124 @@ const square = (x: number, y: number, s: number): [number, number][] => [
 ];
 const reversed = (ring: [number, number][]) => [...ring].reverse();
 
+describe('seasonal cemetery and worship sidecars', () => {
+  const tile = { z: 16, x: 55192, y: 30266 };
+  const burial = {
+    id: 'cemetery:test/row',
+    class: 'building_part',
+    kind: 'burial=flush',
+    height: 0.1,
+    detail_blocked: true,
+    detail_parent: 'cemetery',
+  };
+  const cemetery = feature(3, { id: 'cemetery', class: 'grass', kind: 'landuse=cemetery' }, [
+    square(100, 100, 1000),
+    reversed(square(800, 800, 100)),
+  ]);
+  const row = [
+    square(400, 400, 20),
+    square(600, 600, 12),
+    square(-30, 500, 10),
+    square(4090, 800, 12),
+  ];
+  const decode = (rows = row, address = tile, maximum = 16) =>
+    buildTileGeometry(
+      {
+        landuse: layer([
+          cemetery,
+          feature(3, { id: 'empty', class: 'grass', kind: 'amenity=grave_yard' }, [
+            square(1500, 1500, 500),
+          ]),
+        ]),
+        buildings: layer([feature(3, burial, rows)]),
+      },
+      createIdRegistry(),
+      address,
+      maximum,
+    ).life;
+
+  it('extracts every owned marker with stable world identities despite polygon ordering and buffering', () => {
+    const geo = decode();
+    expect(geo.graves).toHaveLength(6);
+    expect(decode([...row].reverse()).graves).toEqual(geo.graves);
+    for (let i = 0; i < geo.graves!.length; i += 3) {
+      const [x, y, seed] = geo.graves!.slice(i, i + 3);
+      expect(seed).toBe(
+        graveSeed(
+          hashString(burial.id),
+          Math.round(tile.x * EXTENT + x!),
+          Math.round(tile.y * EXTENT + y!),
+        ),
+      );
+      expect(Number.isInteger(seed)).toBe(true);
+    }
+    const shifted = row.map((ring) => ring.map(([x, y]): [number, number] => [x - EXTENT, y]));
+    const neighbor = decode(shifted, { ...tile, x: tile.x + 1 });
+    expect(neighbor.graves).toHaveLength(3);
+    expect(neighbor.graves![0]).toBe(0);
+    expect(neighbor.graves![2]).toBe(
+      graveSeed(hashString(burial.id), (tile.x + 1) * EXTENT, tile.y * EXTENT + 806),
+    );
+    expect(geo.cemeteryAreas![0]!.rings).toHaveLength(2);
+    expect(geo.cemeteryAreas!.map((area) => area.hasBurials)).toEqual([true, false]);
+    expect(decode([square(-30, 500, 10)]).cemeteryAreas![0]!.hasBurials).toBe(true);
+    // Even low/flush burial surfaces remain walking blockers after the low-curb change on main.
+    expect(geo.areas!.filter((area) => area.kind === 'blocked')).toHaveLength(4);
+  });
+
+  it('retains cemetery anchors on parent tiles without grave or fallback data', () => {
+    const geo = decode(row, { ...tile, z: 15 });
+    expect(geo.cemeteries).toHaveLength(6);
+    expect(geo.graves).toBeUndefined();
+    expect(geo.cemeteryAreas).toBeUndefined();
+    expect(decode(row, tile, 17).graves).toBeUndefined();
+  });
+
+  it('retains accepted point and polygon worship landmark identities', () => {
+    const geo = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(
+            1,
+            {
+              id: 'point',
+              class: 'building_religious',
+              kind: 'amenity=place_of_worship',
+              landmark_id: 'landmark/point',
+            },
+            [[[100, 100]]],
+          ),
+          feature(
+            3,
+            {
+              id: 'church',
+              class: 'building_religious',
+              kind: 'amenity=place_of_worship',
+              height: 8,
+              landmark_id: 'landmark/church',
+            },
+            [square(500, 500, 100)],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+      16,
+    ).life;
+    expect(geo.placeLandmarks).toEqual([
+      [0, 'landmark/point'],
+      [1, 'landmark/church'],
+    ]);
+  });
+});
+
 it('keeps authored low curbs out of walking obstacles while retaining their vehicle clearance', () => {
   const g = buildTileGeometry(
     {
       buildings: layer([
         feature(3, { id: 'curb', class: 'building_part', height: 0.18, detail_blocked: true }, [
           square(100, 100, 30),
+          reversed(square(110, 110, 10)),
         ]),
         feature(3, { id: 'wall', class: 'building_part', height: 0.3, detail_blocked: true }, [
           square(200, 100, 30),
@@ -78,6 +190,9 @@ it('keeps authored low curbs out of walking obstacles while retaining their vehi
   expect(g.life.areas?.filter((a) => a.kind === 'vehicle-blocked')).toHaveLength(1);
   expect(g.life.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(2);
   expect(g.life.obstacleClosed).toHaveLength(2);
+  const island = g.life.areas!.find((a) => a.kind === 'vehicle-blocked')!;
+  expect(island.rings).toHaveLength(1);
+  expect(pointInside({ x: 115, y: 115 }, island.rings)).toBe(true);
 });
 
 /** Vertices of a geometry as { cls, x, y } for easy assertions. */
@@ -293,6 +408,10 @@ describe('classifyRings', () => {
       const unit = metersPerUnit(tile);
       expect(pointInside({ x: 2000, y: 2000 + 4 / unit }, crossing.rings)).toBe(true);
       expect(pointInside({ x: 2000 + 2 / unit, y: 2000 }, crossing.rings)).toBe(false);
+      expect(pointInside({ x: 2000, y: 2000 + 6.4 / unit }, crossing.rings)).toBe(true);
+      expect(pointInside({ x: 2000, y: 2000 + 6.6 / unit }, crossing.rings)).toBe(false);
+      expect(pointInside({ x: 2000, y: 2000 + 4.9 / unit }, crossing.crossingStripes!)).toBe(true);
+      expect(pointInside({ x: 2000, y: 2000 + 5.1 / unit }, crossing.crossingStripes!)).toBe(false);
     }
   });
 

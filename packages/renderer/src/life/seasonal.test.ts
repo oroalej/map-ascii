@@ -4,6 +4,8 @@ import type { SeasonConfig, UtilityRecord } from '@atlas/shared';
 import { LifeBuilder, LifeLine, encodeSeasonalPayload } from './geometry';
 import {
   collectSeasonAnchors,
+  seasonProximity,
+  seasonMarkets,
   createSeasonalFixtureCache,
   seasonalFixtures,
   SEASONAL_GLYPHS,
@@ -51,6 +53,39 @@ const glyphs = mapGlyphs(themes.dark),
   index = (s: string) => glyphs.indexOf(s);
 const pack = (fixtures: Parameters<typeof packFixtures>[2], zoom = 20) =>
   packFixtures(new Uint8Array(40000), grid, fixtures, zoom, index, 0);
+
+it('measures cemetery edge reach in meters across source zooms and excludes unrelated markets', () => {
+  for (const z of [15, 16, 17]) {
+    const source = { ...tile, z };
+    const builder = new LifeBuilder();
+    builder.cemetery({ x: 1000, y: 1000 }, 100 / metersPerUnit(source));
+    const anchors = collectSeasonAnchors([{ tile: source, life: builder.finish() }]);
+    expect(anchors[0]!.radius_m).toBeCloseTo(100, 4);
+    const center = lngLatToTile(tile, ...anchors[0]!.at);
+    const near = seasonProximity(tile, anchors, ['cemetery'], 20);
+    expect(near(center.x + 119 / metersPerUnit(tile), center.y)).toBe(true);
+    expect(near(center.x + 121 / metersPerUnit(tile), center.y)).toBe(false);
+    const market = [{ at: anchors[0]!.at, kind: 'market' as const }];
+    expect(
+      seasonProximity(
+        tile,
+        market,
+        ['cemetery'],
+        20,
+        seasonMarkets(['cemetery']),
+      )(center.x, center.y),
+    ).toBe(false);
+    expect(
+      seasonProximity(
+        tile,
+        market,
+        ['worship'],
+        20,
+        seasonMarkets(['worship']),
+      )(center.x, center.y),
+    ).toBe(true);
+  }
+});
 
 describe('seasonal fixtures', () => {
   afterEach(() => vi.restoreAllMocks());

@@ -6,7 +6,7 @@ import { catGlyphs } from './life/cats';
 import { figureOf, personGlyphs } from './life/people';
 import { PUFF_GLYPHS } from './life/puff-style';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
-import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
+import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
 
@@ -579,6 +579,7 @@ export function mapGlyphs(theme: Theme): string[] {
     // Canopy stages follow all earlier glyphs, retaining fixture, pose and parking indices.
     ...personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined),
     ...PUFF_GLYPHS,
+    ...CANDLE_GLYPHS,
     ...PROCESSION_GLYPHS,
   ];
   for (const g of extras) set.add(g);
