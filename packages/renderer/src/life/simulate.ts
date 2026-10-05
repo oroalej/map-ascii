@@ -209,6 +209,7 @@ export type WorldGroundGuard = ((
   reserve?: boolean,
   identity?: GroundAgent,
   reject?: (reason: ContinuityRejection) => void,
+  previousLife?: TileLife,
 ) => boolean) & {
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
@@ -787,10 +788,10 @@ export class TileLife {
   private readonly dogRng: () => number;
   /** Road lines with vehicles parked along their curbs; traffic drives on what is left. */
   private readonly parkingLines = new Set<number>();
-  private readonly roadVertices = new Map<string, { code: number; vertex: number }[]>();
+  private readonly roadVertices = new Map<number, { code: number; vertex: number }[]>();
   /** Per vertex, the distance along its line from the line's first vertex, in tile units. */
   private readonly along: Float64Array;
-  /** Line ends by position: packed position Ã¢â€ â€™ line * 2 + (0 start, 1 end). */
+  /** Line ends by packed position, holding line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
   private readonly curvable: Uint8Array;
   private time = 0;
@@ -1064,8 +1065,7 @@ export class TileLife {
     const road = this.roadWidth(m.line);
     const normal = laneOffset(road, spec.width, m.lane, spec.curb);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
-    const lane =
-      m.roadShift === undefined ? normal : this.shiftedLane(m, m.line, normal, curb);
+    const lane = m.roadShift === undefined ? normal : this.shiftedLane(m, m.line, normal, curb);
     return this.scenes.offset(identity, lane, curb, m);
   }
 
@@ -2364,7 +2364,7 @@ export class TileLife {
   /** Resolve the same directed reference for planning, curves, following and entry. */
   directedExit(code: number, shared?: number) {
     const line = code >> 1,
-      dir = (code & 1 ? -1 : 1) as 1 | -1;
+      dir: 1 | -1 = code & 1 ? -1 : 1;
     const vertex =
       shared === undefined
         ? undefined
@@ -3453,7 +3453,7 @@ export class TileLife {
                 m.curveCorner = corner;
                 moved = this.advance(m, distance * share);
                 const pose = this.pose(m),
-                  spec = VEHICLES[m.vehicle!];
+                  spec = VEHICLES[m.vehicle];
                 const cornerTravel =
                   Math.hypot(pose.x - oldPose.x, pose.y - oldPose.y) +
                   (Math.hypot(pose.hx - oldPose.hx, pose.hy - oldPose.hy) *
@@ -3505,7 +3505,7 @@ export class TileLife {
             this.scenes.transferable(m)
           ) {
             const side = before.roadSteering ?? (Math.sign(before.roadShift ?? 0) || -1);
-            const spec = VEHICLES[m.vehicle!];
+            const spec = VEHICLES[m.vehicle];
             const effectiveShift =
               this.vehicleLane(before, before.line) -
               laneOffset(this.roadWidth(before.line), spec.width, before.lane, spec.curb);
@@ -3784,7 +3784,7 @@ export class TileLife {
           reverse();
           if (!sourceOwned(approach) || !guard(m, approach, false)) continue;
           const reversed = { ...m };
-          const departure = VEHICLES[m.vehicle!].length * this.perMeter;
+          const departure = VEHICLES[m.vehicle].length * this.perMeter;
           if (this.segment(m.from, m.from + m.dir) - m.d < departure) continue;
           this.advance(m, departure, false);
           if (!sourceOwned(reversed) || !guard(m, reversed, false)) continue;
@@ -6053,7 +6053,7 @@ export class LifeWorld {
               guard.holdingCorridor(tile, mover, before),
             passing: (mover: Mover) => guard.passing(mover),
             cancelYield: (mover: Mover) => guard.cancelYield(mover),
-            yielding: guard.yielding,
+            yielding: (mover: Mover) => guard.yielding(mover),
           },
         ),
         {

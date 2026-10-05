@@ -5,7 +5,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCityPacks } from '@atlas/content';
-import { activeSeason, CityMeta, dialogueChoices, runtimeDialogueCatalog } from '@atlas/shared';
+import {
+  activeSeason,
+  CityMeta,
+  CityProcessions,
+  dialogueChoices,
+  runtimeDialogueCatalog,
+} from '@atlas/shared';
 import * as workingCamera from '../src/camera';
 import * as workingDensity from '../src/density';
 import * as workingGrid from '../src/grid';
@@ -30,6 +36,7 @@ import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snap
 import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
 import { simulationSeasons } from '../src/life/seasonal-simulation';
 import { configureLifeWorld } from '../src/life/worker-api';
+import { liveProgress } from '../src/life/procession';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
@@ -110,6 +117,12 @@ const pack = packs[0],
   config = pack.city;
 const metadata = await readFile(resolve(root, 'apps/web/public/tiles/naga.meta.json'));
 const meta = CityMeta.parse(JSON.parse(metadata.toString()));
+const processionData = pack.content.processions.length
+  ? await readFile(resolve(root, `apps/web/public/tiles/${config.slug}.processions.json`))
+  : undefined;
+const processions = processionData
+  ? CityProcessions.parse(JSON.parse(processionData.toString())).processions
+  : [];
 const archive = await openArchive(config.slug);
 const hash = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const size = { width: 1920, height: 1080 };
@@ -133,13 +146,15 @@ const inputs = {
   metadata: hash(metadata),
   config: hash(JSON.stringify(config)),
   dialogue: hash(JSON.stringify(runtime ?? null)),
+  processions: processionData ? hash(processionData) : null,
   date: '2026-10-04',
   worldConfiguration: {
-    version: 1,
+    version: 2,
     shopSchedule: config.life?.schedules?.shops ?? null,
     seasons: simulationSeasons(config.life?.seasons),
     seasonSelection: 'auto at the pinned local date',
-    processions: config.processions ?? [],
+    processionSelection: 'production schedule at the pinned local date and clock',
+    processions,
   },
   size,
   dt,
@@ -435,6 +450,14 @@ try {
           const zone = { timezone: config.timezone, lng: camera.lng };
           const date = atCityMinutes(new Date('2026-10-04T12:00:00Z'), zone, minutes);
           const clock = cityTime(date, zone);
+          world.setLive(undefined);
+          for (const route of processions) {
+            const progress = liveProgress(route.schedule, date);
+            if (progress === undefined) continue;
+            const local = cityTime(date, { ...zone, timezone: route.schedule.timezone });
+            world.setLive(route.id, progress, `${route.id}/${local.year}`);
+            break;
+          }
           const season = activeSeason(config.life?.seasons, clock.year, clock.day)?.id ?? null;
           if (season && typeof world.setSeasons !== 'function')
             throw new Error(
@@ -449,7 +472,10 @@ try {
           const weather = { rain: 0, sunAltitude: sun.altitude };
           const [west] = project(meta.regionBounds[0], camera.lat, zoom);
           const [east] = project(meta.regionBounds[2], camera.lat, zoom);
-          let [x, y] = project(camera.lng, camera.lat, zoom),
+          const projected = project(camera.lng, camera.lat, zoom),
+            y = projected[1],
+            stepWeather = { rain: 0, minutes, cityLife: config.life, season };
+          let x = projected[0],
             direction = 1,
             previousTiles = '';
           for (let frame = 0; frame < (warmup + seconds) / dt; frame++) {
@@ -504,7 +530,7 @@ try {
               zoom,
               bounds,
               undefined,
-              { rain: 0, minutes, cityLife: config.life, season },
+              stepWeather,
               cellMeters,
               cell.height / cell.width,
             );

@@ -335,7 +335,7 @@ export class LifeDiagnostics {
       seen.add(id);
       const h: MotionHistory = history ?? {
         kind: frame.kind,
-        samples: new Array(512),
+        samples: new Array<MotionHistory['samples'][number]>(512),
         head: 0,
         count: 0,
         tags: new Set<string>(),

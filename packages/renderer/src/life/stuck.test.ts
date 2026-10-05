@@ -18,7 +18,7 @@ function fixture(
   width: number,
   besideRoad = false,
   terrain?: (b: LifeBuilder) => void,
-  oneway = 0,
+  oneway: 0 | 1 | -1 = 0,
 ) {
   const b = new LifeBuilder();
   b.line(
@@ -330,7 +330,7 @@ it.each([false, true])(
     const before = { ...m };
     const slots = m.group.map((w) => ({ ...w }));
     let reversed = false;
-    life.step(1 / 30, undefined, undefined, undefined, {}, (owner, previous) => {
+    life.step(1 / 30, undefined, undefined, undefined, { rain: 0 }, (owner, previous) => {
       if (owner.hx === -1) {
         reversed = true;
         const shift = (owner.x - before.x) / pm;
@@ -424,7 +424,7 @@ it.each([false, true])(
     let calls = 0;
     (life as unknown as { walkerRng: () => number }).walkerRng = () => (calls++ === 1 ? 0 : 1);
     let checkedTurn = false;
-    life.step(1 / 30, undefined, undefined, undefined, {}, (owner, previous) => {
+    life.step(1 / 30, undefined, undefined, undefined, { rain: 0 }, (owner, previous) => {
       if (!checkedTurn) {
         checkedTurn = true;
         expect(owner.hx).toBe(-1);
@@ -1153,7 +1153,7 @@ it('requires accepted travel before rearming a vehicle recovery', () => {
   expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(false);
   expect(m).toEqual(recovered);
   for (let frame = 0; frame < 150; frame++)
-    life.step(1 / 30, undefined, undefined, undefined, {}, () => true);
+    life.step(1 / 30, undefined, undefined, undefined, { rain: 0 }, () => true);
   expect(Math.abs(m.x - recovered.x) / pm).toBeGreaterThan(4.4);
   expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(true);
 });

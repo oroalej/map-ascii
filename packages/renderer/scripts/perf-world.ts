@@ -138,6 +138,9 @@ try {
       const measure = (Constructor: typeof LifeWorld, encode: typeof snapshotOf) => {
         const profiler = new FrameProfiler();
         const world = new Constructor(config.traffic, profiler);
+        if (typeof world.setShopSchedule === 'function')
+          world.setShopSchedule(config.life?.schedules?.shops);
+        const stepWeather = { rain: 0, minutes: 720, cityLife: config.life };
         const levels = activityLevels(1);
         const timings = Object.fromEntries(
           realStages.map((stage) => [stage, [] as number[]]),
@@ -175,15 +178,7 @@ try {
           profiler.begin(frame / 30);
           const start = performance.now();
           if (changed) world.sync(windows[shift]!, center, view(shift));
-          world.step(
-            births ? 0.1 : 1 / 30,
-            undefined,
-            18,
-            bounds,
-            undefined,
-            { rain: 0, minutes: 720, cityLife: config.life },
-            minimum,
-          );
+          world.step(births ? 0.1 : 1 / 30, undefined, 18, bounds, undefined, stepWeather, minimum);
           timings[changed ? 'syncFrame' : 'step'].push(performance.now() - start);
           world.visible(18, levels, center, { rain: 0, sunAltitude: 40 }, bounds);
           const terrain = world.cellTerrain();

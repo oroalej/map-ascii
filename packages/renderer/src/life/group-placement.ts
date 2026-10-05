@@ -143,7 +143,7 @@ export function placeCoarseGroup(
   const order = members
     .map((_, i) => i)
     .sort((a, b) => candidates[a]!.length - candidates[b]!.length || a - b);
-  const selected: (Offset | undefined)[] = new Array(members.length);
+  const selected = new Array<Offset | undefined>(members.length);
   const occupied = new Set<number>();
   const coherent = (i: number, offset: Offset) => {
     const anchor = members[i]!.cells[0]!;

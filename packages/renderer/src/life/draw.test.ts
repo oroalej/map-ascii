@@ -1025,7 +1025,7 @@ describe('packLife people', () => {
         members = new Uint8Array(owners.length),
         points = new Map<number, [number, number]>(),
         clocks: number[] = [];
-      const focus = new Set(['people']);
+      const focus = new Set(['people'] as const);
       expect(
         packLife(
           original,
