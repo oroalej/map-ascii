@@ -34,7 +34,12 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
-import { placeCoarseGroup, type GroupPlacement } from './group-placement';
+import {
+  placeCoarseGroup,
+  placeCoarseLone,
+  type GroupPlacement,
+  type LonePlacement,
+} from './group-placement';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -131,6 +136,7 @@ let clockCells: number[] | undefined;
 export type LifePackMetadata = {
   /** Observe only the new rejection tier; never used to select a placement. */
   groupRetry?: (result: GroupPlacement) => void;
+  loneRetry?: (result: LonePlacement) => void;
   owners?: Uint32Array;
   focus?: ReadonlySet<LifeFocus>;
   /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
@@ -409,6 +415,44 @@ export function packLife(
               drawn += members.length;
               placed = true;
             }
+          }
+          if (
+            !placed &&
+            eligible &&
+            agent.kind === 'person' &&
+            agent.mappedPersonMover === true &&
+            (agent.people?.length ?? 1) === 1 &&
+            !agent.people?.some((look) => look.figure === 'rower') &&
+            journal.members?.length === 1
+          ) {
+            const member = journal.members[0]!;
+            const result = placeCoarseLone(
+              member,
+              grid,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
+            );
+            if (result.offset) {
+              const [dx, dy] = result.offset;
+              for (const { col, row, bytes } of member.cells) {
+                const cell = (row + dy) * grid.cols + col + dx;
+                out.set(bytes, cell * 4);
+                groundCells[cell] = 1;
+                if (drawingOwners) drawingOwners[cell] = drawingOwner;
+                if (drawingSpeakers) drawingSpeakers.members[cell] = 1;
+                drawingClockCells?.push(cell);
+              }
+              if (member.point)
+                drawingSpeakers?.points.set(drawingOwner, [
+                  member.point[0] + dx,
+                  member.point[1] + dy,
+                ]);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn++;
+              placed = true;
+            }
+            if (result.rigidAttempts) metadata.loneRetry?.(result);
           }
           if (!placed && eligible && journal.members && journal.members.length >= 2) {
             const members = journal.members;

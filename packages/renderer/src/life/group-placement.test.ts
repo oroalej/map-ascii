@@ -1,10 +1,91 @@
 import { expect, it } from 'vitest';
-import { GROUP_PLACEMENT_ATTEMPTS, placeCoarseGroup, type GroupRaster } from './group-placement';
+import {
+  GROUP_PLACEMENT_ATTEMPTS,
+  placeCoarseGroup,
+  placeCoarseLone,
+  type GroupRaster,
+} from './group-placement';
 
 const grid = { cols: 20, rows: 20, cellWidth: 5, cellHeight: 9 };
 const member = (col: number, row: number): GroupRaster => ({ expected: 1, cells: [{ col, row }] });
 const permits = (cells: readonly (readonly [number, number])[]) => (col: number, row: number) =>
   cells.some(([c, r]) => c === col && r === row);
+
+it('limits lone figures to sixteen rigid offsets and sixty-four translated cells', () => {
+  const visited: string[] = [];
+  const result = placeCoarseLone(member(5, 5), grid, (col, row) => {
+    visited.push(`${col - 5}/${row - 5}`);
+    return false;
+  });
+  expect(result).toEqual({ rigidAttempts: 16, targetCellChecks: 16 });
+  expect(new Set(visited).size).toBe(16);
+  expect(
+    visited.every((offset) => Math.max(...offset.split('/').map(Number).map(Math.abs)) === 2),
+  ).toBe(true);
+  const four = {
+    expected: 4,
+    cells: [
+      { col: 5, row: 5 },
+      { col: 6, row: 5 },
+      { col: 5, row: 6 },
+      { col: 6, row: 6 },
+    ],
+  };
+  const placed = placeCoarseLone(
+    four,
+    grid,
+    permits([
+      [7, 7],
+      [8, 7],
+      [7, 8],
+      [8, 8],
+    ]),
+  );
+  expect(placed.offset).toEqual([2, 2]);
+  expect(placed.rigidAttempts).toBeLessThanOrEqual(16);
+  expect(placed.targetCellChecks).toBeLessThanOrEqual(64);
+});
+
+it('orders lone rigid retries in device pixels with stable ties and DPR scaling', () => {
+  const allowed = permits([
+    [3, 5],
+    [7, 5],
+    [5, 3],
+    [5, 7],
+  ]);
+  for (const dpr of [1, 2]) {
+    expect(
+      placeCoarseLone(member(5, 5), { ...grid, cellWidth: 5 * dpr, cellHeight: 9 * dpr }, allowed)
+        .offset,
+    ).toEqual([-2, 0]);
+    expect(
+      placeCoarseLone(member(5, 5), { ...grid, cellWidth: 9 * dpr, cellHeight: 5 * dpr }, allowed)
+        .offset,
+    ).toEqual([0, -2]);
+  }
+});
+
+it('rejects invalid lone payloads without a search and keeps translated cells in bounds', () => {
+  for (const invalid of [
+    { expected: 0, cells: [] },
+    { expected: 4, cells: [{ col: 5, row: 5 }] },
+    { expected: 4, cells: Array.from({ length: 4 }, () => ({ col: 5, row: 5 })) },
+    member(5.1, 5),
+    member(NaN, 5),
+    {
+      expected: 2,
+      cells: [
+        { col: 5, row: 5 },
+        { col: 6, row: 5 },
+      ],
+    },
+  ])
+    expect(placeCoarseLone(invalid, grid, () => true)).toEqual({
+      rigidAttempts: 0,
+      targetCellChecks: 0,
+    });
+  expect(placeCoarseLone(member(0, 0), grid, permits([[-2, 0]])).offset).toBeUndefined();
+});
 
 it('prefers a complete rigid second-ring translation using pixel distance and stable ties', () => {
   const members = [member(5, 5), member(5, 7)];

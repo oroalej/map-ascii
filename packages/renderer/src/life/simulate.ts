@@ -4054,6 +4054,8 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
+  mappedPersonMover?: boolean;
   /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
   /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
@@ -6462,6 +6464,10 @@ export class LifeWorld {
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
+            ...(m.kind === 'person' &&
+              people.every((look) => look.figure !== 'seated' && look.figure !== 'rower') && {
+                mappedPersonMover: true,
+              }),
             lng,
             lat,
             ahead,
@@ -6492,6 +6498,7 @@ export class LifeWorld {
         } else {
           push(m, {
             kind: m.kind,
+            ...(m.kind === 'person' && { mappedPersonMover: true }),
             lng,
             lat,
             ahead,

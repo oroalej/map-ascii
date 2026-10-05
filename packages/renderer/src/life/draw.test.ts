@@ -1006,6 +1006,298 @@ describe('packLife people', () => {
     ...over,
   });
 
+  it.each([0.2, 3])('packs a marked lone coarse figure with exact metadata (scale %s)', (scale) => {
+    for (const explicit of [false, true]) {
+      const [g, agent] = person(1, 0, scale, {
+        lng: 20,
+        lat: 15,
+        ahead: [21, 15],
+        mappedPersonMover: true,
+        ...(explicit && { people: [look()] }),
+        candle: true,
+        effectClock: 12,
+        speech: { id: 'lone', exchangeId: 'lone', line: 0, member: 0 },
+      });
+      const out = new Uint8Array(g.cols * g.rows * 4),
+        original = out.slice(),
+        plain = out.slice();
+      const owners = new Uint32Array(g.cols * g.rows),
+        members = new Uint8Array(owners.length),
+        points = new Map<number, [number, number]>(),
+        clocks: number[] = [];
+      const focus = new Set(['people']);
+      expect(
+        packLife(
+          original,
+          { ...g, speakers: { members, points } },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners, focus, clockCells: clocks },
+        ),
+      ).toBe(1);
+      const originalPoint = points.get(1)!;
+      const expected = new Map(
+        [...owners.entries()]
+          .filter(([, owner]) => owner)
+          .map(([cell]) => [cell - 2, original.slice(cell * 4, cell * 4 + 4)]),
+      );
+      const allowed = (_agent: VisibleAgent, col: number, row: number) =>
+        expected.has(row * g.cols + col);
+      let calls = 0;
+      expect(
+        packLife(
+          out,
+          { ...g, allowsGroundCell: allowed, speakers: { members, points } },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          {
+            owners,
+            focus,
+            clockCells: clocks,
+            loneRetry: (result) => {
+              calls++;
+              expect(result.offset).toEqual([-2, 0]);
+              expect(result.targetCellChecks).toBeLessThanOrEqual(64);
+            },
+          },
+        ),
+      ).toBe(1);
+      expect(calls).toBe(1);
+      expect([...owners].filter(Boolean)).toHaveLength(scale === 3 ? 4 : 1);
+      expect(points.get(1)).toEqual([originalPoint[0] - 2, originalPoint[1]]);
+      expect(new Set(clocks)).toEqual(new Set(expected.keys()));
+      for (const [cell, bytes] of expected) {
+        expect(out.slice(cell * 4, cell * 4 + 4)).toEqual(bytes);
+        expect(owners[cell]).toBe(1);
+        expect(members[cell]).toBe(1);
+        const cls = unpackGlyph(bytes[0]!, bytes[1]!).cls;
+        for (const surface of ['building', 'water_area', 'tree_crown'] as const)
+          expect(
+            lifeVisibleOnSurface(
+              cls,
+              bytes[2]!,
+              classId(surface),
+              classId(surface),
+              surface === 'building' ? 5 : 0,
+            ),
+          ).toBe(false);
+        expect(lifeVisibleOnSurface(cls, bytes[2]!, classId('paving'), classId('paving'), 0)).toBe(
+          true,
+        );
+      }
+      expect(
+        packLife(
+          plain,
+          { ...g, allowsGroundCell: allowed },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { focus },
+        ),
+      ).toBe(1);
+      expect(plain).toEqual(out);
+      agent.mappedPersonMover = false;
+      expect(
+        packLife(
+          out,
+          { ...g, allowsGroundCell: allowed, speakers: { members, points } },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners, focus, clockCells: clocks },
+        ),
+      ).toBe(0);
+      expect(out.every((byte) => byte === 0)).toBe(true);
+      expect(owners.every((owner) => owner === 0)).toBe(true);
+      expect(members.every((member) => member === 0)).toBe(true);
+      expect(points.size).toBe(0);
+      expect(clocks).toEqual([]);
+      packLife(
+        out,
+        { ...g, speakers: { members, points } },
+        [],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners, clockCells: clocks },
+      );
+      expect(out.every((byte) => byte === 0)).toBe(true);
+      expect(points.size).toBe(0);
+    }
+  });
+
+  it('does no lone-tier work for original and first-ring successes', () => {
+    const [g, agent] = person(1, 0, 0.2, { mappedPersonMover: true });
+    for (const allowsGroundCell of [undefined, (_agent: VisibleAgent, col: number) => col === 19]) {
+      let calls = 0;
+      expect(
+        packLife(
+          new Uint8Array(g.cols * g.rows * 4),
+          { ...g, allowsGroundCell },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { loneRetry: () => calls++ },
+        ),
+      ).toBe(1);
+      expect(calls).toBe(0);
+    }
+  });
+
+  it('keeps excluded person presentations outside the lone tier even when marked', () => {
+    for (const extra of [
+      { mappedPersonMover: false },
+      { mappedPersonMover: undefined },
+      { parked: true },
+      { aboard: true },
+      { kind: 'dog' as const },
+      { kind: 'vehicle' as const, vehicle: 'car' as const },
+      { vehicle: 'cart' as const },
+      { people: [] },
+      { people: [look(), look({ lateral: 2 })] },
+      { people: [look({ figure: 'seated' })] },
+      { people: [look({ figure: 'rower' })] },
+      { prop: 'ball' as const },
+    ]) {
+      const [g, agent] = person(1, 0, 0.2, { mappedPersonMover: true, ...extra });
+      let calls = 0;
+      packLife(
+        new Uint8Array(g.cols * g.rows * 4),
+        { ...g, allowsGroundCell: () => false },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { loneRetry: () => calls++ },
+      );
+      expect(calls).toBe(0);
+    }
+    for (const scale of [6]) {
+      const [g, agent] = person(1, 0, scale, { mappedPersonMover: true });
+      let calls = 0;
+      packLife(
+        new Uint8Array(g.cols * g.rows * 4),
+        { ...g, allowsGroundCell: () => false },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { loneRetry: () => calls++ },
+      );
+      expect(calls).toBe(0);
+    }
+  });
+
+  it('preserves earlier ground owners and exposes later-owner retry cascades', () => {
+    const [g, agent] = person(1, 0, 0.2, { mappedPersonMover: true, people: [look()] });
+    const other = { ...agent, people: [look({ paint: Paint.blue })] };
+    for (const agents of [
+      [agent, other],
+      [other, agent],
+    ]) {
+      const owners = new Uint32Array(g.cols * g.rows),
+        outcomes = new Uint8Array(2),
+        out = new Uint8Array(owners.length * 4);
+      const allowed = (_agent: VisibleAgent, col: number, row: number) => col === 18 && row === 15;
+      expect(
+        packLife(
+          out,
+          { ...g, outcomes, allowsGroundCell: allowed },
+          agents,
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners },
+        ),
+      ).toBe(1);
+      expect([...owners].filter(Boolean)).toEqual([1]);
+      expect([...outcomes]).toEqual([PackingOutcome.drawn, PackingOutcome.cellGuard]);
+      expect(out[(15 * g.cols + 18) * 4 + 3]).toBe(
+        personByte(agents[0]!.people![0]!.paint, PersonPart.figure),
+      );
+    }
+  });
+
+  it('retains nonground composition independently of optional ownership', () => {
+    const [g, personAgent] = person(1, 0, 0.2, { mappedPersonMover: true, people: [look()] });
+    const bird: VisibleAgent = { kind: 'bird', lng: 10, lat: 15, flap: 0 };
+    const allowed = (_agent: VisibleAgent, col: number, row: number) => col === 18 && row === 15;
+    for (const agents of [
+      [bird, personAgent],
+      [personAgent, bird],
+    ]) {
+      const owners = new Uint32Array(g.cols * g.rows),
+        out = new Uint8Array(owners.length * 4),
+        plain = out.slice();
+      expect(
+        packLife(
+          out,
+          { ...g, allowsGroundCell: allowed },
+          agents,
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners },
+        ),
+      ).toBe(2);
+      expect(
+        packLife(plain, { ...g, allowsGroundCell: allowed }, agents, themes.dark, glyphIndex),
+      ).toBe(2);
+      expect(out).toEqual(plain);
+      expect(owners[15 * g.cols + 18]).toBe(2);
+    }
+  });
+
+  it('retries valid boundary captures without widening off-grid base admission', () => {
+    for (const outside of [false, true]) {
+      const [g, agent] = person(1, 0, 3, {
+        mappedPersonMover: true,
+        people: [look()],
+      });
+      g.toCell = (lng, lat) => [lng * 3, lat * 3];
+      agent.lng = (g.cols + Number(outside)) / 3;
+      agent.lat = (g.rows + Number(outside)) / 3;
+      agent.ahead = [agent.lng + 1, agent.lat];
+      const owners = new Uint32Array(g.cols * g.rows),
+        out = new Uint8Array(owners.length * 4);
+      let calls = 0;
+      const drawn = packLife(
+        out,
+        {
+          ...g,
+          allowsGroundCell: (_agent, col, row) =>
+            col >= g.cols - 3 && col <= g.cols - 2 && row >= g.rows - 3 && row <= g.rows - 2,
+        },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners, loneRetry: () => calls++ },
+      );
+      expect(drawn).toBe(outside ? 0 : 1);
+      expect(calls).toBe(outside ? 0 : 1);
+      expect([...owners].filter(Boolean)).toHaveLength(outside ? 0 : 4);
+    }
+  });
+
   it('places complete second-ring figures with original bytes, members, speech and clock cells', () => {
     const [g, agent] = person(1, 0, 3, {
       lng: 20,
@@ -1298,7 +1590,7 @@ describe('packLife people', () => {
   });
 
   it('rolls back a complete coarse member when one glyph of its figure is unavailable', () => {
-    const [grid, agent] = person(1, 1, 2, { people: [look()] });
+    const [grid, agent] = person(1, 1, 2, { people: [look()], mappedPersonMover: true });
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const missing = figureGlyph('adult', false, 0, { slice: 2 });
     expect(

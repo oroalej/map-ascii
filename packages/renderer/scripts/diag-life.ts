@@ -184,6 +184,10 @@ const cases: {
     rigidAttempts: number;
     assignmentAttempts: number;
     maxAssignmentAttempts: number;
+    loneCalls: number;
+    lonePlacements: number;
+    loneRigidAttempts: number;
+    loneTargetCellChecks: number;
   };
   flickerSamples?: unknown[];
   report: ReturnType<workingDiagnostics.LifeDiagnostics['report']>;
@@ -385,6 +389,10 @@ try {
             rigidAttempts: 0,
             assignmentAttempts: 0,
             maxAssignmentAttempts: 0,
+            loneCalls: 0,
+            lonePlacements: 0,
+            loneRigidAttempts: 0,
+            loneTargetCellChecks: 0,
           };
           let measuring = false;
           const groupRetry: NonNullable<workingDraw.LifePackMetadata['groupRetry']> = (result) => {
@@ -398,6 +406,13 @@ try {
               packingWork.maxAssignmentAttempts,
               result.assignmentAttempts,
             );
+          };
+          const loneRetry: NonNullable<workingDraw.LifePackMetadata['loneRetry']> = (result) => {
+            if (!measuring) return;
+            packingWork.loneCalls++;
+            packingWork.lonePlacements += Number(!!result.offset);
+            packingWork.loneRigidAttempts += result.rigidAttempts;
+            packingWork.loneTargetCellChecks += result.targetCellChecks;
           };
           let camera = { ...meta.defaultCamera, zoom };
           const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
@@ -517,7 +532,7 @@ try {
               glyphIndex,
               sun,
               lifeGlyphs,
-              { groupRetry },
+              { groupRetry, loneRetry },
             );
             if (measuring) packingTimes.push(performance.now() - packingStart);
             classifyTerminalStops(world, diagnostics);

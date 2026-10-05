@@ -73,7 +73,7 @@ it('rolls back a complete stamped vehicle when one cell overlaps forbidden tree 
   expect(out.every((byte) => byte === 0)).toBe(true);
 });
 
-it('rejects the complete walking group when one member touches a forbidden road cell', () => {
+it('retries the complete walking group off a forbidden road cell and omits an infeasible group', () => {
   const person: VisibleAgent = {
     kind: 'person',
     lng: 20,
@@ -87,6 +87,7 @@ it('rejects the complete walking group when one member touches a forbidden road 
     ],
   };
   const out = new Uint8Array(grid.cols * grid.rows * 4);
+  const owners = new Uint32Array(grid.cols * grid.rows);
   expect(
     packLife(
       out,
@@ -94,7 +95,26 @@ it('rejects the complete walking group when one member touches a forbidden road 
       [person],
       themes.dark,
       () => 1,
+      null,
+      undefined,
+      { owners },
+    ),
+  ).toBe(2);
+  const represented = [...owners.entries()].filter(([, owner]) => owner);
+  expect(represented).toHaveLength(2);
+  expect(represented.every(([cell]) => Math.floor(cell / grid.cols) < 16)).toBe(true);
+  expect(
+    packLife(
+      out,
+      { ...grid, allowsGroundCell: (_agent, _col, row) => row < 13 },
+      [person],
+      themes.dark,
+      () => 1,
+      null,
+      undefined,
+      { owners },
     ),
   ).toBe(0);
   expect(out.every((byte) => byte === 0)).toBe(true);
+  expect(owners.every((owner) => owner === 0)).toBe(true);
 });

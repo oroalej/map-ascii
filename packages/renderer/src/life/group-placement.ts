@@ -12,6 +12,56 @@ export type GroupPlacement = {
   exhausted: boolean;
 };
 
+export type LonePlacement = {
+  offset?: Offset;
+  rigidAttempts: number;
+  targetCellChecks: number;
+};
+
+/** A single complete coarse figure has only sixteen rigid second-ring choices. */
+export function placeCoarseLone(
+  member: GroupRaster,
+  grid: { cols: number; rows: number; cellWidth: number; cellHeight: number },
+  permits: (col: number, row: number) => boolean,
+): LonePlacement {
+  const result: LonePlacement = { rigidAttempts: 0, targetCellChecks: 0 };
+  if (
+    (member.expected !== 1 && member.expected !== 4) ||
+    member.cells.length !== member.expected ||
+    member.cells.some(({ col, row }) => !Number.isInteger(col) || !Number.isInteger(row)) ||
+    new Set(member.cells.map(({ col, row }) => `${col}/${row}`)).size !== member.cells.length
+  )
+    return result;
+  const offsets: Offset[] = [];
+  for (let dy = -2; dy <= 2; dy++)
+    for (let dx = -2; dx <= 2; dx++)
+      if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) offsets.push([dx, dy]);
+  offsets.sort(
+    (a, b) =>
+      (a[0] * grid.cellWidth) ** 2 +
+        (a[1] * grid.cellHeight) ** 2 -
+        (b[0] * grid.cellWidth) ** 2 -
+        (b[1] * grid.cellHeight) ** 2 ||
+      a[1] - b[1] ||
+      a[0] - b[0],
+  );
+  for (const offset of offsets) {
+    result.rigidAttempts++;
+    if (
+      member.cells.every((cell) => {
+        result.targetCellChecks++;
+        const col = cell.col + offset[0],
+          row = cell.row + offset[1];
+        return col >= 0 && col < grid.cols && row >= 0 && row < grid.rows && permits(col, row);
+      })
+    ) {
+      result.offset = offset;
+      break;
+    }
+  }
+  return result;
+}
+
 export function placeCoarseGroup(
   members: readonly GroupRaster[],
   grid: { cols: number; rows: number; cellWidth: number; cellHeight: number },
