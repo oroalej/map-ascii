@@ -72,7 +72,13 @@ import {
 import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { stripRing } from '../life/terrain';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
-import { DEFAULT_ROAD_WIDTH_M, FLOOD, SHOP } from '../life/config';
+import {
+  DEFAULT_ROAD_WIDTH_M,
+  FLOOD,
+  SHOP,
+  ROAD_SPLIT_CLEARANCE_M,
+  LIFE_TILE_MIN_ZOOM,
+} from '../life/config';
 import { habitatOf } from '../life/birds';
 import { LampState, placeSeed, placeTileLamps, type LitLine } from '../life/lights';
 
@@ -1426,6 +1432,8 @@ export function buildTileGeometry(
 
   for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
+  if (unitMeters && tile && tile.z >= LIFE_TILE_MIN_ZOOM)
+    life.splitRoadJunctions(1 / unitMeters, ROAD_SPLIT_CLEARANCE_M);
 
   if (unitMeters && tile) {
     if (fireworks)

@@ -16,7 +16,7 @@ import {
   type LegacyStreetFixture,
 } from './fixtures';
 import { LampState } from './lights';
-import { tileToLngLat } from '../raster/geometry';
+import { lngLatToTile, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { mapGlyphs, themes } from '../theme';
 import { drawProcedural } from '../glyphs/atlas';
 import { utilityFixtures } from './utilities';
@@ -163,6 +163,7 @@ describe('seasonal fixtures', () => {
     b.line(
       [
         { x: 0, y: 2000 },
+        { x: 2500, y: 2000 },
         { x: 4096, y: 2000 },
       ],
       LifeLine.roadMinor,
@@ -200,12 +201,13 @@ describe('seasonal fixtures', () => {
     expect(preferred).toMatchObject([{ kind: 'season-bunting', id: 'crossing' }]);
     b.line(
       [
-        { x: 0, y: 2500 },
-        { x: 4096, y: 2500 },
+        { x: 2500, y: 2000 },
+        { x: 2500, y: 4096 },
       ],
       LifeLine.roadMinor,
       8,
     );
+    b.splitRoadJunctions(1 / metersPerUnit(tile), 40);
     const partial = seasonalFixtures(
       [{ tile, life: b.finish(), fixtures, utilities: [crossing] }],
       season,
@@ -215,6 +217,15 @@ describe('seasonal fixtures', () => {
     expect(partial.some((f) => f.kind === 'season-bunting' && f.id.startsWith('fallback/'))).toBe(
       true,
     );
+    for (const fixture of partial) {
+      if (fixture.kind !== 'season-bunting' || !fixture.id.startsWith('fallback/')) continue;
+      const midpoint = lngLatToTile(
+        tile,
+        (fixture.from[0] + fixture.to[0]) / 2,
+        (fixture.from[1] + fixture.to[1]) / 2,
+      );
+      expect(midpoint.x).toBeCloseTo(2500, 4);
+    }
     const fallback = seasonalFixtures([{ tile, life, fixtures }], season, 13.6);
     expect(fallback.length).toBeGreaterThan(1);
     expect(fallback).toEqual(seasonalFixtures([{ tile, life, fixtures }], season, 13.6));

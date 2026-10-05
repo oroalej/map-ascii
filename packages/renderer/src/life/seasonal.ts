@@ -118,7 +118,8 @@ function fallbackBunting(
   const step = config.spacing_m / groundScale;
   const result: SeasonalFixture[] = [];
   for (let line = 0; line < life.kinds.length; line++) {
-    if (life.kinds[line]! > LifeLine.roadMinor || covered.has(line)) continue;
+    if (life.kinds[line]! > LifeLine.roadMinor || covered.has(life.spawnGroups?.[line] ?? line))
+      continue;
     const reach = ((life.widths[line] || DEFAULT_ROAD_WIDTH_M) / 2 + 0.5) / metersPerUnit(tile);
     for (let v = life.starts[line]! + 1; v < life.starts[line + 1]!; v++) {
       const ax = life.coords[(v - 1) * 2]!,
@@ -326,7 +327,7 @@ export function seasonalFixtures(
             metersPerUnit(group.tile)) **
             2
       )
-        covered.add(closest);
+        covered.add(group.life.spawnGroups?.[closest] ?? closest);
       bunting.set(span.id, {
         kind: 'season-bunting',
         id: span.id,
