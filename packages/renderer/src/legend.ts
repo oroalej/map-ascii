@@ -36,6 +36,7 @@ import {
 } from './theme';
 
 export type LegendEntryId =
+  | 'info:emoji'
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
@@ -243,12 +244,14 @@ export function legendEntries(
   present?: readonly RenderClass[],
   {
     life = false,
+    emoji = false,
     lights = false,
     sidewalksDerived = true,
     fixtures,
     season,
   }: {
     life?: boolean;
+    emoji?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
     fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
@@ -321,6 +324,16 @@ export function legendEntries(
       glyphs: '◊ ( )',
       color: css(theme.styles.water_river?.color ?? theme.label),
     });
+  if (life && emoji && zoom >= 18) {
+    const pets = entries.findIndex((e) => e.id === 'life:pets');
+    entries.splice(pets + 1, 0, {
+      id: 'info:emoji',
+      classes: [],
+      label: 'Emoji (simulated moods)',
+      glyphs: '😊 💤',
+      color: css(theme.label),
+    });
+  }
   if (
     fixtures
       ? fixtures.streetlights

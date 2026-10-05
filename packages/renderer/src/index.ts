@@ -1,4 +1,5 @@
 import { MOMENTS } from './life/moments';
+export type { EmojiCue } from './life/emoji';
 import { spawnMargin } from './life/births';
 import {
   bandVisibility,
@@ -69,6 +70,7 @@ import {
   lifeRaster,
   labelsCoverPoint,
   labelCovers,
+  labelObstacles,
   lightPass,
   metersPerCssPx,
   streetTextPass,
@@ -123,6 +125,9 @@ import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
+import { EmojiController, type EmojiInView } from './life/emoji-view';
+import { CueReadback } from './life/cue-readback';
+export type { EmojiInView } from './life/emoji-view';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
   prevailingWind,
@@ -205,6 +210,7 @@ export type AtlasOptions = {
   /** Optional curated city-pack speech. Display preferences do not affect simulation. */
   dialogue?: DialogueCatalog | RuntimeDialogueCatalog;
   speech?: boolean;
+  emoji?: boolean;
   /** Static city-pack utility policy; omitted means disabled. */
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
@@ -275,6 +281,7 @@ export type AtlasEventMap = {
   lifehover: LifeHover;
   /** Visible simulated speakers, anchored in CSS pixels from the canvas top left. */
   speechchange: SpeechInView[];
+  emojichange: EmojiInView[];
   qualitychange: QualityState;
   camerachange: CameraState;
   /**
@@ -365,6 +372,8 @@ export type Atlas = {
   /** Transient legend focus; null restores ordinary map colours. */
   setFocus(focus: LegendFocus | null): void;
   setSpeech(enabled: boolean): void;
+  setEmoji(enabled: boolean): void;
+  getLabelObstacles(): readonly { left: number; top: number; width: number; height: number }[];
   setQuality(choice: QualityChoice): void;
   getQuality(): QualityChoice;
   /** Move the camera, or fly there with `animate`. */
@@ -469,6 +478,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
+  let emojiDate = {
+    epochDay: cityTime(now(), zone).day,
+    weekday: cityTime(now(), zone).weekday,
+    preview: false,
+  };
+  let emojiSunAltitude: number | undefined;
   const resolveCurrentSeason = () => {
     const local = cityTime(now(), zone);
     return resolveSeason(options.cityLife?.seasons, life.season, local.year, local.day);
@@ -587,8 +602,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
   );
   let speechEnabled = options.speech ?? true;
-  const speech = new SpeechController(readback, gl.COLOR_ATTACHMENT0, (cues) =>
-    emit('speechchange', cues),
+  let emojiEnabled = options.emoji ?? true;
+  let speechPoints: readonly (readonly [number, number])[] = [];
+  const cueReads = new CueReadback();
+  const speech = new SpeechController(
+    readback,
+    gl.COLOR_ATTACHMENT0,
+    (cues) => {
+      speechPoints = cues.map((c) => c.point);
+      emit('speechchange', cues);
+    },
+    () => performance.now(),
+    cueReads,
+  );
+  const emoji = new EmojiController(
+    readback,
+    gl.COLOR_ATTACHMENT0,
+    (cues) => emit('emojichange', cues),
+    () => performance.now(),
+    cueReads,
+    () => speechPoints,
   );
   const speechSpeakers = {
     members: new Uint8Array(0),
@@ -968,7 +1001,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             zoom: camera.zoom,
             bounds: viewBounds(),
             wind: worldWind(time),
-            weather: { rain: currentRain(), minutes: cityMinutes, season: season?.id ?? null },
+            weather: {
+              rain: currentRain(),
+              minutes: cityMinutes,
+              season: season?.id ?? null,
+              date: emojiDate,
+              sunAltitude: emojiSunAltitude,
+              windPreset: prevailingWind(life.wind, options.climate, cityMonth).strength,
+            },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
           },
@@ -996,7 +1036,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeAgents = agents;
       return;
     }
-    const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
+    const trackSpeech =
+      ((options.dialogue && speechEnabled) || emojiEnabled) && camera.zoom >= MOMENTS.zoom;
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
@@ -1018,13 +1059,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lifeShown = agents.length > 0;
     lifeAgents = agents;
   };
-  const reportSpeech = (now: number) => {
+  const reportCues = (kind: 'speech' | 'emoji', now: number) => {
+    const controller = kind === 'speech' ? speech : emoji;
     const raster = targets && lifeRaster(targets);
     if (
       !raster ||
-      !speechEnabled ||
+      (kind === 'speech' ? !speechEnabled || !options.dialogue : !emojiEnabled) ||
       now - lastInput < 150 ||
-      !options.dialogue ||
       !lifeActive() ||
       !watch.watched() ||
       camera.zoom < MOMENTS.zoom ||
@@ -1033,12 +1074,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !lifeAgents.length ||
       speechSpeakers.members.length !== raster.owners.length
     ) {
-      speech.clear();
+      controller.clear();
       return;
     }
     const cell = cellDev(),
       label = themeRes!.label.cellDev;
-    speech.update(
+    controller.update(
       {
         targets,
         dpr,
@@ -1401,6 +1442,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const next = daylightAt(position.altitude);
     const nextMoon = moonlight(moment, camera.lng, camera.lat);
     const local = cityTime(moment, zone);
+    const real = cityTime(now(), zone);
+    const automatic = resolveSeason(options.cityLife?.seasons, 'auto', real.year, real.day);
+    emojiDate = {
+      epochDay: real.day,
+      weekday: real.weekday,
+      preview:
+        !!season &&
+        life.season !== 'auto' &&
+        life.season === season.id &&
+        season.id !== automatic?.id,
+    };
+    emojiSunAltitude = position.altitude;
     cityMinutes = local.minutes;
     cityMonth = cityTime(now(), zone).month;
     const nextActivity = activityLevels(next, {
@@ -1748,7 +1801,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         : null,
       performance.now(),
     );
-    reportSpeech(performance.now());
+    reportCues('speech', performance.now());
+    reportCues('emoji', performance.now());
     profiler?.end();
   };
   if (season) warmSeasonalPrograms();
@@ -1765,6 +1819,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lifeHover.pointer(null);
     lifePause.tick(performance.now(), false);
     speech.clear();
+    emoji.clear();
     canvas.style.cursor = '';
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
@@ -1811,7 +1866,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetQualitySamples();
     if (!watched) lifeHover.pointer(null);
     lifePause.tick(performance.now(), watched && lifeActive() && !lost);
-    if (!watched) speech.clear();
+    if (!watched) {
+      speech.clear();
+      emoji.clear();
+    }
   });
 
   /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
@@ -1820,6 +1878,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const applyCamera = (next: CameraState, batched = false) => {
     lifeHover.pointer(null);
     speech.clear();
+    emoji.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
     lastInput = performance.now();
@@ -1874,6 +1933,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (!enabled) speech.clear();
       drawDirty = true;
     },
+    setEmoji(enabled) {
+      if (emojiEnabled === enabled) return;
+      emojiEnabled = enabled;
+      if (!enabled) emoji.clear();
+      drawDirty = true;
+    },
+    getLabelObstacles: () =>
+      !lost && themeRes ? labelObstacles(targets, labelGrid, themeRes.label.cellDev, dpr) : [],
     setQuality(choice) {
       quality.setChoice(choice);
     },
@@ -1890,6 +1957,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getCamera: () => ({ ...camera }),
     setReducedMotion(enabled) {
       speech.clear();
+      emoji.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
       lifeHover.pointer(null);
@@ -1938,6 +2006,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       updateSeason();
       lifePause.tick(performance.now(), lifeRunning());
       speech.clear();
+      emoji.clear();
       if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
@@ -1983,6 +2052,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       names.clear();
       lifeHover.pointer(null);
       speech.clear();
+      emoji.clear();
       host.dispose();
       destroyed = true;
       canvas.style.cursor = '';
