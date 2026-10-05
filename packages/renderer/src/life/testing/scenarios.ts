@@ -1,3 +1,4 @@
+import { metersPerCssPx } from '../../grid';
 /** Shared synthetic geography for CPU benchmarks and combined simulation tests. */
 import { viewportFor } from '../../camera';
 import { metersPerUnit, tileToLngLat } from '../../raster/geometry';
@@ -9,6 +10,7 @@ import type { PolygonIndex, Polygon } from '../occupancy';
 import { stripRing } from '../terrain';
 import type { MomentOptions } from '../moments-host';
 import type { DialogueChoice } from '@atlas/shared';
+import { vehicleEffectSnapshot } from '../vehicle-effects';
 
 /** Text-free fixtures explicitly enable speech in CPU runs; ordinary scenarios stay unchanged. */
 export const SCENARIO_DIALOGUE: readonly DialogueChoice[] = [
@@ -233,6 +235,7 @@ export function makeScenario(
   Simulation: typeof LifeWorld = LifeWorld,
   profiler?: FrameProfiler,
   moments?: MomentOptions,
+  zoom = 18,
 ) {
   const tiles = scenarioTiles(kind, count, seed);
   const traffic =
@@ -241,7 +244,7 @@ export function makeScenario(
   world.sync(tiles);
   const center = tileToLngLat(tiles[0]!.tile, { x: 2048, y: 2048 });
   const size = mobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 };
-  const camera = { lng: center[0], lat: center[1], zoom: 18 };
+  const camera = { lng: center[0], lat: center[1], zoom };
   const [[west, south], [east, north]] = viewportFor(camera, size).getBounds() as [
     number[],
     number[],
@@ -259,7 +262,7 @@ export function makeScenario(
     cellHeight: 18,
     toCell,
   };
-  world.visible(18, levels, center, undefined, bounds);
+  world.visible(zoom, levels, center, undefined, bounds);
   return {
     world,
     tiles,
@@ -275,18 +278,33 @@ export function makeScenario(
     },
     step(frame: number, dt = 1 / 30, minimum = 0.9) {
       const env = this.environment(frame);
-      world.step(dt, undefined, 18, bounds, undefined, env, minimum);
-      return world.visible(18, levels, center, { rain: env.rain, sunAltitude: 40 }, bounds);
+      world.step(
+        dt,
+        undefined,
+        zoom,
+        bounds,
+        undefined,
+        env,
+        minimum,
+        1.8,
+        metersPerCssPx(camera) * 10,
+      );
+      return world.visible(zoom, levels, center, { rain: env.rain, sunAltitude: 40 }, bounds);
     },
   };
 }
 export function scenarioState(world: LifeWorld) {
-  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile));
+  return [...worldTiles(world)].map(([key, tile]) => tileState(key, tile, world.signalClock));
 }
-function tileState(key: string, tile: TileLife) {
+function tileState(key: string, tile: TileLife, clock = tile.elapsed) {
   return {
     key,
     elapsed: tile.elapsed,
+    // Benchmark fixtures also inspect frozen pre-exhaust revisions.
+    decorations: {
+      puffs: tile.puffs?.snapshot(clock) ?? [],
+      effects: tile.movers.map((m) => vehicleEffectSnapshot(m, clock)),
+    },
     flocks: tile.flocks,
     movers: tile.movers,
     gatherers: tile.gatherers,
@@ -350,7 +368,7 @@ export function completeScenarioState(world: LifeWorld) {
     })),
     retired: [...retiredTiles(world)].map(([key, { life, at }]) => ({
       at,
-      ...tileState(key, life),
+      ...tileState(key, life, at),
       scene: scenes(life),
       ceded: internal.history.get(life)?.ceded,
       pending: life.pending.map((p) => ({

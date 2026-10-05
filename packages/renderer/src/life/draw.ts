@@ -35,6 +35,9 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
+import { BRAKE_LAMP } from './lamps';
+import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
+import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -58,6 +61,8 @@ export type LifeGrid = {
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
+  /** Successful detailed vehicle stamps, indexed by this frame's final agent array. */
+  stampedVehicles?: Uint8Array;
 };
 /** Per-person packing, independent of cart and group owner identity. */
 export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
@@ -66,8 +71,13 @@ export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, nu
  * A vehicle's or boat's paint (bits 0–3), part (4–6), and whether it is parked (bit 7: lamps
  * off), in the texel's last byte.
  */
-export const vehicleByte = (paint: number, part: VehiclePart, parked = false) =>
-  (paint & 15) | (part << 4) | (parked ? 128 : 0);
+export const vehicleByte = (paint: number, part: VehiclePart, parked = false, brake = false) =>
+  ((part === VehiclePart.taillight
+    ? (paint & ~BRAKE_LAMP) | (brake && !parked ? BRAKE_LAMP : 0)
+    : paint) &
+    15) |
+  (part << 4) |
+  (parked ? 128 : 0);
 
 /**
  * A vehicle drawn from its plan may hang over open ground at a narrow road's edge, but never
@@ -98,6 +108,8 @@ export type LifeGlyphs = { parts: Uint16Array };
 let journal:
   | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
   | undefined;
+let fallbackStampedVehicles = new Uint8Array(0);
+let detailedStamp = false;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
 let drawingFocus = 0;
@@ -209,12 +221,19 @@ export function packLife(
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
   metadata: LifePackMetadata = {},
+  puffs: Float64Array = EMPTY_PUFFS,
 ): number {
   const cells = grid.cols * grid.rows;
   drawingOwners = metadata.owners ?? grid.owners;
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
+  if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
+    throw new RangeError('Wrong stamped vehicle mask size');
+  if (!grid.stampedVehicles && fallbackStampedVehicles.length < agents.length)
+    fallbackStampedVehicles = new Uint8Array(agents.length);
+  const stampedVehicles = grid.stampedVehicles ?? fallbackStampedVehicles;
+  stampedVehicles.fill(0);
   drawingOwners?.fill(0);
   drawingOwner = 0;
   drawingFocus = 0;
@@ -244,6 +263,7 @@ export function packLife(
         drawingMember = 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
+        detailedStamp = false;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
         if (journal && grid.allowsGroundCell)
           for (const at of journal.before.keys())
@@ -264,8 +284,12 @@ export function packLife(
         else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+          if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
         }
       }
+    journal = undefined;
+    drawingOwner = 0;
+    drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
     journal = undefined;
@@ -275,6 +299,35 @@ export function packLife(
     drawingFocus = 0;
     drawingSpeakers = undefined;
     drawingMember = 0;
+  }
+}
+
+/** Decorative ink fills empty cells only after its detailed source was successfully admitted. */
+function drawPuffs(
+  out: Uint8Array,
+  grid: LifeGrid,
+  puffs: Float64Array,
+  glyphIndex: (g: string) => number,
+  stampedVehicles: Uint8Array,
+) {
+  for (let i = 0; i + PUFF_STRIDE <= puffs.length; i += PUFF_STRIDE) {
+    if (!stampedVehicles[puffs[i]!]) continue;
+    const [x, y] = grid.toCell(puffs[i + 1]!, puffs[i + 2]!);
+    const col = Math.floor(x),
+      row = Math.floor(y);
+    if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) continue;
+    const at = (row * grid.cols + col) * 4;
+    if (out[at + 2] !== 0) continue;
+    const age = Math.max(0, Math.min(1, puffs[i + 3]!));
+    const glyph = glyphIndex(puffGlyph(age));
+    if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
+    [out[at], out[at + 1]] = packGlyph(glyph, classId('life_person'));
+    out[at + 2] = CellBit.vehicle | CellBit.person;
+    out[at + 3] = personByte(
+      Math.min(PUFF_AGE_MASK, Math.floor(age * (PUFF_AGE_MASK + 1))) |
+        (puffs[i + 4] === 1 ? PUFF_KIND_BIT : 0),
+      PersonPart.puff,
+    );
   }
 }
 
@@ -325,10 +378,18 @@ function drawAgent(
         agent.kind === 'vehicle' &&
         !agent.parked &&
         hasTurnSignals(agent.vehicle) &&
-        agent.turnSignal?.on &&
+        (agent.lamps?.kind === 'hazard' ? agent.lamps.on : agent.turnSignal?.on) &&
         Math.hypot(...across) * spec.width >= 2
-          ? { side: agent.turnSignal.side, glyph: parts[VehiclePart.headlight]! }
+          ? {
+              sides:
+                agent.lamps?.kind === 'hazard'
+                  ? (['left', 'right'] as const)
+                  : [agent.turnSignal!.side],
+              glyph: parts[VehiclePart.headlight]!,
+            }
           : undefined;
+      const brake =
+        agent.kind === 'vehicle' && hasTurnSignals(agent.vehicle) && agent.lamps?.kind === 'brake';
       const stamped = stamp(
         out,
         grid,
@@ -341,10 +402,11 @@ function drawAgent(
           parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
           classId(cls),
           bits,
-          vehicleByte(agent.paint ?? 0, part, agent.parked),
+          vehicleByte(agent.paint ?? 0, part, agent.parked, brake),
         ],
         indicator,
       );
+      detailedStamp = stamped;
       // The vendor stands clear of the cart's side.
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
@@ -903,7 +965,7 @@ function stamp(
   across: [number, number],
   spec: VehicleSpec,
   texel: (part: VehiclePart) => [number, number, number, number],
-  indicator?: { side: TurnSide; glyph: number },
+  indicator?: { sides: readonly TurnSide[]; glyph: number },
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -926,12 +988,23 @@ function stamp(
   let any = false;
   // Nearest existing cells to front/rear corners: never enlarge the vehicle's footprint.
   const lamps = indicator
-    ? [
-        { at: -1, score: Infinity, forward: -length * 0.4 },
-        { at: -1, score: Infinity, forward: length * 0.4 },
-      ]
+    ? indicator.sides.flatMap((side) => [
+        {
+          at: -1,
+          score: Infinity,
+          forward: -length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+        {
+          at: -1,
+          score: Infinity,
+          forward: length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+      ])
     : undefined;
-  const lampRight = indicator?.side === 'left' ? -spec.width * 0.4 : spec.width * 0.4;
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       // The cell's center in meters forward and to the right of the vehicle's center.
@@ -947,11 +1020,12 @@ function stamp(
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, glyph, cls, bits, byte);
-      if (lamps && (indicator!.side === 'left' ? right < 0 : right > 0))
+      if (lamps)
         for (const lamp of lamps) {
+          if (lamp.side === 'left' ? right >= 0 : right <= 0) continue;
           // Keep front and rear lamps on their own half, even when viewport clipping hides one.
           if (forward * lamp.forward <= 0) continue;
-          const score = (forward - lamp.forward) ** 2 + (right - lampRight) ** 2;
+          const score = (forward - lamp.forward) ** 2 + (right - lamp.right) ** 2;
           if (score < lamp.score) {
             lamp.at = at;
             lamp.score = score;

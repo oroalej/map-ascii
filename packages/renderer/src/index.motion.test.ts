@@ -41,6 +41,13 @@ import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
+import { createConePackingScratch } from './life/lights';
+
+const vehicleBuffers = () => ({
+  stampedVehicles: new Uint8Array(0),
+  beamCones: createConePackingScratch(),
+  brakeCones: createConePackingScratch(),
+});
 
 /** Label cases opt into the real CPU overlay; motion cases keep their original empty map. */
 const labelFixture = vi.hoisted(() => ({
@@ -411,6 +418,7 @@ describe('live motion preference', () => {
         revision: 1,
         light: life,
         lamps: null,
+        ...vehicleBuffers(),
         candles: true,
       });
       return 1;
@@ -454,6 +462,7 @@ describe('live motion preference', () => {
         revision: time,
         light: life,
         lamps: null,
+        ...vehicleBuffers(),
       });
       return 1;
     });
@@ -476,6 +485,7 @@ describe('live motion preference', () => {
       second += 0.000001;
       latest = {
         generation,
+        puffs: new Float64Array(0),
         signalClock: clock,
         procession: undefined,
         cellGuard: () => undefined,
@@ -636,6 +646,7 @@ describe('live motion preference', () => {
     const original: Hosts.FrameView = {
       agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
+      puffs: new Float64Array(0),
       signalClock: 1,
       cellGuard: () => undefined,
     };
@@ -664,6 +675,7 @@ describe('live motion preference', () => {
     const count = request.mock.calls.length;
     latest = {
       ...original,
+      puffs: new Float64Array(0),
       signalClock: 2,
       agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
       cellGuard: () => undefined,
@@ -691,6 +703,7 @@ describe('live motion preference', () => {
     const visible: Hosts.FrameView = {
       agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
+      puffs: new Float64Array(0),
       signalClock: 0,
       cellGuard: () => undefined,
     };
@@ -775,6 +788,7 @@ describe('live motion preference', () => {
           revision: time,
           light: life,
           lamps: null,
+          ...vehicleBuffers(),
         });
         return 1;
       });
@@ -872,6 +886,7 @@ describe('live motion preference', () => {
         revision: 0,
         light: life,
         lamps: null,
+        ...vehicleBuffers(),
       });
       return 0;
     });
@@ -915,6 +930,7 @@ describe('live motion preference', () => {
         revision: 0,
         light: life,
         lamps: null,
+        ...vehicleBuffers(),
       });
       return 0;
     });
@@ -1207,6 +1223,7 @@ describe('live motion preference', () => {
       revision: 0,
       light: new Uint8Array(4),
       lamps: null,
+      ...vehicleBuffers(),
     });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
@@ -1255,6 +1272,7 @@ describe('live motion preference', () => {
       revision: 0,
       light: new Uint8Array(4),
       lamps: null,
+      ...vehicleBuffers(),
     });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'cat', lng: 0, lat: 0, flap: 2 },
@@ -1284,6 +1302,7 @@ describe('live motion preference', () => {
       revision: 0,
       light: new Uint8Array(4),
       lamps: null,
+      ...vehicleBuffers(),
     });
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'vehicle', vehicle: 'car', lng: 0, lat: 0, ahead: [0.01, 0], flap: 0 },
@@ -1558,6 +1577,7 @@ describe('label focus in the renderer frame', () => {
           revision: 1,
           light: new Uint8Array(count * 4),
           lamps: null,
+          ...vehicleBuffers(),
         });
         if (speakers) speakers.members = new Uint8Array(count);
         return args[6].length;
