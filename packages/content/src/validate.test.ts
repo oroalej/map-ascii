@@ -72,6 +72,15 @@ describe('loadCityPacks', () => {
         message: 'steps.0.narration: a verified tour cannot contain TODO(verify)',
       },
       {
+        file: 'cities/fixture/city.json',
+        message: 'life.seasons.0.congregations.landmarks: no landmark "landmark/missing-church"',
+      },
+      {
+        file: 'cities/fixture/city.json',
+        message:
+          'life.seasons.0.congregations.landmarks: landmark "landmark/fixture-school" is not a church',
+      },
+      {
         file: 'cities/fixture/tiles.lock.json',
         message: 'files.fixture.pmtiles: expected a hex sha256',
       },

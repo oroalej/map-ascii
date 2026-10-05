@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert/strict';
 import { metersPerUnit } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, LifeWorld, type Mover } from './simulate';
@@ -420,7 +421,7 @@ describe('curved traffic', () => {
     life.parked.length = life.stalls.length = 0;
     for (let frame = 0; frame < 120 * 30; frame++) {
       life.step(1 / 30);
-      for (const m of life.movers) if (m.kind === 'vehicle') expect(m.dir).toBe(1);
+      for (const m of life.movers) if (m.kind === 'vehicle') assert.equal(m.dir, 1);
     }
   });
   it('queues behind a leader on the planned exit without compressing the bumper gap', () => {
@@ -626,7 +627,7 @@ describe('crossroads traffic', () => {
         const holders = table.snapshot().filter((r) => r.since !== undefined);
         for (let a = 0; a < holders.length; a++)
           for (let c = a + 1; c < holders.length; c++)
-            expect(compatible(holders[a]!.movement, holders[c]!.movement)).toBe(true);
+            assert.equal(compatible(holders[a]!.movement, holders[c]!.movement), true);
         for (let i = 0; i < life.movers.length; i++) {
           const m = life.movers[i]!;
           maxWait = Math.max(maxWait, table.waited(m));
@@ -640,16 +641,18 @@ describe('crossroads traffic', () => {
             m.dir === move.dir
           ) {
             const distance = Math.hypot(m.x - center.x, m.y - center.y);
-            expect(distance / pm).toBeGreaterThanOrEqual(
-              move.junction.radius / pm + 1.5 + 2.2 - 0.05,
+            assert.ok(
+              distance / pm >= move.junction.radius / pm + 1.5 + 2.2 - 0.05,
+              'ungranted vehicle crosses the physical stop distance',
             );
           }
           // Same lane cars never compress a queued leader's bumper gap.
           for (let j = i + 1; j < life.movers.length; j++) {
             const other = life.movers[j]!;
             if (other.line === m.line && other.dir === m.dir)
-              expect(Math.abs(other.d - m.d) / pm - 4.4).toBeGreaterThanOrEqual(
-                FOLLOW.minGap - 1e-6,
+              assert.ok(
+                Math.abs(other.d - m.d) / pm - 4.4 >= FOLLOW.minGap - 1e-6,
+                'queued vehicles compress the bumper gap',
               );
           }
         }

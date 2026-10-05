@@ -59,7 +59,7 @@ export function valid(world: LifeWorld) {
 export function bounded(world: LifeWorld) {
   // CI checks long lifecycles with a bounded population; CPU benchmarks retain full density.
   for (const tile of worldTiles(world).values()) {
-    if (tile.movers.length <= 48) continue;
+    if (tile.movers.length <= 32) continue;
     const near = (m: Mover) => Math.hypot(m.x - 1900, m.y - SCENE_CURB_Y);
     const targets = [
       { x: 1900, y: SCENE_CURB_Y },
@@ -78,11 +78,11 @@ export function bounded(world: LifeWorld) {
         tile.movers
           .filter((m) => m.kind === kind)
           .sort((a, b) => near(a) - near(b))
-          .slice(0, 12),
+          .slice(0, kind === 'vehicle' ? 8 : 4),
       ),
     ];
     tile.movers.splice(0, tile.movers.length, ...keep);
-    tile.gatherers.splice(12);
+    tile.gatherers.splice(8);
   }
 }
 

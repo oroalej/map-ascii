@@ -10,7 +10,7 @@ type Row = {
   style?: 'red-yellow-rectangles';
   priority?: BuntingPriority;
 };
-type Fixture = Row | { kind: 'season-lantern' | 'season-installation' };
+type Fixture = Row | { kind: 'season-lantern' | 'season-installation' | 'season-candle' };
 export type ProjectedBunting = { from: Point; to: Point };
 export type BuntingProjection = {
   scale: string;

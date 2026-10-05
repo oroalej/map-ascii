@@ -14,7 +14,7 @@ import {
   type PersonLook,
 } from './people';
 import type { VisibleAgent } from './simulate';
-import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './seasonal-glyphs';
+import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './seasonal-glyphs';
 
 const glyphs = ['', ...mapGlyphs(themes.dark)];
 const index = (glyph: string) => glyphs.indexOf(glyph);
@@ -138,10 +138,10 @@ it('keeps canopy stages after all existing map glyphs in both themes', () => {
 it('packs attentive and gesturing adults and children at one-cell, big and stamp sizes', () => {
   // Seasonal symbols, parking labels and fourteen canopy stages extend the original glyph set.
   expect(mapGlyphs(themes.dark)).toHaveLength(
-    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14 + CANDLE_GLYPHS.length,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
-    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14 + CANDLE_GLYPHS.length,
   );
   for (const figure of ['adult', 'child'] as const)
     for (const pose of ['attentive', 'gesture'] as const)
