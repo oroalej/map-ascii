@@ -92,6 +92,8 @@ export function placeTileLamps(
  * the center of its pool and points its radius east and north of that, and how it is.
  */
 export type VisibleLamp = {
+  /** Seasonal fixtures provide their own glyph and need only the compact pool. */
+  headless?: boolean;
   lng: number;
   lat: number;
   center: [number, number];
@@ -185,7 +187,7 @@ export function packLights(
   // Heads first, so pools leave them be.
   let drawn = 0;
   for (const lamp of lamps) {
-    if (lamp.state === LampState.flood || lamp.state === LampState.shop) continue;
+    if (lamp.headless || lamp.state === LampState.flood || lamp.state === LampState.shop) continue;
     let [hx, hy] = toCell(lamp.lng, lamp.lat);
     const [mx, my] = toCell(...lamp.center);
     const side = Math.hypot(hx - mx, hy - my);

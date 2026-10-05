@@ -1,3 +1,4 @@
+import { gathererShare } from './gatherer-share';
 /** Admission adapter: the social controller never writes route cursors or meeting paths. */
 import { inTile, PLACE_CODES, PLACE_STRIDE, SITE_STRIDE, LifeLine } from './geometry';
 import {
@@ -131,7 +132,7 @@ export class MomentHost {
     for (const m of this.tile.movers)
       if (m.kind === 'person' && m.group?.length === 1 && inTile(m)) update(m);
     for (const g of this.tile.gatherers)
-      if (g.behavior !== 'sit' && g.behavior !== 'work' && inTile(g)) update(g);
+      if (!g.seasonal && g.behavior !== 'sit' && g.behavior !== 'work' && inTile(g)) update(g);
     return out;
   }
   private source(owner: Gatherer): number | undefined {
@@ -218,8 +219,9 @@ export class MomentHost {
         )
           return false;
       } else if (
+        owner.seasonal !== undefined ||
         this.source(owner) === undefined ||
-        (env?.levels && owner.rank >= env.levels.places[owner.place])
+        owner.rank >= gathererShare(owner, env?.levels)
       )
         return false;
       return tile.canIdle(owner);

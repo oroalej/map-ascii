@@ -1,10 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { VEHICLE_TYPES } from '@atlas/shared';
-import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
+import { LifeBuilder, LifeLine, lifeTransferables, type LifeGeometry } from './geometry';
 import { JUNCTION, ROAD_SPLIT_CLEARANCE_M, SIGNAL } from './config';
 import { VEHICLES } from './vehicles';
 
 const clearance = ROAD_SPLIT_CLEARANCE_M;
+
+it('keeps exact grave seeds and structured-cloned sidecars, recording only admitted worship places', () => {
+  const builder = new LifeBuilder();
+  builder.grave({ x: 20, y: 30 }, 'marker', 0xffffff);
+  builder.grave({ x: 4096, y: 30 }, 'unowned', 5);
+  builder.cemetery({ x: 100, y: 200 }, 40);
+  for (let i = 0; i < 40; i++)
+    builder.place({ x: i, y: i }, 'worship', 0, false, NaN, `landmark/church-${i}`);
+  builder.place({ x: 50, y: 50 }, 'worship', 0, false, NaN, 'landmark/dropped');
+  const geo = builder.finish();
+  expect(geo.graves).toEqual(Float32Array.from([20, 30, 0xffffff]));
+  expect(geo.placeLandmarks).toHaveLength(40);
+  expect(geo.placeLandmarks!.at(-1)).toEqual([39, 'landmark/church-39']);
+  const buffers = lifeTransferables(geo);
+  expect(buffers).toContain(geo.graves!.buffer);
+  expect(buffers).toContain(geo.cemeteries!.buffer);
+  expect(new Set(buffers).size).toBe(buffers.length);
+  const copy = structuredClone(geo, { transfer: buffers });
+  expect(copy.graves![2]).toBe(0xffffff);
+  expect(copy.placeLandmarks).toEqual(geo.placeLandmarks);
+});
 const points = (geo: LifeGeometry, line: number) =>
   Array.from({ length: geo.starts[line + 1]! - geo.starts[line]! }, (_, i) => {
     const v = geo.starts[line]! + i;

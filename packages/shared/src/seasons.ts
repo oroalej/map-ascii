@@ -120,8 +120,20 @@ export type RuntimeSeasonConfig = Omit<
   };
 };
 export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
-  const { id, title, window, includes, fireworks, lanterns, bunting, stalls, installations } =
-    season;
+  const {
+    id,
+    title,
+    window,
+    includes,
+    fireworks,
+    lanterns,
+    bunting,
+    stalls,
+    installations,
+    candles,
+    visitors,
+    congregations,
+  } = season;
   return {
     id,
     title,
@@ -130,6 +142,9 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
     ...(fireworks && { fireworks }),
     ...(lanterns && { lanterns }),
     ...(stalls && { stalls }),
+    ...(candles && { candles }),
+    ...(visitors && { visitors }),
+    ...(congregations && { congregations }),
     ...(bunting && {
       bunting: {
         label: bunting.label,
@@ -174,6 +189,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
     const buntingSeason = season.bunting ? season : included.find((s) => s.bunting);
     const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
     const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
+    const candles = season.candles ?? included.find((s) => s.candles)?.candles;
+    const visitors = season.visitors ?? included.find((s) => s.visitors)?.visitors;
+    const congregations =
+      season.congregations ?? included.find((s) => s.congregations)?.congregations;
     const installations = composeSeasonInstallations(
       season.installations,
       included.map((s) => s.installations),
@@ -187,6 +206,9 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       }),
       ...(stalls && { stalls }),
       ...(fireworks && { fireworks }),
+      ...(candles && { candles }),
+      ...(visitors && { visitors }),
+      ...(congregations && { congregations }),
       ...(installations.length && { installations }),
     };
   });
