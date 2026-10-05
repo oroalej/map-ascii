@@ -26,6 +26,11 @@ export const INTERACTIONS = {
   purchase: [3, 6],
   rainOn: 0.5,
   rainOff: 0.2,
+  /** Default site search radius, m; caught walkers use `RUN.shelter.reach`. */
+  reach: 35,
+  /** Per-scan admission chances for covered sites in rain and visits in dry weather. */
+  shelterChance: 0.7,
+  visitChance: 0.12,
 } as const;
 type Site = WalkPoint & {
   kind: LifeSiteKind | 'vendor' | 'rest';
@@ -330,10 +335,15 @@ export class LocalScenes {
     return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
   }
 
+  /** A caught person's dash pace, or undefined when the group stays dry. */
+  dashPace(m: Mover): number | undefined {
+    return this.caught(m) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+  }
+
   /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
   private pace(m: Mover, visit: Visit): number {
-    return this.caught(m) && (visit.state === 'approach' || visit.state === 'return')
-      ? runPace(m, RUN.dash, this.perMeter)
+    return visit.state === 'approach' || visit.state === 'return'
+      ? (this.dashPace(m) ?? m.speed)
       : m.speed;
   }
 
@@ -612,7 +622,7 @@ export class LocalScenes {
       ) {
         // Those caught with no umbrella look further for cover, and are surer to go.
         const caught = this.caught(m);
-        const reach = caught ? RUN.shelter.reach : 35;
+        const reach = caught ? RUN.shelter.reach : INTERACTIONS.reach;
         const candidates = this.sites
           .map((site, index) => ({ site, index, d: dist(m, site) }))
           .filter(
@@ -630,7 +640,14 @@ export class LocalScenes {
           )
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);
-        if (this.rng() < (caught ? RUN.shelter.chance : this.wet ? 0.7 : 0.12)) {
+        if (
+          this.rng() <
+          (caught
+            ? RUN.shelter.chance
+            : this.wet
+              ? INTERACTIONS.shelterChance
+              : INTERACTIONS.visitChance)
+        ) {
           const reserved = candidates.some(({ index }) => this.reserve(m, index));
           if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, RUN.shelter.retry);
         }

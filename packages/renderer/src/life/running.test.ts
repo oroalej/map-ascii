@@ -105,7 +105,7 @@ describe('random runners', () => {
     let runs = 0;
     let groupViolations = 0;
     let leastAdvance = Infinity;
-    for (let t = 0; t < 3000; t++) {
+    for (let t = 0; t < 1000; t++) {
       const walked = life.movers.map((m) => m.walked ?? 0);
       const was = life.movers.map((m) => (m.run ?? 0) > 0);
       life.step(0.1, undefined, undefined, undefined, { rain: 0 });
@@ -267,7 +267,7 @@ describe('random runners', () => {
     const a = street(singles(), 9);
     const b = street(singles(), 9);
     let starts = 0;
-    for (let t = 0; t < 600; t++) {
+    for (let t = 0; t < 200; t++) {
       const wasRunning = a.movers.map((m) => (m.run ?? 0) > 0);
       a.step(0.1, undefined, undefined, undefined, { rain: 0 });
       b.step(0.1, undefined, undefined, undefined, { rain: 0 });

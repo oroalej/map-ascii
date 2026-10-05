@@ -3219,12 +3219,13 @@ export class TileLife {
         (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
         a.i - b.i,
     );
-    // Frozen runners retain their timer. On resuming, runs share the cap in stable mover order.
+    // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
+    // the cap in stable mover order.
     let running = 0;
     for (let i = 0; i < this.movers.length; i++) {
       const m = this.movers[i]!;
       if ((m.run ?? 0) <= 0) continue;
-      else if (this.scenes.visits.has(m)) m.run = 0;
+      else if (this.scenes.visits.has(m)) this.stopRun(m);
       else if (this.eligible[i]) {
         if (running < RUN.maxPerTile) running++;
         else this.stopRun(m);
@@ -3320,7 +3321,8 @@ export class TileLife {
           continue;
         }
         const idle = this.canIdle(m);
-        const dashing = this.scenes.caught(m);
+        const dash = this.scenes.dashPace(m);
+        const dashing = dash !== undefined;
         if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
@@ -3343,7 +3345,8 @@ export class TileLife {
           }
         }
         const was = (m.run ?? 0) > 0;
-        const pace = this.runSpeed(m, dt, running < RUN.maxPerTile, dashing);
+        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const pace = dash ?? randomPace;
         running += Number((m.run ?? 0) > 0) - Number(was);
         if (pace !== undefined) speeds[i] = pace;
       }
@@ -3465,15 +3468,14 @@ export class TileLife {
   }
 
   /**
-   * How fast a person runs this step (config.ts `RUN`), or undefined while they walk. In the rain
-   * anyone with no umbrella runs; otherwise someone walking alone now and then runs a few
-   * seconds, while there is `room` (fewer than `RUN.maxPerTile` in the tile running). A run ends
-   * early when they are held up.
+   * A random run's pace (config.ts `RUN`), or undefined while walking or in rain. Someone
+   * walking alone now and then runs a few seconds while there is `room` (fewer than
+   * `RUN.maxPerTile` in the tile running). A run ends early when held up or rain starts.
    */
-  private runSpeed(m: Mover, dt: number, room: boolean, dashing: boolean): number | undefined {
+  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
     if (this.scenes.raining) {
       if (m.run) m.run = 0;
-      return dashing ? runPace(m, RUN.dash, this.perMeter) : undefined;
+      return;
     }
     if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
     else if (
