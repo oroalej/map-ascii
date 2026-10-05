@@ -93,6 +93,8 @@ export type RuntimeSeasonConfig = Omit<
   'sources' | 'grounds' | 'installations' | 'bunting'
 > & {
   installations?: RuntimeSeasonInstallation[];
+  /** Author of the selected dense bunting records after season composition. */
+  buntingSeasonId?: string;
   bunting?: Omit<NonNullable<SeasonConfig['bunting']>, 'corridors'> & {
     corridors?: Pick<BuntingCorridor, 'id' | 'ways'>[];
   };
@@ -141,7 +143,7 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       return config ? [config] : [];
     });
     const lanterns = season.lanterns ?? included.find((s) => s.lanterns)?.lanterns;
-    const bunting = season.bunting ?? included.find((s) => s.bunting)?.bunting;
+    const buntingSeason = season.bunting ? season : included.find((s) => s.bunting);
     const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
     const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
     const installations = [
@@ -151,7 +153,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
     return {
       ...season,
       ...(lanterns && { lanterns }),
-      ...(bunting && { bunting }),
+      ...(buntingSeason?.bunting && {
+        bunting: buntingSeason.bunting,
+        ...(season.includes && { buntingSeasonId: buntingSeason.id }),
+      }),
       ...(stalls && { stalls }),
       ...(fireworks && { fireworks }),
       ...(installations.length && { installations }),

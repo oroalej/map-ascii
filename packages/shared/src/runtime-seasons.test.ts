@@ -72,6 +72,7 @@ describe('season client payload', () => {
     const newYear = runtime.seasons!.find((s) => s.id === 'new-year')!;
     const christmas = runtime.seasons!.find((s) => s.id === 'christmas')!;
     expect(newYear.includes).toEqual(['christmas']);
+    expect(newYear.buntingSeasonId).toBe('christmas');
     expect(newYear.fireworks).toEqual(life.seasons!.find((s) => s.id === 'new-year')!.fireworks);
     for (const field of ['lanterns', 'bunting', 'stalls', 'installations'] as const)
       expect(newYear[field]).toEqual(christmas[field]);
@@ -127,6 +128,7 @@ describe('season client payload', () => {
       lanterns: own.lanterns,
       fireworks: own.fireworks,
       bunting: base.bunting,
+      buntingSeasonId: 'base',
       stalls: base.stalls,
     });
     expect(expanded[0]!.installations!.map((i) => i.id)).toEqual([
@@ -136,6 +138,10 @@ describe('season client payload', () => {
     ]);
     expect(expanded[1]).toEqual(base);
     expect(expanded[1]).not.toBe(base);
+    expect(expandSeasons([{ ...own, bunting: second.bunting }, base, second])[0]).toMatchObject({
+      bunting: second.bunting,
+      buntingSeasonId: own.id,
+    });
     expect(expandSeasons([{ ...own, fireworks: undefined }, base])[0]!.fireworks).toEqual(
       base.fireworks,
     );

@@ -1087,6 +1087,7 @@ const SeasonId = z
   .string()
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
   .refine((id) => id !== 'auto', 'auto is reserved');
+const MAX_SEASON_INSTALLATIONS = 32;
 export const Season = z
   .strictObject({
     id: SeasonId,
@@ -1168,7 +1169,7 @@ export const Season = z
         ]),
       )
       .min(1)
-      .max(32)
+      .max(MAX_SEASON_INSTALLATIONS)
       .refine((v) => new Set(v.map((i) => i.id)).size === v.length, 'duplicate installation ids')
       .optional(),
     lanterns: z
@@ -1295,11 +1296,11 @@ export const CityLife = z.strictObject({
             path: [index, 'includes'],
             message: 'composed installations must have unique ids',
           });
-        if (installations.length > 32)
+        if (installations.length > MAX_SEASON_INSTALLATIONS)
           ctx.addIssue({
             code: 'custom',
             path: [index, 'includes'],
-            message: 'a composed season accepts at most 32 installations',
+            message: `a composed season accepts at most ${MAX_SEASON_INSTALLATIONS} installations`,
           });
       }
     })

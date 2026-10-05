@@ -243,7 +243,7 @@ Shop areas without a building or another rendered area class receive one interio
 - Coordinates, toggleable.
 - A "Life" toggle for the life layer (§4) and a time chip that cycles live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00 (the city's local time). Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
 - Attribution keeps the OSM link visible, with additional credits in a bounded scrolling region so sourced city packs leave the map and controls accessible.
-- For packs with seasons, a chip cycles Today and pack titles. Today names the active season when there is one. Preview titles use the pack title without a draft suffix or disclosure. The choice is remembered in this browser, validated again for each city, and stays out of the shared URL. The legend names visible seasonal hardware and possible temporary vendors on walking routes.
+- For packs with seasons, a chip cycles Today and pack titles. Today names the active season when there is one. Preview titles use the pack title. The choice is remembered in this browser, validated again for each city, and stays out of the shared URL. The legend names visible seasonal hardware and possible temporary vendors on walking routes.
 
 ## 6. Tours
 

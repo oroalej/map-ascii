@@ -17,6 +17,8 @@ import { lines } from './road-geometry';
 import { localFrame } from './geo';
 
 type Point = SeasonalPoint;
+const crownRadius = (f: AtlasFeature) =>
+  Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2));
 const distance = (p: Point, a: Point, b: Point) => {
   const dx = b[0] - a[0],
     dy = b[1] - a[1];
@@ -401,7 +403,7 @@ export function generateSeasonalInstallations(
           .filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point')
           .sort((a, b) => a.properties.id.localeCompare(b.properties.id))) {
           const at = f.geometry.type === 'Point' ? (f.geometry.coordinates as Point) : undefined;
-          const radius = Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2));
+          const radius = crownRadius(f);
           if (
             at &&
             (inside(project(at), polygon) ||
@@ -421,7 +423,7 @@ export function generateSeasonalInstallations(
                 ? [
                     {
                       at: project(f.geometry.coordinates),
-                      radius: Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2)),
+                      radius: crownRadius(f),
                     },
                   ]
                 : [],
