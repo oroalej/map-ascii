@@ -492,6 +492,8 @@ describe('crossroads traffic', () => {
     const world = new LifeWorld();
     world.sync([{ key: 'human-junction', tile, life: b.finish() }]);
     const life = worldTiles(world).get('human-junction')!;
+    // This junction-hold fixture needs a stationary human rather than a spontaneous runner.
+    (life as unknown as { runRng: () => number }).runRng = () => 1;
     life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
     life.scenes.sites.length = 0;
     const car: Mover = {

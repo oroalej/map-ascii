@@ -65,6 +65,7 @@ import {
   LIFE_ZOOM,
   MAX_STEP_S,
   RETIRE,
+  RUN,
   ADOPT,
   MAX_TILE_AGENTS,
   MAX_TILE_GATHERERS,
@@ -80,6 +81,7 @@ import {
   spawnRules,
   TRAIN,
   umbrellaShare,
+  underUmbrella,
   UMBRELLA_MOTION,
   usableLines,
   VENDORS,
@@ -123,6 +125,7 @@ import {
 } from './forage';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { runPace } from './running';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
@@ -324,6 +327,8 @@ export type Mover = {
   /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
   trot?: number;
   lying?: boolean;
+  /** People: seconds left of a run (config.ts `RUN`). */
+  run?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -666,6 +671,7 @@ export class TileLife {
   signals!: SignalControl;
   scenes!: LocalScenes;
   private readonly catRng: () => number;
+  private readonly runRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
   readonly pending: PendingSeed[] = [];
@@ -953,6 +959,8 @@ export class TileLife {
   private pedestrianCrossings!: PedestrianCrossings;
   private readonly pathScratch: { cursor: Mover; at: Pose; next: Pose }[] = [];
   private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly followingPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly leaderPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   /** Borrowed only by the synchronous physical query; generator/cache results remain detached. */
   private readonly straightSegments: PedestrianSegment[] = [
     { x: 0, y: 0, hx: 1, hy: 0, length: 0, ahead: 0, line: 0 },
@@ -1003,6 +1011,7 @@ export class TileLife {
     this.forageRng = random(seed ^ 0x4f1bbcdc);
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
+    this.runRng = random(seed ^ 0xcc9e2d51);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
@@ -1247,11 +1256,7 @@ export class TileLife {
 
   private roadShiftBounds(m: Mover, line = m.line): readonly [number, number] {
     const spec = VEHICLES[m.vehicle!];
-    const oneWay = this.geo.oneway?.[line];
-    const edge = Math.max(
-      0,
-      this.roadWidth(line) / 2 - spec.width / 2 + (oneWay ? ROAD_AVOID.shoulder : -ROAD_MARGIN_M),
-    );
+    const edge = Math.max(0, this.roadWidth(line) / 2 - spec.width / 2 + ROAD_AVOID.shoulder);
     // A mapped curb can intrude into either half; the guard checks all available road space.
     return [-edge, edge];
   }
@@ -1269,6 +1274,27 @@ export class TileLife {
         ? this.scenes.offset(m, normal, curb)
         : this.scenes.offsetAt(sceneOwner, m, normal, curb);
     return this.shiftedOffset(m, offset);
+  }
+
+  /** A straight neighbor leaves room for a long vehicle to begin turning before the midpoint. */
+  private cornerSpan(
+    line: number,
+    adjacent: number,
+    step: number,
+    hx: number,
+    hy: number,
+    length: number,
+  ): number {
+    const next = adjacent + step;
+    if (next < this.first(line) || next > this.last(line)) return length;
+    const c = this.geo.coords;
+    const dx = c[next * 2]! - c[adjacent * 2]!,
+      dy = c[next * 2 + 1]! - c[adjacent * 2 + 1]!;
+    const distance = Math.hypot(dx, dy);
+    return distance > 0 &&
+      (dx * hx + dy * hy) / distance > Math.cos((FILLET.minAngle * Math.PI) / 180)
+      ? length * 2
+      : length;
   }
 
   private corner(m: Mover, vertex: number, sceneOwner = m): Curve | undefined {
@@ -1299,6 +1325,11 @@ export class TileLife {
     const li = Math.hypot(ix, iy),
       lo = Math.hypot(ox, oy);
     if (!li || !lo) return;
+    const inDir = inLine === m.line ? m.dir : m.came! & 1 ? 1 : -1;
+    const outDir = outLine === m.line ? m.dir : (m.routing?.plan?.exit ?? m.next)! & 1 ? -1 : 1;
+    // Traffic keeps right: left turns use the available straight span, while a right
+    // turn keeps its shorter approach rather than cutting across the inside curb early.
+    const leftTurn = m.kind === 'vehicle' && ix * oy - iy * ox < 0;
     const offset = (line: number) =>
       line === m.line
         ? this.offsetOf(m, sceneOwner)
@@ -1321,8 +1352,8 @@ export class TileLife {
       iy / li,
       ox / lo,
       oy / lo,
-      li,
-      lo,
+      leftTurn ? this.cornerSpan(inLine, incoming, -inDir, -ix / li, -iy / li, li) : li,
+      leftTurn ? this.cornerSpan(outLine, outgoing, outDir, ox / lo, oy / lo, lo) : lo,
       offset(inLine) * this.perMeter,
       offset(outLine) * this.perMeter,
       this.perMeter,
@@ -3547,7 +3578,27 @@ export class TileLife {
     const limit = (i: number, j: number, separation: number) => {
       const m = movers[i]!,
         leader = movers[j]!;
-      const gap = separation - (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2;
+      const spec = VEHICLES[m.vehicle!],
+        leaderSpec = VEHICLES[leader.vehicle!];
+      let gap = separation - (spec.length + leaderSpec.length) / 2;
+      if (m.roadShift !== undefined || leader.roadShift !== undefined) {
+        // Offset turns compress centreline progress. Leave room behind the actual rear
+        // footprint so a following vehicle cannot pin a terrain recovery against its curb.
+        const at = this.pose(m, this.followingPose),
+          ahead = this.pose(leader, this.leaderPose);
+        const front =
+          (Math.abs(at.hx * m.hx + at.hy * m.hy) * spec.length +
+            Math.abs(-at.hy * m.hx + at.hx * m.hy) * spec.width) /
+          2;
+        const rear =
+          (Math.abs(ahead.hx * m.hx + ahead.hy * m.hy) * leaderSpec.length +
+            Math.abs(-ahead.hy * m.hx + ahead.hx * m.hy) * leaderSpec.width) /
+          2;
+        gap = Math.min(
+          gap,
+          ((ahead.x - at.x) * m.hx + (ahead.y - at.y) * m.hy) / pm - front - rear,
+        );
+      }
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
       speeds[i] = Math.min(
         speeds[i]!,
@@ -3740,12 +3791,24 @@ export class TileLife {
     this.captureEffects(clock, dt, env, shows, near, pass);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
-    let rejection: ContinuityRejection | undefined;
+    let terrainRejected = false;
     const rejected = (reason: ContinuityRejection) => {
-      rejection = reason;
+      terrainRejected ||= reason === 'terrain';
     };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movementOrder();
+    // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
+    // the cap in stable mover order.
+    let running = 0;
+    for (let i = 0; i < this.movers.length; i++) {
+      const m = this.movers[i]!;
+      if ((m.run ?? 0) <= 0) continue;
+      else if (this.scenes.visits.has(m)) this.stopRun(m);
+      else if (this.eligible[i]) {
+        if (running < RUN.maxPerTile) running++;
+        else this.stopRun(m);
+      }
+    }
     for (let slot = 0; slot < this.movers.length; slot++) {
       const i = order?.[slot] ?? slot,
         m = this.movers[i]!;
@@ -3834,19 +3897,26 @@ export class TileLife {
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
+          running -= Number(this.stopRun(m));
           continue;
         }
         const idle = this.canIdle(m);
-        if (!idle) m.pause = 0;
+        const dash = this.scenes.dashPace(m);
+        const dashing = dash !== undefined;
+        if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
-          continue;
-        }
-        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
+          const pause = between(this.walkerRng, PERSON_PAUSE.seconds);
+          if (!dashing) {
+            m.pause = pause;
+            running -= Number(this.stopRun(m));
+            continue;
+          }
+        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+          running -= Number(this.stopRun(m));
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -3854,6 +3924,11 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+        const was = (m.run ?? 0) > 0;
+        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const pace = dash ?? randomPace;
+        running += Number((m.run ?? 0) > 0) - Number(was);
+        if (pace !== undefined) speeds[i] = pace;
       }
       const walking = isWalker(m.kind);
       if (walking) {
@@ -3916,7 +3991,7 @@ export class TileLife {
           (this.scenes.walkable(previous ?? next, next) &&
             this.roadTerrain.access.allows(this.groundBodies(next))));
       if (m.kind === 'vehicle' || walking) {
-        rejection = undefined;
+        terrainRejected = false;
         let fits = fitsGround(m, before, m.kind === 'vehicle' ? rejected : undefined);
         if (!fits) {
           // Vehicles creep; walkers also step aside, preferring the same side on successive
@@ -3951,7 +4026,7 @@ export class TileLife {
         }
         if (
           !fits &&
-          rejection === 'terrain' &&
+          terrainRejected &&
           m.kind === 'vehicle' &&
           m.vehicle &&
           distance > 0 &&
@@ -3965,7 +4040,7 @@ export class TileLife {
             const shift =
               Math.max(minimum, Math.min(maximum, offset + side * ROAD_AVOID.shift * dt)) - offset;
             if (Math.abs(shift) < 1e-9) continue;
-            for (const share of [0.25, 0]) {
+            for (const share of [1, 0.25, 0]) {
               Object.assign(m, before);
               m.roadShift = (before.roadShift ?? 0) + shift;
               moved = this.advance(m, distance * share);
@@ -4068,6 +4143,35 @@ export class TileLife {
     m.d = this.segment(m.from, to) - m.d;
     m.from = to;
     m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /** Cancel a live run, reporting whether it occupied a running slot. */
+  private stopRun(m: Mover): boolean {
+    if ((m.run ?? 0) <= 0) return false;
+    m.run = 0;
+    return true;
+  }
+
+  /**
+   * A random run's pace (config.ts `RUN`), or undefined while walking or in rain. Someone
+   * walking alone now and then runs a few seconds while there is `room` (fewer than
+   * `RUN.maxPerTile` in the tile running). A run ends early when held up or rain starts.
+   */
+  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
+    if (this.scenes.raining) {
+      if (m.run) m.run = 0;
+      return;
+    }
+    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
+    else if (
+      room &&
+      (m.waiting ?? 0) <= 0 &&
+      m.group?.length === 1 &&
+      m.group[0]!.figure === 'adult' &&
+      this.runRng() < RUN.chance * dt
+    )
+      m.run = between(this.runRng, RUN.seconds);
+    return (m.run ?? 0) > 0 ? runPace(m, RUN.speed, this.perMeter) : undefined;
   }
 
   /**
@@ -6366,7 +6470,7 @@ export class LifeWorld {
     clock: number,
   ): PersonLook {
     if (walker.figure !== 'adult') return look;
-    const want = walker.umbrella < share;
+    const want = underUmbrella(walker, share);
     const open =
       zoom >= UMBRELLA_MOTION.zoom ? this.umbrellas.look(walker, want, clock) : Number(want);
     if (open > 0) {

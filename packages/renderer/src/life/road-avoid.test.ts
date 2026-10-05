@@ -26,6 +26,7 @@ function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
   world.sync([{ key: 'road', tile, life: b.finish() }]);
   const life = worldTiles(world).get('road')!;
   (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+  (life as unknown as { runRng: () => number }).runRng = () => 1;
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
   life.scenes.sites.length = 0;
   const make = (x: number, vehicle: 'car' | 'motorcycle' = 'car'): Mover => ({
@@ -124,6 +125,121 @@ describe('terrain-blocked road vehicles', () => {
     expect(car.d).toBeGreaterThanOrEqual(start);
     expect(bodiesOverlap(life.groundBodies(car)[0]!, life.groundBodies(parked)[0]!)).toBe(false);
   });
+
+  for (const [vehicle, turn, oneway] of [
+    ['jeepney', 'left', 1],
+    ['car', 'right', 0],
+  ] as const)
+    it(`clears a ${vehicle} and followers around a curb into a ${turn} turn, oneway ${oneway}`, () => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 466, y: 378 },
+          { x: 500, y: 263 },
+          { x: 518, y: 208 },
+        ],
+        LifeLine.roadMid,
+        8,
+        1,
+        1,
+      );
+      b.line(
+        [{ x: 518, y: 208 }, turn === 'left' ? { x: 181, y: 40 } : { x: 3833, y: 1313 }],
+        LifeLine.roadMid,
+        8,
+        2,
+        oneway,
+      );
+      const curb = [
+        [
+          { x: 536, y: 216 },
+          { x: 563, y: 230 },
+          { x: 563, y: 268 },
+          { x: 531, y: 278 },
+          { x: 527, y: 278 },
+          { x: 494, y: 268 },
+          { x: 494, y: 230 },
+          { x: 522, y: 216 },
+          { x: 536, y: 216 },
+        ],
+        [
+          { x: 496, y: 231 },
+          { x: 496, y: 267 },
+          { x: 529, y: 277 },
+          { x: 562, y: 267 },
+          { x: 562, y: 231 },
+          { x: 535, y: 218 },
+          { x: 522, y: 218 },
+          { x: 496, y: 231 },
+        ],
+      ];
+      b.area('vehicle-blocked', curb);
+      const world = new LifeWorld();
+      world.sync([{ key: 'turn', tile, life: b.finish() }]);
+      const life = worldTiles(world).get('turn')!;
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.pending.length = 0;
+      life.scenes.sites.length = 0;
+      const make = (vehicle: 'jeepney' | 'motorcycle' | 'car'): Mover => ({
+        kind: 'vehicle',
+        vehicle,
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 0,
+        x: 466,
+        y: 378,
+        hx: 34 / Math.hypot(34, 115),
+        hy: -115 / Math.hypot(34, 115),
+        speed: 4 * pm,
+        v: 4 * pm,
+        lane: 0.24,
+        paint: 0,
+        pause: 0,
+        rank: 0,
+      });
+      const jeep = make(vehicle),
+        motorcycle = make('motorcycle'),
+        car = make('car');
+      const completed = new Set<Mover>();
+      life.movers.push(jeep);
+      for (let frame = 0; frame < 9000; frame++) {
+        if (frame === 300) life.movers.push(motorcycle);
+        if (frame === 600) life.movers.push(car);
+        world.step(1 / 30, undefined, 21);
+        for (const m of life.movers)
+          for (const body of life.groundBodies(m))
+            expect(
+              bodyHitsPolygon(
+                {
+                  ...body,
+                  x: body.x * pm,
+                  y: body.y * pm,
+                  length: body.length * pm,
+                  width: body.width * pm,
+                },
+                curb,
+              ),
+            ).toBe(false);
+        const bodies = life.movers.map((m) => life.groundBodies(m)[0]!);
+        for (let i = 0; i < bodies.length; i++)
+          for (let j = i + 1; j < bodies.length; j++)
+            expect(bodiesOverlap(bodies[i]!, bodies[j]!)).toBe(false);
+        // The fixture ends beyond the curb. Remove departing traffic so its artificial
+        // dead end cannot send vehicles back into the junction under test.
+        for (const m of [jeep, motorcycle, car])
+          if (!completed.has(m) && m.line === 1 && m.d > 20 * pm && m.roadShift === undefined) {
+            completed.add(m);
+            life.movers.splice(life.movers.indexOf(m), 1);
+          }
+        if (completed.size === 3) break;
+      }
+      for (const m of [jeep, motorcycle, car]) {
+        expect(m.line, JSON.stringify(m)).toBe(1);
+        expect(m.d).toBeGreaterThan(20 * pm);
+        expect(m.roadShift).toBeUndefined();
+      }
+    });
 });
 
 describe('blocked walking routes', () => {

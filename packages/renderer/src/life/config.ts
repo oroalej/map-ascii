@@ -84,7 +84,7 @@ export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
-/** Lateral recovery/return speeds, m/s; clear one-way road edge allowance, m. */
+/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
 export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
 /** Turn back after this many active seconds attempting a blocked walking route. */
 export const WALK_RECOVERY = { seconds: 3 } as const;
@@ -279,6 +279,30 @@ export function umbrellaShare(rain: number, sunAltitude: number): number {
   );
   return Math.max(UMBRELLA.base, rain * UMBRELLA.rain, sun * UMBRELLA.sun);
 }
+
+/** Whether this adult carries an umbrella for the current share. */
+export function underUmbrella(
+  walker: { figure: 'adult' | 'child'; umbrella: number },
+  share: number,
+): boolean {
+  return walker.figure === 'adult' && walker.umbrella < share;
+}
+
+/**
+ * People running (life/running.ts): now and then someone walking alone runs at `speed` m/s for
+ * `seconds` (`chance` per second), at most `maxPerTile` at once. In the rain those with no
+ * umbrella run at `dash` m/s, on their way or to a covered shelter within `shelter.reach` m,
+ * which they head for with `shelter.chance` (life/interactions.ts). Unreachable cover waits
+ * `shelter.retry` seconds before another route search.
+ */
+export const RUN = {
+  chance: 0.004,
+  seconds: [3, 8] as const,
+  speed: [2.6, 3.4] as const,
+  maxPerTile: 2,
+  dash: [2.8, 3.6] as const,
+  shelter: { reach: 60, chance: 0.9, retry: 5 },
+} as const;
 
 /**
  * Street vendors with their carts: one per this many meters of line (`spacing`), `marketBoost`
