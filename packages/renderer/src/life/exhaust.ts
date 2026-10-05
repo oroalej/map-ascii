@@ -223,6 +223,9 @@ export class PuffStore {
   private cursor = 0;
   private count = 0;
   private clock?: number;
+  get size() {
+    return this.count;
+  }
   add(puff: Puff) {
     if (!this.slots[this.cursor]) this.count++;
     this.slots[this.cursor] = puff;
@@ -284,6 +287,7 @@ export class PuffSelector {
     let reference: TileId | undefined;
     let origin = { x: 0, y: 0 };
     for (const life of tiles) {
+      if (!life.puffs.size) continue;
       if (!reference) {
         reference = life.tile;
         origin = lngLatToTile(reference, ...center);

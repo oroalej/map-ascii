@@ -3,7 +3,15 @@ import { TileLife, LifeWorld, type VisibleAgent } from './simulate';
 import { continuityMover, continuityTile, left, right, parent } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import { BRAKE, BRAKE_LAMP } from './lamps';
-import { emitter, PUFF, stepEmitter, PUFF_STRIDE, puffGlyph, stoppedFor } from './exhaust';
+import {
+  emitter,
+  PUFF,
+  stepEmitter,
+  PUFF_STRIDE,
+  puffGlyph,
+  stoppedFor,
+  PuffSelector,
+} from './exhaust';
 import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
@@ -11,7 +19,7 @@ import { PersonPart, personByte } from './people';
 import { ensureVehicleEffects, vehicleEffects, vehicleEffectSnapshot } from './vehicle-effects';
 import { packLife, type LifeGrid } from './draw';
 import { Paint, VehiclePart } from './vehicles';
-import { SIGNAL_VEHICLES, TURN_SIGNAL_BIT } from './turn-signals';
+import { blinkOn, SIGNAL_VEHICLES, TURN_SIGNAL_BIT } from './turn-signals';
 import { themes } from '../theme';
 import { tileToLngLat } from '../raster/geometry';
 import type { Visit } from './interactions';
@@ -83,6 +91,32 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
 
 describe('accepted vehicle effects', () => {
+  it.each([0, 0.6])('freezes inspected transit hazards from phase %s', (start) => {
+    const { world, lives } = fixture(true);
+    const life = lives[0]!;
+    const m = continuityMover(life, 1000);
+    m.vehicle = 'bus';
+    m.routing = { seed: 0, turns: 0 };
+    m.v = 0;
+    life.movers.push(m);
+    life.scenes.services.set(m, { site: siteAt(m), time: 20, boarded: 0, arriving: false });
+    for (let frame = 0; frame < Math.round(start * 30); frame++) world.step(1 / 30);
+    const center = tileToLngLat(left, m);
+    const selected = world.visible(21, 1, center).find((a) => a.vehicle === 'bus')!;
+    const on = blinkOn(0, world.signalClock);
+    expect(on).toBe(start === 0);
+    expect(selected.lamps).toEqual({ kind: 'hazard', on });
+    world.inspection!.select(
+      { id: selected.inspectionId!, revision: 1, time: world.signalClock },
+      world.signalClock,
+    );
+    for (let frame = 0; frame < 18; frame++) world.step(1 / 30);
+    expect(blinkOn(0, world.signalClock)).toBe(!on);
+    expect(
+      world.visible(21, 1, center).find((a) => a.inspectionId === selected.inspectionId)!.lamps,
+    ).toEqual({ kind: 'hazard', on });
+  });
+
   it('retains brake lamps and emitter deadlines while inspecting a vehicle', () => {
     const { world, lives } = fixture(true);
     const life = lives[0]!;
@@ -453,6 +487,54 @@ describe('accepted vehicle effects', () => {
     world.clearTiles();
     expect(world.visiblePuffs.length).toBe(0);
   });
+  it('skips empty and hidden plumes, then resumes sources across tile boundaries', () => {
+    const { world, lives } = fixture();
+    const select = vi.spyOn(PuffSelector.prototype, 'select');
+    lives.forEach((life, index) => {
+      const m = continuityMover(life, 1000);
+      m.vehicle = 'bus';
+      ensureVehicleEffects(m).sourceId = index + 1;
+      life.movers.push(m);
+    });
+    const center = tileToLngLat(left, { x: 1000, y: 2000 });
+    const add = () =>
+      lives[0]!.puffs.add({
+        sourceId: 2,
+        x: 1000,
+        y: 2000,
+        vx: 0,
+        vy: 0,
+        t0: world.signalClock,
+        life: 0.2,
+        vehicle: 'bus',
+        kind: 'diesel',
+      });
+    world.visible(20, 1, center);
+    expect(select).not.toHaveBeenCalled();
+    expect(world.visiblePuffs.length).toBe(0);
+    // The emitter's actor is in the other tile, which has no particles of its own.
+    add();
+    const agents = world.visible(20, 1, center);
+    expect(world.visiblePuffs[0]).toBe(agents.findIndex((a) => a.lng > center[0]));
+    expect(world.visiblePuffs.length).toBe(PUFF_STRIDE);
+    expect(select).toHaveBeenCalledTimes(1);
+    world.visible(14, 1, center);
+    expect(world.visiblePuffs.length).toBe(0);
+    expect(select).toHaveBeenCalledTimes(1);
+    world.visible(20, 1, center);
+    expect(world.visiblePuffs.length).toBe(PUFF_STRIDE);
+    for (let i = 0; i < 3; i++) world.step(0.1);
+    world.visible(20, 1, center);
+    expect(world.visiblePuffs.length).toBe(0);
+    expect(select).toHaveBeenCalledTimes(2);
+    add();
+    world.visible(20, 1, center, undefined, undefined, 1, 1);
+    expect(world.visiblePuffs.length).toBe(0);
+    const resumed = world.visible(20, 1, center);
+    expect(world.visiblePuffs.length).toBe(PUFF_STRIDE);
+    expect(world.visiblePuffs[0]).toBe(resumed.findIndex((a) => a.lng > center[0] + 0.001));
+    select.mockRestore();
+  });
   it('skips hidden render scales and rebases on return without altering movement', () => {
     const entry = continuityTile(left),
       life = new TileLife(left, entry.life, 1);
@@ -631,6 +713,28 @@ describe('lamp and puff packing', () => {
         );
         expect(result.count).toBe(packed([source]).count);
       }
+  });
+  it('shares stamp admission with supplied and fallback masks across consecutive frames', () => {
+    const source = { ...car, vehicle: 'bus' as const };
+    const mask = new Uint8Array(2);
+    const packet = puff(0.2, 0, 5, 5);
+    for (const allowsGroundCell of [() => true, () => false, () => true]) {
+      const customGrid = { ...grid, allowsGroundCell };
+      const fallback = packed([source], customGrid, packet);
+      const supplied = packed([source], { ...customGrid, stampedVehicles: mask }, packet);
+      sameBytes(supplied.out, fallback.out);
+      expect(supplied.count).toBe(fallback.count);
+      expect(mask[0]).toBe(Number(allowsGroundCell()));
+      expect(supplied.out[(5 * grid.cols + 5) * 4 + 2]).toBe(allowsGroundCell() ? 3 : 0);
+    }
+    expect(packed([], { ...grid, stampedVehicles: mask }, packet).out.every((b) => b === 0)).toBe(
+      true,
+    );
+    expect(Array.from(mask)).toEqual([0, 0]);
+    expect(packed([], grid, packet).out.every((b) => b === 0)).toBe(true);
+    expect(() => packed([source], { ...grid, stampedVehicles: new Uint8Array(0) }, packet)).toThrow(
+      'Wrong stamped vehicle mask size',
+    );
   });
   it('never reserves, displaces or counts puff cells and requires a detailed accepted source', () => {
     const alone = packed([car]);

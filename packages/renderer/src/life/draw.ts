@@ -108,7 +108,7 @@ export type LifeGlyphs = { parts: Uint16Array };
 let journal:
   | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
   | undefined;
-const stampedSources = new Set<number>();
+let fallbackStampedVehicles = new Uint8Array(0);
 let detailedStamp = false;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
@@ -228,10 +228,12 @@ export function packLife(
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
-  const stampedVehicles = grid.stampedVehicles;
-  if (stampedVehicles && stampedVehicles.length < agents.length)
+  if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
     throw new RangeError('Wrong stamped vehicle mask size');
-  stampedVehicles?.fill(0);
+  if (!grid.stampedVehicles && fallbackStampedVehicles.length < agents.length)
+    fallbackStampedVehicles = new Uint8Array(agents.length);
+  const stampedVehicles = grid.stampedVehicles ?? fallbackStampedVehicles;
+  stampedVehicles.fill(0);
   drawingOwners?.fill(0);
   drawingOwner = 0;
   drawingFocus = 0;
@@ -246,7 +248,6 @@ export function packLife(
   drawingSpeakers?.points.clear();
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
-    stampedSources.clear();
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
@@ -283,15 +284,12 @@ export function packLife(
         else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
-          if (n && detailedStamp) {
-            stampedSources.add(index);
-            if (stampedVehicles && agent.kind === 'vehicle') stampedVehicles[index] = 1;
-          }
+          if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
         }
       }
     journal = undefined;
     drawingOwner = 0;
-    drawPuffs(out, grid, puffs, glyphIndex);
+    drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
     journal = undefined;
@@ -310,9 +308,10 @@ function drawPuffs(
   grid: LifeGrid,
   puffs: Float64Array,
   glyphIndex: (g: string) => number,
+  stampedVehicles: Uint8Array,
 ) {
   for (let i = 0; i + PUFF_STRIDE <= puffs.length; i += PUFF_STRIDE) {
-    if (!stampedSources.has(puffs[i]!)) continue;
+    if (!stampedVehicles[puffs[i]!]) continue;
     const [x, y] = grid.toCell(puffs[i + 1]!, puffs[i + 2]!);
     const col = Math.floor(x),
       row = Math.floor(y);
@@ -389,6 +388,8 @@ function drawAgent(
               glyph: parts[VehiclePart.headlight]!,
             }
           : undefined;
+      const brake =
+        agent.kind === 'vehicle' && hasTurnSignals(agent.vehicle) && agent.lamps?.kind === 'brake';
       const stamped = stamp(
         out,
         grid,
@@ -401,14 +402,7 @@ function drawAgent(
           parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
           classId(cls),
           bits,
-          vehicleByte(
-            agent.paint ?? 0,
-            part,
-            agent.parked,
-            agent.kind === 'vehicle' &&
-              hasTurnSignals(agent.vehicle) &&
-              agent.lamps?.kind === 'brake',
-          ),
+          vehicleByte(agent.paint ?? 0, part, agent.parked, brake),
         ],
         indicator,
       );

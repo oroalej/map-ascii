@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { VEHICLES } from './vehicles';
 import { tileToLngLat } from '../raster/geometry';
 import {
@@ -221,6 +221,38 @@ describe('accepted tailpipe geometry', () => {
 });
 
 describe('bounded puff selection', () => {
+  it('avoids per-tile selection geometry for empty stores and resumes after refill', () => {
+    const tile = { z: 16, x: 55192, y: 30266 };
+    const puffs = new PuffStore();
+    const selector = new PuffSelector();
+    const inside = vi.fn(() => () => true);
+    const sources = new Map([[1, 3]]);
+    const select = () =>
+      selector.select([{ tile, perMeter: 1, puffs }], sources, [0, 0], 0, inside);
+    expect(select().length).toBe(0);
+    expect(inside).not.toHaveBeenCalled();
+    const add = () =>
+      puffs.add({
+        sourceId: 1,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        t0: 0,
+        life: 2,
+        kind: 'diesel',
+        vehicle: 'bus',
+      });
+    add();
+    expect(select()[0]).toBe(3);
+    expect(inside).toHaveBeenCalledTimes(1);
+    puffs.advance(2, 2, undefined, 1);
+    expect(select().length).toBe(0);
+    expect(inside).toHaveBeenCalledTimes(1);
+    add();
+    expect(select()[0]).toBe(3);
+    expect(inside).toHaveBeenCalledTimes(2);
+  });
   it('projects nearest winners only and maps stable emitter IDs to final actor indices', () => {
     const tile = { z: 16, x: 55192, y: 30266 };
     const stores = [1, 2, 3].map((sourceId) => {

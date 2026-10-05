@@ -5,6 +5,7 @@ import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshotWorkingTree, snapshotRevision, currentSourceHash } from './snapshot';
 import { withoutDecorations } from './decorations';
+import { resolveBaselineRevision } from './verify-life-args';
 import type * as Scenarios from '../src/life/testing/scenarios';
 import type * as Simulation from '../src/life/simulate';
 
@@ -12,13 +13,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback: string) =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const revision = arg('baseline', '');
-if (!revision || !/^[\w./-]+$/.test(revision)) throw new Error('Provide --baseline=<revision>');
+const baselineCommit = await resolveBaselineRevision(root, revision);
 const scratch = resolve(root, arg('scratch', 'test-results'));
 await mkdir(scratch, { recursive: true });
 const temporary = await mkdtemp(join(scratch, 'life-invariants-'));
 try {
   const sourceHash = await currentSourceHash(root);
-  const old = await snapshotRevision(root, revision, join(temporary, 'baseline'));
+  const old = await snapshotRevision(root, baselineCommit, join(temporary, 'baseline'));
   const next = await snapshotWorkingTree(root, join(temporary, 'current'));
   const baseline = (await import(old.path('life/simulate.ts'))) as typeof Simulation;
   const current = (await import(next.path('life/simulate.ts'))) as typeof Simulation;

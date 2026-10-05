@@ -5681,6 +5681,13 @@ export class LifeWorld {
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
     this.actorSources.clear();
+    let collectPuffs = false;
+    if (shows('vehicle') && levels.vehicle > 0)
+      for (const life of this.tiles.values())
+        if (life.puffs.size) {
+          collectPuffs = true;
+          break;
+        }
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
@@ -5760,7 +5767,8 @@ export class LifeWorld {
             flap: 0,
           };
           if (lamps) agent.lamps = lamps;
-          if (effects?.sourceId !== undefined) this.actorSources.set(agent, effects.sourceId);
+          if (collectPuffs && effects?.sourceId !== undefined)
+            this.actorSources.set(agent, effects.sourceId);
           push(m, agent);
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
@@ -6048,13 +6056,7 @@ export class LifeWorld {
       return admitted;
     };
     if (out.length <= maxAgents) {
-      const result = this.withPuffs(
-        withBalls([...staged, ...out]),
-        zoom,
-        center,
-        bounds,
-        levels.vehicle,
-      );
+      const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
       return inspection?.finish(result) ?? result;
     }
     const [cx, cy] = center;
@@ -6081,30 +6083,33 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    const result = this.withPuffs(withBalls(kept), zoom, center, bounds, levels.vehicle);
+    const result = this.withPuffs(withBalls(kept), center, bounds);
     return inspection?.finish(result, true) ?? result;
   }
 
   private withPuffs(
     agents: VisibleAgent[],
-    zoom: number,
     center: [number, number],
     bounds: LngLatBounds | undefined,
-    activity: number,
   ) {
     const sources = this.puffSources;
     sources.clear();
+    if (!this.actorSources.size) {
+      this.puffPacket = EMPTY_PUFFS;
+      return agents;
+    }
     for (let i = 0; i < agents.length; i++) {
       const source = this.actorSources.get(agents[i]!);
       if (source !== undefined) sources.set(source, i);
     }
     this.actorSources.clear();
-    this.puffPacket =
-      bandVisibility(LIFE_ZOOM.vehicle, zoom) >= 1 && activity > 0
-        ? this.puffSelector.select(this.tiles.values(), sources, center, this.clock, (tile) =>
-            viewIn(tile, bounds, 0),
-          )
-        : EMPTY_PUFFS;
+    this.puffPacket = this.puffSelector.select(
+      this.tiles.values(),
+      sources,
+      center,
+      this.clock,
+      (tile) => viewIn(tile, bounds, 0),
+    );
     return agents;
   }
 }

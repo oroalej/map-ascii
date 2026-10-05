@@ -646,8 +646,8 @@ void main() {
   bool shop = (lampG & 7) == ${LampState.shop};
   // Floods, candles, and open shops light their own place, whatever it is.
   bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
-  poolColor = brakeGlow ? vec3(${BRAKE_COLOR.night.map(float).join(', ')}) :
-    flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
+  poolColor = flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
+  vec3 brakeColor = vec3(${BRAKE_COLOR.night.map(float).join(', ')});
   // Brake falloff belongs to its own cone; filtering must not borrow neighboring light strength.
   float poolR = brakeGlow ? light.r : texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
@@ -679,7 +679,7 @@ void main() {
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
   // A colour wash also reads on the light theme's paper, where additive red would clip white.
-  back = (brakeGlow ? mix(back, poolColor, pool * poolGlow()) : back) + glow;
+  back = (brakeGlow ? mix(back, brakeColor, pool * poolGlow()) : back) + glow;
   vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
@@ -797,7 +797,7 @@ void main() {
   // (Its streetlight pool too, which that just replaced.)
   if (!edge && bgClass == cls) {
     vec3 fill = fillOf(cls, color) * shade;
-    back = (brakeGlow ? mix(fill, poolColor, pool * poolGlow()) : fill) + glow;
+    back = (brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow;
   }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.

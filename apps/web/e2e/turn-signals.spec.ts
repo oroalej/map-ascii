@@ -289,6 +289,67 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         const neighborHeadlight = withNeighbor(input.headlightBeam),
           neighborStreetlight = withNeighbor(input.streetlightPool),
           belowThreshold = withNeighbor(input.headlightBeam, 2);
+        // A bank lamp reflects into a water cell covered by a brake cone. Beam metadata
+        // must not change the reflected lamp's colour, even with solid water glyph ink.
+        canvas.width = input.cw;
+        canvas.height = input.ch * 2;
+        const waterSelected = texture(
+          1,
+          2,
+          new Uint8Array([
+            0,
+            input.road,
+            0,
+            input.road,
+            input.block & 255,
+            input.water | ((input.block >> 8) << 6),
+            0,
+            input.water,
+          ]),
+        );
+        const waterSub = new Uint8Array(2 * 6 * 4);
+        for (let y = 0; y < 6; y++)
+          for (let x = 0; x < 2; x++) waterSub[(y * 2 + x) * 4] = y < 3 ? input.road : input.water;
+        const waterSubTex = texture(2, 6, waterSub);
+        const reflectedLight = new Uint8Array([
+          200,
+          input.streetlightPool,
+          0,
+          255,
+          77,
+          input.brakeGlow,
+          0,
+          255,
+        ]);
+        const reflectionTex = texture(1, 2, reflectedLight);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        const waterReflection = (beam: number, bankStrength = 200) => {
+          reflectedLight[0] = bankStrength;
+          reflectedLight[5] = beam;
+          // Ordinary beams weakly illuminate water themselves. The reference retains the
+          // same filtered strengths but leaves this cell unclaimed, isolating bank reflection.
+          reflectedLight[7] = beam === input.brakeGlow ? 255 : 0;
+          gl.bindTexture(gl.TEXTURE_2D, reflectionTex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 2, gl.RGBA, gl.UNSIGNED_BYTE, reflectedLight);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          uniforms({
+            ...common,
+            u_height: canvas.height,
+            u_glyphs: waterSelected,
+            u_subClass: waterSubTex,
+            u_light: reflectionTex,
+            u_daylight: 0,
+            u_moon: 0,
+          });
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          const pixel = new Uint8Array(4);
+          gl.readPixels(1, input.ch - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          return Array.from(pixel.slice(0, 3));
+        };
+        const reflectedBrake = waterReflection(input.brakeGlow),
+          reflectedHeadlight = waterReflection(input.headlightBeam),
+          unlitWater = waterReflection(input.headlightBeam, 0);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
         return {
           day,
@@ -302,6 +363,9 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           neighborHeadlight,
           neighborStreetlight,
           belowThreshold,
+          reflectedBrake,
+          reflectedHeadlight,
+          unlitWater,
         };
       },
       {
@@ -367,6 +431,8 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
     expect(result.neighborHeadlight).toEqual(result.brakeNight.neighborEdge);
     expect(result.neighborStreetlight).toEqual(result.brakeNight.neighborEdge);
     expect(result.belowThreshold).toEqual(result.night.neighborEdge);
+    expect(result.reflectedBrake).toEqual(result.reflectedHeadlight);
+    expect(result.reflectedHeadlight).not.toEqual(result.unlitWater);
     expect(redness(result.brakeNight.cells[21]!)).toBeGreaterThan(
       redness(result.night.cells[21]!) + 10,
     );
