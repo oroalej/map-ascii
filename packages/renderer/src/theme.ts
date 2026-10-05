@@ -559,7 +559,10 @@ export function mapGlyphs(theme: Theme): string[] {
     ...doubleWall,
     ...sextantGlyphs,
     ...vehicleGlyphs(),
-    ...personGlyphs().filter((glyph) => !figureOf(glyph)?.pose),
+    ...personGlyphs().filter((glyph) => {
+      const figure = figureOf(glyph)!;
+      return !figure.pose && figure.stage === undefined;
+    }),
     ...birdGlyphs(),
     ...dogGlyphs(),
     ...catGlyphs(),
@@ -572,6 +575,8 @@ export function mapGlyphs(theme: Theme): string[] {
     ...personGlyphs().filter((glyph) => figureOf(glyph)?.pose),
     // Parking labels follow all existing glyphs so legacy atlas indices stay unchanged.
     ...ACCESS_GLYPHS,
+    // Canopy stages follow all earlier glyphs, retaining fixture, pose and parking indices.
+    ...personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined),
     ...PUFF_GLYPHS,
   ];
   for (const g of extras) set.add(g);
