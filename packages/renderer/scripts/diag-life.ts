@@ -236,6 +236,7 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
     momentFacing: m.momentFacing,
     roadShift: m.roadShift,
     curveLengthM: m.curveLengthM,
+    bodies: life.groundBodies(m),
     junction: {
       movement: state.junctions.movement(m),
       granted: state.junctions.granted(m),

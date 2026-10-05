@@ -80,6 +80,7 @@ type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) &
   yielding?: (mover: Mover) => Mover | undefined;
   holding?: (mover: Mover) => boolean;
   passing?: (mover: Mover) => boolean;
+  cancelYield?: (mover: Mover) => void;
 };
 const dist = (a: WalkPoint, b: WalkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 /** How far `p` lies ahead of a mover along its heading (negative: behind it). */
@@ -383,7 +384,10 @@ export class LocalScenes {
   ) {
     if (guard?.passing?.(m)) this.clearBypass(m);
     if (this.yieldStep(m, dt, guard, walkLimit, owns)) {
-      if (!this.yieldHeld.has(m)) visit.blocked += dt;
+      if (!this.yieldHeld.has(m)) {
+        visit.blocked += dt;
+        this.blockedTimeout(m, visit);
+      }
       return false;
     }
     const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
@@ -536,6 +540,27 @@ export class LocalScenes {
                 !this.graph.allowsBodies(this.walkingBodies(m, target, 0, true), true)
               )
                 continue;
+              const accepted = snapshotMover(m);
+              let previous = accepted,
+                safe = true;
+              for (const point of [...(retreat ? [retreat] : []), sidePoint, target]) {
+                m.x = point.x;
+                m.y = point.y;
+                if (point === target) faceGroup(m, trial.hx, trial.hy);
+                const bodies = this.walkingBodies(m, m, 0, true);
+                if (
+                  !inTile(m) ||
+                  (owns && !owns(m)) ||
+                  !bodies.every((body) => inTile(body) && (!owns || owns(body))) ||
+                  !guard(m, previous, false)
+                ) {
+                  safe = false;
+                  break;
+                }
+                previous = snapshotMover(m);
+              }
+              restoreMover(m, accepted);
+              if (!safe) continue;
               visit.path.splice(next, 0, ...(retreat ? [retreat] : []), sidePoint, target);
               visit.bypass = {
                 target,
@@ -556,17 +581,7 @@ export class LocalScenes {
         restoreMover(m, before);
       }
       visit.blocked += dt;
-      // Give an approaching group time to clear; abandoned visits release their queue slot.
-      if (visit.blocked >= 8 && visit.state !== 'return') this.returning(m, visit);
-      else if (visit.blocked >= (visit.retryAt ?? 16) && visit.state === 'return') {
-        const path = this.route(m, visit.trail[0]!);
-        if (path?.every(inTile)) {
-          visit.path = path;
-          visit.next = 1;
-          delete visit.bypass;
-        }
-        visit.retryAt = visit.blocked + 16;
-      }
+      this.blockedTimeout(m, visit);
       return false;
     }
     if (held && !changed) return false;
@@ -576,7 +591,10 @@ export class LocalScenes {
       if (progress > bypass.progress + 1e-8 * this.perMeter) {
         bypass.progress = progress;
         this.blockedProgress(m, visit, dt);
-      } else visit.blocked += dt;
+      } else {
+        visit.blocked += dt;
+        this.blockedTimeout(m, visit);
+      }
     } else if (visit.progress) this.blockedProgress(m, visit, dt);
     else visit.blocked = 0;
     if (visit.returnPending && this.canIdle(m)) {
@@ -596,7 +614,24 @@ export class LocalScenes {
       visit.blocked = 0;
       delete visit.progress;
       delete visit.retryAt;
-    } else visit.blocked += dt;
+    } else {
+      visit.blocked += dt;
+      this.blockedTimeout(m, visit);
+    }
+  }
+
+  private blockedTimeout(m: Mover, visit: Visit) {
+    if (visit.blocked >= 8 && visit.state !== 'return') {
+      if (!visit.returnPending) this.requestReturn(m, visit);
+    } else if (visit.blocked >= (visit.retryAt ?? 16) && visit.state === 'return') {
+      const path = this.route(m, visit.trail[0]!);
+      if (path?.every(inTile)) {
+        visit.path = path;
+        visit.next = 1;
+        delete visit.bypass;
+      }
+      visit.retryAt = visit.blocked + 16;
+    }
   }
 
   /** A negotiated passing actor resumes its retained route, without a pose jump. */
@@ -688,7 +723,10 @@ export class LocalScenes {
         if (state) break;
       }
       restoreMover(m, anchor);
-      if (!state) return true;
+      if (!state) {
+        guard.cancelYield?.(m);
+        return false;
+      }
       this.yielding.set(m, state);
     }
     if (!priority && !state.returning) {

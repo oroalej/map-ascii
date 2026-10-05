@@ -102,6 +102,56 @@ describe('local interaction scenes', () => {
     expect(scene.visits.get(p)).toBe(visit);
   });
 
+  it('continues its retained route when reciprocal yielding has no safe holding corridor', () => {
+    const scene = setup(),
+      p = { ...person(), hx: 1, hy: 0, group: [{ ...walker }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(visit.trail);
+    let cancelled = 0;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) =>
+        reserve && Math.hypot(next.x - before.x, next.y - before.y) <= p.speed * 0.1 + 1e-8,
+      {
+        yielding: () => person(45),
+        cancelYield: () => {
+          cancelled++;
+        },
+      },
+    );
+    scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(cancelled).toBe(1);
+    expect(p.x).toBeGreaterThan(40);
+    expect(p.x - 40).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+    expect(visit.trail[0]).toEqual(anchor[0]);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(visit.blocked).toBe(0);
+  });
+
+  it('freezes an existing blocked episode and facing during a signal hold', () => {
+    const scene = setup(),
+      p = { ...person(), hx: 0, hy: 1, group: [{ ...walker }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    visit.blocked = 7.5;
+    const before = structuredClone(p);
+    for (let i = 0; i < 120; i++)
+      scene.step(
+        0.1,
+        [p],
+        {},
+        undefined,
+        undefined,
+        () => true,
+        undefined,
+        () => 0,
+      );
+    expect(p).toEqual(before);
+    expect(visit.blocked).toBe(7.5);
+    expect(visit.state).toBe('approach');
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
   it.each([0, 1e-12])(
     'finishes a return at its route start within %s without a footprint move',
     (residue) => {

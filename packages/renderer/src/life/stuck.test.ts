@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LifeWorld, type Mover, type Walker, type WorldGroundGuard } from './simulate';
+import { LifeWorld, TileLife, type Mover, type Walker, type WorldGroundGuard } from './simulate';
 import { worldTiles } from './testing/scenarios';
 import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
@@ -203,6 +203,77 @@ for (const minimum of [2.9, 1.45])
     expect(a.walked ?? 0).toBeGreaterThanOrEqual(20);
     expect(b.walked ?? 0).toBeGreaterThanOrEqual(20);
   });
+
+it.each([true, false])(
+  'counts only traffic beyond an interior entry as outgoing leaders (behind %s)',
+  (behind) => {
+    const b = new LifeBuilder(),
+      x = 1000 + 60 * pm;
+    b.line(
+      [
+        { x: 1000, y: 2048 },
+        { x, y: 2048 },
+      ],
+      LifeLine.roadMinor,
+      6,
+      101,
+      1,
+    );
+    b.line(
+      [
+        { x, y: 2048 - 100 * pm },
+        { x, y: 2048 },
+        { x, y: 2048 + 100 * pm },
+      ],
+      LifeLine.roadMajor,
+      6,
+      102,
+      1,
+    );
+    const world = new LifeWorld(undefined, undefined, { enabled: false });
+    world.sync([{ key: 'interior-leader', tile, life: b.finish() }]);
+    const life = worldTiles(world).get('interior-leader')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const entrant = mover('vehicle', 40, 1),
+      leader = mover('vehicle', 0, 1);
+    entrant.speed = 3 * pm;
+    entrant.v = 0;
+    Object.assign(leader, {
+      line: 1,
+      from: behind ? 2 : 3,
+      d: (behind ? 30 : 10) * pm,
+      x,
+      y: 2048 + (behind ? -70 : 10) * pm,
+      hx: 0,
+      hy: 1,
+      speed: 0,
+      v: 0,
+    });
+    life.movers.push(entrant, leader);
+    leader.x = life.geo.coords[leader.from * 2]!;
+    leader.y = life.geo.coords[leader.from * 2 + 1]! + leader.d;
+    const stopped = structuredClone(leader);
+    for (let frame = 0; frame < 600; frame++)
+      world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+    expect([leader.x, leader.y, leader.dir, leader.d]).toEqual([
+      stopped.x,
+      stopped.y,
+      stopped.dir,
+      stopped.d,
+    ]);
+    if (behind) {
+      expect(entrant.line).toBe(1);
+      expect(entrant.y - 2048).toBeGreaterThan(VEHICLES.car.length * pm);
+    } else {
+      expect(entrant.line).toBe(0);
+      expect(entrant.x).toBeLessThan(x);
+      expect((world as unknown as { junctions: JunctionTable }).junctions.granted(entrant)).toBe(
+        false,
+      );
+    }
+  },
+);
 
 it.each([false, true])(
   'checks a blocked walker reversal and rolls all group slots back (social facing %s)',
@@ -697,6 +768,43 @@ it('executes a selected recovery retreat in bounded steps before reversing', () 
   expect(reversed).toBe(true);
   expect(m.waiting).toBe(30);
   expect((start - m.x) / pm).toBeCloseTo(0.5);
+});
+
+it('rejects recovery departure corridors that would enter an unreserved junction', () => {
+  const b = new LifeBuilder(),
+    x = 1000 + 60 * pm;
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x, y: 2048 },
+      { x: 1000 + 220 * pm, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    8,
+    1,
+  );
+  b.line(
+    [
+      { x, y: 2048 - 30 * pm },
+      { x, y: 2048 },
+    ],
+    LifeLine.roadMinor,
+    6,
+    2,
+  );
+  const life = new TileLife(tile, b.finish(), 1),
+    m = mover('vehicle', 70, 1);
+  m.from = 1;
+  m.d = 10 * pm;
+  m.waiting = 30;
+  life.movers.length = 0;
+  life.movers.push(m);
+  const before = snapshotMover(m),
+    lines = new Set<number>();
+  expect(life.junctionIndex.junctions).toHaveLength(1);
+  expect(life.recoverVehicle(m, () => true, new JunctionTable(), lines)).toBe(false);
+  expect(m).toEqual(before);
+  expect(lines.size).toBe(0);
 });
 
 it('rolls back rejected vehicle recoveries, retains routing identity, and admits one per line', () => {

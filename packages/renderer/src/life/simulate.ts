@@ -163,6 +163,7 @@ type GroundGuard = ((owner: GroundAgent, before?: GroundAgent, reserve?: boolean
   yielding?: (mover: Mover) => Mover | undefined;
   holding?: (mover: Mover) => boolean;
   passing?: (mover: Mover) => boolean;
+  cancelYield?: (mover: Mover) => void;
 };
 type SuppressedActors<T extends object> = {
   hidden: T[];
@@ -214,6 +215,7 @@ export type WorldGroundGuard = ((
   yielding(mover: Mover): Mover | undefined;
   holding(life: TileLife, mover: Mover): boolean;
   passing(mover: Mover): boolean;
+  cancelYield(mover: Mover): void;
 };
 type SeamLimit = {
   room: number;
@@ -3035,7 +3037,10 @@ export class TileLife {
             const entry = (dir * this.directedExit(code, end).along) / pm;
             const lane = m.kind === 'vehicle' ? this.vehicleLane(m, line) : 0;
             for (const j of this.trafficGroups.get(line * 2 + (dir === 1 ? 1 : 0)) ?? []) {
-              if (j === i || !overlaps(i, j, lane)) continue;
+              // An interior entry joins ahead of traffic on the through line's
+              // preceding segment. That traffic competes for its junction grant;
+              // it is not an outgoing leader with negative following room.
+              if (j === i || progress[j]! < entry || !overlaps(i, j, lane)) continue;
               limit(i, j, remaining + progress[j]! - entry);
               break;
             }
@@ -4327,6 +4332,7 @@ export class LifeWorld {
   private readonly junctions = new JunctionTable();
   private readonly reciprocalBlockers = new WeakMap<Mover, { other: Mover; at: number }>();
   private readonly passingActors = new WeakMap<Mover, Mover>();
+  private readonly failedYield = new WeakMap<Mover, number>();
   private readonly yieldingActors = new WeakMap<
     Mover,
     {
@@ -5420,11 +5426,13 @@ export class LifeWorld {
     };
     const contact = (life: TileLife, m: Mover) => {
       if (this.inspection?.owner === m || m.speed <= 0) return;
+      if (this.clock - (this.failedYield.get(m) ?? -Infinity) < 0.5) return;
       const physical = life.groundBodies(m).map((b) => toRef(origin(life), b));
       const blocker = occupied.firstConflict(m, physical, undefined, physicalShape);
       if (!blocker || !('kind' in blocker) || !('speed' in blocker)) return;
       const other = blocker as Mover,
         otherLife = owners.get(other);
+      if (this.clock - (this.failedYield.get(other) ?? -Infinity) < 0.5) return;
       if (!otherLife || this.inspection?.owner === other || other.speed <= 0 || other.pause > 0)
         return;
       const visiting = otherLife.scenes.visits.get(other);
@@ -5527,8 +5535,22 @@ export class LifeWorld {
       const other = this.passingActors.get(m);
       return !!other && yielding(other) === m;
     };
+    const cancelYield = (m: Mover) => {
+      const decision = this.yieldingActors.get(m);
+      this.yieldingActors.delete(m);
+      this.failedYield.set(m, this.clock);
+      if (decision) this.failedYield.set(decision.priority, this.clock);
+    };
     if (!this.profiler)
-      return Object.assign(check, { remove, reserveSeam, contact, yielding, holding, passing });
+      return Object.assign(check, {
+        remove,
+        reserveSeam,
+        contact,
+        yielding,
+        holding,
+        passing,
+        cancelYield,
+      });
     return Object.assign(
       (...args: Parameters<typeof check>) => {
         const start = this.profiler!.time();
@@ -5539,7 +5561,7 @@ export class LifeWorld {
           this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
         }
       },
-      { remove, reserveSeam, contact, yielding, holding, passing },
+      { remove, reserveSeam, contact, yielding, holding, passing, cancelYield },
     );
   }
 
@@ -5785,6 +5807,7 @@ export class LifeWorld {
             contact: (mover: Mover) => guard.contact(tile, mover),
             holding: (mover: Mover) => guard.holding(tile, mover),
             passing: (mover: Mover) => guard.passing(mover),
+            cancelYield: (mover: Mover) => guard.cancelYield(mover),
             yielding: guard.yielding,
           },
         ),
