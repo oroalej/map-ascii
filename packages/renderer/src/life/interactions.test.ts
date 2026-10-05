@@ -499,6 +499,37 @@ describe('local interaction scenes', () => {
     expect(scene.visits.get(caught)!.state).toBe('return');
     expect(from - caught.x).toBeCloseTo(caught.speed * 0.5);
   });
+  it('runs a cancelled vendor customer back while the storm continues', () => {
+    const stall: Stall = { x: 65, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]);
+    const p = { ...person(), group: [walker] };
+    expect(scene.reserve(p, 1)).toBe(true);
+    scene.step(2, [p], { rain: 0 });
+    const visit = scene.visits.get(p)!;
+    expect(visit.state).toBe('approach');
+    expect(visit.sheltering).toBe(false);
+    const walked = p.walked ?? 0;
+    scene.step(0.1, [p], { rain: 1 });
+    expect(visit.state).toBe('return');
+    expect(visit.site.queue).toHaveLength(0);
+    expect((p.walked ?? 0) - walked).toBeGreaterThanOrEqual(RUN.dash[0] * 0.1);
+  });
+  it('runs back from an abandoned shelter approach while the storm continues', () => {
+    const scene = setup(2);
+    const p = { ...person(), group: [walker] };
+    scene.step(0, [], { rain: 1 });
+    expect(scene.reserve(p, 0)).toBe(true);
+    scene.step(1, [p], { rain: 1 });
+    const visit = scene.visits.get(p)!;
+    expect(visit.state).toBe('approach');
+    for (let i = 0; i < 90 && visit.state === 'approach'; i++)
+      scene.step(0.1, [p], { rain: 1 }, undefined, undefined, () => false);
+    expect(visit.state).toBe('return');
+    expect(visit.site.queue).toHaveLength(0);
+    const walked = p.walked ?? 0;
+    scene.step(0.1, [p], { rain: 1 });
+    expect((p.walked ?? 0) - walked).toBeGreaterThanOrEqual(RUN.dash[0] * 0.1);
+  });
   it('sends those with no umbrella to cover from further away', () => {
     const reservesShelter = (umbrellaRoll: number) => {
       const scene = setup(2);

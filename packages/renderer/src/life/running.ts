@@ -1,4 +1,4 @@
-import { umbrellaShare } from './config';
+import { umbrellaShare, underUmbrella } from './config';
 import type { Mover, Walker } from './simulate';
 
 /**
@@ -9,7 +9,7 @@ import type { Mover, Walker } from './simulate';
 export function exposed(group: readonly Walker[] | undefined, rain: number): boolean {
   if (!group?.length || rain <= 0) return false;
   const share = umbrellaShare(rain, 0);
-  for (const w of group) if (w.figure === 'adult' && w.umbrella < share) return false;
+  for (const w of group) if (underUmbrella(w, share)) return false;
   return true;
 }
 

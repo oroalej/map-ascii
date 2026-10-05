@@ -330,9 +330,9 @@ export class LocalScenes {
     return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
   }
 
-  /** A person with no umbrella runs for the shelter they are headed to; everyone else walks. */
+  /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
   private pace(m: Mover, visit: Visit): number {
-    return visit.sheltering && visit.state === 'approach' && this.caught(m)
+    return this.caught(m) && (visit.state === 'approach' || visit.state === 'return')
       ? runPace(m, RUN.dash, this.perMeter)
       : m.speed;
   }
@@ -631,13 +631,8 @@ export class LocalScenes {
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);
         if (this.rng() < (caught ? RUN.shelter.chance : this.wet ? 0.7 : 0.12)) {
-          let reserved = false;
-          for (const { index } of candidates)
-            if (this.reserve(m, index)) {
-              reserved = true;
-              break;
-            }
-          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, 5);
+          const reserved = candidates.some(({ index }) => this.reserve(m, index));
+          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, RUN.shelter.retry);
         }
       }
     }

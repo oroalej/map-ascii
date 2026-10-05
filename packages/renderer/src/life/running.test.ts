@@ -311,7 +311,23 @@ describe('running from the rain', () => {
     expect(m.walked).toBeGreaterThanOrEqual(RUN.dash[0] * 0.1 - 1e-9);
   });
 
-  it('runs those with no umbrella on their way, and no one runs for fun', () => {
+  it('prevents random starts in rain even when the run stream would start one', () => {
+    const life = street([[adult(0.1)]]);
+    streams(life).walkerRng = () => 1;
+    const runRng = vi.fn<() => number>().mockReturnValue(0);
+    streams(life).runRng = runRng;
+    const m = life.movers[0]!;
+    m.run = 0;
+    for (let t = 0; t < 30; t++) {
+      const walked = m.walked ?? 0;
+      life.step(0.1, undefined, undefined, undefined, { rain: 1 });
+      expect(m.run).toBe(0);
+      expect((m.walked ?? 0) - walked).toBeCloseTo((m.speed / perMeter) * 0.1);
+    }
+    expect(runRng).not.toHaveBeenCalled();
+  });
+
+  it('runs exposed groups along their way and cancels every existing random run', () => {
     const groups = [[adult(0.9)], [adult(0.95), child], [adult(0.1)], [adult(0.2), child]];
     const life = street(groups);
     for (const m of life.movers) m.run = 3;

@@ -75,6 +75,7 @@ import {
   spawnRules,
   TRAIN,
   umbrellaShare,
+  underUmbrella,
   UMBRELLA_MOTION,
   usableLines,
   VENDORS,
@@ -3342,7 +3343,7 @@ export class TileLife {
           }
         }
         const was = (m.run ?? 0) > 0;
-        const pace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const pace = this.runSpeed(m, dt, running < RUN.maxPerTile, dashing);
         running += Number((m.run ?? 0) > 0) - Number(was);
         if (pace !== undefined) speeds[i] = pace;
       }
@@ -3469,10 +3470,10 @@ export class TileLife {
    * seconds, while there is `room` (fewer than `RUN.maxPerTile` in the tile running). A run ends
    * early when they are held up.
    */
-  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
+  private runSpeed(m: Mover, dt: number, room: boolean, dashing: boolean): number | undefined {
     if (this.scenes.raining) {
       if (m.run) m.run = 0;
-      return this.scenes.caught(m) ? runPace(m, RUN.dash, this.perMeter) : undefined;
+      return dashing ? runPace(m, RUN.dash, this.perMeter) : undefined;
     }
     if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
     else if (
@@ -5747,7 +5748,7 @@ export class LifeWorld {
     clock: number,
   ): PersonLook {
     if (walker.figure !== 'adult') return look;
-    const want = walker.umbrella < share;
+    const want = underUmbrella(walker, share);
     const open =
       zoom >= UMBRELLA_MOTION.zoom ? this.umbrellas.look(walker, want, clock) : Number(want);
     if (open > 0) {
