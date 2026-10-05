@@ -705,7 +705,7 @@ export function lightPass(
   repack: boolean,
 ) {
   const { cols, rows } = targets;
-  const grid = { cols, rows, toCell: placement.toCell };
+  const grid = { cols, rows, toCell: placement.toCell, world: placement.world };
   const buffers = texels(targets);
   const lightTexels = buffers.light;
   if (!buffers.lamps) {

@@ -16,9 +16,12 @@ export const SeasonalPart = {
   wheelMotion: 43,
   bumperMotion: 44,
   accessSurface: 45,
+  candle: 46,
 } as const;
 /** Appended after legacy glyphs, for clear parking-bay labels. */
 export const ACCESS_GLYPHS = ['P'] as const;
+/** Appended after the complete existing atlas, including social/access/canopy/puff glyphs. */
+export const CANDLE_GLYPHS = ['\ue228'] as const;
 /** Appended after every legacy glyph; the existing flag star keeps its raster and index. */
 export const SEASONAL_GLYPHS = [
   '\ue220',
@@ -32,6 +35,7 @@ export const SEASONAL_GLYPHS = [
 ] as const;
 
 export const SeasonalGlyph = {
+  candle: CANDLE_GLYPHS[0],
   parol: SEASONAL_GLYPHS[0],
   triangleLeft: SEASONAL_GLYPHS[1],
   triangleRight: SEASONAL_GLYPHS[2],
