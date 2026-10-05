@@ -557,6 +557,7 @@ export class TileLife {
   junctionIndex!: JunctionIndex;
   private readonly localJunctions = new JunctionTable();
   private readonly trafficGroups = new Map<number, number[]>();
+  private readonly trafficGroupBuffers = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
   private readonly recoveryProgress = new WeakMap<Mover, number>();
@@ -1061,9 +1062,11 @@ export class TileLife {
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
-    const normal = this.vehicleLane(m, m.line);
+    const normal = laneOffset(road, spec.width, m.lane, spec.curb);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
-    return this.scenes.offset(identity, normal, curb, m);
+    const lane =
+      m.roadShift === undefined ? normal : this.shiftedLane(m, m.line, normal, curb);
+    return this.scenes.offset(identity, lane, curb, m);
   }
 
   private vehicleLane(m: Mover, line: number) {
@@ -1072,8 +1075,14 @@ export class TileLife {
     const normal = laneOffset(road, spec.width, m.lane, spec.curb);
     if (m.roadShift === undefined) return normal;
     const maximum = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
-    const minimum = this.geo.oneway?.[line] ? -maximum : Math.min(normal, spec.width / 2 + 0.075);
-    return Math.max(minimum, Math.min(maximum, normal + (m.roadShift ?? 0)));
+    return this.shiftedLane(m, line, normal, maximum);
+  }
+
+  private shiftedLane(m: Mover, line: number, normal: number, maximum: number) {
+    const minimum = this.geo.oneway?.[line]
+      ? -maximum
+      : Math.min(normal, VEHICLES[m.vehicle!].width / 2 + 0.075);
+    return Math.max(minimum, Math.min(maximum, normal + m.roadShift!));
   }
 
   private corner(m: Mover, vertex: number, identity = m): Curve | undefined {
@@ -2872,13 +2881,18 @@ export class TileLife {
       const m = movers[i]!;
       if (!m.vehicle || !active(m)) continue;
       this.prepareTurn(m, i);
-      this.prepareSignalRoute(m);
+      if (this.junctionIndex.hasLinked) this.prepareSignalRoute(m);
       this.progress[i] = (m.dir * this.along[m.from]! + m.d) / pm;
       this.offsets[i] = this.offsetOf(m);
       const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
-      const group = this.trafficGroups.get(key) ?? [];
+      let group = this.trafficGroups.get(key);
+      if (!group) {
+        group = this.trafficGroupBuffers.get(key);
+        if (!group) this.trafficGroupBuffers.set(key, (group = []));
+        group.length = 0;
+        this.trafficGroups.set(key, group);
+      }
       group.push(i);
-      this.trafficGroups.set(key, group);
     }
     for (const group of this.trafficGroups.values())
       group.sort((a, b) => this.progress[a]! - this.progress[b]! || a - b);
@@ -2890,6 +2904,9 @@ export class TileLife {
     clock: number,
     tileKey = '',
   ) {
+    // An isolated tile without junctions cannot create local reservations.
+    // A world table can carry a neighboring tile's hold and must still refresh it.
+    if (table === this.localJunctions && !this.junctionIndex.junctions.length) return;
     for (let index = 0; index < this.movers.length; index++) {
       const m = this.movers[index]!;
       if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
