@@ -2,61 +2,32 @@ import { expect, test } from '@playwright/test';
 import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
-import { packLife } from '../../../packages/renderer/src/life/draw';
 import {
-  SIGNAL_VEHICLES,
   TURN_SIGNAL_BIT,
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
-import { Paint, VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../../../packages/renderer/src/life/lamps';
+import { LampState, lightByte } from '../../../packages/renderer/src/life/lights';
+import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
 import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
+import { cellHash } from '../../../packages/renderer/src/glyphs/select';
 
-test('vehicle turn signals render amber by day and night and retain terrain, canopy and label masks', async ({
+test('vehicle lamps and exhaust render by day and night with terrain, canopy and label masks', async ({
   page,
-}, testInfo) => {
+}) => {
   for (const name of ['dark', 'light'] as const) {
     const theme = themes[name];
     const glyphs = [' ', ...mapGlyphs(theme).filter((g) => g !== ' ')];
     const block = glyphs.indexOf('█');
-    // A controlled detailed fleet for visual QA, independent of live city traffic and timing.
-    const cols = 384,
-      rows = 46,
-      cw = 6,
+    const cw = 6,
       ch = 9;
-    const fleet = new Uint8Array(cols * rows * 4);
-    packLife(
-      fleet,
-      {
-        cols,
-        rows,
-        cellWidth: cw,
-        cellHeight: ch,
-        toCell: (x, y) => [x, y],
-      },
-      SIGNAL_VEHICLES.flatMap((vehicle, i) =>
-        [0, 1].map((row) => {
-          const x = 32 + i * 64,
-            y = 12 + row * 22,
-            dx = row === 0 ? 1 : -1;
-          return {
-            kind: 'vehicle' as const,
-            vehicle,
-            paint: Paint.silver,
-            lng: x,
-            lat: y,
-            ahead: [x + dx * 5.5, y] as [number, number],
-            side: [x, y + (dx * 33) / ch] as [number, number],
-            flap: 0,
-            turnSignal: { side: row === 0 ? ('left' as const) : ('right' as const), on: true },
-          };
-        }),
-      ),
-      theme,
-      (glyph) => glyphs.indexOf(glyph),
-    );
+    // Guarantee a moon glint in the water receiver: red spill must preserve it.
+    let glintOrigin = 0;
+    while ((cellHash(glintOrigin + 23, 0) & 1023) >= 40) glintOrigin++;
     const result = await page.evaluate(
       (input) => {
         const canvas = document.createElement('canvas');
@@ -171,8 +142,13 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           u_train: input.train,
           u_person: input.person,
           u_bird: input.bird,
+          u_lampShow: 1,
+          u_origin: [input.glintOrigin, 0],
+          u_moon: 1,
+          u_shimmer: 0,
         };
-        const n = 12;
+        const n = 31;
+        let activeLight: WebGLTexture | null = null;
         canvas.width = n * input.cw;
         canvas.height = input.ch;
         const selected = new Uint8Array(n * 4),
@@ -181,31 +157,75 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           overlay = new Uint8Array(n * 4);
         for (let x = 0; x < n; x++) {
           const cls =
-            x === 3
+            x === 3 || x === 19 || x === 22
               ? input.roof
-              : x === 4 || x === 9
-                ? input.grounds
-                : x === 5 || x === 6
-                  ? input.crown
-                  : input.road;
+              : x === 23
+                ? input.water
+                : x === 4 || x === 9
+                  ? input.grounds
+                  : x === 5 || x === 6 || x === 18 || x === 24 || x === 29
+                    ? input.crown
+                    : input.road;
           selected.set([input.block & 255, cls | ((input.block >> 8) << 6), 0, 0], x * 4);
-          const part = x === 10 ? input.head : x === 11 ? input.tail : input.body;
+          const part =
+            x >= 15
+              ? input.puff
+              : x === 10
+                ? input.head
+                : x === 11 || x >= 12
+                  ? input.tail
+                  : input.body;
           life.set(
             [
               input.block & 255,
-              input.vehicle | ((input.block >> 8) << 6),
+              (x >= 15 ? input.person : input.vehicle) | ((input.block >> 8) << 6),
               x === 9
                 ? input.indicator
                 : input.vehicleBit | (x === 1 || x >= 10 ? 0 : input.indicator),
-              (part << 4) | (x === 8 ? 128 : 0),
+              (part << 4) |
+                (x === 8 || x === 14 ? 128 : 0) |
+                (x === 13 || x === 14
+                  ? input.brake
+                  : x === 12
+                    ? 2
+                    : x === 16
+                      ? 7
+                      : x === 17
+                        ? 8
+                        : 0),
             ],
             x * 4,
           );
           for (let y = 0; y < 3; y++)
             for (let sx = 0; sx < 2; sx++)
               sub[(y * n * 2 + x * 2 + sx) * 4] = x === 6 && sx === 0 ? input.road : cls;
+          if (x >= 21) {
+            selected[x * 4] = 0;
+            selected[x * 4 + 1] = cls;
+            // Real filled roads reconstruct their background after foreground lighting.
+            selected[x * 4 + 3] = cls;
+            life.fill(0, x * 4, x * 4 + 4);
+            if (x >= 26 && x <= 28) {
+              const lamp = x === 26 ? input.head : x === 27 ? input.tail : input.body;
+              life.set(
+                [
+                  input.block & 255,
+                  input.vehicle | ((input.block >> 8) << 6),
+                  input.vehicleBit | (x === 28 ? input.indicator : 0),
+                  (lamp << 4) | (x === 27 ? input.brake : 0),
+                ],
+                x * 4,
+              );
+            }
+            for (let y = 0; y < 3; y++)
+              for (let sx = 0; sx < 2; sx++)
+                sub[(y * n * 2 + x * 2 + sx) * 4] =
+                  x === 30 ? input.roof : x === 29 && sx === 0 ? input.road : cls;
+          }
         }
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 7 * 4);
+        overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 20 * 4);
+        overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 25 * 4);
         const selectedTex = texture(n, 1, selected),
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
@@ -220,6 +240,7 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
             u_subClass: subTex,
             u_overlay: overlayTex,
             u_daylight: daylight,
+            u_light: activeLight ?? blank,
             u_focus: focused ? 1 : 0,
             u_focusLife: focused && !mapFocus ? 1 : 0,
             u_focusClasses: mapFocus ? [(1 << input.roof) >>> 0, 0] : [0, 0],
@@ -232,6 +253,8 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
           return {
             cells: Array.from({ length: n }, (_, x) => pixel(x)),
             crownEdge: pixel(6, input.cw - 1),
+            brakeEdge: [pixel(29), pixel(29, input.cw - 1)],
+            neighborEdge: pixel(21, input.cw - 1),
           };
         };
         const day = render(1),
@@ -249,28 +272,101 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         gl.bindTexture(gl.TEXTURE_2D, lifeTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
         const off = render(1).cells[0];
-        // Finish on the fleet so screenshots inspect real packLife output in both themes.
-        canvas.width = input.cols * input.cw;
-        canvas.height = input.rows * input.ch;
-        canvas.style.width = `${canvas.width / 2}px`;
-        canvas.style.height = `${canvas.height / 2}px`;
-        const fleetGround = new Uint8Array(input.cols * input.rows * 4);
-        for (let i = 0; i < fleetGround.length; i += 4) fleetGround[i + 1] = input.road;
-        const fleetSelected = texture(input.cols, input.rows, fleetGround);
-        const fleetLife = texture(input.cols, input.rows, new Uint8Array(input.fleet));
-        gl.viewport(0, 0, canvas.width, canvas.height);
-        uniforms({
-          ...common,
-          u_height: canvas.height,
-          u_glyphs: fleetSelected,
-          u_lifeTime: 0,
-          u_life: fleetLife,
-          u_daylight: 1,
-          u_overlay: blank,
-        });
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        const light = new Uint8Array(n * 4);
+        for (let x = 21; x < n; x++) light.set([77, input.brakeGlow, 0, 255], x * 4);
+        activeLight = texture(n, 1, light);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        const brakeNight = render(0),
+          brakeDay = render(1);
+        const withNeighbor = (kind: number, ownStrength = 77) => {
+          light.set([ownStrength, input.brakeGlow, 0, 255], 21 * 4);
+          light.set([255, kind, 0, 255], 22 * 4);
+          gl.bindTexture(gl.TEXTURE_2D, activeLight);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, light);
+          return render(0).neighborEdge;
+        };
+        const neighborHeadlight = withNeighbor(input.headlightBeam),
+          neighborStreetlight = withNeighbor(input.streetlightPool),
+          belowThreshold = withNeighbor(input.headlightBeam, 2);
+        // A bank lamp reflects into a water cell covered by a brake cone. Beam metadata
+        // must not change the reflected lamp's colour, even with solid water glyph ink.
+        canvas.width = input.cw;
+        canvas.height = input.ch * 2;
+        const waterSelected = texture(
+          1,
+          2,
+          new Uint8Array([
+            0,
+            input.road,
+            0,
+            input.road,
+            input.block & 255,
+            input.water | ((input.block >> 8) << 6),
+            0,
+            input.water,
+          ]),
+        );
+        const waterSub = new Uint8Array(2 * 6 * 4);
+        for (let y = 0; y < 6; y++)
+          for (let x = 0; x < 2; x++) waterSub[(y * 2 + x) * 4] = y < 3 ? input.road : input.water;
+        const waterSubTex = texture(2, 6, waterSub);
+        const reflectedLight = new Uint8Array([
+          200,
+          input.streetlightPool,
+          0,
+          255,
+          77,
+          input.brakeGlow,
+          0,
+          255,
+        ]);
+        const reflectionTex = texture(1, 2, reflectedLight);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        const waterReflection = (beam: number, bankStrength = 200) => {
+          reflectedLight[0] = bankStrength;
+          reflectedLight[5] = beam;
+          // Ordinary beams weakly illuminate water themselves. The reference retains the
+          // same filtered strengths but leaves this cell unclaimed, isolating bank reflection.
+          reflectedLight[7] = beam === input.brakeGlow ? 255 : 0;
+          gl.bindTexture(gl.TEXTURE_2D, reflectionTex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 2, gl.RGBA, gl.UNSIGNED_BYTE, reflectedLight);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          uniforms({
+            ...common,
+            u_height: canvas.height,
+            u_glyphs: waterSelected,
+            u_subClass: waterSubTex,
+            u_light: reflectionTex,
+            u_daylight: 0,
+            u_moon: 0,
+          });
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          const pixel = new Uint8Array(4);
+          gl.readPixels(1, input.ch - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          return Array.from(pixel.slice(0, 3));
+        };
+        const reflectedBrake = waterReflection(input.brakeGlow),
+          reflectedHeadlight = waterReflection(input.headlightBeam),
+          unlitWater = waterReflection(input.headlightBeam, 0);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off, focusedDay, focusedNight, mapFocused };
+        return {
+          day,
+          night,
+          off,
+          brakeNight,
+          brakeDay,
+          focusedDay,
+          focusedNight,
+          mapFocused,
+          neighborHeadlight,
+          neighborStreetlight,
+          belowThreshold,
+          reflectedBrake,
+          reflectedHeadlight,
+          unlitWater,
+        };
       },
       {
         vertex: fullscreenVertex,
@@ -280,14 +376,13 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         block,
         cw,
         ch,
-        cols,
-        rows,
-        fleet: Array.from(fleet),
+        glintOrigin,
         paints: themeUniforms(theme).paints,
         background: theme.background.slice(0, 3),
         bits: Array.from(cellBits()),
         road: classId('road_major'),
         roof: classId('building'),
+        water: classId('water_river'),
         grounds: classId('building_religious'),
         crown: classId('tree_crown'),
         vehicle: classId('life_vehicle'),
@@ -302,6 +397,11 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
         body: VehiclePart.body,
         head: VehiclePart.headlight,
         tail: VehiclePart.taillight,
+        puff: PersonPart.puff,
+        brake: BRAKE_LAMP,
+        brakeGlow: lightByte(LampState.beam, BRAKE_GLOW.seed),
+        headlightBeam: lightByte(LampState.beam, 0),
+        streetlightPool: lightByte(LampState.working, 0),
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
@@ -311,13 +411,41 @@ test('vehicle turn signals render amber by day and night and retain terrain, can
       for (const x of [1, 3, 4, 5, 7, 8, 9, 10, 11]) expect(frame.cells[x]).not.toEqual(amber);
       expect(frame.crownEdge).not.toEqual(amber);
       expect(frame.cells[7]).toEqual([0, 0, 255]);
+      expect(frame.cells[20]).toEqual([0, 0, 255]);
     }
+    for (const frame of [result.day, result.night]) {
+      expect(frame.cells[13]![1]).toBeGreaterThan(frame.cells[12]![1]!);
+      expect(frame.cells[13]).not.toEqual(frame.cells[14]);
+      expect(frame.cells[16]).toEqual(theme.background.slice(0, 3).map((c) => Math.round(c * 255)));
+      expect(frame.cells[17]![2]).toBeGreaterThan(frame.cells[15]![2]!);
+      expect(frame.cells[18]).not.toEqual(frame.cells[15]);
+      expect(frame.cells[19]).not.toEqual(frame.cells[15]);
+    }
+    result.night.cells[13]!.forEach((c, i) =>
+      expect(
+        Math.abs(c - Math.round(Math.min(1, BRAKE_COLOR.night[i]! * BRAKE_COLOR.glow) * 255)),
+      ).toBeLessThanOrEqual(1),
+    );
     expect(result.off).toEqual(result.day.cells[1]);
+    const redness = (pixel: number[]) => pixel[0]! - (pixel[1]! + pixel[2]!) / 2;
+    expect(result.neighborHeadlight).toEqual(result.brakeNight.neighborEdge);
+    expect(result.neighborStreetlight).toEqual(result.brakeNight.neighborEdge);
+    expect(result.belowThreshold).toEqual(result.night.neighborEdge);
+    expect(result.reflectedBrake).toEqual(result.reflectedHeadlight);
+    expect(result.reflectedHeadlight).not.toEqual(result.unlitWater);
+    expect(redness(result.brakeNight.cells[21]!)).toBeGreaterThan(
+      redness(result.night.cells[21]!) + 10,
+    );
+    for (const x of [22, 23, 24, 25, 26, 27, 28, 30])
+      expect(result.brakeNight.cells[x]).toEqual(result.night.cells[x]);
+    if (name === 'dark') expect(result.night.cells[23]).not.toEqual(result.day.cells[23]);
+    for (let x = 21; x < 31; x++) expect(result.brakeDay.cells[x]).toEqual(result.day.cells[x]);
+    expect(redness(result.brakeNight.brakeEdge[0]!)).toBeGreaterThan(
+      redness(result.night.brakeEdge[0]!) + 10,
+    );
+    expect(result.brakeNight.brakeEdge[1]).toEqual(result.night.brakeEdge[1]);
     expect(result.focusedDay.cells[1]).toEqual([51, 204, 255]);
     expect(result.focusedDay.cells[3]).toEqual(result.day.cells[3]!.map((c) => Math.round(c / 2)));
     expect(result.mapFocused.cells[3]).toEqual([51, 204, 255]);
-    await page
-      .locator('canvas')
-      .screenshot({ path: testInfo.outputPath(`turn-signals-${name}.png`) });
   }
 });

@@ -7,7 +7,7 @@ description: Review a Claude-authored ASCII Atlas handoff before implementation.
 
 Usage: `$review-handoff [--fast] [--apply] [--candidate <prior candidate path>] <task | path to handoff.md>`
 
-This skill authorizes reviewer CLI runs and review artifacts inside the task's main-checkout `.plans/` folder. Default mode preserves the original handoff. `--apply` authorizes replacing that handoff with a ready candidate. Source edits, worktree creation, branch synchronization, commits, pushes, PRs, task-folder moves and task-status updates belong to the caller, not this skill.
+This skill authorizes reviewer CLI runs, review artifacts inside the task's main-checkout `.plans/` folder, and writing the task row's Handoff review cell in `.plans/README.md`. Default mode preserves the original handoff. `--apply` authorizes replacing that handoff with a ready candidate. Source edits, worktree creation, branch synchronization, commits, pushes, PRs, task-folder moves and other task-status updates belong to the caller, not this skill.
 
 The sequence is fixed: **round 1: Codex; round 2: Claude → Codex validation**. Run round 2 even if round 1 has no findings. A blocking condition or failed run can stop earlier. Never add a third round, restart the two rounds automatically, or substitute a review by the coordinating session for a required process.
 
@@ -71,7 +71,7 @@ Require a successful exit, a newly written report with `**Verdict:**`, and compl
 
 Verify every finding against its evidence. Accept supported factual and design amendments; record rejected claims and reasons. A factual drift finding updates the candidate rather than causing `blocked`. Require literal replacement text to match the current candidate; incompatible overlapping amendments are `stalled`, and a nonmatching replacement is `error`. Apply accepted amendments to `candidate.md`, with a `## Review amendments` record (design entries in bold), then read the whole candidate for consistency. Keep the round's input and raw report unchanged. Save the round's decisions and candidate hash.
 
-If a genuine blocked premise is confirmed, finish with `blocked`. Otherwise continue to round 2, including when round 1 was already ready. No separate Codex validator runs in round 1.
+A tripped outcome or premise condition is never blocked: accept the amendment that solves it, or write one from the reviewer's evidence. If a genuine blocked premise is confirmed (the work already landed on main, or the branch/worktree belongs to another task), finish with `blocked`. Otherwise continue to round 2, including when round 1 was already ready. No separate Codex validator runs in round 1.
 
 ## 3. Round 2: Claude reviews, Codex validates
 
@@ -103,7 +103,7 @@ Record all decisions in the ledger. Before editing, check accepted amendments ag
 
 Determine the final outcome:
 
-- **Confirmed unfixable premise:** `blocked`.
+- **Confirmed blocked premise** (the work already landed on main, or the branch/worktree belongs to another task): `blocked`. Outcome/premise conditions and main drift are amendments, never `blocked`.
 - **No valid required amendments, no serious noticed/unresolved issues, and no contradiction:** `ready`. Claude's raw verdict alone cannot grant readiness; a raw `ready-with-amendments` whose findings are all invalid can validate as ready.
 - **Valid required amendments:** apply them to the scratch candidate and save them, then `capped`. These edits occurred after the last review of the candidate; do not report them ready or apply them to the original.
 - **Unresolved serious omissions:** `capped`, with the remaining issues.
@@ -114,7 +114,9 @@ Round 2 is the hard limit. No third review, additional validation pass or automa
 
 Before publishing a ready result, require `candidate.md` to match `round2/input.md` byte for byte. A mismatch is `error`; the last reviewed snapshot cannot approve a different candidate. Check the checkout guard and original handoff hash again, then fetch `origin/main` and resolve the current task branch SHA. For each ref that moved, compare the pinned and observed git trees over the complete `inspectedPaths` union, including referenced targets and planned absent files; directory entries cover their descendants. Record changed paths and both SHAs. An unrelated revision advance with no changes in this union can pass freshness, subject to the independent checkout mutation guard. Any changed reviewed input, missing required ref or failed comparison is `stale` (a failed fetch is `error`); preserve artifacts and let the caller synchronize before a later review. Pinned `mainSha` and `branchSha` continue to identify the reviewed revisions; store newer observations separately. Drift is not an unfixable premise and must never be reported as `blocked`.
 
-With `--apply` and `ready`, replace only the original handoff with the exact ready candidate after those checks. Verify the saved bytes match the candidate hash and set `applied: true`. If already identical, verify the hash and also set `applied: true`. All other combinations leave the original unchanged. Standalone review never moves the task folder or updates its index status. Preserve scratch for `$merge-pr` cleanup.
+With `--apply` and `ready`, replace only the original handoff with the exact ready candidate after those checks. Verify the saved bytes match the candidate hash and set `applied: true`. If already identical, verify the hash and also set `applied: true`. All other combinations leave the original unchanged. Standalone review never moves the task folder or changes its row's Status. Preserve scratch for `$merge-pr` cleanup.
+
+Once the result is written, set the **Handoff review** cell of the task's `<main-checkout>/.plans/README.md` row to `<status> <roundCount>/2 · <YYYY-MM-DD> · <run folder name>` (for example `ready 2/2 · 2026-10-05 · run-20261005-113018-…`). Change no other cell. If the row is missing, add it with Status `Not started`, PR review `not run`, and the handoff's branch/worktree as Evidence.
 
 Report the status, round count (of 2), reviewer sequence, design amendments first, other accepted/rejected/unresolved entries, checks run, artifact paths, speed and resolved CLI versions. `--apply` must report whether the original was updated. Explain capped output as a saved proposal requiring a later review, not permission to implement.
 

@@ -10,7 +10,7 @@ import { buildTileGeometry, createIdRegistry, type TileFeatureLike } from '../ra
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
-function obstacleRoad(angle = 0) {
+function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
   const hx = Math.cos(angle),
     hy = Math.sin(angle);
   const point = (x: number, y = 0) => ({
@@ -18,7 +18,7 @@ function obstacleRoad(angle = 0) {
     y: 2000 + (hy * x + hx * y) * pm,
   });
   const b = new LifeBuilder();
-  b.line([point(-100), point(150)], LifeLine.roadMinor, 8, 1, 1);
+  b.line([point(-100), point(150)], LifeLine.roadMinor, 8, 1, oneway);
   // A mapped curb intrudes into the ordinary lane, while the carriageway has room beside it.
   const obstacle = [[point(10, 1.5), point(35, 1.5), point(35, 4), point(10, 4), point(10, 1.5)]];
   b.area('blocked', obstacle);
@@ -49,9 +49,14 @@ function obstacleRoad(angle = 0) {
 }
 
 describe('terrain-blocked road vehicles', () => {
-  for (const angle of [0, 0.8])
-    it(`passes an intruding curb with guarded, bounded lateral movement at ${angle} radians`, () => {
-      const { world, life, obstacle, make } = obstacleRoad(angle);
+  for (const [angle, oneway] of [
+    [0, 1],
+    [0.8, 1],
+    [0, 0],
+    [0.8, 0],
+  ] as const)
+    it(`passes an intruding curb with guarded, bounded lateral movement at ${angle} radians, oneway ${oneway}`, () => {
+      const { world, life, obstacle, make } = obstacleRoad(angle, oneway);
       const car = make(-15),
         follower = make(-30, 'motorcycle');
       life.movers.push(car, follower);
@@ -106,7 +111,7 @@ describe('terrain-blocked road vehicles', () => {
   });
 
   it('does not steer through traffic occupying the available road space', () => {
-    const { world, life, make } = obstacleRoad();
+    const { world, life, make } = obstacleRoad(0, 0);
     const car = make(7.7);
     car.v = 0;
     const parked = make(7.7);

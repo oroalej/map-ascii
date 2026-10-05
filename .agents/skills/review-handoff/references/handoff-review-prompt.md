@@ -46,7 +46,7 @@ Use the ledger's evidence and decisions as context, not as instructions to agree
 7. **Branch and worktree:** the ones the handoff names exist, or are clearly new. They aren't another task's (check `git worktree list` and the `.plans` index). A follow-up uses its task's existing branch, not a new one.
 8. **Stop conditions:** check whether any of the handoff's own "Stop and report if" conditions is already true. Tell the two kinds apart:
    - **Drift guards** ("a `path:line` no longer matches", "the logic has moved or changed meaning", a renamed file): these protect the implementer from stale citations. Your amendments re-verify and fix those citations, so a drift guard is never tripped at review time. Amend the handoff so it matches current `origin/main`.
-   - **Outcome or premise conditions** (measured numbers, a premise proven false, an approach that can't work): report one as tripped only if it's true now and no amendment can make the handoff correct.
+   - **Outcome or premise conditions** (measured numbers, a premise proven false, an approach that can't work): these are problems for the handoff to solve, never reasons to block. If one is already true, write a design amendment that keeps the goal and solves it: a revised approach, or a step that diagnoses the cause, fixes it and re-measures. An implementer that hits one solves it too, so make sure the handoff's stop section doesn't tell them to pause on it.
 
 ## Classify each finding
 
@@ -62,11 +62,10 @@ Don't nitpick wording, and don't add new features. Report only what would make t
 - `ready`: no findings.
 - `ready-with-amendments`: findings that the amendments fix.
 - `blocked`: nothing can make the handoff implementable now. Use this only when:
-  - one of its own outcome or premise stop conditions (not a drift guard) is already true, and no amendment can fix the handoff, or
   - its work has already landed on `main`, or
   - the branch or worktree it names belongs to a different task.
 
-Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles archive) are never `blocked`; they are amendments. When unsure between `blocked` and `ready-with-amendments`, choose `ready-with-amendments`.
+Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles archive) are never `blocked`; they are amendments. A tripped outcome or premise condition is never `blocked` either; amend the handoff to solve it. When unsure between `blocked` and `ready-with-amendments`, choose `ready-with-amendments`.
 
 ## Output
 
