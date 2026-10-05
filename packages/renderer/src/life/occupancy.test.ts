@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pedestrianView } from './pedestrians';
 import {
   bodiesOverlap,
+  binKeys,
   bodyCorners,
   corridorDistance,
   type Point,
@@ -31,6 +32,35 @@ const nearest = (o: Occupancy, x = 0, y = 0, hx = 1, hy = 0, width = 1, range = 
 
 describe('pedestrian occupancy queries', () => {
   const human = (x: number, y: number): Body => ({ ...box(x, y, 1, 1), kind: BODY_KIND.human });
+  it('preserves corner-derived bin membership at rotated and degenerate boundary positions', () => {
+    const o = new Occupancy(),
+      owner = {};
+    const entries = (o as unknown as { entries: Map<object, { keys: number[] }> }).entries;
+    let seed = 719;
+    const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+    for (let i = 0; i < 1600; i++) {
+      const angle = random() * Math.PI * 2,
+        hx = Math.cos(angle),
+        hy = Math.sin(angle),
+        length = i % 17 ? random() * 60 : 0,
+        width = i % 23 ? random() * 15 : 0,
+        rx = (Math.abs(hx) * length + Math.abs(hy) * width) / 2,
+        ry = (Math.abs(hy) * length + Math.abs(hx) * width) / 2;
+      const edgeX = (Math.floor(random() * 128) - 64) * 12,
+        edgeY = (Math.floor(random() * 128) - 64) * 12;
+      const b: Body = {
+        x: edgeX + (i % 3 === 0 ? rx + 0.2 : i % 3 === 1 ? -rx - 0.2 : random() * 12),
+        y: edgeY + (i % 3 === 0 ? -ry - 0.2 : i % 3 === 1 ? ry + 0.2 : random() * 12),
+        hx,
+        hy,
+        length,
+        width,
+        kind: BODY_KIND.human,
+      };
+      o.set(owner, [b]);
+      expect(entries.get(owner)!.keys).toEqual(binKeys(bodyCorners(b), 0.2));
+    }
+  });
   it('uses the intersected footprint, with side, behind, range and kind filtering', () => {
     const o = new Occupancy();
     for (const b of [human(-1, 0), human(4, 2), human(10.6, 0), box(2, 0)]) o.set({}, [b]);
@@ -42,6 +72,20 @@ describe('pedestrian occupancy queries', () => {
     expect(nearest(o)).toBe(4.5);
     o.delete(person);
     expect(nearest(o)).toBe(Infinity);
+  });
+  it('clears corridor query owners on an immediate hit and filters an ignored owner', () => {
+    const o = new Occupancy(),
+      first = {},
+      next = {};
+    o.set(first, [human(0, 0)]);
+    o.set(next, [human(4, 0)]);
+    expect(o.nearestInCorridor(0, 0, 1, 0, 1, 10, BODY_KIND.human)).toBe(0);
+    expect((o as unknown as { queryNeighbors: Set<object> }).queryNeighbors.size).toBe(0);
+    expect(o.nearestInCorridor(0, 0, 1, 0, 1, 10, BODY_KIND.human, first)).toBe(3.5);
+    expect(o.nearestInCorridor(0, 0, 1, 0, 1, 10, BODY_KIND.vehicle)).toBe(Infinity);
+    o.delete(first);
+    o.delete(next);
+    expect(o.nearestInCorridor(0, 0, 1, 0, 1, 10, BODY_KIND.human)).toBe(Infinity);
   });
   it('clips a rotated body and corridor across spatial bins', () => {
     const o = new Occupancy(),

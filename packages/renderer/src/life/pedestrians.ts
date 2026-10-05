@@ -141,6 +141,37 @@ class IndexedPedestrians implements PedestrianView {
       const x = frame.x + first.x * frame.scale,
         y = frame.y + item.value.y * frame.scale,
         reach = (range + halfWidth) * frame.scale;
+      if (
+        first.ahead === 0 &&
+        first.length >= range &&
+        Math.abs(first.hx * first.hx + first.hy * first.hy - 1) < 1e-9
+      ) {
+        if (range > 0 && range <= 1e-7) return Infinity;
+        // A complete straight chord needs one exact corridor test, without polygon/copy work.
+        let nearest = this.occupied.nearestInCorridor(
+          x,
+          y,
+          first.hx,
+          first.hy,
+          halfWidth * frame.scale,
+          range * frame.scale,
+          BODY_KIND.human,
+        );
+        if (nearest !== 0 && this.queryOnly)
+          nearest = Math.min(
+            nearest,
+            this.queryOnly.nearestInCorridor(
+              x,
+              y,
+              first.hx,
+              first.hy,
+              halfWidth * frame.scale,
+              range * frame.scale,
+              BODY_KIND.human,
+            ),
+          );
+        return nearest / frame.scale;
+      }
       const [a, b, c, d] = this.queryCorners;
       if (first.length >= range) {
         const nx = -first.hy * halfWidth * frame.scale,

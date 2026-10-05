@@ -249,8 +249,30 @@ export class Occupancy {
   private readonly uniqueKeys = new Set<number>();
   private readonly neighbors = new Set<object>();
   private readonly queryNeighbors = new Set<object>();
+  private readonly corridor: Body = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 };
   private keys(b: Body): number[] {
-    return binKeys(bodyCorners(b, this.corners), 0.2, this.scratchKeys);
+    const ax = (b.hx * b.length) / 2,
+      ay = (b.hy * b.length) / 2,
+      bx = (b.hy * b.width) / 2,
+      by = (b.hx * b.width) / 2;
+    // Keep the corner arithmetic order: rounding at bin edges must match bodyCorners.
+    const xa = b.x - ax + bx,
+      xb = b.x + ax + bx,
+      xc = b.x + ax - bx,
+      xd = b.x - ax - bx,
+      ya = b.y - ay - by,
+      yb = b.y + ay - by,
+      yc = b.y + ay + by,
+      yd = b.y - ay + by;
+    const x0 = Math.floor((Math.min(xa, xb, xc, xd) - 0.2) / BIN_M),
+      x1 = Math.floor((Math.max(xa, xb, xc, xd) + 0.2) / BIN_M),
+      y0 = Math.floor((Math.min(ya, yb, yc, yd) - 0.2) / BIN_M),
+      y1 = Math.floor((Math.max(ya, yb, yc, yd) + 0.2) / BIN_M);
+    const keys = this.scratchKeys;
+    keys.length = 0;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) keys.push((x + 32768) * 65536 + (y + 32768));
+    return keys;
   }
   set(owner: object, bodies: readonly Body[]) {
     const previous = this.entries.get(owner);
@@ -302,6 +324,63 @@ export class Occupancy {
   }
   bodies(owner: object): readonly Body[] {
     return this.entries.get(owner)?.bodies ?? [];
+  }
+  /** Exact nearest footprint in a corridor with a normalized forward axis, in metres. */
+  nearestInCorridor(
+    x: number,
+    y: number,
+    hx: number,
+    hy: number,
+    halfWidth: number,
+    range: number,
+    kindMask: number,
+    ignore?: object,
+  ): number {
+    if (
+      range < 0 ||
+      halfWidth < 0 ||
+      !Number.isFinite(range) ||
+      !Number.isFinite(halfWidth) ||
+      (kindMask === BODY_KIND.human && !this.humans)
+    )
+      return Infinity;
+    const corridor = this.corridor;
+    corridor.x = x + (hx * range) / 2;
+    corridor.y = y + (hy * range) / 2;
+    corridor.hx = hx;
+    corridor.hy = hy;
+    corridor.length = range;
+    corridor.width = halfWidth * 2;
+    const owners = this.queryNeighbors;
+    const support = (BIN_M / 2) * (Math.abs(hx) + Math.abs(hy));
+    owners.clear();
+    try {
+      for (const key of this.keys(corridor)) {
+        const bx = Math.floor(key / 65536) - 32768,
+          by = (key % 65536) - 32768;
+        const dx = (bx + 0.5) * BIN_M - x,
+          dy = (by + 0.5) * BIN_M - y,
+          forward = dx * hx + dy * hy;
+        if (
+          Math.abs(-dx * hy + dy * hx) > halfWidth + support + 1e-9 ||
+          forward < -support - 1e-9 ||
+          forward > range + support + 1e-9
+        )
+          continue;
+        for (const owner of this.bins.get(key) ?? [])
+          if (owner !== ignore && this.entries.get(owner)!.mask & kindMask) owners.add(owner);
+      }
+      let nearest = Infinity;
+      for (const owner of owners)
+        for (const b of this.entries.get(owner)!.bodies) {
+          if (!((b.kind ?? BODY_KIND.fixed) & kindMask)) continue;
+          nearest = Math.min(nearest, corridorDistance(b, x, y, hx, hy, halfWidth, range));
+          if (nearest === 0) return 0;
+        }
+      return nearest;
+    } finally {
+      owners.clear();
+    }
   }
   /** Visit matching footprints, never expose owners or retain callback/body references. */
   someInArea(

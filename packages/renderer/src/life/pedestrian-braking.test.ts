@@ -94,26 +94,23 @@ describe('live pedestrian readers', () => {
         width: width * frame.scale,
         kind: BODY_KIND.human,
       });
-      occupied.set({}, [body(-20, 0), body(20, 25), body(31, 1.6, 4, 1)]);
-      const visited: number[] = [],
-        scan = occupied.someInArea.bind(occupied);
-      vi.spyOn(occupied, 'someInArea').mockImplementation((area, mask, predicate, ignore) =>
-        scan(
-          area,
-          mask,
-          (b) => {
-            visited.push(b.x);
-            return predicate?.(b) ?? true;
-          },
-          ignore,
-        ),
-      );
+      occupied.set({}, [body(-20, 0), body(20, 25)]);
       const reader = pedestrianView(occupied, 0.9, frame);
-      expect(
-        reader.walkersAlong([{ x: 0, y: 0, hx, hy, length: 30, ahead: 0, line: 0 }], 1.2, 30),
-      ).toBeCloseTo(29);
-      expect(visited).toHaveLength(1);
+      const path = [{ x: 0, y: 0, hx, hy, length: 30, ahead: 0, line: 0 }];
+      expect(reader.walkersAlong(path, 1.2, 30)).toBe(Infinity);
+      occupied.set({}, [body(31, 1.6, 4, 1)]);
+      const scan = vi.spyOn(occupied, 'nearestInCorridor');
+      expect(reader.walkersAlong(path, 1.2, 30)).toBeCloseTo(29);
+      expect(scan).toHaveBeenCalledExactlyOnceWith(100, -30, hx, hy, 2.4, 60, BODY_KIND.human);
     }
+  });
+  it('preserves zero-length and sub-tolerance straight query behavior', () => {
+    const occupied = new Occupancy();
+    occupied.set({}, [{ x: 0, y: 0, hx: 1, hy: 0, length: 1, width: 1, kind: BODY_KIND.human }]);
+    const reader = pedestrianView(occupied, 0.9);
+    const path = [{ x: 0, y: 0, hx: 1, hy: 0, length: 1, ahead: 0, line: 0 }];
+    expect(reader.walkersAlong(path, 1, 0)).toBe(0);
+    expect(reader.walkersAlong(path, 1, 1e-8)).toBe(Infinity);
   });
   it('reuses prepared conversions across readers but converts mutable query geometry again', () => {
     const f = crossingFixture(),
