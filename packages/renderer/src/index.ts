@@ -168,8 +168,6 @@ export { cityTime, type LocalTime } from './life/clock';
 export type SeasonState = Readonly<{
   id: string;
   title: string;
-  status: 'draft' | 'verified';
-  note?: string;
   labels: Readonly<{
     lanterns?: string;
     bunting?: string;
@@ -481,8 +479,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? Object.freeze({
           id: season.id,
           title: season.title.en,
-          status: season.status,
-          ...(season.note ? { note: season.note } : {}),
           labels: Object.freeze({
             ...(season.fireworks ? { fireworks: season.fireworks.label } : {}),
             ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),

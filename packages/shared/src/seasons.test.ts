@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cityPack from '../../content/cities/naga/city.json';
 import {
   activeSeason,
+  admitsSeasonRecord,
   epochDay,
   nthWeekdayDay,
   resolveSeason,
@@ -14,6 +15,13 @@ const winter: SeasonWindow = { from: { month: 12, day: 1 }, to: { month: 1, day:
 const contains = (window: SeasonWindow, year: number, month: number, day: number) =>
   seasonContains(window, year, epochDay(year, month, day));
 describe('annual season calendars', () => {
+  it('admits authored and explicitly included record seasons only', () => {
+    const season = { id: 'new-year', includes: ['christmas'] };
+    expect(admitsSeasonRecord(season, 'new-year')).toBe(true);
+    expect(admitsSeasonRecord(season, 'christmas')).toBe(true);
+    expect(admitsSeasonRecord(season, 'fiesta')).toBe(false);
+    expect(admitsSeasonRecord({ id: 'new-year' }, 'christmas')).toBe(false);
+  });
   it.each([
     [2024, 13, 22],
     [2026, 11, 20],

@@ -25,8 +25,6 @@ const tile = { z: 16, x: 55192, y: 30266 };
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
   lanterns: { label: 'Stars', shape: 'star' },
