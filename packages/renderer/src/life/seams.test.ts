@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LifeWorld, type TileLife, type LifeTile, type Mover } from './simulate';
+import {
+  LifeWorld,
+  type TileLife,
+  type LifeTile,
+  type Mover,
+  type WorldGroundGuard,
+} from './simulate';
+import { JunctionTable } from './junctions';
 import { continuityTile, continuityMover, left, right, parent } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import { LifeBuilder, LifeLine } from './geometry';
@@ -657,6 +664,52 @@ it.each(['quota', 'projection', 'final'] as const)(
     expect(source.elapsed).toBeLessThan(10);
   },
 );
+
+it('resumes accepted travel after a recovered vehicle queues at a full destination', () => {
+  const westId = { ...left, x: left.x - 1 };
+  const { world, lives } = fixture([continuityTile(left), continuityTile(westId)]);
+  const source = lives[0]!,
+    target = lives[1]!;
+  for (const life of lives) {
+    life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+  }
+  const m = continuityMover(source, 5 * source.perMeter);
+  m.v = 0;
+  source.movers.push(m);
+  const guard = (world as unknown as { groundGuard(): WorldGroundGuard }).groundGuard();
+  expect(
+    source.recoverVehicle(
+      m,
+      (next, before, reserve) => guard(source, next, before, undefined, reserve),
+      new JunctionTable(),
+      new Set(),
+      undefined,
+      0.1,
+    ),
+  ).toBe(true);
+  const inactive = {
+    ...continuityMover(target, 2000),
+    kind: 'train' as const,
+    rank: 1,
+    vehicle: undefined,
+  };
+  target.movers.push(...Array<Mover>(MAX_TILE_AGENTS).fill(inactive));
+  for (let frame = 0; frame < 110; frame++) world.step(0.1, undefined, 18);
+  const recovery = source as unknown as { recoveryProgress: WeakMap<Mover, number> };
+  const queues = world as unknown as { queuedSeams: Map<Mover, TileLife> };
+  expect(queues.queuedSeams.get(m)).toBe(source);
+  expect(recovery.recoveryProgress.get(m)).toBeGreaterThan(0);
+  const stopped = m.x;
+  target.movers.length = 0;
+  for (let frame = 0; frame < 150 && source.movers.includes(m); frame++)
+    world.step(0.1, undefined, 18);
+  expect(target.movers).toContain(m);
+  expect(source.movers).not.toContain(m);
+  expect(recovery.recoveryProgress.has(m)).toBe(false);
+  expect(m.x).not.toBe(stopped);
+  expect(queues.queuedSeams.has(m)).toBe(false);
+});
 
 it('keeps a queued seam recovery frozen during an active service hold', () => {
   const { world, lives } = fixture([continuityTile(left), continuityTile(right, LifeLine.path)]);

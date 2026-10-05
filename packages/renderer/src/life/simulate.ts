@@ -78,6 +78,7 @@ import {
   PLACES,
   ROAD_MARGIN_M,
   ROAD_AVOID,
+  RECOVERY,
   spawnRules,
   TRAIN,
   umbrellaShare,
@@ -279,6 +280,7 @@ export type StepPass = {
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
   recoveredLines?: Set<number>;
   recoveryAttempts?: ReadonlySet<Mover>;
+  recoveredNow?: ReadonlySet<Mover>;
   recovered?: (m: Mover) => void;
 };
 
@@ -891,7 +893,23 @@ export class TileLife {
     this.recoveryApproaches.delete(m);
     this.blockedProgress.delete(m);
     this.walkerRecoveryProgress.delete(m);
+    this.recoveryProgress.delete(m);
     if (this.recoveryLeaders.get(m.line) === m) this.recoveryLeaders.delete(m.line);
+  }
+
+  /** Suspend leadership without discarding a frozen actor's checked retreat target. */
+  prepareRecovery(active?: (m: Mover) => boolean, inspecting: object | undefined = this.inspected) {
+    if (!this.recoveryLeaders.size) return;
+    for (const [line, leader] of this.recoveryLeaders) {
+      const index = this.movers.indexOf(leader);
+      if (
+        index < 0 ||
+        leader.line !== line ||
+        leader === inspecting ||
+        !(active ? active(leader) : this.eligible[index])
+      )
+        this.recoveryLeaders.delete(line);
+    }
   }
   /** Tile units per meter. */
   readonly perMeter: number;
@@ -1433,25 +1451,36 @@ export class TileLife {
     out.hy = m.hy;
     if (m.momentFacing) Object.assign(out, m.momentFacing);
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
-    const reach = FILLET.maxM * this.perMeter;
-    const behind = m.d <= reach ? this.corner(m, m.from, identity) : undefined;
+    const behind = this.cornerWithin(m, m.from, m.d, identity);
     if (behind && m.d <= behind.length) return curvePose(behind, m.d, out);
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
-    const ahead = remaining <= reach ? this.corner(m, m.from + m.dir, identity) : undefined;
+    const ahead = this.cornerWithin(m, m.from + m.dir, remaining, identity);
     if (ahead && remaining <= ahead.length) return curvePose(ahead, -remaining, out);
     return out;
+  }
+
+  /** Pure lookup within the maximum reach; callers retain their actual-arc predicates. */
+  private cornerWithin(m: Mover, vertex: number, distance: number, identity = m) {
+    return distance <= FILLET.maxM * this.perMeter ? this.corner(m, vertex, identity) : undefined;
+  }
+
+  private matchesCurve(m: Mover, vertex: number) {
+    return (
+      !!m.curveCorner &&
+      this.geo.coords[vertex * 2] === m.curveCorner.x &&
+      this.geo.coords[vertex * 2 + 1] === m.curveCorner.y
+    );
   }
 
   private clearPastCurve(m: Mover) {
     const corner = m.curveCorner;
     if (!corner) return;
-    const matches = (vertex: number) =>
-      this.geo.coords[vertex * 2] === corner.x && this.geo.coords[vertex * 2 + 1] === corner.y;
     // Keep the shortened shape until even the default outgoing arc is behind us;
     // clearing at the smaller arc's end would re-enter the wider default curve.
     const reach = FILLET.maxM * this.perMeter;
-    if (matches(m.from) && m.d <= reach) return;
-    if (matches(m.from + m.dir) && this.segment(m.from, m.from + m.dir) - m.d <= reach) return;
+    if (this.matchesCurve(m, m.from) && m.d <= reach) return;
+    if (this.matchesCurve(m, m.from + m.dir) && this.segment(m.from, m.from + m.dir) - m.d <= reach)
+      return;
     m.curveLengthM = undefined;
     m.curveCorner = undefined;
   }
@@ -3811,7 +3840,7 @@ export class TileLife {
       Math.abs(lane - offsets[j]!) <
         (VEHICLES[movers[i]!.vehicle!].width + VEHICLES[movers[j]!.vehicle!].width) / 2 +
           (movers[i]!.kind === 'vehicle' && movers[j]!.kind === 'vehicle'
-            ? 0.15
+            ? FOLLOW.roadGap
             : -FOLLOW.squeeze) ||
       (curbScenes && this.mergingOverlap(i, j, lane));
     for (const group of this.trafficGroups.values())
@@ -3983,6 +4012,7 @@ export class TileLife {
     if (guard) this.terminalLimits(speeds);
     // Scenes can begin/end visits in this step. Share the main loop's eligibility after that.
     this.captureEffects(clock, dt, env, shows, near, pass);
+    this.prepareRecovery();
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     let recoveredLines = pass?.recoveredLines;
@@ -4207,7 +4237,7 @@ export class TileLife {
         if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
       const distance = speeds[i]! * dt;
-      if (pass?.recoveryAttempts?.has(m) && this.recoveryProgress.has(m)) {
+      if (pass?.recoveredNow?.has(m)) {
         m.v = 0;
         continue;
       }
@@ -4237,11 +4267,8 @@ export class TileLife {
         m.speed > 0 &&
         m.roadShift !== undefined &&
         m.roadSteering === undefined &&
-        !(m.d <= FILLET.maxM * this.perMeter && this.corner(m, m.from)) &&
-        !(
-          this.segment(m.from, m.from + m.dir) - m.d <= FILLET.maxM * this.perMeter &&
-          this.corner(m, m.from + m.dir)
-        ) &&
+        !this.cornerWithin(m, m.from, m.d) &&
+        !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d) &&
         (!guard || guard({ ...m, roadShift: undefined }, before, false))
       ) {
         const change = Math.min(Math.abs(m.roadShift), ROAD_AVOID.restore * dt);
@@ -4321,15 +4348,15 @@ export class TileLife {
           m.curveCorner !== undefined &&
           m.vehicle &&
           (m.v ?? m.speed) < m.speed / 2 &&
-          ((before.d <= FILLET.maxM * this.perMeter &&
-            this.geo.coords[before.from * 2] === m.curveCorner.x &&
-            this.geo.coords[before.from * 2 + 1] === m.curveCorner.y &&
-            this.corner(before, before.from, m)) ||
-            (this.segment(before.from, before.from + before.dir) - before.d <=
-              FILLET.maxM * this.perMeter &&
-              this.geo.coords[(before.from + before.dir) * 2] === m.curveCorner.x &&
-              this.geo.coords[(before.from + before.dir) * 2 + 1] === m.curveCorner.y &&
-              this.corner(before, before.from + before.dir, m)));
+          ((this.matchesCurve(m, before.from) &&
+            this.cornerWithin(before, before.from, before.d, m)) ||
+            (this.matchesCurve(m, before.from + before.dir) &&
+              this.cornerWithin(
+                before,
+                before.from + before.dir,
+                this.segment(before.from, before.from + before.dir) - before.d,
+                m,
+              )));
         if (!fits || correctingCurve) {
           const ordinary = fits ? { ...m } : undefined,
             ordinaryMoved = moved;
@@ -4343,7 +4370,7 @@ export class TileLife {
           if (m.kind === 'vehicle' && before.roadShift !== undefined) tries.unshift([0, 1]);
           let limit = 0;
           let steeringOrigin = before.roadShift ?? 0;
-          const steeringSpeed = Math.min(0.6, m.speed / this.perMeter / Math.SQRT2);
+          const steeringSpeed = Math.min(ROAD_AVOID.steer, m.speed / this.perMeter / Math.SQRT2);
           if (
             m.kind === 'vehicle' &&
             m.vehicle &&
@@ -4352,10 +4379,9 @@ export class TileLife {
             !intentionalHold &&
             this.scenes.transferable(m)
           ) {
-            const vertex =
-                before.d <= FILLET.maxM * this.perMeter && this.corner(before, before.from, m)
-                  ? before.from
-                  : before.from + before.dir,
+            const vertex = this.cornerWithin(before, before.from, before.d, m)
+                ? before.from
+                : before.from + before.dir,
               corner = {
                 x: this.geo.coords[vertex * 2]!,
                 y: this.geo.coords[vertex * 2 + 1]!,
@@ -4441,11 +4467,9 @@ export class TileLife {
               this.vehicleLane(before, before.line) -
               laneOffset(this.roadWidth(before.line), spec.width, before.lane, spec.curb);
             if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
-              const reach = FILLET.maxM * this.perMeter;
-              const behind = before.d <= reach ? this.corner(before, before.from, m) : undefined;
+              const behind = this.cornerWithin(before, before.from, before.d, m);
               const remaining = this.segment(before.from, before.from + before.dir) - before.d;
-              const ahead =
-                remaining <= reach ? this.corner(before, before.from + before.dir, m) : undefined;
+              const ahead = this.cornerWithin(before, before.from + before.dir, remaining, m);
               // A narrower road can clamp a retained shift well before its stored
               // value. Start retries at the same effective lane, so their first
               // increment moves. Active arcs keep both existing tangent offsets.
@@ -4480,17 +4504,8 @@ export class TileLife {
               // A retained shorter fillet must still fit both tangent offsets.
               // Losing it here would turn the next line transition into a jump.
               if (m.curveLengthM !== undefined && m.curveCorner) {
-                const vertex =
-                  this.geo.coords[m.from * 2] === m.curveCorner.x &&
-                  this.geo.coords[m.from * 2 + 1] === m.curveCorner.y
-                    ? m.from
-                    : m.from + m.dir;
-                if (
-                  this.geo.coords[vertex * 2] === m.curveCorner.x &&
-                  this.geo.coords[vertex * 2 + 1] === m.curveCorner.y &&
-                  !this.corner(m, vertex)
-                )
-                  continue;
+                const vertex = this.matchesCurve(m, m.from) ? m.from : m.from + m.dir;
+                if (this.matchesCurve(m, vertex) && !this.corner(m, vertex)) continue;
               }
             }
             if (!walking && share! < 0) {
@@ -4547,8 +4562,8 @@ export class TileLife {
             m.waiting = (before.waiting ?? 0) + dt;
           } else {
             m.waiting = 0;
-            this.blockedProgress.delete(m);
-            m.roadSteering = undefined;
+            if (progress) this.blockedProgress.delete(m);
+            if (m.roadSteering !== undefined) m.roadSteering = undefined;
           }
         } else m.waiting = before.waiting ?? 0;
         if (
@@ -4776,7 +4791,7 @@ export class TileLife {
     if (!candidate) {
       // Reject-only whole-corridor inspection, including usable departure space.
       // The actual translation is executed in subsequent speed-bounded steps.
-      for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
+      for (const retreat of RECOVERY.retreats) {
         for (const shift of [...new Set([before.roadShift ?? 0, 0])]) {
           restoreMover(m, before);
           if (retreat * this.perMeter > m.d) continue;
@@ -4806,8 +4821,8 @@ export class TileLife {
       restoreMover(m, before);
       if (!candidate) return false;
       this.recoveryApproaches.set(m, candidate);
-      this.recoveryLeaders.set(m.line, m);
     }
+    if (this.recoveryLeaders.get(m.line) !== m) this.recoveryLeaders.set(m.line, m);
     lines.add(m.line);
     const rejected = () => {
       candidate.blocked = (candidate.blocked ?? 0) + dt;
@@ -4823,7 +4838,7 @@ export class TileLife {
       dy = candidate.shift - (m.roadShift ?? 0);
     const distance = Math.hypot(dx, dy);
     const share = distance
-      ? Math.min(1, (dt * Math.min(0.6, m.speed / this.perMeter)) / distance)
+      ? Math.min(1, (dt * Math.min(ROAD_AVOID.steer, m.speed / this.perMeter)) / distance)
       : 1;
     m.d += dx * this.perMeter * share;
     m.roadShift = (m.roadShift ?? 0) + dy * share;
@@ -6677,6 +6692,20 @@ export class LifeWorld {
       }
       return physical;
     };
+    // This helper is allocated once per guard, and invoked only on rejection.
+    // Terrain escape and conflict escape retain their distinct acceptance checks.
+    const previousPhysical = (
+      life: TileLife,
+      owner: GroundAgent,
+      previous: readonly Body[],
+      identity: GroundAgent,
+      ignore?: object,
+      cached?: Body[],
+    ) => {
+      const physical = physicalSample(life, owner, previous, cached);
+      const score = occupied.conflicts(identity, physical, ignore, physicalShape);
+      return { physical, score, before: physical.map((b) => ({ ...b })) };
+    };
     const check = (
       life: TileLife,
       owner: GroundAgent,
@@ -6703,15 +6732,11 @@ export class LifeWorld {
       // Existing overlaps at a density change may escape, but never deepen or tunnel through.
       if (endScore > 0 && (oldScore === 0 || endScore >= oldScore - 1e-6)) {
         if (before && minimum > 0) {
-          oldPhysicalScore = occupied.conflicts(
-            identity,
-            (physical = physicalSample(life, owner, previous, physical)),
-            ignore,
-            physicalShape,
-          );
-          physicalBefore = (physical = physicalSample(life, owner, previous, physical)).map(
-            (b) => ({ ...b }),
-          );
+          ({
+            physical,
+            score: oldPhysicalScore,
+            before: physicalBefore,
+          } = previousPhysical(life, owner, previous, identity, ignore, physical));
           const score = occupied.conflicts(
             identity,
             (physical = physicalSample(life, owner, next, physical)),
@@ -6833,15 +6858,11 @@ export class LifeWorld {
           }
           if (!physicalOnly) {
             physicalOnly = true;
-            oldPhysicalScore = occupied.conflicts(
-              identity,
-              (physical = physicalSample(life, owner, previous, physical)),
-              ignore,
-              physicalShape,
-            );
-            physicalBefore = (physical = physicalSample(life, owner, previous, physical)).map(
-              (b) => ({ ...b }),
-            );
+            ({
+              physical,
+              score: oldPhysicalScore,
+              before: physicalBefore,
+            } = previousPhysical(life, owner, previous, identity, ignore, physical));
           }
         }
         // The endpoint's complete inflated bodies were checked above. A clear
@@ -6858,15 +6879,11 @@ export class LifeWorld {
                 physicalOnly ? physicalBefore : previous,
               );
         if (increased > 0 && !physicalOnly && before && minimum > 0) {
-          oldPhysicalScore = occupied.conflicts(
-            identity,
-            (physical = physicalSample(life, owner, previous, physical)),
-            ignore,
-            physicalShape,
-          );
-          physicalBefore = (physical = physicalSample(life, owner, previous, physical)).map(
-            (b) => ({ ...b }),
-          );
+          ({
+            physical,
+            score: oldPhysicalScore,
+            before: physicalBefore,
+          } = previousPhysical(life, owner, previous, identity, ignore, physical));
           const end = occupied.conflicts(
             identity,
             (physical = physicalSample(life, owner, next, physical)),
@@ -7279,6 +7296,7 @@ export class LifeWorld {
     const eligibility = new Map<TileLife, (m: Mover) => boolean>();
     const recoveries = new Map<TileLife, Set<number>>();
     const recoveryAttempts = new Set<Mover>();
+    let recoveredNow: Set<Mover> | undefined;
     const heldForRecovery = (life: TileLife, m: Mover) =>
       !life.scenes.transferable(m) ||
       (m.kind === 'vehicle' &&
@@ -7293,6 +7311,7 @@ export class LifeWorld {
         (!env.levels || m.rank < env.levels[m.kind]) &&
         !tile.scenes.hidden(m);
       eligibility.set(tile, active);
+      tile.prepareRecovery(active, env.inspecting);
     }
     for (const [m, tile] of this.queuedSeams) {
       const active = eligibility.get(tile);
@@ -7315,6 +7334,7 @@ export class LifeWorld {
           clamped,
         )
       ) {
+        (recoveredNow ??= new Set()).add(m);
         this.clearSeamRecovery(m);
         this.seamWait.delete(m);
         env.diagnostics?.recovery(m, 'seam');
@@ -7424,6 +7444,10 @@ export class LifeWorld {
             : guard.clearSeam(target, preview, m, reject) &&
               guard(target, preview, seam.preview, undefined, false, m, reject, source));
         if (safe && target && preview) {
+          if (history?.queued) {
+            history.queued = false;
+            this.queuedSeams.delete(m);
+          }
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
@@ -7477,6 +7501,7 @@ export class LifeWorld {
           owns: this.covers.has(tile) ? (p) => this.owns(tile, p) : undefined,
           recoveredLines: recoveries.get(tile),
           recoveryAttempts,
+          recoveredNow,
           recovered: (m) => this.clearSeamRecovery(m),
         },
       );
@@ -7982,10 +8007,6 @@ export class LifeWorld {
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
-            ...(m.kind === 'person' &&
-              people.every((look) => look.figure !== 'seated' && look.figure !== 'rower') && {
-                mappedPersonMover: true,
-              }),
             lng,
             lat,
             ahead,
@@ -7994,6 +8015,11 @@ export class LifeWorld {
             ...(speech && {
               speech: { ...speech, id: `${tile.z}/${tile.x}/${tile.y}:${speech.id}` },
             }),
+            mappedPersonMover:
+              m.kind === 'person' &&
+              people.every((look) => look.figure !== 'seated' && look.figure !== 'rower')
+                ? true
+                : undefined,
           };
           push(m, agent);
           owners?.set(m, agent);
@@ -8016,11 +8042,11 @@ export class LifeWorld {
         } else {
           push(m, {
             kind: m.kind,
-            ...(m.kind === 'person' && { mappedPersonMover: true }),
             lng,
             lat,
             ahead,
             flap: 0,
+            mappedPersonMover: m.kind === 'person' ? true : undefined,
           });
         }
       }

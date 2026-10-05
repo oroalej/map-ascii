@@ -255,6 +255,74 @@ describe('cross-zoom continuity', () => {
 });
 
 describe('transactional adoption', () => {
+  it.each([1, -1] as const)(
+    'remaps an interior arm in direction %i without connecting a merely nearby plan',
+    (direction) => {
+      const a = new LifeBuilder(),
+        b = new LifeBuilder();
+      for (const builder of [a, b])
+        builder.line(
+          [
+            { x: 0, y: 2000 },
+            { x: 400, y: 2000 },
+          ],
+          LifeLine.roadMajor,
+          8,
+          77,
+        );
+      a.line(
+        [
+          { x: 400, y: 1000 },
+          { x: 400, y: 2000 },
+          { x: 400, y: 3000 },
+        ],
+        LifeLine.roadMajor,
+        8,
+        88,
+      );
+      b.line(
+        [
+          { x: 1000, y: 500 },
+          { x: 1500, y: 500 },
+        ],
+        LifeLine.roadMajor,
+        8,
+        88,
+      );
+      const arm = [
+        { x: 400, y: 1000 },
+        { x: 400, y: 2000 },
+        { x: 400, y: 3000 },
+      ];
+      b.line(direction === 1 ? arm : [...arm].reverse(), LifeLine.roadMajor, 8, 88, direction);
+      // Same way identity and quantized proximity do not establish exact plan connectivity.
+      b.line(
+        arm.map((p) => ({ ...p, x: p.x + 0.4 })),
+        LifeLine.roadMajor,
+        8,
+        88,
+        1,
+      );
+      const source = new TileLife(left, a.finish(), 1),
+        target = new TileLife(left, b.finish(), 2),
+        m = continuityMover(source, 100);
+      m.d = 100;
+      m.junctionRoute = { key: 'interior', exits: [2] };
+      m.routing = {
+        seed: 10,
+        turns: 7,
+        indicating: true,
+        plan: { line: 0, dir: 1, vertex: 1, exit: 2, target: source.directedExit(2, 1), radius: 4 },
+      };
+      const before = structuredClone(m),
+        preview = target.projectFrom(m, source)!;
+      const exit = direction === 1 ? 4 : 5;
+      expect(preview.junctionRoute?.exits).toEqual([exit]);
+      expect(preview.routing?.plan?.exit).toBe(exit);
+      expect(preview.routing?.plan?.target).toEqual(target.directedExit(exit, 1));
+      expect(m).toEqual(before);
+    },
+  );
   it('remaps a quantized curve and linked exits by identity before adopting their local frame', () => {
     const sourceTile = { z: 16, x: 55192, y: 30266 };
     const targetTile = { ...sourceTile, x: sourceTile.x + 1 };

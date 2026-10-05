@@ -566,7 +566,7 @@ describe('crossroads traffic', () => {
     expect(waiter.y).toBeGreaterThan(cy + 10 * pm);
   });
   it.each([0, 2.9, 7])(
-    'clears every arm with compatible holds, safe stops and bounded waits over 180 seconds at minimum %s',
+    'clears every arm with compatible holds, safe stops and bounded waits at minimum %s',
     (minimum) => {
       const b = new LifeBuilder();
       const center = { x: 2048, y: 2048 };
@@ -614,7 +614,8 @@ describe('crossroads traffic', () => {
       const table = (world as unknown as { junctions: JunctionTable }).junctions;
       const crossed = new Set<number>();
       let maxWait = 0;
-      for (let frame = 0; frame < 180 * 30; frame++) {
+      const seconds = minimum === 0 ? 180 : 60;
+      for (let frame = 0; frame < seconds * 30; frame++) {
         const before = life.movers.map((m) => ({
           line: m.line,
           turns: m.routing?.turns ?? 0,

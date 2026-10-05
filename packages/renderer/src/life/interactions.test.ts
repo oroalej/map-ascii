@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { activityLevels, RUN } from './config';
+import { activityLevels, RUN, RECOVERY } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LocalScenes } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
+import type { WalkingGraph } from './navigation';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -54,6 +55,71 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('expires active yielding through a checked return while preserving its reservation', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] },
+      priority = person(45);
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(p),
+      trail = structuredClone(visit.trail),
+      group = p.group;
+    let active = true,
+      returning = false;
+    const cancel = vi.fn(() => {
+      active = false;
+      returning = true;
+    });
+    let blockReturn = true;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) => {
+        if (reserve) {
+          expect(Math.hypot(next.x - before.x, next.y - before.y)).toBeLessThanOrEqual(
+            p.speed * 0.1 + 1e-8,
+          );
+          return !(returning && blockReturn);
+        }
+        return true;
+      },
+      { yielding: () => (active ? priority : undefined), holding: () => true, cancelYield: cancel },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    const holding = structuredClone(p);
+    // A zero-time call must preserve the active timeout and complete pose.
+    for (let frame = 0; frame < 60; frame++) scene.yieldStep(p, 0, guard);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(p).toEqual(holding);
+    for (let frame = 10; frame < (RECOVERY.yieldSeconds + 1) * 10; frame++)
+      scene.yieldStep(p, 0.1, guard);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(p.y).toBe(holding.y);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.trail).toEqual(trail);
+    blockReturn = false;
+    for (let frame = 0; frame < 12; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p).toEqual({ ...anchor, walked: p.walked });
+    expect(p.group).toBe(group);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(scene.yieldStep(p, 0.1, guard)).toBe(false);
+  });
+
+  it('rejects holding candidates before performing a route search', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] };
+    const graph = (scene as unknown as { graph: WalkingGraph }).graph,
+      route = vi.spyOn(graph, 'route'),
+      cancel = vi.fn();
+    const guard = Object.assign(() => true, {
+      yielding: () => person(45),
+      holding: () => false,
+      cancelYield: cancel,
+    });
+    expect(scene.yieldStep(p, 0.1, guard)).toBe(false);
+    expect(route).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('retreats against mapped travel while retaining a backward physical facing', () => {
     const scene = setup(),
       p = { ...person(), group: [{ ...walker }], momentFacing: { hx: -1, hy: 0 } },

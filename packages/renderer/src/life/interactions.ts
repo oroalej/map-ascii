@@ -10,7 +10,7 @@ import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometr
 import { WalkingGraph, type WalkPoint } from './navigation';
 import { between, random } from './random';
 import { VEHICLES } from './vehicles';
-import { isWalker, RUN, usableLines, kinematicsOf, type Activity } from './config';
+import { isWalker, RUN, RECOVERY, usableLines, kinematicsOf, type Activity } from './config';
 import { exposed, runPace } from './running';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
@@ -130,6 +130,7 @@ export class LocalScenes {
       path: WalkPoint[];
       next: number;
       returning: boolean;
+      seconds: number;
     }
   >();
   private readonly yieldHeld = new WeakSet<Mover>();
@@ -663,14 +664,17 @@ export class LocalScenes {
   private blockedTimeout(m: Mover, visit: Visit) {
     if (visit.blocked >= 8 && visit.state !== 'return') {
       if (!visit.returnPending) this.requestReturn(m, visit);
-    } else if (visit.blocked >= (visit.retryAt ?? 16) && visit.state === 'return') {
+    } else if (
+      visit.blocked >= (visit.retryAt ?? RECOVERY.returnReplanSeconds) &&
+      visit.state === 'return'
+    ) {
       const path = this.route(m, visit.trail[0]!);
       if (path?.every(inTile)) {
         visit.path = path;
         visit.next = 1;
         delete visit.bypass;
       }
-      visit.retryAt = visit.blocked + 16;
+      visit.retryAt = visit.blocked + RECOVERY.returnReplanSeconds;
     }
   }
 
@@ -721,6 +725,7 @@ export class LocalScenes {
     owns?: (p: WalkPoint) => boolean,
   ): boolean {
     if (!guard || !isWalker(m.kind)) return false;
+    if (dt <= 0) return this.yielding.has(m);
     this.yieldHeld.delete(m);
     let priority = guard.yielding?.(m);
     let state = this.yielding.get(m);
@@ -766,7 +771,7 @@ export class LocalScenes {
         );
       };
       for (const direct of [false, true]) {
-        for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
+        for (const retreat of RECOVERY.retreats) {
           for (const side of [1, -1]) {
             for (const offset of [0.65, 1, 1.2, 1.5]) {
               restoreMover(m, anchor);
@@ -781,9 +786,9 @@ export class LocalScenes {
                 y: back.y + heading.hx * side * offset * this.perMeter,
               };
               if (
-                !this.graph.route(physicalPoint(anchor), physicalPoint({ ...m, ...holding })) ||
                 !admissible(previous, holding) ||
-                (guard.holding && !guard.holding(m))
+                (guard.holding && !guard.holding(m)) ||
+                !this.graph.route(physicalPoint(anchor), physicalPoint(m))
               )
                 continue;
               state = {
@@ -791,6 +796,7 @@ export class LocalScenes {
                 path: direct ? [holding] : [back, holding],
                 next: 0,
                 returning: false,
+                seconds: 0,
               };
               break;
             }
@@ -806,6 +812,13 @@ export class LocalScenes {
         return false;
       }
       this.yielding.set(m, state);
+    }
+    if (priority && !state.returning) {
+      state.seconds += dt;
+      if (state.seconds >= RECOVERY.yieldSeconds - 1e-9) {
+        guard.cancelYield?.(m);
+        priority = undefined;
+      }
     }
     if (!priority && !state.returning) {
       state.path = [

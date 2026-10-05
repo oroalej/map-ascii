@@ -66,7 +66,7 @@ describe('terrain-blocked road vehicles', () => {
         const before = life.offsetOf(car);
         world.step(0.1, undefined, 21);
         const offset = life.offsetOf(car);
-        expect(Math.abs(offset - before)).toBeLessThanOrEqual(ROAD_AVOID.shift * 0.1 + 1e-9);
+        expect(Math.abs(offset - before)).toBeLessThanOrEqual(ROAD_AVOID.steer * 0.1 + 1e-9);
         expect(Math.abs(offset) + VEHICLES.car.width / 2).toBeLessThanOrEqual(4);
         for (const m of [car, follower]) {
           const bodies = life.groundBodies(m);

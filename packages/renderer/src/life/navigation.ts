@@ -34,6 +34,12 @@ export class WalkingGraph {
   private readonly edgeBins = new Map<string, number[]>();
   private readonly bin: number;
   private roadAccess!: RoadAccess;
+  private search?: {
+    costs: Float64Array;
+    previous: Int32Array;
+    done: Uint8Array;
+    open: Set<number>;
+  };
 
   constructor(
     geo: LifeGeometry,
@@ -294,10 +300,21 @@ export class WalkingGraph {
     // the ends of two long parallel edges. This uses the graph's same 3 m join limit.
     if (distance(start.point, end.point) <= 3 * this.perMeter && this.clear(start.point, end.point))
       return [from, start.point, end.point, to];
-    const costs = new Float64Array(this.points.length).fill(Infinity);
-    const previous = new Int32Array(this.points.length).fill(-1);
-    const done = new Uint8Array(this.points.length);
-    const open = new Set<number>([start.edge.a, start.edge.b]);
+    if (!this.search || this.search.costs.length < this.points.length) {
+      this.search = {
+        costs: new Float64Array(this.points.length),
+        previous: new Int32Array(this.points.length),
+        done: new Uint8Array(this.points.length),
+        open: new Set(),
+      };
+    }
+    const { costs, previous, done, open } = this.search;
+    costs.fill(Infinity);
+    previous.fill(-1);
+    done.fill(0);
+    open.clear();
+    open.add(start.edge.a);
+    open.add(start.edge.b);
     costs[start.edge.a] = distance(start.point, this.points[start.edge.a]!);
     costs[start.edge.b] = distance(start.point, this.points[start.edge.b]!);
     let found = -1;

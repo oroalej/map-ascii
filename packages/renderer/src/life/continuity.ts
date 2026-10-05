@@ -96,6 +96,17 @@ export class SegmentGrid {
     // Legacy closest-segment ties are resolved by original geometry order.
     return [...found].sort((a, b) => a.line - b.line || a.v - b.v);
   }
+
+  /** Candidate line order matches the full geometry scan, including duplicate identities. */
+  linesNear(x: number, y: number, reach: number): readonly number[] {
+    return [...new Set(this.near(x, y, reach).map((segment) => segment.line))];
+  }
+}
+
+/** Point matching is independent of whether either neighboring directed arm is legal. */
+function* matchingVertices(geo: LifeGeometry, line: number, x: number, y: number) {
+  for (let v = geo.starts[line]!; v < geo.starts[line + 1]!; v++)
+    if (Math.hypot(geo.coords[v * 2]! - x, geo.coords[v * 2 + 1]! - y) <= ADOPT.vertexSnap) yield v;
 }
 
 /** No mutation or random draws: source and preview may coexist until an admission commits. */
@@ -207,12 +218,10 @@ export function projectMover(
   if (m.curveCorner) {
     const x = frame.x + m.curveCorner.x * frame.scale;
     const y = frame.y + m.curveCorner.y * frame.scale;
-    for (let v = target.geo.starts[s.line]!; v < target.geo.starts[s.line + 1]!; v++) {
+    for (const v of matchingVertices(target.geo, s.line, x, y)) {
       const point = { x: target.geo.coords[v * 2]!, y: target.geo.coords[v * 2 + 1]! };
-      if (Math.hypot(point.x - x, point.y - y) <= 2) {
-        preview.curveCorner = point;
-        break;
-      }
+      preview.curveCorner = point;
+      break;
     }
     if (!preview.curveCorner) delete preview.curveLengthM;
   }
@@ -230,15 +239,9 @@ export function projectMover(
       const hy =
         source.geo.coords[(old.vertex + old.dir) * 2 + 1]! - source.geo.coords[old.vertex * 2 + 1]!;
       let mapped: number | undefined;
-      for (let line = 0; line < target.geo.kinds.length && mapped === undefined; line++) {
+      for (const line of grid.linesNear(x, y, ADOPT.vertexSnap)) {
         if (target.geo.lineIds?.[line] !== id) continue;
-        for (
-          let v = target.geo.starts[line]!;
-          v < target.geo.starts[line + 1]! && mapped === undefined;
-          v++
-        ) {
-          if (Math.hypot(target.geo.coords[v * 2]! - x, target.geo.coords[v * 2 + 1]! - y) > 2)
-            continue;
+        for (const v of matchingVertices(target.geo, line, x, y)) {
           for (const direction of [1, -1] as const) {
             const next = v + direction;
             if (
@@ -254,7 +257,9 @@ export function projectMover(
               break;
             }
           }
+          if (mapped !== undefined) break;
         }
+        if (mapped !== undefined) break;
       }
       if (mapped === undefined) break;
       exits.push(mapped);
@@ -266,9 +271,7 @@ export function projectMover(
   if (m.entered) {
     const x = frame.x + source.geo.coords[m.entered.vertex * 2]! * frame.scale;
     const y = frame.y + source.geo.coords[m.entered.vertex * 2 + 1]! * frame.scale;
-    for (let v = target.geo.starts[s.line]!; v < target.geo.starts[s.line + 1]!; v++) {
-      if (Math.hypot(target.geo.coords[v * 2]! - x, target.geo.coords[v * 2 + 1]! - y) > 2)
-        continue;
+    for (const v of matchingVertices(target.geo, s.line, x, y)) {
       preview.entered = {
         vertex: v,
         x: frame.x + m.entered.x * frame.scale,
@@ -293,7 +296,7 @@ export function projectMover(
       const py = frame.y + source.geo.coords[plan.vertex * 2 + 1]! * frame.scale;
       if (
         Math.hypot(target.geo.coords[vertex * 2]! - px, target.geo.coords[vertex * 2 + 1]! - py) <=
-        2
+        ADOPT.vertexSnap
       ) {
         const oldLine = plan.exit >> 1,
           oldDir = plan.exit & 1 ? -1 : 1;
@@ -303,7 +306,11 @@ export function projectMover(
         const hx = source.geo.coords[(oldVertex + oldDir) * 2]! - source.geo.coords[oldVertex * 2]!;
         const hy =
           source.geo.coords[(oldVertex + oldDir) * 2 + 1]! - source.geo.coords[oldVertex * 2 + 1]!;
-        for (let line = 0; line < target.geo.kinds.length; line++) {
+        for (const line of grid.linesNear(
+          target.geo.coords[vertex * 2]!,
+          target.geo.coords[vertex * 2 + 1]!,
+          ADOPT.vertexSnap,
+        )) {
           if (target.geo.lineIds?.[line] !== exitId) continue;
           for (const direction of [1, -1] as const) {
             const ref = target.directedExit(line * 2 + (direction === 1 ? 0 : 1), vertex);

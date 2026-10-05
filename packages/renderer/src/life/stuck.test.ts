@@ -6,7 +6,7 @@ import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
 import { packLife } from './draw';
 import { themes } from '../theme';
-import { FOLLOW, WALK, ROAD_AVOID, PEDESTRIAN } from './config';
+import { FOLLOW, WALK, ROAD_AVOID, PEDESTRIAN, RECOVERY, activityLevels } from './config';
 import { VEHICLES } from './vehicles';
 import { snapshotMover } from './mover-pose';
 import { bodiesOverlap, PolygonIndex } from './occupancy';
@@ -1203,6 +1203,100 @@ it('requires accepted travel before rearming a vehicle recovery', () => {
     life.step(1 / 30, undefined, undefined, undefined, { rain: 0 }, () => true);
   expect(Math.abs(m.x - recovered.x) / pm).toBeGreaterThan(4.4);
   expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(true);
+});
+
+it.each(['activity', 'near', 'inspection', 'removed'] as const)(
+  'suspends an ineligible recovery leader without holding traffic (%s)',
+  (reason) => {
+    const { life } = fixture(LifeLine.roadMajor, 8);
+    const leader = mover('vehicle', 70, 1),
+      start = leader.x;
+    life.movers.push(leader);
+    const guard: Parameters<typeof life.recoverVehicle>[1] = (next) =>
+      !('dir' in next) || next.dir !== -1 || next.x <= start - 0.5 * pm + 1e-8;
+    expect(life.recoverVehicle(leader, guard, new JunctionTable(), new Set(), undefined, 0.1)).toBe(
+      false,
+    );
+    const state = life as unknown as {
+      recoveryLeaders: Map<number, Mover>;
+      recoveryApproaches: WeakMap<Mover, unknown>;
+    };
+    const approach = state.recoveryApproaches.get(leader);
+    expect(state.recoveryLeaders.get(leader.line)).toBe(leader);
+    const oncoming = mover('vehicle', 75, -1);
+    life.movers.push(oncoming);
+    leader.rank = reason === 'activity' ? 0.9 : 0;
+    if (reason === 'removed') life.movers.splice(0, 1);
+    const initial = oncoming.x,
+      leaderPose = snapshotMover(leader);
+    const near = reason === 'near' ? (x: number) => x > start + pm : undefined;
+    const env = {
+      rain: 0,
+      levels: { ...activityLevels(1), vehicle: 0.5 },
+      inspecting: reason === 'inspection' ? leader : undefined,
+    };
+    life.step(0.1, undefined, undefined, near, env, () => true);
+    expect(oncoming.x).toBeLessThan(initial);
+    expect(state.recoveryLeaders.get(leader.line)).not.toBe(leader);
+    // Traffic may lazily initialize a routing seed even for an inspected actor.
+    expect(leader).toMatchObject(leaderPose);
+    expect(state.recoveryApproaches.get(leader)).toBe(approach);
+    if (reason !== 'removed') {
+      leader.rank = 0;
+      life.step(0.1, undefined, undefined, undefined, undefined, guard);
+      expect(state.recoveryLeaders.get(leader.line)).toBe(leader);
+    }
+  },
+);
+
+it.each(['inspection', 'activity', 'near'] as const)(
+  'freezes active yielding time while its walker is ineligible (%s)',
+  (reason) => {
+    const { life } = fixture(LifeLine.path, 4);
+    const m = mover('person', 70, 1),
+      priority = mover('vehicle', 75, -1);
+    life.movers.push(m);
+    let active = true;
+    const cancel = vi.fn(() => {
+      active = false;
+    });
+    const guard = Object.assign(() => true, {
+      yielding: () => (active ? priority : undefined),
+      holding: () => true,
+      cancelYield: cancel,
+    });
+    for (let frame = 0; frame < 10; frame++)
+      life.step(0.1, undefined, undefined, undefined, undefined, guard);
+    const frozen = snapshotMover(m);
+    for (let frame = 0; frame < (RECOVERY.yieldSeconds + 1) * 10; frame++)
+      life.step(
+        0.1,
+        undefined,
+        undefined,
+        reason === 'near' ? () => false : undefined,
+        {
+          rain: 0,
+          inspecting: reason === 'inspection' ? m : undefined,
+          levels: { ...activityLevels(1), person: reason === 'activity' ? 0 : 1 },
+        },
+        guard,
+      );
+    expect(m).toEqual(frozen);
+    expect(cancel).not.toHaveBeenCalled();
+    for (let frame = 0; frame < (RECOVERY.yieldSeconds - 1) * 10; frame++)
+      life.step(0.1, undefined, undefined, undefined, undefined, guard);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  },
+);
+
+it('keeps vehicle-only recovery fields absent on ordinary walking steps', () => {
+  const { life } = fixture(LifeLine.path, 4);
+  const m = mover('person', 70, 1);
+  life.movers.push(m);
+  expect(Object.hasOwn(m, 'roadSteering')).toBe(false);
+  life.step(0.1, undefined, undefined, undefined, undefined, () => true);
+  expect(m.x).toBeGreaterThan(1000 + 70 * pm);
+  expect(Object.hasOwn(m, 'roadSteering')).toBe(false);
 });
 
 it('executes a selected recovery retreat in bounded steps before reversing', () => {

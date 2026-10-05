@@ -83,18 +83,26 @@ for (const seed of [1, 42]) {
     world.visible(18, s.levels, s.center, undefined, s.bounds);
     const states = new Set<string>();
     const expectedStates = ['wait', 'purchase', 'board', 'aboard', 'return'];
+    const originalVisits = new Map(people.map((p) => [p, tile.scenes.visits.get(p)!]));
+    const returning = new Set<(typeof people)[number]>();
+    const completed = new Set<(typeof people)[number]>();
     let services = 0;
-    for (let frame = 0; frame < 180 * 30; frame++) {
+    for (let frame = 0; frame < 30 * 30; frame++) {
       world.step(1 / 30, undefined, 18, s.bounds, undefined, { rain: 0 }, 0.9);
       world.visible(18, s.levels, s.center, undefined, s.bounds);
       for (const visit of tile.scenes.visits.values()) states.add(visit.state);
+      for (const p of people) {
+        const visit = tile.scenes.visits.get(p);
+        if (visit === originalVisits.get(p) && visit?.state === 'return') returning.add(p);
+        if (returning.has(p) && visit !== originalVisits.get(p)) completed.add(p);
+      }
       services = Math.max(services, tile.scenes.services.size);
       if (frame % 60 === 0) valid(world);
-      // The long transit soak covers later frames; this test proves these flows.
-      if (services > 0 && expectedStates.every((state) => states.has(state))) break;
+      if (completed.size === people.length) break;
     }
     valid(world);
     expect(services).toBeGreaterThan(0);
+    expect(completed.size).toBe(people.length);
     for (const state of expectedStates)
       expect(states.has(state), `missing ${state}; observed ${[...states].join(', ')}`).toBe(true);
   });

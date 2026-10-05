@@ -18,24 +18,22 @@ export type LonePlacement = {
   targetCellChecks: number;
 };
 
-/** A single complete coarse figure has only sixteen rigid second-ring choices. */
-export function placeCoarseLone(
-  member: GroupRaster,
-  grid: { cols: number; rows: number; cellWidth: number; cellHeight: number },
-  permits: (col: number, row: number) => boolean,
-): LonePlacement {
-  const result: LonePlacement = { rigidAttempts: 0, targetCellChecks: 0 };
-  if (
-    (member.expected !== 1 && member.expected !== 4) ||
-    member.cells.length !== member.expected ||
-    member.cells.some(({ col, row }) => !Number.isInteger(col) || !Number.isInteger(row)) ||
-    new Set(member.cells.map(({ col, row }) => `${col}/${row}`)).size !== member.cells.length
-  )
-    return result;
+// Only the current dimensions are retained. First-ring draw ordering also depends
+// on each actor's fractional anchor and deliberately does not use this cache.
+let cachedOffsets:
+  | {
+      width: number;
+      height: number;
+      all: readonly Offset[];
+      ring: readonly Offset[];
+    }
+  | undefined;
+function offsetsFor(grid: { cellWidth: number; cellHeight: number }) {
+  if (cachedOffsets?.width === grid.cellWidth && cachedOffsets.height === grid.cellHeight)
+    return cachedOffsets;
   const offsets: Offset[] = [];
   for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -2; dx <= 2; dx++)
-      if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) offsets.push([dx, dy]);
+    for (let dx = -2; dx <= 2; dx++) offsets.push(Object.freeze([dx, dy] as const));
   offsets.sort(
     (a, b) =>
       (a[0] * grid.cellWidth) ** 2 +
@@ -45,7 +43,38 @@ export function placeCoarseLone(
       a[1] - b[1] ||
       a[0] - b[0],
   );
-  for (const offset of offsets) {
+  cachedOffsets = {
+    width: grid.cellWidth,
+    height: grid.cellHeight,
+    all: Object.freeze(offsets),
+    ring: Object.freeze(offsets.filter(([dx, dy]) => Math.max(Math.abs(dx), Math.abs(dy)) === 2)),
+  };
+  return cachedOffsets;
+}
+
+function validRaster(member: GroupRaster) {
+  if ((member.expected !== 1 && member.expected !== 4) || member.cells.length !== member.expected)
+    return false;
+  for (let i = 0; i < member.cells.length; i++) {
+    const cell = member.cells[i]!;
+    if (!Number.isInteger(cell.col) || !Number.isInteger(cell.row)) return false;
+    // Input cells may be outside the grid before translation. Compare coordinates
+    // directly so row * cols + col cannot alias two distinct out-of-bounds cells.
+    for (let j = 0; j < i; j++)
+      if (member.cells[j]!.col === cell.col && member.cells[j]!.row === cell.row) return false;
+  }
+  return true;
+}
+
+/** A single complete coarse figure has only sixteen rigid second-ring choices. */
+export function placeCoarseLone(
+  member: GroupRaster,
+  grid: { cols: number; rows: number; cellWidth: number; cellHeight: number },
+  permits: (col: number, row: number) => boolean,
+): LonePlacement {
+  const result: LonePlacement = { rigidAttempts: 0, targetCellChecks: 0 };
+  if (!validRaster(member)) return result;
+  for (const offset of offsetsFor(grid).ring) {
     result.rigidAttempts++;
     if (
       member.cells.every((cell) => {
@@ -77,33 +106,15 @@ export function placeCoarseGroup(
     members.length < 2 ||
     members.length > 4 ||
     members.reduce((sum, member) => sum + member.expected, 0) > 16 ||
-    members.some(
-      (member) =>
-        (member.expected !== 1 && member.expected !== 4) ||
-        member.cells.length !== member.expected ||
-        !member.cells.length ||
-        member.cells.some(({ col, row }) => !Number.isInteger(col) || !Number.isInteger(row)) ||
-        new Set(member.cells.map(({ col, row }) => `${col}/${row}`)).size !== member.cells.length,
-    )
+    members.some((member) => !validRaster(member))
   )
     return result;
 
-  const offsets: Offset[] = [];
-  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) offsets.push([dx, dy]);
-  offsets.sort(
-    (a, b) =>
-      (a[0] * grid.cellWidth) ** 2 +
-        (a[1] * grid.cellHeight) ** 2 -
-        (b[0] * grid.cellWidth) ** 2 -
-        (b[1] * grid.cellHeight) ** 2 ||
-      a[1] - b[1] ||
-      a[0] - b[0],
-  );
+  const offsets = offsetsFor(grid);
   const allowed = (col: number, row: number) =>
     col >= 0 && col < grid.cols && row >= 0 && row < grid.rows && permits(col, row);
   // Prefer a common translation; preserve formation before assigning members separately.
-  for (const offset of offsets) {
-    if (Math.max(Math.abs(offset[0]), Math.abs(offset[1])) !== 2) continue;
+  for (const offset of offsets.ring) {
     result.rigidAttempts++;
     const used = new Set<number>();
     let clear = true;
@@ -128,7 +139,7 @@ export function placeCoarseGroup(
 
   // Filter once and cache addresses. The recursive search allocates no footprint arrays.
   const candidates = members.map((member) =>
-    offsets.flatMap((offset) => {
+    offsets.all.flatMap((offset) => {
       const cells: number[] = [];
       for (const cell of member.cells) {
         const col = cell.col + offset[0],
