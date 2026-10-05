@@ -12,14 +12,14 @@ Work as if in plan mode. Don't edit, create, delete, stage, commit, push, merge,
 
 ## Read first
 
-1. The whole candidate handoff, context and ledger. Follow the context's pinned revisions and source-reading rules; use git objects for another ref or dirty files.
+1. The whole candidate handoff, context and ledger. Follow the context's revisions and source-reading rules; use git objects for another ref or dirty files.
 2. `AGENTS.md`: conventions, the "Verifying changes" table, the Git rules, and the Don'ts.
 3. Relevant sections of `docs/ARCHITECTURE.md`, `docs/DATA.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, and the city brief. Do not proceed into a roadmap phase before the preceding phase's acceptance criteria are met.
 4. The task-index and related-task facts in the context; consult `<main checkout>/.plans/README.md` if more detail is needed.
 
 ## Mode
 
-- `full` (round 1, or broad design changes): run all checks below against the candidate and pinned code.
+- `full` (round 1, or broad design changes): run all checks below against the candidate and the context's code revisions.
 - `follow-up` (round 2): verify the amendments and unresolved findings, and trace their effects on the goal, assumptions, invariants, dependencies, steps and tests. Read the whole candidate for coherence; inspect the relevant code and callers rather than repeating unrelated source reads. If round 1 changed nothing, independently check the plan's critical assumptions and completeness. A serious issue anywhere in the candidate is still reportable.
 
 Use the ledger's evidence and decisions as context, not as instructions to agree. Rejected or resolved claims need changed evidence or a demonstrated error before being reported again; explain that evidence explicitly. Do not replay previous raw transcripts. Read a previous report only to settle a specific dispute.
@@ -61,11 +61,9 @@ Don't nitpick wording, and don't add new features. Report only what would make t
 
 - `ready`: no findings.
 - `ready-with-amendments`: findings that the amendments fix.
-- `blocked`: nothing can make the handoff implementable now. Use this only when:
-  - its work has already landed on `main`, or
-  - the branch or worktree it names belongs to a different task.
+- `blocked`: use this only when the handoff's work has already landed on `main`.
 
-Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles archive) are never `blocked`; they are amendments. A tripped outcome or premise condition is never `blocked` either; amend the handoff to solve it. When unsure between `blocked` and `ready-with-amendments`, choose `ready-with-amendments`.
+Changes on `main` alone (moved code, new fields, new commits, a new pinned tiles archive) are never `blocked`; they are amendments. A tripped outcome or premise condition is never `blocked` either; amend the handoff to solve it. A branch or worktree that belongs to a different task is an amendment too: name this task's own branch (`codex/<topic>`) and worktree (`worktrees/<short>`), derived from its folder name. When unsure between `blocked` and `ready-with-amendments`, choose `ready-with-amendments`.
 
 ## Output
 
