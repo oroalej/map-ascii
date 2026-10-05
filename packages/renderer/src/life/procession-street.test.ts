@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { eventOccurrence, type StreetRoute, type MassRoute } from '@atlas/shared';
+import {
+  eventOccurrence,
+  processionFormationWidth,
+  localMetricProjection,
+  type StreetRoute,
+  type MassRoute,
+  type FluvialRoute,
+} from '@atlas/shared';
 import { GroundProcessionScene } from './procession-street';
 import { LifeInspection } from './inspection';
 import { liveProgress } from './procession';
 import { eventGroundAllows, eventBridgeAllows, groundForRoute } from './ground-events';
-import { LifeWorld, type Mover } from './simulate';
+import { LifeWorld, type Mover, type Stall } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
 import { CellBit, EVENT_PERSON_BITS, MAX_TILE_AGENTS } from './config';
 import { metersPerUnit, tileToLngLat, lngLatToTile } from '../raster/geometry';
@@ -59,7 +66,26 @@ const mass: MassRoute = {
     roads: [{ line: routePoints, width_m: 8 }],
   },
 };
-function world() {
+function ordinaryPerson(x: number, y = 2000, rank = 0): Mover {
+  return {
+    kind: 'person',
+    line: 0,
+    from: 0,
+    dir: 1,
+    d: x,
+    x,
+    y,
+    hx: 1,
+    hy: 0,
+    speed: 0,
+    paint: 0,
+    lane: 0,
+    pause: 100,
+    rank,
+    group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
+  };
+}
+function world(inspection = false) {
   const b = new LifeBuilder();
   b.line(
     [
@@ -71,7 +97,7 @@ function world() {
     1,
     1,
   );
-  const w = new LifeWorld();
+  const w = new LifeWorld(undefined, undefined, undefined, inspection);
   w.setProcessions([street, mass]);
   w.sync([{ key: 'road', tile, life: b.finish() }]);
   const life = worldTiles(w).get('road')!;
@@ -80,6 +106,142 @@ function world() {
   return { w, life };
 }
 describe('street event simulation', () => {
+  it.each(['car', 'attendant'] as const)(
+    'checks off-view %s bodies during admission independently of camera bounds',
+    (obstacle) => {
+      for (const bounds of [undefined, [20, 10, 21, 11] as [number, number, number, number]]) {
+        const { w, life } = world();
+        const candidate = new GroundProcessionScene(street)
+          .agents(0.6, 0, { scope: 'live/test' })
+          .find((actor) => !actor.prop)!;
+        const at = lngLatToTile(tile, candidate.lng, candidate.lat);
+        if (obstacle === 'car')
+          life.movers.push({
+            kind: 'vehicle',
+            vehicle: 'car',
+            ...at,
+            y: 2000,
+            hx: 1,
+            hy: 0,
+            line: 0,
+            from: 0,
+            dir: 1,
+            d: at.x,
+            speed: 0,
+            v: 0,
+            paint: 0,
+            lane: 0,
+            pause: 100,
+            rank: 99,
+          });
+        else {
+          const stall: Stall = {
+            x: at.x + 1.3 * pm,
+            y: at.y,
+            hx: 0,
+            hy: 1,
+            side: 1,
+            rank: 99,
+            paint: 0,
+            shirt: 0,
+          };
+          life.stalls.push(stall);
+        }
+        w.visible(18, 0.01, point(1500), undefined, bounds);
+        w.setLive(street.id, 0.6, 'test');
+        w.step(0.1, undefined, 18, bounds);
+        const admitted = w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor);
+        expect(admitted.length).toBeGreaterThan(0);
+        expect(admitted.some((actor) => actor.eventActor === candidate.eventActor)).toBe(false);
+      }
+    },
+  );
+  it('invalidates cached reservations when the loaded reference tile changes and restores stable identities', () => {
+    const { w, life } = world();
+    w.setLive(street.id, 0.6, 'test');
+    w.step(0.1, undefined, 18);
+    const ids = w
+      .visible(18, 1, point(1500))
+      .filter((actor) => actor.eventActor)
+      .map((actor) => actor.eventActor);
+    const neighbor = {
+      key: 'neighbor',
+      tile: { ...tile, x: tile.x + 1 },
+      life: new LifeBuilder().finish(),
+    };
+    w.sync([neighbor]);
+    expect(w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor)).toEqual([]);
+    w.sync([neighbor, { key: 'road', tile, life: life.geo }]);
+    w.step(0.1, undefined, 18);
+    expect(
+      w
+        .visible(18, 1, point(1500))
+        .filter((actor) => actor.eventActor)
+        .map((actor) => actor.eventActor),
+    ).toEqual(ids);
+    w.stop();
+    w.setLive(undefined);
+    expect(life.eventPopulation).toBe(0);
+  });
+  it('keeps a parade actor visible through a rounded bend and rejects ground beyond it', () => {
+    const frame = localMetricProjection(street.route[0]!);
+    const route: StreetRoute = {
+      ...street,
+      kind: 'parade',
+      formation: undefined,
+      route: [
+        [0, 0],
+        [100, 0],
+        [100, 100],
+      ].map((q) => frame.from(q as [number, number])),
+      length_m: 200,
+      segments: Array.from({ length: 2 }, () => ({ id: 'osm:way/1', width_m: 8, sidewalk_m: 0 })),
+    };
+    const scene = new GroundProcessionScene(route),
+      tail = Math.max(10, ...scene.actors.map((actor) => actor.back)) + 10;
+    for (const head of [95, 99.75, 100, 101, 105])
+      expect(
+        scene
+          .agents((head + tail) / (200 + tail), 0)
+          .some((actor) => actor.eventActor?.endsWith('/0')),
+      ).toBe(true);
+    expect(eventGroundAllows(scene.ground, [frame.from([102.5, -2.5])])).toBe(true);
+    expect(eventGroundAllows(scene.ground, [frame.from([104, -4])])).toBe(false);
+  });
+  it.each([0, Math.PI / 4])('retains full minimum-width formations at heading %s', (angle) => {
+    const origin = street.route[0]!,
+      frame = localMetricProjection(origin);
+    const formations: StreetRoute[] = [
+      ...[4, 8, 24].map((bearers): StreetRoute => ({
+        ...street,
+        formation: { bearers, ranks: 12, marshals: 4 },
+      })),
+      {
+        ...street,
+        kind: 'parade',
+        formation: {
+          contingents: 3,
+          ranks: 4,
+          band: 12,
+          color_guard: 4,
+          vehicles: ['car', 'truck', 'motorcycle'],
+        },
+      },
+    ];
+    for (const route of formations) {
+      const width = processionFormationWidth(
+        route.kind,
+        route.kind === 'parade' ? route.formation?.vehicles : [],
+      );
+      const scene = new GroundProcessionScene({
+        ...route,
+        route: [origin, frame.from([1000 * Math.cos(angle), 1000 * Math.sin(angle)])],
+        length_m: 1000,
+        segments: [{ id: 'osm:way/1', width_m: width, sidewalk_m: 0 }],
+      });
+      expect(scene.agents(0.6, 0, { crowds: false })).toHaveLength(scene.actors.length);
+    }
+  });
   it('admits walkers over water only on a baked bridge carriageway', () => {
     const b = new LifeBuilder();
     b.line(
@@ -392,9 +554,21 @@ describe('street event simulation', () => {
   });
   it('uses tile and visible capacity, including props, and clears repeated playback ownership', () => {
     const { w, life } = world();
+    life.movers.push(
+      ...Array.from({ length: 40 }, (_, i) => ordinaryPerson(3000 + i * pm, 2000 + 4.5 * pm)),
+    );
+    const bounds: [number, number, number, number] = [
+      point(0, 4096)[0],
+      point(0, 4096)[1],
+      point(4096, 0)[0],
+      point(4096, 0)[1],
+    ];
+    expect(
+      w.visible(18, 1, point(1500), undefined, bounds).filter((actor) => !actor.eventActor).length,
+    ).toBeGreaterThan(30);
     w.setLive(street.id, 0.6, '2026');
     w.step(0.1, undefined, 18);
-    const event = w.visible(18, 1, point(1500), undefined, undefined, 1, 30);
+    const event = w.visible(18, 1, point(1500), undefined, bounds, 1, 30);
     expect(event.length).toBeLessThanOrEqual(30);
     expect(event.some((a) => a.eventActor)).toBe(true);
     expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
@@ -404,6 +578,7 @@ describe('street event simulation', () => {
       w.stop();
       expect(life.eventPopulation).toBe(0);
     }
+    life.movers.length = 0;
     life.movers.push(
       ...Array.from({ length: MAX_TILE_AGENTS }, (): Mover => ({
         kind: 'person',
@@ -492,6 +667,118 @@ describe('street event simulation', () => {
       w.visible(18, 1, point(1500)).map((a) => a.eventActor),
     );
   });
+  it.each(['fluvial-live', 'street-played'] as const)(
+    'retains arrival identities and inspection ownership from %s',
+    (kind) => {
+      const { w, life } = world(true);
+      const river: FluvialRoute = {
+        id: 'procession/river',
+        kind: 'fluvial',
+        title: street.title,
+        status: street.status,
+        route: street.route,
+        banks: street.route.map(() => [0, 0]),
+        length_m: street.length_m,
+        schedule: street.schedule,
+      };
+      const predecessor = kind === 'fluvial-live' ? river : street;
+      const arrival = { ...mass, follows: predecessor.id };
+      w.setProcessions([predecessor, arrival]);
+      if (kind === 'fluvial-live') {
+        w.setLive(river.id, 0.99, 'test');
+        w.step(0.1, undefined, 18);
+      } else {
+        w.play(street.id, eventOccurrence(street.schedule, new Date('2026-06-01')));
+        w.step(162, undefined, 18);
+      }
+      const before = w
+        .visible(18, 1, point(1500))
+        .filter((actor) => actor.kind === 'person' && !actor.prop && !actor.aboard);
+      expect(before.length).toBeGreaterThan(0);
+      if (kind === 'fluvial-live') {
+        w.setLive(arrival.id, 0, 'test');
+        w.step(0.1, undefined, 18);
+      } else {
+        w.play(arrival.id, eventOccurrence(arrival.schedule, new Date('2026-06-01')));
+        w.step(1e-6, undefined, 18);
+      }
+      const after = w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor);
+      const retained = after.filter((actor) =>
+        before.some((old) => old.inspectionId === actor.inspectionId),
+      );
+      expect(retained.length).toBeGreaterThan(0);
+      for (const actor of retained) {
+        const old = before.find((candidate) => candidate.inspectionId === actor.inspectionId)!;
+        expect(actor.lng).toBeCloseTo(old.lng, 8);
+        expect(actor.lat).toBeCloseTo(old.lat, 8);
+        expect([actor.paint, actor.candle, actor.candleSeed]).toEqual([
+          old.paint,
+          old.candle,
+          old.candleSeed,
+        ]);
+      }
+      expect(new Set(after.map((actor) => actor.eventActor)).size).toBe(after.length);
+      expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
+      w.stop();
+      w.setLive(undefined);
+      expect(life.eventPopulation).toBe(0);
+    },
+  );
+  it.each(['procession', 'mass'] as const)(
+    'respects saturated tile quotas for %s across a seam',
+    (kind) => {
+      const { w, life } = world();
+      w.sync([
+        { key: 'road', tile, life: life.geo },
+        { key: 'neighbor', tile: { ...tile, x: tile.x + 1 }, life: life.geo },
+      ]);
+      const next = worldTiles(w).get('neighbor')!;
+      for (const target of [life, next]) {
+        target.movers.length =
+          target.parked.length =
+          target.stalls.length =
+          target.gatherers.length =
+            0;
+        target.scenes.sites.length = 0;
+        target.movers.push(
+          ...Array.from({ length: MAX_TILE_AGENTS - 5 }, () => ordinaryPerson(3000, 2000, 99)),
+        );
+      }
+      const dx = 4096 - lngLatToTile(tile, ...mass.site.anchor).x;
+      const shift = (q: [number, number]) => {
+        const at = lngLatToTile(tile, ...q);
+        return point(at.x + dx, at.y);
+      };
+      const crossing: StreetRoute = {
+        ...street,
+        route: street.route.map((_, i) => point(4096 - 100 * pm + i * 4 * pm)),
+      };
+      const gathering: MassRoute = {
+        ...mass,
+        site: {
+          ...mass.site,
+          location: shift(mass.site.location),
+          anchor: shift(mass.site.anchor),
+          grounds: mass.site.grounds.map((ring) => ring.map(shift)),
+          approaches: mass.site.approaches.map((line) => line.map(shift)),
+        },
+      };
+      const route = kind === 'mass' ? gathering : crossing;
+      w.setProcessions([route]);
+      w.visible(18, 1, point(4096));
+      w.setLive(route.id, kind === 'mass' ? 0.5 : 0.6, 'test');
+      w.step(0.1, undefined, 18);
+      for (const target of [life, next]) {
+        expect(target.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
+        expect(target.eventPopulation).toBeGreaterThan(0);
+        expect(target.eventPopulation).toBeLessThanOrEqual(5);
+      }
+      const actors = w.visible(18, 1, point(4096)).filter((actor) => actor.eventActor);
+      expect(new Set(actors.map((actor) => actor.eventActor)).size).toBe(actors.length);
+      w.setLive(undefined);
+      expect(life.eventPopulation + next.eventPopulation).toBe(0);
+    },
+  );
   it('uses resolved live rules on September 11 at 12:30 and September 18 at 07:30 in Manila', () => {
     expect(liveProgress(street.schedule, new Date('2026-09-11T04:30:00Z'))).toBe(30 / 240);
     const parade = { ...street.schedule, offset_days: -1, start: '07:00', duration_min: 120 };
@@ -514,7 +801,7 @@ describe('street event simulation', () => {
     expect(host.latest()?.procession).toBeUndefined();
     w.clearTiles();
     host.play(street.id, timing);
-    for (let i = 0; i < 1801; i++) w.step(0.1);
+    w.step(180);
     expect(host.latest()?.procession).toBeUndefined();
     host.dispose();
   });

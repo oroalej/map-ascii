@@ -2,11 +2,12 @@
 import {
   localMetricProjection,
   PROCESSION_DEFAULTS,
+  PROCESSION_GEOMETRY,
   LEGACY_LOCAL_METERS_PER_DEGREE,
   type StreetRoute,
   type MassRoute,
 } from '@atlas/shared';
-import { PROCESSION, motionProfile, profileAt, segmentIndex } from './procession';
+import { PROCESSION, motionProfile, profileAt, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
 import { eventGroundAllows, groundForRoute, type EventGround } from './ground-events';
 import { hashString, random } from './random';
@@ -15,8 +16,13 @@ import type { LifeInspection } from './inspection';
 import { VEHICLES } from './vehicles';
 
 type Point = [number, number];
+const MASS_CELL = PROCESSION_GEOMETRY.massCell;
+const PERSON_REACH =
+  Math.max(PROCESSION_GEOMETRY.person.length, PROCESSION_GEOMETRY.person.width) / 2 +
+  PROCESSION_GEOMETRY.probePadding;
 type Actor = {
   id: string;
+  seed: number;
   back: number;
   off: number;
   paint: number;
@@ -34,9 +40,11 @@ export class GroundProcessionScene {
   readonly ground: EventGround;
   readonly frame: ReturnType<typeof localMetricProjection>;
   readonly points: Point[];
-  readonly along: number[] = [0];
+  readonly along: number[];
+  private readonly polyline: ReturnType<typeof routePolyline>;
   readonly profile: Float64Array;
   private readonly tail: number;
+  private scopedIds?: { scope: string; ids: string[] };
   private adopted: VisibleAgent[] = [];
   private massCells = new Map<string, Point>();
   private massParents = new Map<string, string | undefined>();
@@ -52,14 +60,8 @@ export class GroundProcessionScene {
         : {},
     );
     this.points = route.kind === 'mass' ? [] : route.route.map(this.frame.to);
-    for (let i = 1; i < this.points.length; i++)
-      this.along.push(
-        this.along.at(-1)! +
-          Math.hypot(
-            this.points[i]![0] - this.points[i - 1]![0],
-            this.points[i]![1] - this.points[i - 1]![1],
-          ),
-      );
+    this.polyline = routePolyline(this.points);
+    this.along = this.polyline.along;
     this.profile = motionProfile(hashString(route.id), this.along.at(-1)!);
     this.ground = groundForRoute(route);
     this.build();
@@ -83,9 +85,11 @@ export class GroundProcessionScene {
       paint: number,
       glyph?: string,
       vehicle?: Actor['vehicle'],
-    ) =>
+    ) => {
+      const id = `${this.route.id}/${this.actors.length}`;
       this.actors.push({
-        id: `${this.route.id}/${this.actors.length}`,
+        id,
+        seed: hashString(id),
         back,
         off,
         paint,
@@ -94,6 +98,7 @@ export class GroundProcessionScene {
         glyph,
         vehicle,
       });
+    };
     if (this.route.kind === 'mass') {
       const r = this.route;
       const key = (x: number, y: number) => `${x}/${y}`;
@@ -103,19 +108,23 @@ export class GroundProcessionScene {
         const xy = ring.map(this.frame.to),
           xs = xy.map((q) => q[0]),
           ys = xy.map((q) => q[1]);
-        for (let y = Math.ceil((Math.min(...ys) + 0.55) / 2); y * 2 < Math.max(...ys) - 0.55; y++)
+        for (
+          let y = Math.ceil((Math.min(...ys) + PERSON_REACH) / MASS_CELL);
+          y * MASS_CELL < Math.max(...ys) - PERSON_REACH;
+          y++
+        )
           for (
-            let x = Math.ceil((Math.min(...xs) + 0.55) / 2);
-            x * 2 < Math.max(...xs) - 0.55;
+            let x = Math.ceil((Math.min(...xs) + PERSON_REACH) / MASS_CELL);
+            x * MASS_CELL < Math.max(...xs) - PERSON_REACH;
             x++
           ) {
-            const q: Point = [x * 2, y * 2];
+            const q: Point = [x * MASS_CELL, y * MASS_CELL];
             if (
               eventGroundAllows(
                 permission,
                 [
-                  [q[0] - 0.55, q[1] - 0.55],
-                  [q[0] + 0.55, q[1] + 0.55],
+                  [q[0] - PERSON_REACH, q[1] - PERSON_REACH],
+                  [q[0] + PERSON_REACH, q[1] + PERSON_REACH],
                 ].map((q) => this.frame.from(q as Point)),
               )
             )
@@ -168,28 +177,52 @@ export class GroundProcessionScene {
       const f = this.route.formation;
       add(0, 0, 4, ProcessionGlyph.andas);
       for (let i = 0; i < (f?.bearers ?? PROCESSION_DEFAULTS.procession.bearers); i++)
-        add(1 + Math.floor(i / 2) * 1.2, (i % 2 ? 1 : -1) * 1.6, 3);
+        add(1 + Math.floor(i / 2) * 1.2, (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.bearerOffset, 3);
       for (let i = 0; i < (f?.marshals ?? PROCESSION_DEFAULTS.procession.marshals); i++)
-        add(-8 - Math.floor(i / 2) * 3, (i % 2 ? 1 : -1) * 1.1, 6, ProcessionGlyph.flag);
+        add(
+          -8 - Math.floor(i / 2) * 3,
+          (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.marshalOffset,
+          6,
+          ProcessionGlyph.flag,
+        );
       for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.procession.ranks); r++)
-        for (let c = 0; c < 4; c++) add(10 + r * 2, (c - 1.5) * 0.8, 3 + Math.floor(rng() * 5));
+        for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
+          add(
+            10 + r * 2,
+            (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
+            3 + Math.floor(rng() * 5),
+          );
     } else {
       const f = this.route.formation;
       let back = 0;
       for (let i = 0; i < (f?.color_guard ?? PROCESSION_DEFAULTS.parade.color_guard); i++)
-        add(back + Math.floor(i / 4) * 2, ((i % 4) - 1.5) * 0.8, 5, ProcessionGlyph.flag);
+        add(
+          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * 2,
+          ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
+            PROCESSION_GEOMETRY.columnPitch,
+          5,
+          ProcessionGlyph.flag,
+        );
       back += 8;
       for (let i = 0; i < (f?.band ?? PROCESSION_DEFAULTS.parade.band); i++)
         add(
-          back + Math.floor(i / 4) * 2,
-          ((i % 4) - 1.5) * 0.8,
+          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * 2,
+          ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
+            PROCESSION_GEOMETRY.columnPitch,
           4,
           i % 2 ? ProcessionGlyph.bugle : ProcessionGlyph.drum,
         );
-      back += Math.ceil((f?.band ?? PROCESSION_DEFAULTS.parade.band) / 4) * 2 + 5;
+      back +=
+        Math.ceil((f?.band ?? PROCESSION_DEFAULTS.parade.band) / PROCESSION_GEOMETRY.columns) * 2 +
+        5;
       for (let k = 0; k < (f?.contingents ?? PROCESSION_DEFAULTS.parade.contingents); k++) {
         for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks); r++)
-          for (let c = 0; c < 4; c++) add(back + r * 2, (c - 1.5) * 0.8, 3 + k);
+          for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
+            add(
+              back + r * 2,
+              (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
+              3 + k,
+            );
         back += (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks) * 2 + 6;
       }
       for (const vehicle of f?.vehicles ?? []) {
@@ -227,16 +260,16 @@ export class GroundProcessionScene {
       if (actor.kind !== 'person' || actor.prop || actor.vehicle || actor.aboard) continue;
       const q = this.frame.to([actor.lng, actor.lat]);
       const footprint = [
-        [-0.55, -0.55],
-        [-0.55, 0.55],
-        [0.55, -0.55],
-        [0.55, 0.55],
+        [-PERSON_REACH, -PERSON_REACH],
+        [-PERSON_REACH, PERSON_REACH],
+        [PERSON_REACH, -PERSON_REACH],
+        [PERSON_REACH, PERSON_REACH],
       ].map(([dx, dy]) => this.frame.from([q[0] + dx!, q[1] + dy!]));
       if (!eventGroundAllows(this.ground, footprint)) continue;
       let nearest: string | undefined,
         distance = Infinity;
-      const cx = Math.round(q[0] / 2),
-        cy = Math.round(q[1] / 2);
+      const cx = Math.round(q[0] / MASS_CELL),
+        cy = Math.round(q[1] / MASS_CELL);
       for (let y = cy - 1; y <= cy + 1; y++)
         for (let x = cx - 1; x <= cx + 1; x++) {
           const key = `${x}/${y}`;
@@ -254,7 +287,7 @@ export class GroundProcessionScene {
       if (
         !nearest ||
         Math.hypot(this.massCells.get(nearest)![0] - q[0], this.massCells.get(nearest)![1] - q[1]) >
-          2
+          MASS_CELL
       )
         continue;
       const approach: Point[] = [q];
@@ -267,7 +300,7 @@ export class GroundProcessionScene {
       const index = this.adopted.length,
         slot = this.actors[index]!,
         destination = this.frame.to(slot.destination!);
-      const destKey = `${Math.round(destination[0] / 2)}/${Math.round(destination[1] / 2)}`,
+      const destKey = `${Math.round(destination[0] / MASS_CELL)}/${Math.round(destination[1] / MASS_CELL)}`,
         tail: Point[] = [];
       for (
         let node: string | undefined = destKey;
@@ -284,19 +317,7 @@ export class GroundProcessionScene {
     if (this.route.kind === 'mass') this.actors.forEach((a, i) => (a.approach = this.massPaths[i]));
   }
   private at(s: number) {
-    s = Math.max(0, Math.min(this.along.at(-1)!, s));
-    const i = segmentIndex(this.along, s);
-    const a = this.points[i - 1]!,
-      b = this.points[i]!,
-      d = this.along[i]! - this.along[i - 1]!,
-      u = d ? (s - this.along[i - 1]!) / d : 0;
-    return {
-      x: a[0] + (b[0] - a[0]) * u,
-      y: a[1] + (b[1] - a[1]) * u,
-      hx: d ? (b[0] - a[0]) / d : 1,
-      hy: d ? (b[1] - a[1]) / d : 0,
-      index: i - 1,
-    };
+    return this.polyline.at(s);
   }
   private head(progress: number) {
     return (
@@ -338,10 +359,12 @@ export class GroundProcessionScene {
     const out: VisibleAgent[] = [];
     if (progress < 0 || progress >= 1) return out;
     const scope = options.scope ?? 'live/default';
+    if (this.scopedIds?.scope !== scope)
+      this.scopedIds = { scope, ids: this.actors.map((actor) => `${scope}/${actor.id}`) };
     for (let i = 0; i < this.actors.length; i++) {
       const a = this.actors[i]!;
       const adopted = this.adopted[i],
-        id = adopted?.eventActor ?? `${scope}/${a.id}`;
+        id = adopted?.eventActor ?? this.scopedIds.ids[i]!;
       const owner = options.owner?.(id);
       const actorProgress =
         owner && options.inspection ? options.inspection.progress(owner, progress) : progress;
@@ -382,14 +405,22 @@ export class GroundProcessionScene {
         y = at.y + hx * a.off;
       }
       const q = this.frame.from([x, y]);
-      const radius =
-        a.glyph === ProcessionGlyph.andas ? 1.7 : a.vehicle ? VEHICLES[a.vehicle].width / 2 : 0.55;
-      const corners: Point[] = [
-        [x - radius, y - radius],
-        [x - radius, y + radius],
-        [x + radius, y - radius],
-        [x + radius, y + radius],
-      ].map((q) => this.frame.from(q as Point));
+      const dimensions = a.vehicle
+        ? PROCESSION_GEOMETRY.vehicles[a.vehicle]
+        : a.glyph === ProcessionGlyph.andas
+          ? PROCESSION_GEOMETRY.andas
+          : PROCESSION_GEOMETRY.person;
+      const length = dimensions.length / 2 + PROCESSION_GEOMETRY.probePadding,
+        width = dimensions.width / 2 + PROCESSION_GEOMETRY.probePadding;
+      const corners: Point[] = [];
+      for (const along of [-1, 1])
+        for (const across of [-1, 1])
+          corners.push(
+            this.frame.from([
+              x + along * hx * length - across * hy * width,
+              y + along * hy * length + across * hx * width,
+            ]),
+          );
       if (!eventGroundAllows(this.ground, [q, ...corners])) continue;
       out.push({
         kind: a.vehicle ? 'vehicle' : 'person',
@@ -404,7 +435,7 @@ export class GroundProcessionScene {
         ...(a.glyph && { prop: 'event', glyph: a.glyph }),
         ...(a.vehicle && { vehicle: a.vehicle }),
         candle: (adopted?.candle ?? a.candle) && !a.glyph && !a.vehicle,
-        candleSeed: adopted?.candleSeed ?? hashString(a.id),
+        candleSeed: adopted?.candleSeed ?? a.seed,
         paint: adopted?.paint ?? a.paint,
         eventActor: id,
         eventGround: this.route.id,

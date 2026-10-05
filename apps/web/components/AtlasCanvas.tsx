@@ -46,12 +46,12 @@ const cellSchedule = (small: boolean): CellSchedule =>
 
 type MetaState =
   | { status: 'loading' }
-  | { status: 'ready'; meta: CityMeta; processions: readonly ProcessionRoute[] }
+  | { status: 'ready'; meta: CityMeta }
   | { status: 'missing' }
   | { status: 'invalid'; message: string };
 
 /**
- * The city's river processions (`<slug>.processions.json`, step 07). A city without any has no
+ * The city's events (`<slug>.processions.json`, step 07). A city without any has no
  * file, and a missing or stale file only means none are shown.
  */
 async function loadProcessions(slug: string): Promise<readonly ProcessionRoute[]> {
@@ -65,32 +65,47 @@ async function loadProcessions(slug: string): Promise<readonly ProcessionRoute[]
   }
 }
 
-/** Load the city's generated `<slug>.meta.json`, and its processions. */
+const EMPTY_PROCESSIONS: readonly ProcessionRoute[] = [];
+function useCityProcessions(slug: string): readonly ProcessionRoute[] {
+  const [state, setState] = useState({ slug, routes: EMPTY_PROCESSIONS });
+  useEffect(() => {
+    let cancelled = false;
+    void loadProcessions(slug).then((routes) => {
+      if (!cancelled) setState({ slug, routes });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+  return state.slug === slug ? state.routes : EMPTY_PROCESSIONS;
+}
+
+/** Load metadata independently of optional event geography. */
 function useCityMeta(slug: string): MetaState {
-  const [state, setState] = useState<MetaState>({ status: 'loading' });
+  const [state, setState] = useState<{ slug: string; value: MetaState }>({
+    slug,
+    value: { status: 'loading' },
+  });
   useEffect(() => {
     let cancelled = false;
     const load = async (): Promise<MetaState> => {
-      const [response, processions] = await Promise.all([
-        fetch(`/tiles/${slug}.meta.json`),
-        loadProcessions(slug),
-      ]);
+      const response = await fetch(`/tiles/${slug}.meta.json`);
       if (!response.ok) return { status: 'missing' };
       const json: unknown = await response.json();
       return isCityMeta(json)
-        ? { status: 'ready', meta: json, processions }
+        ? { status: 'ready', meta: json }
         : { status: 'invalid', message: 'not a city meta file' };
     };
     void load()
       .catch((err: unknown) => ({ status: 'invalid', message: String(err) }) as const)
       .then((next) => {
-        if (!cancelled) setState(next);
+        if (!cancelled) setState({ slug, value: next });
       });
     return () => {
       cancelled = true;
     };
   }, [slug]);
-  return state;
+  return state.slug === slug ? state.value : { status: 'loading' };
 }
 
 export function AtlasCanvas({
@@ -119,7 +134,8 @@ export function AtlasCanvas({
   const supported = useSyncExternalStore(subscribeNoop, detectWebGL2, () => true);
   const metaState = useCityMeta(slug);
   const meta = metaState.status === 'ready' ? metaState.meta : null;
-  const processions = metaState.status === 'ready' ? metaState.processions : null;
+  const processions = useCityProcessions(slug);
+  const atlasInstance = useAtlasInstance((state) => state.atlas);
   const level = useAtlasStore((s) => (s.camera ? zoomLevel(s.camera.zoom) : null));
   const subdivision = useUiStore((s) => s.subdivision);
   const [contextLost, setContextLost] = useState(false);
@@ -127,6 +143,9 @@ export function AtlasCanvas({
   useEffect(() => {
     useUiStore.setState({ meta, processions: processions ?? [] });
   }, [meta, processions]);
+  useEffect(() => {
+    atlasInstance?.setProcessions(processions);
+  }, [atlasInstance, processions]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -173,7 +192,6 @@ export function AtlasCanvas({
       cityLife,
       dialogue,
       speech: speechPrefs.enabled,
-      processions: processions ?? [],
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
@@ -204,18 +222,7 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null });
       atlas.destroy();
     };
-  }, [
-    supported,
-    meta,
-    processions,
-    slug,
-    traffic,
-    climate,
-    timezone,
-    cityLife,
-    dialogue,
-    utilitiesDerived,
-  ]);
+  }, [supported, meta, slug, traffic, climate, timezone, cityLife, dialogue, utilitiesDerived]);
 
   if (!supported) {
     return (

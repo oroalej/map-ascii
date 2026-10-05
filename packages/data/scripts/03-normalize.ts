@@ -58,6 +58,7 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   highway?: string;
   foot?: string;
   access?: string;
+  vehicle?: string;
   motor_vehicle?: string;
   motorcar?: string;
   motorcycle?: string;
@@ -282,6 +283,7 @@ export function normalize(
         'highway',
         'foot',
         'access',
+        'vehicle',
         'motor_vehicle',
         'motorcar',
         'motorcycle',

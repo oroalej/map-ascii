@@ -23,14 +23,6 @@ type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: stri
  */
 export const MAX_SNAP_M = 300;
 
-/** Full formation footprint plus a clear margin on both sides, in metres. */
-export const PROCESSION_CLEARANCE = {
-  andasWidth: 2.4,
-  personPitch: 0.8,
-  margin: 0.5,
-  vehicleWidths: { car: 1.9, truck: 2.5, motorcycle: 0.8 },
-} as const;
-
 type Point = [number, number];
 
 /** Meters east and north of an origin, near enough flat over a few kilometers. */

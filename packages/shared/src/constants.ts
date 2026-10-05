@@ -116,6 +116,7 @@ export const PROCESSION_LIMITS = {
   parade: { contingents: [1, 6], ranks: [1, 10], band: [0, 24], color_guard: [0, 8] },
   radius: 500,
   vehicles: 4,
+  schedule: { offset_days: [-31, 31], duration_min: [1, 1440] },
 } as const;
 export const PROCESSION_DEFAULTS = {
   fluvial: { columns: 3, ranks: 8, escorts: 6 },
@@ -123,8 +124,45 @@ export const PROCESSION_DEFAULTS = {
   parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4 },
 } as const;
 export const PROCESSION_VEHICLES = ['car', 'truck', 'motorcycle'] as const;
+/** Physical geometry used by event routing, probes and collision reservations, in metres. */
+export const PROCESSION_GEOMETRY = {
+  person: { length: 0.9, width: 1 },
+  andas: { length: 3, width: 2.4 },
+  vehicles: {
+    car: { length: 4.4, width: 1.8 },
+    truck: { length: 8, width: 2.5 },
+    motorcycle: { length: 2, width: 0.8 },
+  },
+  bearerOffset: 1.6,
+  marshalOffset: 1.1,
+  columns: 4,
+  columnPitch: 0.8,
+  probePadding: 0.05,
+  clearanceMargin: 0.5,
+  massCell: 2,
+} as const;
+export function processionFormationWidth(
+  kind: 'procession' | 'parade',
+  vehicles: readonly (typeof PROCESSION_VEHICLES)[number][] = [],
+): number {
+  const g = PROCESSION_GEOMETRY;
+  const people = (g.columns - 1) * g.columnPitch + g.person.width;
+  return (
+    Math.max(
+      people,
+      ...(kind === 'procession'
+        ? [2 * g.bearerOffset + g.person.width, 2 * g.marshalOffset + g.person.width, g.andas.width]
+        : vehicles.map((vehicle) => g.vehicles[vehicle].width)),
+    ) +
+    2 * (g.probePadding + g.clearanceMargin)
+  );
+}
 export const CLOCK_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const TIME_ZONE_PATTERN = /^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/;
+export const OSM_ID_PATTERN = /^osm:(node|way|relation)\/\d+$/;
+export const OSM_AREA_ID_PATTERN = /^osm:(way|relation)\/\d+$/;
+export const OSM_WAY_ID_PATTERN = /^osm:way\/\d+$/;
+export const TODO_VERIFY = 'TODO(verify)';
 
 /** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
 export const artChars = (row: string): string[] => [...row];

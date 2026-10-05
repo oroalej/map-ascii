@@ -38,6 +38,7 @@ import {
   YEAR_RANGE,
   RoofShape,
   PROCESSION_LIMITS,
+  TODO_VERIFY,
   PROCESSION_DEFAULTS,
   PROCESSION_VEHICLES,
   CLOCK_TIME_PATTERN,
@@ -135,7 +136,7 @@ export const CameraState = z.strictObject({
 export type CameraState = z.infer<typeof CameraState>;
 
 /** Marks draft text that still has to be checked against sources (SPEC.md §6). */
-export const TODO_VERIFY = 'TODO(verify)';
+export { TODO_VERIFY } from './constants';
 
 /** The longest flight a tour step may ask for, in ms. */
 export const MAX_TOUR_FLY_MS = 15_000;
@@ -609,13 +610,16 @@ export const ProcessionSchedule = z.strictObject({
   /** Which one of that weekday in the month, 1–5. */
   nth: z.int().min(1).max(5),
   /** Days after that weekday; -1 is the day before. */
-  offset_days: z.int().min(-31).max(31),
+  offset_days: z
+    .int()
+    .min(PROCESSION_LIMITS.schedule.offset_days[0])
+    .max(PROCESSION_LIMITS.schedule.offset_days[1]),
   /** Local start time, HH:MM. */
   start: z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM'),
   duration_min: z
     .int()
-    .positive()
-    .max(24 * 60),
+    .min(PROCESSION_LIMITS.schedule.duration_min[0])
+    .max(PROCESSION_LIMITS.schedule.duration_min[1]),
   /** IANA time zone the start time is in, e.g. "Asia/Manila". */
   timezone: TimeZone,
 });
@@ -631,7 +635,10 @@ export const ProcessionFormation = z.strictObject({
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
 export const FollowingSchedule = z.strictObject({
   follows: z.string().regex(/^procession\/[a-z0-9-]+$/),
-  duration_min: z.int().positive().max(1440),
+  duration_min: z
+    .int()
+    .min(PROCESSION_LIMITS.schedule.duration_min[0])
+    .max(PROCESSION_LIMITS.schedule.duration_min[1]),
 });
 export const StreetFormation = z.strictObject({
   bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(

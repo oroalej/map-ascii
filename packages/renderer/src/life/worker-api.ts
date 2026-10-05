@@ -197,6 +197,9 @@ export function createLifeWorkerApi(
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },
+    setProcessions(routes: readonly ProcessionRoute[]) {
+      world.setProcessions(routes);
+    },
     setLive(id: string | undefined, progress?: number, occurrence?: string) {
       world.setLive(id, progress, occurrence);
     },

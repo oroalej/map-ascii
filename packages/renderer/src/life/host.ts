@@ -40,6 +40,8 @@ export interface LifeHost {
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
+  /** Replace event geography without changing tile residency or ordinary population. */
+  setProcessions(routes: readonly ProcessionRoute[]): void;
   setLive(id: string | undefined, progress?: number, occurrence?: string): void;
   play(id: string, timing?: EventTiming): boolean;
   stop(): void;
@@ -111,6 +113,12 @@ export function createInlineHost(
         procession: world.procession(),
       };
     },
+    setProcessions(routes) {
+      if (disposed) return;
+      world.setProcessions(routes);
+      view = undefined;
+      acceptedPost = undefined;
+    },
     setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
     play: (id, timing) => world.play(id, timing),
     stop: () => world.stop(),
@@ -134,7 +142,7 @@ export function createWorkerHost(
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
-  const eventGrounds = groundsForRoutes(processions);
+  let eventGrounds = groundsForRoutes(processions);
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
@@ -327,6 +335,19 @@ export function createWorkerHost(
       if (acceptedPost !== undefined)
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return view;
+    },
+    setProcessions(routes) {
+      if (disposed) return;
+      processions = routes;
+      eventGrounds = groundsForRoutes(routes);
+      agentEpoch++;
+      played = undefined;
+      playedTiming = undefined;
+      live = { id: undefined };
+      acceptedPost = undefined;
+      view = undefined;
+      if (fallback) fallback.setProcessions(routes);
+      else void remote.setProcessions(routes).catch(fail);
     },
     setLive(id, progress, occurrence) {
       if (disposed) return;

@@ -270,7 +270,8 @@ describe('life worker protocol', () => {
     direct.setProcessions([route]);
     direct.sync(scenario.tiles);
     const api = createLifeWorkerApi();
-    api.init({ traffic, processions: [route], profiling: true });
+    api.init({ traffic, processions: [], profiling: true });
+    api.setProcessions([route]);
     api.sync(structuredClone(scenario.tiles));
     for (let frame = 0; frame < 120; frame++) {
       if (frame === 20) expect(api.play('test')).toBe(direct.play('test'));

@@ -18,6 +18,7 @@ const mock = vi.hoisted(() => ({
   play: vi.fn(),
   stop: vi.fn(),
   setLive: vi.fn(),
+  setProcessions: vi.fn(() => Promise.resolve()),
   release: vi.fn(),
   terminate: vi.fn(),
 }));
@@ -79,6 +80,50 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('installs late event routes in the inline fallback and replaces active playback', () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw Error('Unavailable');
+        }
+      },
+    );
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    host.setProcessions([route]);
+    expect(host.play(route.id)).toBe(true);
+    expect(host.latest()?.procession?.id).toBe(route.id);
+    host.setProcessions([]);
+    expect(host.latest()?.procession).toBeUndefined();
+    expect(host.play(route.id)).toBe(false);
+    host.dispose();
+  });
+  it('installs late routes without resyncing tiles and discards an older event reply', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    expect(host.request(s.input)).toBe(true);
+    host.setProcessions([route]);
+    resolve({ ...result(1), procession: { id: 'old', progress: 0.5, live: false } });
+    await flush();
+    expect(host.latest()?.procession).toBeUndefined();
+    expect(mock.setProcessions).toHaveBeenCalledWith([route]);
+    expect(mock.sync).toHaveBeenCalledTimes(1);
+    expect(host.play(route.id)).toBe(true);
+    host.setProcessions([]);
+    expect(host.play(route.id)).toBe(false);
+    host.dispose();
+  });
   it('initializes the ordinary shop schedule once without sending city config in frame requests', async () => {
     const s = fixture(),
       shops = { open: '22:00', close: '06:00' };

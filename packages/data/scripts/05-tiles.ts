@@ -92,6 +92,7 @@ export const step: Step = {
       '--exclude=highway',
       '--exclude=foot',
       '--exclude=access',
+      '--exclude=vehicle',
       '--exclude=motor_vehicle',
       '--exclude=motorcar',
       '--exclude=motorcycle',

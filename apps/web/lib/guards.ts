@@ -9,6 +9,8 @@ import {
   PROCESSION_VEHICLES,
   CLOCK_TIME_PATTERN,
   TIME_ZONE_PATTERN,
+  OSM_ID_PATTERN,
+  TODO_VERIFY,
   type CameraState,
   type CityMeta,
   type CityProcessions,
@@ -107,7 +109,7 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
     if (
       p.status === 'verified' &&
       (!p.sources ||
-        Object.values(p.title as Record<string, string>).some((t) => t.includes('TODO(verify)')))
+        Object.values(p.title as Record<string, string>).some((t) => t.includes(TODO_VERIFY)))
     )
       return false;
     const s = p.schedule;
@@ -117,8 +119,8 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       !integer(s.month, 1, 12) ||
       !integer(s.weekday, 0, 6) ||
       !integer(s.nth, 1, 5) ||
-      !integer(s.offset_days, -31, 31) ||
-      !integer(s.duration_min, 1, 1440) ||
+      !integer(s.offset_days, ...PROCESSION_LIMITS.schedule.offset_days) ||
+      !integer(s.duration_min, ...PROCESSION_LIMITS.schedule.duration_min) ||
       !isText(s.start) ||
       !CLOCK_TIME_PATTERN.test(s.start) ||
       !isText(s.timezone) ||
@@ -152,7 +154,7 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
           'roads',
         ]) &&
         isText(site.id) &&
-        /^osm:(node|way|relation)\/\d+$/.test(site.id) &&
+        OSM_ID_PATTERN.test(site.id) &&
         point(site.location) &&
         point(site.anchor) &&
         isNumber(site.radius_m) &&
@@ -205,7 +207,7 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
           isRecord(e) &&
           only(e, ['id', 'width_m', 'sidewalk_m']) &&
           isText(e.id) &&
-          /^osm:(node|way|relation)\/\d+$/.test(e.id) &&
+          OSM_ID_PATTERN.test(e.id) &&
           isNumber(e.width_m) &&
           e.width_m > 0 &&
           isNumber(e.sidewalk_m) &&

@@ -1,10 +1,11 @@
 /** Bounded geographic permissions shared by event admission and inline/worker cell packing. */
 import {
   pointInPolygon,
-  localMetricProjection,
+  seasonalAccessRing,
   type StreetRoute,
   type MassRoute,
 } from '@atlas/shared';
+import type { LngLatBounds } from './procession';
 type Point = [number, number];
 export type EventGround = {
   regions: Point[][];
@@ -27,6 +28,22 @@ const indexes = new WeakMap<
 >();
 const EMPTY: Point[][] = [];
 const routeGrounds = new WeakMap<StreetRoute | MassRoute, EventGround>();
+const groundBounds = new WeakMap<EventGround, LngLatBounds>();
+/** Full event envelope, independent of the camera; guard callers add their body margin. */
+export function eventGroundBounds(ground: EventGround): LngLatBounds {
+  const saved = groundBounds.get(ground);
+  if (saved) return saved;
+  const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const ring of ground.regions)
+    for (const [lng, lat] of ring) {
+      bounds[0] = Math.min(bounds[0], lng);
+      bounds[1] = Math.min(bounds[1], lat);
+      bounds[2] = Math.max(bounds[2], lng);
+      bounds[3] = Math.max(bounds[3], lat);
+    }
+  groundBounds.set(ground, bounds);
+  return bounds;
+}
 /** Initialized once on either side of the worker; frame replies carry only route IDs. */
 export function groundForRoute(route: StreetRoute | MassRoute): EventGround {
   const saved = routeGrounds.get(route);
@@ -36,25 +53,14 @@ export function groundForRoute(route: StreetRoute | MassRoute): EventGround {
       ? { regions: route.site.grounds, blocked: route.site.blocked }
       : { regions: [], blocked: route.blocked, water: route.water, bridges: route.bridges };
   if (route.kind !== 'mass') {
-    const frame = localMetricProjection(route.route[0]!);
     for (let i = 1; i < route.route.length; i++) {
-      const a = frame.to(route.route[i - 1]!),
-        b = frame.to(route.route[i]!);
-      const dx = b[0] - a[0],
-        dy = b[1] - a[1],
-        d = Math.hypot(dx, dy);
-      if (!d) continue;
-      const reach = route.segments[i - 1]!.width_m / 2 + route.segments[i - 1]!.sidewalk_m;
-      const nx = (-dy / d) * reach,
-        ny = (dx / d) * reach;
+      const segment = route.segments[i - 1]!;
       ground.regions.push(
-        [
-          [a[0] + nx, a[1] + ny],
-          [b[0] + nx, b[1] + ny],
-          [b[0] - nx, b[1] - ny],
-          [a[0] - nx, a[1] - ny],
-          [a[0] + nx, a[1] + ny],
-        ].map((q) => frame.from(q as Point)),
+        seasonalAccessRing({
+          from: route.route[i - 1]!,
+          to: route.route[i]!,
+          width_m: segment.width_m + 2 * segment.sidewalk_m,
+        }),
       );
     }
   }

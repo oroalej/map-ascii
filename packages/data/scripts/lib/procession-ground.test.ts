@@ -69,6 +69,55 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it.each([
+    { kind: 'procession', formation: { bearers: 4 } },
+    { kind: 'procession', formation: { bearers: 8 } },
+    { kind: 'procession', formation: { bearers: 24 } },
+    ...['car', 'truck', 'motorcycle'].map((vehicle) => ({
+      kind: 'parade',
+      formation: { vehicles: [vehicle] },
+    })),
+  ])('admits exactly sufficient physical clearance for %j', (formation) => {
+    const event = Procession.parse({ ...base, ...formation });
+    if (event.kind !== 'procession' && event.kind !== 'parade') throw Error();
+    const minimum = requiredFormationWidth(event),
+      way = road(
+        'osm:way/3',
+        [
+          [0, 0],
+          [0.002, 0],
+        ],
+        { width: minimum, sidewalk: 'none' },
+      );
+    expect(routeProcessions([features[0]!, features[1]!, way], [event]).routes).toHaveLength(1);
+    way.properties.width = minimum - 0.01;
+    expect(() => routeProcessions([features[0]!, features[1]!, way], [event])).toThrow(
+      'admissible',
+    );
+  });
+  it('keeps an explicitly sized footway at its mapped width without invented sidewalks', () => {
+    const route = routeProcessions(
+      [
+        features[0]!,
+        features[1]!,
+        road(
+          'osm:way/3',
+          [
+            [0, 0],
+            [0.002, 0],
+          ],
+          { class: 'path', highway: 'footway', width: undefined, event_path_width: 6 },
+        ),
+        area('osm:way/9', 'water_area', 0.0008, 0.000029, 0.0012, 0.00004),
+      ],
+      [Procession.parse(base)],
+    ).routes[0]!;
+    if (route.kind !== 'procession') throw Error();
+    expect(
+      route.segments.every((segment) => segment.width_m === 6 && segment.sidewalk_m === 0),
+    ).toBe(true);
+    expect(route.water).toEqual([]);
+  });
   it('follows pinned via ways despite a shorter admissible road', () => {
     const r = routeProcessions(
       [
@@ -188,8 +237,32 @@ describe('street event routing', () => {
     const a = Procession.parse({ ...base, formation: { bearers: 4 } }),
       b = Procession.parse({ ...base, formation: { bearers: 24 } });
     if (a.kind !== 'procession' || b.kind !== 'procession') throw Error();
-    expect(requiredFormationWidth(b)).toBeGreaterThan(requiredFormationWidth(a));
+    // Bearers form two longitudinal columns, so adding rows doesn't widen their footprint.
+    expect(requiredFormationWidth(b)).toBe(requiredFormationWidth(a));
   });
+  it.each([{ access: 'no' }, { vehicle: 'no' }])(
+    'keeps a pedestrian exemption separate from parade vehicles (%s)',
+    (restriction) => {
+      const source = [
+        features[0]!,
+        features[1]!,
+        road(
+          'osm:way/3',
+          [
+            [0, 0],
+            [0.002, 0],
+          ],
+          { foot: 'yes', ...restriction },
+        ),
+      ];
+      expect(routeProcessions(source, [Procession.parse(base)]).routes).toHaveLength(1);
+      expect(() =>
+        routeProcessions(source, [
+          Procession.parse({ ...base, kind: 'parade', formation: { vehicles: ['car'] } }),
+        ]),
+      ).toThrow('admissible');
+    },
+  );
   it('bakes connected outdoor Mass permissions without a building in the gathering', () => {
     const rect = (id: string, cls: string, w: number, s: number, e: number, n: number): F => ({
       type: 'Feature',
@@ -221,7 +294,11 @@ describe('street event routing', () => {
     const church = rect('osm:way/10', 'building_worship', -0.0001, -0.0001, 0.0001, 0.0001);
     const grounds = rect('osm:way/11', 'building_religious', -0.0004, -0.0004, 0.0004, 0.0004);
     delete grounds.properties.height; // Religious grounds use a building class without a standing roof.
-    const bundle = routeProcessions([...features, church, grounds], [mass, Procession.parse(base)]);
+    const water = rect('osm:way/12', 'water_area', -0.01, -0.01, -0.00025, 0.01);
+    const bundle = routeProcessions(
+      [...features, church, grounds, water],
+      [mass, Procession.parse(base)],
+    );
     const r = bundle.routes[0]!;
     if (r.kind !== 'mass') throw Error();
     expect(r.schedule.start).toBe('16:00');
@@ -229,8 +306,13 @@ describe('street event routing', () => {
     expect(r.site.approaches.length).toBeGreaterThan(0);
     expect(r.site.grounds.length).toBeGreaterThan(5);
     const frame = localFrame(r.site.location);
+    for (const q of r.site.blocked.flat())
+      expect(Math.max(...frame.toMeters(q).map(Math.abs))).toBeLessThanOrEqual(
+        r.site.radius_m + 1e-6,
+      );
     for (const q of r.site.grounds.flat())
       expect(Math.hypot(...frame.toMeters(q))).toBeLessThanOrEqual(r.site.radius_m + 1e-6);
+    expect(r.site.grounds.flat().every((q) => q[0] > -0.00025)).toBe(true);
     expect(r.site.blocked).toContainEqual(
       (church.geometry as { coordinates: number[][][] }).coordinates[0],
     );

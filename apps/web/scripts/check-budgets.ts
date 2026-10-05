@@ -17,7 +17,7 @@ const BUDGETS = {
   initialJs: 250 * KB,
   renderer: 120 * KB,
   pmtiles: 40 * MB,
-  processions: 100 * KB,
+  processions: 60 * KB,
 };
 
 const root = fileURLToPath(new URL('..', import.meta.url));

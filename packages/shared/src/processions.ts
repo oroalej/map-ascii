@@ -1,6 +1,7 @@
 /** Event dependency and occurrence arithmetic; safe to import without Zod in the browser. */
 import { nthWeekdayDay, epochDay } from './seasons';
 import { localDateParts } from './clock';
+import { PROCESSION_LIMITS } from './constants';
 import type { Procession, ProcessionSchedule } from './schemas';
 
 export class ProcessionScheduleError extends Error {
@@ -57,10 +58,11 @@ export function resolveProcessionSchedules(
       const [h, m] = parent.start.split(':').map(Number);
       const end = h! * 60 + m! + parent.duration_min;
       const offset_days = parent.offset_days + Math.floor(end / 1440);
-      if (offset_days < -31 || offset_days > 31)
+      const [minimum, maximum] = PROCESSION_LIMITS.schedule.offset_days;
+      if (offset_days < minimum || offset_days > maximum)
         throw new ProcessionScheduleError(
           id,
-          `Unrepresentable schedule ${id}: resolved offset ${offset_days} is outside -31…31`,
+          `Unrepresentable schedule ${id}: resolved offset ${offset_days} is outside ${minimum}…${maximum}`,
         );
       const minute = end % 1440;
       schedule = {
@@ -86,16 +88,15 @@ export type EventTime = {
   date: string;
   time: string;
 };
-export const eventLocalParts = localDateParts;
 
 /** Resolve in the actual local year, including zone offsets at the occurrence, not today. */
 export function eventOccurrence(schedule: ProcessionSchedule, now: Date): EventTiming {
-  const year = eventLocalParts(now, schedule.timezone).year;
+  const year = localDateParts(now, schedule.timezone).year;
   const [h, m] = schedule.start.split(':').map(Number);
   const localMs = nthWeekdayDay(schedule, year) * 86400000 + (h! * 60 + m!) * 60000;
   let startMs = localMs;
   for (let i = 0; i < 3; i++) {
-    const p = eventLocalParts(new Date(startMs), schedule.timezone);
+    const p = localDateParts(new Date(startMs), schedule.timezone);
     const projected = Date.UTC(p.year, p.month - 1, p.date, p.hour, p.minute);
     startMs += localMs - projected;
   }
@@ -105,7 +106,7 @@ export function eventOccurrence(schedule: ProcessionSchedule, now: Date): EventT
 export function eventTime(timing: EventTiming, progress: number): EventTime {
   const instantMs =
     timing.startMs + Math.max(0, Math.min(1, progress)) * timing.duration_min * 60000;
-  const p = eventLocalParts(new Date(instantMs), timing.timezone);
+  const p = localDateParts(new Date(instantMs), timing.timezone);
   const pad = (v: number) => String(v).padStart(2, '0');
   return {
     instantMs,

@@ -1,7 +1,8 @@
 /** Complete-source street and church-ground event geography. */
 import {
   pointInPolygon,
-  PROCESSION_DEFAULTS,
+  PROCESSION_GEOMETRY,
+  processionFormationWidth,
   type Procession,
   type ProcessionRoute,
 } from '@atlas/shared';
@@ -10,7 +11,7 @@ import type { AtlasFeature } from '../03-normalize';
 import { localFrame } from './geo';
 import { lines, width } from './road-geometry';
 import { roadGraph } from './road-graph';
-import { featurePoint, PROCESSION_CLEARANCE } from './procession';
+import { featurePoint } from './procession';
 import { isStandingBuilding } from './obstacles';
 import { intersection, union } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
@@ -20,6 +21,10 @@ type F = Feature<Geometry, Record<string, unknown>>;
 type Street = Extract<Procession, { kind: 'procession' | 'parade' }>;
 type Mass = Extract<Procession, { kind: 'mass' }>;
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
+const sidewalkWidth = (road: AtlasFeature) =>
+  road.properties.class === 'path' || road.properties.sidewalk === 'none'
+    ? 0
+    : Number(road.properties.sidewalk_width ?? 1);
 const polygons = (g: Geometry): Position[][][] =>
   g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
 const asPoints = (ring: Position[]) => ring.map((p) => [p[0]!, p[1]!] as Point);
@@ -73,24 +78,7 @@ function nearbyFeatures(features: readonly F[], bounds: [number, number, number,
 }
 
 export function requiredFormationWidth(p: Street): number {
-  if (p.kind === 'procession') {
-    const bearers = p.formation?.bearers ?? PROCESSION_DEFAULTS.procession.bearers;
-    return (
-      Math.max(
-        PROCESSION_CLEARANCE.andasWidth,
-        Math.min(4, Math.ceil(bearers / 2)) * PROCESSION_CLEARANCE.personPitch,
-      ) +
-      2 * PROCESSION_CLEARANCE.margin
-    );
-  }
-  const vehicles = p.formation?.vehicles ?? [];
-  return (
-    Math.max(
-      4 * PROCESSION_CLEARANCE.personPitch,
-      ...vehicles.map((v) => PROCESSION_CLEARANCE.vehicleWidths[v]),
-    ) +
-    2 * PROCESSION_CLEARANCE.margin
-  );
+  return processionFormationWidth(p.kind, p.kind === 'parade' ? p.formation?.vehicles : []);
 }
 
 /** Polygon holes and linear barriers become explicit exclusion rings. */
@@ -164,7 +152,13 @@ export function routeStreet(features: readonly F[], p: Street) {
       tags.class === 'path' ? Number(tags.event_path_width ?? 0) : width(f as AtlasFeature);
     if (!Number.isFinite(effective) || effective < needed) return false;
     if (p.kind === 'parade' && p.formation?.vehicles.length) {
-      if (tags.class === 'path' || blockedAccess(tags.motor_vehicle)) return false;
+      if (
+        tags.class === 'path' ||
+        blockedAccess(tags.access) ||
+        blockedAccess(tags.vehicle) ||
+        blockedAccess(tags.motor_vehicle)
+      )
+        return false;
       for (const v of p.formation.vehicles)
         if (blockedAccess(tags[v === 'truck' ? 'hgv' : v === 'car' ? 'motorcar' : 'motorcycle']))
           return false;
@@ -231,8 +225,7 @@ export function routeStreet(features: readonly F[], p: Street) {
     const b = a === e.a ? e.b : e.a;
     const count = Math.ceil(e.length / 10);
     const road = byId.get(e.road)!;
-    const sidewalk_m =
-      road.properties.sidewalk === 'none' ? 0 : Number(road.properties.sidewalk_width ?? 1);
+    const sidewalk_m = sidewalkWidth(road);
     for (let k = 1; k <= count; k++) {
       const t = k / count;
       route.push(unproject([a.xy[0] + (b.xy[0] - a.xy[0]) * t, a.xy[1] + (b.xy[1] - a.xy[1]) * t]));
@@ -250,10 +243,8 @@ export function routeStreet(features: readonly F[], p: Street) {
   ];
   const corridors = ordered.map(
     (e) =>
-      seatingFootprint(
-        [e.a.at, e.b.at],
-        e.width + 2 * Number(byId.get(e.road)!.properties.sidewalk_width ?? 1),
-      ).coordinates as Point[][][],
+      seatingFootprint([e.a.at, e.b.at], e.width + 2 * sidewalkWidth(byId.get(e.road)!))
+        .coordinates as Point[][][],
   );
   // Balance clipping, rounding far below source precision, as seatingFootprint does.
   let merged = corridors.map((poly) =>
@@ -299,8 +290,11 @@ export function bakeMassSite(
   });
   const a = frame.toLngLat([-p.radius_m, -p.radius_m]),
     b = frame.toLngLat([p.radius_m, p.radius_m]);
-  const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]]);
-  for (const poly of groundPolys) blocked.push(...poly.slice(1));
+  const square: Point[][][] = [[[a, [b[0], a[1]], b, [a[0], b[1]], a]]];
+  const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]], square);
+  for (const poly of groundPolys)
+    for (const hole of poly.slice(1))
+      for (const part of intersection([hole], square)) blocked.push(asPoints(part[0]!));
   const nearby = (line: Position[]) =>
     line.some((q) => Math.hypot(...frame.toMeters(q)) <= p.radius_m + 20);
   const roads = features
@@ -345,7 +339,7 @@ export function bakeMassSite(
       (groundPolys.some((poly) => pointInPolygon(q, poly)) || nearLine(xy))
     );
   };
-  const step = 2,
+  const step = PROCESSION_GEOMETRY.massCell,
     radius = Math.ceil(p.radius_m / step),
     cells = new Map<string, Point>();
   const key = (x: number, y: number) => `${x}/${y}`;
@@ -355,10 +349,10 @@ export function bakeMassSite(
       if (
         [
           [0, 0],
-          [-1, -1],
-          [-1, 1],
-          [1, -1],
-          [1, 1],
+          [-step / 2, -step / 2],
+          [-step / 2, step / 2],
+          [step / 2, -step / 2],
+          [step / 2, step / 2],
         ].every(([dx, dy]) => safe([xy[0] + dx!, xy[1] + dy!]))
       )
         cells.set(key(x, y), xy);

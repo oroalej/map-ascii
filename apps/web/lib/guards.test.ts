@@ -89,6 +89,20 @@ describe('browser shape guards agree with the schemas', () => {
       expect(CityProcessions.safeParse({ processions: [p] }).success).toBe(true);
       expect(isCityProcessions({ processions: [p] })).toBe(true);
     }
+    for (const [offset_days, duration_min, accepted] of [
+      [-31, 1, true],
+      [31, 1440, true],
+      [-32, 1, false],
+      [32, 1, false],
+      [0, 0, false],
+      [0, 1441, false],
+    ] as const) {
+      const bundle = {
+        processions: [{ ...street, schedule: { ...base.schedule, offset_days, duration_min } }],
+      };
+      expect(CityProcessions.safeParse(bundle).success).toBe(accepted);
+      expect(isCityProcessions(bundle)).toBe(accepted);
+    }
     for (const p of [
       { ...street, segments: [] },
       { ...street, formation: { columns: 2 } },

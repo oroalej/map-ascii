@@ -78,7 +78,8 @@ export const PROCESSION = {
 type Point = [number, number];
 
 type Person = {
-  id: number;
+  id: string;
+  candleSeed: number;
   s: number;
   side: number;
   back: number;
@@ -191,6 +192,31 @@ export function segmentIndex(along: ArrayLike<number>, distance: number): number
   return lo;
 }
 
+/** Shared metric-route sampling. Skip leading zero-length edges; an entirely flat route faces east. */
+export function routePolyline(points: readonly Point[]) {
+  const along = [0];
+  for (let i = 1; i < points.length; i++)
+    along.push(
+      along[i - 1]! +
+        Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]),
+    );
+  return {
+    along,
+    at(distance: number) {
+      const s = Math.max(0, Math.min(along.at(-1)!, distance));
+      let i = segmentIndex(along, s);
+      while (i < points.length - 1 && along[i] === along[i - 1]) i++;
+      const a = points[i - 1]!,
+        b = points[i]!,
+        length = along[i]! - along[i - 1]!,
+        t = length ? (s - along[i - 1]!) / length : 0,
+        hx = length ? (b[0] - a[0]) / length : 1,
+        hy = length ? (b[1] - a[1]) / length : 0;
+      return { x: a[0] + hx * t * length, y: a[1] + hy * t * length, hx, hy, index: i - 1, t };
+    },
+  };
+}
+
 /** One procession's boats and crowds along its route. */
 export class ProcessionScene {
   private liveOwners?: { scope: string; keys: WeakMap<object, object> };
@@ -211,6 +237,7 @@ export class ProcessionScene {
   /** The route in meters east and north of its start, and the distance to each point. */
   private readonly points: Point[];
   private readonly along: number[];
+  private readonly polyline: ReturnType<typeof routePolyline>;
   private readonly banks: readonly (readonly [number, number])[] | undefined;
   private readonly boats: Boat[] = [];
   private readonly poles: Pole[] = [];
@@ -226,12 +253,8 @@ export class ProcessionScene {
     this.kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
     this.ky = 110_540;
     this.points = route.route.map(([lng, lat]) => [(lng - lng0) * this.kx, (lat - lat0) * this.ky]);
-    this.along = [0];
-    for (let i = 1; i < this.points.length; i++) {
-      const [ax, ay] = this.points[i - 1]!;
-      const [bx, by] = this.points[i]!;
-      this.along.push(this.along[i - 1]! + Math.hypot(bx - ax, by - ay));
-    }
+    this.polyline = routePolyline(this.points);
+    this.along = this.polyline.along;
     this.length = this.along.at(-1)!;
     this.banks = route.banks?.length === route.route.length ? route.banks : undefined;
 
@@ -331,8 +354,10 @@ export class ProcessionScene {
         const phase = rng() * 6.28;
         const { x, y, tx, ty, left, right } = this.at(s);
         const off = side > 0 ? right + back : -(left + back);
+        const id = `${this.route.id}/crowd/${this.people.length}`;
         this.people.push({
-          id: this.people.length,
+          id,
+          candleSeed: hashString(id),
           s,
           side,
           back,
@@ -370,15 +395,9 @@ export class ProcessionScene {
 
   /** The point `s` m along the route, its direction (a unit vector), and the banks there. */
   private at(s: number) {
-    const { points, along } = this;
-    // The first point at least `s` along (the last, past the end): `along` only grows.
-    const i = segmentIndex(along, s);
-    const [ax, ay] = points[i - 1]!;
-    const [bx, by] = points[i]!;
-    const length = along[i]! - along[i - 1]! || 1;
-    const tx = (bx - ax) / length;
-    const ty = (by - ay) / length;
-    const t = Math.min(1, Math.max(0, (s - along[i - 1]!) / length));
+    const sample = this.polyline.at(s),
+      i = sample.index + 1,
+      t = sample.t;
     let left: number = PROCESSION.defaultBank;
     let right: number = PROCESSION.defaultBank;
     if (this.banks) {
@@ -387,7 +406,7 @@ export class ProcessionScene {
       left = la + (lb - la) * t;
       right = ra + (rb - ra) * t;
     }
-    return { x: ax + tx * t * length, y: ay + ty * t * length, tx, ty, left, right };
+    return { x: sample.x, y: sample.y, tx: sample.hx, ty: sample.hy, left, right };
   }
 
   private lngLat(x: number, y: number): [number, number] {
@@ -547,12 +566,11 @@ export class ProcessionScene {
       crews: false,
       scope,
       inspection,
+      handover: true,
     }).filter((a) => a.kind === 'person' && !a.aboard);
   }
   arrivalOwners(scope: string) {
-    return new Map(
-      this.people.map((p) => [`${scope}/${this.route.id}/crowd/${p.id}`, this.owner(scope, p)]),
-    );
+    return new Map(this.people.map((p) => [`${scope}/${p.id}`, this.owner(scope, p)]));
   }
 
   /**
@@ -568,6 +586,7 @@ export class ProcessionScene {
       boats = true,
       crowds = true,
       crews = false,
+      handover = false,
       bounds,
       inspection,
       scope = 'live/default',
@@ -575,6 +594,7 @@ export class ProcessionScene {
       boats?: boolean;
       crowds?: boolean;
       crews?: boolean;
+      handover?: boolean;
       bounds?: LngLatBounds;
       inspection?: LifeInspection;
       scope?: string;
@@ -658,8 +678,8 @@ export class ProcessionScene {
         const agent: VisibleAgent = {
           kind: 'person',
           inspectionId: undefined,
-          candleSeed: hashString(`${this.route.id}/crowd/${p.id}`),
-          eventActor: `${scope}/${this.route.id}/crowd/${p.id}`,
+          candleSeed: p.candleSeed,
+          ...(handover && { eventActor: `${scope}/${p.id}` }),
           effectClock: undefined,
           lng,
           lat,

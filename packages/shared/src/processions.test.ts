@@ -36,6 +36,24 @@ const mass = Procession.parse({
   schedule: { follows: moving.id, duration_min: 60 },
 });
 describe('event occurrence and dependency resolution', () => {
+  it.each([-31, 31])('resolves a following schedule at offset boundary %s', (offset_days) => {
+    const start = Procession.parse({
+      ...moving,
+      schedule: {
+        month: 9,
+        nth: 3,
+        weekday: 6,
+        offset_days,
+        start: '00:00',
+        duration_min: 1,
+        timezone: 'Asia/Manila',
+      },
+    });
+    expect(resolveProcessionSchedules([mass, start]).get(mass.id)).toMatchObject({
+      offset_days,
+      start: '00:01',
+    });
+  });
   it('resolves out of order and carries midnight without changing the annual rule', () => {
     const resolved = resolveProcessionSchedules([mass, moving]).get(mass.id)!;
     expect(resolved).toMatchObject({ offset_days: -7, start: '01:00', duration_min: 60 });

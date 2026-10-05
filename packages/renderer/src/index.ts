@@ -363,6 +363,8 @@ export type AtlasStats = {
 };
 
 export type Atlas = {
+  /** Install optional event routes after map startup; replace active event playback. */
+  setProcessions(routes: readonly ProcessionRoute[]): void;
   /** Transient legend focus; null restores ordinary map colours. */
   setFocus(focus: LegendFocus | null): void;
   setSpeech(enabled: boolean): void;
@@ -864,7 +866,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   // The life layer (life/simulate.ts): agents for the tiles on screen, stepped every drawn frame.
-  const processions = options.processions ?? [];
+  let processions = options.processions ?? [];
   const moments = {
     dialogue: options.dialogue && dialogueChoices(options.dialogue),
     periods: options.dialogue?.periods,
@@ -1960,6 +1962,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getLife: () => ({ ...life }),
     getSeason: () => seasonSnapshot,
+    setProcessions(routes) {
+      processions = routes;
+      host.setProcessions(routes);
+      lifeHover.clear();
+      livePause.reset();
+      liveOccurrence = undefined;
+      lifeAgents = [];
+      lastSun = -Infinity;
+      cellDirty = true;
+      cellsFor = null;
+      reportProcession();
+      drawDirty = true;
+    },
     playProcession(id) {
       const route = processions.find((p) => p.id === id);
       if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
