@@ -79,7 +79,8 @@ for (const city of cities) {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
-        await page.goto(`/${city.slug}?z=19`);
+        // Use the event flow's Place entry zoom; full-detail geometry is covered separately.
+        await page.goto(`/${city.slug}?z=17.5`);
         await mapReady(page);
         const today = page.getByRole('button', { name: 'Season: Today', exact: true });
         await expect(today).toBeVisible();
