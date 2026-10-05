@@ -17,6 +17,8 @@ import { lines } from './road-geometry';
 import { localFrame } from './geo';
 
 type Point = SeasonalPoint;
+const crownRadius = (f: AtlasFeature) =>
+  Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2));
 const distance = (p: Point, a: Point, b: Point) => {
   const dx = b[0] - a[0],
     dy = b[1] - a[1];
@@ -45,6 +47,36 @@ function rings(f: AtlasFeature): Point[][] {
 }
 const edgeDistance = (p: Point, polygon: Point[][]) =>
   Math.min(...polygon.flatMap((r) => r.slice(1).map((b, i) => distance(p, r[i]!, b))));
+
+/** Keep every portion outside the union of tree crowns, including both ends of a crossing. */
+function outsideCrowns(a: Point, b: Point, crowns: readonly { at: Point; radius: number }[]) {
+  const dx = b[0] - a[0],
+    dy = b[1] - a[1],
+    lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) return [];
+  const intervals: [number, number][] = [];
+  for (const { at, radius } of crowns) {
+    const x = a[0] - at[0],
+      y = a[1] - at[1],
+      along = x * dx + y * dy,
+      discriminant = along * along - lengthSquared * (x * x + y * y - radius * radius);
+    if (discriminant <= 0) continue;
+    const root = Math.sqrt(discriminant),
+      from = Math.max(0, (-along - root) / lengthSquared),
+      to = Math.min(1, (-along + root) / lengthSquared);
+    if (from < to) intervals.push([from, to]);
+  }
+  intervals.sort((left, right) => left[0] - right[0]);
+  const spans: { start: Point; end: Point; clipped: boolean }[] = [];
+  const at = (t: number): Point => [a[0] + dx * t, a[1] + dy * t];
+  let cursor = 0;
+  for (const [from, to] of intervals) {
+    if (from > cursor) spans.push({ start: at(cursor), end: at(from), clipped: true });
+    cursor = Math.max(cursor, to);
+  }
+  if (cursor < 1) spans.push({ start: at(cursor), end: at(1), clipped: cursor !== 0 });
+  return spans;
+}
 
 export function generateSeasonalInstallations(
   features: readonly AtlasFeature[],
@@ -371,15 +403,32 @@ export function generateSeasonalInstallations(
           .filter((f) => f.properties.class === 'tree' && f.geometry.type === 'Point')
           .sort((a, b) => a.properties.id.localeCompare(b.properties.id))) {
           const at = f.geometry.type === 'Point' ? (f.geometry.coordinates as Point) : undefined;
-          if (at && inside(project(at), polygon))
+          const radius = crownRadius(f);
+          if (
+            at &&
+            (inside(project(at), polygon) ||
+              (config.trees === 'overlapping' && edgeDistance(project(at), polygon) < radius))
+          )
             records.push({
               ...base(f.properties.id),
               kind: config.kind,
               at,
-              radius_m: Math.max(0.5, Math.min(20, Number(f.properties.crown ?? 6) / 2)),
+              radius_m: radius,
             });
         }
       } else {
+        const crowns = config.exclude_tree_crowns
+          ? local.flatMap((f) =>
+              f.properties.class === 'tree' && f.geometry.type === 'Point'
+                ? [
+                    {
+                      at: project(f.geometry.coordinates),
+                      radius: crownRadius(f),
+                    },
+                  ]
+                : [],
+            )
+          : [];
         const add = (a: Point, b: Point) => {
           if (grounds && access.some((p) => segmentDistance(a, b, p.from, p.to) < p.radius + 0.35))
             return;
@@ -429,23 +478,31 @@ export function generateSeasonalInstallations(
           )
             return;
           if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 2) return;
-          const from = unproject(a),
-            to = unproject(b);
-          records.push({
-            ...base(`${from[0].toFixed(7)}/${from[1].toFixed(7)}`),
-            kind: 'light-string',
-            from,
-            to,
-            ...(buildingLights
-              ? { mount: 'building' as const }
-              : config.mount
-                ? { mount: config.mount }
-                : {}),
-            ...(config.bulb_spacing_m === undefined
-              ? {}
-              : { bulb_spacing_m: config.bulb_spacing_m }),
-            ...(config.palette === undefined ? {} : { palette: config.palette }),
-          });
+          for (const { start, end, clipped } of outsideCrowns(a, b, crowns)) {
+            // Preserve short surviving pieces of a clipped row instead of dropping its ends.
+            if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.01) continue;
+            const from = unproject(start),
+              to = unproject(end);
+            records.push({
+              ...base(
+                clipped
+                  ? `clipped/${from.join('/')}/${to.join('/')}`
+                  : `${from[0].toFixed(7)}/${from[1].toFixed(7)}`,
+              ),
+              kind: 'light-string',
+              from,
+              to,
+              ...(buildingLights
+                ? { mount: 'building' as const }
+                : config.mount
+                  ? { mount: config.mount }
+                  : {}),
+              ...(config.bulb_spacing_m === undefined
+                ? {}
+                : { bulb_spacing_m: config.bulb_spacing_m }),
+              ...(config.palette === undefined ? {} : { palette: config.palette }),
+            });
+          }
         };
         if (config.layout === 'canopy') {
           // Parallel strings follow the longest property edge. Intersections clip each row

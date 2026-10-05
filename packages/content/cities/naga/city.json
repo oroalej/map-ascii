@@ -194,7 +194,6 @@
         "title": {
           "en": "New Year"
         },
-        "status": "draft",
         "window": {
           "from": {
             "month": 12,
@@ -205,7 +204,6 @@
             "day": 1
           }
         },
-        "note": "TODO(verify): owner-requested illustrative New Year display, December 31–January 1. Peony, chrysanthemum, ring and golden willow bursts, drifting smoke and timing are schematic atmospheric effects seen from above, not surveyed launch locations, a confirmed Naga event, or air-quality data. It takes precedence over the overlapping Christmas calendar. Preview remains visible at any chosen hour and with Life off; reduced motion holds a still burst.",
         "fireworks": {
           "label": "Fireworks and smoke",
           "variants": ["peony", "chrysanthemum", "ring", "willow"]
@@ -214,6 +212,10 @@
           {
             "title": "Project owner: animated New Year season (2026-10-03)",
             "note": "Requests fireworks with several variants and smoke. Display and two-day calendar are illustrative, not a verified local event schedule."
+          },
+          {
+            "title": "Project owner: retain Christmas decorations during New Year (recorded 2026-10-05)",
+            "note": "Requests Christmas lanterns, bunting, temporary stalls, trees, lights and the Sabang perya alongside New Year fireworks. The composed calendar and decoration placements remain illustrative, not a verified recurring installation or event schedule."
           },
           {
             "title": "PBS A Capitol Fourth: Names of Fireworks",
@@ -225,14 +227,14 @@
             "url": "https://www.observatory.ph/wp-content/uploads/2024/02/MO-AQ-NY2024.pdf",
             "note": "Documents Philippine New Year fireworks and particles affected by wind and dispersion. Provides general seasonal context, not a Naga launch location or a physical smoke/air-quality model."
           }
-        ]
+        ],
+        "includes": ["christmas"]
       },
       {
         "id": "christmas",
         "title": {
           "en": "Christmas"
         },
-        "status": "draft",
         "window": {
           "from": {
             "month": 12,
@@ -243,7 +245,6 @@
             "day": 6
           }
         },
-        "note": "TODO(verify): December follows Kamundagan; January 6 is illustrative. Decorations combine references from several years, with schematic sizes and placements. The private Magsaysay display and Christmas perya beside LCC Mall Sabang were requested by the project owner; neither is a verified annual installation. Church-area banners and stalls are illustrative. This is not an exact historical or Christmas 2026 reconstruction.",
         "lanterns": {
           "label": "Parol lanterns",
           "shape": "star"
@@ -471,46 +472,10 @@
               }
             ],
             "label": "Christmas lights and ornaments",
-            "id": "magsaysay-orange-garlands",
-            "grounds": "magsaysay-orange-display",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 0.9,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.4,
-            "palette": "warm"
-          },
-          {
-            "anchor": "osm:way/23664053",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
-              }
-            ],
-            "label": "Christmas lights and ornaments",
             "id": "magsaysay-house-lights",
             "kind": "light-string",
             "layout": "building-perimeter",
             "spacing_m": 3,
-            "bulb_spacing_m": 0.4,
-            "palette": "christmas"
-          },
-          {
-            "anchor": "osm:way/23664053",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
-                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
-              }
-            ],
-            "label": "Christmas lights and ornaments",
-            "id": "magsaysay-orange-border",
-            "grounds": "magsaysay-orange-display",
-            "kind": "light-string",
-            "layout": "perimeter",
-            "spacing_m": 3,
-            "mount": "canopy",
             "bulb_spacing_m": 0.4,
             "palette": "christmas"
           },
@@ -644,78 +609,6 @@
             ]
           },
           {
-            "id": "magsaysay-walk-island-canopy",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-walk-island",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 1.5,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.4,
-            "palette": "warm",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-walk-island-perimeter",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-walk-island",
-            "kind": "light-string",
-            "layout": "perimeter",
-            "spacing_m": 3,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.4,
-            "palette": "christmas",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-drive-island-canopy",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-drive-island",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 1.5,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.4,
-            "palette": "warm",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-drive-island-perimeter",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-drive-island",
-            "kind": "light-string",
-            "layout": "perimeter",
-            "spacing_m": 3,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.4,
-            "palette": "christmas",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
-                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
-              }
-            ]
-          },
-          {
             "id": "magsaysay-island-tree-1",
             "anchor": "osm:way/23664053",
             "grounds": "magsaysay-access-forecourt",
@@ -726,60 +619,6 @@
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
                 "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-yellow-west-lights",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-yellow-west",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 0.75,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.3,
-            "palette": "christmas",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-yellow-middle-lights",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-yellow-middle",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 0.75,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.3,
-            "palette": "christmas",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
-              }
-            ]
-          },
-          {
-            "id": "magsaysay-yellow-east-lights",
-            "anchor": "osm:way/23664053",
-            "grounds": "magsaysay-yellow-east",
-            "kind": "light-string",
-            "layout": "canopy",
-            "spacing_m": 0.75,
-            "mount": "canopy",
-            "bulb_spacing_m": 0.3,
-            "palette": "christmas",
-            "label": "Christmas lights and ornaments",
-            "sources": [
-              {
-                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
           },
@@ -796,35 +635,230 @@
                 "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
-          }
-        ],
-        "grounds": [
+          },
           {
-            "id": "magsaysay-orange-display",
+            "id": "magsaysay-tree-lights",
+            "kind": "decorated-canopy",
             "anchor": "osm:way/23664053",
-            "ring": [
-              [123.19573371, 13.63244469],
-              [123.19575841, 13.63247705],
-              [123.19579004, 13.63250175],
-              [123.19581128, 13.63252985],
-              [123.19582861, 13.63253922],
-              [123.19582948, 13.63251027],
-              [123.19584031, 13.63248302],
-              [123.19584551, 13.632463],
-              [123.19583251, 13.63245449],
-              [123.19579351, 13.63243703],
-              [123.19576578, 13.63241872],
-              [123.19575364, 13.63241914],
-              [123.19574887, 13.63244043],
-              [123.19573371, 13.63244469]
-            ],
+            "grounds": "magsaysay-tree-display",
+            "trees": "overlapping",
+            "label": "Christmas trees and lights",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay crown wraps and retained yard lights (2026-10-05)",
+                "note": "The owner clarified that only yard-string portions overlapping existing roadside crowns should be removed. Lights on the remaining open ground are retained, and the overlapping crowns receive wrapped lights. The envelope follows the outer envelope of the original display patches; it is illustrative, not a surveyed property boundary or a verified annual installation."
+              }
+            ]
+          },
+          {
+            "anchor": "osm:way/23664053",
             "sources": [
               {
                 "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
                 "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
               }
-            ]
+            ],
+            "label": "Christmas lights and ornaments",
+            "id": "magsaysay-orange-garlands",
+            "grounds": "magsaysay-orange-display",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.9,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "exclude_tree_crowns": true
           },
+          {
+            "anchor": "osm:way/23664053",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "label": "Christmas lights and ornaments",
+            "id": "magsaysay-orange-border",
+            "grounds": "magsaysay-orange-display",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-walk-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-walk-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-walk-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-drive-island-canopy",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 1.5,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "warm",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-drive-island-perimeter",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-drive-island",
+            "kind": "light-string",
+            "layout": "perimeter",
+            "spacing_m": 3,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.4,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
+                "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-yellow-west-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-west",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-yellow-middle-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-middle",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          },
+          {
+            "id": "magsaysay-yellow-east-lights",
+            "anchor": "osm:way/23664053",
+            "grounds": "magsaysay-yellow-east",
+            "kind": "light-string",
+            "layout": "canopy",
+            "spacing_m": 0.75,
+            "mount": "canopy",
+            "bulb_spacing_m": 0.3,
+            "palette": "christmas",
+            "label": "Christmas lights and ornaments",
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              },
+              {
+                "title": "Project owner: retain ground lights, trim only crown overlaps (2026-10-05)",
+                "note": "The owner clarified using an ASCII Atlas screenshot that the existing yard lights remain. Only string portions overlapping roadside tree crowns are removed; those crowns retain their wrapped lights. This is an illustrative seasonal design, not a surveyed or annual installation."
+              }
+            ],
+            "exclude_tree_crowns": true
+          }
+        ],
+        "grounds": [
           {
             "id": "sabang-carnival-lot",
             "anchor": "osm:way/1053960480",
@@ -861,6 +895,71 @@
               {
                 "title": "Project owner: Magsaysay Christmas displays; access additions removed (2026-10-03)",
                 "note": "The owner's October 3 forecourt annotation guides these schematic placements; the retained handoff does not establish its base image. The owner requested additional Christmas lights and a small tree in the forecourt, then removed the walking-path and parking additions. Only schematic seasonal decorations remain; no paved surfaces, parking bays or permanent access routes are asserted."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-red-tree",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19581826, 13.63241519],
+              [123.19587742, 13.63241519],
+              [123.19587742, 13.63247269],
+              [123.19581826, 13.63247269],
+              [123.19581826, 13.63241519]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
+                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-tree-display",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19573371, 13.63244469],
+              [123.19575364, 13.63241914],
+              [123.19580493, 13.63236464],
+              [123.19586243, 13.63231891],
+              [123.19598602, 13.63238569],
+              [123.19593802, 13.63243762],
+              [123.19582861, 13.63253922],
+              [123.19581128, 13.63252985],
+              [123.19575841, 13.63247705],
+              [123.19573371, 13.63244469]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay crown wraps and retained yard lights (2026-10-05)",
+                "note": "The owner clarified that only yard-string portions overlapping existing roadside crowns should be removed. Lights on the remaining open ground are retained, and the overlapping crowns receive wrapped lights. The envelope follows the outer envelope of the original display patches; it is illustrative, not a surveyed property boundary or a verified annual installation."
+              }
+            ]
+          },
+          {
+            "id": "magsaysay-orange-display",
+            "anchor": "osm:way/23664053",
+            "ring": [
+              [123.19573371, 13.63244469],
+              [123.19575841, 13.63247705],
+              [123.19579004, 13.63250175],
+              [123.19581128, 13.63252985],
+              [123.19582861, 13.63253922],
+              [123.19582948, 13.63251027],
+              [123.19584031, 13.63248302],
+              [123.19584551, 13.632463],
+              [123.19583251, 13.63245449],
+              [123.19579351, 13.63243703],
+              [123.19576578, 13.63241872],
+              [123.19575364, 13.63241914],
+              [123.19574887, 13.63244043],
+              [123.19573371, 13.63244469]
+            ],
+            "sources": [
+              {
+                "title": "Project owner: Magsaysay forecourt access and house Christmas lights (2026-10-02)",
+                "note": "The owner-annotated ASCII Atlas render of OSM-derived map data limits ground decoration to the orange patch within the red forecourt boundary, with yellow paths and parking access kept clear. The adjacent mapped house receives roof-edge lights. Geometry, tree sizes and the seasonal design are illustrative, not surveyed property lines or a verified annual installation."
               }
             ]
           },
@@ -952,23 +1051,6 @@
                 "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
               }
             ]
-          },
-          {
-            "id": "magsaysay-red-tree",
-            "anchor": "osm:way/23664053",
-            "ring": [
-              [123.19581826, 13.63241519],
-              [123.19587742, 13.63241519],
-              [123.19587742, 13.63247269],
-              [123.19581826, 13.63247269],
-              [123.19581826, 13.63241519]
-            ],
-            "sources": [
-              {
-                "title": "Project owner: red Christmas tree and yellow light patches, Magsaysay (2026-10-03)",
-                "note": "The owner's October 3 red/yellow annotation (codex-clipboard-chBEf7.png; its base image is not established by the retained handoff) requests a Christmas tree at the red spot and denser lights in three yellow forecourt patches. Yellow now denotes hanging lights rather than paved access. Registered against the mapped house; dimensions and placement are schematic, not surveyed or a verified annual installation. Keep roads and the house clear; do not restore paving or parking markings."
-              }
-            ]
           }
         ]
       },
@@ -977,7 +1059,6 @@
         "title": {
           "en": "Peñafrancia fiesta"
         },
-        "status": "draft",
         "window": {
           "anchor": {
             "month": 9,
@@ -988,7 +1069,6 @@
           "days_before": 9,
           "days_after": 0
         },
-        "note": "TODO(verify): The Basilica's calendar explanation places the feast on the Sunday after September 15, represented here as the day after the third Saturday. The 2026 calendar supports September 11–20, covering the novena and feast day. Decoration/stall positions remain unverified. Banners, radii and densities are illustrative; this does not change the fluvial procession or add fiesta crowds. Dense red/yellow rectangular banderitas on selected Centro corridors were requested by the project owner on 2026-10-01 using a photograph and marked map references; 3 m rows and curb-to-curb spans are illustrative, not surveyed installations.",
         "bunting": {
           "label": "Fiesta banners",
           "near": ["worship"],

@@ -13,8 +13,6 @@ const road = (id: number, points: SeasonalPoint[], extra = {}): AtlasFeature => 
 const season = (ways = ['osm:way/1', 'osm:way/2'], ends = {}): SeasonConfig => ({
   id: 'feast',
   title: { en: 'Feast' },
-  status: 'draft',
-  note: 'TODO(verify)',
   sources: [],
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   bunting: {
