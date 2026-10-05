@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TilePoint } from '../raster/geometry';
 import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import {
@@ -235,6 +235,47 @@ describe('packLights', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     expect(packLights(out, grid, [lamp(-1, 5.5, LampState.working)])).toBe(0);
     expect(cell(out, 0, 5)[0]!).toBeGreaterThan(0);
+  });
+});
+
+describe('compact candle pools', () => {
+  const candle = (x: number, seed: number): VisibleLamp => ({
+    ...lamp(x, 5.5, LampState.candle, seed, 1),
+    headless: true,
+    worldPool: [x, 5.5, 1, 1],
+  });
+  it('retains different fractional centres, first-seed ties and off-grid spill', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    packLights(out, grid, [candle(5.15, 1), candle(5.85, 2), candle(-0.25, 3)]);
+    expect(cell(out, 4, 5)[0]).toBeGreaterThan(0);
+    expect(cell(out, 4, 5)[1]).toBe(lightByte(LampState.candle, 1));
+    expect(cell(out, 6, 5)[0]).toBeGreaterThan(0);
+    expect(cell(out, 6, 5)[1]).toBe(lightByte(LampState.candle, 2));
+    expect(cell(out, 5, 5)[1]).toBe(lightByte(LampState.candle, 1));
+    expect(cell(out, 0, 5)[0]).toBeGreaterThan(0);
+    expect(cell(out, 0, 5)[1]).toBe(lightByte(LampState.candle, 3));
+    expect(out.some((value, i) => i % 4 === 2 && value > 0)).toBe(false);
+  });
+  it('uses current placement without repeated projections and clears the batch between pans', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const toCell = vi.fn(grid.toCell);
+    const lamps = [candle(5.15, 1), candle(5.85, 2), candle(-0.25, 3), candle(1000, 4)];
+    const expected = new Uint8Array(out.length);
+    packLights(expected, grid, lamps);
+    packLights(out, { ...grid, toCell, world: [1, 1, 0, 0] }, lamps);
+    expect(out).toEqual(expected);
+    expect(toCell).not.toHaveBeenCalled();
+    packLights(out, { ...grid, toCell, world: [1, 1, 5, 0] }, lamps);
+    expect(cell(out, 0, 5)[0]).toBeGreaterThan(0);
+    expect(cell(out, 5, 5)).toEqual([0, 0, 0, 0]);
+    packLights(out, { ...grid, world: [1, 1, 0, 0] }, []);
+    expect(out.every((value) => value === 0)).toBe(true);
+  });
+  it('preserves ordinary head ownership and lamp-order ties around a candle batch', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const ordinary = lamp(5.5, 5.5, LampState.working, 9, 1);
+    packLights(out, grid, [candle(5.5, 1), ordinary, candle(5.5, 2)]);
+    expect(cell(out, 5, 5)).toEqual([255, lightByte(LampState.working, 9), 255, 255]);
   });
 });
 

@@ -61,6 +61,11 @@ export class LifeInspection {
     this.sharedOwners = undefined;
   }
 
+  forgetOwner(owner: object, clock: number) {
+    if (this.selected?.owner === owner) this.release(clock);
+    this.visible = this.visible.filter((actor) => actor.owner !== owner);
+  }
+
   select(command: InspectionCommand, clock: number) {
     if (command.revision < this.revision) return;
     this.time = clock;

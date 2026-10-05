@@ -1,4 +1,6 @@
 import type { SimulationSeason } from './seasonal-simulation';
+import { seasonalCrowds } from './seasonal-crowds';
+import { gathererShare } from './gatherer-share';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 /**
@@ -83,6 +85,7 @@ import {
   PERSON_PAUSE,
   PERSON_TURN_CHANCE,
   PLACES,
+  SEASON_CROWD,
   ROAD_MARGIN_M,
   ROAD_AVOID,
   WALK_RECOVERY,
@@ -162,7 +165,12 @@ import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
 import { PuffStore, PuffSelector, EMPTY_PUFFS } from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
-import { collectSeasonAnchors, seasonProximity, type SeasonAnchor } from './seasonal';
+import {
+  collectSeasonAnchors,
+  seasonProximity,
+  seasonMarkets,
+  type SeasonAnchor,
+} from './seasonal';
 import { admitsInstallation } from './seasonal-installations';
 import {
   hasTurnSignals,
@@ -498,6 +506,7 @@ export type Stall = {
  * end: `sign`), leading a carabao in `carabao`'s paint.
  */
 export type Gatherer = {
+  seasonal?: 'visitors' | 'congregations';
   /** Original place ordinal; adjacent or coincident records retain separate ownership. */
   source?: number;
   momentFacing?: { hx: number; hy: number };
@@ -820,7 +829,13 @@ export class TileLife {
     anchors: readonly SeasonAnchor[],
     guard: GroundGuard,
   ) {
-    const near = seasonProximity(this.tile, anchors, config.near, config.radius_m, true);
+    const near = seasonProximity(
+      this.tile,
+      anchors,
+      config.near,
+      config.radius_m,
+      seasonMarkets(config.near),
+    );
     const limit = Math.min(config.per_tile, Math.max(0, MAX_TILE_AGENTS - this.population));
     for (const stall of (this.seasonalCandidates ??= this.prepareSeasonalCandidates())) {
       if (this.seasonalStalls.length >= limit) break;
@@ -867,6 +882,12 @@ export class TileLife {
   }
   /** People at places: churches, schools, pitches, benches, fields (`spawnGatherers`). */
   readonly gatherers: Gatherer[] = [];
+  private seasonalGatherersAdmitted = false;
+  get ordinaryGatherers(): readonly Gatherer[] {
+    return this.seasonalGatherersAdmitted
+      ? this.gatherers.filter((g) => !g.seasonal)
+      : this.gatherers;
+  }
 
   /** A zoom transfer commits only after a detached preview passes every admission check. */
   projectFrom(m: Mover, source: TileLife, options: AdoptionOptions = {}): Mover | undefined {
@@ -944,6 +965,15 @@ export class TileLife {
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
   private readonly placeRng: () => number;
+  private readonly visitorsRng: () => number;
+  private readonly congregationsRng: () => number;
+  private gathererRng(g: Gatherer) {
+    return g.seasonal === 'visitors'
+      ? this.visitorsRng
+      : g.seasonal === 'congregations'
+        ? this.congregationsRng
+        : this.placeRng;
+  }
   /** Birds' species, landings, and bats: their own stream, so no one else moves for them. */
   private readonly birdRng: () => number;
   /** Ground choices cannot change flight, traffic, or walking random streams. */
@@ -1095,6 +1125,8 @@ export class TileLife {
     this.routeRng = random(seed ^ 0x2545f491);
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
+    this.visitorsRng = random(seed ^ 0x63a8f127);
+    this.congregationsRng = random(seed ^ 0x4e19b6cd);
     this.birdRng = random(seed ^ 0x165667b1);
     this.forageRng = random(seed ^ 0x4f1bbcdc);
     this.dogRng = random(seed ^ 0xd3a2646c);
@@ -2848,6 +2880,43 @@ export class TileLife {
    * then along the next row over, back the other way (farm workers); or a few meters round the
    * building, monument, or fountain they stand by, or across the grounds they stand on.
    */
+  admitSeasonalGatherers(
+    config: SimulationSeason,
+    guard: GroundGuard,
+    remove: (owner: Gatherer) => void = () => {},
+  ) {
+    this.seasonalGatherersAdmitted = true;
+    this.gatherers.push(
+      ...seasonalCrowds(config, {
+        tile: this.tile,
+        geo: this.geo,
+        perMeter: this.perMeter,
+        count: this.gatherers.length + (this.suppressedGround?.gatherers.hidden.length ?? 0),
+        visitorsRng: this.visitorsRng,
+        congregationsRng: this.congregationsRng,
+        target: (g) => this.nextTarget(g),
+        guard: (g) => this.canIdle(g) && guard(g),
+        remove,
+      }),
+    );
+  }
+
+  clearSeasonalGatherers(remove: (owner: Gatherer) => void = () => {}) {
+    this.seasonalGatherersAdmitted = false;
+    const clear = (owners: Gatherer[]) => {
+      for (let i = owners.length - 1; i >= 0; i--) {
+        const g = owners[i]!;
+        if (!g.seasonal) continue;
+        remove(g);
+        if (this.inspected === g) this.inspected = undefined;
+        delete g.momentFacing;
+        owners.splice(i, 1);
+      }
+    };
+    clear(this.gatherers);
+    if (this.suppressedGround) clear(this.suppressedGround.gatherers.hidden);
+  }
+
   private nextTarget(g: Gatherer) {
     const previous = { tx: g.tx, ty: g.ty, sign: g.sign };
     this.chooseTarget(g);
@@ -2874,7 +2943,7 @@ export class TileLife {
   }
 
   private chooseTarget(g: Gatherer) {
-    const rng = this.placeRng;
+    const rng = this.gathererRng(g);
     const { perMeter } = this;
     const reach = 8 * perMeter;
     switch (g.behavior) {
@@ -2932,8 +3001,8 @@ export class TileLife {
 
   /** People at places walk to their next spot, and stand there a while (`PLACES` `pause`). */
   private stepGatherers(dt: number, near?: (x: number, y: number) => boolean, guard?: GroundGuard) {
-    const rng = this.placeRng;
     for (const g of this.gatherers) {
+      const rng = this.gathererRng(g);
       if (this.inspected === g) continue;
       if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || (near && !near(g.x, g.y))) continue;
@@ -2943,7 +3012,7 @@ export class TileLife {
       }
       if (!this.canIdle(g)) g.pause = 0;
       if (g.pause > 0) {
-        this.momentHost.attend(g, guard);
+        if (!g.seasonal) this.momentHost.attend(g, guard);
         g.pause -= dt;
         continue;
       }
@@ -2956,7 +3025,9 @@ export class TileLife {
       if (dist <= move) {
         g.x = g.tx;
         g.y = g.ty;
-        g.pause = this.canIdle(g) ? between(rng, PLACES[g.place].pause) : 0;
+        g.pause = this.canIdle(g)
+          ? between(rng, g.seasonal ? SEASON_CROWD.pause : PLACES[g.place].pause)
+          : 0;
         this.nextTarget(g);
       } else {
         g.hx = dx / dist;
@@ -4792,7 +4863,7 @@ export class TileLife {
         (!env?.levels || m.rank < env.levels.person)
       )
         add(m);
-    for (const g of this.gatherers) if (!env?.levels || g.rank < env.levels.places[g.place]) add(g);
+    for (const g of this.gatherers) if (g.rank < gathererShare(g, env?.levels)) add(g);
     for (const s of this.stalls)
       if (s.open !== false && (!env?.levels || s.rank < env.levels.person)) add(s);
     return pedestrianView(occupied, 0);
@@ -5107,7 +5178,7 @@ export class TileLife {
       if (this.momentHost.moments.busy(g)) continue;
       if (this.ownership && !this.ownership(g)) continue;
       if (g.behavior === 'sit' || g.pause > 0) continue;
-      if (levels && g.rank >= levels.places[g.place]) continue;
+      if (g.rank >= gathererShare(g, levels)) continue;
       if (within(g.x, g.y, reach)) return true;
     }
     return false;
@@ -5482,9 +5553,12 @@ export class LifeWorld {
     return bounds;
   }
 
+  private readonly appliedCrowds = new WeakMap<TileLife, string>();
+
   private syncSeason(season: string | null | undefined) {
     const config = this.seasons.find(
-      (s) => s.id === season && (s.stalls || s.installations?.length),
+      (s) =>
+        s.id === season && (s.stalls || s.installations?.length || s.visitors || s.congregations),
     );
     const changed = config?.id !== this.seasonalConfig?.id;
     if (!changed && !this.seasonsDirty) {
@@ -5499,7 +5573,15 @@ export class LifeWorld {
     this.seasonalTerrainKey = seasonalKey;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
+    const crowdKey =
+      config?.visitors || config?.congregations
+        ? JSON.stringify([config.visitors, config.congregations])
+        : '';
     for (const life of this.tiles.values()) {
+      if ((this.appliedCrowds.get(life) ?? '') !== crowdKey) {
+        life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
+        this.appliedCrowds.delete(life);
+      }
       const previous = this.appliedSeasons.get(life) ?? null;
       if (previous !== (config ?? null)) {
         const before = previous?.stalls,
@@ -5526,6 +5608,36 @@ export class LifeWorld {
         [...this.tiles.values()].some((life) => life.hasSuppressedActors))
     )
       this.groundGuard();
+    let admissionGuard: ReturnType<typeof this.groundGuard> | undefined;
+    const guardForAdmission = () =>
+      (admissionGuard ??= this.groundGuard(0, undefined, undefined, true));
+    if (crowdKey && config) {
+      const pending: TileLife[] = [];
+      for (const life of this.tiles.values()) {
+        if (this.appliedCrowds.get(life) === crowdKey) continue;
+        const visitors =
+          config.visitors &&
+          (life.geo.graves?.length ||
+            life.geo.memorialSites?.length ||
+            (!life.geo.memorialSites && life.geo.cemeteryAreas?.some((area) => !area.hasBurials)));
+        const congregations =
+          config.congregations &&
+          life.geo.placeLandmarks?.some(([, id]) => config.congregations!.landmarks.includes(id));
+        if (visitors || congregations) pending.push(life);
+        else this.appliedCrowds.set(life, crowdKey);
+      }
+      if (pending.length) {
+        const guard = guardForAdmission();
+        for (const life of pending) {
+          life.admitSeasonalGatherers(
+            config,
+            (owner, before) => this.owns(life, owner) && guard(life, owner, before),
+            (owner) => guard.remove(owner),
+          );
+          this.appliedCrowds.set(life, crowdKey);
+        }
+      }
+    }
     if (!config?.stalls) return;
     const lives = [...this.tiles.values()];
     const anchors = lives.flatMap((life) => {
@@ -5537,9 +5649,14 @@ export class LifeWorld {
       return found;
     });
     const changedTiles = lives.flatMap((life) => {
-      const reach = config.stalls!.radius_m * life.perMeter;
       const nearby = anchors.filter((a) => {
-        if (a.kind !== 'market' && !config.stalls!.near.includes(a.kind)) return false;
+        if (
+          a.kind === 'market'
+            ? !seasonMarkets(config.stalls!.near)
+            : !config.stalls!.near.includes(a.kind)
+        )
+          return false;
+        const reach = (config.stalls!.radius_m + (a.radius_m ?? 0)) * life.perMeter;
         const p = lngLatToTile(life.tile, ...a.at);
         return p.x >= -reach && p.y >= -reach && p.x <= EXTENT + reach && p.y <= EXTENT + reach;
       });
@@ -5566,14 +5683,14 @@ export class LifeWorld {
       return [{ life, anchors: nearby }];
     });
     if (!changedTiles.length) return;
-    const guard = this.groundGuard(0, undefined, undefined, true);
+    const guard = guardForAdmission();
     for (const { life, anchors } of changedTiles) {
       const near = seasonProximity(
         life.tile,
         anchors,
         config.stalls.near,
         config.stalls.radius_m,
-        true,
+        seasonMarkets(config.stalls.near),
       );
       for (let i = life.seasonalStalls.length - 1; i >= 0; i--) {
         const stall = life.seasonalStalls[i]!;
@@ -5895,6 +6012,8 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
+          life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
+          this.appliedCrowds.delete(life);
           this.retired.set(key, { life, at: this.clock });
           this.tiles.delete(key);
           changed = true;
@@ -6637,7 +6756,7 @@ export class LifeWorld {
         if (
           inView(g) &&
           this.owns(life, g) &&
-          (allBodies || !this.lastLevels || g.rank < this.lastLevels.places[g.place])
+          (allBodies || g.rank < gathererShare(g, this.lastLevels))
         )
           occupied.set(g, bodies(life, g, buffer(g).live));
       }
@@ -7527,7 +7646,7 @@ export class LifeWorld {
       if (shows('person')) {
         for (const g of life.gatherers) {
           if (!this.owns(life, g)) continue;
-          if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
+          if (g.rank >= gathererShare(g, levels) * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
           const figure = g.behavior === 'sit' ? 'seated' : w.figure;
           const still = g.pause > 0 || g.behavior === 'sit';

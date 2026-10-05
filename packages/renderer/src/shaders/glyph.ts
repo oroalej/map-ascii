@@ -18,7 +18,7 @@
  * ownership. Uniform names below describe these inputs; documentation stays outside the
  * GLSL string so it does not add to the shipped shader payload.
  */
-import { Flags, MAX_CLASSES } from '../classes';
+import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
@@ -413,7 +413,8 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     // Crown-mounted bulbs sit on the foliage; ordinary hardware stays beneath it.
     int cls = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
     bool foliage = cls == u_vehicleOccluders.x || cls == u_vehicleOccluders.y || cls == u_vehicleOccluders.z;
-    if ((part != ${FixturePart.festiveLight} && part != ${FixturePart.carnivalLight}) || !foliage) return under + halo;
+    bool burialCandle = part == ${FixturePart.candle} && cls == ${classId('building_part')};
+    if (!burialCandle && ((part != ${FixturePart.festiveLight} && part != ${FixturePart.carnivalLight}) || !foliage)) return under + halo;
   }`
       : 'if (!allowed) return under + halo;'
   }
@@ -462,6 +463,13 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
       ? /* glsl */ `if (part == ${FixturePart.lantern}) {
     float lit = lampOn(info, u_time) * switchedOn(info);
     color = mix(lampLit(daylit(u_fixturePaints[9]), rainLight), u_fixturePaints[2], lit);
+  }
+  if (part == ${FixturePart.candle}) {
+    float lit = lampOn(info, u_time) * switchedOn(info);
+    bool flame = float(inCell.y) / u_cell.y < 0.4;
+    vec3 wax = lampLit(daylit(vec3(0.95, 0.88, 0.69)), rainLight);
+    vec3 amber = vec3(1.0, 0.64, 0.16);
+    color = flame ? amber * mix(1.0, lit, darkness()) : mix(wax, amber * 0.7 * lit, darkness());
   }
   if (part == ${FixturePart.bunting}) {
     color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * buntingFold), rainLight);

@@ -225,6 +225,18 @@ export type LifeGeometry = {
   places: Float32Array;
   /** Compass heading per place; NaN keeps existing unsurveyed bench orientation. */
   seatBearings?: Float32Array;
+  /** Owned burial centres: x, y, exactly representable 24-bit seed. */
+  graves?: Float32Array;
+  /** Owned cemetery centres: x, y, radius in tile units. */
+  cemeteries?: Float32Array;
+  /** Maximum-zoom fragments, including holes/buffers; absence of markers is tile-local. */
+  cemeteryAreas?: { id: string; rings: TilePoint[][]; hasBurials: boolean }[];
+  /** Worker-prepared safe fallback x/y/seed triples, including a computed-empty result. */
+  memorialSites?: Float32Array;
+  /** Fragment identity for each prepared fallback triple. */
+  memorialFragments?: string[];
+  /** Accepted worship-place ordinals and curated identities; structured-cloned, not transferred. */
+  placeLandmarks?: [number, string][];
 };
 
 export type LifeArea = {
@@ -279,6 +291,13 @@ export const MAX_TILE_PERCHES = 24;
 export const MAX_TILE_PLACES = 40;
 export const MAX_TILE_SHOPS = 150;
 
+/** Full numeric world identity is retained separately from this compact visual seed. */
+export function graveSeed(featureHash: number, x: number, y: number): number {
+  let seed = Math.imul(featureHash ^ (x | 0) ^ Math.floor(x / 0x100000000), 0x85ebca6b);
+  seed = Math.imul(seed ^ (y | 0) ^ Math.floor(y / 0x100000000), 0xc2b2ae35);
+  return (seed ^ (seed >>> 16)) & 0xffffff;
+}
+
 /** Keep the same bounded set regardless of vector-tile feature traversal order. */
 function shopEntry(entries: Map<string, number[]>, id: string, values: number[]) {
   if (entries.has(id)) return;
@@ -296,6 +315,29 @@ const shopValues = (entries: Map<string, number[]>) =>
   );
 
 export class LifeBuilder {
+  private graves = new Map<string, Map<number, Map<number, number[]>>>();
+  private cemeteries: number[] = [];
+  private cemeteryAreas: { id: string; rings: TilePoint[][] }[] = [];
+  private burialParents = new Set<string>();
+  private placeLandmarks: [number, string][] = [];
+
+  grave(p: TilePoint, feature: string, seed: number, world = [Math.round(p.x), Math.round(p.y)]) {
+    if (!inTile(p)) return;
+    let columns = this.graves.get(feature);
+    if (!columns) this.graves.set(feature, (columns = new Map<number, Map<number, number[]>>()));
+    let rows = columns.get(world[0]!);
+    if (!rows) columns.set(world[0]!, (rows = new Map<number, number[]>()));
+    rows.set(world[1]!, [p.x, p.y, seed & 0xffffff]);
+  }
+  cemetery(p: TilePoint, radius: number) {
+    if (inTile(p)) this.cemeteries.push(p.x, p.y, radius);
+  }
+  cemeteryArea(id: string, rings: readonly (readonly TilePoint[])[]) {
+    this.cemeteryAreas.push({ id, rings: rings.map((ring) => ring.map((p) => ({ ...p }))) });
+  }
+  burialParent(id: string) {
+    this.burialParents.add(id);
+  }
   private commerce = new Map<string, number[]>();
   commerceAt(p: TilePoint, id = `${p.x}/${p.y}`) {
     shopEntry(this.commerce, id, [p.x, p.y]);
@@ -594,13 +636,34 @@ export class LifeBuilder {
    * A place people gather at, centered at `p`, `radius` tile units across (0 for a point);
    * `building` when people stand around it rather than on it. Past `MAX_TILE_PLACES`, dropped.
    */
-  place(p: TilePoint, kind: PlaceKind, radius: number, building = false, bearing = NaN) {
+  place(
+    p: TilePoint,
+    kind: PlaceKind,
+    radius: number,
+    building = false,
+    bearing = NaN,
+    landmarkId?: string,
+  ) {
     if (this.places.length / PLACE_STRIDE >= MAX_TILE_PLACES) return;
+    if (kind === 'worship' && landmarkId)
+      this.placeLandmarks.push([this.places.length / PLACE_STRIDE, landmarkId]);
     this.places.push(p.x, p.y, placeCode(kind), radius, building ? 1 : 0);
     this.seatBearings.push(bearing);
   }
 
   finish(): LifeGeometry {
+    const graves = [...this.graves].flatMap(([feature, columns]) =>
+      [...columns.values()].flatMap((rows) =>
+        [...rows.values()].map((values) => ({ feature, values })),
+      ),
+    );
+    graves.sort(
+      (a, b) =>
+        a.values[2]! - b.values[2]! ||
+        a.values[0]! - b.values[0]! ||
+        a.values[1]! - b.values[1]! ||
+        (a.feature < b.feature ? -1 : a.feature > b.feature ? 1 : 0),
+    );
     return {
       signals: Float32Array.from(this.signals),
       signalLayouts: this.signalLayouts,
@@ -631,11 +694,23 @@ export class LifeBuilder {
       shops: shopValues(this.shops),
       places: Float32Array.from(this.places),
       seatBearings: Float32Array.from(this.seatBearings),
+      ...(graves.length && { graves: Float32Array.from(graves.flatMap(({ values }) => values)) }),
+      ...(this.cemeteries.length && { cemeteries: Float32Array.from(this.cemeteries) }),
+      ...(this.cemeteryAreas.length && {
+        cemeteryAreas: this.cemeteryAreas.map((area) => ({
+          ...area,
+          hasBurials: this.burialParents.has(area.id),
+        })),
+      }),
+      ...(this.placeLandmarks.length && { placeLandmarks: this.placeLandmarks }),
     };
   }
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...(g.memorialSites ? [g.memorialSites.buffer as ArrayBuffer] : []),
+  ...(g.graves ? [g.graves.buffer as ArrayBuffer] : []),
+  ...(g.cemeteries ? [g.cemeteries.buffer as ArrayBuffer] : []),
   ...(g.seasonalPayload instanceof Uint8Array ? [g.seasonalPayload.buffer as ArrayBuffer] : []),
   ...(g.flagpoles ? [g.flagpoles.buffer as ArrayBuffer] : []),
   ...(g.lampSites ? [g.lampSites.buffer as ArrayBuffer] : []),

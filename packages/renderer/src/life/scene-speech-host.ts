@@ -1,3 +1,4 @@
+import { gathererShare } from './gatherer-share';
 /** Adapts authoritative visits and existing group members to presentation-only dialogue. */
 import type { MomentOptions } from './moments-host';
 import { MOMENTS, type MomentAnchor } from './moments';
@@ -57,7 +58,7 @@ export class SceneSpeechHost {
         inTile(owner) &&
         owner.rank <
           ('place' in owner
-            ? (this.sceneEnv?.levels?.places[owner.place] ?? 1)
+            ? gathererShare(owner, this.sceneEnv?.levels)
             : (this.sceneEnv?.levels?.person ?? 1)) &&
         ('kind' in owner
           ? tile.movers.includes(owner) &&
@@ -77,7 +78,12 @@ export class SceneSpeechHost {
         easing: (env?.rain ?? 0) < this.previousRain - 0.001,
       });
       const tryAmbient = (owner: Mover | Gatherer) => {
-        if (!visible(owner) || (env?.rain ?? 0) >= MOMENTS.rain) return;
+        if (
+          ('seasonal' in owner && owner.seasonal) ||
+          !visible(owner) ||
+          (env?.rain ?? 0) >= MOMENTS.rain
+        )
+          return;
         const eligible = () =>
           visible(owner) &&
           (this.sceneEnv?.rain ?? 0) < MOMENTS.rain &&
@@ -204,13 +210,14 @@ export class SceneSpeechHost {
       if (scan) {
         // Keep one check available for real service events between scan boundaries.
         // Spending both on background companions can miss a short purchase entirely.
-        const count = tile.movers.length + tile.gatherers.length;
+        const ordinary = tile.ordinaryGatherers;
+        const count = tile.movers.length + ordinary.length;
         while (this.sceneBudget > 1 && count) {
           sceneChecks++;
           this.sceneBudget--;
           const index = this.sceneCursor++ % count;
           if (index < tile.movers.length) tryScene(tile.movers[index]!);
-          else tryAmbient(tile.gatherers[index - tile.movers.length]!);
+          else tryAmbient(ordinary[index - tile.movers.length]!);
         }
       }
     }

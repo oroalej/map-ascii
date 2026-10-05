@@ -15,7 +15,7 @@ import {
   type FigureGlyph,
 } from '../life/people';
 import { STALL_GLYPH } from '../life/vehicles';
-import { SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
+import { CANDLE_GLYPHS, SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
@@ -303,50 +303,62 @@ function drawStall(slot: Slot) {
 /** Rasterize seasonal cloth and ornaments into their fixed atlas slots. */
 function drawSeasonal(slot: Slot, glyph: string) {
   const points: [number, number][] =
-    glyph === SeasonalGlyph.foliage
-      ? Array.from({ length: 16 }, (_, i) => {
-          const a = (i * Math.PI) / 8,
-            r = i % 2 ? 0.32 : 0.49;
-          return [0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r];
-        })
-      : glyph === SeasonalGlyph.bulb
+    glyph === SeasonalGlyph.candle
+      ? [
+          [0.5, 0.08],
+          [0.34, 0.28],
+          [0.46, 0.4],
+          [0.32, 0.42],
+          [0.32, 0.9],
+          [0.68, 0.9],
+          [0.68, 0.42],
+          [0.54, 0.4],
+          [0.66, 0.28],
+        ]
+      : glyph === SeasonalGlyph.foliage
         ? Array.from({ length: 16 }, (_, i) => {
-            const a = (i * Math.PI) / 8;
-            return [0.5 + Math.cos(a) * 0.29, 0.5 + Math.sin(a) * 0.19];
+            const a = (i * Math.PI) / 8,
+              r = i % 2 ? 0.32 : 0.49;
+            return [0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r];
           })
-        : glyph === SeasonalGlyph.bell
-          ? [
-              [0.42, 0.16],
-              [0.58, 0.16],
-              [0.77, 0.32],
-              [0.77, 0.59],
-              [0.94, 0.73],
-              [0.64, 0.73],
-              [0.58, 0.87],
-              [0.42, 0.87],
-              [0.36, 0.73],
-              [0.06, 0.73],
-              [0.23, 0.59],
-              [0.23, 0.32],
-            ]
-          : glyph === SeasonalGlyph.parol
-            ? Array.from({ length: 10 }, (_, i) => {
-                const angle = (i * Math.PI) / 5 - Math.PI / 2,
-                  radius = i % 2 ? 0.21 : 0.48;
-                return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
-              })
-            : glyph === SeasonalGlyph.rectangleLeft || glyph === SeasonalGlyph.rectangleRight
-              ? [
-                  [0.08, 0.22],
-                  [0.92, 0.22],
-                  [glyph === SeasonalGlyph.rectangleLeft ? 0.82 : 0.92, 0.87],
-                  [glyph === SeasonalGlyph.rectangleLeft ? 0.08 : 0.18, 0.87],
-                ]
-              : [
-                  [0.05, 0.25],
-                  [0.95, 0.25],
-                  [glyph === SeasonalGlyph.triangleLeft ? 0.35 : 0.65, 0.85],
-                ];
+        : glyph === SeasonalGlyph.bulb
+          ? Array.from({ length: 16 }, (_, i) => {
+              const a = (i * Math.PI) / 8;
+              return [0.5 + Math.cos(a) * 0.29, 0.5 + Math.sin(a) * 0.19];
+            })
+          : glyph === SeasonalGlyph.bell
+            ? [
+                [0.42, 0.16],
+                [0.58, 0.16],
+                [0.77, 0.32],
+                [0.77, 0.59],
+                [0.94, 0.73],
+                [0.64, 0.73],
+                [0.58, 0.87],
+                [0.42, 0.87],
+                [0.36, 0.73],
+                [0.06, 0.73],
+                [0.23, 0.59],
+                [0.23, 0.32],
+              ]
+            : glyph === SeasonalGlyph.parol
+              ? Array.from({ length: 10 }, (_, i) => {
+                  const angle = (i * Math.PI) / 5 - Math.PI / 2,
+                    radius = i % 2 ? 0.21 : 0.48;
+                  return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
+                })
+              : glyph === SeasonalGlyph.rectangleLeft || glyph === SeasonalGlyph.rectangleRight
+                ? [
+                    [0.08, 0.22],
+                    [0.92, 0.22],
+                    [glyph === SeasonalGlyph.rectangleLeft ? 0.82 : 0.92, 0.87],
+                    [glyph === SeasonalGlyph.rectangleLeft ? 0.08 : 0.18, 0.87],
+                  ]
+                : [
+                    [0.05, 0.25],
+                    [0.95, 0.25],
+                    [glyph === SeasonalGlyph.triangleLeft ? 0.35 : 0.65, 0.85],
+                  ];
   for (let y = 0; y < slot.h; y++)
     for (let x = 0; x < slot.w; x++) {
       let coverage = 0;
@@ -389,7 +401,11 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === STALL_GLYPH) drawStall(slot);
-  else if ((SEASONAL_GLYPHS as readonly string[]).includes(glyph)) drawSeasonal(slot, glyph);
+  else if (
+    (SEASONAL_GLYPHS as readonly string[]).includes(glyph) ||
+    (CANDLE_GLYPHS as readonly string[]).includes(glyph)
+  )
+    drawSeasonal(slot, glyph);
   else return false;
   return true;
 }

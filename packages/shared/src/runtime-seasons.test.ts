@@ -16,6 +16,64 @@ describe('season client payload', () => {
   const life = CityLife.parse(cityPack.life);
   const runtime = runtimeCityLife(life);
 
+  it('serializes crowd-only and candle-only calendars and inherits each group with own precedence', () => {
+    const groups = {
+      candles: { label: 'Candles', share: 0.75 },
+      visitors: {
+        label: 'Families',
+        share: 0.35,
+        per_grave_family: [2, 5],
+        max_per_tile: 120,
+        hours: [
+          [0, 0.05],
+          [18, 1],
+          [23, 0.15],
+        ],
+      },
+      congregations: {
+        label: 'Mass-goers',
+        landmarks: ['landmark/church'],
+        extra: 60,
+        hours: [
+          [0, 0.02],
+          [7, 0.9],
+          [23, 0.03],
+        ],
+      },
+    };
+    const calendar = Object.entries(groups).map(([id, group]) => ({
+      id,
+      title: { en: id },
+      sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
+      window: { from: { month: 10, day: 31 }, to: { month: 11, day: 2 } },
+      [id]: group,
+    }));
+    const authored = { source: 'Illustrative test calendar', seasons: calendar };
+    const parsed = CityLife.parse(authored);
+    const compact = runtimeCityLife(parsed);
+    expect(RuntimeCityLifeSchema.parse(authored)).toEqual(compact);
+    for (const field of ['candles', 'visitors', 'congregations'] as const) {
+      expect(compact.seasons!.find((s) => s.id === field)![field]).toEqual(groups[field]);
+    }
+    const preview: RuntimeSeasonConfig = {
+      id: 'preview',
+      title: { en: 'Preview' },
+      window: compact.seasons![0]!.window,
+      includes: ['candles', 'visitors', 'congregations'],
+      candles: { label: 'Own candles', share: 1 },
+    };
+    const expanded = expandSeasons([preview, ...compact.seasons!]);
+    expect(expanded[0]).toMatchObject({
+      candles: preview.candles,
+      visitors: groups.visitors,
+      congregations: groups.congregations,
+    });
+    expect(preview).not.toHaveProperty('visitors');
+    expect(
+      expandSeasons([{ ...preview, candles: undefined }, ...compact.seasons!])[0]!.candles,
+    ).toEqual(groups.candles);
+  });
+
   it('keeps calendar and admission fields while omitting pipeline geometry', () => {
     expect(RuntimeCityLifeSchema.parse(cityPack.life)).toEqual(runtime);
     expect(runtime.schedules).toEqual(life.schedules);

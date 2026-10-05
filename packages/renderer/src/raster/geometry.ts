@@ -59,6 +59,7 @@ import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '
 import {
   CANAL_KIND,
   LifeBuilder,
+  graveSeed,
   LifeLine,
   lifeLineFor,
   lifeTransferables,
@@ -774,6 +775,7 @@ export function buildTileGeometry(
   fireworks = true,
 ): TileGeometry {
   const unitMeters = tile ? metersPerUnit(tile) : undefined;
+  const memorials = !!tile && tile.z === maxZoom;
   const drawnAt = (zoom: number) =>
     !tile || maxZoom === undefined || tile.z >= Math.min(zoom, maxZoom) - 1;
   const strips = drawnAt(ROAD_AREA_ZOOM);
@@ -825,6 +827,7 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      let burialHash: number | undefined;
       // A site's building or monument may be in another tile on a cold direct-URL load.
       // Register its real metadata without assigning its id to the surface's outline.
       const descriptor = feature.properties.detail_selection;
@@ -1139,7 +1142,16 @@ export function buildTileGeometry(
               addShop(p, SHOP.pointRadius / 2 / unitMeters, !!shopPosition);
             }
             if (place && inTile)
-              life.place(p, place, 0, false, Number(feature.properties.seat_bearing ?? NaN));
+              life.place(
+                p,
+                place,
+                0,
+                false,
+                Number(feature.properties.seat_bearing ?? NaN),
+                typeof feature.properties.landmark_id === 'string'
+                  ? feature.properties.landmark_id
+                  : undefined,
+              );
           }
         }
       } else if (feature.type === 2) {
@@ -1287,6 +1299,7 @@ export function buildTileGeometry(
           !overhead &&
           feature.properties.detail_blocked === true &&
           className === 'building_part' &&
+          !String(feature.properties.kind).startsWith('burial=') &&
           rawHeight > 0 &&
           rawHeight <= 0.2;
         const solid = !overhead && !walkableStep && isBuilding(className) && height > 0;
@@ -1402,6 +1415,26 @@ export function buildTileGeometry(
             for (const i of triangles) fills.indices.push(base + i);
           }
           const outer = polygon[0]!;
+          if (!isRegion && memorials) {
+            if (
+              className === 'grass' &&
+              ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+            ) {
+              life.cemeteryArea(featureId, polygon);
+            }
+            if (
+              className === 'building_part' &&
+              String(feature.properties.kind).startsWith('burial=')
+            ) {
+              if (typeof feature.properties.detail_parent === 'string')
+                life.burialParent(feature.properties.detail_parent);
+              const center = ringCentroid(outer);
+              const wx = Math.round(tile.x * EXTENT + center.x),
+                wy = Math.round(tile.y * EXTENT + center.y);
+              burialHash ??= hashString(featureId);
+              life.grave(center, featureId, graveSeed(burialHash, wx, wy), [wx, wy]);
+            }
+          }
           if (!isRegion && obstacle) life.obstacle(outer, true);
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           if (!isRegion && className === 'parking' && unitMeters) {
@@ -1412,6 +1445,13 @@ export function buildTileGeometry(
         }
         if (largest) {
           const center = ringCentroid(largest.ring);
+          if (
+            !isRegion &&
+            className === 'grass' &&
+            ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+          ) {
+            life.cemetery(center, Math.sqrt(largest.area / 2 / Math.PI));
+          }
           if (isBuilding(className)) addPoint(center, cls);
           addMarkers(center);
           // A landmark is floodlit at night, over its whole footprint (life/lights.ts).
@@ -1439,7 +1479,16 @@ export function buildTileGeometry(
           if (!isRegion && place && inside) {
             // `signedArea` is twice the area; the radius of a circle as big.
             const radius = Math.sqrt(largest.area / 2 / Math.PI);
-            life.place(center, place, radius, isBuilding(className) && height > 0);
+            life.place(
+              center,
+              place,
+              radius,
+              isBuilding(className) && height > 0,
+              NaN,
+              typeof feature.properties.landmark_id === 'string'
+                ? feature.properties.landmark_id
+                : undefined,
+            );
           }
         }
       }

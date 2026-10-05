@@ -177,6 +177,20 @@ export async function loadCityPacks(
       }
     }
 
+    const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
+    for (const [index, season] of (city.life?.seasons ?? []).entries())
+      for (const id of season.congregations?.landmarks ?? [])
+        if (!landmarks.has(id))
+          errors.push({
+            file: configFile,
+            message: `life.seasons.${index}.congregations.landmarks: no landmark "${id}"`,
+          });
+        else if (landmarks.get(id)!.type !== 'church')
+          errors.push({
+            file: configFile,
+            message: `life.seasons.${index}.congregations.landmarks: landmark "${id}" is not a church`,
+          });
+
     const dialoguePath = join(dir, 'dialogue.json');
     const dialogue = (await exists(dialoguePath))
       ? await readValid(dialoguePath, dialogueCatalog(city.languages), toFile(dialoguePath), errors)
