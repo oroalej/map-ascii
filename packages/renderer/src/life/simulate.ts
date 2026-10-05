@@ -60,6 +60,11 @@ import {
   TERMINAL,
   PEDESTRIAN,
   STALL,
+  STRANDED_WALK_M,
+  CROSSING_WALK_PAST_M,
+  WALK_GAP,
+  TURN_AROUND,
+  WALK_ASIDE,
   FILLET,
   JUNCTION,
   kinematicsOf,
@@ -302,6 +307,30 @@ const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo +
 
 /** Craft kinds in a stable order, for lane bend keys. */
 const VEHICLE_KINDS = Object.keys(VEHICLES) as CraftType[];
+/** The longest road vehicle, m: how far any lane bend can reach past its road. */
+const LONGEST_ROAD_VEHICLE_M = Math.max(
+  ...VEHICLE_TYPES.map((type) => VEHICLES[type as CraftType].length),
+);
+
+/**
+ * The way someone faces partway through turning round (`Mover.turning`): from the facing they
+ * turned from to their walking heading, the long way round by their right.
+ */
+function turningFacing(
+  turning: NonNullable<Mover['turning']>,
+  to: { hx: number; hy: number },
+): { hx: number; hy: number } {
+  const done = 1 - Math.max(0, turning.left) / TURN_AROUND.seconds;
+  let angle = Math.atan2(
+    turning.hx * to.hy - turning.hy * to.hx,
+    turning.hx * to.hx + turning.hy * to.hy,
+  );
+  if (Math.abs(angle) > Math.PI - 1e-6) angle = Math.PI;
+  const a = angle * done;
+  const c = Math.cos(a),
+    s = Math.sin(a);
+  return { hx: turning.hx * c - turning.hy * s, hy: turning.hx * s + turning.hy * c };
+}
 
 /** A bend `distance` metres from where it is required, easing off at `LANE_BEND.slope`. */
 const eased = (bend: number, distance: number) =>
@@ -351,10 +380,17 @@ export type Mover = {
   lane: number;
   /** Accepted lateral road clearance adjustment, metres from the ordinary lane. */
   roadShift?: number;
-  /** Sideways metres per metre travelled while `roadShift` changes, smoothed; turns the nose. */
+  /**
+   * Sideways metres per metre travelled while `roadShift` (or a walker's `avoid`) changes,
+   * smoothed: the nose, or the walker, faces the way it actually goes.
+   */
   roadYaw?: number;
   /** Vehicles: seconds in a row fixed obstacles have stopped it (`STALL`). */
   terrainWait?: number;
+  /** People turning round where they stand: the facing they turned from, and seconds left. */
+  turning?: { hx: number; hy: number; left: number };
+  /** People: `walked` when they last turned back from a blocked way (`WALK_RECOVERY`). */
+  turnedAt?: number;
   /** Seconds left standing still (people and dogs). */
   pause: number;
   /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
@@ -990,6 +1026,10 @@ export class TileLife {
   private laneTerrain?: LaneTerrain;
   /** Lane bends by line, direction, vehicle and lane; null when the ordinary lane is clear. */
   private readonly laneBends = new Map<number, Float32Array | null>();
+  /** Per line: 0 not yet looked at, 1 no fixed obstacle anywhere near it, 2 some near it. */
+  private laneNear: Uint8Array = new Uint8Array(0);
+  /** The same per vertex, for corner curves (`clearCorner`). */
+  private cornerNear: Uint8Array = new Uint8Array(0);
   /** Corner curves already checked against fixed obstacles (`clearCorner`). */
   private readonly clearCorners = new Map<string, Curve | null>();
   private time = 0;
@@ -1203,6 +1243,75 @@ export class TileLife {
   }
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
+  /**
+   * A crossing, or another short walking line, joined to no other walking line at either end (no
+   * mapped sidewalk): nobody lives there, or they would only pace back and forth across the road.
+   */
+  private strandedWalk(line: number): boolean {
+    const kind = this.geo.kinds[line]!;
+    if (kind !== LifeLine.path && kind !== LifeLine.plaza) return false;
+    if (
+      this.lineLength(line) / this.perMeter >= STRANDED_WALK_M &&
+      !this.crossingLine(line)
+    )
+      return false;
+    const joined = (atStart: boolean) => {
+      const v = atStart ? this.first(line) : this.last(line);
+      const x = this.geo.coords[v * 2]!,
+        y = this.geo.coords[v * 2 + 1]!;
+      // Cut at the tile's edge, it goes on in the next tile.
+      if (x <= 0 || y <= 0 || x >= EXTENT || y >= EXTENT) return true;
+      return (
+        this.ends
+          .get(this.endKey(v))
+          ?.some(
+            (code) =>
+              code >> 1 !== line &&
+              (this.geo.kinds[code >> 1] === LifeLine.path ||
+                this.geo.kinds[code >> 1] === LifeLine.plaza),
+          ) ?? false
+      );
+    };
+    return !joined(true) && !joined(false);
+  }
+
+  /**
+   * Crossing stripes by centre, with how far they reach across the road: raster/geometry.ts
+   * centres each crossing's walking line on its stripes, `CROSSING_WALK_PAST_M` beyond them.
+   */
+  private crossingReach?: Map<number, Point[]>;
+
+  /** Whether a walking line is a crossing's own: two points, centred on its stripes. */
+  private crossingLine(line: number): boolean {
+    if (this.last(line) - this.first(line) !== 1) return false;
+    if (!this.crossingReach) {
+      this.crossingReach = new Map();
+      for (const area of this.geo.areas ?? []) {
+        const ring = area.rings[0];
+        if (area.kind !== 'crossing' || !ring || ring.length < 4) continue;
+        let x = 0,
+          y = 0;
+        for (let i = 0; i < 4; i++) {
+          x += ring[i]!.x / 4;
+          y += ring[i]!.y / 4;
+        }
+        this.crossingReach.set(vertexKey(Math.round(x), Math.round(y)), ring.slice(0, 4));
+      }
+    }
+    const c = this.geo.coords,
+      a = this.first(line);
+    const x = (c[a * 2]! + c[a * 2 + 2]!) / 2,
+      y = (c[a * 2 + 1]! + c[a * 2 + 3]!) / 2;
+    const ring = this.crossingReach.get(vertexKey(Math.round(x), Math.round(y)));
+    if (!ring) return false;
+    const half = this.lineLength(line) / 2;
+    const hx = (c[a * 2 + 2]! - c[a * 2]!) / (2 * half),
+      hy = (c[a * 2 + 3]! - c[a * 2 + 1]!) / (2 * half);
+    let reach = 0;
+    for (const p of ring) reach = Math.max(reach, Math.abs((p.x - x) * hx + (p.y - y) * hy));
+    return Math.abs(half - reach - CROSSING_WALK_PAST_M * this.perMeter) < 0.5 * this.perMeter;
+  }
+
   private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
@@ -1276,7 +1385,11 @@ export class TileLife {
           this.moveTrain(mover, trainLength(train.cars) * this.perMeter);
           mover.pause = 0;
         }
-        if (rule.kind !== 'person' || usableLines.person.includes(kind)) this.movers.push(mover);
+        if (
+          rule.kind !== 'person' ||
+          (usableLines.person.includes(kind) && !this.strandedWalk(position.line))
+        )
+          this.movers.push(mover);
       }
     }
   }
@@ -1326,12 +1439,39 @@ export class TileLife {
     this.laneTerrain = terrain;
     this.laneBends.clear();
     this.clearCorners.clear();
+    this.laneNear = new Uint8Array(this.geo.kinds.length);
+    this.cornerNear = new Uint8Array(this.geo.coords.length / 2);
   }
 
   /** How a vehicle's lane bends around fixed obstacles along `line` (lane-clearance.ts). */
   private laneBendOf(m: Mover, line: number, dir: 1 | -1): Float32Array | undefined {
     if (!this.laneTerrain || m.kind !== 'vehicle' || !m.vehicle) return;
     if (this.geo.kinds[line]! > LifeLine.roadMinor) return;
+    if (this.laneNear[line] === 0) {
+      // Any lane of any vehicle reaches at most this far from the centre line.
+      const reach = this.roadWidth(line) / 2 + ROAD_AVOID.shoulder + LONGEST_ROAD_VEHICLE_M;
+      const c = this.geo.coords;
+      let x0 = Infinity,
+        y0 = Infinity,
+        x1 = -Infinity,
+        y1 = -Infinity;
+      for (let v = this.first(line); v <= this.last(line); v++) {
+        x0 = Math.min(x0, c[v * 2]!);
+        y0 = Math.min(y0, c[v * 2 + 1]!);
+        x1 = Math.max(x1, c[v * 2]!);
+        y1 = Math.max(y1, c[v * 2 + 1]!);
+      }
+      const pm = this.perMeter;
+      this.laneNear[line] = this.laneTerrain.near(
+        x0 / pm - reach,
+        y0 / pm - reach,
+        x1 / pm + reach,
+        y1 / pm + reach,
+      )
+        ? 2
+        : 1;
+    }
+    if (this.laneNear[line] === 1) return;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(line);
     const lanes = Math.max(1, Math.floor(road / 2 / LANE_WIDTH_M));
@@ -1639,10 +1779,16 @@ export class TileLife {
   ): Curve | undefined {
     const pm = this.perMeter;
     const spec = VEHICLES[m.vehicle!];
-    const reach = Math.max(full, longest) / pm + spec.length;
-    const x = this.geo.coords[vertex * 2]! / pm,
-      y = this.geo.coords[vertex * 2 + 1]! / pm;
-    if (!this.laneTerrain!.near(x - reach, y - reach, x + reach, y + reach)) return curve;
+    if (this.cornerNear[vertex] === 0) {
+      // As far as any corner curve and vehicle reach from it.
+      const reach = 2 * FILLET.maxM + LONGEST_ROAD_VEHICLE_M;
+      const x = this.geo.coords[vertex * 2]! / pm,
+        y = this.geo.coords[vertex * 2 + 1]! / pm;
+      this.cornerNear[vertex] = this.laneTerrain!.near(x - reach, y - reach, x + reach, y + reach)
+        ? 2
+        : 1;
+    }
+    if (this.cornerNear[vertex] === 1) return curve;
     const steady = m.roadShift === undefined && this.scenes.curbSite(m) === undefined;
     const key = `${vertex}/${inLine}/${outLine}/${m.vehicle}/${curve.x0}/${curve.y0}/${curve.x2}/${curve.y2}`;
     if (steady && this.clearCorners.has(key)) return this.clearCorners.get(key) ?? undefined;
@@ -1706,6 +1852,14 @@ export class TileLife {
       }
     }
     if (m.momentFacing) Object.assign(out, m.momentFacing);
+    else if (m.turning) Object.assign(out, turningFacing(m.turning, m));
+    else if (m.roadYaw && isWalker(m.kind)) {
+      const hx = out.hx - out.hy * m.roadYaw,
+        hy = out.hy + out.hx * m.roadYaw;
+      const norm = Math.hypot(hx, hy);
+      out.hx = hx / norm;
+      out.hy = hy / norm;
+    }
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
     // A curve can run on past its vertex for up to twice the usual fillet (`clearCorner`).
     const reach = 2 * FILLET.maxM * this.perMeter;
@@ -2317,7 +2471,7 @@ export class TileLife {
                 step: rng() < 0.5 ? 0 : 1,
               },
             ];
-            if (guard(m)) this.movers.push(m);
+            if (!this.strandedWalk(line) && guard(m)) this.movers.push(m);
           } else {
             let market = false;
             for (let j = 0; j < this.geo.markets.length; j += 2)
@@ -3441,6 +3595,7 @@ export class TileLife {
       };
     if (options.length === 0) {
       m.next = undefined;
+      this.beginTurn(m);
       m.dir = m.dir === 1 ? -1 : 1;
       if (m.train) {
         // A real end of the track: it waits, then heads back. Past the tile's edge, the track
@@ -4266,6 +4421,12 @@ export class TileLife {
         }
       }
       if (m.kind === 'person') {
+        if (m.turning) {
+          // Turning round on the spot (`beginTurn`).
+          m.turning.left -= dt;
+          if (m.turning.left > 0) continue;
+          m.turning = undefined;
+        }
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
           running -= Number(this.stopRun(m));
@@ -4288,6 +4449,7 @@ export class TileLife {
           }
         } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
           running -= Number(this.stopRun(m));
+          this.beginTurn(m);
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -4310,6 +4472,8 @@ export class TileLife {
             speeds[i]! * dt,
             clock,
           ) / dt;
+        if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
+          speeds[i] = 0;
       }
       if (m.vehicle) {
         this.motionStats.steps++;
@@ -4353,7 +4517,9 @@ export class TileLife {
       }
       if (walking) {
         delete m.momentFacing;
-        m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - dt * 0.4);
+        // Drift back toward the middle of the path only while walking on.
+        m.avoid =
+          (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
       let moved = distance === 0 && m.vehicle && m.v === 0 ? 0 : this.advance(m, distance);
@@ -4367,7 +4533,7 @@ export class TileLife {
             this.roadTerrain.access.allows(this.groundBodies(next))));
       if (m.kind === 'vehicle' || walking) {
         terrainRejected = false;
-        let fits = fitsGround(m, before, m.kind === 'vehicle' ? rejected : undefined);
+        let fits = fitsGround(m, before, rejected);
         if (!fits) {
           // Vehicles creep; walkers also step aside, preferring the same side on successive
           // steps so detours don't oscillate. Each try is [side, share of the step].
@@ -4396,7 +4562,7 @@ export class TileLife {
               m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             }
             moved = this.advance(m, distance * share!);
-            if ((fits = fitsGround(m, before, m.kind === 'vehicle' ? rejected : undefined))) break;
+            if ((fits = fitsGround(m, before, rejected))) break;
           }
         }
         if (
@@ -4437,15 +4603,27 @@ export class TileLife {
           m.terrainWait = !fits && terrainRejected ? (before.terrainWait ?? 0) + dt : undefined;
         const blockedWalk = walking && distance > 0 && moved <= distance * 1e-6;
         m.waiting = fits && !blockedWalk ? 0 : (before.waiting ?? 0) + dt;
-        if (m.kind === 'person' && blockedWalk && m.waiting >= WALK_RECOVERY.seconds) {
+        // A curb, wall or planter won't move: turn back from it at once, unless the last turn
+        // back was just now (blocked both ways). Waiting is for people and traffic.
+        const walledIn =
+          terrainRejected &&
+          (m.turnedAt === undefined ||
+            (m.walked ?? 0) - m.turnedAt >= WALK_RECOVERY.terrainMinWalkM);
+        if (
+          m.kind === 'person' &&
+          blockedWalk &&
+          (walledIn || m.waiting >= WALK_RECOVERY.seconds)
+        ) {
           // Reversing the cursor and every signed group offset preserves each live footprint.
           // A successful sideways-only shuffle must not keep a blocked route alive forever.
+          this.beginTurn(m);
           this.turnBack(m);
           m.hx = -m.hx;
           m.hy = -m.hy;
           if (m.avoid !== undefined) m.avoid = -m.avoid;
           m.group = m.group?.map((w) => ({ ...w, lateral: -w.lateral, back: -w.back }));
           m.waiting = 0;
+          m.turnedAt = m.walked ?? 0;
         }
         if (!fits && m.kind === 'cat') {
           m.pause = CAT.blockedPause;
@@ -4453,17 +4631,26 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
-      if (m.kind === 'vehicle' && (m.roadShift !== undefined || m.roadYaw !== undefined)) {
-        // The nose follows a sideways shift.
+      if (
+        (m.kind === 'vehicle' && (m.roadShift !== undefined || m.roadYaw !== undefined)) ||
+        (walking && (m.avoid !== before.avoid || m.roadYaw !== undefined))
+      ) {
+        // The nose, or the walker, follows a sideways shift.
         const forward = moved / this.perMeter;
-        const sideways = (m.roadShift ?? 0) - (before.roadShift ?? 0);
+        const sideways =
+          m.kind === 'vehicle'
+            ? (m.roadShift ?? 0) - (before.roadShift ?? 0)
+            : (m.avoid ?? 0) - (before.avoid ?? 0);
         const target =
           forward > 1e-4
             ? Math.max(-2 * ROAD_AVOID.slope, Math.min(2 * ROAD_AVOID.slope, sideways / forward))
             : 0;
         // Eased by distance travelled, so a stopped vehicle doesn't swivel.
         const yaw = (m.roadYaw ?? 0) + (target - (m.roadYaw ?? 0)) * Math.min(1, forward * 1.5);
-        m.roadYaw = m.roadShift === undefined && Math.abs(yaw) < 1e-3 ? undefined : yaw;
+        m.roadYaw =
+          (m.kind === 'vehicle' ? m.roadShift === undefined : !m.avoid) && Math.abs(yaw) < 1e-3
+            ? undefined
+            : yaw;
       }
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
@@ -4531,6 +4718,44 @@ export class TileLife {
   }
 
   /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
+  /**
+   * Whether a step would take someone off the curb onto a crossing in front of a vehicle that
+   * couldn't stop for them. One that can stop yields (pedestrians.ts), and they cross.
+   */
+  private trafficTooClose(m: Mover, distance: number): boolean {
+    if (this.pedestrianCrossings.empty) return false;
+    const pm = this.perMeter;
+    const from = this.pose(m, this.pedestrianPose);
+    const fx = from.x / pm,
+      fy = from.y / pm;
+    const crossings = this.pedestrianCrossings.entered(
+      { x: fx, y: fy },
+      { x: fx + (m.hx * distance) / pm, y: fy + (m.hy * distance) / pm },
+    );
+    if (!crossings.length) return false;
+    const at: Pose = { x: 0, y: 0, hx: 0, hy: 0 };
+    for (const c of crossings)
+      for (const v of this.movers) {
+        if (v.kind !== 'vehicle' || !v.vehicle || v.line !== c.line) continue;
+        const speed = (v.v ?? v.speed) / pm;
+        if (speed < WALK_GAP.movingMs) continue;
+        this.pose(v, at);
+        const ahead = (c.body.x - at.x / pm) * at.hx + (c.body.y - at.y / pm) * at.hy;
+        const { length } = VEHICLES[v.vehicle];
+        const stopping =
+          (speed * speed) / (2 * kinematicsOf(v.vehicle).brake) + length / 2 + WALK_GAP.marginM;
+        if (ahead > -length / 2 - c.body.length / 2 && ahead < stopping) return true;
+      }
+    return false;
+  }
+
+  /** A person starts turning round where they stand, from the way they face now. */
+  private beginTurn(m: Mover) {
+    if (m.kind !== 'person') return;
+    const { hx, hy } = m.turning ? turningFacing(m.turning, m) : m;
+    m.turning = { hx, hy, left: TURN_AROUND.seconds };
+  }
+
   private turnBack(m: Mover) {
     const to = m.from + m.dir;
     m.d = this.segment(m.from, to) - m.d;
@@ -7046,13 +7271,20 @@ export class LifeWorld {
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
           const clock = inspection?.clock(m, this.clock) ?? this.clock;
+          // Turning round, the group keeps its footing while the drawn facing swings: each
+          // member's place, held in the walking heading's frame, is redrawn in the swinging one.
+          const place = (w: { lateral: number; back: number }) => {
+            if (!m.turning) return { lateral: w.lateral, back: w.back };
+            const wx = -m.hy * w.lateral - m.hx * w.back,
+              wy = m.hx * w.lateral - m.hy * w.back;
+            return { lateral: -hy * wx + hx * wy, back: -(hx * wx + hy * wy) };
+          };
           const people = m.group.map((w, member) =>
             this.umbrellaLook(
               {
                 figure: w.figure,
                 paint: w.shirt,
-                lateral: w.lateral,
-                back: w.back,
+                ...place(w),
                 // Standing still, feet together.
                 flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
                 pose: life.momentHost.pose(m, member),

@@ -303,6 +303,29 @@ export class PedestrianCrossings {
   hasLine(line: number): boolean {
     return this.lines.has(line);
   }
+  /**
+   * The uncontrolled crossings a step from `from` to `to` (tile metres) walks onto from outside,
+   * one record per road line they cross.
+   */
+  entered(from: Point, to: Point): PedestrianCrossing[] {
+    const out: PedestrianCrossing[] = [];
+    // Crossing quads keep their four corners without repeating the first (`prepare`).
+    const inside = (c: PedestrianCrossing, p: Point) => {
+      const ring = c.polygon[0]!;
+      let odd = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i]!,
+          b = ring[j]!;
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+          odd = !odd;
+      }
+      return odd;
+    };
+    for (const key of binKeys([to]))
+      for (const c of this.index.get(key) ?? [])
+        if (!c.controlled && !out.includes(c) && inside(c, to) && !inside(c, from)) out.push(c);
+    return out;
+  }
   constructor(
     private readonly tile: TileId,
     private readonly pm: number,

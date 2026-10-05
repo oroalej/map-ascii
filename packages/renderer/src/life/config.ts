@@ -101,8 +101,27 @@ export const ROAD_AVOID = { slope: 0.25, shoulder: 0.5 } as const;
  * or the movement guard has refused it for any reason this long.
  */
 export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
-/** Turn back after this many active seconds attempting a blocked walking route. */
-export const WALK_RECOVERY = { seconds: 3 } as const;
+/**
+ * Turn back after this many active seconds attempting a blocked walking route; from fixed
+ * obstacles at once, once at least `terrainMinWalkM` has been walked since the last turn back.
+ */
+export const WALK_RECOVERY = { seconds: 3, terrainMinWalkM: 1 } as const;
+/**
+ * People wait at the curb while a vehicle moving faster than `movingMs` (m/s) couldn't stop
+ * `marginM` short of the crossing.
+ */
+export const WALK_GAP = { movingMs: 0.5, marginM: 2 } as const;
+/** People turn round on the spot over this many seconds. */
+export const TURN_AROUND = { seconds: 0.4 } as const;
+/** Having stepped aside on a path, the share of the offset given back per metre walked on. */
+export const WALK_ASIDE = { restore: 0.3 } as const;
+/** Walking lines shorter than this, m, joined to no other at either end, get no residents. */
+export const STRANDED_WALK_M = 20;
+/**
+ * A crossing's walking line runs this far past its walkable cut at each end (raster/geometry.ts),
+ * giving a group room to clear the road before turning at an unattached end.
+ */
+export const CROSSING_WALK_PAST_M = 1.5;
 /** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,
