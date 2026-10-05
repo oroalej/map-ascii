@@ -58,6 +58,45 @@ const car = (): Mover => ({
   rank: 0,
 });
 describe('signals', () => {
+  it('associates derived stripes with legacy road stops within radius plus 3.5 metres', () => {
+    const life = new TileLife(tile, geography(), 1);
+    expect(life.signals.controlsCrossing(0, { x: 2048 + 10 * pm, y: 2048 })).toBe(true);
+    expect(life.signals.controlsCrossing(0, { x: 2048 + 12 * pm, y: 2048 })).toBe(false);
+    expect(life.signals.controlsCrossing(9, { x: 2048, y: 2048 })).toBe(false);
+  });
+  it('associates linked controllers with the corresponding road member only', () => {
+    const b = new LifeBuilder(),
+      members = [
+        { x: 2048, y: 2000 },
+        { x: 2048, y: 2200 },
+      ];
+    for (const p of members)
+      b.line([{ x: 0, y: p.y }, p, { x: 4096, y: p.y }], LifeLine.roadMajor, 14);
+    b.signal(members[0]!, 8, 90, 0, true);
+    const geo = b.finish();
+    geo.lineIds = Uint32Array.from([hashString('a'), hashString('b')]);
+    geo.signalLayouts = [
+      {
+        members: members.map((p) => tileToLngLat(tile, p)),
+        arms: members.map((p, i) => ({
+          road_id: i ? 'b' : 'a',
+          junction: tileToLngLat(tile, p),
+          toward: tileToLngLat(tile, { x: 0, y: p.y }),
+          direction: 1 as const,
+          inbound: true,
+          outbound: true,
+          bearing: 90,
+          width: 14,
+          group: 'a' as const,
+        })),
+      },
+    ];
+    const life = new TileLife(tile, geo, 1);
+    expect(life.signals.signals[0]!.approaches).toHaveLength(2);
+    const stripe = { x: 2048 + 10 * pm, y: 2200 };
+    expect(life.signals.controlsCrossing(1, stripe)).toBe(true);
+    expect(life.signals.controlsCrossing(0, stripe)).toBe(false);
+  });
   it('uses legacy red and green gates when a layout has no matching local approach', () => {
     const geo = geography(true, false);
     geo.lineIds = Uint32Array.from([hashString('road/main'), hashString('road/side')]);

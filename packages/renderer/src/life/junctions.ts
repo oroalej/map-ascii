@@ -248,6 +248,9 @@ export class JunctionTable {
   private records = new Map<Mover, Hold>();
   private requests: JunctionRequest[] = [];
   private clock = 0;
+  get empty(): boolean {
+    return this.records.size === 0;
+  }
   begin(live: ReadonlySet<TileLife>): void {
     this.requests = [];
     for (const [m, r] of this.records) if (!live.has(r.life)) this.records.delete(m);

@@ -291,30 +291,33 @@ describe('traffic clearance', () => {
 });
 
 describe('parking footprints', () => {
-  it('omits complete cars overlapping trees, including rotated corners, keeping clear stalls', () => {
-    const b = new LifeBuilder();
-    b.area('parking-exclusion', [
-      [
-        { x: 500, y: 500 },
-        { x: 540, y: 500 },
-        { x: 540, y: 540 },
-        { x: 500, y: 540 },
-        { x: 500, y: 500 },
-      ],
-    ]);
-    for (const [x, y, hx, hy] of [
-      [510, 510, 1, 0],
-      [547, 543, Math.SQRT1_2, Math.SQRT1_2],
-      [700, 700, 1, 0],
-    ])
-      b.spot({ x: x!, y: y! }, hx!, hy!);
-    const seen = new Set<number>();
-    for (let seed = 1; seed <= 12; seed++) {
-      const life = new TileLife(tile, b.finish(), seed, resolveTraffic({ parked: { car: 1 } }));
-      for (const p of life.parked) seen.add(p.x);
-    }
-    expect([...seen]).toEqual([700]);
-  });
+  it.each(['parking-exclusion', 'vehicle-blocked'] as const)(
+    'omits complete cars overlapping %s, including rotated corners, keeping clear stalls',
+    (kind) => {
+      const b = new LifeBuilder();
+      b.area(kind, [
+        [
+          { x: 500, y: 500 },
+          { x: 540, y: 500 },
+          { x: 540, y: 540 },
+          { x: 500, y: 540 },
+          { x: 500, y: 500 },
+        ],
+      ]);
+      for (const [x, y, hx, hy] of [
+        [510, 510, 1, 0],
+        [547, 543, Math.SQRT1_2, Math.SQRT1_2],
+        [700, 700, 1, 0],
+      ])
+        b.spot({ x: x!, y: y! }, hx!, hy!);
+      const seen = new Set<number>();
+      for (let seed = 1; seed <= 12; seed++) {
+        const life = new TileLife(tile, b.finish(), seed, resolveTraffic({ parked: { car: 1 } }));
+        for (const p of life.parked) seen.add(p.x);
+      }
+      expect([...seen]).toEqual([700]);
+    },
+  );
   it('removes parking overlapping a neighboring tile crown while retaining nearby clear cars', () => {
     const { world, life } = worldWith(road().finish());
     const overlapping = { x: 4090, y: 2000, hx: 1, hy: 0, vehicle: 'car' as const, paint: 0 };

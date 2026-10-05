@@ -169,6 +169,7 @@ export function projectMover(
     vehicle: m.vehicle,
     paint: m.paint,
     lane: m.lane,
+    roadShift: m.roadShift,
     pause: m.pause,
     rank: m.rank,
     group: m.group,

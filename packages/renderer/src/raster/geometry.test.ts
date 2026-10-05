@@ -59,6 +59,27 @@ const square = (x: number, y: number, s: number): [number, number][] => [
 ];
 const reversed = (ring: [number, number][]) => [...ring].reverse();
 
+it('keeps authored low curbs out of walking obstacles while retaining their vehicle clearance', () => {
+  const g = buildTileGeometry(
+    {
+      buildings: layer([
+        feature(3, { id: 'curb', class: 'building_part', height: 0.18, detail_blocked: true }, [
+          square(100, 100, 30),
+        ]),
+        feature(3, { id: 'wall', class: 'building_part', height: 0.3, detail_blocked: true }, [
+          square(200, 100, 30),
+        ]),
+        feature(3, { id: 'building', class: 'building', height: 0.18 }, [square(300, 100, 30)]),
+      ]),
+    },
+    createIdRegistry(),
+    { z: 16, x: 55192, y: 30266 },
+  );
+  expect(g.life.areas?.filter((a) => a.kind === 'vehicle-blocked')).toHaveLength(1);
+  expect(g.life.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(2);
+  expect(g.life.obstacleClosed).toHaveLength(2);
+});
+
 /** Vertices of a geometry as { cls, x, y } for easy assertions. */
 const vertices = (g: { positions: Int16Array; meta: Uint8Array }) =>
   Array.from({ length: g.positions.length / 2 }, (_, i) => ({

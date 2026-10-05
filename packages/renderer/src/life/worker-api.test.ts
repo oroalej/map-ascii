@@ -4,7 +4,8 @@ import { continuityMover, continuityTile, left, parent, right } from './testing/
 import { createInlineHost } from './host';
 import { LifePreparation } from './preparation';
 import { LifeWorld } from './simulate';
-import { makeScenario } from './testing/scenarios';
+import { completeScenarioState, makeScenario, worldTiles } from './testing/scenarios';
+import { pedestrianEntry, seedPedestrians } from './testing/pedestrians';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
 import { placeGrid } from '../grid';
 import { treeGust } from '../glyphs/select';
@@ -14,7 +15,6 @@ import { activityLevels } from './config';
 import { ensureVehicleEffects } from './vehicle-effects';
 import { emitter } from './exhaust';
 import { BRAKE } from './lamps';
-import { worldTiles } from './testing/scenarios';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
 vi.mock('./moments', async (load) => {
@@ -31,6 +31,80 @@ vi.mock('./moments', async (load) => {
 });
 
 describe('life worker protocol', () => {
+  it('matches braking, crossing expiry and release in worker and inline complete state', () => {
+    const entry = pedestrianEntry(),
+      worlds: LifeWorld[] = [];
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- apply below supplies the intercepted world.
+    const sync = LifeWorld.prototype.sync;
+    const intercept = vi.spyOn(LifeWorld.prototype, 'sync').mockImplementation(function (
+      this: LifeWorld,
+      ...args
+    ) {
+      sync.apply(this, args);
+      if (!worlds.includes(this) && args[0].some((entry) => entry.key === 'pedestrian-crossing')) {
+        worlds.push(this);
+        seedPedestrians(this, 1.75);
+      }
+    });
+    try {
+      const direct = new LifeWorld();
+      direct.sync([entry]);
+      const api = createLifeWorkerApi();
+      api.init({ processions: [] });
+      api.sync([structuredClone(entry)]);
+      expect(worlds).toHaveLength(2);
+      const fixtures = worlds.map((world) => {
+        const life = worldTiles(world).get(entry.key)!;
+        return { car: life.movers[0]!, human: life.movers[1]! };
+      });
+      const center = tileToLngLat(entry.tile, { x: 2000, y: 2000 });
+      let braked = false,
+        held = false,
+        expired = false,
+        released = false;
+      for (let frame = 0; frame < 300; frame++) {
+        const input: FrameInput = {
+          gust: {
+            camera: { lng: center[0], lat: center[1], zoom: 18 },
+            size: { width: 800, height: 600 },
+            cssCell: { w: 5, h: 7.5 },
+            time: frame / 10,
+            wind: { dir: [1, 0], strength: 0 },
+          },
+          step: {
+            dt: 0.1,
+            zoom: 18,
+            bounds: undefined,
+            wind: undefined,
+            weather: { rain: 0 },
+            cellMeters: 0.9,
+          },
+          visible: [18, activityLevels(1), center],
+        };
+        expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+        const car = fixtures[0]!.car;
+        braked ||= car.v! < car.speed;
+        held ||= !!car.pedestrianHolds?.length;
+        expired ||= !!car.pedestrianHolds?.[0]?.expired;
+        released ||= expired && fixtures.every(({ car }) => car.pedestrianHolds === undefined);
+        if (frame === 220)
+          for (const world of worlds) {
+            const life = worldTiles(world).get(entry.key)!;
+            life.movers.splice(1, 1);
+          }
+      }
+      expect({ braked, held, expired, released }).toEqual({
+        braked: true,
+        held: true,
+        expired: true,
+        released: true,
+      });
+      for (const { car } of fixtures) expect(car.pedestrianHolds).toBeUndefined();
+      expect(completeScenarioState(worlds[1]!)).toEqual(completeScenarioState(direct));
+    } finally {
+      intercept.mockRestore();
+    }
+  });
   it.each([false, true])(
     'transfers speech, poses and balls with inline parity (profiles=%s)',
     (profiles) => {
