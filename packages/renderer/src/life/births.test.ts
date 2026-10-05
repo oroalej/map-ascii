@@ -230,7 +230,7 @@ it('retains the in-view exemption at a disconnected road end', () => {
 });
 
 it.each([1, -1] as const)(
-  'admits a bus past a short disconnected terminal piece in %s flow',
+  'retains a bus seed whose terminal placement overlaps a junction box in %s flow',
   (dir) => {
     const pm = 1 / metersPerUnit(left);
     const junctionX = dir === 1 ? 1000 + 3 * pm : 3000 - 3 * pm;
@@ -287,8 +287,8 @@ it.each([1, -1] as const)(
       },
       0.1,
     );
-    expect(life.movers).toContain(mover);
-    expect(life.pending).toHaveLength(0);
+    expect(life.movers).not.toContain(mover);
+    expect(life.pending).toHaveLength(1);
     expect(mover.line).toBe(line);
     expect(outsideView(life, life.birthBodies(mover), view, 0)).toBe(false);
   },

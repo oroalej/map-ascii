@@ -12,6 +12,7 @@ import type { Mover, TileLife } from './simulate';
 import { VEHICLES } from './vehicles';
 import { frameBetween } from './frames';
 import { complete } from './cooperate';
+import type { JunctionTraffic } from './junction-traffic';
 
 export type Arm = {
   line: number;
@@ -156,18 +157,67 @@ export class JunctionIndex {
       }
   }
 
-  /** Initial traffic must enter a linked zone through its gates and acquire a reservation. */
+  /** Seed footprints must enter every box through arbitration, including ordinary junctions. */
   canSpawnVehicle(m: Mover): boolean {
-    if (!this.hasLinked) return true;
     if (this.internalLines.has(m.line)) return false;
-    const movement = this.movement(m, 60 * this.pm);
-    return !movement?.junction.linked || movement.ahead >= 0;
+    const linked = this.movement(m, 60 * this.pm);
+    if (linked?.junction.linked && linked.ahead < 0) return false;
+    const spec = VEHICLES[m.vehicle!];
+    return this.junctions.every((j) =>
+      j.arms.every((a) => {
+        const dx = (a.x ?? j.x) - m.x,
+          dy = (a.y ?? j.y) - m.y;
+        return (
+          Math.abs(dx * m.hx + dy * m.hy) >= j.radius + (spec.length * this.pm) / 2 ||
+          Math.abs(-dx * m.hy + dy * m.hx) >= j.radius + (spec.width * this.pm) / 2
+        );
+      }),
+    );
   }
 
   movement(m: Mover, reach: number): Movement | undefined {
-    let nearest: Movement | undefined;
+    return this.movements(m, reach)[0];
+  }
+  /** Only a committed/uniquely legal continuation is enumerated; this never chooses a route. */
+  movements(
+    m: Mover,
+    reach: number,
+    next?: (line: number, dir: 1 | -1) => number | undefined,
+  ): Movement[] {
+    const found: Movement[] = [];
+    let cursor = m,
+      distance = 0;
+    const visited = new Set<number>();
+    while (distance <= reach) {
+      const route = cursor.line * 2 + Number(cursor.dir === 1);
+      if (visited.has(route)) break;
+      visited.add(route);
+      this.lineMovements(cursor, reach - distance, distance, found);
+      if (!next) break;
+      const end =
+        cursor.dir === 1 ? this.geo.starts[cursor.line + 1]! - 1 : this.geo.starts[cursor.line]!;
+      distance += cursor.dir * (this.along[end]! - this.along[cursor.from]!) - cursor.d;
+      const code = next(cursor.line, cursor.dir);
+      if (code === undefined || code < 0 || distance > reach) break;
+      const line = code >> 1,
+        dir = code & 1 ? -1 : 1;
+      cursor = {
+        ...m,
+        line,
+        dir,
+        from: dir === 1 ? this.geo.starts[line]! : this.geo.starts[line + 1]! - 1,
+        d: 0,
+        next: next(line, dir),
+        routing: undefined,
+      };
+    }
+    found.sort((a, b) => a.ahead - b.ahead || a.key.localeCompare(b.key));
+    return found;
+  }
+  private lineMovements(m: Mover, reach: number, routeDistance: number, found: Movement[]) {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const j of this.lines.get(m.line) ?? []) {
+      if (found.some((p) => p.key === j.key)) continue;
       const incoming = j.arms.find(
         (a) => a.line === m.line && a.out === -m.dir && a.inbound !== false,
       );
@@ -193,24 +243,22 @@ export class JunctionIndex {
         incoming.stopAlong !== undefined
           ? m.dir * (incoming.stopAlong - progress) - length / 2
           : distance - j.radius - (JUNCTION.gap * this.pm + length / 2);
-      if (!nearest || ahead < nearest.ahead)
-        nearest = {
-          key: j.key,
-          junction: j,
-          inHx: -incoming.hx,
-          inHy: -incoming.hy,
-          outHx: exit.hx,
-          outHy: exit.hy,
-          rank: this.geo.kinds[m.line]!,
-          stop: incoming.along,
-          line: m.line,
-          dir: m.dir,
-          exit,
-          ahead,
-          entry: incoming,
-        };
+      found.push({
+        key: j.key,
+        junction: j,
+        inHx: -incoming.hx,
+        inHy: -incoming.hy,
+        outHx: exit.hx,
+        outHy: exit.hy,
+        rank: this.geo.kinds[m.line]!,
+        stop: incoming.along,
+        line: m.line,
+        dir: m.dir,
+        exit,
+        ahead: routeDistance + ahead,
+        entry: incoming,
+      });
     }
-    return nearest;
   }
 }
 
@@ -324,14 +372,31 @@ export type JunctionRequest = {
   ready: boolean;
   inside: boolean;
   atLine?: boolean;
+  traffic?: JunctionTraffic;
   /** Free metres beyond the exit box; pending holders consume this space too. */
   room?: number;
 };
-type Hold = JunctionRequest & { arrival?: number; since?: number; carried?: boolean };
+type Hold = JunctionRequest & {
+  arrival?: number;
+  since?: number;
+  carried?: boolean;
+  seen?: boolean;
+  surrendered?: boolean;
+};
+const NO_RECORDS: readonly Hold[] = [];
+function sameExit(a: Hold, b: Hold): boolean {
+  const x = a.movement,
+    y = b.movement;
+  if (x.outHx * y.outHx + x.outHy * y.outHy <= COS20) return false;
+  const f = frameBetween(a.life.tile, b.life.tile);
+  const dx = f.x + (x.exit.x ?? x.junction.x) * f.scale - (y.exit.x ?? y.junction.x),
+    dy = f.y + (x.exit.y ?? x.junction.y) * f.scale - (y.exit.y ?? y.junction.y);
+  return Math.abs(dx * y.outHy - dy * y.outHx) < 4 * b.life.perMeter;
+}
 
 /** Two-phase world arbitration. Physical occupants never expire or authorize running red. */
 export class JunctionTable {
-  private records = new Map<Mover, Hold>();
+  private records = new Map<Mover, Map<string, Hold>>();
   private requests: JunctionRequest[] = [];
   private clock = 0;
   private readonly precedence = new Precedence();
@@ -339,36 +404,67 @@ export class JunctionTable {
   private readonly ordered: Hold[] = [];
   private readonly blocking: Hold[] = [];
   private readonly yielded = new Set<Hold>();
+  private readonly eligibleRows = new Set<Hold>();
   get empty(): boolean {
     return this.records.size === 0;
   }
   begin(live: ReadonlySet<TileLife>): void {
-    this.requests = [];
-    for (const [m, r] of this.records) if (!live.has(r.life)) this.records.delete(m);
+    this.requests.length = 0;
+    for (const [m, records] of this.records) {
+      for (const [key, r] of records) {
+        r.seen = false;
+        if (!live.has(r.life)) records.delete(key);
+      }
+      if (!records.size) this.records.delete(m);
+    }
   }
   request(r: JunctionRequest): void {
     this.requests.push(r);
   }
-  movement(m: Mover): Movement | undefined {
-    return this.records.get(m)?.movement;
+  holds(m: Mover): Iterable<Hold> {
+    return this.records.get(m)?.values() ?? NO_RECORDS;
   }
-  granted(m: Mover): boolean {
-    return this.records.get(m)?.since !== undefined;
+  private record(m: Mover, key?: string): Hold | undefined {
+    const records = this.records.get(m);
+    if (key !== undefined) return records?.get(key);
+    let primary: Hold | undefined;
+    for (const r of records?.values() ?? NO_RECORDS) {
+      if (
+        !primary ||
+        (r.inside && !primary.inside) ||
+        (r.inside === primary.inside && r.movement.ahead < primary.movement.ahead)
+      )
+        primary = r;
+    }
+    return primary;
   }
-  waited(m: Mover): number {
-    const r = this.records.get(m);
+  movement(m: Mover, key?: string): Movement | undefined {
+    return this.record(m, key)?.movement;
+  }
+  granted(m: Mover, key?: string): boolean {
+    return this.record(m, key)?.since !== undefined;
+  }
+  waited(m: Mover, key?: string): number {
+    const r = this.record(m, key);
     return r?.arrival === undefined ? 0 : this.clock - r.arrival;
   }
-  release(m: Mover): void {
-    this.records.delete(m);
+  revokeGrant(m: Mover, key: string): void {
+    const r = this.record(m, key);
+    if (r && !r.inside) r.since = undefined;
   }
-  carried(m: Mover): boolean {
-    return !!this.records.get(m)?.carried;
+  release(m: Mover, key?: string): void {
+    if (key === undefined) this.records.delete(m);
+    else {
+      const records = this.records.get(m);
+      records?.delete(key);
+      if (!records?.size) this.records.delete(m);
+    }
+  }
+  carried(m: Mover, key?: string): boolean {
+    return !!this.record(m, key)?.carried;
   }
   /** Keep the original world reservation and waiting age; only its local coordinate frame changes. */
   rebind(m: Mover, target: TileLife, tileKey: string, source: TileLife) {
-    const r = this.records.get(m);
-    if (!r) return;
     const f = frameBetween(source.tile, target.tile);
     const arm = (a: Arm): Arm => ({
       ...a,
@@ -378,33 +474,44 @@ export class JunctionTable {
       y: a.y === undefined ? undefined : f.y + a.y * f.scale,
       stopAlong: a.stopAlong === undefined ? undefined : a.stopAlong * f.scale,
     });
-    const old = r.movement;
-    const local = !r.inside && target.junctionIndex.movement(m, 100 * target.perMeter);
-    r.movement =
-      local && local.key === old.key
-        ? local
-        : {
-            ...old,
-            line: -1,
-            stop: old.stop * f.scale,
-            ahead: old.ahead * f.scale,
-            junction: {
-              ...old.junction,
-              x: f.x + old.junction.x * f.scale,
-              y: f.y + old.junction.y * f.scale,
-              radius: old.junction.radius * f.scale,
-              arms: old.junction.arms.map(arm),
-            },
-            entry: old.entry && arm(old.entry),
-            exit: arm(old.exit),
-          };
-    r.carried = !(local && local.key === old.key);
-    r.life = target;
-    r.tileKey = tileKey;
-    r.index = target.movers.indexOf(m);
+    for (const r of this.holds(m)) {
+      const old = r.movement;
+      const local =
+        !r.inside &&
+        target.junctionIndex.movements(m, 100 * target.perMeter).find((p) => p.key === old.key);
+      r.movement =
+        local && local.key === old.key
+          ? local
+          : {
+              ...old,
+              line: -1,
+              stop: old.stop * f.scale,
+              ahead: old.ahead * f.scale,
+              junction: {
+                ...old.junction,
+                x: f.x + old.junction.x * f.scale,
+                y: f.y + old.junction.y * f.scale,
+                radius: old.junction.radius * f.scale,
+                arms: old.junction.arms.map(arm),
+              },
+              entry: old.entry && arm(old.entry),
+              exit: arm(old.exit),
+            };
+      r.carried = !(local && local.key === old.key);
+      r.life = target;
+      r.tileKey = tileKey;
+      r.index = target.movers.indexOf(m);
+    }
   }
-  refreshCarried(m: Mover, ready: (movement: Movement) => boolean, room: number) {
-    const r = this.records.get(m);
+  refreshCarried(
+    m: Mover,
+    ready: (movement: Movement) => boolean,
+    room: number,
+    key?: string,
+    atLine?: boolean,
+    traffic?: JunctionTraffic,
+  ) {
+    const r = this.record(m, key);
     if (!r?.carried) return;
     const p = r.movement,
       j = p.junction,
@@ -412,17 +519,20 @@ export class JunctionTable {
     const length = VEHICLES[m.vehicle!].length * pm;
     const past = (m.x - (p.exit.x ?? j.x)) * p.outHx + (m.y - (p.exit.y ?? j.y)) * p.outHy;
     if (past > j.radius + length / 2) {
-      this.release(m);
+      this.release(m, p.key);
       return;
     }
     p.ahead =
       ((p.entry?.x ?? j.x) - m.x) * p.inHx +
       ((p.entry?.y ?? j.y) - m.y) * p.inHy -
       j.radius -
-      length / 2;
+      length / 2 -
+      JUNCTION.gap * pm;
     r.inside = p.ahead < -0.05 * pm;
     r.room = room;
     r.ready = ready(p);
+    r.atLine = atLine ?? false;
+    r.traffic = traffic;
     this.request(r);
   }
   clear(): void {
@@ -430,36 +540,48 @@ export class JunctionTable {
     this.requests = [];
   }
   snapshot() {
-    return [...this.records.values()].map((r) => ({
-      tileKey: r.tileKey,
-      index: r.index,
-      movement: r.movement,
-      arrival: r.arrival,
-      since: r.since,
-      inside: r.inside,
-      ready: r.ready,
-    }));
+    return [...this.records.values()].flatMap((records) =>
+      [...records.values()].map((r) => ({
+        tileKey: r.tileKey,
+        index: r.index,
+        movement: r.movement,
+        arrival: r.arrival,
+        since: r.since,
+        inside: r.inside,
+        ready: r.ready,
+        key: r.movement.key,
+        atLine: r.atLine,
+      })),
+    );
   }
   resolve(clock: number): void {
     this.clock = clock;
-    const seen = new Set<Mover>();
     const groups = new Map<string, Hold[]>();
     for (const request of this.requests) {
-      const previous = this.records.get(request.m);
-      const r: Hold =
-        previous?.movement.key === request.movement.key
-          ? Object.assign(previous, request)
-          : { ...request };
+      let records = this.records.get(request.m);
+      if (!records) this.records.set(request.m, (records = new Map()));
+      const previous = records.get(request.movement.key);
+      const r: Hold = previous ? Object.assign(previous, request) : { ...request };
       if (r.arrival === undefined && (r.atLine === true || r.inside)) r.arrival = clock;
-      if (!r.inside && r.since !== undefined && clock - r.since > JUNCTION.holdMax)
-        r.since = undefined;
-      this.records.set(r.m, r);
-      seen.add(r.m);
+      if (r.inside) r.since ??= clock;
+      else if (r.since !== undefined) {
+        if (clock - r.since > JUNCTION.holdMax) {
+          r.since = undefined;
+          r.arrival = r.atLine === true ? clock : undefined;
+          r.surrendered = true;
+        } else if (!r.ready || (r.room ?? Infinity) < VEHICLES[r.m.vehicle!].length + JUNCTION.gap)
+          r.since = undefined;
+      }
+      records.set(r.movement.key, r);
+      r.seen = true;
       const list = groups.get(r.movement.key) ?? [];
       list.push(r);
       groups.set(r.movement.key, list);
     }
-    for (const m of this.records.keys()) if (!seen.has(m)) this.records.delete(m);
+    for (const [m, records] of this.records) {
+      for (const [key, r] of records) if (!r.seen) records.delete(key);
+      if (!records.size) this.records.delete(m);
+    }
     for (const group of groups.values()) {
       const over = (r: Hold) => r.arrival !== undefined && clock - r.arrival >= JUNCTION.maxWait;
       group.sort(
@@ -496,12 +618,21 @@ export class JunctionTable {
           ),
         );
       }
+      const eligible = (r: Hold) => this.eligibleRows.has(r);
+      this.eligibleRows.clear();
+      for (const r of group)
+        if (
+          r.ready &&
+          (r.room ?? Infinity) >= VEHICLES[r.m.vehicle!].length + JUNCTION.gap &&
+          group.every((b) => !b.inside || b === r || compatible(r.movement, b.movement))
+        )
+          this.eligibleRows.add(r);
       const oncoming = (a: Hold, b: Hold) =>
         a !== b &&
         leftTurn(a.movement) &&
         !over(a) &&
         !leftTurn(b.movement) &&
-        ((b.atLine === true && b.ready) || (b.inside && b.since !== undefined)) &&
+        ((b.atLine === true && eligible(b)) || (b.inside && b.since !== undefined)) &&
         a.movement.inHx * b.movement.inHx + a.movement.inHy * b.movement.inHy < -COS20 &&
         (b.room ?? Infinity) >= VEHICLES[b.m.vehicle!].length + JUNCTION.gap;
       this.yielded.clear();
@@ -510,7 +641,13 @@ export class JunctionTable {
           r.since = undefined;
           this.yielded.add(r);
         }
-      const final = this.precedence.order(ordered, (a, b) => oncoming(b, a));
+      const surrender = (a: Hold, b: Hold) =>
+        !!b.surrendered &&
+        !a.surrendered &&
+        a.atLine === true &&
+        eligible(a) &&
+        !compatible(a.movement, b.movement);
+      const final = this.precedence.order(ordered, (a, b) => oncoming(b, a) || surrender(a, b));
       const blocking = this.blocking;
       blocking.length = 0;
       for (const r of group) if (r.inside || r.since !== undefined) blocking.push(r);
@@ -525,8 +662,8 @@ export class JunctionTable {
             sum +
             (b !== r &&
             b.since !== undefined &&
-            !b.inside &&
-            b.movement.outHx * r.movement.outHx + b.movement.outHy * r.movement.outHy > COS20
+            sameExit(b, r) &&
+            !r.traffic?.occupiesExit(b.m, r.movement, r.life)
               ? VEHICLES[b.m.vehicle!].length + JUNCTION.gap
               : 0),
           0,
@@ -535,6 +672,7 @@ export class JunctionTable {
           continue;
         if (blocking.every((b) => b === r || compatible(r.movement, b.movement))) {
           r.since = clock;
+          r.surrendered = false;
           blocking.push(r);
         } else if (r.arrival !== undefined) blocking.push(r);
       }

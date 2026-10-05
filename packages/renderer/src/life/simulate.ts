@@ -134,6 +134,7 @@ import { SignalControl } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
 import { JunctionIndex, JunctionTable } from './junctions';
+import { JunctionTraffic } from './junction-traffic';
 import { trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -665,6 +666,8 @@ export class TileLife {
   private commerceAdmitted = false;
   junctionIndex!: JunctionIndex;
   private readonly localJunctions = new JunctionTable();
+  private readonly localJunctionTraffic = new JunctionTraffic();
+  private readonly clearingJunctions = new Set<string>();
   private readonly trafficGroups = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
@@ -1841,11 +1844,12 @@ export class TileLife {
       yield;
       const m = this.movers[i]!;
       if (m.kind !== 'vehicle' && m.kind !== 'person') continue;
-      let fits = guard(m);
+      let fits = (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m)) && guard(m);
       for (let attempt = 0; !fits && attempt < 24; attempt++) {
         yield;
         this.advance(m, (3 + attempt) * this.perMeter, false);
-        fits = inTile(m) && guard(m);
+        fits =
+          inTile(m) && (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m)) && guard(m);
       }
       if (!fits) this.movers.splice(i, 1);
     }
@@ -3425,47 +3429,55 @@ export class TileLife {
     active: (m: Mover) => boolean,
     clock: number,
     tileKey = '',
+    traffic?: JunctionTraffic,
   ) {
-    // A tile without junctions can still carry a reservation adopted from another tile.
     if (!this.junctionIndex.junctions.length && table.empty) return;
+    traffic ??= this.localJunctionTraffic;
+    if (traffic === this.localJunctionTraffic) {
+      traffic.begin(this);
+      for (const m of this.movers) if (active(m)) traffic.add(this, m);
+    }
     for (let index = 0; index < this.movers.length; index++) {
       const m = this.movers[index]!;
       if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
       const pm = this.perMeter,
         length = VEHICLES[m.vehicle].length * pm;
-      if (table.carried(m)) {
-        const movement = table.movement(m)!;
-        let room = Infinity;
-        const ex = movement.exit.x ?? movement.junction.x,
-          ey = movement.exit.y ?? movement.junction.y;
-        for (const other of this.movers) {
-          if (other === m || other.kind !== 'vehicle' || !other.vehicle) continue;
-          const past = (other.x - ex) * movement.outHx + (other.y - ey) * movement.outHy;
-          const side = Math.abs((other.x - ex) * movement.outHy - (other.y - ey) * movement.outHx);
-          if (past >= 0 && side < 4 * pm)
-            room = Math.min(
-              room,
-              past / pm - VEHICLES[other.vehicle].length / 2 - movement.junction.radius / pm,
-            );
-        }
-        table.refreshCarried(
+      const movements = this.junctionIndex.movements(
+        m,
+        Math.max(
+          60 * pm,
+          (m.v ?? m.speed) ** 2 / (2 * kinematicsOf(m.vehicle).brake * pm) + 20 * pm,
+        ),
+        (line, dir) => this.seamExit(m, line, dir),
+      );
+      const submit = (movement: Movement, inside: boolean) => {
+        const room = traffic.room(m, movement, this);
+        const ready =
+          room >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
+          this.signals.allows(
+            m,
+            movement.entry?.x ?? movement.junction.x,
+            movement.entry?.y ?? movement.junction.y,
+            clock,
+            Math.max(0, movement.ahead),
+            movement,
+          );
+        table.request({
           m,
-          (p) =>
-            this.signals.allows(
-              m,
-              p.entry?.x ?? p.junction.x,
-              p.entry?.y ?? p.junction.y,
-              clock,
-              Math.max(0, p.ahead),
-            ),
+          life: this,
+          tileKey,
+          index,
+          movement,
+          ready,
+          inside,
+          atLine: traffic.atLine(m, movement, this, table),
           room,
-        );
-        continue;
-      }
-      const previous = table.movement(m);
-      let movement = previous;
-      if (previous) {
-        const j = previous.junction;
+          traffic,
+        });
+      };
+      for (const r of table.holds(m)) {
+        const previous = r.movement,
+          j = previous.junction;
         const past =
           (m.x - (previous.exit.x ?? j.x)) * previous.outHx +
           (m.y - (previous.exit.y ?? j.y)) * previous.outHy;
@@ -3474,73 +3486,42 @@ export class TileLife {
           m.dir === previous.dir &&
           m.dir * (previous.stop - this.along[m.from]! - m.dir * m.d) > 0;
         if (!sameApproach && past > j.radius + length / 2) {
-          table.release(m);
-          movement = undefined;
-        } else if (sameApproach && previous.ahead >= 0) {
-          // Refresh a pending route as it becomes known; retain the committed route inside.
-          movement = this.junctionIndex.movement(m, 60 * pm) ?? previous;
+          table.release(m, previous.key);
+          continue;
         }
+        const candidate = movements.find((p) => p.key === previous.key);
+        if (r.carried) {
+          table.refreshCarried(
+            m,
+            (p) =>
+              this.signals.allows(
+                m,
+                p.entry?.x ?? p.junction.x,
+                p.entry?.y ?? p.junction.y,
+                clock,
+                Math.max(0, p.ahead),
+                p,
+              ),
+            traffic.room(m, previous, this),
+            previous.key,
+            traffic.atLine(m, previous, this, table),
+            traffic,
+          );
+        } else if (r.inside) {
+          previous.ahead =
+            ((previous.entry?.x ?? j.x) - m.x) * previous.inHx +
+            ((previous.entry?.y ?? j.y) - m.y) * previous.inHy -
+            j.radius -
+            JUNCTION.gap * pm -
+            length / 2;
+          submit(previous, true);
+        } else if (candidate)
+          submit(candidate, candidate.ahead < -0.05 * pm && candidate.line === m.line);
+        else table.release(m, previous.key); // A committed route was abandoned, not rear-cleared.
+        if (candidate) movements.splice(movements.indexOf(candidate), 1);
       }
-      movement ??= this.junctionIndex.movement(
-        m,
-        Math.max(
-          60 * pm,
-          (m.v ?? m.speed) ** 2 / (2 * kinematicsOf(m.vehicle).brake * pm) + 20 * pm,
-        ),
-      );
-      if (!movement) continue;
-      const j = movement.junction;
-      const before =
-        m.line === movement.line && m.dir === movement.dir
-          ? m.dir * (movement.stop - this.along[m.from]! - m.dir * m.d)
-          : -Infinity;
-      const ahead =
-        before -
-        (movement.entry?.stopAlong !== undefined
-          ? movement.dir * (movement.stop - movement.entry.stopAlong)
-          : j.radius + JUNCTION.gap * pm) -
-        length / 2;
-      const inside = ahead < -0.05 * pm;
-      // Do not change the incoming/outgoing movement when a holder crosses its endpoint.
-      movement = { ...movement, ahead };
-      const exit = movement.exit;
-      let room = Infinity;
-      for (const other of this.trafficGroups.get(exit.line * 2 + (exit.out === 1 ? 1 : 0)) ?? []) {
-        const leader = this.movers[other]!;
-        if (leader === m) continue;
-        const past = this.progress[other]! * pm - exit.out * exit.along;
-        if (past < 0) continue;
-        room = Math.min(room, past - (VEHICLES[leader.vehicle!].length * pm) / 2 - j.radius);
-      }
-      const ready =
-        room >= length + FOLLOW.minGap * pm &&
-        this.signals.allows(
-          m,
-          movement.entry?.x ?? j.x,
-          movement.entry?.y ?? j.y,
-          clock,
-          Math.max(0, ahead),
-        );
-      const atLine =
-        ahead / pm <= JUNCTION.atLine &&
-        !(this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? []).some(
-          (i) =>
-            i !== index &&
-            this.progress[i]! > this.progress[index]! &&
-            this.progress[i]! * pm < movement.dir * movement.stop &&
-            !table.granted(this.movers[i]!),
-        );
-      table.request({
-        m,
-        life: this,
-        tileKey,
-        index,
-        movement,
-        ready,
-        inside,
-        atLine,
-        room: room / pm,
-      });
+      for (const movement of movements)
+        submit(movement, movement.ahead < -0.05 * pm && movement.line === m.line);
     }
   }
 
@@ -3673,13 +3654,14 @@ export class TileLife {
             }
           }
         }
-        const movement = table.movement(m);
-        if (movement && !table.granted(m) && movement.ahead >= -0.05 * pm) {
-          speeds[i] = Math.min(
-            speeds[i],
-            approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
-          );
-          caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
+        for (const { movement } of table.holds(m)) {
+          if (!table.granted(m, movement.key) && movement.ahead >= -0.05 * pm) {
+            speeds[i] = Math.min(
+              speeds[i],
+              approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
+            );
+            caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
+          }
         }
       }
     return speeds;
@@ -3838,16 +3820,11 @@ export class TileLife {
           limit.target = speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
-          const movement = table.movement(m);
-          this.signals.vehicleLimit(
-            m,
-            dt,
-            clock,
-            limit,
-            movement && table.granted(m) && movement.ahead < -0.05 * this.perMeter
-              ? movement.key
-              : undefined,
-          );
+          const clearing = this.clearingJunctions;
+          clearing.clear();
+          for (const r of table.holds(m))
+            if (r.inside && table.granted(m, r.movement.key)) clearing.add(r.movement.key);
+          this.signals.vehicleLimit(m, dt, clock, limit, clearing);
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
         } else
@@ -4998,6 +4975,7 @@ export class LifeWorld {
   private birthCursor = 0;
   private birthCredit = 0;
   private readonly junctions = new JunctionTable();
+  private readonly junctionTraffic = new JunctionTraffic();
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
@@ -6079,8 +6057,17 @@ export class LifeWorld {
       eligibility.set(tile, active);
       tile.prepareTraffic(active);
     }
+    this.junctionTraffic.begin(this.tiles.values().next().value!);
+    for (const tile of this.tiles.values())
+      for (const m of tile.movers) if (eligibility.get(tile)!(m)) this.junctionTraffic.add(tile, m);
     for (const [key, tile] of this.tiles)
-      tile.requestJunctions(this.junctions, eligibility.get(tile)!, this.clock, key);
+      tile.requestJunctions(
+        this.junctions,
+        eligibility.get(tile)!,
+        this.clock,
+        key,
+        this.junctionTraffic,
+      );
     this.junctions.resolve(this.clock);
     const trains = trainLimits(
       [...this.tiles.values()],
