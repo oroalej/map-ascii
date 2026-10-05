@@ -1,11 +1,28 @@
+import { labelCandidate } from './label-candidates';
 import { expect, it, vi } from 'vitest';
-import { overlayPass, placeGrid, prepareCrowns, type TileDraw, type View } from './passes';
+import { buntingWindResponse } from './life/bunting-motion';
+import {
+  glyphPass,
+  fixturePass,
+  overlayPass,
+  cellPass,
+  crownPass,
+  placeGrid,
+  prepareCrowns,
+  selectPass,
+  type TileDraw,
+  type View,
+} from './passes';
+import * as twgl from 'twgl.js';
+import { classId, classVisibility, groundFlags } from './classes';
 import type { CellTargets, GL } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
+import * as gpuContext from './gpu-context';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
 import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
+import { LampState } from './life/lights';
 
 const view: View = {
   camera: { lat: 13, lng: 123, zoom: 18 },
@@ -16,6 +33,296 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('supplies wind-driven bunting independently of Life and stills it for Calm or reduced motion', () => {
+  const strength = vi.fn(),
+    direction = vi.fn(),
+    shimmer = vi.fn();
+  const programs = {
+    glyph: {
+      program: {},
+      uniformSetters: { u_buntingWind: strength, u_buntingWindDir: direction, u_shimmer: shimmer },
+    },
+    emptyVao: null,
+  } as unknown as Programs;
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (
+    wind: { strength: number; dir: [number, number]; from: number } | null,
+    reduced = false,
+  ) =>
+    glyphPass(
+      gl,
+      programs,
+      { sub: {} } as CellTargets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      7,
+      reduced,
+      1,
+      { rain: 0, wind },
+    );
+  draw({ strength: 0.7, dir: [-1, 0], from: 90 });
+  expect(strength).toHaveBeenLastCalledWith(buntingWindResponse(0.7));
+  expect(direction).toHaveBeenLastCalledWith([-1, 0]);
+  expect(shimmer).toHaveBeenLastCalledWith(true);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(1);
+  expect(direction).toHaveBeenLastCalledWith([0, 1]);
+  draw({ strength: 0.325, dir: [0, 1], from: 0 });
+  expect(strength).toHaveBeenLastCalledWith(0);
+  draw({ strength: 1.5, dir: [0, 1], from: 0 }, true);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(shimmer).toHaveBeenLastCalledWith(false);
+  draw(null);
+  expect(strength).toHaveBeenLastCalledWith(0);
+  expect(direction).toHaveBeenLastCalledWith([0, 0]);
+});
+
+it('selects the seasonal shader from cached fixture inputs and returns to the ordinary shader', () => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = placeGrid(view, view.cellDev, 80, 34);
+  const draw = () =>
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      view,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+  try {
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+    fixturePass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [{ kind: 'season-bunting', id: 'row', from: [123, 13], to: [123.001, 13], seed: 1 }],
+      0,
+      true,
+    );
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(true);
+    fixturePass(gl, targets, resources, view, placement, [], 0, true);
+    draw();
+    expect(choose.mock.calls.at(-1)![4]).toBe(false);
+  } finally {
+    choose.mockRestore();
+  }
+});
+it.each([
+  { zoom: 15, index: 1, margin: false, expected: false },
+  { zoom: 16.5, index: 1, margin: false, expected: false },
+  { zoom: 17, index: 0, margin: false, expected: false },
+  { zoom: 17, index: 1, margin: false, expected: true },
+  { zoom: 17, index: 1, margin: true, expected: true },
+])('selects seasonal shaders from written ink: %j', ({ zoom, index, margin, expected }) => {
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'bindTexture',
+      'pixelStorei',
+      'texSubImage2D',
+    ].map((key) => [key, vi.fn()]),
+  ) as unknown as GL;
+  const programs = {
+    glyph: { program: {}, uniformSetters: {} },
+    emptyVao: null,
+  } as unknown as Programs;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => index }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const current = { ...view, height: margin ? 180 : view.height, camera: { ...view.camera, zoom } };
+  const targets = {
+    cols: 80,
+    rows: 34,
+    sub: {},
+    fixtureTex: {},
+    signalLightTex: {},
+  } as CellTargets;
+  const placement = {
+    ...placeGrid(current, current.cellDev, 80, 34),
+    toCell: (x: number, y: number): [number, number] => [x, y],
+  };
+  try {
+    const visible = fixturePass(
+      gl,
+      targets,
+      resources,
+      current,
+      placement,
+      [
+        {
+          kind: 'season-lantern',
+          lamp: {
+            kind: 'streetlight',
+            base: [20, 0],
+            tip: [20, margin ? 32 : 20],
+            forward: [20, 1],
+            right: [21, 0],
+            roadCenter: [20, 0],
+            seed: 1,
+            state: LampState.working,
+          },
+        },
+      ],
+      0,
+      true,
+    );
+    if (margin) expect(visible.seasonal?.lanterns).toBe(false);
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      current,
+      placement.grid,
+      placement.grid,
+      0,
+      true,
+      1,
+    );
+    expect(choose.mock.calls.at(-1)![4]).toBe(expected);
+  } finally {
+    choose.mockRestore();
+  }
+});
+
+it('uploads the complete ground array to both base and crown draws', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = Object.fromEntries(
+    [
+      'enable',
+      'disable',
+      'depthFunc',
+      'useProgram',
+      'bindFramebuffer',
+      'viewport',
+      'clearBufferfv',
+      'clearBufferfi',
+      'bindVertexArray',
+      'readBuffer',
+      'drawBuffers',
+      'blitFramebuffer',
+    ].map((name) => [name, vi.fn()]),
+  ) as unknown as GL;
+  const raster = { fbo: {}, width: 83, height: 37 };
+  const targets = { cols: 83, rows: 37, base: raster, subBase: raster, sub: raster } as CellTargets;
+  const programs = { cell: { program: {} } } as unknown as Programs;
+  const placement = placeGrid(view, view.cellDev, 83, 37);
+  try {
+    cellPass(gl, programs, targets, view, placement, { region: [], tiles: [] });
+    crownPass(gl, programs, targets, view, placement, [], 0, { from: 0, strength: 0, dir: [1, 0] });
+    const groundUploads = uniforms.mock.calls
+      .map(([, values]) => (values as Record<string, unknown>).u_ground)
+      .filter((ground): ground is Int32Array => ground instanceof Int32Array);
+    expect(groundUploads).toHaveLength(2);
+    for (const ground of groundUploads) {
+      expect(ground).toEqual(groundFlags());
+      expect(ground[classId('building_hospital')]).toBe(1);
+      expect(ground[classId('building_station')]).toBe(1);
+      expect(ground[classId('road_major')]).toBe(0);
+    }
+  } finally {
+    uniforms.mockRestore();
+  }
+});
+
+it('allows paving edge sampling only where the cell pass can rasterize paving', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const targets = { cols: 83, rows: 37, base: {}, sub: {} } as CellTargets;
+  const programs = { select: { program: {} } } as unknown as Programs;
+  const resources = { map: { tables: {} } } as unknown as ThemeResources;
+  try {
+    for (const zoom of [10, 12, 12.25, 12.5, 18]) {
+      // Quality changes glyph detail zoom; class admission follows the camera.
+      const changed = { ...view, camera: { ...view.camera, zoom }, detailZoom: 18 };
+      const { grid } = placeGrid(changed, changed.cellDev, 83, 37);
+      selectPass(
+        gl,
+        programs,
+        targets,
+        resources,
+        changed,
+        grid,
+        0,
+        { hover: 0, selected: 0, highlight: new Uint32Array(64), highlightCount: 0 },
+        { from: 0, strength: 0, dir: [1, 0] },
+      );
+      expect(uniforms.mock.calls.at(-1)![1]).toMatchObject({
+        u_pavingVisible: classVisibility(zoom)[classId('paving')]! > 0,
+      });
+    }
+  } finally {
+    uniforms.mockRestore();
+  }
+});
 
 it('reuses crown matrices through sub-cell shifts and invalidates every matrix input', () => {
   const tiles = [
@@ -89,22 +396,68 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
     rank: LabelRank.landmark,
     band: { min: 16 },
   };
-  const first = overlayPass(gl, targets, resources, view, placement, [label], programs);
+  const first = overlayPass(
+    gl,
+    targets,
+    resources,
+    view,
+    placement,
+    [labelCandidate(label, view, placement)!],
+    programs,
+  );
   expect(first).toHaveLength(1);
   const buffer = uploaded[0]!,
     snapshot = buffer.slice();
   overlayPass(gl, targets, resources, view, placement, [], programs);
   expect(uploaded[1]).toBe(buffer);
   expect(buffer.every((byte) => byte === 0)).toBe(true);
-  expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [labelCandidate(label, view, placement)!],
+      programs,
+    ),
+  ).toEqual(first);
   expect(buffer).toEqual(snapshot);
   programs.streetText.count = 6;
   const hidden = { ...view, camera: { ...view.camera, zoom: 16 } };
-  expect(overlayPass(gl, targets, resources, hidden, placement, [label], programs)).toEqual([]);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      hidden,
+      placement,
+      [label].flatMap((label) => labelCandidate(label, hidden, placement) ?? []),
+      programs,
+    ),
+  ).toEqual([]);
   expect(buffer.every((byte) => byte === 0)).toBe(true);
   expect(programs.streetText.count).toBe(0);
-  expect(overlayPass(gl, targets, resources, view, placement, [label], programs)).toEqual(first);
-  overlayPass(gl, { ...targets }, resources, view, placement, [label], programs);
+  expect(
+    overlayPass(
+      gl,
+      targets,
+      resources,
+      view,
+      placement,
+      [labelCandidate(label, view, placement)!],
+      programs,
+    ),
+  ).toEqual(first);
+  overlayPass(
+    gl,
+    { ...targets },
+    resources,
+    view,
+    placement,
+    [labelCandidate(label, view, placement)!],
+    programs,
+  );
   expect(uploaded[5]).not.toBe(buffer);
   expect(uploaded[5]).toEqual(snapshot);
   const resized = { ...targets, labelCols: 10, labelRows: 10 };

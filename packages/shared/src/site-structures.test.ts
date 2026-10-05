@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SiteDetail, SiteStructure } from './schemas';
+import { RoofShape } from './constants';
 
 const part = {
   id: 'beam',
@@ -25,6 +26,86 @@ const detail = {
 };
 
 describe('site structure content', () => {
+  it('accepts shared roof shapes for both wings and overrides and rejects unknown shapes', () => {
+    for (const shape of [...Object.keys(RoofShape), 'unknown']) {
+      const expected = shape in RoofShape;
+      expect(
+        SiteStructure.safeParse({
+          ...part,
+          material: 'roof',
+          roof_shape: shape,
+          roof_osm_id: 'osm:way/2',
+        }).success,
+      ).toBe(expected);
+      expect(
+        SiteDetail.safeParse({ ...detail, roof_overrides: [{ osm_id: 'osm:way/2', shape }] })
+          .success,
+      ).toBe(expected);
+    }
+  });
+  it('validates sourced building heights and rejects duplicate mapped targets', () => {
+    expect(SiteDetail.parse(detail).building_overrides).toEqual([]);
+    const override = { osm_id: 'osm:way/2', height_m: 9 };
+    expect(SiteDetail.safeParse({ ...detail, building_overrides: [override] }).success).toBe(true);
+    for (const height_m of [0, -1, 256, Infinity])
+      expect(
+        SiteDetail.safeParse({ ...detail, building_overrides: [{ ...override, height_m }] })
+          .success,
+      ).toBe(false);
+    expect(
+      SiteDetail.safeParse({ ...detail, building_overrides: [override, override] }).success,
+    ).toBe(false);
+  });
+  it('accepts courts, holed tracks and explicit mapped roof wings without ambiguous roof fields', () => {
+    expect(SiteStructure.safeParse({ ...part, material: 'water', overhead: false }).success).toBe(
+      true,
+    );
+    expect(SiteStructure.safeParse({ ...part, material: 'water' }).success).toBe(false);
+    expect(SiteStructure.safeParse({ ...part, material: 'pitch', overhead: false }).success).toBe(
+      true,
+    );
+    expect(SiteStructure.safeParse({ ...part, material: 'pitch' }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'roof',
+        roof_shape: 'gabled',
+        roof_osm_id: 'osm:way/1',
+      }).success,
+    ).toBe(true);
+    for (const extra of [
+      { roof_shape: 'flat' },
+      { roof_osm_id: 'osm:way/1' },
+      { roof_shape: 'flat', roof_osm_id: 'osm:way/1' },
+    ])
+      expect(SiteStructure.safeParse({ ...part, ...extra }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        holes: [
+          [
+            [0.2, 0.2],
+            [0.4, 0.2],
+            [0.4, 0.4],
+            [0.2, 0.4],
+            [0.2, 0.2],
+          ],
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        holes: [
+          [
+            [0.2, 0.2],
+            [0.4, 0.2],
+            [0.4, 0.4],
+          ],
+        ],
+      }).success,
+    ).toBe(false);
+  });
   it('accepts walkable raised paving and rejects overhead paving', () => {
     expect(
       SiteStructure.safeParse({ ...part, material: 'paving', height_m: 0.15, overhead: false })
@@ -36,6 +117,27 @@ describe('site structure content', () => {
     expect(SiteDetail.parse(detail).structures).toEqual([]);
     expect(SiteDetail.safeParse({ ...detail, structures: [part] }).success).toBe(true);
     expect(SiteDetail.safeParse({ ...detail, structures: [part, part] }).success).toBe(false);
+  });
+
+  it('accepts explicit paving overrides without changing legacy records', () => {
+    expect(SiteStructure.parse(part).ground_override).toBeUndefined();
+    expect(SiteStructure.safeParse({ ...part, ground_override: true }).success).toBe(false);
+    expect(SiteStructure.safeParse({ ...part, ground_override: false }).success).toBe(false);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'paving',
+        overhead: false,
+        ground_override: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      SiteStructure.safeParse({
+        ...part,
+        material: 'paving',
+        ground_override: true,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects open, collapsed and self-intersecting footprints before triangulation', () => {

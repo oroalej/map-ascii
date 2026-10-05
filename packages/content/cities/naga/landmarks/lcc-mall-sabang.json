@@ -1,0 +1,20 @@
+{
+  "id": "landmark/lcc-mall-sabang",
+  "osm_id": "osm:way/23665048",
+  "name": {
+    "en": "LCC Mall Sabang"
+  },
+  "type": "market",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: LCC Mall Naga",
+      "url": "https://www.openstreetmap.org/way/23665048",
+      "note": "Mapped mall and its northern/southern parking lots."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference guides approximate planting, pedestrian approaches and parking. Mapped roofs and access routes remain; dimensions and outdoor coverage are draft estimates."
+    }
+  ]
+}

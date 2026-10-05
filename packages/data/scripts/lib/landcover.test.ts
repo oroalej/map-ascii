@@ -1,6 +1,7 @@
 import type { Landcover } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
-import { landcoverCredits, landcoverFeatures } from './landcover';
+import { applyLandcoverTreeOverrides, landcoverCredits, landcoverFeatures } from './landcover';
+import type { AtlasFeature } from '../03-normalize';
 
 const METERS = 111_320;
 
@@ -8,12 +9,44 @@ const pack = (over: Partial<Landcover> = {}): Landcover => ({
   id: 'landcover/test',
   title: 'Test grounds',
   trees: [],
+  tree_overrides: [],
   rows: [],
   areas: [],
   status: 'draft',
   credit: 'Tree positions: Example imagery',
   sources: [{ title: 'Example imagery' }],
   ...over,
+});
+
+describe('mapped tree appearance corrections', () => {
+  const mapped: AtlasFeature = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [1, 1] },
+    properties: { id: 'osm:node/1', class: 'tree', crown: 8, height: 10 },
+    tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
+  };
+  it('changes only requested attributes without duplicating or moving a mapped tree', () => {
+    const corrections = pack({ tree_overrides: [{ osm_id: 'osm:node/1', crown_m: 22 }] });
+    const result = applyLandcoverTreeOverrides([mapped], [corrections]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.geometry).toEqual(mapped.geometry);
+    expect(result[0]!.properties).toEqual({ ...mapped.properties, crown: 22 });
+    expect(mapped.properties.crown).toBe(8);
+    expect(landcoverFeatures(result, [corrections]).features).toEqual([]);
+  });
+  it('fails for missing/non-tree targets and duplicate corrections across packs', () => {
+    const corrections = pack({ tree_overrides: [{ osm_id: 'osm:node/1', crown_m: 22 }] });
+    expect(() => applyLandcoverTreeOverrides([], [corrections])).toThrow('mapped tree point');
+    expect(() =>
+      applyLandcoverTreeOverrides(
+        [{ ...mapped, properties: { ...mapped.properties, class: 'furniture' } }],
+        [corrections],
+      ),
+    ).toThrow('mapped tree point');
+    expect(() => applyLandcoverTreeOverrides([mapped], [corrections, corrections])).toThrow(
+      'duplicate',
+    );
+  });
 });
 
 const ring: [number, number][] = [

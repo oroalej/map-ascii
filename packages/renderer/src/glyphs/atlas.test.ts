@@ -1,5 +1,6 @@
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
+import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
 import {
   doubleLine,
   fixtureGlyphs,
@@ -259,6 +260,8 @@ describe('glyph set', () => {
         ...PUFF_GLYPHS,
         ...fixtureGlyphs,
         ...arrowGlyphs,
+        ...SEASONAL_GLYPHS,
+        ...ACCESS_GLYPHS,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,
         ...doubleWall,

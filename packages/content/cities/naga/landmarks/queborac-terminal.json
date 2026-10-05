@@ -1,0 +1,20 @@
+{
+  "id": "landmark/queborac-terminal",
+  "osm_id": "osm:node/4545731100",
+  "name": {
+    "en": "Queborac Terminal"
+  },
+  "type": "station",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Naga Integrated Northbound Terminal",
+      "url": "https://www.openstreetmap.org/node/4545731100",
+      "note": "Mapped Naga Integrated Northbound Terminal, also known as the Calabanga/Tinambac-bound jeepney terminal."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference guides approximate planting, pedestrian approaches and parking. Mapped roofs and access routes remain; dimensions and outdoor coverage are draft estimates."
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "id": "detail/jose-rizal-elementary-school",
+  "osm_id": "osm:way/881068601",
+  "title": "Jose Rizal Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "additional-approach-1-1",
+      "ring": [
+        [123.19588912, 13.61933824],
+        [123.195845963, 13.619236001],
+        [123.195806611, 13.619117311],
+        [123.195757494, 13.619020513],
+        [123.195732624, 13.619032432],
+        [123.195780841, 13.619127457],
+        [123.195819899, 13.619245262],
+        [123.195863261, 13.619347985],
+        [123.195909064, 13.619469746],
+        [123.195950909, 13.619591751],
+        [123.195977216, 13.619583229],
+        [123.195935245, 13.619460857],
+        [123.19588912, 13.61933824]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-2-2",
+      "ring": [
+        [123.195873151, 13.618843389],
+        [123.195849489, 13.618857441],
+        [123.195888499, 13.618919481],
+        [123.195915423, 13.618910616],
+        [123.195873151, 13.618843389]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-2-3",
+      "ring": [
+        [123.195923458, 13.619020179],
+        [123.195950883, 13.619010276],
+        [123.195949939, 13.618980931],
+        [123.195922486, 13.618989955],
+        [123.195923458, 13.619020179]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-3-1",
+      "ring": [
+        [123.195837976, 13.618816621],
+        [123.195677103, 13.618869175],
+        [123.195685253, 13.618892738],
+        [123.195714328, 13.618885446],
+        [123.195846812, 13.618842166],
+        [123.195837976, 13.618816621]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-4-1",
+      "ring": [
+        [123.19593257, 13.61951692],
+        [123.19594148, 13.61954244],
+        [123.196041927, 13.619509462],
+        [123.19604077, 13.619506416],
+        [123.19604124, 13.619505627],
+        [123.19611584, 13.619478427],
+        [123.196116406, 13.619478446],
+        [123.196116764, 13.619478783],
+        [123.196118971, 13.619484503],
+        [123.196179339, 13.619464946],
+        [123.19617057, 13.619439379],
+        [123.19600831, 13.619491945],
+        [123.19593257, 13.61951692]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "additional-approach-5-1",
+      "ring": [
+        [123.195641425, 13.619076],
+        [123.195763093, 13.619035271],
+        [123.195754062, 13.619009791],
+        [123.195632394, 13.61905052],
+        [123.195641425, 13.619076]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/881068601",
+      "note": "ODbL. Complete source footprints, boundaries, roads, mapped trunks and identities retained."
+    },
+    {
+      "title": "Owner-supplied additional roadside and campus references",
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

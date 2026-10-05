@@ -7,7 +7,7 @@ import {
   type MomentAnchor,
   type MomentContext,
 } from './moments';
-import { FIGURE_SIZE_M, figureFit } from './people';
+import { FIGURE_SIZE_M, figureFit, type PersonPose } from './people';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
 import { LIFE_SITE_KINDS, type DialogueChoice, type GreetingPeriods } from '@atlas/shared';
 import type { DialogueMemory } from './dialogue';
@@ -28,10 +28,20 @@ export class MomentHost {
   get scenes() {
     return this.sceneHost.speech;
   }
+  private inspected?: object;
+  private heldPoses: (PersonPose | undefined)[] = [];
+  /** Hold only the selected person's gesture; exchanges and other participants continue. */
+  pose(owner: Owner | Stall, member = 0): PersonPose | undefined {
+    if (owner === this.inspected) return this.heldPoses[member];
+    return this.livePose(owner, member);
+  }
+  private livePose(owner: Owner | Stall, member: number): PersonPose | undefined {
+    return this.moments.pose(owner) ?? this.scenes.pose(owner, member);
+  }
   private actors = new WeakMap<Owner, MomentActor<Owner>>();
   private readonly candidates: MomentActor<Owner>[] = [];
   private readonly living = new Set<Owner>();
-  private readonly pose = { x: 0, y: 0, hx: 0, hy: 0 };
+  private readonly poseScratch = { x: 0, y: 0, hx: 0, hy: 0 };
   private readonly anchors: MomentAnchor[] = [];
   private readonly sceneAnchors: MomentAnchor[] = [];
   private readonly stallAnchors = new WeakMap<Stall, MomentAnchor>();
@@ -88,7 +98,7 @@ export class MomentHost {
     const out = this.candidates;
     out.length = 0;
     const update = (owner: Mover | Gatherer) => {
-      if (near && !near(owner.x, owner.y)) return;
+      if (owner === this.inspected || (near && !near(owner.x, owner.y))) return;
       const walker = 'kind' in owner ? owner.group?.[0] : owner.walker;
       if (!walker) return;
       let actor = this.actors.get(owner);
@@ -105,7 +115,7 @@ export class MomentHost {
         };
         this.actors.set(owner, actor);
       }
-      const pose = 'kind' in owner ? this.tile.pose(owner, this.pose) : owner;
+      const pose = 'kind' in owner ? this.tile.pose(owner, this.poseScratch) : owner;
       actor.x = pose.x;
       actor.y = pose.y;
       actor.hx = owner.hx;
@@ -128,6 +138,8 @@ export class MomentHost {
     return owner.source;
   }
   clear() {
+    this.inspected = undefined;
+    this.heldPoses.length = 0;
     this.sceneHost.clear();
     this.moments.clear((actor) => {
       delete actor.owner.momentFacing;
@@ -145,6 +157,7 @@ export class MomentHost {
     this.tryFacing(owner, undefined, guard);
   }
   private tryFacing(owner: Owner, next: Owner['momentFacing'], guard?: Guard) {
+    if (owner === this.inspected) return false;
     const before = { ...owner };
     if (next) owner.momentFacing = next;
     else delete owner.momentFacing;
@@ -163,7 +176,18 @@ export class MomentHost {
     guard: Guard | undefined,
     cellWidth: number,
     cellAspect: number,
+    inspected?: object,
   ) {
+    if (inspected !== this.inspected) {
+      this.heldPoses.length = 0;
+      if (inspected) {
+        const owner = inspected as Owner | Stall;
+        const members = 'kind' in owner ? (owner.group?.length ?? 1) : 1;
+        for (let member = 0; member < members; member++)
+          this.heldPoses.push(this.livePose(owner, member));
+      }
+      this.inspected = inspected;
+    }
     const { tile } = this;
     const anchors = this.sceneAnchors;
     anchors.length = 0;

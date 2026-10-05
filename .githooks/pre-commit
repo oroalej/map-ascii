@@ -1,0 +1,11 @@
+#!/bin/sh
+# One worktree per task (AGENTS.md "Git"): the main checkout stays on main, so sessions never
+# share uncommitted edits. Git runs hooks from the top of the working tree.
+if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
+  branch=$(git symbolic-ref --short -q HEAD)
+  if [ "$branch" != "main" ]; then
+    echo "pre-commit: the main checkout is read-only (on '${branch:-detached HEAD}')." >&2
+    echo "Work in a task worktree: pnpm worktree:new <short> <topic>" >&2
+    exit 1
+  fi
+fi

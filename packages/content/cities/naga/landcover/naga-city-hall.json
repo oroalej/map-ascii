@@ -1,0 +1,217 @@
+{
+  "id": "landcover/naga-city-hall",
+  "title": "Naga City Hall grounds",
+  "trees": [
+    {
+      "at": [123.198690028, 13.626669293],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.198614616, 13.626669757],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198746493, 13.626724884],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198845381, 13.626657384],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198887915, 13.62654275],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.198972923, 13.626536015],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.199053001, 13.626446647],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.19918778, 13.626393037],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.199262574, 13.626282671],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.199321242, 13.62618942],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.199264114, 13.62612158],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.199178013, 13.62615923],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.199056546, 13.626235293],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.198934055, 13.626340211],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198830004, 13.626415704],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198773272, 13.626478719],
+      "crown_m": 9,
+      "height_m": 6
+    },
+    {
+      "at": [123.19846932, 13.626546479],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.198423335, 13.626475913],
+      "crown_m": 9,
+      "height_m": 6
+    },
+    {
+      "at": [123.198267735, 13.626156411],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198330234, 13.626082252],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198405669, 13.62599809],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.19848696, 13.625924762],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198552743, 13.62586981],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198662819, 13.62577464],
+      "crown_m": 10,
+      "height_m": 6
+    },
+    {
+      "at": [123.198841982, 13.625719131],
+      "crown_m": 11,
+      "height_m": 8
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "shrubs",
+      "ring": [
+        [123.19892282, 13.62637593],
+        [123.19893148, 13.62638528],
+        [123.198904, 13.62640932],
+        [123.19889534, 13.62639997],
+        [123.19892282, 13.62637593]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.198995064, 13.626040098],
+        [123.198942557, 13.626091628],
+        [123.198858071, 13.626191556],
+        [123.198858065, 13.626191563],
+        [123.198858037, 13.626191595],
+        [123.19885803, 13.626191603],
+        [123.19874407, 13.626314438],
+        [123.199017316, 13.62604466],
+        [123.198995064, 13.626040098]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.198568277, 13.626458951],
+        [123.198587268, 13.62646925],
+        [123.198611963, 13.626444868],
+        [123.19859578, 13.626431959],
+        [123.198568277, 13.626458951]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.198280279, 13.626140631],
+        [123.198239848, 13.626190405],
+        [123.198245153, 13.626199966],
+        [123.198440483, 13.626020804],
+        [123.198507482, 13.625933798],
+        [123.198280279, 13.626140631]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.199017222, 13.626441214],
+        [123.198795894, 13.626662649],
+        [123.198804955, 13.626691715],
+        [123.199048311, 13.626457926],
+        [123.199017222, 13.626441214]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.199160872, 13.626225733],
+        [123.199102083, 13.626272027],
+        [123.199127528, 13.62629088],
+        [123.199188296, 13.626242835],
+        [123.199160872, 13.626225733]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga City Hall — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23669724",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_City_Hall,_Apr_2024.jpg",
+      "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The initial schematic pass used no overhead imagery; this owner-reference planting supersedes its earlier source limitation. No timeline dates are inferred."
+    },
+    {
+      "title": "Owner-supplied overhead reference, seven-site adjustment",
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. "
+    }
+  ]
+}

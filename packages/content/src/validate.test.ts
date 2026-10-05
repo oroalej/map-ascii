@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { contentRoot, loadCityPacks } from './validate';
 
 const badRoot = fileURLToPath(new URL('./__fixtures__/bad', import.meta.url));
+// loadCityPacks reads the packs from disk; this lets targeted runs select the test on pack edits.
+import.meta.glob('../cities/**/*.json');
 
 describe('loadCityPacks', () => {
   it('passes on the repository city packs', async () => {

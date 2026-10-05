@@ -19,11 +19,13 @@ const highwayClass = (highway: string | undefined): AtlasClass | null => {
   return null;
 };
 
-/** The specific building class a feature's tags imply, if any (ignoring `building=*`). */
+/** The specific building class a feature's tags imply, if any. */
 const buildingKind = (tags: Tags): AtlasClass | null => {
   if (oneOf(tags.building, 'church', 'cathedral', 'chapel')) return 'building_religious';
   if (tags.amenity === 'place_of_worship') return 'building_religious';
   if (oneOf(tags.amenity, 'school', 'university', 'college')) return 'building_school';
+  if (tags.building === 'hospital' || tags.amenity === 'hospital' || tags.healthcare === 'hospital')
+    return 'building_hospital';
   if (tags.amenity === 'marketplace' || oneOf(tags.shop, 'mall', 'supermarket')) {
     return 'building_market';
   }
@@ -184,19 +186,26 @@ export function classify(
 
   // Areas
   if (tags.building && tags.building !== 'no') return buildingKind(tags) ?? 'building';
+  // Burial lawns can also carry park/garden tags; their cemetery identity takes precedence.
+  if (tags.landuse === 'cemetery' || tags.amenity === 'grave_yard') return 'grass';
   const kindOfBuilding = buildingKind(tags);
   if (kindOfBuilding) return kindOfBuilding;
   // Church grounds (e.g. "Cathedral Grounds"); without building=* they get no height.
   if (tags.landuse === 'religious') return 'building_religious';
   if (isMonument(tags)) return 'monument';
-  if (tags.natural === 'water' || tags.water !== undefined) return 'water_area';
+  if (tags.natural === 'water' || tags.water !== undefined || tags.leisure === 'swimming_pool')
+    return 'water_area';
   if (tags.waterway === 'riverbank') return 'water_area';
   if (oneOf(tags.leisure, 'park', 'garden', 'playground') || tags.place === 'square') return 'park';
   if (tags.natural === 'wood' || oneOf(tags.landuse, 'forest', 'orchard')) return 'trees';
-  if (oneOf(tags.natural, 'scrub', 'heath') || oneOf(tags.landuse, 'plant_nursery', 'cemetery'))
-    return 'grass';
+  if (oneOf(tags.natural, 'scrub', 'heath') || tags.landuse === 'plant_nursery') return 'grass';
   if (oneOf(tags.landuse, 'grass', 'meadow', 'village_green')) return 'grass';
-  if (tags.natural === 'grassland' || tags.leisure === 'recreation_ground') return 'grass';
+  if (
+    tags.natural === 'grassland' ||
+    tags.leisure === 'recreation_ground' ||
+    tags.landuse === 'recreation_ground'
+  )
+    return 'grass';
   if (oneOf(tags.landuse, 'farmland', 'paddy') || tags.crop === 'rice') return 'farmland';
   if (tags.amenity === 'parking') return 'parking';
   if (tags.leisure === 'pitch') return 'pitch';
@@ -288,6 +297,7 @@ const defaultHeights: Partial<Record<AtlasClass, number>> = {
   building: 6,
   building_religious: 15,
   building_school: 9,
+  building_hospital: 6,
   building_market: 8,
   building_station: 8,
 };
@@ -311,6 +321,7 @@ export function buildingHeight(tags: Tags, atlasClass: AtlasClass): number | und
 /** Tags whose value says what a feature is, most telling first. */
 const kindKeys = [
   'amenity',
+  'healthcare',
   'shop',
   'leisure',
   'historic',
@@ -329,6 +340,8 @@ const kindKeys = [
 
 /** The tag that defines what a feature is, e.g. `amenity=university`, for the info panel. */
 export function kindOf(tags: Tags): string | undefined {
+  if ((!tags.building || tags.building === 'no') && tags.landuse === 'cemetery')
+    return 'landuse=cemetery';
   for (const key of kindKeys) {
     const value = tags[key];
     if (value && value !== 'yes') return `${key}=${value}`;

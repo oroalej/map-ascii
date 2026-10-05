@@ -12,8 +12,32 @@
 
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.header {
+  max-width: 100%;
+}
+
+.header .zoom {
+  flex: none;
+  white-space: nowrap;
+}
+
+.focusClear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 32ch;
+}
+
+.focusLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .zoom {
@@ -26,7 +50,9 @@
 }
 
 .legend {
-  max-height: calc(100dvh - 120px);
+  max-height: calc(
+    100dvh - var(--hud-header-bottom, 44px) - var(--attribution-height, 16px) - 16px
+  );
   overflow-y: auto;
   padding: 6px 10px;
   background: rgb(4 5 10 / 88%);
@@ -42,6 +68,12 @@
   font-size: 11px;
 }
 
+.legend summary:focus-visible,
+.focusClear:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
+}
+
 .legend ul {
   margin: 6px 0 0;
   padding: 0;
@@ -52,6 +84,32 @@
   display: flex;
   gap: 10px;
   line-height: 1.6;
+}
+
+.legendEntry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.legendEntry:hover,
+.legendEntry[aria-pressed='true'] {
+  color: #ffd35c;
+  background: rgb(255 255 255 / 8%);
+}
+
+.legendEntry:focus-visible {
+  outline: 1px solid #ffd35c;
+  outline-offset: 2px;
 }
 
 .glyphs {
@@ -72,6 +130,7 @@
 .bottomLeft {
   position: fixed;
   left: 12px;
+  max-width: calc(100vw - 24px);
   bottom: 12px;
   display: flex;
   flex-direction: column;
@@ -85,6 +144,11 @@
 .bottomLeft .button,
 .bottomLeft .line [title] {
   pointer-events: auto;
+}
+
+/* Disabled controls are passive readouts: map gestures still reach the canvas below them. */
+.bottomLeft .button:disabled {
+  pointer-events: none;
 }
 
 .scale {
@@ -134,6 +198,33 @@
   opacity: 0.5;
 }
 
+.seasonControl {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.seasonDisclosure summary {
+  list-style: none;
+}
+
+.seasonNote {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(40ch, calc(100vw - 24px));
+  max-height: 30dvh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #2a2c36;
+  background: rgb(4 5 10 / 95%);
+  pointer-events: auto;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
@@ -151,6 +242,24 @@
 
   .zoom {
     font-size: 12px;
+  }
+
+  /* Tours occupies the left of this row; keep zoom and clear focus beside it. */
+  .header {
+    max-width: calc(100vw - 120px);
+  }
+
+  .legendEntry,
+  .legend summary,
+  .focusClear,
+  .seasonControl .button {
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .legend summary {
+    align-content: center;
   }
 
   /* Above the attribution, which wraps to a few lines on phones (Attribution.tsx publishes its height). */

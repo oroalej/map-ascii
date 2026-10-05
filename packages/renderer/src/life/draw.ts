@@ -4,6 +4,7 @@
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
 import { classId } from '../classes';
+import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
@@ -101,25 +102,62 @@ export type LifeGlyphs = { parts: Uint16Array };
  * whether one of them was already another ground agent's. A whole ground agent is omitted if
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
-let journal: { before: Map<number, number[]>; denied: boolean } | undefined;
-/** Cells (texel offset / 4) held by ground agents already drawn this frame. */
-let groundCells = new Uint8Array(0);
+let journal:
+  | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
+  | undefined;
 const stampedSources = new Set<number>();
 let detailedStamp = false;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
+let drawingFocus = 0;
+let drawingClockCells: number[] | undefined;
+let clockCells: number[] | undefined;
+
+export type LifePackMetadata = {
+  owners?: Uint32Array;
+  focus?: ReadonlySet<LifeFocus>;
+  /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
+  clockCells?: number[];
+};
+
+/** Every complete texel write also replaces its frame-local owner. */
+function writeCell(
+  out: Uint8Array,
+  at: number,
+  glyph: number,
+  cls: number,
+  bits: number,
+  byte: number,
+) {
+  [out[at], out[at + 1]] = packGlyph(glyph, cls);
+  out[at + 2] = bits | drawingFocus;
+  out[at + 3] = byte;
+  if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
+  drawingClockCells?.push(at / 4);
+}
+/** Cells (texel offset / 4) held by ground agents already drawn this frame. */
+let groundCells = new Uint8Array(0);
 let drawingSpeakers: SpeakerGrid | undefined;
 let drawingMember = 0;
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
-    const previous = drawingOwners
-      ? [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners[at / 4]!]
-      : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!];
-    journal.before.set(at, previous);
-    if (drawingSpeakers) previous.push(drawingSpeakers.members[at / 4]!);
+    // Preserve the ordinary five-value owner journal; speech adds its member
+    // only when enabled, avoiding an unused slot in every painted-cell array.
+    journal.before.set(
+      at,
+      drawingSpeakers
+        ? [
+            out[at]!,
+            out[at + 1]!,
+            out[at + 2]!,
+            out[at + 3]!,
+            drawingOwners?.[at / 4] ?? 0,
+            drawingSpeakers.members[at / 4]!,
+          ]
+        : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
+    );
   }
-  if (drawingOwners) drawingOwners[at / 4] = drawingOwner;
   if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
 /** Glyph indices belong to this atlas; density, DPR, and theme changes build another set. */
@@ -148,29 +186,38 @@ export function packLife(
   glyphIndex: (glyph: string) => number,
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
+  metadata: LifePackMetadata | Float64Array = {},
   puffs: Float64Array = EMPTY_PUFFS,
 ): number {
+  // Frozen benchmark revisions used the eighth argument for the puff packet.
+  if (metadata instanceof Float64Array) {
+    puffs = metadata;
+    metadata = {};
+  }
+  const cells = grid.cols * grid.rows;
+  drawingOwners = metadata.owners ?? grid.owners;
+  if (drawingOwners && drawingOwners.length !== cells)
+    throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
   const stampedVehicles = grid.stampedVehicles;
   if (stampedVehicles && stampedVehicles.length < agents.length)
     throw new RangeError('Wrong stamped vehicle mask size');
   stampedVehicles?.fill(0);
-  if (grid.owners && grid.owners.length !== grid.cols * grid.rows)
-    throw new RangeError('Wrong owner grid size');
-  drawingOwners = grid.owners;
   drawingOwners?.fill(0);
+  drawingOwner = 0;
+  drawingFocus = 0;
+  clockCells = metadata.clockCells;
+  if (clockCells) clockCells.length = 0;
+  drawingClockCells = undefined;
+  journal = undefined;
   drawingSpeakers = grid.speakers;
-  if (
-    drawingSpeakers &&
-    (!drawingOwners || drawingSpeakers.members.length !== grid.cols * grid.rows)
-  )
+  if (drawingSpeakers && (!drawingOwners || drawingSpeakers.members.length !== cells))
     throw new RangeError('Speaker packing requires matching owner and member grids');
   drawingSpeakers?.members.fill(0);
   drawingSpeakers?.points.clear();
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
     stampedSources.clear();
-    const cells = grid.cols * grid.rows;
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
@@ -178,9 +225,12 @@ export function packLife(
     for (const parked of [true, false])
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
-        drawingOwner = index + 1;
-        drawingMember = 0;
         if (!!agent.parked !== parked) continue;
+        drawingOwner = index + 1;
+        drawingClockCells =
+          agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
+        drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
+        drawingMember = 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
         detailedStamp = false;
@@ -217,7 +267,9 @@ export function packLife(
   } finally {
     journal = undefined;
     drawingOwners = undefined;
+    drawingClockCells = clockCells = undefined;
     drawingOwner = 0;
+    drawingFocus = 0;
     drawingSpeakers = undefined;
     drawingMember = 0;
   }
@@ -270,9 +322,14 @@ function drawAgent(
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
-    [out[at], out[at + 1]] = packGlyph(index, classId(lifeClassFor.person));
-    out[at + 2] = CellBit.person;
-    out[at + 3] = personByte(PAINT_NONE, PersonPart.figure);
+    writeCell(
+      out,
+      at,
+      index,
+      classId(lifeClassFor.person),
+      CellBit.person,
+      personByte(PAINT_NONE, PersonPart.figure),
+    );
     return 1;
   }
   const baseSpec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
@@ -357,9 +414,14 @@ function drawAgent(
   if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  [out[at], out[at + 1]] = packGlyph(index, classId(cls));
-  out[at + 2] = agentBit[agent.kind];
-  out[at + 3] = spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255;
+  writeCell(
+    out,
+    at,
+    index,
+    classId(cls),
+    agentBit[agent.kind],
+    spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
+  );
   return people + 1;
 }
 
@@ -434,9 +496,7 @@ function drawPeople(
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return false;
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
-    [out[at], out[at + 1]] = packGlyph(index, cls);
-    out[at + 2] = bits;
-    out[at + 3] = byte;
+    writeCell(out, at, index, cls, bits, byte);
     return true;
   };
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
@@ -635,9 +695,7 @@ function stampMaster(
       if (index <= 0 || index > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      [out[at], out[at + 1]] = packGlyph(index, cls);
-      out[at + 2] = bits;
-      out[at + 3] = byte;
+      writeCell(out, at, index, cls, bits, byte);
       any = true;
     }
   }
@@ -706,9 +764,7 @@ function drawBird(
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  [out[at], out[at + 1]] = packGlyph(index, cls);
-  out[at + 2] = bits;
-  out[at + 3] = birdByte(species, false, fit === 'cell');
+  writeCell(out, at, index, cls, bits, birdByte(species, false, fit === 'cell'));
   return true;
 }
 
@@ -804,10 +860,8 @@ function drawPet(
   if (index <= 0 || index > MAX_GLYPHS) return false;
   const at = (r * cols + c) * 4;
   rememberGroundCell(out, at);
-  [out[at], out[at + 1]] = packGlyph(index, cls);
-  out[at + 2] = bits;
   // Drawn like a canopy: the full ink its paint, the tone ink darker (shaders/glyph.ts).
-  out[at + 3] = personByte(paint, PersonPart.canopy);
+  writeCell(out, at, index, cls, bits, personByte(paint, PersonPart.canopy));
   return true;
 }
 
@@ -878,9 +932,7 @@ function stamp(
       if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
-      [out[at], out[at + 1]] = packGlyph(glyph, cls);
-      out[at + 2] = bits;
-      out[at + 3] = byte;
+      writeCell(out, at, glyph, cls, bits, byte);
       if (lamps)
         for (const lamp of lamps) {
           if (lamp.side === 'left' ? right >= 0 : right <= 0) continue;
@@ -967,9 +1019,14 @@ function drawLine(
     const index = tip ? glyphIndex(tip.glyph) : glyph;
     if (index <= 0 || index > MAX_GLYPHS) return;
     rememberGroundCell(out, at);
-    [out[at], out[at + 1]] = packGlyph(index, cls);
-    out[at + 2] = CellBit.boat;
-    out[at + 3] = vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body);
+    writeCell(
+      out,
+      at,
+      index,
+      cls,
+      CellBit.boat,
+      vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body),
+    );
   });
   return marks.length > 0;
 }

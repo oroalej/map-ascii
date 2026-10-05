@@ -1,0 +1,56 @@
+{
+  "id": "landcover/universidad-de-santa-isabel-frontage",
+  "title": "Universidad de Santa Isabel adjoining crowns (ownership unspecified)",
+  "trees": [
+    {
+      "at": [123.188776235, 13.628532999],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188847662, 13.628515102],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188912552, 13.628490853],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188736724, 13.628476677],
+      "crown_m": 14
+    },
+    {
+      "at": [123.18880815, 13.62845878],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188879576, 13.628440884],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188951002, 13.628422987],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188768639, 13.628402459],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188840065, 13.628384562],
+      "crown_m": 14
+    },
+    {
+      "at": [123.188902951, 13.628370103],
+      "crown_m": 14
+    }
+  ],
+  "rows": [],
+  "areas": [],
+  "status": "draft",
+  "credit": "Universidad de Santa Isabel — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "Owner-supplied overhead reference, five-site adjustment",
+      "note": "Inspected supplied image; registered to cached OSM roof/pool outlines. Capture and imagery dates unknown. Positions, sizes and counts are estimates; no construction dates inferred. Reference bitmap remains ignored evidence and is not distributed. Mapped footprints are preserved, including alignment uncertainty."
+    }
+  ]
+}

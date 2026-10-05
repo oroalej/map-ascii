@@ -1,0 +1,139 @@
+{
+  "id": "detail/sabang-elementary-school",
+  "osm_id": "osm:relation/11525332",
+  "title": "Sabang Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1-2-1",
+      "ring": [
+        [123.181615845, 13.62076694],
+        [123.181536043, 13.620603582],
+        [123.181514333, 13.620613599],
+        [123.181594135, 13.620776957],
+        [123.181615845, 13.62076694]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-3-1",
+      "ring": [
+        [123.181673623, 13.620885215],
+        [123.181632252, 13.620800527],
+        [123.181610543, 13.620810544],
+        [123.181651913, 13.620895232],
+        [123.181673623, 13.620885215]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-1-4-1",
+      "ring": [
+        [123.181768117, 13.621078649],
+        [123.181717187, 13.620974392],
+        [123.181695477, 13.620984409],
+        [123.181746407, 13.621088666],
+        [123.181768117, 13.621078649]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3-1-1",
+      "ring": [
+        [123.181891434, 13.620915922],
+        [123.181723424, 13.620993445],
+        [123.181733731, 13.621014544],
+        [123.181901741, 13.620937021],
+        [123.181891434, 13.620915922]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4-1-1",
+      "ring": [
+        [123.181760865, 13.620588348],
+        [123.181552278, 13.620684593],
+        [123.181562585, 13.620705692],
+        [123.181771172, 13.620609447],
+        [123.181760865, 13.620588348]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "approach-1-2",
+      "line": [
+        [123.181525188, 13.62060859],
+        [123.18160499, 13.620771949]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-3",
+      "line": [
+        [123.181621398, 13.620805536],
+        [123.181662768, 13.620890223]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-1-4",
+      "line": [
+        [123.181706332, 13.620979401],
+        [123.181757262, 13.621083657]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-3-1",
+      "line": [
+        [123.181728578, 13.621003994],
+        [123.181896587, 13.620926472]
+      ],
+      "width_m": 1.8
+    },
+    {
+      "id": "approach-4-1",
+      "line": [
+        [123.181557432, 13.620695143],
+        [123.181766018, 13.620598897]
+      ],
+      "width_m": 1.8
+    }
+  ],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap school/plaza grounds",
+      "url": "https://www.openstreetmap.org/relation/11525332",
+      "note": "ODbL. Complete mapped parent, standing roofs, roads, neighboring identities and source geometries retained."
+    },
+    {
+      "title": "Owner-supplied Shrine, Concepcion and Sabang references",
+      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated draft estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Owner approximate school-complex border",
+      "note": "The annotated complex contains separately mapped Sabang National High School, Sabang Elementary School and Naga City School of Arts and Trades. This detail selects the Elementary parcel only. Supplemental complex landcover fills source-clear National parcel lawns; existing Arts and Trades details and planting are preserved. No legal shared ownership or red-line boundary is asserted."
+    }
+  ]
+}

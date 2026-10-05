@@ -1,0 +1,20 @@
+{
+  "id": "landmark/concepcion-pequena-national-high-school",
+  "osm_id": "osm:way/795854470",
+  "name": {
+    "en": "Concepcion Pequeña National High School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Concepcion Pequeña National High School",
+      "url": "https://www.openstreetmap.org/way/795854470",
+      "note": "Mapped school grounds."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference guides approximate planting, lawns, paths and parking. Positions and dimensions are draft estimates; mapped buildings and access routes are retained."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "landmark/naga-city-montessori-school",
+  "osm_id": "osm:way/23662206",
+  "name": {
+    "en": "Naga City Montessori School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/way/23662206",
+      "note": "Mapped footprint matched to the owner-requested site."
+    },
+    {
+      "title": "City of Naga private elementary school directory",
+      "url": "https://www2.naga.gov.ph/directory-of-private-elementary-schools/",
+      "note": "Confirms the Mayon Avenue, Tinago campus name and street; the nearby OSM Montessori point on Leon SA Aureus is a different location. The three source footprints fit the tightly cropped owner reference."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference identifies the site and guides restrained outdoor detail."
+    }
+  ]
+}

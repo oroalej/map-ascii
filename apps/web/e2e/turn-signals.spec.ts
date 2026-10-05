@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { LIFE_FOCUS_BIT } from '../../../packages/renderer/src/focus';
 import { classId, MAX_CLASSES } from '../../../packages/renderer/src/classes';
 import { cellBits, CellBit } from '../../../packages/renderer/src/life/config';
 import {
@@ -10,14 +11,14 @@ import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_POOL } from '../../../packages/renderer/
 import { LampState, lightByte } from '../../../packages/renderer/src/life/lights';
 import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
-import { glyphFragment } from '../../../packages/renderer/src/shaders/glyph';
+import { glyphFragmentFor } from '../../../packages/renderer/src/shaders/glyph';
 import { mapGlyphs, themes } from '../../../packages/renderer/src/theme';
 import { themeUniforms } from '../../../packages/renderer/src/theme-uniforms';
 import { cellHash } from '../../../packages/renderer/src/glyphs/select';
 
 test('vehicle lamps and exhaust render by day and night with terrain, canopy and label masks', async ({
   page,
-}, testInfo) => {
+}) => {
   for (const name of ['dark', 'light'] as const) {
     const theme = themes[name];
     const glyphs = [' ', ...mapGlyphs(theme).filter((g) => g !== ' ')];
@@ -34,21 +35,27 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         document.body.style.margin = '0';
         const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true })!;
         if (!gl) throw new Error('WebGL2 unavailable');
-        const program = gl.createProgram();
-        for (const [type, source] of [
-          [gl.VERTEX_SHADER, input.vertex],
-          [gl.FRAGMENT_SHADER, input.fragment],
-        ] as const) {
-          const shader = gl.createShader(type)!;
-          gl.shaderSource(shader, source);
-          gl.compileShader(shader);
-          if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-            throw new Error(gl.getShaderInfoLog(shader)!);
-          gl.attachShader(program, shader);
-        }
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-          throw new Error(gl.getProgramInfoLog(program)!);
+        const buildProgram = (fragment: string) => {
+          const program = gl.createProgram();
+          for (const [type, source] of [
+            [gl.VERTEX_SHADER, input.vertex],
+            [gl.FRAGMENT_SHADER, fragment],
+          ] as const) {
+            const shader = gl.createShader(type)!;
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+              throw new Error(gl.getShaderInfoLog(shader)!);
+            gl.attachShader(program, shader);
+          }
+          gl.linkProgram(program);
+          if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+            throw new Error(gl.getProgramInfoLog(program)!);
+          return program;
+        };
+        const variants = new Map<number, WebGLProgram>();
+        let program = buildProgram(input.fragments[0]!);
+        variants.set(0, program);
         gl.useProgram(program);
         gl.bindVertexArray(gl.createVertexArray());
         const texture = (w: number, h: number, data: Uint8Array, channels = 4) => {
@@ -75,6 +82,10 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         const blank = texture(1, 1, new Uint8Array(4));
         type Value = number | readonly number[] | WebGLTexture;
         const uniforms = (values: Record<string, Value>) => {
+          const key = values.u_focus ? 1 : 0;
+          if (!variants.has(key)) variants.set(key, buildProgram(input.fragments[key]!));
+          program = variants.get(key)!;
+          gl.useProgram(program);
           let unit = 0;
           for (let i = 0; i < gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i++) {
             const info = gl.getActiveUniform(program, i)!;
@@ -91,6 +102,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
               else if (info.type === gl.FLOAT_VEC3) gl.uniform3fv(loc, a);
               else if (info.type === gl.INT_VEC2) gl.uniform2iv(loc, a);
               else if (info.type === gl.INT_VEC3) gl.uniform3iv(loc, a);
+              else if (info.type === gl.UNSIGNED_INT_VEC2) gl.uniform2uiv(loc, a);
               else gl.uniform1iv(loc, a);
             }
           }
@@ -117,6 +129,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           u_labelAtlas: atlas,
           u_labelColor: [0, 0, 1],
           u_background: input.background,
+          u_accent: [0.2, 0.8, 1],
           u_colors: colors,
           u_fillColors: colors,
           u_cellBits: input.bits,
@@ -217,7 +230,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
           overlayTex = texture(n, 1, overlay);
-        const render = (daylight: number) => {
+        const render = (daylight: number, focused = false, mapFocus = false) => {
           gl.viewport(0, 0, canvas.width, canvas.height);
           uniforms({
             ...common,
@@ -228,6 +241,9 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
             u_overlay: overlayTex,
             u_daylight: daylight,
             u_light: activeLight ?? blank,
+            u_focus: focused ? 1 : 0,
+            u_focusLife: focused && !mapFocus ? 1 : 0,
+            u_focusClasses: mapFocus ? [(1 << input.roof) >>> 0, 0] : [0, 0],
           });
           gl.drawArrays(gl.TRIANGLES, 0, 3);
           const pixels = new Uint8Array(canvas.width * canvas.height * 4);
@@ -242,6 +258,15 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         };
         const day = render(1),
           night = render(0);
+        // Focus metadata must never become a surface permission or recolour amber indicators.
+        for (let x = 0; x < n; x++) life[x * 4 + 2]! |= input.focusBit;
+        gl.bindTexture(gl.TEXTURE_2D, lifeTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
+        const focusedDay = render(1, true),
+          focusedNight = render(0, true);
+        const mapFocused = render(1, true, true);
+        // Strip focus metadata, keeping ordinary agent permissions and indicator flags.
+        for (let x = 0; x < n; x++) life[x * 4 + 2]! &= ~input.focusBit;
         life[2] = input.vehicleBit;
         gl.bindTexture(gl.TEXTURE_2D, lifeTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
@@ -252,11 +277,11 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         const brakeNight = render(0),
           brakeDay = render(1);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off, brakeNight, brakeDay };
+        return { day, night, off, brakeNight, brakeDay, focusedDay, focusedNight, mapFocused };
       },
       {
         vertex: fullscreenVertex,
-        fragment: glyphFragment,
+        fragments: [false, true].map((focus) => glyphFragmentFor({ focus, effectClocks: false })),
         maxClasses: MAX_CLASSES,
         glyphs,
         block,
@@ -279,6 +304,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         occluders: [classId('tree'), classId('tree_crown'), classId('trees')],
         vehicleBit: CellBit.vehicle | CellBit.person,
         indicator: TURN_SIGNAL_BIT,
+        focusBit: LIFE_FOCUS_BIT,
         body: VehiclePart.body,
         head: VehiclePart.headlight,
         tail: VehiclePart.taillight,
@@ -288,19 +314,21 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
-    for (const frame of [result.day, result.night]) {
+    for (const frame of [result.day, result.night, result.focusedDay, result.focusedNight]) {
       for (const x of [0, 2, 6])
         frame.cells[x]!.forEach((c, i) => expect(Math.abs(c - amber[i]!)).toBeLessThanOrEqual(1));
       for (const x of [1, 3, 4, 5, 7, 8, 9, 10, 11]) expect(frame.cells[x]).not.toEqual(amber);
       expect(frame.crownEdge).not.toEqual(amber);
       expect(frame.cells[7]).toEqual([0, 0, 255]);
+      expect(frame.cells[20]).toEqual([0, 0, 255]);
+    }
+    for (const frame of [result.day, result.night]) {
       expect(frame.cells[13]![1]).toBeGreaterThan(frame.cells[12]![1]!);
       expect(frame.cells[13]).not.toEqual(frame.cells[14]);
       expect(frame.cells[16]).toEqual(theme.background.slice(0, 3).map((c) => Math.round(c * 255)));
       expect(frame.cells[17]![2]).toBeGreaterThan(frame.cells[15]![2]!);
       expect(frame.cells[18]).not.toEqual(frame.cells[15]);
       expect(frame.cells[19]).not.toEqual(frame.cells[15]);
-      expect(frame.cells[20]).toEqual([0, 0, 255]);
     }
     result.night.cells[13]!.forEach((c, i) =>
       expect(
@@ -320,8 +348,8 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
       redness(result.night.brakeEdge[0]!) + 10,
     );
     expect(result.brakeNight.brakeEdge[1]).toEqual(result.night.brakeEdge[1]);
-    await page
-      .locator('canvas')
-      .screenshot({ path: testInfo.outputPath(`vehicle-effects-${name}.png`) });
+    expect(result.focusedDay.cells[1]).toEqual([51, 204, 255]);
+    expect(result.focusedDay.cells[3]).toEqual(result.day.cells[3]!.map((c) => Math.round(c / 2)));
+    expect(result.mapFocused.cells[3]).toEqual([51, 204, 255]);
   }
 });

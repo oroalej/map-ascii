@@ -1,0 +1,16 @@
+{
+  "id": "landmark/bicol-central-station",
+  "osm_id": "osm:way/293702439",
+  "name": {
+    "en": "Bicol Central Station"
+  },
+  "type": "station",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/293702439",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

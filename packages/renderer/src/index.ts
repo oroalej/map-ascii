@@ -4,8 +4,10 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   UTILITY_ZOOM,
+  SEASON_ZOOM,
   shopHours,
   shopOpen,
+  resolveSeason,
   dialogueChoices,
   type ShopHours,
 } from '@atlas/shared';
@@ -13,7 +15,7 @@ import { sameReferenceMembers } from './cache-inputs';
 import type {
   BBox,
   CameraState,
-  CityLifeConfig,
+  RuntimeCityLife,
   ClimateConfig,
   DialogueCatalog,
   RuntimeDialogueCatalog,
@@ -48,6 +50,7 @@ import {
   deleteLabelGlyphs,
   deleteMapGlyphs,
   deletePrograms,
+  prewarmGlyphPrograms,
   type LabelGlyphs,
   type MapGlyphs,
   type Programs,
@@ -58,18 +61,18 @@ import { attachInput } from './input';
 import {
   cellPass,
   crownPass,
+  effectClockPass,
   glyphPass,
   fixturePass,
   hasCrowns,
   lifePass,
   lifeRaster,
+  labelsCoverPoint,
   labelCovers,
   lightPass,
   metersPerCssPx,
-  overlayPass,
   streetTextPass,
   placeGrid,
-  screenArea,
   selectPass,
   type Grid,
   type GridPlacement,
@@ -77,6 +80,10 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
+import { screenArea } from './grid';
+import { AtlasLabels, type LabelSource } from './label-controller';
+import { LifeHoverController, type LifeHover } from './life/hover';
+import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
@@ -97,10 +104,23 @@ import {
 } from './life/lights';
 import { moonlight } from './life/moon';
 import { createUtilityFixtureCache } from './life/utilities';
-import { tileFixtures, type StreetFixture, type FixtureVisibility } from './life/fixtures';
+import {
+  tileFixtures,
+  type StreetFixture,
+  type FixtureVisibility,
+  type LegacyStreetFixture,
+} from './life/fixtures';
+import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
+import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
-import { createInlineHost, createWorkerHost } from './life/host';
+import { simulationSeasons } from './life/seasonal-simulation';
+import { fireworksPass } from './fireworks-pass';
+import { FIREWORKS } from './fireworks-layout';
+import { configureLifeWorld } from './life/worker-api';
+import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
+import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
 import {
@@ -131,21 +151,40 @@ import { tileKey, type TileId } from './tiles';
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendIcon } from './legend';
+export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
+export type { LifeHover } from './life/hover';
 export type { RenderClass } from './classes';
+export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
 export type { WindChoice } from './life/wind';
 export { cityTime, type LocalTime } from './life/clock';
+
+/** Resolved immutable calendar selection for controls and the fixture legend. */
+export type SeasonState = Readonly<{
+  id: string;
+  title: string;
+  status: 'draft' | 'verified';
+  note?: string;
+  labels: Readonly<{
+    lanterns?: string;
+    bunting?: string;
+    stalls?: string;
+    installations?: string;
+    fireworks?: string;
+  }>;
+}>;
 
 /**
  * The life layer (SPEC.md §4 "Life layer"): simulated traffic, people, boats, and birds, and
  * the time of day the map is lit for.
  */
 export type LifeSettings = {
+  /** Pack season id for preview; omitted or 'auto' follows the real city date. */
+  season?: string;
   /** Show the agents (never with reduced motion, which keeps the map still). */
   enabled: boolean;
   /**
@@ -162,6 +201,8 @@ export type LifeSettings = {
 };
 
 export type AtlasOptions = {
+  /** Per-item hover pause; 'all' restores the previous global inspection path. */
+  lifeHoverPause?: 'item' | 'all';
   /** Optional curated city-pack speech. Display preferences do not affect simulation. */
   dialogue?: DialogueCatalog | RuntimeDialogueCatalog;
   speech?: boolean;
@@ -218,7 +259,7 @@ export type AtlasOptions = {
    */
   timezone?: string;
   /** The city's daily rhythm (its pack's `life`); default: `DEFAULT_RHYTHM`. */
-  cityLife?: CityLifeConfig;
+  cityLife?: RuntimeCityLife;
   /** The clock for the live time of day (tests pin it). */
   now?: () => Date;
   /**
@@ -231,6 +272,8 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  /** A visible simulated agent under the mouse, in canvas CSS pixels. */
+  lifehover: LifeHover;
   /** Visible simulated speakers, anchored in CSS pixels from the canvas top left. */
   speechchange: SpeechInView[];
   qualitychange: QualityState;
@@ -273,6 +316,7 @@ export type AtlasEventMap = {
   lightschange: boolean;
   /** Hardware packed inside the viewport, independent of Life and illumination. */
   fixtureschange: FixtureVisibility;
+  seasonchange: SeasonState | null;
   /**
    * The names of places, landmarks, and monuments on screen changed (street names aren't
    * included), in placement order: most important first. For a text alternative to the map.
@@ -319,6 +363,8 @@ export type AtlasStats = {
 };
 
 export type Atlas = {
+  /** Transient legend focus; null restores ordinary map colours. */
+  setFocus(focus: LegendFocus | null): void;
   setSpeech(enabled: boolean): void;
   setQuality(choice: QualityChoice): void;
   getQuality(): QualityChoice;
@@ -344,6 +390,7 @@ export type Atlas = {
   /** Turn the life layer on or off, or change the time of day. */
   setLife(settings: Partial<LifeSettings>): void;
   getLife(): LifeSettings;
+  getSeason(): SeasonState | null;
   /**
    * Play a procession from its start as a time-lapse. False when it isn't one of the city's or
    * the life layer is off.
@@ -410,7 +457,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const interactive = options.interactive ?? (() => true);
   const font = options.font ?? DEFAULT_FONT;
   let camera = clampCamera({ ...options.initialCamera }, limits);
-  let life: LifeSettings = { enabled: true, time: 'live', wind: 'live', ...options.life };
+  let life: LifeSettings = {
+    enabled: true,
+    time: 'live',
+    wind: 'live',
+    season: 'auto',
+    ...options.life,
+  };
   const now = options.now ?? (() => new Date());
   /** Where the city's clock is (life/clock.ts). */
   const zone: ClockZone = {
@@ -419,6 +472,32 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
+  const resolveCurrentSeason = () => {
+    const local = cityTime(now(), zone);
+    return resolveSeason(options.cityLife?.seasons, life.season, local.year, local.day);
+  };
+  let season = resolveCurrentSeason();
+  const seasonState = (): SeasonState | null =>
+    season
+      ? Object.freeze({
+          id: season.id,
+          title: season.title.en,
+          status: season.status,
+          ...(season.note ? { note: season.note } : {}),
+          labels: Object.freeze({
+            ...(season.fireworks ? { fireworks: season.fireworks.label } : {}),
+            ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
+            ...(season.bunting ? { bunting: season.bunting.label } : {}),
+            ...(season.stalls ? { stalls: season.stalls.label } : {}),
+            ...(season.installations?.length
+              ? {
+                  installations: [...new Set(season.installations.map((i) => i.label))].join(', '),
+                }
+              : {}),
+          }),
+        })
+      : null;
+  let seasonSnapshot = seasonState();
   /**
    * The wind at `time` seconds in world axes (x east, y south), which are the grid's (the map is
    * north-up): the season's (or the chosen strength), veering and breathing; still with reduced
@@ -453,9 +532,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
   const start = performance.now();
+  let lastPointerInput = start;
+  const lifePause = new LifePause<FrameView>(start, life.enabled && !reducedMotion);
+  const itemInspection = options.lifeHoverPause !== 'all';
+  let inspected: { id: number; generation: number | undefined } | undefined;
+  let inspectionRevision = 0;
+  const livePause = new LivePauseOffset();
+  let drawnLife: FrameView | undefined;
   /** Timing stats (`getStats`): when recent frames were drawn, and smoothed durations. */
   const drawTimes: number[] = [];
   let frameMs = 0;
@@ -483,15 +570,36 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  const lifeHover = new LifeHoverController(
+    readback,
+    gl.COLOR_ATTACHMENT0,
+    (hover) => emit('lifehover', hover),
+    (active) => {
+      if (!itemInspection) {
+        if (active) lifePause.pause(drawnLife, performance.now());
+        else lifePause.resume(performance.now());
+      }
+      drawDirty = true;
+    },
+    (agent) => {
+      if (!itemInspection) return;
+      inspected =
+        agent?.inspectionId === undefined
+          ? undefined
+          : { id: agent.inspectionId, generation: drawnLife?.generation };
+      inspectionRevision++;
+      drawDirty = true;
+    },
+  );
   let speechEnabled = options.speech ?? true;
   const speech = new SpeechController(readback, gl.COLOR_ATTACHMENT0, (cues) =>
     emit('speechchange', cues),
   );
-  let speechOwners = new Uint32Array(0);
   const speechSpeakers = {
     members: new Uint8Array(0),
     points: new Map<number, [number, number]>(),
   };
+  // Label-only redraws also invalidate speech and hover visibility evidence.
   let speechGeometry = 0;
   let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
 
@@ -535,6 +643,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const resize = () => {
+    lifeHover.clear();
     resetQualitySamples();
     const nextDpr = Math.min(window.devicePixelRatio || 1, knobs.maxDpr);
     const width = Math.max(1, Math.round(canvas.clientWidth * nextDpr));
@@ -564,12 +673,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (targets) deleteCellTargets(gl, targets);
       targets = createCellTargets(gl, cols, rows, labelCols, labelRows);
       targetsGeneration++;
+      lifeHover.clear();
     }
     // Zooming out stops where the bounds fill the view (SPEC.md §3).
     const size = cssSize();
     limits.minZoom = Math.min(limits.maxZoom, Math.max(baseMinZoom, fitZoom(limits.bounds, size)));
     const clamped = clampCamera(camera, limits, size);
     if (!sameCamera(clamped, camera)) {
+      lifeHover.pointer(null);
       camera = clamped;
       emit('camerachange', { ...camera });
     }
@@ -588,8 +699,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsFor = null;
     },
     profiler,
+    options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
+    !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
   );
   const { source } = tileCache;
+
+  const names = new AtlasLabels();
+  let labelsForReport: TileLabel[] | undefined;
+  let labelVisibilityDirty = false;
 
   const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
     const a = screenArea(v, map.grid);
@@ -620,6 +737,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     placement = next;
     grid = next.grid;
     labelGrid = nextLabels.grid;
+    labelVisibilityDirty = true;
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -634,17 +752,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     labelGrid = labelPlacement.grid;
     cellsFor = cellsKey(v, placement, labelPlacement);
     cellsTargets = targets;
+    source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
     syncFixtures(tiles);
-    const labels = new Map<number, TileLabel>();
+    syncResidentialSites(tiles);
+    const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
       for (const tile of ids) {
         const loaded = tileCache.get(tile);
         if (!loaded) continue;
-        for (const label of loaded.labels) labels.set(label.id, label);
+        labels.push({ labels: loaded.labels, zoom: tile.z });
         out.push({ tile, mesh: loaded.mesh });
       }
       return out;
@@ -653,16 +773,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    const placed = overlayPass(gl, targets, themeRes, v, labelPlacement, labels.values(), programs);
+    names.collect(targets, v, labelPlacement, labels);
+    labelsForReport = names.draw(
+      gl,
+      targets,
+      themeRes,
+      v,
+      labelPlacement,
+      programs,
+      selectedIndex(),
+      hoverIndex,
+    );
     speechGeometry++;
-    reportLabels(placed.flatMap((c) => labels.get(c.id) ?? []));
     classesStale = true;
   };
 
-  /** The last `labelschange` payload's feature ids, to send it only on change. */
-  let labelsKey = '';
+  /** Compare the whole visible-label payload, including changed names and source anchors. */
+  let reportedLabels: LabelInView[] | undefined;
   const reportLabels = (placed: readonly TileLabel[]) => {
-    const inView: LabelInView[] = [];
+    let changed: LabelInView[] | undefined;
+    let count = 0;
     for (const label of placed) {
       const kind =
         label.rank === LabelRank.landmark
@@ -674,14 +804,32 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
                 label.rank === LabelRank.roadMajor
               ? null
               : 'place';
+      if (!kind) continue;
       const featureId = source.feature(label.id)?.id;
-      if (!kind || !featureId) continue;
-      inView.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      if (!featureId) continue;
+      const old = reportedLabels?.[count];
+      if (
+        !changed &&
+        (!old ||
+          old.featureId !== featureId ||
+          old.name !== label.text ||
+          old.kind !== kind ||
+          old.lngLat[0] !== label.lng ||
+          old.lngLat[1] !== label.lat)
+      ) {
+        changed = reportedLabels?.slice(0, count) ?? [];
+      }
+      if (changed)
+        changed.push({ featureId, name: label.text, kind, lngLat: [label.lng, label.lat] });
+      count++;
     }
-    const key = inView.map((l) => l.featureId).join('|');
-    if (key === labelsKey) return;
-    labelsKey = key;
-    emit('labelschange', inView);
+    if (!changed && reportedLabels && count === reportedLabels.length) return;
+    reportedLabels = changed ?? reportedLabels?.slice(0, count) ?? [];
+    // Event consumers may mutate the public payload; retain an independent comparison snapshot.
+    emit(
+      'labelschange',
+      reportedLabels.map((label) => ({ ...label, lngLat: [...label.lngLat] })),
+    );
   };
 
   // Which classes are on screen (the `classeschange` event): the on-screen part of the class
@@ -727,23 +875,29 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
-      ? createWorkerHost({ ...options, moments }, processions, profiler)
+      ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
       : (() => {
-          const world = new LifeWorld(options.traffic, profiler, moments);
-          world.setProcessions(processions);
+          const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
+          configureLifeWorld(world, {
+            processions,
+            seasons: simulationSeasons(options.cityLife?.seasons),
+            shopSchedule: options.cityLife?.schedules?.shops,
+          });
           return createInlineHost(world, profiler);
         })();
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
+  const lifeView = () => lifePause.view(host.latest());
   const reportProcession = () => {
-    const run = host.latest()?.procession;
+    const run = lifeView()?.procession;
     const key = run ? `${run.id} ${run.live}` : '';
     if (key === processionKey) return;
     processionKey = key;
     emit('procession', run ?? null);
   };
   const lifeActive = () => life.enabled && !reducedMotion;
-  let lastLifeStep = -Infinity;
+  const lifeRunning = () => lifeActive() && !lost && watch.watched();
+  let lifeInputs: LifeTile[] = [];
   /** Whether the life texture holds agents (so turning the layer off clears it once). */
   let lifeShown = false;
   let agentsDrawn = 0;
@@ -759,6 +913,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const loaded = tileCache.get(tile);
       if (loaded) lifeTiles.push({ key: tileKey(tile), tile, life: loaded.life });
     }
+    if (
+      lifeTiles.length !== lifeInputs.length ||
+      lifeTiles.some(
+        (tile) => !lifeInputs.some((old) => old.key === tile.key && old.life === tile.life),
+      )
+    )
+      lifeHover.clear();
+    lifeInputs = lifeTiles;
     const cell = stepCell(schedule, step ?? 0);
     host.sync(lifeTiles, [camera.lng, camera.lat], {
       bounds: viewBounds(),
@@ -793,29 +955,42 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
-      const accepted = host.request({
-        gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
-        step: {
-          dt: (at - lastLifeStep) / 1000,
-          zoom: camera.zoom,
-          bounds: viewBounds(),
-          wind: worldWind(time),
-          weather: { rain: currentRain(), minutes: cityMinutes, cityLife: options.cityLife },
-          cellMeters: metersPerCssPx(camera) * cssCell.width,
-          effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
-        },
-        visible: [
-          camera.zoom,
-          activity,
-          [camera.lng, camera.lat],
-          { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
-          viewBounds(),
-          knobs.crowd,
-          knobs.maxAgents,
-        ],
-      });
-      if (accepted) lastLifeStep = at;
-      agents = host.latest()?.agents ?? [];
+      const accepted =
+        !lifePause.inspecting &&
+        host.request({
+          ...(itemInspection
+            ? {
+                inspection: {
+                  id: inspected?.id ?? null,
+                  revision: inspectionRevision,
+                  time: lifePause.time,
+                },
+              }
+            : {}),
+          gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
+          step: {
+            dt: lifePause.delta,
+            zoom: camera.zoom,
+            bounds: viewBounds(),
+            wind: worldWind(time),
+            weather: { rain: currentRain(), minutes: cityMinutes, season: season?.id ?? null },
+            cellMeters: metersPerCssPx(camera) * cssCell.width,
+            effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
+          },
+          visible: [
+            camera.zoom,
+            activity,
+            [camera.lng, camera.lat],
+            { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+            viewBounds(),
+            knobs.crowd,
+            knobs.maxAgents,
+          ],
+        });
+      if (accepted) lifePause.accept();
+      drawnLife = lifeView();
+      if (inspected && drawnLife?.generation !== inspected.generation) lifeHover.clear();
+      agents = drawnLife?.agents ?? [];
       reportProcession();
     } else if (!lifeShown) {
       return;
@@ -827,10 +1002,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
     const trackSpeech = options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom;
-    if (trackSpeech && speechOwners.length !== targets.cols * targets.rows)
-      speechOwners = new Uint32Array(targets.cols * targets.rows);
-    if (trackSpeech && speechSpeakers.members.length !== speechOwners.length)
-      speechSpeakers.members = new Uint8Array(speechOwners.length);
+    if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
+      speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -841,16 +1014,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       agents,
       knobs.shadows ? sun : null,
       profiler,
-      host.latest()?.cellGuard(placement.toCell),
-      trackSpeech ? speechOwners : undefined,
+      drawnLife?.cellGuard(placement.toCell),
+      focus.life,
+      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
       trackSpeech ? speechSpeakers : undefined,
-      host.latest()?.puffs,
+      drawnLife?.puffs,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
   };
   const reportSpeech = (now: number) => {
+    const raster = targets && lifeRaster(targets);
     if (
+      !raster ||
       !speechEnabled ||
       now - lastInput < 150 ||
       !options.dialogue ||
@@ -860,7 +1036,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !targets ||
       !placement ||
       !lifeAgents.length ||
-      speechOwners.length !== targets.cols * targets.rows
+      speechSpeakers.members.length !== raster.owners.length
     ) {
       speech.clear();
       return;
@@ -872,9 +1048,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         targets,
         dpr,
         agents: lifeAgents,
-        owners: speechOwners,
+        owners: raster.owners,
         speakers: speechSpeakers,
-        life: lifeRaster(targets),
+        life: raster.life,
         geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
         toCell: placement.toCell,
@@ -893,6 +1069,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // Streetlights (life/lights.ts): the lamps of the tiles on screen, lit from dusk. They are
   // lighting, like windows, so they show with the life layer off and with reduced motion too.
   let lamps: VisibleLamp[] = [];
+  let festiveLamps: VisibleLamp[] = [];
+  let festiveLightVersion = 0;
   /** The shops on screen, each with its own hours, and which of them are open (by index). */
   let shops: { lamp: VisibleLamp; hours: ShopHours }[] = [];
   let shopsKey = '';
@@ -902,16 +1080,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
    * The lamps lit now (street and flood lamps, and the open shops) and which shops are open, as
    * a key; worked out again only when the lamps or the city's minute change.
    */
-  let lit = { lamps, shops, minutes: NaN, all: [] as VisibleLamp[], key: '' };
+  let lit = { lamps, shops, festiveLamps, minutes: NaN, all: [] as VisibleLamp[], key: '' };
   const litNow = () => {
-    if (lit.lamps !== lamps || lit.shops !== shops || lit.minutes !== cityMinutes) {
+    if (
+      lit.lamps !== lamps ||
+      lit.shops !== shops ||
+      lit.minutes !== cityMinutes ||
+      lit.festiveLamps !== festiveLamps
+    ) {
       const open = shops.map((s) => shopOpen(s.hours, cityMinutes));
       lit = {
         lamps,
         shops,
         minutes: cityMinutes,
-        all: [...lamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
-        key: open.map((o) => (o ? '1' : '0')).join(''),
+        festiveLamps,
+        all: [...lamps, ...festiveLamps, ...shops.filter((_, i) => open[i]).map((s) => s.lamp)],
+        key: open.map((o) => (o ? '1' : '0')).join('') + `/festive:${festiveLightVersion}`,
       };
     }
     return lit;
@@ -1008,16 +1192,40 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
   };
   let fixtures: StreetFixture[] = [];
-  const fixtureTiles = new WeakMap<LoadedTile['life'], StreetFixture[]>();
+  const fixtureTiles = new WeakMap<LoadedTile['life'], LegacyStreetFixture[]>();
   let fixturesKey = '';
   const cachedUtilities = createUtilityFixtureCache();
+  const cachedSeasonal = createSeasonalFixtureCache();
+  let fixtureSeason = season;
   let fixtureInputs: readonly LoadedTile[] = [];
   let hadUtilities = false;
+  let fixtureDisplaysShown = false;
+  let fixtureBuntingShown = false;
+  let fireworkSites = NO_FIREWORK_SITES;
+  let residentialInputs: readonly Float64Array[] = [];
+  const syncResidentialSites = (tiles: readonly TileId[]) => {
+    const active = !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom;
+    const groups = tileCache.residentialSitesFor(camera, cssSize(), active, tiles);
+    if (!active) {
+      residentialInputs = [];
+      fireworkSites = NO_FIREWORK_SITES;
+      return;
+    }
+    const inputs = groups.map((group) => group.sites);
+    if (sameReferenceMembers(inputs, residentialInputs)) return;
+    residentialInputs = inputs;
+    fireworkSites = residentialFireworkSites(groups, FIREWORKS.referenceZoom);
+  };
   const syncFixtures = (tiles: readonly TileId[]) => {
     if (camera.zoom < 15) {
       fixtures = [];
+      if (festiveLamps.length) {
+        festiveLamps = [];
+        festiveLightVersion++;
+      }
       fixtureInputs = [];
       hadUtilities = false;
+      cachedSeasonal([], undefined, 0);
       return;
     }
     const inputs = tiles
@@ -1026,10 +1234,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       .filter((t): t is LoadedTile => !!t);
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
-    if (showUtilities === hadUtilities && sameReferenceMembers(inputs, fixtureInputs)) return;
+    const displaysShown = camera.zoom >= 18;
+    const buntingShown = bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0;
+    if (
+      displaysShown === fixtureDisplaysShown &&
+      buntingShown === fixtureBuntingShown &&
+      showUtilities === hadUtilities &&
+      season === fixtureSeason &&
+      sameReferenceMembers(inputs, fixtureInputs)
+    )
+      return;
+    fixtureDisplaysShown = displaysShown;
+    fixtureBuntingShown = buntingShown;
+    fixtureSeason = season;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
     fixtures = [];
+    const seasonalGroups: SeasonalTile[] = [];
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
       const loaded = tileCache.get(tile);
@@ -1040,11 +1261,31 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         fixtureTiles.set(loaded.life, found);
       }
       fixtures.push(...found);
+      seasonalGroups.push({
+        tile,
+        life: loaded.life,
+        fixtures: found,
+        ...(loaded.utilities ? { utilities: loaded.utilities } : {}),
+        ...(loaded.seasonal ? { seasonal: loaded.seasonal } : {}),
+      });
     }
     const utilityGroups = showUtilities
       ? inputs.flatMap((t) => (t.utilities ? [t.utilities] : []))
       : [];
     fixtures.push(...cachedUtilities(utilityGroups));
+    fixtures.push(
+      ...cachedSeasonal(
+        seasonalGroups,
+        season,
+        (options.bounds[1] + options.bounds[3]) / 2,
+        buntingShown,
+      ),
+    );
+    festiveLamps = installationLamps(
+      fixtures.filter((f): f is InstallationFixture => f.kind === 'season-installation'),
+      camera.zoom,
+    );
+    festiveLightVersion++;
   };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
@@ -1055,11 +1296,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       view(),
       placement,
       fixtures,
-      host.latest()?.signalClock ?? 0,
+      lifeView()?.signalClock ?? 0,
       cellsDrawn,
       { time, strength: wind.strength },
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities}`;
+    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);
@@ -1082,7 +1323,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const key = on ? litNow().key : '';
     const shopsChanged = key !== shopsKey;
     shopsKey = key;
-    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) return;
+    if (!changed && !shopsChanged && !(on && cellsDrawn) && !beams && !beamsShown) {
+      effectClockPass(gl, targets);
+      return;
+    }
     lightPass(
       gl,
       targets,
@@ -1106,21 +1350,56 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
   let lastSun = -Infinity;
+  const updateSeason = () => {
+    const next = resolveCurrentSeason();
+    if (next === season) return;
+    lifeHover.clear();
+    season = next;
+    source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
+    seasonSnapshot = seasonState();
+    warmSeasonalPrograms();
+    host.invalidateFrame();
+    lifeAgents = [];
+    cellDirty = true;
+    cellsFor = null;
+    emit('seasonchange', seasonSnapshot);
+  };
+  let liveOccurrence: string | undefined;
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
+    updateSeason();
     // A procession under way by its schedule, when the map follows the real clock.
     let live: { id: string; progress: number } | undefined;
+    let occurrence: string | undefined;
+    let duration = 1;
     if (life.time === 'live') {
       for (const route of processions) {
-        const progress = liveProgress(route.schedule, now());
+        const date = now();
+        const progress = liveProgress(route.schedule, date);
         if (progress !== undefined) {
+          const local = cityTime(date, { ...zone, timezone: route.schedule.timezone });
+          occurrence = `${route.id}/${local.year}`;
+          duration = route.schedule.duration_min * 60;
           live = { id: route.id, progress };
           break;
         }
       }
     }
-    host.setLive(live?.id, live?.progress);
+    if (occurrence !== liveOccurrence) {
+      lifeHover.pointer(null);
+      livePause.reset();
+      liveOccurrence = occurrence;
+    }
+    if (live && occurrence)
+      live.progress = livePause.progress(
+        occurrence,
+        live.progress,
+        duration,
+        lifePause.pausedSeconds(at),
+      );
+    else livePause.reset();
+    host.setLive(live?.id, live?.progress, occurrence);
     // The moment the map shows: now, or today at the fixed time in the city.
     const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
@@ -1160,6 +1439,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hoverIndex = 0;
   const highlightIndices = new Uint32Array(MAX_HIGHLIGHT);
 
+  const selectedIndex = () => (selectedId ? source.indexOf(selectedId) : 0);
+
   const highlights = () => {
     let highlightCount = 0;
     for (const id of highlightedIds) {
@@ -1168,7 +1449,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     return {
       hover: hoverIndex,
-      selected: selectedId ? source.indexOf(selectedId) : 0,
+      selected: selectedIndex(),
       highlight: highlightIndices,
       highlightCount,
     };
@@ -1184,6 +1465,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let flight: Flight | null = null;
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
+    lifeHover.pointer(null);
     const now = performance.now();
     flight = startFlight(camera, target, limits, cssSize(), {
       reducedMotion,
@@ -1232,8 +1514,32 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
 
   let raf = 0;
+  const canWarmGlyphs = () =>
+    !destroyed &&
+    !lost &&
+    watch.watched() &&
+    !flight &&
+    performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
+  const warmSeasonalPrograms = (clocks = false) => {
+    if (!programs || lost || destroyed) return;
+    const seasonal =
+      !!season &&
+      ((!!season.lanterns && bandVisibility(SEASON_ZOOM.lanterns, camera.zoom) > 0) ||
+        (!!season.bunting && bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0) ||
+        (!!season.installations?.length &&
+          bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0));
+    prewarmGlyphPrograms(
+      gl,
+      programs,
+      canWarmGlyphs,
+      clocks,
+      seasonal,
+      !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
+    );
+  };
   const frame = (now: number) => {
     if (destroyed || lost) return;
+    lifePause.tick(now, lifeRunning());
     profiler?.begin(now);
     raf = requestAnimationFrame(frame);
     gpuTimer.poll();
@@ -1293,6 +1599,28 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
       const v = view();
+      if (!cellsDrawn) {
+        const relabeled = names.relabel(
+          gl,
+          targets,
+          themeRes,
+          v,
+          programs,
+          selectedIndex(),
+          hoverIndex,
+          labelGrid,
+        );
+        if (relabeled !== undefined) {
+          labelsForReport = relabeled;
+          speechGeometry++;
+        }
+      }
+      // Publish only the final overlay for this frame, including sub-cell visibility changes.
+      if (labelsForReport || labelVisibilityDirty) {
+        reportLabels(labelsForReport ?? names.inView(targets, v, labelGrid));
+        labelsForReport = undefined;
+        labelVisibilityDirty = false;
+      }
       const wind = worldWind(time);
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
@@ -1301,7 +1629,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         wind.strength > 0 &&
         hasCrowns(crownTiles) &&
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
-      if (placement && (cellsDrawn || swaying)) {
+      if (placement && (cellsDrawn || (swaying && animating))) {
         const crownStart = performance.now();
         crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
@@ -1345,8 +1673,25 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         lampShow(),
         moon,
         sun,
+        focus,
+        lifePause.time,
       );
       drawDirty = false;
+      fireworksPass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        grid,
+        labelGrid,
+        season?.fireworks,
+        time,
+        reducedMotion,
+        wind,
+        daylight,
+        fireworkSites,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
@@ -1378,9 +1723,40 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // Deliver reads after drawing and issuing prioritized picks/class queries so a slow
     // frame cannot consume freshly confirmed speech before it is published.
     readback.poll();
+    const raster = lifeRaster(targets);
+    if (lastDraw !== -Infinity) warmSeasonalPrograms(Boolean(raster?.candles));
+    lifeHover.update(
+      lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
+        ? {
+            targets,
+            generation: drawnLife?.generation,
+            grid: {
+              shiftX: grid.shiftX,
+              shiftY: grid.shiftY,
+              cellWidth: cellDev().w,
+              cellHeight: cellDev().h,
+            },
+            dpr,
+            geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            revision: raster.revision,
+            owners: raster.owners,
+            life: raster.life,
+            agents: lifeAgents,
+            labelsCover: (point) =>
+              labelsCoverPoint(targets!, point, dpr, {
+                shiftX: labelGrid.shiftX,
+                shiftY: labelGrid.shiftY,
+                cellWidth: view().labelDev.w,
+                cellHeight: view().labelDev.h,
+              }),
+          }
+        : null,
+      performance.now(),
+    );
     reportSpeech(performance.now());
     profiler?.end();
   };
+  if (season) warmSeasonalPrograms();
   raf = requestAnimationFrame(frame);
 
   // A lost context (GPU reset, too many contexts, a backgrounded mobile tab) takes every GPU
@@ -1389,11 +1765,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    names.clear();
+    reportLabels([]);
+    lifeHover.pointer(null);
+    lifePause.tick(performance.now(), false);
     speech.clear();
     canvas.style.cursor = '';
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
     cancelAnimationFrame(raf);
+    programs?.glyphWarmup?.cancel();
     programs = undefined;
     dropGlyphs(false);
     targets = undefined;
@@ -1413,9 +1794,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const onContextRestored = () => {
     if (!lost || destroyed) return;
     lost = false;
+    lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
     programs = createPrograms(gl);
+    if (season) warmSeasonalPrograms();
     gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
     tileCache.resume();
     // `resize` rebuilds the theme resources and render targets.
@@ -1431,14 +1814,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // agents carry on from where they stood.
   const watch = watchVisibility(canvas, (watched) => {
     resetQualitySamples();
-    if (watched) lastLifeStep = performance.now();
-    else speech.clear();
+    if (!watched) lifeHover.pointer(null);
+    lifePause.tick(performance.now(), watched && lifeActive() && !lost);
+    if (!watched) speech.clear();
   });
 
   /** Input moved the camera since the last frame: `camerachange` goes out once, from `frame`. */
   let cameraMoved = false;
   /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
   const applyCamera = (next: CameraState, batched = false) => {
+    lifeHover.pointer(null);
     speech.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
@@ -1463,6 +1848,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
     hover: (point) => {
+      lastPointerInput = performance.now();
+      lifeHover.pointer(flight ? null : point);
       pointerOver = point !== null;
       if (!point) canvas.style.cursor = '';
       if (point) {
@@ -1480,6 +1867,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   });
 
   return {
+    setFocus(input) {
+      const next = normalizeFocus(input);
+      if (next.key === focus.key) return;
+      focus = next;
+      drawDirty = true;
+    },
     setSpeech(enabled) {
       if (speechEnabled === enabled) return;
       speechEnabled = enabled;
@@ -1504,8 +1897,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       speech.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      lifeHover.pointer(null);
+      lifePause.tick(performance.now(), lifeRunning());
       if (enabled) host.clearTiles();
-      lastLifeStep = performance.now();
       lastSun = -Infinity;
       cellDirty = true;
       cellsFor = null;
@@ -1543,7 +1937,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
+      lifeHover.pointer(null);
+      if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       life = { ...life, ...settings };
+      updateSeason();
+      lifePause.tick(performance.now(), lifeRunning());
       speech.clear();
       if (!lifeActive()) host.clearTiles();
       lastSun = -Infinity;
@@ -1552,12 +1950,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsFor = null;
     },
     getLife: () => ({ ...life }),
+    getSeason: () => seasonSnapshot,
     playProcession(id) {
       if (!lifeActive() || !host.play(id)) return false;
+      lifeHover.pointer(null);
+      lastSun = -Infinity;
       drawDirty = true;
       return true;
     },
     stopProcession() {
+      lifeHover.pointer(null);
+      lastSun = -Infinity;
       host.stop();
       drawDirty = true;
     },
@@ -1565,6 +1968,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Phase 4: time filtering.
     },
     setTheme(name) {
+      lifeHover.pointer(null);
       theme = themes[name];
       uniforms = themeUniforms(theme);
       // `resize` builds the new theme's glyphs (on restore, while the context is lost).
@@ -1581,6 +1985,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      names.clear();
+      lifeHover.pointer(null);
       speech.clear();
       host.dispose();
       destroyed = true;

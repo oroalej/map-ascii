@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-hope-christian-school",
+  "osm_id": "osm:way/276457437",
+  "name": {
+    "en": "Naga Hope Christian School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/276457437",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

@@ -2,8 +2,178 @@ import { describe, expect, it } from 'vitest';
 import { legendEntries } from './legend';
 import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
+import { classId } from './classes';
+import { normalizeFocus } from './focus';
+import { themes } from './theme';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('labels atmospheric fireworks independently of Life and removes them below their zoom or in another season', () => {
+  const season = {
+    id: 'new-year',
+    title: 'New Year',
+    status: 'draft' as const,
+    labels: { fireworks: 'Fireworks and smoke' },
+  };
+  for (const theme of ['dark', 'light'] as const) {
+    const entry = legendEntries(theme, 7, [], { life: false, season }).find(
+      (e) => e.id === 'info:season-fireworks',
+    );
+    expect(entry).toMatchObject({ classes: [], label: 'Fireworks and smoke (illustrative)' });
+    for (const zoom of [7, 16, 19.99, 20, 20.999])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(true);
+    for (const zoom of [6, 21])
+      expect(
+        legendEntries(theme, zoom, [], { season }).some((e) => e.id === 'info:season-fireworks'),
+      ).toBe(false);
+    expect(
+      legendEntries(theme, 19, [], { season: null }).some((e) => e.id === 'info:season-fireworks'),
+    ).toBe(false);
+  }
+});
+it('names visible installations with Life off and drops the entry after leaving the site or season', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { installations: 'Christmas trees and lights' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: false, bunting: false, installations: true },
+  };
+  for (const theme of ['dark', 'light'] as const)
+    expect(
+      legendEntries(theme, 20, ['park'], { season, fixtures, life: false }).find(
+        (e) => e.id === 'info:season-installations',
+      )?.label,
+    ).toBe('Christmas trees and lights (illustrative)');
+  expect(
+    legendEntries('dark', 20, ['park'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { ...fixtures.seasonal, installations: false } },
+    }).some((e) => e.id === 'info:season-installations'),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['park'], { fixtures }).some(
+      (e) => e.id === 'info:season-installations',
+    ),
+  ).toBe(false);
+});
+it('reports seasonal hardware with Life off and temporary vendors only where paths can support them', () => {
+  const season = {
+    id: 'winter',
+    title: 'Winter',
+    status: 'draft' as const,
+    labels: { lanterns: 'Parols', bunting: 'Pennants', stalls: 'Fair carts' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: true, bunting: true },
+  };
+  const entries = legendEntries('dark', 20, ['path'], { season, fixtures, life: false });
+  expect(entries.filter((e) => e.id.startsWith('info:season-')).map((e) => e.id)).toEqual([
+    'info:season-lanterns',
+    'info:season-bunting',
+  ]);
+  expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
+  for (const entry of entries.filter((e) => e.id.startsWith('info:season-')))
+    expect(entry.focus).toBeUndefined();
+  expect(
+    entries.filter((e) => e.id.startsWith('info:season-')).every((e) => e.classes.length === 0),
+  ).toBe(true);
+  expect(
+    legendEntries('light', 20, ['path'], { season, fixtures, life: true }).find(
+      (e) => e.id === 'info:season-stalls',
+    )?.label,
+  ).toBe('Fair carts (simulated)');
+  expect(
+    legendEntries('dark', 20, ['water_river'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 16, ['path'], { season, life: true }).some(
+      (e) => e.id === 'info:season-stalls',
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 20, ['path'], {
+      season,
+      fixtures: { ...fixtures, seasonal: { lanterns: false, bunting: false } },
+    }).some((e) => e.id.startsWith('info:season-')),
+  ).toBe(false);
+});
+
+it('merges visible hospital roofs and markers into a distinct, focusable category in both themes', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    for (const present of [
+      ['building_hospital'],
+      ['marker_hospital'],
+      ['building_hospital', 'marker_hospital'],
+    ] as const) {
+      const entries = legendEntries(theme, 19, ['building', ...present]);
+      const hospital = entries.find((e) => e.id === 'class:building_hospital')!;
+      expect(hospital.label).toBe('Hospital');
+      expect(hospital.classes).toEqual([...present]);
+      const { mask } = normalizeFocus(hospital.focus!);
+      for (const cls of present) {
+        const id = classId(cls);
+        expect((mask[id >>> 5]! >>> (id & 31)) & 1).toBe(1);
+      }
+      const generic = classId('building');
+      expect((mask[generic >>> 5]! >>> (generic & 31)) & 1).toBe(0);
+      expect(hospital.color).not.toBe(entries.find((e) => e.id === 'class:building')!.color);
+      if (present.some((cls) => cls === 'marker_hospital')) expect(hospital.glyphs).toContain('+');
+    }
+    expect(themes[theme].styles.marker_hospital!.color).toBe(
+      themes[theme].styles.building_hospital!.color,
+    );
+    expect(legendEntries(theme, 19, ['building']).some((e) => e.label === 'Hospital')).toBe(false);
+    expect(legendEntries(theme, 12, ['marker_hospital']).some((e) => e.label === 'Hospital')).toBe(
+      false,
+    );
+  }
+});
+
+it('keeps category identity through themes, class membership and changing explanatory wording', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    for (const classes of [
+      ['marker_school'],
+      ['building_school'],
+      ['building_school', 'marker_school'],
+    ] as const) {
+      const school = legendEntries(theme, 19, classes).find(
+        (e) => e.id === 'class:building_school',
+      );
+      expect(school?.label).toBe('School');
+      expect(school?.classes).toEqual([...classes]);
+    }
+    for (const sidewalksDerived of [true, false]) {
+      const entries = legendEntries(theme, 20, undefined, {
+        life: true,
+        sidewalksDerived,
+        fixtures: {
+          streetlights: true,
+          trafficSignals: true,
+          utilities: true,
+        },
+      });
+      expect(entries.find((e) => e.id === 'info:sidewalks')?.label).toBe(
+        sidewalksDerived ? 'Sidewalks (partly derived)' : 'Sidewalks (mapped)',
+      );
+      expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
+      expect(entries.find((e) => e.id === 'class:tree')?.classes).toEqual(
+        expect.arrayContaining(['tree', 'tree_crown']),
+      );
+      expect(entries.find((e) => e.id === 'class:building_market')?.label).toBe('Market or shop');
+      expect(entries.find((e) => e.id === 'class:marker_market')?.label).toBe('Market');
+    }
+  }
+});
 
 it('describes utilities with Life off, only when reported, and switches glyphs at 19.5', () => {
   const entry = (zoom: number, utilities?: boolean) =>

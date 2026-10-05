@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-city-peoples-mall",
+  "osm_id": "osm:way/23674855",
+  "name": {
+    "en": "Naga City People's Mall"
+  },
+  "type": "market",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23674855",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

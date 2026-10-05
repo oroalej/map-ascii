@@ -17,6 +17,7 @@ import type { VisibleAgent } from './simulate';
 import { VEHICLES, type CraftType } from './vehicles';
 import { BRAKE_POOL } from './lamps';
 import { hasTurnSignals } from './turn-signals';
+import { ORDINARY_CLOCK } from './effect-clocks';
 
 /**
  * What lights a cell: a streetlight lit, out, or flickering; a vehicle's headlight `beam`, a
@@ -132,6 +133,8 @@ function pool(
   ry: number,
   strength: number,
   g: number,
+  clocks?: (cell: number, token: number) => void,
+  clock = ORDINARY_CLOCK,
 ) {
   const { cols, rows } = grid;
   const c0 = Math.max(0, Math.floor(cx - rx) - 1);
@@ -147,6 +150,7 @@ function pool(
       if (d >= 1) {
         if (!head && out[at + 3] === 0) {
           out[at + 1] = g;
+          clocks?.(at / 4, clock);
           out[at + 3] = 255;
         }
         continue;
@@ -157,6 +161,7 @@ function pool(
       out[at] = value;
       if (head) continue;
       out[at + 1] = g;
+      clocks?.(at / 4, clock);
       out[at + 3] = 255;
     }
   }
@@ -507,6 +512,7 @@ export function packCandles(
   grid: LightGrid,
   agents: readonly VisibleAgent[],
   cellsPerMeter: number,
+  clocks?: (cell: number, token: number) => void,
 ): number {
   // At least a cell and a half, so a crowd's candles still read zoomed out.
   const radius = Math.max(1.5, CANDLE.radius * cellsPerMeter);
@@ -519,9 +525,20 @@ export function packCandles(
     const [cx, cy] = grid.toCell(agent.lng, agent.lat);
     if (cx < -r || cy < -r || cx > grid.cols + r || cy > grid.rows + r) return;
     if (agent.candle) {
-      pool(out, grid, cx, cy, r, r, CANDLE.strength, lightByte(LampState.candle, i));
+      pool(
+        out,
+        grid,
+        cx,
+        cy,
+        r,
+        r,
+        CANDLE.strength,
+        lightByte(LampState.candle, agent.candleSeed ?? i),
+        clocks,
+        agent.effectClock ?? ORDINARY_CLOCK,
+      );
     } else {
-      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i));
+      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i), clocks);
     }
     lit++;
   });

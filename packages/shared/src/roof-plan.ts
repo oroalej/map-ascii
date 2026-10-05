@@ -97,6 +97,7 @@ export const ROOF_BUILDING_CLASSES: readonly AtlasClass[] = [
   'building',
   'building_religious',
   'building_school',
+  'building_hospital',
   'building_market',
   'building_station',
 ];

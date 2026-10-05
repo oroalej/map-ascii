@@ -1,0 +1,167 @@
+{
+  "id": "landcover/sta-cruz-elementary-school",
+  "title": "Sta. Cruz Elementary School planting",
+  "trees": [
+    {
+      "at": [123.181805979, 13.626918541],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181887362, 13.626923254],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181989201, 13.626911472],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182108013, 13.626909115],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.18222925, 13.626916185],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182304417, 13.626873768],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182301992, 13.626737092],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.18227532, 13.626581563],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181804921, 13.62658392],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181787948, 13.62671117],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181785523, 13.626803959],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181792797, 13.626237516],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181807346, 13.626114979],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181817045, 13.625980659],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182061943, 13.626195099],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182047395, 13.625999511],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182037696, 13.625853408],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.181780673, 13.625855765],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.182202578, 13.625881686],
+      "crown_m": 8,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "grass",
+      "ring": [
+        [123.182277745, 13.626517938],
+        [123.181812195, 13.626529721],
+        [123.181819469, 13.626902046],
+        [123.182265621, 13.626887907],
+        [123.182277745, 13.626517938]
+      ]
+    },
+    {
+      "cover": "grass",
+      "ring": [
+        [123.182035271, 13.625933529],
+        [123.181819469, 13.625924103],
+        [123.181817045, 13.626249298],
+        [123.182054669, 13.626249298],
+        [123.182035271, 13.625933529]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.181865539, 13.62654386],
+        [123.181829168, 13.62654386],
+        [123.181834018, 13.626866699],
+        [123.181870389, 13.626866699],
+        [123.181865539, 13.62654386]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.182268046, 13.626520295],
+        [123.182226825, 13.626539147],
+        [123.1822341, 13.626871412],
+        [123.182272895, 13.626871412],
+        [123.182268046, 13.626520295]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.182049819, 13.625926459],
+        [123.182015873, 13.625931172],
+        [123.182025572, 13.626239872],
+        [123.182061943, 13.626239872],
+        [123.182049819, 13.625926459]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/relation/15353667",
+      "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+    },
+    {
+      "title": "Owner-supplied memorial and school enhancement references",
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+    }
+  ]
+}

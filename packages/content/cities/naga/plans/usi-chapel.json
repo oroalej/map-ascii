@@ -1,0 +1,46 @@
+{
+  "id": "plan/usi-chapel",
+  "osm_id": "osm:way/486772546",
+  "title": "St. Elizabeth of Hungary Chapel",
+  "front": "n",
+  "parts": [
+    {
+      "kind": "tier",
+      "shape": "circle",
+      "size_m": 15,
+      "height_m": 16,
+      "at": {
+        "along": 0,
+        "across": 0
+      }
+    },
+    {
+      "kind": "tower",
+      "shape": "circle",
+      "size_m": 3,
+      "height_m": 21,
+      "at": {
+        "along": 0,
+        "across": 0
+      }
+    }
+  ],
+  "status": "draft",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/276457427",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://www.usi.edu.ph/_files/ugd/48eaaf_591c22c5c2e843efab8fe37e9d947a5a.pdf",
+      "note": "Official independent illustrated campus map identifies the chapel and courtyard facilities. Small paved chapel approach and seats are schematic; preserve existing landcover order. OSM boundary includes Naga Central School I: no detail is added to that northern section. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
+    },
+    {
+      "title": "Universidad de Sta. Isabel de Naga: chapel description",
+      "url": "https://en.wikipedia.org/wiki/Universidad_de_Sta._Isabel_de_Naga",
+      "note": "Describes the circular chapel with a tall conical roof. Dimensions and center are schematic estimates on the actual OSM standing chapel, not on the campus grounds."
+    }
+  ]
+}

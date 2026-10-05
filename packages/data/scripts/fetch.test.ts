@@ -3,11 +3,29 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeResponses,
   neighborhoodQuery,
+  groundsQuery,
+  poolsQuery,
   railQuery,
   regionQueries,
   splitBbox,
   trafficQuery,
 } from './01-fetch';
+
+it('fetches recreation grounds and their member geometry in a separate bounded query', () => {
+  const query = groundsQuery('1,2,3,4');
+  expect(query).toContain('[bbox:1,2,3,4]');
+  expect(query).toContain('nwr["landuse"="recreation_ground"]');
+  expect(query).toContain('out body; >; out skel qt;');
+  expect(query).not.toContain('shop');
+});
+
+it('fetches pool footprints independently without requiring natural-water tags', () => {
+  const query = poolsQuery('1,2,3,4');
+  expect(query).toContain('[bbox:1,2,3,4]');
+  expect(query).toContain('nwr["leisure"="swimming_pool"]');
+  expect(query).toContain('out body; >; out skel qt;');
+  expect(query).not.toContain('["natural"');
+});
 
 it('fetches commerce and neighborhood vegetation without commercial land-use zones', () => {
   const q = neighborhoodQuery('1,2,3,4');
@@ -18,6 +36,7 @@ it('fetches commerce and neighborhood vegetation without commercial land-use zon
     'dentist',
     'scrub|heath',
     'orchard|plant_nursery|cemetery',
+    'nwr["amenity"="grave_yard"]',
     '[bbox:1,2,3,4]',
   ])
     expect(q).toContain(tag);

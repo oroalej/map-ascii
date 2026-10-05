@@ -1,0 +1,99 @@
+{
+  "id": "detail/naga-city-hall",
+  "osm_id": "osm:way/23669724",
+  "title": "Naga City Hall",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "front-step",
+      "ring": [
+        [123.19878580850853, 13.62627951006241],
+        [123.19886008363538, 13.626199449686982],
+        [123.19886557557524, 13.62620426198743],
+        [123.19879130044839, 13.626284322362858],
+        [123.19878580850853, 13.62627951006241]
+      ],
+      "height_m": 0.15,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "flagpoles": [
+    {
+      "osm_id": "osm:node/13982296650",
+      "at": [123.198929, 13.6263339],
+      "flag": "PH"
+    }
+  ],
+  "walks": [],
+  "seating": [
+    {
+      "id": "front-bench",
+      "line": [
+        [123.19888256, 13.62630741],
+        [123.1989073, 13.62633411]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Naga City Hall — Reference: Ralff Nestor Nacor, April 2024, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/23669724",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://commons.wikimedia.org/wiki/File:Naga_City_Hall,_Apr_2024.jpg",
+      "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
+    },
+    {
+      "title": "Draft surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a draft estimate."
+    },
+    {
+      "title": "Owner-supplied City Hall overhead, seven-site follow-up",
+      "note": "Reference inspected 2026-10-02; imagery date unknown. Draft visual envelope extends to the supplied monument court, south frontage and adjoining planting; original mapped building, drives and earlier detail structures remain unchanged. This envelope is not a cadastral boundary."
+    }
+  ],
+  "grounds": [
+    [123.198853011, 13.625694032],
+    [123.198623207, 13.625742317],
+    [123.198328809, 13.626081108],
+    [123.198266295, 13.626155284],
+    [123.198238958, 13.626190058],
+    [123.198231986, 13.62625058],
+    [123.198231986, 13.626286909],
+    [123.198467916, 13.626547647],
+    [123.198468012, 13.62654775],
+    [123.198468119, 13.626547845],
+    [123.198613449, 13.626671152],
+    [123.198613588, 13.626671252],
+    [123.198613744, 13.626671342],
+    [123.198613882, 13.626671406],
+    [123.198745801, 13.62672655],
+    [123.198745956, 13.626726604],
+    [123.198746132, 13.626726647],
+    [123.198746312, 13.626726673],
+    [123.198746493, 13.626726682],
+    [123.198746674, 13.626726673],
+    [123.198746854, 13.626726647],
+    [123.19874701, 13.626726609],
+    [123.198960061, 13.626662931],
+    [123.199358106, 13.626366055],
+    [123.199323051, 13.626189051],
+    [123.199323012, 13.626188898],
+    [123.199322951, 13.626188732],
+    [123.199322873, 13.626188573],
+    [123.199322786, 13.626188432],
+    [123.199069174, 13.625836814],
+    [123.198890421, 13.625694032],
+    [123.198853011, 13.625694032]
+  ]
+}

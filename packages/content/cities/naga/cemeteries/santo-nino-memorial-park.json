@@ -1,0 +1,1892 @@
+{
+  "id": "cemetery/santo-nino-memorial-park",
+  "osm_id": "osm:way/226828495",
+  "title": "Santo Niño cemetery",
+  "rows": [
+    {
+      "id": "northwest-tip-01",
+      "line": [
+        [123.199492, 13.63544606],
+        [123.19984182, 13.6355367]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-tip-02",
+      "line": [
+        [123.19950712, 13.63548575],
+        [123.19982394, 13.63556783]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-tip-03",
+      "line": [
+        [123.19952224, 13.63552543],
+        [123.19980606, 13.63559896]
+      ],
+      "count": 12,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-tip-04",
+      "line": [
+        [123.19953736, 13.63556511],
+        [123.19978818, 13.6356301]
+      ],
+      "count": 11,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-tip-05",
+      "line": [
+        [123.19955248, 13.6356048],
+        [123.1997703, 13.63566123]
+      ],
+      "count": 10,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-tip-06",
+      "line": [
+        [123.1995676, 13.63564448],
+        [123.19975242, 13.63569236]
+      ],
+      "count": 8,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-01",
+      "line": [
+        [123.19972542, 13.63448331],
+        [123.20011631, 13.63459733]
+      ],
+      "count": 17,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-02",
+      "line": [
+        [123.19971856, 13.63452137],
+        [123.20010432, 13.63463389]
+      ],
+      "count": 17,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-03",
+      "line": [
+        [123.19971171, 13.63455942],
+        [123.20009233, 13.63467044]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-04",
+      "line": [
+        [123.19970486, 13.63459748],
+        [123.20008035, 13.634707]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-05",
+      "line": [
+        [123.19969801, 13.63463553],
+        [123.20006836, 13.63474356]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-06",
+      "line": [
+        [123.19969116, 13.63467358],
+        [123.20005637, 13.63478011]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-07",
+      "line": [
+        [123.1996843, 13.63471164],
+        [123.20004438, 13.63481667]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-08",
+      "line": [
+        [123.19967745, 13.63474969],
+        [123.20003239, 13.63485322]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-09",
+      "line": [
+        [123.1996706, 13.63478775],
+        [123.2000204, 13.63488978]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-10",
+      "line": [
+        [123.19966375, 13.6348258],
+        [123.20000841, 13.63492634]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-11",
+      "line": [
+        [123.19965689, 13.63486386],
+        [123.19999642, 13.63496289]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-12",
+      "line": [
+        [123.19965004, 13.63490191],
+        [123.19998444, 13.63499945]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-13",
+      "line": [
+        [123.19964319, 13.63493997],
+        [123.19997245, 13.635036]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-14",
+      "line": [
+        [123.19963634, 13.63497802],
+        [123.19996046, 13.63507256]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-15",
+      "line": [
+        [123.19962949, 13.63501607],
+        [123.19994847, 13.63510912]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-16",
+      "line": [
+        [123.19962263, 13.63505413],
+        [123.19993648, 13.63514567]
+      ],
+      "count": 14,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-17",
+      "line": [
+        [123.19961578, 13.63509218],
+        [123.19992449, 13.63518223]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-18",
+      "line": [
+        [123.19960893, 13.63513024],
+        [123.1999125, 13.63521879]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-19",
+      "line": [
+        [123.19960208, 13.63516829],
+        [123.19990052, 13.63525534]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-20",
+      "line": [
+        [123.19959523, 13.63520635],
+        [123.19988853, 13.6352919]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-21",
+      "line": [
+        [123.19958837, 13.6352444],
+        [123.19987654, 13.63532845]
+      ],
+      "count": 13,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-22",
+      "line": [
+        [123.19958152, 13.63528245],
+        [123.19986455, 13.63536501]
+      ],
+      "count": 12,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-west-23",
+      "line": [
+        [123.19957467, 13.63532051],
+        [123.19985256, 13.63540157]
+      ],
+      "count": 12,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-01",
+      "line": [
+        [123.20034871, 13.63452855],
+        [123.20036065, 13.63452263]
+      ],
+      "count": 1,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-02",
+      "line": [
+        [123.20033305, 13.63456524],
+        [123.2003952, 13.63453442]
+      ],
+      "count": 3,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-03",
+      "line": [
+        [123.20031739, 13.63460194],
+        [123.20042974, 13.63454621]
+      ],
+      "count": 6,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-04",
+      "line": [
+        [123.20030172, 13.63463863],
+        [123.20046429, 13.634558]
+      ],
+      "count": 8,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-05",
+      "line": [
+        [123.20028606, 13.63467532],
+        [123.20049884, 13.63456979]
+      ],
+      "count": 10,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-06",
+      "line": [
+        [123.20027039, 13.63471201],
+        [123.20053339, 13.63458158]
+      ],
+      "count": 12,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-07",
+      "line": [
+        [123.20025473, 13.63474871],
+        [123.20056794, 13.63459337]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-08",
+      "line": [
+        [123.20023906, 13.6347854],
+        [123.20060249, 13.63460516]
+      ],
+      "count": 17,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-09",
+      "line": [
+        [123.2002234, 13.63482209],
+        [123.20063704, 13.63461695]
+      ],
+      "count": 19,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-10",
+      "line": [
+        [123.20020773, 13.63485878],
+        [123.20067158, 13.63462874]
+      ],
+      "count": 21,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-11",
+      "line": [
+        [123.20019207, 13.63489548],
+        [123.20070613, 13.63464053]
+      ],
+      "count": 24,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-12",
+      "line": [
+        [123.2001764, 13.63493217],
+        [123.20074068, 13.63465232]
+      ],
+      "count": 26,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-13",
+      "line": [
+        [123.20016074, 13.63496886],
+        [123.20077523, 13.63466411]
+      ],
+      "count": 28,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-14",
+      "line": [
+        [123.20014507, 13.63500555],
+        [123.20080978, 13.63467589]
+      ],
+      "count": 30,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-15",
+      "line": [
+        [123.20012941, 13.63504225],
+        [123.20084433, 13.63468768]
+      ],
+      "count": 33,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-16",
+      "line": [
+        [123.20011375, 13.63507894],
+        [123.20087888, 13.63469947]
+      ],
+      "count": 35,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-17",
+      "line": [
+        [123.20009808, 13.63511563],
+        [123.20091343, 13.63471126]
+      ],
+      "count": 37,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-18",
+      "line": [
+        [123.20008242, 13.63515233],
+        [123.20094797, 13.63472305]
+      ],
+      "count": 39,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-19",
+      "line": [
+        [123.20006675, 13.63518902],
+        [123.20098252, 13.63473484]
+      ],
+      "count": 42,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-20",
+      "line": [
+        [123.20005109, 13.63522571],
+        [123.20101707, 13.63474663]
+      ],
+      "count": 44,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-21",
+      "line": [
+        [123.20003542, 13.6352624],
+        [123.20105162, 13.63475842]
+      ],
+      "count": 46,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-22",
+      "line": [
+        [123.20001976, 13.6352991],
+        [123.20095209, 13.63483671]
+      ],
+      "count": 42,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-23",
+      "line": [
+        [123.20000409, 13.63533579],
+        [123.20076992, 13.63495598]
+      ],
+      "count": 35,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-24",
+      "line": [
+        [123.19998843, 13.63537248],
+        [123.20058776, 13.63507524]
+      ],
+      "count": 27,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-25",
+      "line": [
+        [123.19997276, 13.63540917],
+        [123.20040559, 13.63519451]
+      ],
+      "count": 20,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-east-26",
+      "line": [
+        [123.1999571, 13.63544587],
+        [123.20022343, 13.63531378]
+      ],
+      "count": 12,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-01",
+      "line": [
+        [123.19994741, 13.63422805],
+        [123.20029701, 13.63429637]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-02",
+      "line": [
+        [123.1999377, 13.63425787],
+        [123.20101549, 13.63446849]
+      ],
+      "count": 45,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-03",
+      "line": [
+        [123.19992799, 13.6342877],
+        [123.20125421, 13.63454687]
+      ],
+      "count": 55,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-04",
+      "line": [
+        [123.19991828, 13.63431752],
+        [123.20123052, 13.63457396]
+      ],
+      "count": 54,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-05",
+      "line": [
+        [123.19990857, 13.63434734],
+        [123.20120683, 13.63460105]
+      ],
+      "count": 54,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northwest-south-06",
+      "line": [
+        [123.19989886, 13.63437717],
+        [123.20118314, 13.63462814]
+      ],
+      "count": 53,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "northeast-north-01",
+      "line": [
+        [123.20254446, 13.63652613],
+        [123.20267199, 13.63657003]
+      ],
+      "count": 5,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-north-02",
+      "line": [
+        [123.20220223, 13.63645067],
+        [123.20263362, 13.63659917]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-north-03",
+      "line": [
+        [123.20212504, 13.63646645],
+        [123.20259524, 13.63662832]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-north-04",
+      "line": [
+        [123.20209568, 13.6364987],
+        [123.20255687, 13.63665746]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-north-05",
+      "line": [
+        [123.20206633, 13.63653094],
+        [123.20251849, 13.6366866]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-01",
+      "line": [
+        [123.20211616, 13.63506468],
+        [123.20251998, 13.63521971]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-02",
+      "line": [
+        [123.2020321, 13.63507629],
+        [123.20251084, 13.63526008]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-03",
+      "line": [
+        [123.20203217, 13.63512019],
+        [123.2025017, 13.63530045]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-04",
+      "line": [
+        [123.20203224, 13.6351641],
+        [123.20249257, 13.63534082]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-05",
+      "line": [
+        [123.20203231, 13.63520801],
+        [123.20248343, 13.63538119]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-06",
+      "line": [
+        [123.20203238, 13.63525191],
+        [123.2024743, 13.63542157]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-07",
+      "line": [
+        [123.20203245, 13.63529582],
+        [123.20246516, 13.63546194]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-08",
+      "line": [
+        [123.20203252, 13.63533973],
+        [123.20245602, 13.63550231]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-09",
+      "line": [
+        [123.20203259, 13.63538363],
+        [123.20244689, 13.63554268]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-10",
+      "line": [
+        [123.20203266, 13.63542754],
+        [123.20243775, 13.63558306]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-11",
+      "line": [
+        [123.20203273, 13.63547144],
+        [123.20242862, 13.63562343]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-12",
+      "line": [
+        [123.2020328, 13.63551535],
+        [123.20241948, 13.6356638]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-13",
+      "line": [
+        [123.20203287, 13.63555926],
+        [123.20241034, 13.63570417]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-14",
+      "line": [
+        [123.20203294, 13.63560316],
+        [123.20240121, 13.63574455]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-15",
+      "line": [
+        [123.20203301, 13.63564707],
+        [123.20239207, 13.63578492]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-16",
+      "line": [
+        [123.20203308, 13.63569098],
+        [123.20238294, 13.63582529]
+      ],
+      "count": 14,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-17",
+      "line": [
+        [123.20203314, 13.63573488],
+        [123.2023738, 13.63586566]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-18",
+      "line": [
+        [123.20203321, 13.63577879],
+        [123.20236466, 13.63590604]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-19",
+      "line": [
+        [123.20203328, 13.6358227],
+        [123.20235553, 13.63594641]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-20",
+      "line": [
+        [123.20203335, 13.6358666],
+        [123.20234639, 13.63598678]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-21",
+      "line": [
+        [123.20203342, 13.63591051],
+        [123.20233726, 13.63602715]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-22",
+      "line": [
+        [123.20203349, 13.63595442],
+        [123.20232812, 13.63606752]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-23",
+      "line": [
+        [123.20203356, 13.63599832],
+        [123.20231898, 13.6361079]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-24",
+      "line": [
+        [123.20203363, 13.63604223],
+        [123.20230985, 13.63614827]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-25",
+      "line": [
+        [123.2020337, 13.63608614],
+        [123.20230071, 13.63618864]
+      ],
+      "count": 11,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-26",
+      "line": [
+        [123.20203377, 13.63613004],
+        [123.20229158, 13.63622901]
+      ],
+      "count": 10,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-27",
+      "line": [
+        [123.20203384, 13.63617395],
+        [123.20228244, 13.63626939]
+      ],
+      "count": 10,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-28",
+      "line": [
+        [123.20203391, 13.63621785],
+        [123.2022733, 13.63630976]
+      ],
+      "count": 9,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-29",
+      "line": [
+        [123.20203398, 13.63626176],
+        [123.20226417, 13.63635013]
+      ],
+      "count": 9,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-west-30",
+      "line": [
+        [123.20203405, 13.63630567],
+        [123.20225503, 13.6363905]
+      ],
+      "count": 9,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-01",
+      "line": [
+        [123.20269652, 13.63509972],
+        [123.20273872, 13.63509457]
+      ],
+      "count": 2,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-02",
+      "line": [
+        [123.20268724, 13.63514303],
+        [123.20286521, 13.6351213]
+      ],
+      "count": 7,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-03",
+      "line": [
+        [123.20267796, 13.63518634],
+        [123.20299169, 13.63514804]
+      ],
+      "count": 12,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-04",
+      "line": [
+        [123.20266868, 13.63522965],
+        [123.20311818, 13.63517478]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-05",
+      "line": [
+        [123.2026594, 13.63527296],
+        [123.20324467, 13.63520152]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-06",
+      "line": [
+        [123.20265012, 13.63531627],
+        [123.20325414, 13.63524254]
+      ],
+      "count": 22,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-07",
+      "line": [
+        [123.20264084, 13.63535959],
+        [123.20323729, 13.63528678]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-08",
+      "line": [
+        [123.20263156, 13.6354029],
+        [123.20322045, 13.63533101]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-09",
+      "line": [
+        [123.20262228, 13.63544621],
+        [123.2032036, 13.63537524]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-10",
+      "line": [
+        [123.202613, 13.63548952],
+        [123.20318676, 13.63541948]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-11",
+      "line": [
+        [123.20260372, 13.63553283],
+        [123.20316991, 13.63546371]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-12",
+      "line": [
+        [123.20259444, 13.63557614],
+        [123.20315306, 13.63550795]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-13",
+      "line": [
+        [123.20258516, 13.63561945],
+        [123.20313622, 13.63555218]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-14",
+      "line": [
+        [123.20257588, 13.63566276],
+        [123.20311937, 13.63559642]
+      ],
+      "count": 20,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-15",
+      "line": [
+        [123.2025666, 13.63570608],
+        [123.20310253, 13.63564065]
+      ],
+      "count": 19,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-16",
+      "line": [
+        [123.20255732, 13.63574939],
+        [123.20308568, 13.63568489]
+      ],
+      "count": 19,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-17",
+      "line": [
+        [123.20254803, 13.6357927],
+        [123.20306884, 13.63572912]
+      ],
+      "count": 19,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-18",
+      "line": [
+        [123.20253875, 13.63583601],
+        [123.20305199, 13.63577336]
+      ],
+      "count": 19,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-19",
+      "line": [
+        [123.20252947, 13.63587932],
+        [123.20303515, 13.63581759]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-20",
+      "line": [
+        [123.20252019, 13.63592263],
+        [123.2030183, 13.63586183]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-21",
+      "line": [
+        [123.20251091, 13.63596594],
+        [123.20300146, 13.63590606]
+      ],
+      "count": 18,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-22",
+      "line": [
+        [123.20250163, 13.63600926],
+        [123.20298461, 13.6359503]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-23",
+      "line": [
+        [123.20249235, 13.63605257],
+        [123.20296777, 13.63599453]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-24",
+      "line": [
+        [123.20248307, 13.63609588],
+        [123.20295092, 13.63603877]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-25",
+      "line": [
+        [123.20247379, 13.63613919],
+        [123.20293407, 13.636083]
+      ],
+      "count": 17,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-26",
+      "line": [
+        [123.20246451, 13.6361825],
+        [123.20291723, 13.63612724]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-27",
+      "line": [
+        [123.20245523, 13.63622581],
+        [123.20290038, 13.63617147]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-28",
+      "line": [
+        [123.20244595, 13.63626912],
+        [123.20288354, 13.63621571]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-29",
+      "line": [
+        [123.20243667, 13.63631243],
+        [123.20286669, 13.63625994]
+      ],
+      "count": 16,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-30",
+      "line": [
+        [123.20242739, 13.63635575],
+        [123.20284985, 13.63630418]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-east-31",
+      "line": [
+        [123.20241811, 13.63639906],
+        [123.202833, 13.63634841]
+      ],
+      "count": 15,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-south-01",
+      "line": [
+        [123.20207563, 13.63476465],
+        [123.20217872, 13.63477964]
+      ],
+      "count": 4,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-south-02",
+      "line": [
+        [123.20205326, 13.63481253],
+        [123.20241371, 13.63486494]
+      ],
+      "count": 13,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-south-03",
+      "line": [
+        [123.20203089, 13.63486042],
+        [123.20262043, 13.63494613]
+      ],
+      "count": 21,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "northeast-south-04",
+      "line": [
+        [123.20200852, 13.6349083],
+        [123.20260376, 13.63499484]
+      ],
+      "count": 22,
+      "kind": "vault",
+      "width_m": 2.3,
+      "length_m": 2.5,
+      "height_m": 2.2
+    },
+    {
+      "id": "balatas-west-01",
+      "line": [
+        [123.19959165, 13.63366621],
+        [123.19980064, 13.63371747]
+      ],
+      "count": 8,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-02",
+      "line": [
+        [123.19960327, 13.63371033],
+        [123.20025084, 13.63386918]
+      ],
+      "count": 22,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-03",
+      "line": [
+        [123.19961488, 13.63375446],
+        [123.20070104, 13.63402089]
+      ],
+      "count": 37,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-04",
+      "line": [
+        [123.1996265, 13.63379858],
+        [123.20115124, 13.6341726]
+      ],
+      "count": 52,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-05",
+      "line": [
+        [123.19963811, 13.63384271],
+        [123.20126292, 13.63424127]
+      ],
+      "count": 55,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-06",
+      "line": [
+        [123.19964973, 13.63388683],
+        [123.20125022, 13.63427943]
+      ],
+      "count": 55,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-07",
+      "line": [
+        [123.19966134, 13.63393096],
+        [123.20123751, 13.63431759]
+      ],
+      "count": 54,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-west-08",
+      "line": [
+        [123.19967296, 13.63397508],
+        [123.2012248, 13.63435575]
+      ],
+      "count": 53,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-01",
+      "line": [
+        [123.20199489, 13.63421112],
+        [123.20226965, 13.6342628]
+      ],
+      "count": 10,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-02",
+      "line": [
+        [123.20198458, 13.63424562],
+        [123.20281335, 13.6344015]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-03",
+      "line": [
+        [123.20197427, 13.63428011],
+        [123.20280492, 13.63443635]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-04",
+      "line": [
+        [123.20196395, 13.63431461],
+        [123.2027965, 13.63447121]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-05",
+      "line": [
+        [123.20195364, 13.6343491],
+        [123.20278808, 13.63450606]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-06",
+      "line": [
+        [123.20194333, 13.6343836],
+        [123.20277965, 13.63454091]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-07",
+      "line": [
+        [123.20193301, 13.6344181],
+        [123.20277123, 13.63457576]
+      ],
+      "count": 28,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-08",
+      "line": [
+        [123.2019227, 13.63445259],
+        [123.2027628, 13.63461061]
+      ],
+      "count": 29,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-09",
+      "line": [
+        [123.20191239, 13.63448709],
+        [123.20275438, 13.63464546]
+      ],
+      "count": 29,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-centre-10",
+      "line": [
+        [123.20190207, 13.63452158],
+        [123.20274595, 13.63468031]
+      ],
+      "count": 29,
+      "kind": "flush",
+      "width_m": 0.65,
+      "length_m": 0.45,
+      "height_m": 0
+    },
+    {
+      "id": "balatas-east-01",
+      "line": [
+        [123.20306851, 13.63446299],
+        [123.20350839, 13.63458099]
+      ],
+      "count": 19,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-02",
+      "line": [
+        [123.20306128, 13.63449626],
+        [123.20348542, 13.63461005]
+      ],
+      "count": 18,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-03",
+      "line": [
+        [123.20305404, 13.63452954],
+        [123.20346245, 13.6346391]
+      ],
+      "count": 17,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-04",
+      "line": [
+        [123.20304681, 13.63456281],
+        [123.20343948, 13.63466815]
+      ],
+      "count": 17,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-05",
+      "line": [
+        [123.20303957, 13.63459609],
+        [123.20341651, 13.63469721]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-06",
+      "line": [
+        [123.20303234, 13.63462936],
+        [123.20339354, 13.63472626]
+      ],
+      "count": 16,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    },
+    {
+      "id": "balatas-east-07",
+      "line": [
+        [123.20302511, 13.63466264],
+        [123.20337057, 13.63475531]
+      ],
+      "count": 15,
+      "kind": "slab",
+      "width_m": 1.1,
+      "length_m": 2.1,
+      "height_m": 0.3
+    }
+  ],
+  "status": "draft",
+  "credit": "Basilica cemeteries: owner-supplied Google Maps overhead / ground references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Draft estimates; imagery dates unknown.",
+  "sources": [
+    {
+      "title": "OpenStreetMap cemetery extent, drives and mapped facilities",
+      "url": "https://www.openstreetmap.org/way/226828495",
+      "note": "ODbL. Existing cemetery geometry, road widths, standing buildings and monuments retained."
+    },
+    {
+      "title": "Owner-supplied seven-image cemetery correction",
+      "note": "Inspected 2026-10-02. Wide overhead registered to the Basilica pavilion, Santo Niño circular shelter and Eternal Gardens octagonal building. Burial beds separately traced on the two Santo Niño river peninsulas and Eternal Gardens lawns. Ground/closeup images corroborate flush plaques, raised slabs and dense mausoleum/crypt roofs; their exact subsections are not georeferenced. Row counts, dimensions, heights and positions are representative draft estimates, not a burial inventory or cadastral survey. Image/capture dates unknown; no timeline dates or individual burials inferred. Trees/roads/buildings interrupt rows; whole plots outside the source boundary or on mapped obstacles are omitted. No reference bitmap ships with the app."
+    }
+  ]
+}

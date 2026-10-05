@@ -1,0 +1,20 @@
+{
+  "id": "landmark/jose-rizal-elementary-school",
+  "osm_id": "osm:way/881068601",
+  "name": {
+    "en": "Jose Rizal Elementary School"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/881068601",
+      "note": "ODbL. Complete source footprints, boundaries, roads, mapped trunks and identities retained."
+    },
+    {
+      "title": "Owner-supplied additional roadside and campus references",
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

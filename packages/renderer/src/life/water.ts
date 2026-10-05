@@ -15,6 +15,7 @@ export function waterEffect(
   time: number,
   rain: number,
   fish: boolean,
+  lifeTime = time,
 ): number | null {
   const block = WATER_EFFECTS.block;
   const bx = Math.floor(x / block);
@@ -31,7 +32,7 @@ export function waterEffect(
     if (Math.abs(Math.hypot(dx, dy * 1.8) - radius) < 0.5 && age < 0.85)
       return dx < 0 ? 0 : dx > 0 ? 1 : 2;
   }
-  const moment = (time + ((hash >>> 8) & 255)) % WATER_EFFECTS.fishPeriod;
+  const moment = (lifeTime + ((hash >>> 8) & 255)) % WATER_EFFECTS.fishPeriod;
   if (!fish || (hash & 15) !== 0 || moment >= WATER_EFFECTS.fishDuration) return null;
   if (moment < 1 && Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return 3;
   if (moment >= 1 && Math.abs(Math.hypot(dx, dy * 1.8) - (moment - 1) * 1.4) < 0.5)
@@ -52,7 +53,7 @@ int waterEffect(ivec2 cell, bool fishWater) {
   if (u_rain > 0.0 && float((h >> 16u) & 255u) / 255.0 < u_rain * 0.45 && age < 0.85 &&
       abs(length(delta * vec2(1.0, 1.8)) - radius) < 0.5)
     return delta.x < 0.0 ? 0 : delta.x > 0.0 ? 1 : 2;
-  float moment = mod(u_time + float((h >> 8u) & 255u), ${WATER_EFFECTS.fishPeriod}.0);
+  float moment = mod(u_lifeTime + float((h >> 8u) & 255u), ${WATER_EFFECTS.fishPeriod}.0);
   if (!u_fish || !fishWater || (h & 15u) != 0u || moment >= ${WATER_EFFECTS.fishDuration}) return -1;
   if (moment < 1.0 && abs(delta.x) < 0.5 && abs(delta.y) < 0.5) return 3;
   if (moment >= 1.0 && abs(length(delta * vec2(1.0, 1.8)) - (moment - 1.0) * 1.4) < 0.5)

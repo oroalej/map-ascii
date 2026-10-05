@@ -1,0 +1,1522 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1743824, 13.6357239],
+          [123.1744134, 13.6356464],
+          [123.174514, 13.6356845],
+          [123.1744985, 13.6357232],
+          [123.1745153, 13.6357296],
+          [123.1744998, 13.6357683],
+          [123.1743824, 13.6357239]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201439",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1744208, 13.6356407],
+          [123.1744606, 13.6355518],
+          [123.1745714, 13.6355987],
+          [123.1745456, 13.6356563],
+          [123.1745202, 13.6356456],
+          [123.1745062, 13.6356769],
+          [123.1744208, 13.6356407]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201440",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.174388, 13.6358076],
+          [123.1744142, 13.635742],
+          [123.1745149, 13.63578],
+          [123.1744887, 13.6358456],
+          [123.174388, 13.6358076]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201441",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1741828, 13.6357311],
+          [123.1742103, 13.6356518],
+          [123.1743004, 13.6356813],
+          [123.1742728, 13.6357606],
+          [123.1741828, 13.6357311]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201769",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1740986, 13.6358201],
+          [123.1741245, 13.6357395],
+          [123.1741887, 13.635759],
+          [123.1741628, 13.6358396],
+          [123.1740986, 13.6358201]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201770",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1739497, 13.6357739],
+          [123.1739775, 13.6356925],
+          [123.1741096, 13.6357352],
+          [123.1740817, 13.6358166],
+          [123.1739497, 13.6357739]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201771",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1743311, 13.6359072],
+          [123.1743617, 13.6358259],
+          [123.1744651, 13.6358627],
+          [123.1744345, 13.6359439],
+          [123.1743311, 13.6359072]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313201772",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1736222, 13.6354413],
+          [123.1736444, 13.6353682],
+          [123.1737525, 13.6353994],
+          [123.1737303, 13.6354724],
+          [123.1736222, 13.6354413]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313205543",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1736539, 13.6353565],
+          [123.1736776, 13.6352879],
+          [123.1737842, 13.6353226],
+          [123.1737606, 13.6353912],
+          [123.1736539, 13.6353565]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313205544",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.17369, 13.6356136],
+          [123.1736712, 13.6355408],
+          [123.1737821, 13.6355138],
+          [123.1738009, 13.6355866],
+          [123.17369, 13.6356136]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313205547",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1744522, 13.6354846],
+          [123.1744892, 13.6354068],
+          [123.1745822, 13.6354486],
+          [123.1745452, 13.6355263],
+          [123.1744522, 13.6354846]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313207531",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1743538, 13.6354397],
+          [123.1743907, 13.635362],
+          [123.1744844, 13.635404],
+          [123.1744475, 13.6354817],
+          [123.1743538, 13.6354397]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313207532",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1742574, 13.6354051],
+          [123.1742962, 13.635322],
+          [123.174383, 13.6353603],
+          [123.1743441, 13.6354434],
+          [123.1742574, 13.6354051]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313207534",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1738884, 13.6355978],
+          [123.1739415, 13.6354623],
+          [123.1740195, 13.6354912],
+          [123.1739664, 13.6356267],
+          [123.1738884, 13.6355978]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313207535",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1737433, 13.6354492],
+          [123.1737824, 13.6353515],
+          [123.1738997, 13.6353957],
+          [123.1738606, 13.6354934],
+          [123.1737433, 13.6354492]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/313207536",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.174241, 13.6358982],
+          [123.1738293, 13.6357574],
+          [123.1739449, 13.6354081],
+          [123.1743671, 13.6355828],
+          [123.174241, 13.6358982]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880725922",
+      "class": "building_school",
+      "name": "Tacolod Elementary School – Annex",
+      "kind": "amenity=school",
+      "addr:street": "4th Street",
+      "operator": "Canaman District of Camarines Sur Schools Division, DepEd",
+      "start_year": 2000,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1741796, 13.6358295],
+          [123.1741971, 13.635773],
+          [123.1742539, 13.6357895],
+          [123.1742364, 13.6358461],
+          [123.1741796, 13.6358295]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880725923",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1740165, 13.6355366],
+          [123.1740429, 13.6354665],
+          [123.1741205, 13.635494],
+          [123.1740942, 13.6355642],
+          [123.1740165, 13.6355366]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880725924",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1826984, 13.637672],
+        [123.1824599, 13.6375021],
+        [123.1821948, 13.6373822],
+        [123.1813777, 13.6370835],
+        [123.1808671, 13.6368876],
+        [123.1808411, 13.6368776],
+        [123.1799406, 13.6364797],
+        [123.1797343, 13.6363885],
+        [123.1789403, 13.6360259],
+        [123.1787526, 13.6359616],
+        [123.1782898, 13.635803],
+        [123.1779664, 13.6356552],
+        [123.1775884, 13.6354824],
+        [123.1768629, 13.6351944],
+        [123.176136, 13.6349285],
+        [123.1754224, 13.634676],
+        [123.1747654, 13.6344528],
+        [123.1741311, 13.6342065],
+        [123.172245, 13.6334278],
+        [123.1696105, 13.6322465],
+        [123.1695714, 13.6322282],
+        [123.1658909, 13.630655],
+        [123.1651501, 13.6303336],
+        [123.1620019, 13.6286123],
+        [123.1612219, 13.6281527],
+        [123.1606091, 13.6277192],
+        [123.1604741, 13.6276237],
+        [123.1603442, 13.6275318]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/22758959",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "Taculod Street",
+      "kind": "highway=tertiary",
+      "width": 10
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1739651, 13.6372706],
+        [123.1744413, 13.6372458],
+        [123.1744836, 13.6372363],
+        [123.1744713, 13.6369663],
+        [123.174468, 13.636485],
+        [123.1744657, 13.6360938],
+        [123.174526, 13.6359007]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/278571026",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1751271, 13.6354168],
+        [123.1747767, 13.6352883],
+        [123.1737969, 13.6348988],
+        [123.1733329, 13.6347424],
+        [123.1732739, 13.6347477],
+        [123.1729225, 13.6349614],
+        [123.1725444, 13.6349569],
+        [123.1722627, 13.6349536]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/278571034",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1725444, 13.6349569],
+        [123.1725524, 13.6352012],
+        [123.1729306, 13.6351647],
+        [123.1734241, 13.6351334],
+        [123.1746448, 13.6355874]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/278571037",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [
+        [
+          [
+            [123.21333, 13.6025],
+            [123.21333, 13.60417],
+            [123.21333, 13.60583],
+            [123.21333, 13.6075],
+            [123.21333, 13.60917],
+            [123.21333, 13.61083],
+            [123.21333, 13.6125],
+            [123.21333, 13.61417],
+            [123.21333, 13.61583],
+            [123.21333, 13.6175],
+            [123.21333, 13.61917],
+            [123.21333, 13.62083],
+            [123.21333, 13.6225],
+            [123.21333, 13.62417],
+            [123.21333, 13.62583],
+            [123.21333, 13.6275],
+            [123.21333, 13.62917],
+            [123.21333, 13.63083],
+            [123.21333, 13.6325],
+            [123.21333, 13.63417],
+            [123.21333, 13.63583],
+            [123.21333, 13.6375],
+            [123.21333, 13.63917],
+            [123.2125, 13.64],
+            [123.21083, 13.64],
+            [123.20917, 13.64],
+            [123.2075, 13.64],
+            [123.20583, 13.64],
+            [123.20417, 13.64],
+            [123.2025, 13.64],
+            [123.20083, 13.64],
+            [123.19917, 13.64],
+            [123.1975, 13.64],
+            [123.19583, 13.64],
+            [123.19417, 13.64],
+            [123.1925, 13.64],
+            [123.19083, 13.64],
+            [123.18917, 13.64],
+            [123.1875, 13.64],
+            [123.18583, 13.64],
+            [123.18417, 13.64],
+            [123.1825, 13.64],
+            [123.18083, 13.64],
+            [123.17917, 13.64],
+            [123.1775, 13.64],
+            [123.17583, 13.64],
+            [123.17417, 13.64],
+            [123.1725, 13.64],
+            [123.17083, 13.64],
+            [123.17, 13.63917],
+            [123.17, 13.6375],
+            [123.17, 13.63583],
+            [123.17, 13.63417],
+            [123.17, 13.6325],
+            [123.17, 13.63083],
+            [123.17, 13.62917],
+            [123.17, 13.6275],
+            [123.17, 13.62583],
+            [123.17, 13.62417],
+            [123.17, 13.6225],
+            [123.17, 13.62083],
+            [123.17, 13.61917],
+            [123.17, 13.6175],
+            [123.17, 13.61583],
+            [123.17, 13.61417],
+            [123.17, 13.6125],
+            [123.17, 13.61083],
+            [123.17, 13.60917],
+            [123.17, 13.6075],
+            [123.17, 13.60583],
+            [123.17, 13.60417],
+            [123.17, 13.6025],
+            [123.17083, 13.60167],
+            [123.1725, 13.60167],
+            [123.17417, 13.60167],
+            [123.17583, 13.60167],
+            [123.1775, 13.60167],
+            [123.17917, 13.60167],
+            [123.18083, 13.60167],
+            [123.1825, 13.60167],
+            [123.18417, 13.60167],
+            [123.18583, 13.60167],
+            [123.1875, 13.60167],
+            [123.18917, 13.60167],
+            [123.19083, 13.60167],
+            [123.1925, 13.60167],
+            [123.19417, 13.60167],
+            [123.19583, 13.60167],
+            [123.1975, 13.60167],
+            [123.19917, 13.60167],
+            [123.20083, 13.60167],
+            [123.2025, 13.60167],
+            [123.20417, 13.60167],
+            [123.20583, 13.60167],
+            [123.2075, 13.60167],
+            [123.20917, 13.60167],
+            [123.21083, 13.60167],
+            [123.2125, 13.60167],
+            [123.21333, 13.6025]
+          ],
+          [
+            [123.18083, 13.61565],
+            [123.18063, 13.61583],
+            [123.18083, 13.61593],
+            [123.18104, 13.61583],
+            [123.18083, 13.61565]
+          ],
+          [
+            [123.18583, 13.6121],
+            [123.18564, 13.6125],
+            [123.18583, 13.61304],
+            [123.18639, 13.6125],
+            [123.18583, 13.6121]
+          ],
+          [
+            [123.1875, 13.60711],
+            [123.18705, 13.6075],
+            [123.1875, 13.60817],
+            [123.18808, 13.6075],
+            [123.1875, 13.60711]
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "terrain/1",
+      "class": "terrain",
+      "height": 1,
+      "elevation_min": 1,
+      "region": true
+    },
+    "tippecanoe": {
+      "layer": "terrain",
+      "minzoom": 6,
+      "maxzoom": 10
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1703652, 13.6318201],
+          [123.1698583, 13.6315607],
+          [123.1700568, 13.631184],
+          [123.170608, 13.6314852],
+          [123.1703652, 13.6318201]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880722105",
+      "class": "building_school",
+      "name": "Tacolod Elementary School",
+      "kind": "amenity=school",
+      "addr:street": "Barvo Street",
+      "operator": "Canaman District of Camarines Sur Schools Division, DepEd",
+      "start_year": 1938,
+      "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1702183, 13.6314072],
+          [123.1700708, 13.6313246],
+          [123.1701205, 13.6312405],
+          [123.1702681, 13.6313231],
+          [123.1702183, 13.6314072]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880722107",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1705257, 13.6315456],
+          [123.1704566, 13.6315029],
+          [123.1705019, 13.6314338],
+          [123.1705709, 13.6314765],
+          [123.1705257, 13.6315456]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880722108",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1704275, 13.6315146],
+          [123.170286, 13.6314269],
+          [123.1703398, 13.6313448],
+          [123.1704814, 13.6314326],
+          [123.1704275, 13.6315146]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880722109",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1703072, 13.6317678],
+          [123.1701069, 13.6316614],
+          [123.1701477, 13.6315889],
+          [123.170348, 13.6316953],
+          [123.1703072, 13.6317678]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/880722110",
+      "class": "building",
+      "kind": "building=school",
+      "height": 6
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1833162, 13.6339624],
+        [123.18295, 13.6338404],
+        [123.1825638, 13.633692],
+        [123.182285, 13.6336135],
+        [123.1812456, 13.6332394],
+        [123.1805804, 13.6330087],
+        [123.1799669, 13.6327853],
+        [123.1794679, 13.6326135],
+        [123.1789673, 13.6324174],
+        [123.1787746, 13.6323311],
+        [123.1784695, 13.6322124],
+        [123.1781569, 13.6320793],
+        [123.1778871, 13.6319448],
+        [123.1777312, 13.6318508],
+        [123.1774394, 13.631685],
+        [123.1772701, 13.6315888],
+        [123.1758899, 13.630836],
+        [123.1757456, 13.6307627],
+        [123.175601, 13.6307069],
+        [123.1748265, 13.6303422],
+        [123.1706203, 13.6284773],
+        [123.1699373, 13.6281264],
+        [123.1694937, 13.6279035],
+        [123.1691957, 13.6277305],
+        [123.168817, 13.6275581],
+        [123.1683041, 13.6272764],
+        [123.1680532, 13.6271385],
+        [123.1675335, 13.6268733],
+        [123.167239, 13.6267305],
+        [123.1667625, 13.6265777],
+        [123.1665459, 13.6265394],
+        [123.1658911, 13.6263777],
+        [123.1653985, 13.6262976],
+        [123.1645019, 13.6261519],
+        [123.1633771, 13.6258854],
+        [123.1633053, 13.6258582],
+        [123.1628419, 13.6256824],
+        [123.1623857, 13.6255471],
+        [123.162151, 13.6254702],
+        [123.1610125, 13.625064]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519136",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "Bagumbayan Marupit Road",
+      "kind": "highway=tertiary",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.166238, 13.6288583],
+        [123.166583, 13.6289996],
+        [123.166904, 13.6291711],
+        [123.1671125, 13.6292838],
+        [123.1673346, 13.6294248],
+        [123.1676891, 13.6296357],
+        [123.1680176, 13.6298171],
+        [123.1682696, 13.6299584],
+        [123.1685635, 13.6301521],
+        [123.1689342, 13.6304107],
+        [123.1692118, 13.6306026],
+        [123.1696557, 13.6308788],
+        [123.1700863, 13.6311163],
+        [123.171241, 13.6317693],
+        [123.1721905, 13.6323401]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/291265530",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1700863, 13.6311163],
+        [123.1695714, 13.6322282]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/291265531",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190352, 13.622973],
+          [123.19031, 13.622981],
+          [123.190294, 13.622894],
+          [123.190337, 13.622886],
+          [123.190352, 13.62297],
+          [123.190352, 13.622973]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23662005",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190669, 13.622848],
+          [123.1907, 13.622965],
+          [123.190605, 13.622989],
+          [123.190575, 13.622872],
+          [123.190586, 13.62287],
+          [123.190669, 13.622848]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663198",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1913008, 13.6227537],
+          [123.191319, 13.6228859],
+          [123.1907512, 13.6229598],
+          [123.1907331, 13.6228286],
+          [123.1909513, 13.6228002],
+          [123.1909453, 13.6227568],
+          [123.1911142, 13.6227348],
+          [123.19112, 13.6227773],
+          [123.1913008, 13.6227537]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23663846",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190352, 13.62297],
+          [123.190352, 13.622941],
+          [123.190417, 13.62294],
+          [123.19042, 13.623033],
+          [123.190354, 13.623035],
+          [123.190352, 13.622973],
+          [123.190352, 13.62297]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665978",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190535, 13.622932],
+          [123.190538, 13.622971],
+          [123.190563, 13.622968],
+          [123.190568, 13.623019],
+          [123.19046, 13.623028],
+          [123.190451, 13.62294],
+          [123.190535, 13.622932]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666042",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190778, 13.622737],
+          [123.190767, 13.622694],
+          [123.190813, 13.622681],
+          [123.190831, 13.622748],
+          [123.190785, 13.62276],
+          [123.190779, 13.622739],
+          [123.190778, 13.622737]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23666776",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1903234, 13.6227666],
+          [123.1903357, 13.6228369],
+          [123.1902928, 13.622844],
+          [123.1902805, 13.6227738],
+          [123.1903234, 13.6227666]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668477",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190296, 13.622917],
+          [123.190302, 13.622945],
+          [123.190227, 13.622958],
+          [123.190222, 13.622931],
+          [123.190296, 13.622917]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668674",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190418, 13.622814],
+          [123.19043, 13.622923],
+          [123.190356, 13.622931],
+          [123.190343, 13.622822],
+          [123.190418, 13.622814]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23670389",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190779, 13.622739],
+          [123.190784, 13.622802],
+          [123.1907, 13.62281],
+          [123.190694, 13.622744],
+          [123.190778, 13.622737],
+          [123.190779, 13.622739]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672045",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1905119, 13.6226649],
+          [123.1905532, 13.622815],
+          [123.1903508, 13.6228125],
+          [123.1903116, 13.6226863],
+          [123.1905119, 13.6226649]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23673116",
+      "class": "building",
+      "name": "St. John Hospital",
+      "kind": "building=hospital",
+      "addr:street": "Panganiban Drive",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190776, 13.622584],
+          [123.190787, 13.622674],
+          [123.190689, 13.622685],
+          [123.190678, 13.622594],
+          [123.190776, 13.622584]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674078",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.190355, 13.622371],
+          [123.190362, 13.62242],
+          [123.190174, 13.622444],
+          [123.190167, 13.622395],
+          [123.190355, 13.622371]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675664",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1900951, 13.622833],
+          [123.1900742, 13.6227244],
+          [123.1902553, 13.6226915],
+          [123.1902937, 13.6228912],
+          [123.1901126, 13.6229241],
+          [123.1900951, 13.622833]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/346444688",
+      "class": "building",
+      "frontage": "retail",
+      "shop_lng": 123.19016617999998,
+      "shop_lat": 13.62281284,
+      "shop_radius_m": 16.595708324729763,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1948266, 13.6225311],
+        [123.1936087, 13.6226772],
+        [123.1921934, 13.6228509],
+        [123.1909204, 13.6230538],
+        [123.189991, 13.6231875]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518926",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Bonifacio Street",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1898794, 13.6226393],
+        [123.189991, 13.6231875],
+        [123.1900513, 13.6236599],
+        [123.190075, 13.6238212],
+        [123.1901814, 13.6247816]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519159",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Palomares Street",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.1897811, 13.6226451],
+        [123.1898794, 13.6226393],
+        [123.190417, 13.6225305],
+        [123.1914532, 13.6223958],
+        [123.1921186, 13.6223045],
+        [123.1927984, 13.6222193],
+        [123.1935399, 13.6221127],
+        [123.1940939, 13.622033]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/836685805",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "Panganiban Drive",
+      "kind": "highway=secondary",
+      "width": 10,
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [123.190417, 13.6225305]
+    },
+    "properties": {
+      "id": "osm:node/7418877241",
+      "class": "furniture",
+      "kind": "highway=crossing",
+      "variant": "crossing",
+      "subdivision": "Tinago",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "poi",
+      "minzoom": 16,
+      "maxzoom": 16
+    }
+  }
+]

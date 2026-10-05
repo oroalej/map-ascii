@@ -1,28 +1,17 @@
-import type { CellTargets } from '../gpu';
 import { SUB, unpackGlyph } from '../glyphs/select';
-import type { GridPlacement } from '../picking';
-import { MAX_PENDING_READS, type Readback } from '../readback';
-import type { VisibleAgent } from './simulate';
+import type { Readback } from '../readback';
 import type { SpeechCue } from './moments';
-import { lifeVisibleOnSurface } from './surface-visibility';
+import { canReadLifeSurface, readLifeSurface, type LifeSurfaceFrame } from './surface-visibility';
 import type { SpeakerGrid } from './draw';
 
 const CONFIRMATION_MS = 1000;
 const RECHECK_MS = 400;
 
 export type SpeechInView = SpeechCue & { point: [number, number] };
-export type SpeechFrame = {
-  targets: Pick<CellTargets, 'cols' | 'rows' | 'glyphFbo' | 'sub'>;
-  grid: GridPlacement;
-  dpr: number;
-  geometry: string;
-  owners: Uint32Array;
+export type SpeechFrame = LifeSurfaceFrame & {
   speakers?: SpeakerGrid;
-  life: Uint8Array;
-  agents: readonly VisibleAgent[];
   toCell: (lng: number, lat: number) => [number, number];
   size: { width: number; height: number };
-  labelsCover: (point: readonly [number, number]) => boolean;
 };
 type Candidate = {
   key: string;
@@ -148,8 +137,7 @@ export class SpeechController {
       .slice(0, limit);
     this.publish(displayed.map((entry) => entry.cue));
     // Leave headroom for picks arriving while this three-read batch is in flight.
-    if (this.pending || !candidates.length || this.readback.size + 3 + 2 > MAX_PENDING_READS)
-      return;
+    if (this.pending || !candidates.length || !canReadLifeSurface(this.readback)) return;
     // Finish a rotation before confirmations expire, including a spare candidate.
     const refreshSlots = Math.min(limit, candidates.length) + Number(candidates.length > limit);
     const refreshAge = Math.max(
@@ -170,45 +158,35 @@ export class SpeechController {
     // A slow frame can spend most of the watchdog interval drawing before this request.
     // Start its timeout when the GPU batch is issued, rather than at the RAF timestamp.
     this.pending = { serial, key: candidate.key, at: Math.max(now, this.clock()) };
-    const bytes: (Uint8Array | undefined)[] = [];
-    const done = (index: number) => (data: Uint8Array) => {
-      if (this.pending?.serial !== serial) return;
-      bytes[index] = data;
-      if (!bytes[0] || !bytes[1] || !bytes[2]) return;
-      const completedAt = this.clock();
-      this.latencies[this.latencyCursor++ % this.latencies.length] = Math.max(
-        0,
-        completedAt - this.pending.at,
-      );
-      this.maxLatency = 0;
-      for (const latency of this.latencies) this.maxLatency = Math.max(this.maxLatency, latency);
-      this.pending = undefined;
-      // The shared grids may already contain the next draw. update() filters this
-      // captured key against that frame before publishing its current position.
-      this.confirmed.set(candidate.key, {
-        at: completedAt,
-        visible: lifeVisibleOnSurface(
-          candidate.cls,
-          candidate.flags,
-          unpackGlyph(bytes[0][0]!, bytes[0][1]!).cls,
-          bytes[1][0]!,
-          bytes[2][0]!,
-        ),
-      });
-    };
-    this.readback.request(
-      frame.targets.glyphFbo,
+    readLifeSurface(
+      this.readback,
       this.attachment,
-      { x: candidate.col, y: candidate.row, width: 1, height: 1 },
-      done(0),
+      frame.targets,
+      {
+        col: candidate.col,
+        row: candidate.row,
+        sx: Math.floor(SUB.cols / 2),
+        sy: Math.floor(SUB.rows / 2),
+        cls: candidate.cls,
+        flags: candidate.flags,
+      },
+      (visible) => {
+        if (this.pending?.serial !== serial) return;
+        const completedAt = this.clock();
+        this.latencies[this.latencyCursor++ % this.latencies.length] = Math.max(
+          0,
+          completedAt - this.pending.at,
+        );
+        this.maxLatency = 0;
+        for (const latency of this.latencies) this.maxLatency = Math.max(this.maxLatency, latency);
+        this.pending = undefined;
+        // The shared grids may already contain the next draw. update() filters this
+        // captured key against that frame before publishing its current position.
+        this.confirmed.set(candidate.key, {
+          at: completedAt,
+          visible,
+        });
+      },
     );
-    const rect = {
-      x: candidate.col * SUB.cols + Math.floor(SUB.cols / 2),
-      y: candidate.row * SUB.rows + Math.floor(SUB.rows / 2),
-      width: 1,
-      height: 1,
-    };
-    this.readback.request(frame.targets.sub.fbo, this.attachment, rect, done(1));
-    this.readback.request(frame.targets.sub.fbo, this.attachment + 1, rect, done(2));
   }
 }

@@ -1,0 +1,135 @@
+{
+  "id": "detail/abcede-elementary-school",
+  "osm_id": "osm:way/881063054",
+  "title": "Dr. Domingo G. Abcede Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "courtyard-approach-1-1",
+      "ring": [
+        [123.185635785, 13.632951869],
+        [123.185645462, 13.633012053],
+        [123.185690529, 13.633125654],
+        [123.185697965, 13.633123938],
+        [123.185703673, 13.633123941],
+        [123.18570927, 13.633125027],
+        [123.185716297, 13.633128177],
+        [123.185667912, 13.633006215],
+        [123.185658617, 13.632948402],
+        [123.185635785, 13.632951869]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-2-1",
+      "ring": [
+        [123.185994127, 13.633000584],
+        [123.185968786, 13.632912339],
+        [123.185650007, 13.632938948],
+        [123.185651984, 13.632961323],
+        [123.185951678, 13.632936308],
+        [123.185971869, 13.633006621],
+        [123.185994127, 13.633000584]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-3-1",
+      "ring": [
+        [123.185922249, 13.632781092],
+        [123.185929335, 13.632819758],
+        [123.185943, 13.632818453],
+        [123.18594436, 13.632819536],
+        [123.185951487, 13.632889499],
+        [123.185950371, 13.632890822],
+        [123.185942496, 13.632891583],
+        [123.185948857, 13.632926292],
+        [123.185971607, 13.632922355],
+        [123.185948888, 13.632798375],
+        [123.18600794, 13.632785705],
+        [123.186005385, 13.632763254],
+        [123.185922249, 13.632781092]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-4-1",
+      "ring": [
+        [123.185811315, 13.632749918],
+        [123.185809645, 13.632760728],
+        [123.185808374, 13.632761746],
+        [123.185771971, 13.632756709],
+        [123.185770932, 13.632755621],
+        [123.185771265, 13.63275264],
+        [123.185661572, 13.632760095],
+        [123.185663184, 13.632782498],
+        [123.185934478, 13.632764061],
+        [123.185932866, 13.632741657],
+        [123.185811315, 13.632749918]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-5-1",
+      "ring": [
+        [123.185225976, 13.632992374],
+        [123.185226042, 13.6330055],
+        [123.185248197, 13.633005042],
+        [123.185249076, 13.633006132],
+        [123.185249319, 13.633014723],
+        [123.185356494, 13.633014219],
+        [123.185361783, 13.633012653],
+        [123.185363315, 13.633014187],
+        [123.185474065, 13.633013667],
+        [123.185539606, 13.632990902],
+        [123.185225976, 13.632992374]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "courtyard-approach-5-2",
+      "ring": [
+        [123.18555135, 13.632990847],
+        [123.185559579, 13.633013266],
+        [123.1856188, 13.633012988],
+        [123.185618688, 13.63299053],
+        [123.18555135, 13.632990847]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [],
+  "seating": [],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/way/881063054",
+      "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+    },
+    {
+      "title": "Owner-supplied memorial and school enhancement references",
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+    }
+  ]
+}

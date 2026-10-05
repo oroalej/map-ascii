@@ -86,13 +86,14 @@ export class LocalScenes {
   private readonly graph: WalkingGraph;
   private readonly rng: () => number;
   private readonly cooldown = new Map<Mover, number>();
+  private returnAfterInspection?: WeakSet<Mover>;
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
   private hoursDirty = false;
-  private cityLife: CityLifeConfig | undefined;
+  private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
 
   constructor(
     geo: LifeGeometry,
@@ -369,13 +370,19 @@ export class LocalScenes {
   step(
     dt: number,
     movers: readonly Mover[],
-    env: { rain?: number; levels?: Activity; minutes?: number; cityLife?: CityLifeConfig },
+    env: {
+      rain?: number;
+      levels?: Activity;
+      minutes?: number;
+      cityLife?: Pick<CityLifeConfig, 'schedules'>;
+    },
     near?: (x: number, y: number) => boolean,
     shows?: (kind: Mover['kind']) => boolean,
     guard?: MoveGuard,
     vehicleOffset?: (mover: Mover) => number,
     walkLimit?: (m: Mover, target: { x: number; y: number }, distance: number) => number,
     owns?: (p: { x: number; y: number }) => boolean,
+    inspecting?: object,
   ) {
     const rain = env.rain ?? 0;
     this.speechEvents.length = 0;
@@ -402,11 +409,14 @@ export class LocalScenes {
             );
       }
     for (const [m, seconds] of this.cooldown) {
+      if (inspecting === m) continue;
       if (owns && !owns(m)) continue;
       if (seconds <= dt) this.cooldown.delete(m);
       else this.cooldown.set(m, seconds - dt);
     }
     for (const [m, visit] of this.visits) {
+      if (inspecting === m) continue;
+      if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
       if (owns && (!owns(m) || !owns(visit.site))) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
       const { kind } = visit.site;
@@ -464,6 +474,7 @@ export class LocalScenes {
       }
     }
     for (const [m, service] of this.services) {
+      if (inspecting === m) continue;
       if (owns && (!owns(m) || !owns(service.site))) continue;
       if ((shows && !shows('vehicle')) || (near && !near(m.x, m.y))) continue;
       if (service.arriving) {
@@ -493,7 +504,9 @@ export class LocalScenes {
         service.passenger = undefined;
       const person =
         !service.passenger &&
-        service.site.queue.find((p) => (!owns || owns(p)) && this.visits.get(p)?.state === 'wait');
+        service.site.queue.find(
+          (p) => inspecting !== p && (!owns || owns(p)) && this.visits.get(p)?.state === 'wait',
+        );
       if (person && service.time < 12 - service.boarded * 2) {
         const visit = this.visits.get(person)!;
         const width = VEHICLES[m.vehicle!].width;
@@ -519,7 +532,11 @@ export class LocalScenes {
       }
       if (service.time <= 0) {
         const passenger = service.passenger && this.visits.get(service.passenger);
-        if (passenger?.state === 'board') this.returning(service.passenger!, passenger);
+        if (passenger?.state === 'board') {
+          if (inspecting === service.passenger)
+            (this.returnAfterInspection ??= new WeakSet()).add(service.passenger!);
+          else this.returning(service.passenger!, passenger);
+        }
         this.services.delete(m);
         this.stopCooldown.set(m, service.site);
         m.pause = 0;
@@ -532,6 +549,7 @@ export class LocalScenes {
     for (let i = 0; i < batch && movers.length; i++) {
       const m = movers[this.cursor++ % movers.length]!;
       if (
+        inspecting === m ||
         (owns && !owns(m)) ||
         (shows && !shows(m.kind)) ||
         (near && !near(m.x, m.y)) ||

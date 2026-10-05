@@ -1,0 +1,25 @@
+{
+  "id": "landmark/bicol-medical-center",
+  "osm_id": "osm:way/619023157",
+  "name": {
+    "en": "Bicol Medical Center"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: standing site footprint",
+      "url": "https://www.openstreetmap.org/way/619023157",
+      "note": "Mapped footprint matched to the owner-requested site."
+    },
+    {
+      "title": "Bicol Medical Center official website",
+      "url": "https://www.bmc.doh.gov.ph/",
+      "note": "Confirms the Juan Miranda Avenue hospital. The complete mapped southern hospital roof anchors the estimated complex coverage; the neighboring Metro Gaisano roof remains outside it."
+    },
+    {
+      "title": "Owner-supplied site reference",
+      "note": "Undated reference identifies the site and guides restrained outdoor detail."
+    }
+  ]
+}

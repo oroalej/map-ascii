@@ -17,7 +17,15 @@ import {
   type RuntimeDialogueCatalog,
   type SubdivisionArea,
 } from '@atlas/shared';
-import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
@@ -26,6 +34,8 @@ import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
+import { SeasonControl, useSeasonState } from './SeasonControl';
+import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { SpeechControls } from './SpeechControls';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -56,10 +66,11 @@ function QualityControl() {
   );
 }
 
-const WIDE = '(min-width: 640px)';
-const isWide = () => window.matchMedia(WIDE).matches;
+// Match the CSS compact query, then negate it: fractional widths have no gap.
+const COMPACT = '(max-width: 640px)';
+const isWide = () => !window.matchMedia(COMPACT).matches;
 const subscribeWide = (onChange: () => void) => {
-  const query = window.matchMedia(WIDE);
+  const query = window.matchMedia(COMPACT);
   query.addEventListener('change', onChange);
   return () => query.removeEventListener('change', onChange);
 };
@@ -126,7 +137,7 @@ const PixelIcon = memo(function PixelIcon({ icon }: { icon: LegendIcon }) {
   );
 });
 
-function Legend({
+function LegendControls({
   subdivisionLabel,
   sidewalksDerived,
   hidden,
@@ -140,6 +151,9 @@ function Legend({
   const theme = useAtlasStore((s) => s.theme);
   const atlas = useAtlasInstance((s) => s.atlas);
   const life = useLifeShown();
+  const focused = useUiStore((s) => s.legendFocus);
+  const summary = useRef<HTMLElement>(null);
+  const header = useRef<HTMLDivElement>(null);
   // The classes on screen, as the renderer last reported them (none reported yet: zoom only).
   const [present, setPresent] = useState<{ atlas: Atlas; classes: RenderClass[] } | null>(null);
   useEffect(() => atlas?.on('classeschange', (classes) => setPresent({ atlas, classes })), [atlas]);
@@ -156,43 +170,121 @@ function Legend({
     [atlas],
   );
   const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
+  const season = useSeasonState();
   const entries = useMemo(
-    () => legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures],
+    () =>
+      legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures, season }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season],
   );
+  // Replacements start clean; cleanup touches only the instance it belongs to.
+  useEffect(() => {
+    useUiStore.setState({ legendFocus: null });
+    return () => atlas?.setFocus(null);
+  }, [atlas]);
+  const selected = entries.find((entry) => entry.id === focused && entry.focus);
+  useEffect(() => {
+    atlas?.setFocus(selected?.focus ?? null);
+    if (focused && !selected) useUiStore.setState({ legendFocus: null });
+  }, [atlas, selected, focused]);
+  const hasFocus = selected !== undefined;
+  useLayoutEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    const style = document.documentElement.style;
+    const publish = () => {
+      const bottom = `${element.getBoundingClientRect().bottom}px`;
+      style.setProperty('--hud-header-bottom', bottom);
+      if (hasFocus) style.setProperty('--focus-header-bottom', bottom);
+      else style.removeProperty('--focus-header-bottom');
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+    window.addEventListener('resize', publish);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', publish);
+      style.removeProperty('--hud-header-bottom');
+      style.removeProperty('--focus-header-bottom');
+    };
+  }, [hasFocus]);
+  const displayLabel = (entry: (typeof entries)[number]) =>
+    entry.id === 'class:admin_subdivision'
+      ? `${capitalize(subdivisionLabel)} boundary`
+      : entry.label;
+  const clearFocus = () => {
+    useUiStore.setState({ legendFocus: null });
+    const target = !hidden
+      ? summary.current
+      : document.querySelector<HTMLCanvasElement>('canvas[tabindex="0"]');
+    target?.focus({ preventScroll: true });
+  };
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? wide;
 
   return (
-    <details
-      className={styles.legend}
-      hidden={hidden}
-      open={open}
-      onToggle={(e) => {
-        const next = (e.target as HTMLDetailsElement).open;
-        if (next !== open) setToggled(next);
-      }}
-    >
-      <summary>Legend</summary>
-      <ul aria-label="What the glyphs on screen mean">
-        {entries.map((entry) => (
-          <li key={entry.label}>
-            <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
-              {entry.icons
-                ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                : entry.glyphs}
-            </span>
-            <span>
-              {entry.label === 'Subdivision boundary'
-                ? `${capitalize(subdivisionLabel)} boundary`
-                : entry.label}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </details>
+    <>
+      <div className={`${styles.row} ${styles.header}`} ref={header}>
+        <ZoomReadout />
+        {selected && (
+          <button
+            type="button"
+            className={`${styles.button} ${styles.focusClear}`}
+            aria-label={`Clear legend focus: ${displayLabel(selected)}`}
+            title={`Clear legend focus: ${displayLabel(selected)}`}
+            onClick={clearFocus}
+          >
+            <span className={styles.focusLabel}>Focus: {displayLabel(selected)}</span>
+            <span aria-hidden="true">×</span>
+          </button>
+        )}
+      </div>
+      <details
+        className={styles.legend}
+        hidden={hidden}
+        open={open}
+        onToggle={(e) => {
+          const next = (e.target as HTMLDetailsElement).open;
+          if (next !== open) setToggled(next);
+        }}
+      >
+        <summary ref={summary}>Legend</summary>
+        <ul aria-label="What the glyphs on screen mean">
+          {entries.map((entry) => {
+            const content = (
+              <>
+                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                  {entry.icons
+                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                    : entry.glyphs}
+                </span>
+                <span>{displayLabel(entry)}</span>
+              </>
+            );
+            return (
+              <li key={entry.id}>
+                {entry.focus ? (
+                  <button
+                    type="button"
+                    className={styles.legendEntry}
+                    aria-pressed={focused === entry.id}
+                    onClick={() =>
+                      useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
+                    }
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  content
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+    </>
   );
 }
 
@@ -432,6 +524,7 @@ export function Hud({
   climate,
   timezone,
   sidewalksDerived = true,
+  seasons,
 }: {
   city: string;
   dialogue?: RuntimeDialogueCatalog | undefined;
@@ -440,6 +533,7 @@ export function Hud({
   /** The city's IANA time zone (its pack's `timezone`). */
   timezone?: string | undefined;
   sidewalksDerived?: boolean;
+  seasons?: readonly RuntimeSeasonConfig[] | undefined;
 }) {
   const hasCamera = useAtlasStore((s) => s.camera !== null);
   const panelOpen = useAtlasStore((s) => s.selectedId !== null);
@@ -451,10 +545,7 @@ export function Hud({
     <>
       <SubdivisionTracker city={city} />
       <div className={styles.topRight} data-speech-obstacle>
-        <div className={styles.row}>
-          <ZoomReadout />
-        </div>
-        <Legend
+        <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
           hidden={panelOpen}
@@ -477,6 +568,7 @@ export function Hud({
         </div>
         <div className={styles.row}>
           <LifeControls climate={climate} timezone={timezone} />
+          <SeasonControl seasons={seasons} />
           <QualityControl />
         </div>
         <ProcessionControls />

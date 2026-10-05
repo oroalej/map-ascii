@@ -3,7 +3,13 @@
  * procession's start down to where it lands. OSM draws a waterway in the direction it flows,
  * so "upstream" walks the river's ways backwards.
  */
-import type { Procession, ProcessionRoute } from '@atlas/shared';
+import {
+  LEGACY_LOCAL_METERS_PER_DEGREE,
+  localMetricProjection,
+  pointInPolygon,
+  type Procession,
+  type ProcessionRoute,
+} from '@atlas/shared';
 import type { Feature, Geometry, Position } from 'geojson';
 
 type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: string }>;
@@ -18,13 +24,9 @@ export const MAX_SNAP_M = 300;
 type Point = [number, number];
 
 /** Meters east and north of an origin, near enough flat over a few kilometers. */
-function localMeters([lng0, lat0]: Point) {
-  const kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
-  const ky = 110_540;
-  return {
-    to: ([lng, lat]: Position): Point => [(lng! - lng0) * kx, (lat! - lat0) * ky],
-    from: ([x, y]: Point): Point => [lng0 + x / kx, lat0 + y / ky],
-  };
+function localMeters(origin: Point) {
+  // Preserve existing published route coordinates and bank widths exactly.
+  return localMetricProjection(origin, { east: LEGACY_LOCAL_METERS_PER_DEGREE, north: 110_540 });
 }
 
 const distance = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -265,19 +267,6 @@ export function resample(path: readonly Point[], step: number): Point[] {
   return out;
 }
 
-/** Whether `p` is inside a polygon (outer ring less holes), even–odd. */
-function inside(polygon: readonly Point[][], [x, y]: Point): boolean {
-  let hit = false;
-  for (const ring of polygon) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [ax, ay] = ring[i]!;
-      const [bx, by] = ring[j]!;
-      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) hit = !hit;
-    }
-  }
-  return hit;
-}
-
 /**
  * How far the water reaches to the left and right of each point of `path` (m, across its
  * direction), from the water polygons (meters, the same projection). Undefined when the path
@@ -288,7 +277,7 @@ export function measureBanks(
   path: readonly Point[],
   water: readonly Point[][][],
 ): [number, number][] | undefined {
-  const wet = (p: Point) => water.some((polygon) => inside(polygon, p));
+  const wet = (p: Point) => water.some((polygon) => pointInPolygon(p, polygon));
   const banks: ([number, number] | undefined)[] = path.map((p, i) => {
     if (!wet(p)) return undefined;
     const a = path[Math.max(0, i - 1)]!;

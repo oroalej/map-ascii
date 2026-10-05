@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { runtimeDialogueCatalog } from '@atlas/shared';
+import { runtimeDialogueCatalog, runtimeCityLife } from '@atlas/shared';
 import { notFound } from 'next/navigation';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity, loadRegistry } from '@/lib/cities';
@@ -31,7 +31,7 @@ export default async function CityPage({ params }: Props) {
         traffic={city.traffic}
         climate={city.climate}
         timezone={city.timezone}
-        cityLife={city.life}
+        cityLife={city.life ? runtimeCityLife(city.life) : undefined}
         dialogue={runtimeDialogueCatalog(pack.dialogue)}
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}

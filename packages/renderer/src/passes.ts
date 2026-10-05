@@ -1,28 +1,34 @@
+import { project } from './camera';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
  * the glyph pass draws the glyphs at full resolution. The life pass puts the life layer's agents
  * on the grid every frame.
  */
-import { metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+import { screenArea, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
+import { normalizeFocus, type LifeFocus } from './focus';
+import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
+import { bandVisibility, CLASS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
 import {
   classDepths,
   classId,
   classVisibility,
   crownSurfaces,
-  groundClasses,
+  groundFlags,
   groundDepth,
   TIER_STEP,
 } from './classes';
 import { roadMask, seeThroughMask, SUB, subcellAreas } from './glyphs/select';
-import type { CellSize, Programs, ThemeResources } from './gpu-context';
+import type { Programs, ThemeResources } from './gpu-context';
+import { glyphProgram } from './gpu-context';
 import {
   copyRaster,
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
   uploadLights,
@@ -33,14 +39,17 @@ import {
 } from './gpu';
 import {
   createOverlay,
-  labelVisibility,
   packOverlay,
   resetOverlay,
   placeLabels,
   rotatedLabelVertices,
+  overlayCoversPoint,
   type LabelCandidate,
   type Overlay,
 } from './labels';
+import { labelScreenArea } from './label-candidates';
+import { labelIntersectsArea, type Box, type LabelLayout } from './label-layout';
+import type { LabelMemory, LabelMemoryEntry, LabelOrderKey } from './label-stability';
 import { cellBits } from './life/config';
 import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
@@ -49,6 +58,7 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
+import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
   packBeams,
@@ -62,10 +72,12 @@ import {
 import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
-import { type TileLabel } from './raster/geometry';
+import { buntingWindResponse } from './life/bunting-motion';
 import { rainGlyphs, type Theme } from './theme';
 import {
   packFixtures,
+  createFixturePackingScratch,
+  type FixturePackingScratch,
   packSignalLights,
   updateFixtureSignals,
   updateFixtureFlags,
@@ -77,7 +89,7 @@ import {
 import type { TileId } from './tiles';
 
 const depths = classDepths();
-const grounds = groundClasses.reduce((mask, cls) => mask | (1 << classId(cls)), 0);
+const grounds = groundFlags();
 const groundsDepth = groundDepth();
 const crownClass = classId('tree_crown');
 const crownSurfaceClasses = crownSurfaces();
@@ -88,18 +100,6 @@ const seeThrough = seeThroughMask();
 const roads = roadMask();
 const areas = subcellAreas();
 const lifeCellBits = cellBits();
-/**
- * The grid cells actually on screen (the grid has a margin, and a sub-cell pan shift):
- * [left, top] inclusive to [right, bottom] exclusive.
- */
-export function screenArea(view: View, grid: Grid, cellDev: CellSize = view.cellDev) {
-  return {
-    left: Math.ceil(grid.shiftX / cellDev.w),
-    top: Math.ceil(grid.shiftY / cellDev.h),
-    right: Math.floor((grid.shiftX + view.width) / cellDev.w),
-    bottom: Math.floor((grid.shiftY + view.height) / cellDev.h),
-  };
-}
 
 /** A tile to draw and its mesh. */
 export type TileDraw = { tile: TileId; mesh: TileMesh };
@@ -136,16 +136,112 @@ export function prepareCrowns(
   return drawn;
 }
 
-const overlays = new WeakMap<CellTargets, { overlay: Overlay; packed: Uint8Array }>();
+const overlays = new WeakMap<
+  CellTargets,
+  {
+    overlay: Overlay;
+    packed: Uint8Array;
+    memory: LabelMemory;
+    rendered: Map<number, LabelLayout>;
+    next: Map<number, LabelLayout>;
+    changed: boolean;
+    order: LabelOrderKey[];
+  }
+>();
 function overlayBuffers(targets: CellTargets) {
   let buffers = overlays.get(targets);
   if (!buffers) {
     const overlay = createOverlay(targets.labelCols, targets.labelRows);
-    buffers = { overlay, packed: new Uint8Array(overlay.glyphs.length * 4) };
+    buffers = {
+      overlay,
+      packed: new Uint8Array(overlay.glyphs.length * 4),
+      memory: new Map(),
+      rendered: new Map(),
+      next: new Map(),
+      changed: true,
+      order: [],
+    };
     overlays.set(targets, buffers);
   }
   resetOverlay(buffers.overlay);
   return buffers;
+}
+
+/** Read the previous acceptance without resetting its glyphs, collision boxes or slots. */
+export const labelMemory = (
+  targets: CellTargets,
+): ReadonlyMap<number, LabelMemoryEntry> | undefined => overlays.get(targets)?.memory;
+
+export const forgetLabelPlacement = (targets: CellTargets): void => {
+  overlays.delete(targets);
+};
+
+/** Move durable acceptance only; replacement textures need fresh layout/upload state. */
+export function transferLabelPlacement(from: CellTargets, to: CellTargets): void {
+  const memory = labelMemory(from);
+  if (memory) {
+    const replacement = overlayBuffers(to).memory;
+    for (const [id, entry] of memory) replacement.set(id, { ...entry });
+  }
+  forgetLabelPlacement(from);
+}
+
+/** Whether the latest overlay pass uploaded label geometry. */
+export const labelOverlayChanged = (targets: CellTargets): boolean =>
+  overlays.get(targets)?.changed ?? false;
+
+const sameBox = (a: Box, b: Box) =>
+  a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+
+function sameLayout(a: LabelLayout, b: LabelLayout): boolean {
+  return (
+    a.slot === b.slot &&
+    a.label.text === b.label.text &&
+    a.label.col === b.label.col &&
+    a.label.row === b.label.row &&
+    a.label.vis === b.label.vis &&
+    (a.slot !== -1 || (b.slot === -1 && a.angle === b.angle)) &&
+    sameBox(a.box, b.box) &&
+    sameBox(a.collision, b.collision) &&
+    sameBox(a.textBounds, b.textBounds)
+  );
+}
+
+/** Retained placements outside the viewport stay in memory but not the accessible list. */
+export function labelsInView(
+  targets: CellTargets,
+  view: View,
+  grid: Grid,
+  placed: readonly LabelCandidate[],
+  out: LabelCandidate[] = [],
+): LabelCandidate[] {
+  out.length = 0;
+  const bounds = overlays.get(targets)?.overlay.placements;
+  const area = labelScreenArea(view, grid);
+  for (const label of placed) {
+    const box = bounds?.get(label.id);
+    if (box !== undefined && labelIntersectsArea(box, area)) out.push(label);
+  }
+  return out;
+}
+
+export function labelsCoverPoint(
+  targets: CellTargets,
+  point: readonly [number, number],
+  dpr: number,
+  grid: PickingGrid,
+): boolean {
+  const overlay = overlays.get(targets)?.overlay;
+  return (
+    !!overlay &&
+    overlayCoversPoint(
+      overlay,
+      point[0] * dpr + grid.shiftX,
+      point[1] * dpr + grid.shiftY,
+      grid.cellWidth,
+      grid.cellHeight,
+    )
+  );
 }
 
 /**
@@ -168,7 +264,7 @@ export function cellPass(
   gl.useProgram(program.program);
   twgl.setUniforms(program, {
     u_depth: depths,
-    u_groundMask: grounds,
+    u_ground: grounds,
     u_groundDepth: groundsDepth,
     u_vis: classVisibility(camera.zoom),
     u_zoom: view.detailZoom,
@@ -247,7 +343,7 @@ export function crownPass(
   gl.useProgram(program.program);
   twgl.setUniforms(program, {
     u_depth: depths,
-    u_groundMask: grounds,
+    u_ground: grounds,
     u_groundDepth: groundsDepth,
     u_vis: classVisibility(view.camera.zoom),
     u_zoom: view.detailZoom,
@@ -290,6 +386,7 @@ export const hasCrowns = (tiles: readonly TileDraw[]): boolean =>
 /**
  * Place the names whose zoom band reaches the camera zoom (labels.ts) on the label grid
  * (`placement`) and upload them to the overlay texture. Returns the labels placed.
+ * Focus-only passes skip uploads when rendered IDs, slots and text geometry stay the same.
  */
 export function overlayPass(
   gl: GL,
@@ -297,18 +394,14 @@ export function overlayPass(
   themeRes: ThemeResources,
   view: View,
   placement: GridPlacement,
-  labels: Iterable<TileLabel>,
+  candidates: readonly LabelCandidate[],
   { streetText }: Programs,
+  focus: readonly number[] = [],
+  commitMemory = true,
 ): LabelCandidate[] {
-  const { camera, labelDev } = view;
-  const { toCell } = placement;
-  /** A street run's length in label cells across, which a rotated name must fit. */
-  const runCells = ([from, to]: NonNullable<TileLabel['run']>) => {
-    const a = toCell(...from),
-      b = toCell(...to);
-    return Math.hypot((b[0] - a[0]) * labelDev.w, (b[1] - a[1]) * labelDev.h) / labelDev.w;
-  };
-  const { overlay, packed } = overlayBuffers(targets);
+  const { labelDev } = view;
+  const buffers = overlayBuffers(targets);
+  const { overlay, packed, memory, rendered, next } = buffers;
   const area = screenArea(view, placement.grid, view.labelDev);
   const glyphs = themeRes.label.atlas;
   const glyphIndex = (char: string) => {
@@ -316,36 +409,36 @@ export function overlayPass(
     return index === 0 ? undefined : index;
   };
 
-  const candidates: LabelCandidate[] = [];
-  for (const label of labels) {
-    const vis = labelVisibility(label.band, camera.zoom);
-    if (vis <= 0) continue;
-    const [col, row] = toCell(label.lng, label.lat);
-    // No box of a label's (none wider or taller than its text, a few cells from its anchor)
-    // reaches the area from further out.
-    const reach = label.text.length + 3;
-    if (
-      col < area.left - reach ||
-      col >= area.right + reach ||
-      row < area.top - reach ||
-      row >= area.bottom + reach
-    ) {
-      continue;
+  const placed = placeLabels(
+    overlay,
+    candidates,
+    glyphIndex,
+    area,
+    labelDev.h / labelDev.w,
+    {
+      memory,
+      focus,
+      commitMemory,
+      screen: labelScreenArea(view, placement.grid),
+      order: buffers.order,
+    },
+    next,
+  );
+  // Focus priority may change the iteration order while every rendered label stays put.
+  // Keep this snapshot separate from durable memory, which focus never commits.
+  buffers.changed = commitMemory || next.size !== rendered.size;
+  if (!buffers.changed) {
+    for (const [id, layout] of next) {
+      const previous = rendered.get(id);
+      if (!previous || !sameLayout(layout, previous)) {
+        buffers.changed = true;
+        break;
+      }
     }
-    candidates.push({
-      id: label.id,
-      text: label.text,
-      rank: label.rank,
-      vis,
-      col: Math.floor(col),
-      row: Math.floor(row),
-      // Street names follow the street.
-      mode: label.angle !== undefined ? 'rotated' : 'beside',
-      angle: label.angle,
-      runCells: label.run && runCells(label.run),
-    });
   }
-  const placed = placeLabels(overlay, candidates, glyphIndex, area, labelDev.h / labelDev.w);
+  if (!buffers.changed) return placed;
+  buffers.rendered = next;
+  buffers.next = rendered;
   uploadOverlay(gl, targets, packOverlay(overlay, packed));
   // Most views have no rotated names, before or after: nothing to upload.
   if (overlay.rotated.length > 0 || streetText.count > 0) {
@@ -406,6 +499,7 @@ export function selectPass(
     u_windDir: wind.dir,
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
+    u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
     u_roadMask: roads,
     u_cellAspect: view.cellDev.h / view.cellDev.w,
     u_hover: highlights.hover,
@@ -444,7 +538,15 @@ function sunUniforms(view: View, sun: Sun | null) {
  * so they are the grid's size and never shared between two maps.
  */
 type Texels = {
+  clocks?: EffectClocks;
+  clockCells?: number[];
+  clockUpload?: number;
+  clockCandidates?: boolean;
+  candles?: boolean;
+  held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
+  owners: Uint32Array;
+  revision: number;
   light: Uint8Array;
   lamps: Uint8Array | null;
   stampedVehicles: Uint8Array;
@@ -459,6 +561,8 @@ const texels = (targets: CellTargets): Texels => {
     const size = targets.cols * targets.rows * 4;
     found = {
       life: new Uint8Array(size),
+      owners: new Uint32Array(size / 4),
+      revision: 0,
       light: new Uint8Array(size),
       lamps: null,
       stampedVehicles: new Uint8Array(0),
@@ -470,8 +574,8 @@ const texels = (targets: CellTargets): Texels => {
   return found;
 };
 
-/** CPU raster backing the current uploaded Life texture, for bounded visibility queries. */
-export const lifeRaster = (targets: CellTargets): Uint8Array => texels(targets).life;
+/** The CPU raster belonging to these targets, without allocating or resetting it. */
+export const lifeRaster = (targets: CellTargets) => texelsOf.get(targets) ?? null;
 /** A conservative label/halo guard, including rotated labels' collision bounds. */
 export function labelCovers(targets: CellTargets, col: number, row: number): boolean {
   const overlay = overlays.get(targets)?.overlay;
@@ -497,16 +601,55 @@ export function lifePass(
   sun?: Sun | null,
   profiler?: FrameProfiler,
   allowsGroundCell?: LifeGrid['allowsGroundCell'],
-  owners?: Uint32Array,
+  focus?: ReadonlySet<LifeFocus>,
+  /** Immutable paired agent/terrain frame; unchanged accepted worker frames may reuse it. */
+  heldFrame?: object,
   speakers?: LifeGrid['speakers'],
   puffs?: Float64Array,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
+  // Target identity owns this cache. Placement and the paired frame own the ground
+  // guard, whose wrapper may be newly allocated even when its terrain is unchanged.
+  const inputs = heldFrame
+    ? [
+        themeRes,
+        theme,
+        placement,
+        view.camera,
+        view.dpr,
+        view.cellDev.w,
+        view.cellDev.h,
+        agents,
+        sun,
+        focus,
+        speakers,
+      ]
+    : undefined;
+  if (
+    heldFrame &&
+    buffers.held?.frame === heldFrame &&
+    inputs!.every((value, i) => value === buffers.held!.inputs[i])
+  )
+    return buffers.held.drawn;
+  buffers.held = undefined;
   const lifeTexels = buffers.life;
   if (buffers.stampedVehicles.length < agents.length)
     buffers.stampedVehicles = new Uint8Array(agents.length);
   const packStart = profiler?.time();
+  buffers.candles = buffers.clockCandidates = false;
+  for (const agent of agents) {
+    if (!agent.candle) continue;
+    buffers.candles = true;
+    if (agent.effectClock !== undefined) {
+      buffers.clockCandidates = true;
+      break;
+    }
+  }
+  if (buffers.clockCandidates) {
+    buffers.clocks ??= new EffectClocks(cols * rows);
+    buffers.clockCells ??= [];
+  }
   const drawn = packLife(
     lifeTexels,
     {
@@ -516,7 +659,6 @@ export function lifePass(
       cellHeight: view.cellDev.h,
       toCell: placement.toCell,
       allowsGroundCell,
-      owners,
       speakers,
       stampedVehicles: buffers.stampedVehicles,
     },
@@ -526,12 +668,23 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
+    { owners: buffers.owners, focus, clockCells: buffers.clockCells },
     puffs,
   );
   buffers.stampedAgents = agents;
+  buffers.revision++;
+  if (buffers.clocks) {
+    buffers.clocks.begin(0);
+    for (const cell of buffers.clockCells!) {
+      const agent = agents[buffers.owners[cell]! - 1];
+      if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? ORDINARY_CLOCK);
+    }
+    buffers.clocks.finish(0);
+  }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
   uploadLife(gl, targets, lifeTexels);
+  if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
 }
@@ -567,8 +720,31 @@ export function lightPass(
     packBrakePools(lightTexels, grid, agents, buffers.stampedVehicles, buffers.brakeCones);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
-  packCandles(lightTexels, grid, agents, 1 / cellMeters!);
+  const clocks = buffers.clocks;
+  clocks?.begin(1);
+  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks?.pool);
+  clocks?.finish(1);
   uploadLights(gl, targets, lightTexels);
+  effectClockPass(gl, targets);
+}
+
+/** Also called in daylight when lighting is idle. Raster changes alone cause no upload. */
+export function effectClockPass(gl: GL, targets: CellTargets) {
+  const buffers = texelsOf.get(targets);
+  const clocks = buffers?.clocks;
+  if (clocks?.active) {
+    if (!targets.effectClockTex || buffers!.clockUpload !== clocks.revision) {
+      uploadEffectClocks(gl, targets, clocks.values);
+      buffers!.clockUpload = clocks.revision;
+    }
+  } else {
+    if (targets.effectClockTex) uploadEffectClocks(gl, targets, undefined);
+    if (buffers && !buffers.clockCandidates) {
+      buffers.clocks = undefined;
+      buffers.clockCells = undefined;
+      buffers.clockUpload = undefined;
+    }
+  }
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
@@ -587,6 +763,8 @@ const fixturesOf = new WeakMap<
     lightTexels: Uint8Array;
     lightScores: Float32Array;
     utilityScratch: UtilityPackingScratch;
+    fixtureScratch: FixturePackingScratch;
+    seasonal: boolean;
     viewport: ReturnType<typeof screenArea>;
   }
 >();
@@ -620,6 +798,7 @@ export function fixturePass(
   ) {
     const area = viewport;
     const utilityScratch = cache?.utilityScratch ?? createUtilityPackingScratch();
+    const fixtureScratch = cache?.fixtureScratch ?? createFixturePackingScratch();
     const packed = packFixtures(
       cache?.packed.texels.length === targets.cols * targets.rows * 4
         ? cache.packed.texels
@@ -630,6 +809,21 @@ export function fixturePass(
         cellWidth: view.cellDev.w,
         cellHeight: view.cellDev.h,
         toCell: placement.toCell,
+        buntingProjection: {
+          scale: `${view.camera.zoom}/${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+          base: {
+            key: `${view.dpr}/${view.cellDev.w}/${view.cellDev.h}`,
+            scale: 2 ** (view.camera.zoom - (SEASON_ZOOM.bunting.min - ZOOM_FADE)),
+            toCell: (lng, lat) => {
+              const [x, y] = project(lng, lat, SEASON_ZOOM.bunting.min - ZOOM_FADE);
+              return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+            },
+          },
+          toCell: (lng, lat) => {
+            const [x, y] = project(lng, lat, view.camera.zoom);
+            return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
+          },
+        },
         visible: (c, r) => c >= area.left && c <= area.right && r >= area.top && r <= area.bottom,
       },
       fixtures,
@@ -638,6 +832,7 @@ export function fixturePass(
       clock,
       motion,
       utilityScratch,
+      fixtureScratch,
     );
     cache = {
       packed,
@@ -656,6 +851,8 @@ export function fixturePass(
           ? cache.lightScores
           : new Float32Array(targets.cols * targets.rows),
       utilityScratch,
+      fixtureScratch,
+      seasonal: (packed.seasonalCells ?? 0) > 0,
       viewport,
     };
     fixturesOf.set(targets, cache);
@@ -720,14 +917,25 @@ export function glyphPass(
   lampShow = 0,
   moon = 0,
   sun: Sun | null = null,
+  focus = normalizeFocus(null),
+  lifeTime = time,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
   const { cellDev } = view;
+  const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
+  const hasEffectClocks = targets.effectClockTex !== undefined;
+  const program = glyphProgram(
+    gl,
+    programs,
+    focused,
+    hasEffectClocks,
+    fixturesOf.get(targets)?.seasonal === true,
+  );
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
-  gl.useProgram(programs.glyph.program);
-  twgl.setUniforms(programs.glyph, {
+  gl.useProgram(program.program);
+  twgl.setUniforms(program, {
     u_glyphs: targets.glyphTex,
     u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
@@ -744,15 +952,23 @@ export function glyphPass(
     u_background: theme.background.slice(0, 3),
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+    u_lifeTime: lifeTime,
     u_overlay: targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
+    u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
+    u_buntingWindDir: weather.wind?.dir ?? [0, 0],
+    u_focus: focused,
+    u_focusLife: focus.life.size > 0,
+    u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
+    u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,

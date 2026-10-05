@@ -1,5 +1,6 @@
 name: CI
 
+# Main checks merged code and refreshes shared caches; browser tests run on PRs only.
 on:
   push:
     branches: [main]
@@ -14,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  # Jobs run in parallel and time out at 6 minutes, so a change that makes CI slow fails its
-  # PR instead of quietly adding minutes (AGENTS.md "Verifying changes").
+  # Every job times out at 6 minutes, so a change that makes CI slow fails its PR instead of
+  # quietly adding minutes (AGENTS.md "Verifying changes"). The e2e shards start once `check` passes.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -41,18 +42,43 @@ jobs:
 
       - run: pnpm test
 
+      # PR-scoped caches cannot be restored by other PRs. Refresh the shared browser cache
+      # on main without building the export, installing system dependencies, or running e2e.
+      - name: Playwright version
+        if: github.event_name == 'push'
+        id: playwright
+        run: echo "version=$(pnpm --filter @atlas/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers for PRs
+        if: github.event_name == 'push'
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          # Must match the e2e job's browser-cache key.
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          lookup-only: true
+
+      - name: Install Playwright browsers for PRs
+        if: github.event_name == 'push' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @atlas/web exec playwright install chromium
+
   # Builds the static export with the published tiles (DATA.md §9), then runs the Playwright
   # smoke suite against it and checks the size budgets (ARCHITECTURE.md §8). The suite is split
-  # across two runners: each test renders WebGL in software on a single worker.
+  # across three runners, gated on `check`, leaving room for setup, export and cleanup
+  # within six minutes without spending browser runners on a failed check.
   e2e:
+    needs: check
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
-      # Release assets of a private repository download through the API with this token.
+      ATLAS_REQUIRE_DETAILS: '1'
+      # With this token, release assets download through the GitHub API (required for private repositories).
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
@@ -75,6 +101,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
+          # Must match the check job's shared browser-cache key.
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       # Azure mirror downloads can exhaust the job budget before any browser test starts.
@@ -88,7 +115,11 @@ jobs:
       - run: pnpm --filter @atlas/web exec playwright install --with-deps chromium
 
       # Prepares the static export before Playwright starts or reuses its web server.
-      - run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Check browser shard duration
+        if: always()
+        run: pnpm check:e2e-budget --report=apps/web/test-results/shard-duration.json --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - run: pnpm check:budgets
         if: matrix.shard == 1

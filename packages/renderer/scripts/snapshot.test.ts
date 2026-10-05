@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { resolve, join, dirname, basename } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { currentSourceHash, snapshotRevision, snapshotCurrent } from './snapshot';
+import { tmpdir } from 'node:os';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn((_command: string, args: string[]) => {
@@ -15,7 +16,7 @@ vi.mock('node:child_process', () => ({
     return 'export const shared = "frozen-shared";';
   }),
 }));
-const workspace = resolve('test-results');
+const workspace = tmpdir();
 let temporary: string | undefined;
 afterEach(async () => {
   if (
@@ -25,6 +26,7 @@ afterEach(async () => {
   )
     await rm(temporary, { recursive: true, force: true });
 });
+// eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
 it('copies helper sources and redirects shared aliases into the frozen source graph', async () => {
   await mkdir(workspace, { recursive: true });
   temporary = await mkdtemp(join(workspace, 'snapshot-test-'));

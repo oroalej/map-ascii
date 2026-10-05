@@ -588,13 +588,16 @@ describe('buildTileGeometry', () => {
   });
 
   it('turns POI points into markers', () => {
-    const { points } = buildTileGeometry(
-      { poi: layer([feature(1, { id: 'osm:node/4', class: 'building_school' }, [[[7, 8]]])]) },
-      createIdRegistry(),
-    );
-    expect(vertices(points)).toEqual([
-      { x: 7, y: 8, cls: classId('marker_school'), height: 0, flags: 0 },
-    ]);
+    for (const [cls, marker] of [
+      ['building_school', 'marker_school'],
+      ['building_hospital', 'marker_hospital'],
+    ] as const) {
+      const { points } = buildTileGeometry(
+        { poi: layer([feature(1, { id: 'osm:node/4', class: cls }, [[[7, 8]]])]) },
+        createIdRegistry(),
+      );
+      expect(vertices(points)).toEqual([{ x: 7, y: 8, cls: classId(marker), height: 0, flags: 0 }]);
+    }
   });
 
   it('skips event pins, unknown classes, and place labels as cells', () => {

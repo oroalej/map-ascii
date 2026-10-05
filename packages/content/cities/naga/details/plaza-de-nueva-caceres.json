@@ -1,0 +1,70 @@
+{
+  "id": "detail/plaza-de-nueva-caceres",
+  "osm_id": "osm:way/682340233",
+  "title": "Plaza de Nueva Caceres",
+  "surface": "paving",
+  "structures": [
+    {
+      "id": "statue-base",
+      "ring": [
+        [123.18413684, 13.62102137],
+        [123.18415514, 13.62101886],
+        [123.18416415, 13.62108113],
+        [123.18414584, 13.62108364],
+        [123.18413684, 13.62102137]
+      ],
+      "height_m": 0.7,
+      "material": "stone",
+      "overhead": false
+    }
+  ],
+  "flagpoles": [],
+  "walks": [
+    {
+      "id": "west-passage",
+      "line": [
+        [123.18413016, 13.62098837],
+        [123.1841394, 13.62111413]
+      ],
+      "width_m": 0.7
+    }
+  ],
+  "seating": [
+    {
+      "id": "north-edge",
+      "line": [
+        [123.18414134, 13.62113335],
+        [123.18415965, 13.62113085]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    },
+    {
+      "id": "south-edge",
+      "line": [
+        [123.18412285, 13.62096267],
+        [123.18414116, 13.62096017]
+      ],
+      "width_m": 0.5,
+      "height_m": 0.45,
+      "facing": "left"
+    }
+  ],
+  "lamps": [],
+  "status": "draft",
+  "credit": "Plaza de Nueva Caceres — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/682340233",
+      "note": "ODbL. Site and building footprints, mapped monuments and facilities. No OSM edit dates are interpreted as construction dates."
+    },
+    {
+      "title": "Independent facility reference",
+      "url": "https://tourism.naga.gov.ph/attractions/plaza-de-nueva-caceres/",
+      "note": "Official plaza description: 37.27 × 6.05 m is the plaza, not the statue base. Two sculptural groups and central flame represented by modest plan pedestals; individual figure counts are not duplicated as footprints. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
+    }
+  ],
+  "selection_osm_id": "osm:node/5067240326"
+}

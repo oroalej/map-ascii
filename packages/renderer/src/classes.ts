@@ -3,6 +3,7 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   isRoofBuilding,
+  ROOF_BUILDING_CLASSES,
   RoofShape,
   type AtlasClass,
 } from '@atlas/shared';
@@ -14,6 +15,7 @@ export const markerClasses = [
   'marker_market',
   'marker_station',
   'marker_landmark',
+  'marker_hospital',
 ] as const;
 export type MarkerClass = (typeof markerClasses)[number];
 
@@ -85,6 +87,7 @@ export function classesIn(texels: Uint8Array): RenderClass[] {
 export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
   building_religious: 'marker_religious',
   building_school: 'marker_school',
+  building_hospital: 'marker_hospital',
   building_market: 'marker_market',
   building_station: 'marker_station',
 };
@@ -98,7 +101,14 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
  */
 export const priority: readonly (readonly RenderClass[])[] = [
   ['marker_landmark'],
-  ['marker_religious', 'marker_school', 'marker_market', 'marker_station', 'monument'],
+  [
+    'marker_religious',
+    'marker_school',
+    'marker_market',
+    'marker_station',
+    'marker_hospital',
+    'monument',
+  ],
   ['tree', 'furniture', 'entrance'],
   ['road_major'],
   ['road_mid'],
@@ -110,6 +120,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
     'building',
     'building_religious',
     'building_school',
+    'building_hospital',
     'building_market',
     'building_station',
     'building_part',
@@ -135,13 +146,14 @@ export const priority: readonly (readonly RenderClass[])[] = [
  * than buildings. Grounds are drawn under everything on them but terrain (`groundDepth`), so a
  * lawn, garden, or pond inside a campus shows.
  */
-export const groundClasses: readonly RenderClass[] = [
-  'building',
-  'building_religious',
-  'building_school',
-  'building_market',
-  'building_station',
-];
+export const groundClasses: readonly RenderClass[] = ROOF_BUILDING_CLASSES;
+
+/** Per-class ground admission, including building ids outside 32-bit masks. */
+export function groundFlags(): Int32Array {
+  const flags = new Int32Array(MAX_CLASSES);
+  for (const cls of groundClasses) flags[classId(cls)] = 1;
+  return flags;
+}
 
 /** Surfaces crowns may cover: roads (1), or roofs only when the crown is taller (2). */
 export function crownSurfaces(): Int32Array {
@@ -173,6 +185,18 @@ export function groundDepth(): number {
   const depths = classDepths();
   return (depths[classId('paving')]! + depths[classId('terrain')]!) / 2;
 }
+
+/** Opt-in paving above coarse ground fills, below planted islands and higher surfaces. */
+export const PavingVariant = { terrace: 1, override: 2 } as const;
+export function pavingOverrideDepth(): number {
+  const depths = classDepths();
+  return (depths[classId('park')]! + depths[classId('planting')]!) / 2;
+}
+export const pavingOverrideBase: readonly RenderClass[] = (() => {
+  const depths = classDepths();
+  const cutoff = pavingOverrideDepth();
+  return priority.flat().filter((cls) => depths[classId(cls)]! > cutoff);
+})();
 
 /**
  * How much of each class shows at `zoom`, 0–1, from the shared `CLASS_ZOOM` table (SPEC.md §2
@@ -243,7 +267,12 @@ export function variantCode(className: string, variant: unknown): number {
     return RoofShape.gabled;
   }
   if (typeof variant !== 'string') return 0;
-  if (className === 'paving') return variant === 'terrace' ? 1 : 0;
+  if (className === 'paving')
+    return variant === 'terrace_override'
+      ? PavingVariant.override
+      : variant === 'terrace'
+        ? PavingVariant.terrace
+        : 0;
   if (className === 'furniture')
     return (
       [

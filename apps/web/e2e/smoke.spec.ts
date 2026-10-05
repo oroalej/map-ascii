@@ -74,6 +74,47 @@ for (const city of cities) {
 
     test.describe('with map data', () => {
       test.skip(!city.hasMeta, 'no generated tiles; run pnpm data:build');
+      test('previews seasonal decorations and keeps the URL unchanged', async ({ page }) => {
+        test.skip(!city.seasons.length, 'no festive calendar in this pack');
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
+        await page.goto(`/${city.slug}?z=19`);
+        await mapReady(page);
+        const today = page.getByRole('button', { name: 'Season: Today', exact: true });
+        await expect(today).toBeVisible();
+        // Initial camera normalization writes the default coordinates asynchronously.
+        await expect.poll(() => query(page).lat).toBeTruthy();
+        await expect.poll(() => query(page).lng).toBeTruthy();
+        const before = query(page),
+          first = city.seasons[0]!;
+        await today.click();
+        const preview = page.getByRole('button', {
+          name: `Season: ${first.title.en}`,
+          exact: true,
+        });
+        await expect(preview).toBeVisible();
+        if (first.status === 'draft') await expect(preview).toHaveAttribute('title', /Draft/);
+        if (first.lanterns)
+          await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
+        if (first.fireworks)
+          await expect(
+            page.getByText(`${first.fireworks.label} (illustrative)`, { exact: true }),
+          ).toBeVisible();
+        // Also exercise a fixture season: fireworks alone don't compile its glyph variant.
+        const decorated = city.seasons.findIndex((season) => !!season.lanterns);
+        if (decorated > 0) {
+          for (let i = 0; i < decorated; i++)
+            await page.getByRole('button', { name: /^Season:/ }).click();
+          const season = city.seasons[decorated]!;
+          await expect(
+            page.getByRole('button', { name: `Season: ${season.title.en}`, exact: true }),
+          ).toBeVisible();
+          await expect(page.getByText(season.lanterns!.label, { exact: true })).toBeVisible();
+        }
+        expect(query(page)).toEqual(before);
+        expect(errors).toEqual([]);
+      });
 
       test(`search finds "${city.smokeLandmark}", flies there, and opens the panel`, async ({
         page,
@@ -118,7 +159,7 @@ for (const city of cities) {
             .filter({ has: page.locator('summary', { hasText: 'Legend' }) });
           await expect(legend).toBeVisible();
           // Readouts may cover the landmark on a phone when attribution pushes the HUD up.
-          // They must let map gestures through; only HUD controls should intercept input.
+          // They must let map gestures through; only enabled HUD controls intercept input.
           const scaleBox = (await page.getByLabel(/^Scale:/).boundingBox())!;
           expect(
             await canvas.evaluate(
@@ -126,6 +167,16 @@ for (const city of cities) {
               { x: scaleBox.x + scaleBox.width / 2, y: scaleBox.y + scaleBox.height / 2 },
             ),
             'the scale readout lets pointer events reach the map',
+          ).toBe(true);
+          const wind = page.getByRole('button', { name: /^Wind/ });
+          await expect(wind).toBeDisabled();
+          const windBox = (await wind.boundingBox())!;
+          expect(
+            await canvas.evaluate(
+              (map, point) => document.elementFromPoint(point.x, point.y) === map,
+              { x: windBox.x + windBox.width / 2, y: windBox.y + windBox.height / 2 },
+            ),
+            'disabled controls let pointer events reach the map',
           ).toBe(true);
           // Controls in the same HUD remain clickable.
           await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
@@ -151,6 +202,29 @@ for (const city of cities) {
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
+          // Reuse the loaded map for browser-only keyboard and layout checks. Focus
+          // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
+          const summary = legend.locator('summary');
+          if (!(await legend.evaluate((element) => (element as HTMLDetailsElement).open)))
+            await summary.click();
+          const focus = legend.getByRole('button', { name: 'Secondary road', exact: true });
+          await expect(focus).toBeVisible();
+          if (hasTouch) await focus.tap();
+          else {
+            await focus.focus();
+            await page.keyboard.press('Enter');
+            await expect(focus).toHaveCSS('outline-style', 'solid');
+          }
+          const clear = page.getByRole('button', { name: /^Clear legend focus:/ });
+          await expect(clear).toBeVisible();
+          if (hasTouch) {
+            for (const control of [focus, summary, clear])
+              expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            const tours = (await page.getByRole('button', { name: /^Tours/ }).boundingBox())!;
+            const zoom = (await page.getByLabel('Zoom').boundingBox())!;
+            expect(zoom.x).toBeGreaterThanOrEqual(tours.x + tours.width + 8);
+          }
+          await clear.click();
         },
       );
 
@@ -223,8 +297,9 @@ for (const city of cities) {
       test('follows the Life toggle and changed motion preference with GPU timing', async ({
         page,
       }) => {
-        // Bound animated software-WebGL work while exercising startup and motion toggles.
-        await page.setViewportSize({ width: 640, height: 480 });
+        // Use the smallest desktop width to bound animated software-WebGL work.
+        await page.setViewportSize({ width: 641, height: 480 });
+        expect(await page.evaluate(() => matchMedia('(max-width: 640px)').matches)).toBe(false);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.emulateMedia({ reducedMotion: 'no-preference' });

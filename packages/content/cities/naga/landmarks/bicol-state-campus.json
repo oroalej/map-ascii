@@ -1,0 +1,25 @@
+{
+  "id": "landmark/bicol-state-campus",
+  "osm_id": "osm:way/243777834",
+  "name": {
+    "en": "Bicol State College of Applied Sciences and Technology"
+  },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/243777834",
+      "note": "ODbL. Original footprints, roads and mapped facilities preserved. No edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied overhead reference, seven-site adjustment",
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. Name identifies the referenced campus; no historical dates added."
+    },
+    {
+      "title": "BISCAST official institution site",
+      "url": "https://biscast.edu.ph/",
+      "note": "Official site still presents the Bicol State College name. OSM also carries Southeast Asian University of Technology/SEAUTech links. This pack identifies the supplied BISCAST campus; it does not assert a conversion completion date."
+    }
+  ]
+}

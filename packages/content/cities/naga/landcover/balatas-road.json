@@ -1,0 +1,121 @@
+{
+  "id": "landcover/balatas-road",
+  "title": "Balatas Road canopy from Magsaysay Avenue to Peñafrancia Basilica",
+  "trees": [
+    {
+      "at": [123.196812421, 13.631493625],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.196871577, 13.631429345],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.19708409, 13.631736416],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.197416125, 13.631916491],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.197355993, 13.63197991],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.197626371, 13.63222519],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.197686279, 13.632161571],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.197959041, 13.632404155],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.197899134, 13.632467774],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198240622, 13.632631725],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.198185715, 13.632699472],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.198536392, 13.632840583],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.198487649, 13.632912646],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.198850611, 13.633019006],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.198981445, 13.633170588],
+      "crown_m": 13,
+      "height_m": 8
+    },
+    {
+      "at": [123.199187324, 13.633156706],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.199328681, 13.633301079],
+      "crown_m": 12,
+      "height_m": 8
+    },
+    {
+      "at": [123.199533007, 13.633284198],
+      "crown_m": 11,
+      "height_m": 8
+    },
+    {
+      "at": [123.199677925, 13.633423583],
+      "crown_m": 14,
+      "height_m": 8
+    },
+    {
+      "at": [123.199881482, 13.633399473],
+      "crown_m": 13,
+      "height_m": 8
+    }
+  ],
+  "rows": [],
+  "areas": [],
+  "status": "draft",
+  "credit": "Owner-supplied church, Science High School and Balatas Road references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Balatas-Cararayan Road",
+      "url": "https://www.openstreetmap.org/way/23521696",
+      "note": "ODbL. Only the section from the Magsaysay Avenue shared vertex to the Basilica eastern frontage at source vertex [123.2000138, 13.6334885] is landscaped; full road geometry remains unchanged."
+    },
+    {
+      "title": "Owner-supplied Balatas Road canopy reference",
+      "note": "Inspected 2026-10-02. The initial dense road-covering draft is superseded by the owner request to reduce it. Retain spaced trees on both verges at roughly 40 m or greater along each side, with smaller estimated 11–14 m crowns and unchanged 8 m height. Chosen trunk positions and source routes remain; constrained gaps and clear road views are intentional. This is a schematic corridor, not a species or tree inventory."
+    }
+  ]
+}

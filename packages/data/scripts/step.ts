@@ -55,6 +55,8 @@ export const files = {
   rawDetailLife: 'detail-life.osm.json',
   rawDetailTraffic: 'detail-traffic.osm.json',
   rawDetailNeighborhood: 'detail-neighborhood.osm.json',
+  rawDetailGrounds: 'detail-grounds.osm.json',
+  rawDetailPools: 'detail-pools.osm.json',
   /** The region relation lookup (tags and bounds only). */
   rawRegionRelation: 'region-relation.osm.json',
   /** Region-wide low-detail layers: coastline, major roads, rivers, lakes, places. */
@@ -70,4 +72,5 @@ export const files = {
   normalized: 'normalized.geojsonl',
   subdivisions: 'subdivisions.json',
   merged: 'merged.geojsonl',
+  detailLayouts: 'detail-layouts.json',
 };

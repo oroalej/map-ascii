@@ -1,0 +1,62 @@
+{
+  "id": "landcover/naga-college-foundation",
+  "title": "Naga College Foundation planting",
+  "trees": [
+    {
+      "at": [123.191733814, 13.633502889],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.191717622, 13.633397724],
+      "crown_m": 6,
+      "height_m": 5
+    },
+    {
+      "at": [123.191735662, 13.633325221],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.191577565, 13.633175207],
+      "crown_m": 10,
+      "height_m": 5
+    },
+    {
+      "at": [123.191614568, 13.633143932],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.191796204, 13.633574236],
+      "crown_m": 7,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "cover": "planting",
+      "ring": [
+        [123.191685817, 13.6331519],
+        [123.191664656, 13.633079019],
+        [123.191595609, 13.633138836],
+        [123.191614269, 13.633184552],
+        [123.191685817, 13.6331519]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Naga College Foundation - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "sources": [
+    {
+      "title": "OpenStreetMap: original site and surrounding features",
+      "url": "https://www.openstreetmap.org/way/1314530225",
+      "note": "Original source geometry and identities retained; no edit dates interpreted as construction dates."
+    },
+    {
+      "title": "Owner-supplied additional landmark overhead reference",
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+    }
+  ]
+}

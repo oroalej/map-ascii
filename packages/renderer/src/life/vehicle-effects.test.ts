@@ -39,8 +39,8 @@ const siteAt = (m: { x: number; y: number }): Visit['site'] => ({
   direction: 1,
 });
 
-function fixture() {
-  const world = new LifeWorld();
+function fixture(itemInspection = false) {
+  const world = new LifeWorld(undefined, undefined, undefined, itemInspection);
   world.sync([continuityTile(left), continuityTile(right)]);
   const lives = [...worldTiles(world).values()];
   for (const life of lives) {
@@ -82,6 +82,7 @@ const packed = (agents: VisibleAgent[], customGrid = grid, puffs = new Float64Ar
     glyphIndex,
     undefined,
     undefined,
+    undefined,
     puffs,
   );
   return { out, count };
@@ -90,6 +91,34 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
 
 describe('accepted vehicle effects', () => {
+  it('retains brake lamps and emitter deadlines while inspecting a vehicle', () => {
+    const { world, lives } = fixture(true);
+    const life = lives[0]!;
+    const m = continuityMover(life, 1000);
+    m.vehicle = 'bus';
+    m.v = 0;
+    life.movers.push(m);
+    const center = tileToLngLat(left, m);
+    const effects = ensureVehicleEffects(m);
+    effects.brake = BRAKE.hold;
+    effects.exhaust = emitter(m.routing!.seed, 0);
+    effects.exhaust.nextIdle = 0.2;
+    const selected = world.visible(21, 1, center).find((a) => a.kind === 'vehicle' && !a.parked)!;
+    expect(selected.lamps).toEqual({ kind: 'brake' });
+    world.inspection!.select({ id: selected.inspectionId!, revision: 1, time: 0 }, 0);
+    for (let frame = 1; frame <= 45; frame++) world.step(1 / 30);
+    expect(effects.brake).toBe(BRAKE.hold);
+    expect(effects.exhaust.emitted).toBe(0);
+    expect(
+      world.visible(21, 1, center).find((a) => a.inspectionId === selected.inspectionId)!.lamps,
+    ).toEqual(selected.lamps);
+    world.inspection!.select({ id: null, revision: 2, time: 1.5 }, world.signalClock);
+    world.step(1 / 30);
+    expect(effects.inactiveAt).toBeUndefined();
+    expect(effects.exhaust.emitted).toBe(0);
+    expect(effects.exhaust.nextIdle).toBeGreaterThan(world.signalClock);
+  });
+
   it.each([30, 60, 120])(
     'matches eager accepted-speed scheduling through lazy idle and pull-away at %s Hz',
     (hz) => {

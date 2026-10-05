@@ -1,0 +1,16 @@
+{
+  "id": "landmark/naga-city-hall",
+  "osm_id": "osm:way/23669724",
+  "name": {
+    "en": "Naga City Hall"
+  },
+  "type": "government",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/way/23669724",
+      "note": "Location and name only; no construction date inferred."
+    }
+  ]
+}

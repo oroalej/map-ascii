@@ -2,9 +2,10 @@ import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
-import { personGlyphs } from './life/people';
+import { figureOf, personGlyphs } from './life/people';
 import { PUFF_GLYPHS } from './life/puff-style';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
+import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
 
@@ -208,6 +209,7 @@ type Palette = Record<
   | 'building'
   | 'religious'
   | 'school'
+  | 'hospital'
   | 'market'
   | 'rail'
   | 'station'
@@ -249,8 +251,14 @@ function makeTheme(background: number, c: Palette): Theme {
     accent: c.accent,
     fixturePaints:
       background > 0x7fffff
-        ? [0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f, 0x8d8a82, 0x34383e]
-        : [0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87, 0xc9c5bb, 0x6f7782],
+        ? [
+            0x555b63, 0x242830, 0xffe6ad, 0xc92825, 0xb87900, 0x12823f, 0x8d8a82, 0x34383e,
+            0xb93340, 0xb8831a, 0x25785a,
+          ]
+        : [
+            0xaab2bd, 0x303641, 0xffebba, 0xff5147, 0xffba3a, 0x58df87, 0xc9c5bb, 0x6f7782,
+            0xf05b5b, 0xffd26f, 0x7ccf9d,
+          ],
     vehiclePaints: c.vehiclePaints,
     awningPaints:
       background > 0x7fffff
@@ -285,6 +293,7 @@ function makeTheme(background: number, c: Palette): Theme {
         fill: 0.22,
       },
       building_school: { kind: 'building', glyphs: buildingRamp, color: c.school, fill: 0.22 },
+      building_hospital: { kind: 'building', glyphs: buildingRamp, color: c.hospital, fill: 0.22 },
       building_market: { kind: 'building', glyphs: buildingRamp, color: c.market, fill: 0.22 },
       building_station: { kind: 'building', glyphs: buildingRamp, color: c.station, fill: 0.22 },
       // Landmark parts seen from above: belfries, domes, a monument's tiered base.
@@ -330,6 +339,7 @@ function makeTheme(background: number, c: Palette): Theme {
       farmland: { kind: 'crop', glyphs: ['≡', "'", '/', '\\', '~'], color: c.farmland, fill: 0.08 },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
       marker_school: { kind: 'single', glyphs: ['⌂'], color: c.school },
+      marker_hospital: { kind: 'single', glyphs: ['+'], color: c.hospital },
       marker_market: { kind: 'single', glyphs: ['$'], color: c.market },
       marker_station: { kind: 'single', glyphs: ['Ħ'], color: c.station },
       marker_landmark: { kind: 'single', glyphs: ['◆'], color: c.landmark },
@@ -376,6 +386,7 @@ export const themes: Record<ThemeName, Theme> = {
     building: 0xa38d74,
     religious: 0xe2b845,
     school: 0x7ea8e0,
+    hospital: 0xe57c94,
     market: 0xe98a45,
     rail: 0x9a8f86,
     station: 0xc8685a,
@@ -430,6 +441,7 @@ export const themes: Record<ThemeName, Theme> = {
     building: 0x8a6e52,
     religious: 0xa87a00,
     school: 0x2f5f9e,
+    hospital: 0xb23b60,
     market: 0xb85418,
     rail: 0x5e5048,
     station: 0x9a3a2c,
@@ -489,6 +501,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   building: 'Building',
   building_religious: 'Place of worship',
   building_school: 'School',
+  building_hospital: 'Hospital',
   building_market: 'Market or shop',
   building_station: 'Train station',
   building_part: 'Landmark part',
@@ -514,6 +527,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   place_label: 'Place',
   marker_religious: 'Place of worship',
   marker_school: 'School',
+  marker_hospital: 'Hospital',
   marker_market: 'Market',
   marker_station: 'Train station',
   marker_landmark: 'Landmark',
@@ -541,12 +555,11 @@ export function mapGlyphs(theme: Theme): string[] {
   const set = new Set<string>();
   for (const style of Object.values(theme.styles)) for (const g of style.glyphs) set.add(g);
   const extras = [
-    ...PUFF_GLYPHS,
     ...singleWall,
     ...doubleWall,
     ...sextantGlyphs,
     ...vehicleGlyphs(),
-    ...personGlyphs(),
+    ...personGlyphs().filter((glyph) => !figureOf(glyph)?.pose),
     ...birdGlyphs(),
     ...dogGlyphs(),
     ...catGlyphs(),
@@ -554,6 +567,12 @@ export function mapGlyphs(theme: Theme): string[] {
     streetlightGlyph,
     ...fixtureGlyphs,
     ...arrowGlyphs,
+    ...SEASONAL_GLYPHS,
+    // New social poses follow all existing map glyphs, preserving hardware and season indices.
+    ...personGlyphs().filter((glyph) => figureOf(glyph)?.pose),
+    // Parking labels follow all existing glyphs so legacy atlas indices stay unchanged.
+    ...ACCESS_GLYPHS,
+    ...PUFF_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];

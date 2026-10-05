@@ -1,5 +1,6 @@
+import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
-import type { CameraState, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid, metersPerCssPx } from '../grid';
@@ -10,9 +11,11 @@ import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
+import type { InspectionCommand } from './inspection';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
+  inspection?: InspectionCommand;
   gust: {
     camera: CameraState;
     size: { width: number; height: number };
@@ -41,6 +44,9 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  seasons?: readonly SimulationSeason[];
+  shopSchedule?: ShopSchedule;
+  itemInspection?: boolean;
   dialogue?: readonly DialogueChoice[];
   periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
@@ -49,9 +55,19 @@ export type LifeInit = {
 };
 export type SyncTile = Omit<LifeTile, 'life'> & { life?: LifeGeometry };
 
+export function configureLifeWorld(
+  world: LifeWorld,
+  options: Pick<LifeInit, 'processions' | 'seasons' | 'shopSchedule'>,
+) {
+  world.setProcessions(options.processions);
+  world.setSeasons(options.seasons ?? []);
+  world.setShopSchedule(options.shopSchedule);
+}
+
 /** Shared synchronous execution keeps the fallback's order and arguments identical. */
 export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: FrameProfiler) {
   const { gust, step } = input;
+  if (input.inspection) world.inspection?.select(input.inspection, world.signalClock);
   const { grid, toCell } = placeGrid(
     { camera: gust.camera, dpr: 1, ...gust.size },
     gust.cssCell,
@@ -91,10 +107,15 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
 export function createLifeWorkerApi(
   preparationClock?: () => number,
   worldFactory = (options: LifeInit, profiler?: FrameProfiler) =>
-    new LifeWorld(options.traffic, profiler, {
-      dialogue: options.dialogue,
-      periods: options.periods,
-    }),
+    new LifeWorld(
+      options.traffic,
+      profiler,
+      {
+        dialogue: options.dialogue,
+        periods: options.periods,
+      },
+      options.itemInspection,
+    ),
 ) {
   let world: LifeWorld;
   let profiler: FrameProfiler | undefined;
@@ -108,7 +129,7 @@ export function createLifeWorkerApi(
       profiler = options.profiling ? new FrameProfiler() : undefined;
       world = worldFactory(options, profiler);
       preparation = new LifePreparation(world, profiler, preparationClock);
-      world.setProcessions(options.processions);
+      configureLifeWorld(world, options);
       geometries.clear();
       lastTerrain = undefined;
       terrainSent = false;
@@ -170,8 +191,8 @@ export function createLifeWorkerApi(
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },
-    setLive(id: string | undefined, progress?: number) {
-      world.setLive(id, progress);
+    setLive(id: string | undefined, progress?: number, occurrence?: string) {
+      world.setLive(id, progress, occurrence);
     },
     play(id: string) {
       return world.play(id);

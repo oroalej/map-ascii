@@ -1,0 +1,133 @@
+{
+  "id": "landcover/penafrancia-shrine",
+  "title": "Our Lady of Peñafrancia Shrine landscaping",
+  "trees": [
+    {
+      "at": [123.19487071, 13.634580633],
+      "crown_m": 6,
+      "height_m": 5
+    },
+    {
+      "at": [123.195027851, 13.634535717],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.195138774, 13.634472835],
+      "crown_m": 7,
+      "height_m": 5
+    },
+    {
+      "at": [123.195203479, 13.634391987],
+      "crown_m": 9,
+      "height_m": 5
+    },
+    {
+      "at": [123.194879953, 13.634176393],
+      "crown_m": 8,
+      "height_m": 5
+    },
+    {
+      "at": [123.195471543, 13.634050629],
+      "crown_m": 8,
+      "height_m": 5
+    }
+  ],
+  "rows": [],
+  "areas": [
+    {
+      "ring": [
+        [123.195017486, 13.63414046],
+        [123.195092556, 13.63414046],
+        [123.195092556, 13.634078734],
+        [123.195012723, 13.634133082],
+        [123.195017486, 13.63414046]
+      ],
+      "cover": "parking"
+    },
+    {
+      "ring": [
+        [123.194899146, 13.634607582],
+        [123.195081093, 13.63453736],
+        [123.195084052, 13.634535717],
+        [123.194858892, 13.634535717],
+        [123.194869959, 13.634607582],
+        [123.194899146, 13.634607582]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.194843753, 13.634170786],
+        [123.19489844, 13.634278925],
+        [123.19489844, 13.634257241],
+        [123.194889197, 13.634257241],
+        [123.194889197, 13.634185376],
+        [123.19489844, 13.634185376],
+        [123.19489844, 13.63416741],
+        [123.194848126, 13.63416741],
+        [123.194843753, 13.634170786]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.195175748, 13.633924866],
+        [123.195166505, 13.633924866],
+        [123.195166505, 13.633921578],
+        [123.195104076, 13.633969781],
+        [123.195141137, 13.633969781],
+        [123.195175748, 13.633945558],
+        [123.195175748, 13.633924866]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.194925762, 13.634499785],
+        [123.194870162, 13.634526734],
+        [123.195046338, 13.634526734],
+        [123.195046338, 13.634499785],
+        [123.194925762, 13.634499785]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.194889197, 13.634185376],
+        [123.194889197, 13.634257241],
+        [123.194916928, 13.634257241],
+        [123.194916928, 13.634185376],
+        [123.194889197, 13.634185376]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.195223783, 13.63391194],
+        [123.195243546, 13.633924866],
+        [123.195258941, 13.633924866],
+        [123.195258941, 13.633897916],
+        [123.195197149, 13.633897916],
+        [123.195166505, 13.633921578],
+        [123.195166505, 13.633924866],
+        [123.195205314, 13.633924866],
+        [123.195223783, 13.63391194]
+      ],
+      "cover": "planting"
+    }
+  ],
+  "status": "draft",
+  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "sources": [
+    {
+      "title": "OpenStreetMap school/plaza grounds",
+      "url": "https://www.openstreetmap.org/way/724187419",
+      "note": "ODbL. Complete mapped parent, standing roofs, roads, neighboring identities and source geometries retained."
+    },
+    {
+      "title": "Owner-supplied Shrine, Concepcion and Sabang references",
+      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated draft estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
+    }
+  ]
+}

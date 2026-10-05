@@ -165,6 +165,7 @@ describe('life worker protocol', () => {
     expect(inline.latest()!.agents).toEqual([]);
     inline.dispose();
   });
+  // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('matches a direct world over 120 frames, weather changes, eviction and reload', () => {
     const scenario = makeScenario('rain', 2, false);
     // Buffered commerce must survive cloning, repeated sync and eviction on both paths.

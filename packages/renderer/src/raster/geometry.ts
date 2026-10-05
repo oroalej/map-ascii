@@ -7,6 +7,7 @@
  */
 import {
   parseUtilityRecord,
+  parseDetailSelection,
   isLitRoad,
   TILE_EXTENT as EXTENT,
   MERCATOR_METERS,
@@ -22,6 +23,17 @@ import {
   type FrontageKind,
 } from '@atlas/shared';
 import earcut from 'earcut';
+import {
+  isResidentialBuilding,
+  isResidentialStreet,
+  isRoofCandidate,
+  isCompactRoof,
+  neighborhoodSites,
+  residentialSite,
+  packResidentialSites,
+  type ResidentialSite,
+  type ResidentialSites,
+} from '../fireworks-sites';
 import { isRoofBuilding, parseRoofPlan, roofFrame } from '@atlas/shared';
 import {
   foldRoofAngle,
@@ -50,10 +62,12 @@ import {
   LifeLine,
   lifeLineFor,
   lifeTransferables,
+  encodeSeasonalPayload,
   placeFor,
   plazaClasses,
   roostClasses,
   type LifeGeometry,
+  type SeasonalPayload,
 } from '../life/geometry';
 import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { stripRing } from '../life/terrain';
@@ -196,8 +210,11 @@ export type GroundGeometry = {
 };
 
 export type TileGeometry = GroundGeometry & {
+  /** Mapped home anchors for atmospheric fireworks, independent of Life simulation. */
+  residential?: ResidentialSites;
   /** Static hardware stays outside Life so it is never cloned to the simulation worker. */
   utilities?: readonly UtilityRecord[];
+  seasonal?: SeasonalPayload;
   /**
    * Tree crowns, flat, kept apart from the ground: the crown pass draws them again every frame,
    * swaying in the wind (passes.ts `crownPass`). Each vertex's `ridge` is its distance from the
@@ -744,6 +761,7 @@ export function buildTileGeometry(
   registry: IdRegistry,
   tile?: TileAddress,
   maxZoom?: number,
+  fireworks = true,
 ): TileGeometry {
   const unitMeters = tile ? metersPerUnit(tile) : undefined;
   const drawnAt = (zoom: number) =>
@@ -762,8 +780,23 @@ export function buildTileGeometry(
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
   const litLines: LitLine[] = [];
   const utilities: UtilityRecord[] = [];
+  const rawSeasonal: string[] = [];
+  const residential: ResidentialSite[] = [];
+  const compactRoofs: ResidentialSite[] = [];
+  const residentialStreets: TilePoint[][] = [];
+  // Burial rows repeat one parent descriptor thousands of times. Keep this cache
+  // local to a decode, including failed parses, so archives cannot grow it forever.
+  const selections = new Map<string, ReturnType<typeof parseDetailSelection>>();
 
   for (const [name, layer] of Object.entries(layers)) {
+    if (name === 'seasons') {
+      if (tile && tile.z === maxZoom)
+        for (let i = 0; i < layer.length; i++) {
+          const raw = layer.feature(i).properties.seasonal;
+          if (typeof raw === 'string') rawSeasonal.push(raw);
+        }
+      continue;
+    }
     if (name === 'utilities') {
       if (tile && tile.z === maxZoom)
         for (let i = 0; i < layer.length; i++) {
@@ -782,6 +815,14 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      // A site's building or monument may be in another tile on a cold direct-URL load.
+      // Register its real metadata without assigning its id to the surface's outline.
+      const descriptor = feature.properties.detail_selection;
+      if (typeof descriptor === 'string' && !selections.has(descriptor))
+        selections.set(descriptor, parseDetailSelection(descriptor));
+      const selection = typeof descriptor === 'string' ? selections.get(descriptor) : undefined;
+      if (selection && selection.id === feature.properties.detail_parent)
+        registry.index(selection.id, () => selection);
       const id = registry.index(featureId, () =>
         featureInfo(featureId, className, feature.properties),
       );
@@ -1089,6 +1130,8 @@ export function buildTileGeometry(
           }
         }
       } else if (feature.type === 2) {
+        if (fireworks && !isRegion && isResidentialStreet(className, feature.properties.kind))
+          residentialStreets.push(...rings);
         const street = streetLabel(className, feature.properties.kind);
         if (street && tile && typeof text === 'string' && text.trim()) {
           const run = rings
@@ -1257,6 +1300,25 @@ export function buildTileGeometry(
         // One corrupt/degenerate fragment falls back for the entire feature, before emitting buffers.
         const usePlan = !!plan && polygons.every((p) => p.pieces !== undefined);
         for (const { polygon, points, triangles, pieces: partition } of polygons) {
+          if (
+            fireworks &&
+            !isRegion &&
+            className === 'building' &&
+            isResidentialBuilding(feature.properties.kind)
+          ) {
+            const site = residentialSite(id, points, triangles, EXTENT);
+            if (site) residential.push(site);
+          }
+          if (
+            fireworks &&
+            !isRegion &&
+            unitMeters &&
+            isRoofCandidate(className, feature.properties.kind, height, landmark) &&
+            isCompactRoof(points, triangles, unitMeters)
+          ) {
+            const site = residentialSite(id, points, triangles, EXTENT);
+            if (site) compactRoofs.push(site);
+          }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
             else if (solid || standingWater || feature.properties.detail_blocked)
@@ -1366,6 +1428,10 @@ export function buildTileGeometry(
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
 
   if (unitMeters && tile) {
+    if (fireworks)
+      residential.push(
+        ...neighborhoodSites(compactRoofs, residential, residentialStreets, unitMeters),
+      );
     const origin = { x: tile.x * EXTENT, y: tile.y * EXTENT };
     life.addLamps(placeTileLamps(litLines, unitMeters, EXTENT, origin));
   }
@@ -1375,6 +1441,7 @@ export function buildTileGeometry(
     lines: g.lines.finish(),
     points: g.points.finish(),
   });
+  const seasonal = rawSeasonal.length ? encodeSeasonalPayload(rawSeasonal) : undefined;
   return {
     ...finish(main),
     crowns: {
@@ -1385,8 +1452,13 @@ export function buildTileGeometry(
     },
     region: finish(regional),
     labels,
-    life: life.finish(),
+    life: {
+      ...life.finish(),
+      ...(seasonal ? { seasonalPayload: seasonal } : {}),
+    },
     ...(utilities.length ? { utilities } : {}),
+    ...(seasonal ? { seasonal } : {}),
+    ...(fireworks ? { residential: packResidentialSites(residential) } : {}),
   };
 }
 
@@ -1417,5 +1489,62 @@ export function transferables(geometry: TileGeometry): ArrayBuffer[] {
     region.fills.indices.buffer as ArrayBuffer,
     ...lifeTransferables(geometry.life),
   );
+  if (geometry.residential) out.push(geometry.residential.buffer as ArrayBuffer);
   return out;
+}
+
+/** Coverage-only requests triangulate roofs without constructing ground, Life or GPU buffers. */
+export function buildResidentialSites(
+  layers: Readonly<Record<string, TileLayerLike>>,
+  registry: IdRegistry,
+  tile: TileAddress,
+): ResidentialSites {
+  const mapped: ResidentialSite[] = [],
+    roofs: ResidentialSite[] = [],
+    streets: TilePoint[][] = [];
+  const meters = metersPerUnit(tile);
+  for (const [name, layer] of Object.entries(layers)) {
+    const scale = EXTENT / layer.extent;
+    for (let i = 0; i < layer.length; i++) {
+      const feature = layer.feature(i),
+        props = feature.properties;
+      if (props.region === true) continue;
+      const road = feature.type === 2 && isResidentialStreet(props.class, props.kind);
+      const explicit = isResidentialBuilding(props.kind);
+      const roof = isRoofCandidate(
+        props.class,
+        props.kind,
+        Number(props.height),
+        props.landmark === true,
+      );
+      if (!road && !(feature.type === 3 && props.class === 'building' && (explicit || roof)))
+        continue;
+      const rings = feature
+        .loadGeometry()
+        .map((ring) => ring.map((p) => ({ x: p.x * scale, y: p.y * scale })));
+      if (road) {
+        streets.push(...rings);
+        continue;
+      }
+      for (const polygon of classifyRings(rings)) {
+        const points: TilePoint[] = [],
+          coords: number[] = [],
+          holes: number[] = [];
+        for (let r = 0; r < polygon.length; r++) {
+          if (r) holes.push(points.length);
+          for (const p of polygon[r]!) {
+            points.push(p);
+            coords.push(p.x, p.y);
+          }
+        }
+        const triangles = earcut(coords, holes.length ? holes : null, 2);
+        if (!explicit && !isCompactRoof(points, triangles, meters)) continue;
+        const featureId = String(props.id ?? `${name}/${i}`);
+        const id = registry.index(featureId, () => featureInfo(featureId, 'building', props));
+        const site = residentialSite(id, points, triangles, EXTENT);
+        if (site) (explicit ? mapped : roofs).push(site);
+      }
+    }
+  }
+  return packResidentialSites([...mapped, ...neighborhoodSites(roofs, mapped, streets, meters)]);
 }
