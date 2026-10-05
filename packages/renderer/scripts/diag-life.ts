@@ -207,6 +207,7 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
   const state = world as unknown as {
     tiles: Map<string, TileLife>;
     junctions: JunctionTable;
+    yieldingActors?: WeakMap<Mover, { priority: Mover; clearance: number }>;
     groundTerrain?: {
       blocked: PolygonIndex;
       water: PolygonIndex;
@@ -233,12 +234,26 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
     };
   };
   const visit = life.scenes.visits.get(m);
+  const yielding = state.yieldingActors?.get(m);
+  const yieldPath = (
+    life.scenes as unknown as {
+      yielding?: WeakMap<
+        Mover,
+        { anchor: Mover; path: { x: number; y: number }[]; next: number; returning: boolean }
+      >;
+    }
+  ).yielding?.get(m);
   return {
     momentFacing: m.momentFacing,
     roadShift: m.roadShift,
     curveLengthM: m.curveLengthM,
     bodies: life.groundBodies(m),
     moverState: structuredClone(m),
+    yielding: yielding && {
+      priority: structuredClone(yielding.priority),
+      clearance: yielding.clearance,
+      path: yieldPath && structuredClone(yieldPath),
+    },
     junction: {
       movement: state.junctions.movement(m),
       granted: state.junctions.granted(m),

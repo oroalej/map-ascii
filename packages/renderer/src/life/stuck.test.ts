@@ -454,6 +454,183 @@ it('uses a visiting walker identity when checking its rollback snapshot', () => 
   expect(life.scenes.visits.get(m)?.blocked).toBe(0);
 });
 
+it('releases a short-path yield after the complete priority footprint passes the original anchor', () => {
+  const { world, life } = fixture(LifeLine.path, 3);
+  const priority = mover('person', 70, 1),
+    yielding = mover('person', 71.06, -1);
+  priority.waiting = 5;
+  yielding.waiting = 4;
+  life.movers.push(priority, yielding);
+  const guard = guardFor(world, 2.9);
+  priority.x += 0.02 * pm;
+  guard.contact(life, priority);
+  priority.x -= 0.02 * pm;
+  yielding.x -= 0.02 * pm;
+  guard.contact(life, yielding);
+  yielding.x += 0.02 * pm;
+  expect(guard.yielding(yielding)).toBe(priority);
+  priority.x += 1.5 * pm;
+  // Its rear still occupies the original anchor: return must keep waiting.
+  expect(guard.yielding(yielding)).toBe(priority);
+  priority.x += 0.8 * pm;
+  // This actual clearance fits a short path, unlike twice the bounding radii.
+  expect(guard.yielding(yielding)).toBeUndefined();
+});
+
+it('rejects a holding spot on a later bend of the retained return route', () => {
+  const { world, life } = fixture(LifeLine.path, 3);
+  const priority = mover('person', 70, 1),
+    yielding = mover('person', 71.06, -1);
+  const start = { x: priority.x, y: priority.y },
+    end = { x: start.x + pm, y: start.y - 3 * pm };
+  life.scenes.visits.set(priority, {
+    site: {
+      ...end,
+      kind: 'vendor',
+      modes: 0,
+      covered: false,
+      queue: [],
+      capacity: 4,
+      hx: 1,
+      hy: 0,
+      road: -1,
+      roadWidth: 0,
+      direction: 1,
+    },
+    state: 'return',
+    path: [start, { x: end.x, y: start.y }, end],
+    trail: [end],
+    next: 1,
+    time: 0,
+    seat: 0,
+    sheltering: false,
+    blocked: 5,
+  });
+  yielding.waiting = 4;
+  life.movers.push(priority, yielding);
+  const guard = guardFor(world, 2.9);
+  guard.contact(life, priority, { ...priority, x: priority.x + 0.02 * pm });
+  guard.contact(life, yielding, { ...yielding, x: yielding.x - 0.02 * pm });
+  expect(guard.yielding(yielding)).toBe(priority);
+  yielding.x = end.x;
+  yielding.y = start.y - 1.6 * pm;
+  expect(guard.holding(life, yielding)).toBe(false);
+  yielding.x = start.x - 0.5 * pm;
+  expect(guard.holding(life, yielding)).toBe(true);
+});
+
+it('clears a committed turning jeepney past a curbside group with retained physical facing', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 466, y: 378 },
+      { x: 500, y: 263 },
+      { x: 518, y: 208 },
+    ],
+    LifeLine.roadMid,
+    8,
+    101,
+    1,
+  );
+  b.line(
+    [
+      { x: 518, y: 208 },
+      { x: 181, y: 40 },
+    ],
+    LifeLine.roadMid,
+    8,
+    102,
+    1,
+  );
+  b.line(
+    [
+      { x: 518, y: 208 },
+      { x: 713, y: 273 },
+    ],
+    LifeLine.roadMid,
+    8,
+    103,
+    0,
+  );
+  b.line(
+    [
+      { x: 533.0589, y: 272.7298 },
+      { x: 466.9411, y: 253.2702 },
+    ],
+    LifeLine.path,
+    3,
+  );
+  b.area('crossing', [
+    [
+      { x: 523.528192, y: 280.701481 },
+      { x: 529.36605, y: 260.866141 },
+      { x: 476.471808, y: 245.298519 },
+      { x: 470.63395, y: 265.133859 },
+      { x: 523.528192, y: 280.701481 },
+    ],
+  ]);
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.sync([{ key: 'curb', tile, life: b.finish() }]);
+  const life = worldTiles(world).get('curb')!;
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+  const car = mover('vehicle', 0, 1),
+    person = mover('person', 0, 1);
+  Object.assign(car, {
+    line: 0,
+    from: 0,
+    d: 92.919449,
+    x: 492.344563,
+    y: 288.893389,
+    hx: 0.28352044,
+    hy: -0.95896619,
+    vehicle: 'jeepney',
+    lane: 0.244205,
+    speed: 5.7 * pm,
+    v: 0,
+    roadShift: -4.8,
+    curveLengthM: 2,
+    curveCorner: { x: 500, y: 263 },
+    routing: { seed: 3544413152, turns: 1 },
+    waiting: 5,
+  });
+  Object.assign(person, {
+    line: 3,
+    from: 7,
+    dir: 1,
+    d: 49.060868,
+    x: 485.994124,
+    y: 258.877845,
+    hx: -0.95931394,
+    hy: -0.28234156,
+    momentFacing: { hx: 0.95931394, hy: 0.28234156 },
+    avoid: 0.985248,
+    waiting: 4,
+    group: [walker(), { ...walker(1), figure: 'child' }, { ...walker(), back: 1, figure: 'child' }],
+  });
+  life.movers.push(car, person);
+  const group = person.group,
+    start = life.pose(car);
+  let granted = false;
+  const table = (world as unknown as { junctions: JunctionTable }).junctions;
+  for (let frame = 0; frame < 25 * 30; frame++) {
+    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+    granted ||= table.granted(car);
+    expect(
+      life
+        .groundBodies(car)
+        .some((a) => life.groundBodies(person).some((b) => bodiesOverlap(a, b, 0))),
+    ).toBe(false);
+  }
+  expect(granted).toBe(true);
+  expect(Math.hypot(life.pose(car).x - start.x, life.pose(car).y - start.y) / pm).toBeGreaterThan(
+    VEHICLES.jeepney.length,
+  );
+  expect(person.group).toBe(group);
+  expect(person.walked).toBeGreaterThan(0.5);
+});
+
 it.each([
   [false, 2],
   [true, 2],

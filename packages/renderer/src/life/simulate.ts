@@ -159,7 +159,7 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = ((owner: GroundAgent, before?: GroundAgent, reserve?: boolean) => boolean) & {
-  contact?: (mover: Mover) => void;
+  contact?: (mover: Mover, trial?: Mover) => void;
   yielding?: (mover: Mover) => Mover | undefined;
   holding?: (mover: Mover) => boolean;
   passing?: (mover: Mover) => boolean;
@@ -217,7 +217,7 @@ export type WorldGroundGuard = ((
     identity: Mover,
     reject?: (reason: ContinuityRejection) => void,
   ): boolean;
-  contact(life: TileLife, mover: Mover): void;
+  contact(life: TileLife, mover: Mover, trial?: Mover): void;
   yielding(mover: Mover): Mover | undefined;
   holding(life: TileLife, mover: Mover): boolean;
   passing(mover: Mover): boolean;
@@ -3367,7 +3367,12 @@ export class TileLife {
             this.roadTerrain.access.allows(this.groundBodies(next))));
       if (m.kind === 'vehicle' || walking) {
         let fits = fitsGround(m, before);
-        if (!fits && distance > 0) guard?.contact?.(m);
+        if (!fits && distance > 0 && guard?.contact) {
+          const trial = snapshotMover(m);
+          restoreMover(m, before);
+          guard.contact(m, trial);
+          restoreMover(m, trial);
+        }
         const correctingCurve =
           m.curveLengthM !== undefined &&
           m.vehicle &&
@@ -4347,6 +4352,8 @@ export class LifeWorld {
       x: number;
       y: number;
       clearance: number;
+      anchor: readonly Body[];
+      travelled: number;
     }
   >();
   private roadCache = new WorldRoadCache();
@@ -5464,10 +5471,10 @@ export class LifeWorld {
       }
       return true;
     };
-    const contact = (life: TileLife, m: Mover) => {
+    const contact = (life: TileLife, m: Mover, trial = m) => {
       if (this.inspection?.owner === m || m.speed <= 0) return;
       if (this.clock - (this.failedYield.get(m) ?? -Infinity) < 0.5) return;
-      const physical = life.groundBodies(m).map((b) => toRef(origin(life), b));
+      const physical = life.groundBodies(trial, 0, [], m).map((b) => toRef(origin(life), b));
       const blocker = occupied.firstConflict(m, physical, undefined, physicalShape);
       if (!blocker || !('kind' in blocker) || !('speed' in blocker)) return;
       const other = blocker as Mover,
@@ -5516,12 +5523,28 @@ export class LifeWorld {
         );
       };
       const point = priorityLife.pose(priority);
+      const at = origin(priorityLife);
+      const anchor = occupied
+        .bodies(yielder)
+        .slice(0, (first >= 0 ? otherLife : life).groundBodies(yielder).length)
+        .map((body, i) => {
+          const physical = physicalShape(yielder, body, i);
+          return {
+            ...physical,
+            x: (physical.x - at.x) / at.scale,
+            y: (physical.y - at.y) / at.scale,
+            length: physical.length / at.scale,
+            width: physical.width / at.scale,
+          };
+        });
       this.yieldingActors.set(yielder, {
         priority,
         tile: priorityLife.tile,
         x: point.x,
         y: point.y,
         clearance: 2 * (radius(m, life) + radius(other, otherLife)) + 0.5,
+        anchor,
+        travelled: 0,
       });
       this.passingActors.set(priority, yielder);
     };
@@ -5536,13 +5559,43 @@ export class LifeWorld {
       const point = life.pose(decision.priority),
         frame = frameBetween(life.tile, decision.tile);
       const pm = 1 / metersPerUnit(decision.tile);
-      if (
+      const distance =
         Math.hypot(
           frame.x + point.x * frame.scale - decision.x,
           frame.y + point.y * frame.scale - decision.y,
-        ) >
-        decision.clearance * pm
-      ) {
+        ) / pm;
+      decision.travelled = Math.max(decision.travelled, distance);
+      let cleared = distance > decision.clearance;
+      if (!cleared && decision.travelled >= 0.5 && decision.anchor.length) {
+        // On a short route, the complete rear can pass the original holding
+        // anchor before travelling twice both bounding radii. A checked turn
+        // away can also clear it. Return movement still uses the swept guard.
+        const direction = life.scenes.travelHeading(decision.priority, true),
+          scale = (life.perMeter * frame.scale) / pm;
+        const extent = (body: Body) =>
+          (Math.abs(body.hx * direction.hx + body.hy * direction.hy) * body.length +
+            Math.abs(-body.hy * direction.hx + body.hx * direction.hy) * body.width) /
+          2;
+        const front = Math.max(
+          ...decision.anchor.map(
+            (body) => body.x * direction.hx + body.y * direction.hy + extent(body),
+          ),
+        );
+        const rear = Math.min(
+          ...life.groundBodies(decision.priority).map((body) => {
+            const physical = {
+              ...body,
+              x: frame.x / pm + body.x * scale,
+              y: frame.y / pm + body.y * scale,
+              length: body.length * scale,
+              width: body.width * scale,
+            };
+            return physical.x * direction.hx + physical.y * direction.hy - extent(physical);
+          }),
+        );
+        cleared = rear > front + 0.15;
+      }
+      if (cleared) {
         this.yieldingActors.delete(m);
         return;
       }
@@ -5556,18 +5609,66 @@ export class LifeWorld {
       const moving = priorityLife
         .groundBodies(decision.priority)
         .map((body) => toRef(origin(priorityLife), body));
-      const direction = priorityLife.scenes.travelHeading(decision.priority, true);
-      // Check the complete priority footprint through the holding actor's region.
-      // This is a reject-only geometric trial, never a future reservation.
-      for (let travel = 0; travel <= decision.clearance; travel += 0.2) {
-        for (const body of moving) {
+      const priority = decision.priority,
+        o = origin(priorityLife);
+      const start = {
+        x: o.x + (priority.x / priorityLife.perMeter) * o.scale,
+        y: o.y + (priority.y / priorityLife.perMeter) * o.scale,
+      };
+      const path = priorityLife.scenes.travelPath(priority, true);
+      const direction = priorityLife.scenes.travelHeading(priority, true);
+      const points = path?.length
+        ? path.map((point) => ({
+            x: o.x + (point.x / priorityLife.perMeter) * o.scale,
+            y: o.y + (point.y / priorityLife.perMeter) * o.scale,
+          }))
+        : [
+            {
+              x: start.x + direction.hx * decision.clearance,
+              y: start.y + direction.hy * decision.clearance,
+            },
+          ];
+      // Follow the retained visit's bends and full member rotation, rather than
+      // proving only its next straight heading. These are reject-only trials.
+      let previous = start,
+        remaining = decision.clearance,
+        heading = { hx: moving[0]!.hx, hy: moving[0]!.hy };
+      const clear = (point: { x: number; y: number }, hx: number, hy: number) =>
+        moving.every((body) => {
           const sample = {
             ...body,
-            x: body.x + direction.hx * travel,
-            y: body.y + direction.hy * travel,
+            x: body.x + point.x - start.x,
+            y: body.y + point.y - start.y,
+            hx,
+            hy,
           };
-          if (waiting.some((other) => bodiesOverlap(sample, other))) return false;
+          return waiting.every((other) => !bodiesOverlap(sample, other));
+        });
+      for (const point of points) {
+        const length = Math.hypot(point.x - previous.x, point.y - previous.y);
+        if (length < 1e-8) continue;
+        const hx = (point.x - previous.x) / length,
+          hy = (point.y - previous.y) / length;
+        const angle = Math.atan2(
+            heading.hx * hy - heading.hy * hx,
+            heading.hx * hx + heading.hy * hy,
+          ),
+          initial = Math.atan2(heading.hy, heading.hx);
+        for (let turn = 0; turn <= 8; turn++) {
+          const bearing = initial + (angle * turn) / 8;
+          if (!clear(previous, Math.cos(bearing), Math.sin(bearing))) return false;
         }
+        const travel = Math.min(length, remaining),
+          steps = Math.ceil(travel / 0.2);
+        for (let step = 1; step <= steps; step++) {
+          const distance = (travel * step) / steps;
+          if (!clear({ x: previous.x + hx * distance, y: previous.y + hy * distance }, hx, hy))
+            return false;
+        }
+        remaining -= travel;
+        if (remaining <= 0) break;
+        previous = point;
+        heading = { hx, hy };
       }
       return true;
     };
@@ -5846,7 +5947,7 @@ export class LifeWorld {
           (owner: GroundAgent, before?: GroundAgent, reserve?: boolean) =>
             guard(tile, owner, before, undefined, reserve),
           {
-            contact: (mover: Mover) => guard.contact(tile, mover),
+            contact: (mover: Mover, trial?: Mover) => guard.contact(tile, mover, trial),
             holding: (mover: Mover) => guard.holding(tile, mover),
             passing: (mover: Mover) => guard.passing(mover),
             cancelYield: (mover: Mover) => guard.cancelYield(mover),

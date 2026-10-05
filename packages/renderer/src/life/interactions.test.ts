@@ -54,6 +54,28 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('reports a denied trial after restoring its actual pose and retained route cursor', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    const before = structuredClone(p),
+      next = visit.next;
+    let contacted = false;
+    const guard = Object.assign(() => false, {
+      contact: (owner: Mover, trial?: Mover) => {
+        contacted = true;
+        expect(owner).toBe(p);
+        expect(owner).toEqual(before);
+        expect(visit.next).toBe(next);
+        expect(trial!.x).toBeGreaterThan(before.x);
+      },
+    });
+    scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(contacted).toBe(true);
+    expect(p).toEqual(before);
+  });
+
   it('advances an owned visit and service when their site is covered by another tile', () => {
     const scene = setup(),
       p = person(),

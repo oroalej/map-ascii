@@ -76,7 +76,7 @@ type Service = {
   passenger?: Mover;
 };
 type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) & {
-  contact?: (mover: Mover) => void;
+  contact?: (mover: Mover, trial?: Mover) => void;
   yielding?: (mover: Mover) => Mover | undefined;
   holding?: (mover: Mover) => boolean;
   passing?: (mover: Mover) => boolean;
@@ -355,13 +355,16 @@ export class LocalScenes {
   }
 
   private walkingBodies(m: Mover, point: WalkPoint, lane = 0, turning = false) {
+    const heading = m.momentFacing ?? m;
+    const x = point.x - m.hy * lane * this.perMeter,
+      y = point.y + m.hx * lane * this.perMeter;
     return (m.group ?? [{ lateral: 0, back: 0, figure: 'adult' }]).map((w) => {
       const size = m.kind === 'dog' || m.kind === 'cat' ? animalSize(m.kind) : memberSize(w.figure);
       return {
-        x: point.x - m.hy * (w.lateral + lane) * this.perMeter - m.hx * w.back * this.perMeter,
-        y: point.y + m.hx * (w.lateral + lane) * this.perMeter - m.hy * w.back * this.perMeter,
-        hx: m.hx,
-        hy: m.hy,
+        x: x - heading.hy * w.lateral * this.perMeter - heading.hx * w.back * this.perMeter,
+        y: y + heading.hx * w.lateral * this.perMeter - heading.hy * w.back * this.perMeter,
+        hx: heading.hx,
+        hy: heading.hy,
         length: (turning ? Math.hypot(size.length, size.width) : size.length) * this.perMeter,
         width: (turning ? Math.hypot(size.length, size.width) : size.width) * this.perMeter,
       };
@@ -431,7 +434,6 @@ export class LocalScenes {
     const changed =
       before && (m.x !== before.x || m.y !== before.y || m.hx !== before.hx || m.hy !== before.hy);
     if (changed && guard && !guard(m, before)) {
-      if (dist(before, m) > 1e-8 * this.perMeter) guard.contact?.(m);
       if (!visit.progress) {
         const target = visit.path[next]!,
           length = dist(before, target);
@@ -449,6 +451,7 @@ export class LocalScenes {
       restoreMover(m, before);
       visit.next = next;
       visit.trail.length = trailLength;
+      if (dist(before, trial) > 1e-8 * this.perMeter) guard.contact?.(m, trial);
       // A pedestrian can take a checked backward/sideways step when a heading
       // change has too little room. Keep the member frame and the exact route
       // progress; this is bounded by the same speed and swept physical guard.
@@ -649,21 +652,27 @@ export class LocalScenes {
   }
 
   travelHeading(m: Mover, retained = false) {
-    const visit = this.visits.get(m),
-      bypass = visit?.bypass;
-    const target =
-      retained && bypass
-        ? visit!.path
-            .slice(visit!.next)
-            .find(
-              (point) =>
-                point !== bypass.side && point !== bypass.retreat && point !== bypass.target,
-            )
-        : visit?.path[visit.next];
+    const target = this.travelPath(m, retained)?.find(
+      (point) => dist(m, point) > 1e-8 * this.perMeter,
+    );
     const d = target && dist(m, target);
     return target && d && d > 1e-8 * this.perMeter
       ? { hx: (target.x - m.x) / d, hy: (target.y - m.y) / d }
       : { hx: m.hx, hy: m.hy };
+  }
+
+  /** Remaining mapped visit path, optionally excluding temporary bypass points. */
+  travelPath(m: Mover, retained = false) {
+    const visit = this.visits.get(m),
+      bypass = visit?.bypass;
+    return visit?.path
+      .slice(visit.next)
+      .filter(
+        (point) =>
+          !retained ||
+          !bypass ||
+          (point !== bypass.side && point !== bypass.retreat && point !== bypass.target),
+      );
   }
 
   /** Checked temporary holding paths retain navigation, visit anchors and reservations. */
@@ -681,6 +690,7 @@ export class LocalScenes {
     if (!state && !priority) return false;
     if (!state) {
       const anchor = snapshotMover(m);
+      const heading = anchor.momentFacing ?? anchor;
       const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
       const admissible = (previous: Mover, target: WalkPoint) => {
         m.x = target.x;
@@ -695,19 +705,19 @@ export class LocalScenes {
           guard(m, previous, false)
         );
       };
-      for (const retreat of [0.5, 1, 2, 3, 4]) {
+      for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
         for (const side of [1, -1]) {
           for (const offset of [0.65, 1, 1.2, 1.5]) {
             restoreMover(m, anchor);
             const back = {
-              x: anchor.x - anchor.hx * retreat * this.perMeter,
-              y: anchor.y - anchor.hy * retreat * this.perMeter,
+              x: anchor.x - heading.hx * retreat * this.perMeter,
+              y: anchor.y - heading.hy * retreat * this.perMeter,
             };
             if (!admissible(anchor, back)) continue;
             const previous = snapshotMover(m);
             const holding = {
-              x: back.x - anchor.hy * side * offset * this.perMeter,
-              y: back.y + anchor.hx * side * offset * this.perMeter,
+              x: back.x - heading.hy * side * offset * this.perMeter,
+              y: back.y + heading.hx * side * offset * this.perMeter,
             };
             if (
               !this.graph.route(anchor, holding) ||
