@@ -5,6 +5,8 @@ export type SimulationSeason = {
   id: string;
   includes?: readonly string[];
   emoji?: RuntimeSeasonConfig['emoji'];
+  visitors?: RuntimeSeasonConfig['visitors'];
+  congregations?: RuntimeSeasonConfig['congregations'];
   stalls?: Pick<NonNullable<RuntimeSeasonConfig['stalls']>, 'near' | 'radius_m' | 'per_tile'>;
   installations?: readonly { id: string; anchor: string; kind: 'christmas-tree' | 'carnival' }[];
 };
@@ -12,23 +14,27 @@ export type SimulationSeason = {
 export function simulationSeasons(
   seasons: readonly RuntimeSeasonConfig[] = [],
 ): SimulationSeason[] {
-  return seasons.flatMap(({ id, includes, emoji, stalls, installations }) => {
-    const trees = installations?.flatMap((i) =>
-      i.kind === 'christmas-tree' || i.kind === 'carnival'
-        ? [{ id: i.id, anchor: i.anchor, kind: i.kind }]
-        : [],
-    );
-    if (!stalls && !trees?.length && !emoji?.length) return [];
-    return [
-      {
-        id,
-        ...(includes && { includes }),
-        ...(emoji && { emoji }),
-        ...(stalls && {
-          stalls: { near: stalls.near, radius_m: stalls.radius_m, per_tile: stalls.per_tile },
-        }),
-        ...(trees?.length && { installations: trees }),
-      },
-    ];
-  });
+  return seasons.flatMap(
+    ({ id, includes, emoji, stalls, installations, visitors, congregations }) => {
+      const trees = installations?.flatMap((i) =>
+        i.kind === 'christmas-tree' || i.kind === 'carnival'
+          ? [{ id: i.id, anchor: i.anchor, kind: i.kind }]
+          : [],
+      );
+      if (!stalls && !trees?.length && !emoji?.length && !visitors && !congregations) return [];
+      return [
+        {
+          id,
+          ...(visitors && { visitors }),
+          ...(congregations && { congregations }),
+          ...(includes && { includes }),
+          ...(emoji && { emoji }),
+          ...(stalls && {
+            stalls: { near: stalls.near, radius_m: stalls.radius_m, per_tile: stalls.per_tile },
+          }),
+          ...(trees?.length && { installations: trees }),
+        },
+      ];
+    },
+  );
 }

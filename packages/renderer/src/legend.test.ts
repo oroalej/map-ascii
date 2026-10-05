@@ -355,3 +355,34 @@ it('lists static street details at strip zoom with the city sidewalk policy', ()
     expect(entries).not.toContain('One-way');
   }
 });
+it('describes memorial candles with Life off and gates informational seasonal crowds by person zoom', () => {
+  const season = {
+    id: 'memorial',
+    title: 'Memorial',
+    labels: { candles: 'Candles', visitors: 'Families', congregations: 'Mass-goers' },
+  };
+  const fixtures = {
+    streetlights: false,
+    trafficSignals: false,
+    seasonal: { lanterns: false, bunting: false, candles: true },
+  };
+  const candles = legendEntries('dark', 19, [], { season, fixtures, life: false }).filter((e) =>
+    e.id.startsWith('info:season-'),
+  );
+  expect(candles.map((e) => e.id)).toEqual(['info:season-candles']);
+  expect(candles[0]!.icons).toHaveLength(1);
+  expect(candles[0]!.glyphs).toBe('');
+  const people = legendEntries('light', 19, [], { season, life: true }).filter((e) =>
+    e.id.startsWith('info:season-'),
+  );
+  expect(people.map((e) => e.label)).toEqual(['Families (simulated)', 'Mass-goers (simulated)']);
+  expect(people.every((e) => e.icons?.length && !e.focus)).toBe(true);
+  expect(
+    legendEntries('dark', 16, [], { season, life: true }).some((e) =>
+      e.id.startsWith('info:season-'),
+    ),
+  ).toBe(false);
+  expect(
+    legendEntries('dark', 19, [], { life: true }).some((e) => e.id.startsWith('info:season-')),
+  ).toBe(false);
+});

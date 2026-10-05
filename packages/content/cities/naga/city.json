@@ -1298,6 +1298,85 @@
             "figure": "child"
           }
         ]
+      },
+      {
+        "id": "all-saints",
+        "title": {
+          "en": "All Saints' Day (Undas)"
+        },
+        "window": {
+          "from": {
+            "month": 10,
+            "day": 31
+          },
+          "to": {
+            "month": 11,
+            "day": 2
+          }
+        },
+        "candles": {
+          "label": "Candles on graves",
+          "share": 0.75
+        },
+        "stalls": {
+          "label": "Candle and flower stalls",
+          "near": ["cemetery"],
+          "radius_m": 120,
+          "per_tile": 16
+        },
+        "visitors": {
+          "label": "Families visiting graves",
+          "share": 0.35,
+          "per_grave_family": [2, 5],
+          "max_per_tile": 120,
+          "hours": [
+            [0, 0.05],
+            [5, 0.1],
+            [12, 0.45],
+            [18, 1],
+            [20, 1],
+            [23, 0.15]
+          ]
+        },
+        "congregations": {
+          "label": "Mass-goers",
+          "extra": 60,
+          "landmarks": [
+            "landmark/naga-metropolitan-cathedral",
+            "landmark/penafrancia-basilica",
+            "landmark/penafrancia-shrine",
+            "landmark/immaculate-conception-parish",
+            "landmark/san-francisco-parish"
+          ],
+          "hours": [
+            [0, 0.02],
+            [5, 0.1],
+            [7, 0.9],
+            [9, 0.4],
+            [12, 0.15],
+            [16, 0.5],
+            [18, 1],
+            [20, 0.3],
+            [23, 0.03]
+          ]
+        },
+        "sources": [
+          {
+            "title": "Undas sa syudad nin Naga pig-aandaman na",
+            "url": "https://www2.naga.gov.ph/undas-sa-syudad-nin-naga-pig-aandaman-na/",
+            "note": "Naga's October 17, 2022 coverage describes November 1–2 cemetery visitation, particularly Naga City Public Cemetery. Illustrative seasonal simulation. Candle placement, fallback memorial sites, family sizes, stall counts, visiting-hour curves and church crowd sizes are not surveyed observations. The selected church list is a pack choice, not a verified Undas attendance or Mass schedule."
+          },
+          {
+            "title": "‘Pista nin mga Kalag’ and why Nov. 2 is a working holiday",
+            "url": "https://www2.naga.gov.ph/pista-nin-mga-kalag-and-why-nov-2-is-a-working-holiday/",
+            "note": "October 31, 2022 local coverage of observance dates and cemetery visitation. Its 2022 holiday classification is historical context, not a current rule."
+          },
+          {
+            "title": "'Undas' amid Covid-19: A different way of honoring the dead",
+            "url": "https://www.pna.gov.ph/articles/1117601",
+            "note": "General Philippine context for pre-pandemic October 31 vigils, family visits, candles, flowers, vendors and hearing Mass. Its 2020 restrictions are historical context. Does not verify Naga placement, crowd counts or church schedules."
+          }
+        ]
       }
     ]
   },

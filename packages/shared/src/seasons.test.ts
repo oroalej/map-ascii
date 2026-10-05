@@ -113,3 +113,27 @@ describe('annual season calendars', () => {
     expect(activeSeason(undefined, 2026, day)).toBeUndefined();
   });
 });
+it('covers Undas October 31 through November 2 without overlapping other Naga seasons', () => {
+  const undas = cityPack.life.seasons.find((s) => s.id === 'all-saints')!;
+  for (const year of [2024, 2026, 2030]) {
+    for (const [month, day, expected] of [
+      [10, 30, false],
+      [10, 31, true],
+      [11, 1, true],
+      [11, 2, true],
+      [11, 3, false],
+    ] as const)
+      expect(contains(undas.window, year, month, day)).toBe(expected);
+    for (const [month, day] of [
+      [10, 31],
+      [11, 1],
+      [11, 2],
+    ]) {
+      expect(
+        cityPack.life.seasons
+          .filter((s) => contains(s.window, year, month!, day!))
+          .map((s) => s.id),
+      ).toEqual(['all-saints']);
+    }
+  }
+});

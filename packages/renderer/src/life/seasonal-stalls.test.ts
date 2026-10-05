@@ -53,6 +53,40 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it('admits cemetery edge stalls beyond the former center-only prefilter', () => {
+    const { world, life, tiles } = setup(false, false);
+    const cemetery = new LifeBuilder();
+    cemetery.cemetery({ x: 500, y: 2000 }, 100 / metersPerUnit(tile));
+    world.setSeasons(
+      simulationSeasons([
+        { ...season, stalls: { ...season.stalls!, near: ['cemetery'], radius_m: 50 } },
+      ]),
+    );
+    world.sync([
+      ...tiles,
+      { key: 'cemetery', tile: { ...tile, x: tile.x + 1 }, life: cemetery.finish() },
+    ]);
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+  });
+  it('rejects unrelated markets with the same reachable geometry and valid radius as its allowed control', () => {
+    const { world, life, tiles } = setup(false, false);
+    world.setSeasons(
+      simulationSeasons([
+        { ...season, stalls: { ...season.stalls!, near: ['cemetery'], radius_m: 80 } },
+      ]),
+    );
+    const market = new LifeBuilder();
+    market.market({ x: 2000, y: 2000 });
+    world.sync([...tiles, { key: 'market', tile, life: market.finish() }]);
+    select(world);
+    expect(life.seasonalStalls).toEqual([]);
+    world.setSeasons(
+      simulationSeasons([{ ...season, stalls: { ...season.stalls!, radius_m: 80 } }]),
+    );
+    select(world);
+    expect(life.seasonalStalls.length).toBeGreaterThan(0);
+  });
   function physicalPreview() {
     const result = setup();
     const display: SeasonalDisplayRecord = {

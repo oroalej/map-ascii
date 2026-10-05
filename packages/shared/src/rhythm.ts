@@ -36,6 +36,9 @@ export const PLACE_KINDS = [
   'farm',
 ] as const;
 export type PlaceKind = (typeof PLACE_KINDS)[number];
+/** Seasonal proximity anchors include mapped cemeteries without changing place storage. */
+export const SEASON_ANCHOR_KINDS = [...PLACE_KINDS, 'cemetery'] as const;
+export type SeasonAnchorKind = (typeof SEASON_ANCHOR_KINDS)[number];
 
 /** Services at places of worship: on these weekdays (0 = Sunday), at these local times. */
 export type WorshipSchedule = { weekdays: number[]; times: string[] };

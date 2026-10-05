@@ -4,7 +4,10 @@ const fixtures = vi.hoisted(() => ({
   fetch: vi.fn(),
   geometry: vi.fn(),
   sites: vi.fn(() => new Float64Array([1, 100, 200])),
+  memorials: vi.fn(),
 }));
+
+vi.mock('./life/seasonal-candles', () => ({ prepareMemorialSites: fixtures.memorials }));
 
 vi.mock('@mapbox/vector-tile', () => ({
   VectorTile: class {
@@ -99,4 +102,30 @@ it('identifies failed drawable and residential requests so their queue slots can
       }),
     );
   }
+});
+
+it('prepares memorial sites once at archive maximum zoom for capable packs before any preview', async () => {
+  fixtures.fetch.mockResolvedValue({ data: new Uint8Array() });
+  const life = {};
+  fixtures.geometry.mockReturnValue({ life });
+  const scope = {
+    postMessage: vi.fn(),
+    onmessage: null as ((event: MessageEvent<WorkerRequest>) => void) | null,
+  };
+  vi.stubGlobal('self', scope);
+  await import('./tiles.worker');
+  const send = (data: WorkerRequest) => scope.onmessage!({ data } as MessageEvent<WorkerRequest>);
+  send({ type: 'init', url: '/test.pmtiles', memorials: false });
+  await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(1));
+  send({ type: 'tile', key: '16/1/2', z: 16, x: 1, y: 2 });
+  await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(2));
+  expect(fixtures.memorials).not.toHaveBeenCalled();
+  send({ type: 'init', url: '/test.pmtiles', memorials: true });
+  await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(3));
+  send({ type: 'tile', key: '15/1/2', z: 15, x: 1, y: 2 });
+  await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(4));
+  expect(fixtures.memorials).not.toHaveBeenCalled();
+  send({ type: 'tile', key: '16/1/3', z: 16, x: 1, y: 3 });
+  await vi.waitFor(() => expect(fixtures.memorials).toHaveBeenCalledOnce());
+  expect(fixtures.memorials).toHaveBeenCalledWith({ z: 16, x: 1, y: 3 }, life);
 });

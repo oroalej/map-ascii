@@ -1,5 +1,5 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
-import type { PlaceKind } from './rhythm';
+import type { RhythmCurve, SeasonAnchorKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
 import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
 import type { SeasonEmojiEntry } from './emoji';
@@ -31,6 +31,23 @@ export type SeasonGrounds = {
 export const FIREWORK_VARIANTS = ['peony', 'chrysanthemum', 'ring', 'willow'] as const;
 export type FireworkVariant = (typeof FIREWORK_VARIANTS)[number];
 export type FireworksConfig = { label: string; variants: FireworkVariant[] };
+/** Illustrative candles on a seeded `share` of the city's mapped burial markers. */
+export type SeasonCandles = { label: string; share: number };
+/** Simulated families standing at a seeded `share` of graves, shown by `hours`. */
+export type SeasonVisitors = {
+  label: string;
+  share: number;
+  per_grave_family: [number, number];
+  max_per_tile: number;
+  hours: RhythmCurve;
+};
+/** Simulated extra crowds around the pack's named landmark churches, shown by `hours`. */
+export type SeasonCongregations = {
+  label: string;
+  landmarks: string[];
+  extra: number;
+  hours: RhythmCurve;
+};
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
@@ -40,15 +57,18 @@ export type SeasonConfig = {
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
-  lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };
+  lanterns?: { label: string; shape: 'star'; near?: SeasonAnchorKind[]; radius_m?: number };
   bunting?: {
     label: string;
-    near: PlaceKind[];
+    near: SeasonAnchorKind[];
     radius_m: number;
     spacing_m: number;
     corridors?: BuntingCorridor[];
   };
-  stalls?: { label: string; near: PlaceKind[]; radius_m: number; per_tile: number };
+  stalls?: { label: string; near: SeasonAnchorKind[]; radius_m: number; per_tile: number };
+  candles?: SeasonCandles;
+  visitors?: SeasonVisitors;
+  congregations?: SeasonCongregations;
   sources: Source[];
 };
 
@@ -113,6 +133,9 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
     bunting,
     stalls,
     installations,
+    candles,
+    visitors,
+    congregations,
   } = season;
   return {
     id,
@@ -123,6 +146,9 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
     ...(fireworks && { fireworks }),
     ...(lanterns && { lanterns }),
     ...(stalls && { stalls }),
+    ...(candles && { candles }),
+    ...(visitors && { visitors }),
+    ...(congregations && { congregations }),
     ...(bunting && {
       bunting: {
         label: bunting.label,
@@ -167,6 +193,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
     const buntingSeason = season.bunting ? season : included.find((s) => s.bunting);
     const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
     const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
+    const candles = season.candles ?? included.find((s) => s.candles)?.candles;
+    const visitors = season.visitors ?? included.find((s) => s.visitors)?.visitors;
+    const congregations =
+      season.congregations ?? included.find((s) => s.congregations)?.congregations;
     const installations = composeSeasonInstallations(
       season.installations,
       included.map((s) => s.installations),
@@ -184,6 +214,9 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       }),
       ...(stalls && { stalls }),
       ...(fireworks && { fireworks }),
+      ...(candles && { candles }),
+      ...(visitors && { visitors }),
+      ...(congregations && { congregations }),
       ...(installations.length && { installations }),
       ...(emoji.length && { emoji }),
     };

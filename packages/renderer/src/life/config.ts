@@ -13,6 +13,7 @@ import {
   rhythmFor,
   type CityLifeConfig,
   type PlaceKind,
+  type RuntimeSeasonConfig,
   type ZoomBand,
 } from '@atlas/shared';
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
@@ -494,6 +495,7 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
   /** Night creatures (bats, life/birds.ts `nocturnal`): `nightActivity`. */
   night: number;
   places: Readonly<Record<PlaceKind, number>>;
+  season?: { visitors: number; congregations: number };
 };
 
 /**
@@ -509,6 +511,7 @@ export function activityLevels(
     weekday: number;
     life?: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined;
   },
+  season?: Pick<RuntimeSeasonConfig, 'visitors' | 'congregations'>,
 ): Activity {
   const byRhythm = (kind: 'vehicle' | 'person' | 'boat' | 'train') =>
     clock ? curveAt(rhythmFor(clock.life, kind), clock.minutes) : activity(kind, daylight);
@@ -526,6 +529,13 @@ export function activityLevels(
     cat: activity('cat', daylight),
     night: nightActivity(daylight),
     places,
+    ...((season?.visitors || season?.congregations) && {
+      season: {
+        visitors: season.visitors && clock ? curveAt(season.visitors.hours, clock.minutes) : 0,
+        congregations:
+          season.congregations && clock ? curveAt(season.congregations.hours, clock.minutes) : 0,
+      },
+    }),
   };
 }
 
@@ -535,9 +545,18 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
     Math.abs(a.night - b.night) > epsilon ||
-    PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon)
+    PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon) ||
+    Math.abs((a.season?.visitors ?? 0) - (b.season?.visitors ?? 0)) > epsilon ||
+    Math.abs((a.season?.congregations ?? 0) - (b.season?.congregations ?? 0)) > epsilon
   );
 }
+
+/** Illustrative long pauses beside memorials and outside churches, in seconds. */
+export const SEASON_CROWD = {
+  pause: [40, 180] as const,
+  speed: [0.3, 0.7] as const,
+  congregationWanderScale: 1.5,
+};
 
 /** The render class each kind is drawn with (its glyphs and color, theme.ts). */
 export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {
