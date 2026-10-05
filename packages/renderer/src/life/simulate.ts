@@ -1261,8 +1261,8 @@ export class TileLife {
       b.y = y + hx * w.lateral * spacing - hy * w.back * spacing;
       b.hx = hx;
       b.hy = hy;
-      b.length = Math.max(memberSize(w.figure).length, Math.min(minimum, 3));
-      b.width = memberSize(w.figure).width;
+      b.length = Math.max(memberSize(w.figure).length, minimum);
+      b.width = Math.max(memberSize(w.figure).width, minimum);
     }
     out.length = walkers.length;
     return out;

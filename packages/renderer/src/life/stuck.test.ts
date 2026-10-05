@@ -441,7 +441,7 @@ it.each([false, true])(
   },
 );
 
-it('retains physical member dimensions at zero minimum and caps forward-only inflation', () => {
+it('retains physical member centres while applying the raster clearance preference', () => {
   const { life } = fixture(LifeLine.path, 3);
   const m = mover('person', 70, 1);
   m.group = [walker(-0.3), { ...walker(0.3), figure: 'child' }];
@@ -452,8 +452,8 @@ it('retains physical member dimensions at zero minimum and caps forward-only inf
     [0.5, 0.5],
   ]);
   expect(inflated.map((b) => [b.length, b.width])).toEqual([
-    [3, 1],
-    [3, 0.5],
+    [7, 7],
+    [7, 7],
   ]);
   expect(inflated.map((b) => [b.x, b.y])).toEqual(physical.map((b) => [b.x, b.y]));
 });
