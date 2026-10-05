@@ -133,7 +133,13 @@ import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
-import { JunctionIndex, JunctionTable, type Movement } from './junctions';
+import {
+  boxAhead,
+  JunctionIndex,
+  JunctionTable,
+  type JunctionRequest,
+  type Movement,
+} from './junctions';
 import { JunctionTraffic } from './junction-traffic';
 import { JunctionCrossings } from './junction-crossings';
 import { trainLimits, type TrainLimit } from './train-motion';
@@ -670,6 +676,7 @@ export class TileLife {
   private readonly localJunctionTraffic = new JunctionTraffic();
   private readonly clearingJunctions = new Set<string>();
   readonly junctionCrossings = new JunctionCrossings(this);
+  private readonly junctionRequests: JunctionRequest[] = [];
   private readonly trafficGroups = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
@@ -3454,10 +3461,13 @@ export class TileLife {
         ),
         (line, dir) => this.seamExit(m, line, dir),
       );
-      const submit = (movement: Movement, inside: boolean) => {
+      const requests = this.junctionRequests;
+      requests.length = 0;
+      let room = Infinity;
+      const allowed = (movement: Movement, availableRoom?: number) => {
         this.junctionCrossings.holdAhead(movement, this.junctionControlled(movement));
-        const room = traffic.room(m, movement, this);
-        const ready =
+        room = availableRoom ?? traffic.room(m, movement, this);
+        return (
           room >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
           this.signals.allows(
             m,
@@ -3467,8 +3477,12 @@ export class TileLife {
             Math.max(0, movement.ahead),
             movement,
           ) &&
-          this.junctionClear(movement, pedestrians);
-        table.request({
+          this.junctionClear(movement, pedestrians)
+        );
+      };
+      const submit = (movement: Movement, inside: boolean) => {
+        const ready = allowed(movement);
+        const request: JunctionRequest = {
           m,
           life: this,
           tileKey,
@@ -3479,7 +3493,9 @@ export class TileLife {
           atLine: traffic.atLine(m, movement, this, table),
           room,
           traffic,
-        });
+        };
+        requests.push(request);
+        table.request(request);
       };
       for (const r of table.holds(m)) {
         const previous = r.movement,
@@ -3487,43 +3503,31 @@ export class TileLife {
         const past =
           (m.x - (previous.exit.x ?? j.x)) * previous.outHx +
           (m.y - (previous.exit.y ?? j.y)) * previous.outHy;
+        const candidate = movements.find((p) => p.key === previous.key);
         const sameApproach =
           m.line === previous.line &&
           m.dir === previous.dir &&
           m.dir * (previous.stop - this.along[m.from]! - m.dir * m.d) > 0;
-        if (!sameApproach && past > j.radius + length / 2) {
+        if ((r.inside || !candidate) && !sameApproach && past > j.radius + length / 2) {
           table.release(m, previous.key);
           continue;
         }
-        const candidate = movements.find((p) => p.key === previous.key);
-        if (r.carried) {
-          table.refreshCarried(
+        if (r.carried && !r.inside && candidate) {
+          r.carried = false;
+          submit(candidate, candidate.ahead < -0.05 * pm && candidate.line === m.line);
+        } else if (r.carried) {
+          const availableRoom = traffic.room(m, previous, this);
+          const refreshed = table.refreshCarried(
             m,
-            (p) => {
-              this.junctionCrossings.holdAhead(p, this.junctionControlled(p));
-              return (
-                this.signals.allows(
-                  m,
-                  p.entry?.x ?? p.junction.x,
-                  p.entry?.y ?? p.junction.y,
-                  clock,
-                  Math.max(0, p.ahead),
-                  p,
-                ) && this.junctionClear(p, pedestrians)
-              );
-            },
-            traffic.room(m, previous, this),
+            (p) => allowed(p, availableRoom),
+            availableRoom,
             previous.key,
-            traffic.atLine(m, previous, this, table),
+            undefined,
             traffic,
           );
+          if (refreshed) requests.push(refreshed);
         } else if (r.inside) {
-          previous.ahead =
-            ((previous.entry?.x ?? j.x) - m.x) * previous.inHx +
-            ((previous.entry?.y ?? j.y) - m.y) * previous.inHy -
-            j.radius -
-            JUNCTION.gap * pm -
-            length / 2;
+          previous.ahead = boxAhead(m, previous, pm);
           previous.boxAhead = previous.ahead;
           submit(previous, true);
         } else if (candidate)
@@ -3533,6 +3537,13 @@ export class TileLife {
       }
       for (const movement of movements)
         submit(movement, movement.ahead < -0.05 * pm && movement.line === m.line);
+      requests.sort(
+        (a, b) =>
+          Number(b.inside) - Number(a.inside) ||
+          (a.movement.boxAhead ?? a.movement.ahead) - (b.movement.boxAhead ?? b.movement.ahead),
+      );
+      for (let i = 0; i < requests.length; i++)
+        requests[i]!.precedingKey = requests[i - 1]?.movement.key;
     }
   }
 
@@ -5024,6 +5035,8 @@ export class LifeWorld {
   private birthCredit = 0;
   private readonly junctions = new JunctionTable();
   private readonly junctionTraffic = new JunctionTraffic();
+  private crossingGeometryVersion = 0;
+  private preparedCrossingVersion = -1;
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
@@ -5121,6 +5134,7 @@ export class LifeWorld {
     for (const tile of this.tiles.values()) tile.momentHost.clear();
     for (const { life } of this.retired.values()) life.momentHost.clear();
     this.tiles.clear();
+    this.crossingGeometryVersion++;
     this.retired.clear();
     this.covers.clear();
     this.mixedZoom = false;
@@ -5235,6 +5249,7 @@ export class LifeWorld {
           changed = true;
         }
       if (changed) {
+        this.crossingGeometryVersion++;
         this.seasonsDirty = true;
         this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
         this.groundTerrain = undefined;
@@ -5471,6 +5486,7 @@ export class LifeWorld {
           [...this.tiles].find(([, life]) => life === target)![0],
           c.life,
         );
+        if (this.junctions.movement(c.m)) this.crossingGeometryVersion++;
         if (replace) {
           this.junctions.release(replace);
           guard.remove(replace);
@@ -6108,8 +6124,17 @@ export class LifeWorld {
     this.junctionTraffic.begin(this.tiles.values().next().value!);
     for (const tile of this.tiles.values())
       for (const m of tile.movers) if (eligibility.get(tile)!(m)) this.junctionTraffic.add(tile, m);
-    const crossingSources = [...this.tiles.values()];
-    for (const tile of crossingSources) tile.junctionCrossings.prepare(crossingSources);
+    if (this.preparedCrossingVersion !== this.crossingGeometryVersion) {
+      const sources = [...this.tiles.values()];
+      for (const tile of sources) {
+        const bounds = tile.junctionCrossings.bounds(this.junctions);
+        tile.junctionCrossings.prepare(
+          sources.filter((source) => tile.junctionCrossings.relevant(source, bounds)),
+          this.crossingGeometryVersion,
+        );
+      }
+      this.preparedCrossingVersion = this.crossingGeometryVersion;
+    }
     for (const [key, tile] of this.tiles)
       tile.requestJunctions(
         this.junctions,
@@ -6245,13 +6270,15 @@ export class LifeWorld {
       ) {
         this.profiler?.countContinuity('transfers');
         effectOwners!.set(m, target);
-        if (held)
+        if (held) {
           this.junctions.rebind(
             m,
             target,
             [...this.tiles].find(([, life]) => life === target)![0],
             source,
           );
+          this.crossingGeometryVersion++;
+        }
         guard.remove(m);
         if (m.kind === 'vehicle') guard(target, m);
       } else {

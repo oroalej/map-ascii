@@ -1,7 +1,7 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { LifeBuilder } from './geometry';
 import { LifeWorld, TileLife, type Mover } from './simulate';
-import type { JunctionTable} from './junctions';
+import type { JunctionTable } from './junctions';
 import { type Junction, type Movement } from './junctions';
 import { worldTiles } from './testing/scenarios';
 import { metersPerUnit } from '../raster/geometry';
@@ -102,12 +102,15 @@ for (const arm of ['entry', 'exit'] as const)
     life.requestJunctions(table, () => true, 0);
     table.resolve(0);
     expect(table.granted(car)).toBe(true);
+    const key = table.movement(car)!.key,
+      arrival = table.snapshot().find((r) => r.key === key)!.arrival;
+    expect(arrival).toBeDefined();
     if (arm === 'exit') human.x = 2000 + 12 * pm;
     life.movers.push(human);
     f.world.step(0.1, undefined, 18, undefined, undefined, undefined, 0.9);
     expect(table.granted(car)).toBe(false);
     expect(car.x).toBeLessThanOrEqual(2000 - 10.7 * pm + 1e-6);
-    expect(table.waited(car)).toBeGreaterThanOrEqual(0);
+    expect(table.snapshot().find((r) => r.key === key)!.arrival).toBe(arrival);
   });
 it('holds a newly denied approach upstream of its entrance stripe without moving physical box admission', () => {
   const f = fixture(),
@@ -258,7 +261,6 @@ it('reads a crossing available only in an adjacent tile in the owner metric fram
     inHy: 0,
     outHx: 1,
     outHy: 0,
-    rank: 0,
     stop: 0,
     line: 2,
     dir: -1,
@@ -267,4 +269,120 @@ it('reads a crossing available only in an adjacent tile in the owner metric fram
     ahead: 1,
   };
   expect(owner.junctionClear(m, view)).toBe(false);
+});
+it('caches relevant crossing sources and invalidates on addition, replacement and removal', () => {
+  const f = fixture(),
+    owner = f.life,
+    neighborTile = { ...tile, x: tile.x + 1 };
+  const geometry = (outward: number) => {
+    const b = new LifeBuilder(),
+      x = 2000 + outward * pm - 4096;
+    b.line(
+      [
+        { x: -4096, y: 2000 },
+        { x: 0, y: 2000 },
+      ],
+      0,
+      12,
+    );
+    b.area('crossing', [
+      [
+        { x: x - 1.5 * pm, y: 2000 - 6.5 * pm },
+        { x: x + 1.5 * pm, y: 2000 - 6.5 * pm },
+        { x: x + 1.5 * pm, y: 2000 + 6.5 * pm },
+        { x: x - 1.5 * pm, y: 2000 + 6.5 * pm },
+      ],
+    ]);
+    return b.finish();
+  };
+  const base = { key: 'junction-crossings', tile, life: owner.geo },
+    near = { key: 'near', tile: neighborTile, life: geometry(20) },
+    far = { key: 'far', tile: { ...tile, x: tile.x + 100 }, life: geometry(20) },
+    prepare = vi.spyOn(owner.junctionCrossings, 'prepare'),
+    j = owner.junctionIndex.junctions[0]!,
+    east = j.arms.find((a) => a.hx === 1)!;
+  f.world.sync([base, near, far]);
+  f.world.step(0.01);
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(prepare.mock.calls[0]![0]).toContain(f.world.active('near'));
+  expect(prepare.mock.calls[0]![0]).not.toContain(f.world.active('far'));
+  expect(owner.junctionCrossings.forArm(j, east)).toHaveLength(2);
+  f.world.step(0.01);
+  expect(prepare).toHaveBeenCalledTimes(1);
+  f.world.sync([base, { ...near, key: 'replacement', life: geometry(25) }, far]);
+  f.world.step(0.01);
+  expect(prepare).toHaveBeenCalledTimes(2);
+  expect(
+    owner.junctionCrossings
+      .forArm(j, east)
+      .some((c) => Math.abs(c.body.x - (2000 + 25 * pm) / pm) < 0.01),
+  ).toBe(true);
+  expect(
+    owner.junctionCrossings
+      .forArm(j, east)
+      .some((c) => Math.abs(c.body.x - (2000 + 20 * pm) / pm) < 0.01),
+  ).toBe(false);
+  f.world.sync([base]);
+  f.world.step(0.01);
+  expect(prepare).toHaveBeenCalledTimes(3);
+  expect(owner.junctionCrossings.forArm(j, east)).toHaveLength(1);
+});
+it('includes prepared crossings from a finer neighboring footprint', () => {
+  const f = fixture(),
+    owner = f.life,
+    b = new LifeBuilder(),
+    finer = { z: tile.z + 1, x: tile.x * 2 + 1, y: tile.y * 2 },
+    x = (2000 + 12 * pm) * 2 - 4096,
+    y = 4000;
+  b.line(
+    [
+      { x: 0, y },
+      { x: 4096, y },
+    ],
+    0,
+    12,
+  );
+  b.area('crossing', [
+    [
+      { x: x - 3 * pm, y: y - 13 * pm },
+      { x: x + 3 * pm, y: y - 13 * pm },
+      { x: x + 3 * pm, y: y + 13 * pm },
+      { x: x - 3 * pm, y: y + 13 * pm },
+    ],
+  ]);
+  const source = new TileLife(finer, b.finish(), 1),
+    bounds = owner.junctionCrossings.bounds(f.table);
+  expect(owner.junctionCrossings.relevant(source, bounds)).toBe(true);
+  owner.junctionCrossings.prepare([source]);
+  const j = owner.junctionIndex.junctions[0]!,
+    east = j.arms.find((a) => a.hx === 1)!;
+  expect(owner.junctionCrossings.forArm(j, east)).toHaveLength(1);
+});
+it('uses the shared default corridor for an unknown-width arm', () => {
+  const b = new LifeBuilder(),
+    center = { x: 2000, y: 2000 };
+  b.line([{ x: 1000, y: 2000 }, center, { x: 3000, y: 2000 }], 0, 0);
+  b.line([{ x: 2000, y: 1000 }, center, { x: 2000, y: 3000 }], 0, 6);
+  for (const [outward, side] of [
+    [20, 6],
+    [30, 0],
+  ]) {
+    const x = center.x + outward! * pm,
+      y = center.y + side! * pm;
+    b.area('crossing', [
+      [
+        { x: x - 1.5 * pm, y: y - 6.5 * pm },
+        { x: x + 1.5 * pm, y: y - 6.5 * pm },
+        { x: x + 1.5 * pm, y: y + 6.5 * pm },
+        { x: x - 1.5 * pm, y: y + 6.5 * pm },
+      ],
+    ]);
+  }
+  const life = new TileLife(tile, b.finish(), 1),
+    j = life.junctionIndex.junctions[0]!,
+    east = j.arms.find((a) => a.hx === 1)!;
+  expect(life.geo.widths[east.line]).toBe(0);
+  const associated = life.junctionCrossings.forArm(j, east);
+  expect(associated).toHaveLength(1);
+  expect(associated[0]!.body.y).toBeCloseTo(center.y / pm);
 });

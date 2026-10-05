@@ -1,17 +1,77 @@
-import type { Arm, Junction, Movement } from './junctions';
+import type { Arm, Junction, JunctionTable, Movement } from './junctions';
 import type { TileLife } from './simulate';
 import { frameBetween } from './frames';
+import { EXTENT } from '../raster/geometry';
+import { DEFAULT_ROAD_WIDTH_M } from './config';
 import { transformCrossing, type PedestrianCrossing, type PedestrianView } from './pedestrians';
 
 const COS30 = Math.cos(Math.PI / 6),
   NO_CROSSINGS: readonly PedestrianCrossing[] = [];
+type Bounds = { x0: number; y0: number; x1: number; y1: number };
 /** Uses prepared road associations, without a second crossing spatial index. */
 export class JunctionCrossings {
   private sources: TileLife[] = [];
   private crossings: PedestrianCrossing[] = [];
   private associations = new WeakMap<Junction, Map<Arm, PedestrianCrossing[]>>();
+  private revision?: number;
+  private sourceBounds?: Bounds;
   constructor(private readonly life: TileLife) {}
-  prepare(sources: readonly TileLife[]) {
+  /** Geometry-change broad phase only; buffered geometry may extend beyond its owner's footprint. */
+  private extent(): Bounds {
+    if (this.sourceBounds) return this.sourceBounds;
+    const bounds = {
+      x0: 0,
+      y0: 0,
+      x1: EXTENT / this.life.perMeter,
+      y1: EXTENT / this.life.perMeter,
+    };
+    for (const lines of [
+      this.life.pedestrianCrossings.uncontrolledAssociations,
+      this.life.pedestrianCrossings.controlledAssociations,
+    ])
+      for (const list of lines.values())
+        for (const c of list) {
+          bounds.x0 = Math.min(bounds.x0, c.body.x);
+          bounds.y0 = Math.min(bounds.y0, c.body.y);
+          bounds.x1 = Math.max(bounds.x1, c.body.x);
+          bounds.y1 = Math.max(bounds.y1, c.body.y);
+        }
+    return (this.sourceBounds = bounds);
+  }
+  bounds(table: JunctionTable): Bounds {
+    const pm = this.life.perMeter,
+      bounds = { x0: -30, y0: -30, x1: EXTENT / pm + 30, y1: EXTENT / pm + 30 };
+    const include = (j: Junction) => {
+      const reach = j.radius / pm + 30;
+      for (const arm of j.arms) {
+        const x = (arm.x ?? j.x) / pm,
+          y = (arm.y ?? j.y) / pm;
+        bounds.x0 = Math.min(bounds.x0, x - reach);
+        bounds.y0 = Math.min(bounds.y0, y - reach);
+        bounds.x1 = Math.max(bounds.x1, x + reach);
+        bounds.y1 = Math.max(bounds.y1, y + reach);
+      }
+    };
+    for (const j of this.life.junctionIndex.junctions) include(j);
+    for (const m of this.life.movers) for (const r of table.holds(m)) include(r.movement.junction);
+    return bounds;
+  }
+  relevant(source: TileLife, bounds: Bounds): boolean {
+    const f = frameBetween(source.tile, this.life.tile),
+      other = source.junctionCrossings.extent(),
+      scale = (source.perMeter * f.scale) / this.life.perMeter,
+      x = f.x / this.life.perMeter,
+      y = f.y / this.life.perMeter;
+    return (
+      x + other.x1 * scale >= bounds.x0 &&
+      x + other.x0 * scale <= bounds.x1 &&
+      y + other.y1 * scale >= bounds.y0 &&
+      y + other.y0 * scale <= bounds.y1
+    );
+  }
+  prepare(sources: readonly TileLife[], revision?: number) {
+    if (revision !== undefined && revision === this.revision) return;
+    this.revision = revision;
     if (sources.length === this.sources.length && sources.every((s, i) => s === this.sources[i]))
       return;
     this.sources = [...sources];
@@ -55,7 +115,8 @@ export class JunctionCrossings {
         if (
           dot < COS30 ||
           Math.abs(arm.hx * c.body.hx + arm.hy * c.body.hy) < COS30 ||
-          Math.abs(dx * arm.hy - dy * arm.hx) > (this.life.geo.widths[arm.line] || 12) / 2 + 2
+          Math.abs(dx * arm.hy - dy * arm.hx) >
+            (this.life.geo.widths[arm.line] || DEFAULT_ROAD_WIDTH_M) / 2 + 2
         )
           continue;
         if (!selected || dot > score + 1e-9) {

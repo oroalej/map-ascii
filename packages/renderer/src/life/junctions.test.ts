@@ -1,19 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { JunctionTable, compatible, type Movement } from './junctions';
-import { LifeBuilder, LifeLine } from './geometry';
+import { LifeBuilder } from './geometry';
 import { TileLife, type Mover } from './simulate';
 import { continuityMover, continuityTile, left, right } from './testing/continuity';
 
 const life = new TileLife({ z: 16, x: 1, y: 1 }, new LifeBuilder().finish(), 1);
 const mover = () => ({ kind: 'vehicle', vehicle: 'car' }) as Mover;
-const movement = (ix: number, iy: number, ox: number, oy: number, rank = 0): Movement => ({
+const movement = (ix: number, iy: number, ox: number, oy: number): Movement => ({
   key: 'cross',
   junction: { key: 'cross', x: 0, y: 0, radius: 7, arms: [] },
   inHx: ix,
   inHy: iy,
   outHx: ox,
   outHy: oy,
-  rank,
   stop: 0,
   line: 0,
   dir: 1,
@@ -21,7 +20,7 @@ const movement = (ix: number, iy: number, ox: number, oy: number, rank = 0): Mov
   ahead: 2,
 });
 const east = movement(1, 0, 1, 0),
-  south = movement(0, 1, 0, 1, LifeLine.roadMinor);
+  south = movement(0, 1, 0, 1);
 describe('junction arbitration', () => {
   it('rebinds a seam hold without releasing its physical box or waiting age', () => {
     const a = continuityTile(left),
@@ -88,7 +87,7 @@ describe('junction arbitration', () => {
     expect(compatible(east, movement(0, 1, 1, 0))).toBe(false);
     expect(compatible(movement(1, 0, 0, 1), movement(0, 1, -1, 0))).toBe(true);
   });
-  it('uses arrival at the line and ages a conflicting waiter', () => {
+  it('breaks arrival ties to the right and ages a conflicting waiter', () => {
     const table = new JunctionTable(),
       a = mover(),
       b = mover();

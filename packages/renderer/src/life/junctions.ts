@@ -13,6 +13,7 @@ import { VEHICLES } from './vehicles';
 import { frameBetween } from './frames';
 import { complete } from './cooperate';
 import type { JunctionTraffic } from './junction-traffic';
+import { binKeys, bodyCorners, type Body, type Point } from './occupancy';
 
 export type Arm = {
   line: number;
@@ -42,7 +43,6 @@ export type Movement = {
   inHy: number;
   outHx: number;
   outHy: number;
-  rank: number;
   stop: number;
   line: number;
   dir: 1 | -1;
@@ -53,12 +53,31 @@ export type Movement = {
   entry?: Arm;
 };
 
+/** Project an occupied/carried approach in its local frame; routed candidates keep route distance. */
+export function boxAhead(m: Mover, p: Movement, pm: number): number {
+  return (
+    ((p.entry?.x ?? p.junction.x) - m.x) * p.inHx +
+    ((p.entry?.y ?? p.junction.y) - m.y) * p.inHy -
+    p.junction.radius -
+    (JUNCTION.gap + VEHICLES[m.vehicle!].length / 2) * pm
+  );
+}
+
 /** Connectivity comes from shared vertices, never geometric crossing/bridge intersections. */
 export class JunctionIndex {
   junctions!: Junction[];
   hasLinked!: boolean;
   private readonly internalLines = new Set<number>();
   private readonly lines = new Map<number, Junction[]>();
+  private readonly boxBins = new Map<number, Junction[]>();
+  private readonly boxKeys: number[] = [];
+  private readonly boxPoints = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ];
+  private readonly spawnCorners: Point[] = [];
+  private readonly spawnCandidates = new Set<Junction>();
+  private readonly spawnBody: Body = { x: 0, y: 0, hx: 1, hy: 0, length: 0, width: 0 };
   constructor(
     tile: TileId,
     private geo: LifeGeometry,
@@ -153,30 +172,61 @@ export class JunctionIndex {
       (j) => j.arms.length >= 3 && new Set(j.arms.map((a) => a.line)).size >= 2,
     );
     this.hasLinked = this.junctions.some((j) => j.linked);
-    for (const j of this.junctions)
+    this.boxBins.clear();
+    for (const j of this.junctions) {
+      yield;
       for (const line of new Set(j.arms.map((a) => a.line))) {
         const list = this.lines.get(line) ?? [];
         list.push(j);
         this.lines.set(line, list);
       }
+      // The old overlap predicate's square rotates with the vehicle; contain every orientation.
+      const reach = (Math.SQRT2 * j.radius) / pm;
+      for (const arm of j.arms) {
+        const x = (arm.x ?? j.x) / pm,
+          y = (arm.y ?? j.y) / pm;
+        this.boxPoints[0]!.x = x - reach;
+        this.boxPoints[0]!.y = y - reach;
+        this.boxPoints[1]!.x = x + reach;
+        this.boxPoints[1]!.y = y + reach;
+        for (const key of binKeys(this.boxPoints, 0, this.boxKeys)) {
+          let bin = this.boxBins.get(key);
+          if (!bin) this.boxBins.set(key, (bin = []));
+          if (!bin.includes(j)) bin.push(j);
+        }
+      }
+    }
   }
 
   /** Seed footprints must enter every box through arbitration, including ordinary junctions. */
   canSpawnVehicle(m: Mover): boolean {
     if (this.internalLines.has(m.line)) return false;
-    const linked = this.movement(m, 60 * this.pm);
+    const linked = this.hasLinked ? this.movement(m, 60 * this.pm) : undefined;
     if (linked?.junction.linked && linked.ahead < 0) return false;
     const spec = VEHICLES[m.vehicle!];
-    return this.junctions.every((j) =>
-      j.arms.every((a) => {
+    const body = this.spawnBody;
+    body.x = m.x / this.pm;
+    body.y = m.y / this.pm;
+    body.hx = m.hx;
+    body.hy = m.hy;
+    body.length = spec.length;
+    body.width = spec.width;
+    this.spawnCandidates.clear();
+    for (const key of binKeys(bodyCorners(body, this.spawnCorners), 0, this.boxKeys)) {
+      const bin = this.boxBins.get(key);
+      if (bin) for (const j of bin) this.spawnCandidates.add(j);
+    }
+    for (const j of this.spawnCandidates)
+      for (const a of j.arms) {
         const dx = (a.x ?? j.x) - m.x,
           dy = (a.y ?? j.y) - m.y;
-        return (
-          Math.abs(dx * m.hx + dy * m.hy) >= j.radius + (spec.length * this.pm) / 2 ||
-          Math.abs(-dx * m.hy + dy * m.hx) >= j.radius + (spec.width * this.pm) / 2
-        );
-      }),
-    );
+        if (
+          Math.abs(dx * m.hx + dy * m.hy) < j.radius + (spec.length * this.pm) / 2 &&
+          Math.abs(-dx * m.hy + dy * m.hx) < j.radius + (spec.width * this.pm) / 2
+        )
+          return false;
+      }
+    return true;
   }
 
   movement(m: Mover, reach: number): Movement | undefined {
@@ -254,7 +304,6 @@ export class JunctionIndex {
         inHy: -incoming.hy,
         outHx: exit.hx,
         outHy: exit.hy,
-        rank: this.geo.kinds[m.line]!,
         stop: incoming.along,
         line: m.line,
         dir: m.dir,
@@ -376,6 +425,8 @@ export type JunctionRequest = {
   ready: boolean;
   inside: boolean;
   atLine?: boolean;
+  /** Immediately preceding reservation on this mover's committed route. */
+  precedingKey?: string;
   traffic?: JunctionTraffic;
   /** Free metres beyond the exit box; pending holders consume this space too. */
   room?: number;
@@ -385,7 +436,7 @@ type Hold = JunctionRequest & {
   since?: number;
   carried?: boolean;
   seen?: boolean;
-  surrendered?: boolean;
+  surrenderedAt?: number;
 };
 const NO_RECORDS: readonly Hold[] = [];
 function sameExit(a: Hold, b: Hold): boolean {
@@ -454,7 +505,19 @@ export class JunctionTable {
   }
   revokeGrant(m: Mover, key: string): void {
     const r = this.record(m, key);
-    if (r && !r.inside) r.since = undefined;
+    if (!r || r.inside) return;
+    r.since = undefined;
+    const records = this.records.get(m)!;
+    for (const downstream of records.values()) {
+      let preceding = downstream.precedingKey;
+      for (let remaining = records.size; preceding !== undefined && remaining > 0; remaining--) {
+        if (preceding === key) {
+          if (!downstream.inside) downstream.since = undefined;
+          break;
+        }
+        preceding = records.get(preceding)?.precedingKey;
+      }
+    }
   }
   release(m: Mover, key?: string): void {
     if (key === undefined) this.records.delete(m);
@@ -527,12 +590,7 @@ export class JunctionTable {
       this.release(m, p.key);
       return;
     }
-    p.ahead =
-      ((p.entry?.x ?? j.x) - m.x) * p.inHx +
-      ((p.entry?.y ?? j.y) - m.y) * p.inHy -
-      j.radius -
-      length / 2 -
-      JUNCTION.gap * pm;
+    p.ahead = boxAhead(m, p, pm);
     p.boxAhead = p.ahead;
     r.inside = p.boxAhead < -0.05 * pm;
     r.room = room;
@@ -540,6 +598,7 @@ export class JunctionTable {
     r.atLine = traffic ? traffic.atLine(m, p, r.life, this) : (atLine ?? false);
     r.traffic = traffic;
     this.request(r);
+    return r;
   }
   clear(): void {
     this.records.clear();
@@ -557,6 +616,8 @@ export class JunctionTable {
         ready: r.ready,
         key: r.movement.key,
         atLine: r.atLine,
+        surrenderedAt: r.surrenderedAt,
+        precedingKey: r.precedingKey,
       })),
     );
   }
@@ -574,7 +635,7 @@ export class JunctionTable {
         if (clock - r.since > JUNCTION.holdMax) {
           r.since = undefined;
           r.arrival = r.atLine === true ? clock : undefined;
-          r.surrendered = true;
+          r.surrenderedAt = clock;
         } else if (!r.ready || (r.room ?? Infinity) < VEHICLES[r.m.vehicle!].length + JUNCTION.gap)
           r.since = undefined;
       }
@@ -587,6 +648,27 @@ export class JunctionTable {
     for (const [m, records] of this.records) {
       for (const [key, r] of records) if (!r.seen) records.delete(key);
       if (!records.size) this.records.delete(m);
+      // Revalidate the whole route after every request's current-step safety gates are known.
+      for (const r of records.values()) {
+        if (r.inside) continue;
+        let preceding = r.precedingKey;
+        for (let remaining = records.size; preceding !== undefined; remaining--) {
+          const upstream = records.get(preceding);
+          if (upstream?.inside) break;
+          if (
+            !remaining ||
+            !upstream ||
+            upstream.since === undefined ||
+            !upstream.ready ||
+            (upstream.room ?? Infinity) < VEHICLES[m.vehicle!].length + JUNCTION.gap
+          ) {
+            r.ready = false;
+            r.since = undefined;
+            break;
+          }
+          preceding = upstream.precedingKey;
+        }
+      }
     }
     for (const group of groups.values()) {
       const over = (r: Hold) => r.arrival !== undefined && clock - r.arrival >= JUNCTION.maxWait;
@@ -648,8 +730,11 @@ export class JunctionTable {
           this.yielded.add(r);
         }
       const surrender = (a: Hold, b: Hold) =>
-        !!b.surrendered &&
-        !a.surrendered &&
+        b.surrenderedAt !== undefined &&
+        !over(b) &&
+        a.surrenderedAt === undefined &&
+        a.arrival !== undefined &&
+        a.arrival <= b.surrenderedAt &&
         a.atLine === true &&
         eligible(a) &&
         !compatible(a.movement, b.movement);
@@ -659,7 +744,7 @@ export class JunctionTable {
       for (const r of group) if (r.inside || r.since !== undefined) blocking.push(r);
       for (const r of final) {
         if (this.yielded.has(r)) {
-          if (r.arrival !== undefined) blocking.push(r);
+          if (r.ready && r.arrival !== undefined) blocking.push(r);
           continue;
         }
         if (r.since !== undefined || !r.ready) continue;
@@ -678,7 +763,7 @@ export class JunctionTable {
           continue;
         if (blocking.every((b) => b === r || compatible(r.movement, b.movement))) {
           r.since = clock;
-          r.surrendered = false;
+          r.surrenderedAt = undefined;
           blocking.push(r);
         } else if (r.arrival !== undefined) blocking.push(r);
       }

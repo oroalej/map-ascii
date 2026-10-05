@@ -294,6 +294,72 @@ it.each([1, -1] as const)(
   },
 );
 
+it.each([1, -1] as const)(
+  'admits a bus past a grouped short terminal piece without a junction box in %s flow',
+  (dir) => {
+    const pm = 1 / metersPerUnit(left),
+      end = dir === 1 ? 1000 + 3 * pm : 3000 - 3 * pm,
+      b = new LifeBuilder();
+    b.line(
+      [
+        { x: 1000, y: 2000 },
+        { x: end, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+    );
+    b.line(
+      [
+        { x: end, y: 2000 },
+        { x: 3000, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+    );
+    const geo = b.finish();
+    geo.spawnGroups = Uint32Array.from([0, 0]);
+    const life = new TileLife(left, geo, 4),
+      line = dir === 1 ? 1 : 0;
+    life.movers.length = 0;
+    const traveler: Mover = {
+      ...continuityMover(life, 2000),
+      vehicle: 'bus',
+      line,
+      from: dir === 1 ? geo.starts[line]! : geo.starts[line + 1]! - 1,
+      dir,
+      hx: dir,
+      speed: 0,
+      v: 0,
+      d: 0,
+    };
+    const mover = life.placeSeed(traveler, 100)!;
+    for (let frame = 0; frame < 11; frame++) life.step(0.1);
+    expect(life.junctionIndex.junctions).toHaveLength(0);
+    expect(life.junctionIndex.canSpawnVehicle(mover)).toBe(true);
+    life.birthCredit = 1;
+    life.pending.push({ mover, at: 0 });
+    const view = context(0, 4096);
+    admitBirths(
+      {
+        view,
+        lives: [life],
+        credit: 4,
+        cursor: 0,
+        owns: () => true,
+        guard: () =>
+          Object.assign(() => true, { remove: () => {}, reserveSeam: () => {}, pedestrians }),
+        boatRoom: () => true,
+      },
+      0.1,
+    );
+    expect(life.movers).toContain(mover);
+    expect(life.pending).toHaveLength(0);
+    expect(outsideView(life, life.birthBodies(mover), view, 0)).toBe(false);
+  },
+);
+
 it('rejects visible births at a protected interior T-junction while retaining off-screen admission', () => {
   const inside = endpointAdmission('protected');
   expect(inside.life.geo.kinds).toHaveLength(2);

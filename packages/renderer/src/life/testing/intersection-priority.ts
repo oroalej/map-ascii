@@ -3,6 +3,8 @@ import type { LifeWorld, TileLife, Mover, WorldGroundGuard } from '../simulate';
 import type { JunctionTable, Movement } from '../junctions';
 import type { Polygon } from '../occupancy';
 import type { LngLatBounds } from '../procession';
+import { VEHICLES } from '../vehicles';
+import { JUNCTION } from '../config';
 
 /** Inject constructors so exactly the same fixture can measure the PRE and POST source. */
 export function priorityFixture(
@@ -209,13 +211,13 @@ export function observePriority(fixture: Fixture) {
   const distance = (m: Mover, movement: Movement) => {
     const j = movement.junction,
       pm = life.perMeter;
-    // This fixture's two fleets have the real car/jeepney lengths; no geometry changes in POST.
-    const half = m.vehicle === 'jeepney' ? 3.5 : 2.2;
+    // Keep the observer's projection independent of production distance/gating helpers.
+    const half = VEHICLES[m.vehicle!].length / 2;
     return (
       ((movement.entry?.x ?? j.x) - m.x) * movement.inHx +
       ((movement.entry?.y ?? j.y) - m.y) * movement.inHy -
       j.radius -
-      (1.5 + half) * pm
+      (JUNCTION.gap + half) * pm
     );
   };
   const armFor = (hx: number, hy: number) => arms.findIndex(([x, y]) => x * hx + y * hy > 0.86);

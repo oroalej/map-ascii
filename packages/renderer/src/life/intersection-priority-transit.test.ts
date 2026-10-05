@@ -8,7 +8,7 @@ const fixture = priorityFixture(LifeWorld, LifeBuilder, metersPerUnit, true),
   observer = observePriority(fixture);
 
 afterAll(() => observer.restore());
-for (let window = 0; window < 3; window++)
+for (let window = 0; window < 3; window++) {
   it(`safely advances the priority transit fixture through window ${window + 1}`, () => {
     for (let frame = 0; frame < 60 * 30; frame++) {
       fixture.beforeStep();
@@ -30,6 +30,19 @@ for (let window = 0; window < 3; window++)
     expect(result.pedestrianEpisodes.some((n) => n > 0)).toBe(true);
     if (window === 2) expect(result.pedestrianEpisodes.every((n) => n > 0)).toBe(true);
     expect(result.transitSites).toBeGreaterThan(0);
-    // Throughput/wait gates are measured separately and carried as unmet in the PR.
     expect(result.unsafeEntries).toBe(0);
   });
+  // These diagnostic gates are carried in the PR; safety above must pass independently.
+  it.fails(`serves every transit arm in 60 second window ${window + 1}`, () => {
+    expect(observer.result().crossingsPerArmPer60[window]!.every((n) => n > 0)).toBe(true);
+  });
+}
+it.fails('limits raw transit at-line wait to 30 seconds', () => {
+  expect(observer.result().maxWaited).toBeLessThanOrEqual(30);
+});
+it.fails('has no independent transit stall episode over 30 seconds', () => {
+  expect(observer.result().stallsOver30).toBe(0);
+});
+it('has no transit two-car inside freeze of at least 10 seconds', () => {
+  expect(observer.result().twoCarFreezes).toBe(0);
+});

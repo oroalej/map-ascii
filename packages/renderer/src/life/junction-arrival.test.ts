@@ -10,7 +10,6 @@ const movement = (vertical = false): Movement => ({
   inHy: vertical ? 1 : 0,
   outHx: vertical ? 0 : 1,
   outHy: vertical ? 1 : 0,
-  rank: 0,
   stop: 0,
   line: 0,
   dir: 1,

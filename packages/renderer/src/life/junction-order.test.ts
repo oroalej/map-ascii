@@ -11,7 +11,6 @@ const movement = (ix: number, iy: number, ox = ix, oy = iy): Movement => ({
   inHy: iy,
   outHx: ox,
   outHy: oy,
-  rank: 0,
   stop: 0,
   line: 0,
   dir: 1,
@@ -59,8 +58,8 @@ it('pins northbound yielding to westbound on its right', () => {
   h.step(0);
   expect(h.winners()).toEqual([1]);
 });
-it('anchors a tie across 0.99/1.01 without clock buckets or road rank', () => {
-  const h = harness([movement(0, -1), { ...movement(-1, 0), rank: 99 }]);
+it('anchors a tie across 0.99/1.01 without clock buckets', () => {
+  const h = harness([movement(0, -1), movement(-1, 0)]);
   h.step(0.99, [0], [false, true]);
   h.step(1.01);
   expect(h.winners()).toEqual([1]);
@@ -109,6 +108,24 @@ it('does not yield to red or pedestrian-blocked oncoming traffic', () => {
   const h = harness([movement(1, 0, 0, -1), movement(-1, 0)]);
   h.step(0, [0, 1], [true, false]);
   expect(h.winners()).toEqual([0]);
+});
+it('does not let an unready yielded left turn block a compatible oncoming follower', () => {
+  const h = harness([movement(1, 0, 0, -1), movement(-1, 0), movement(-1, 0)]);
+  h.step(0, [0], [false, true, true]);
+  h.table.begin(new Set([life]));
+  for (const i of [0, 1, 2])
+    h.table.request({
+      m: h.cars[i]!,
+      life,
+      tileKey: String(i),
+      index: i,
+      movement: [movement(1, 0, 0, -1), movement(-1, 0), movement(-1, 0)][i]!,
+      ready: i !== 0,
+      inside: false,
+      atLine: i !== 2,
+    });
+  h.table.resolve(2);
+  expect(h.winners()).toEqual([1, 2]);
 });
 it('lets a maxWait left turn proceed and orders over-limit traffic oldest first', () => {
   const h = harness([movement(1, 0, 0, -1), movement(-1, 0)]);

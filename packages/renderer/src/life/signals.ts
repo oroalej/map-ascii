@@ -172,18 +172,12 @@ export class SignalControl {
     dt: number,
     clock: number,
     out: MotionLimit,
-    clearing?: string | ReadonlySet<string>,
+    clearing?: ReadonlySet<string>,
   ): void {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
-      if (
-        stop.signal.key &&
-        (typeof clearing === 'string'
-          ? stop.signal.key === clearing
-          : clearing?.has(stop.signal.key))
-      )
-        continue;
+      if (stop.signal.key && clearing?.has(stop.signal.key)) continue;
       const ahead =
         m.dir * (stop.along - progress) -
         ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
