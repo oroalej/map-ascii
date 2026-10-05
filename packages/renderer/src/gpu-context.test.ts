@@ -167,6 +167,63 @@ describe('glyph program variants', () => {
     expect(after.glyphVariants?.size).toBe(1);
     expect(glyphProgram(context, after, false, false)).toBe(after.glyph);
   });
+  it('compiles seasonal code only on demand and keeps ordinary warmup independent', () => {
+    const programs = createPrograms(context);
+    const base = vi.mocked(createProgram).mock.calls[0]![2];
+    expect(base).not.toContain('vec4 carnivalSurface');
+    expect(base).not.toContain('float buntingInk');
+    expect(base).not.toContain('float festivePulse');
+    const seasonal = glyphProgram(context, programs, false, false, true);
+    const source = vi.mocked(createProgram).mock.calls.at(-1)![2];
+    expect(source).toContain('carnivalSurface(');
+    expect(source).toContain('buntingInk(');
+    expect(source).toContain('festivePulse(');
+    expect(glyphProgram(context, programs, false, false, true)).toBe(seasonal);
+    expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
+    glyphProgram(context, programs, true, false, true);
+    glyphProgram(context, programs, false, true, true);
+    expect(programs.glyphVariants?.size).toBe(4);
+    prewarmGlyphPrograms(context, programs, () => true);
+    vi.advanceTimersByTime(400);
+    expect([0, 1, 2, 3].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    deletePrograms(context, programs);
+    expect(gl.deleteProgram.mock.calls).toHaveLength(10);
+  });
+  it('warms selected seasonal programs without allocating fireworks buffers and deletes unused links', () => {
+    const programs = createPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, false, true, true);
+    vi.advanceTimersByTime(600);
+    expect(programs.fireworksProgram).toBeDefined();
+    expect(programs.fireworks).toBeUndefined();
+    expect([0, 1, 4, 5].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    const count = vi.mocked(createProgram).mock.calls.length;
+    glyphProgram(context, programs, false, false, true);
+    prewarmGlyphPrograms(context, programs, () => true, false, true, true);
+    expect(createProgram).toHaveBeenCalledTimes(count);
+    expect(vi.getTimerCount()).toBe(0);
+    const unused = programs.fireworksProgram!.program;
+    deletePrograms(context, programs);
+    expect(gl.deleteProgram.mock.calls.filter(([p]) => p === unused)).toHaveLength(1);
+  });
+
+  it('cancels a pending seasonal link when its season leaves and on teardown', () => {
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    const pending = { ready: () => false, finish: vi.fn(), cancel: vi.fn() };
+    vi.mocked(prepareProgram).mockReturnValue(pending);
+    const programs = createPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, true);
+    vi.advanceTimersByTime(100);
+    expect(programs.glyphWarmup?.pending?.key).toBe(8);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false);
+    expect(pending.cancel).toHaveBeenCalledOnce();
+    expect(programs.glyphWarmup?.pending).toBeUndefined();
+    prewarmGlyphPrograms(context, programs, () => true, false, true, true);
+    vi.advanceTimersByTime(100);
+    deletePrograms(context, programs);
+    expect(pending.cancel).toHaveBeenCalledTimes(2);
+    expect(pending.finish).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it('publishes completed parallel variants once and retains demand compilation after a warmup failure', () => {
     gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });

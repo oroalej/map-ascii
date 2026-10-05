@@ -5,7 +5,7 @@ import type { Mover, TileLife } from './simulate';
 
 export const SEAMS = { missingSeconds: 3, rejectedSeconds: 8 } as const;
 
-/** First geographic ownership boundary along this line, without choosing turns or drawing RNG. */
+/** First ownership boundary along committed exits, without choosing turns or drawing RNG. */
 export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], reach: number) {
   const { coords, starts } = life.geo;
   const rects = [
@@ -17,13 +17,27 @@ export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], r
   ];
   const owns = (x: number, y: number) =>
     x >= 0 && x < EXTENT && y >= 0 && y < EXTENT && !masked(life.tile, { x, y }, covers);
-  let from = m.from,
+  let line = m.line,
+    dir = m.dir,
+    from = m.from,
+    distance = m.d,
     traveled = 0,
     x = m.x,
     y = m.y;
-  const end = m.dir === 1 ? starts[m.line + 1]! - 1 : starts[m.line]!;
-  for (let n = 0; n < 256 && from !== end && traveled <= reach; n++) {
-    const to = from + m.dir;
+  for (let n = 0; n < 256 && traveled <= reach; n++) {
+    const end = dir === 1 ? starts[line + 1]! - 1 : starts[line]!;
+    if (from === end) {
+      const exit = life.seamExit(m, line, dir);
+      if (exit === undefined) break;
+      line = exit >> 1;
+      dir = exit & 1 ? -1 : 1;
+      from = dir === 1 ? starts[line]! : starts[line + 1]! - 1;
+      distance = 0;
+      x = coords[from * 2]!;
+      y = coords[from * 2 + 1]!;
+      continue;
+    }
+    const to = from + dir;
     const bx = coords[to * 2]!,
       by = coords[to * 2 + 1]!;
     const dx = bx - x,
@@ -48,14 +62,19 @@ export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], r
           ...heading,
           x: px,
           y: py,
+          line,
           from,
-          d: (from === m.from ? m.d : 0) + probe * length,
+          dir,
+          d: distance + probe * length,
+          next: line === m.line ? m.next : undefined,
+          routing: line === m.line || !m.routing ? m.routing : { ...m.routing, plan: undefined },
         };
         return { distance: traveled + t * length, preview };
       }
     }
     traveled += length;
     from = to;
+    distance = 0;
     x = bx;
     y = by;
   }

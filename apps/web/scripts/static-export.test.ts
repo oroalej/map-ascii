@@ -236,6 +236,7 @@ describe('static export reuse', () => {
       'apps/web/.next/cache/atlas-export.lock',
       JSON.stringify({ pid: 2_147_483_647, token: 'old' }),
     );
+    // Either simultaneous caller can reclaim the stale lock; exactly one builds.
     expect((await Promise.all([f.prepare(), f.prepare()])).sort()).toEqual([false, true]);
     expect(f.build).toHaveBeenCalledTimes(1);
   });

@@ -107,7 +107,7 @@ export class LocalScenes {
   private cursor = 0;
   private minutes = -1;
   private hoursDirty = false;
-  private cityLife: CityLifeConfig | undefined;
+  private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
 
   constructor(
     private readonly geo: LifeGeometry,
@@ -541,7 +541,12 @@ export class LocalScenes {
   step(
     dt: number,
     movers: readonly Mover[],
-    env: { rain?: number; levels?: Activity; minutes?: number; cityLife?: CityLifeConfig },
+    env: {
+      rain?: number;
+      levels?: Activity;
+      minutes?: number;
+      cityLife?: Pick<CityLifeConfig, 'schedules'>;
+    },
     near?: (x: number, y: number) => boolean,
     shows?: (kind: Mover['kind']) => boolean,
     guard?: MoveGuard,

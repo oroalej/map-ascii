@@ -1,3 +1,4 @@
+import type { SimulationSeason } from './seasonal-simulation';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 /**
@@ -25,10 +26,12 @@ import { admitBirths, outsideView, type LifeViewContext, type PendingSeed } from
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
+  carnivalRing,
   type PlaceKind,
   type ProcessionRoute,
   type TrafficMix,
   type CityLifeConfig,
+  type ShopSchedule,
 } from '@atlas/shared';
 import {
   EXTENT,
@@ -85,7 +88,16 @@ import {
   pickSpecies,
   type BirdSpecies,
 } from './birds';
-import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import {
+  inTile,
+  LifeLine,
+  PLACE_CODES,
+  PLACE_STRIDE,
+  vertexKey,
+  sharedRoadVertexRecorder,
+  physicalSeasonalRecords,
+  type LifeGeometry,
+} from './geometry';
 import { DOG_PAINTS } from './dogs';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
@@ -112,6 +124,8 @@ import {
 } from './vehicles';
 import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
+import { collectSeasonAnchors, seasonProximity, type SeasonAnchor } from './seasonal';
+import { admitsInstallation } from './seasonal-installations';
 import {
   hasTurnSignals,
   TURN_SIGNAL,
@@ -145,6 +159,41 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent, reserve?: boolean) => boolean;
+type SuppressedActors<T extends object> = {
+  hidden: T[];
+  order: WeakMap<T, number>;
+  next: number;
+};
+function suppressedActors<T extends object>(): SuppressedActors<T> {
+  return { hidden: [], order: new WeakMap(), next: 0 };
+}
+/** Keep actor identity and original array order when a temporary display occupies its site. */
+function reconcileActors<T extends object>(
+  active: T[],
+  state: SuppressedActors<T>,
+  blocked: (actor: T) => boolean,
+  hide?: (actor: T) => void,
+  restore?: (actor: T) => void,
+) {
+  for (const actor of active) if (!state.order.has(actor)) state.order.set(actor, state.next++);
+  let restored = false;
+  for (let i = state.hidden.length - 1; i >= 0; i--) {
+    const actor = state.hidden[i]!;
+    if (blocked(actor)) continue;
+    state.hidden.splice(i, 1);
+    active.push(actor);
+    restore?.(actor);
+    restored = true;
+  }
+  if (restored) active.sort((a, b) => state.order.get(a)! - state.order.get(b)!);
+  for (let i = active.length - 1; i >= 0; i--) {
+    const actor = active[i]!;
+    if (!blocked(actor)) continue;
+    active.splice(i, 1);
+    state.hidden.push(actor);
+    hide?.(actor);
+  }
+}
 export type WorldGroundGuard = ((
   life: TileLife,
   owner: GroundAgent,
@@ -157,11 +206,16 @@ export type WorldGroundGuard = ((
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
 };
+type SeamLimit = {
+  room: number;
+  crossing: boolean;
+  boundary?: Pick<Mover, 'line' | 'dir'>;
+};
 export type StepPass = {
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
   owns?: (p: { x: number; y: number }) => boolean;
-  seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
+  seams?: ReadonlyMap<Mover, SeamLimit>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
   recoveredLines?: Set<number>;
   recovered?: (m: Mover) => void;
@@ -262,7 +316,8 @@ export type LifeEnv = {
   inspecting?: object;
   clock?: number;
   minutes?: number;
-  cityLife?: CityLifeConfig;
+  cityLife?: Pick<CityLifeConfig, 'schedules'>;
+  season?: string | null;
   levels?: Activity;
   rain: number;
   wind?: { dir: readonly [number, number]; strength: number };
@@ -468,6 +523,7 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  private readonly sharedRoadVertices = new Set<number>();
   private inspected?: object;
   readonly momentHost: MomentHost;
   private readonly walkerRng: () => number;
@@ -496,6 +552,116 @@ export class TileLife {
   readonly standby: Parked[] = [];
   /** Street vendors with their carts (`spawnStalls`). */
   readonly stalls: Stall[] = [];
+  /** Temporary carts use their own population and never consume legacy random streams. */
+  readonly seasonalStalls: Stall[] = [];
+  private seasonalCandidates?: readonly Stall[];
+  private suppressedGround?: {
+    movers: SuppressedActors<Mover>;
+    gatherers: SuppressedActors<Gatherer>;
+    stalls: SuppressedActors<Stall>;
+    parked: SuppressedActors<Parked>;
+  };
+  get population() {
+    return this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0);
+  }
+  get hasSuppressedActors() {
+    return (
+      !!this.suppressedGround &&
+      Object.values(this.suppressedGround).some((state) => state.hidden.length > 0)
+    );
+  }
+  *residentMovers() {
+    yield* this.movers;
+    yield* this.suppressedGround?.movers.hidden ?? [];
+  }
+  reconcileSeasonalActors(
+    blocked: (owner: GroundAgent) => boolean,
+    parkedBlocked: (owner: Parked) => boolean,
+    active: boolean,
+  ) {
+    if (!active && !this.hasSuppressedActors) return;
+    const state = (this.suppressedGround ??= {
+      movers: suppressedActors<Mover>(),
+      gatherers: suppressedActors<Gatherer>(),
+      stalls: suppressedActors<Stall>(),
+      parked: suppressedActors<Parked>(),
+    });
+    reconcileActors(
+      this.stalls,
+      state.stalls,
+      blocked,
+      (stall) => this.scenes.removeStall(stall),
+      (stall) => this.scenes.addStall(stall),
+    );
+    reconcileActors(this.gatherers, state.gatherers, blocked);
+    reconcileActors(
+      this.movers,
+      state.movers,
+      (m) => (m.kind === 'vehicle' || isWalker(m.kind)) && blocked(m),
+      (m) => this.scenes.release(m),
+    );
+    reconcileActors(this.parked, state.parked, parkedBlocked);
+  }
+
+  *allStalls() {
+    yield* this.stalls;
+    yield* this.seasonalStalls;
+  }
+
+  clearSeasonalStalls(limit = 0) {
+    while (this.seasonalStalls.length > limit) this.scenes.removeStall(this.seasonalStalls.pop()!);
+  }
+
+  admitSeasonalStalls(
+    config: NonNullable<SimulationSeason['stalls']>,
+    anchors: readonly SeasonAnchor[],
+    guard: GroundGuard,
+  ) {
+    const near = seasonProximity(this.tile, anchors, config.near, config.radius_m, true);
+    const limit = Math.min(config.per_tile, Math.max(0, MAX_TILE_AGENTS - this.population));
+    for (const stall of (this.seasonalCandidates ??= this.prepareSeasonalCandidates())) {
+      if (this.seasonalStalls.length >= limit) break;
+      if (
+        this.seasonalStalls.includes(stall) ||
+        !near(stall.x, stall.y) ||
+        !this.canIdle(stall) ||
+        !guard(stall)
+      )
+        continue;
+      this.seasonalStalls.push(stall);
+      this.scenes.addStall(stall);
+    }
+  }
+
+  private prepareSeasonalCandidates(): Stall[] {
+    const rng = random(this.routingSeed ^ 0x3c6ef372);
+    const result: Stall[] = [];
+    const paints = VEHICLES.cart.paints;
+    for (let line = 0; line < this.geo.kinds.length; line++) {
+      const kind = this.geo.kinds[line]!;
+      if (kind !== LifeLine.path && kind !== LifeLine.plaza) continue;
+      const length = this.along[this.last(line)]!;
+      if (!length) continue;
+      const candidates = Math.min(96, Math.max(1, Math.ceil(length / this.perMeter / 12)));
+      for (let n = 0; n < candidates; n++) {
+        const p = this.pointAt(line, ((n + rng()) / candidates) * length);
+        const side = rng() < 0.5 ? 1 : -1;
+        const offset = VENDORS.beside * this.perMeter * side;
+        const stall: Stall = {
+          x: p.x - p.hy * offset,
+          y: p.y + p.hx * offset,
+          hx: p.hx,
+          hy: p.hy,
+          side,
+          paint: paints[Math.floor(rng() * paints.length)]!,
+          shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
+          rank: rng(),
+        };
+        if (inTile(stall)) result.push(stall);
+      }
+    }
+    return result;
+  }
   /** People at places: churches, schools, pitches, benches, fields (`spawnGatherers`). */
   readonly gatherers: Gatherer[] = [];
 
@@ -523,7 +689,7 @@ export class TileLife {
       options.reject?.('localScene');
       return false;
     }
-    if (this.movers.length - (replace ? 1 : 0) >= MAX_TILE_AGENTS) {
+    if (this.population - (replace ? 1 : 0) >= MAX_TILE_AGENTS) {
       options.reject?.('capQuota');
       return false;
     }
@@ -621,11 +787,18 @@ export class TileLife {
   *prepare(): Generator<void, TileLife, void> {
     const { tile, geo, routingSeed: seed } = this;
     const lines = geo.kinds.length;
+    const recordRoadVertex = sharedRoadVertexRecorder(
+      geo.coords,
+      geo.kinds,
+      this.sharedRoadVertices,
+    );
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
+      recordRoadVertex(this.first(line), line);
       for (let v = this.first(line) + 1; v <= this.last(line); v++) {
+        recordRoadVertex(v, line);
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
         if ((v & 127) === 0) yield;
       }
@@ -657,7 +830,11 @@ export class TileLife {
     yield* this.findJunctions();
     yield* this.spawnParked(random(seed ^ 0x9e3779b9));
     yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
-    for (let line = 0; line < lines; line++) yield* this.spawnOn(line);
+    for (let line = 0; line < lines;) {
+      const { end } = this.populationRange(line);
+      yield* this.spawnOn(line, false, end);
+      line = end;
+    }
     // Dogs last, on their own stream: they don't change who else is out.
     for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
     yield* this.spawnStalls();
@@ -686,9 +863,7 @@ export class TileLife {
   }
 
   private endKey(vertex: number) {
-    const x = Math.round(this.geo.coords[vertex * 2]!) + 32768;
-    const y = Math.round(this.geo.coords[vertex * 2 + 1]!) + 32768;
-    return x * 65536 + y;
+    return vertexKey(this.geo.coords[vertex * 2]!, this.geo.coords[vertex * 2 + 1]!);
   }
 
   private addEnd(vertex: number, code: number) {
@@ -696,6 +871,21 @@ export class TileLife {
     const list = this.ends.get(key);
     if (list) list.push(code);
     else this.ends.set(key, [code]);
+  }
+
+  /** Connected road ends are off-screen entrances, never in-view replacement spawn points. */
+  continuesRoad(line: number, atStart: boolean): boolean {
+    const vertex = atStart ? this.first(line) : this.last(line);
+    const endpoint = line * 2 + (atStart ? 0 : 1);
+    return (
+      (this.sharedRoadVertices.has(this.endKey(vertex)) ||
+        this.ends
+          .get(this.endKey(vertex))
+          ?.some(
+            (code) => code !== endpoint && this.geo.kinds[code >> 1]! <= LifeLine.roadMinor,
+          )) ??
+      false
+    );
   }
 
   private segment(a: number, b: number) {
@@ -708,12 +898,46 @@ export class TileLife {
     return this.along[this.last(line)]!;
   }
 
+  populationRange(line: number): { first: number; end: number } {
+    let first = line;
+    let end = line + 1;
+    const group = this.geo.spawnGroups?.[line];
+    while (group !== undefined && first > 0 && this.geo.spawnGroups![first - 1] === group) first--;
+    while (
+      group !== undefined &&
+      end < this.geo.kinds.length &&
+      this.geo.spawnGroups![end] === group
+    )
+      end++;
+    return { first, end };
+  }
+
+  /** Combined length of a population's contiguous routing pieces, in tile units. */
+  populationLength(first: number, end: number): number {
+    let length = 0;
+    for (let piece = first; piece < end; piece++) length += this.lineLength(piece);
+    return length;
+  }
+
+  /** Locate a distance measured from the chosen end of a population line. */
+  populationPiece(first: number, end: number, distance: number, dir: 1 | -1) {
+    let line = dir === 1 ? first : end - 1;
+    for (let count = 1; count < end - first; count++) {
+      const length = this.lineLength(line);
+      if (distance < length) break;
+      distance -= length;
+      line += dir;
+    }
+    return { line, distance };
+  }
+
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
-  private *spawnOn(line: number, dogs = false): Generator<void, void, void> {
+  private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
-    const meters = this.lineLength(line) / this.perMeter;
+    const length = this.populationLength(line, endLine);
+    const meters = length / this.perMeter;
     if (!rules || meters === 0) return;
     const rng = dogs ? this.dogRng : this.rng;
     for (const rule of rules) {
@@ -721,7 +945,7 @@ export class TileLife {
       if (rule.kind === 'cat') continue;
       if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
-      for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
+      for (let i = 0; i < count && this.population < MAX_TILE_AGENTS; i++) {
         yield;
         let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
         const flow = this.geo.oneway?.[line];
@@ -770,8 +994,11 @@ export class TileLife {
           mover.walked = this.looks() * 2 * PEOPLE.stride;
         }
         if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
-        // Start somewhere along the line.
-        this.advance(mover, rng() * this.lineLength(line), false);
+        // Routing splits keep the original population and random draws in their original order.
+        const position = this.populationPiece(line, endLine, rng() * length, dir);
+        mover.line = position.line;
+        mover.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+        this.advance(mover, position.distance, false);
         if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
@@ -1107,9 +1334,7 @@ export class TileLife {
         for (let i = 0; i < count; i++) {
           yield;
           if (
-            shoppers
-              ? this.movers.length >= MAX_TILE_AGENTS
-              : this.stalls.length >= VENDORS.maxPerTile
+            shoppers ? this.population >= MAX_TILE_AGENTS : this.stalls.length >= VENDORS.maxPerTile
           )
             break;
           const dir = rng() < 0.5 ? 1 : -1;
@@ -1196,7 +1421,7 @@ export class TileLife {
       const cats = Math.floor(length / this.perMeter / rule.spacing + rng());
       for (
         let i = 0;
-        i < cats && count < CAT.maxPerTile && this.movers.length < MAX_TILE_AGENTS;
+        i < cats && count < CAT.maxPerTile && this.population < MAX_TILE_AGENTS;
         i++
       ) {
         yield;
@@ -1336,17 +1561,22 @@ export class TileLife {
       return false;
     };
     const paints = VEHICLES.cart.paints;
-    for (let line = 0; line < geo.kinds.length; line++) {
+    for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
+      end = this.populationRange(line).end;
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
-      const length = this.along[this.last(line)]!;
+      const length = this.populationLength(line, end);
       if (!spacing || length === 0) continue;
-      const middle = this.pointAt(line, length / 2);
+      const point = (distance: number) => {
+        const position = this.populationPiece(line, end, distance, 1);
+        return this.pointAt(position.line, position.distance);
+      };
+      const middle = point(length / 2);
       const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
       const count = Math.floor(((length / perMeter) * boost) / spacing + looks());
       for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
         yield;
-        const p = this.pointAt(line, looks() * length);
+        const p = point(looks() * length);
         const side = looks() < 0.5 ? 1 : -1;
         // Right of the line's direction for `side` 1; the vendor stands on the far side.
         const o = VENDORS.beside * perMeter * side;
@@ -1394,7 +1624,13 @@ export class TileLife {
         Math.floor(rule.base + (rule.perMeter * radius) / perMeter + rng()),
       );
       const row = rng() * Math.PI;
-      for (let n = 0; n < count && this.gatherers.length < MAX_TILE_GATHERERS; n++) {
+      for (
+        let n = 0;
+        n < count &&
+        this.gatherers.length + (this.suppressedGround?.gatherers.hidden.length ?? 0) <
+          MAX_TILE_GATHERERS;
+        n++
+      ) {
         yield;
         const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
         const g: Gatherer = {
@@ -1611,7 +1847,12 @@ export class TileLife {
       width: VEHICLES[vehicle].width * perMeter,
     });
     const park = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => {
-      if (this.parked.length >= MAX_TILE_AGENTS || !inTile({ x, y })) return;
+      if (
+        this.parked.length + (this.suppressedGround?.parked.hidden.length ?? 0) >=
+          MAX_TILE_AGENTS ||
+        !inTile({ x, y })
+      )
+        return;
       const body = bodyOf(x, y, hx, hy, vehicle);
       sample[0] = {
         ...body,
@@ -1658,11 +1899,19 @@ export class TileLife {
         park(x, y, hx, hy, vehicle);
       }
     }
+    const curbParking = new Map<number, boolean>();
     for (let line = 0; line < geo.kinds.length; line++) {
       const road = trafficRoadFor[geo.kinds[line]! as LifeLine];
       const width = geo.widths[line] ?? 0;
       const onWater = road === 'river' || road === 'canal';
-      if (!road || onWater || width < PARKED.minWidth || rng() >= PARKED.chance) continue;
+      if (!road || onWater || width < PARKED.minWidth) continue;
+      const id = geo.lineIds?.[line] ?? 0;
+      let chosen = id ? curbParking.get(id) : undefined;
+      if (chosen === undefined) {
+        chosen = rng() < PARKED.chance;
+        if (id) curbParking.set(id, chosen);
+      }
+      if (!chosen) continue;
       this.parkingLines.add(line);
       const length = this.along[this.last(line)]!;
       for (const side of [1, -1]) {
@@ -1787,8 +2036,7 @@ export class TileLife {
 
   /** Admit a complete train on a running line, with enough trail for every coach. */
   arrive(line: number, rng: () => number, owns?: (m: Mover) => boolean): boolean {
-    if (this.geo.kinds[line] !== LifeLine.rail || this.movers.length >= MAX_TILE_AGENTS)
-      return false;
+    if (this.geo.kinds[line] !== LifeLine.rail || this.population >= MAX_TILE_AGENTS) return false;
     const cars = consist(Math.round(between(rng, TRAIN.coaches)));
     const length = trainLength(cars) * this.perMeter;
     if (this.lineLength(line) < length + 10 * this.perMeter) return false;
@@ -1912,12 +2160,71 @@ export class TileLife {
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
   private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
-    if (this.seamLimits?.get(m)?.crossing) return;
+    if (this.crossesSeamLine(m)) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
-    if (junctions && this.exitOptions(m, end).length) return;
+    if (
+      junctions
+        ? this.exitOptions(m, end).length
+        : this.populationContinuation(m, end) !== undefined
+    )
+      return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
     const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
     return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
+  }
+
+  /** A legal continuation on the original population line, without changing a cursor or RNG. */
+  private populationContinuation(m: Mover, end: number): number | undefined {
+    const group = this.geo.spawnGroups?.[m.line];
+    const line = m.line + m.dir;
+    if (group === undefined || this.geo.spawnGroups?.[line] !== group) return;
+    const vertex = m.dir === 1 ? this.first(line) : this.last(line);
+    if (this.endKey(end) !== this.endKey(vertex)) return;
+    const code = line * 2 + (m.dir === 1 ? 0 : 1);
+    if (this.exitOptions(m, end).includes(code)) return code;
+  }
+
+  /** Initial settlement follows the original line without choosing a random junction exit. */
+  private continuePopulation(m: Mover): boolean {
+    const code = this.populationContinuation(m, m.from);
+    if (code === undefined) return false;
+    const line = code >> 1;
+    const vertex = code & 1 ? this.last(line) : this.first(line);
+    m.line = line;
+    m.from = vertex;
+    m.next = undefined;
+    if (m.routing) m.routing = { ...m.routing, plan: undefined };
+    return true;
+  }
+
+  /** Read the committed next exit, or the only legal exit, without advancing a random stream. */
+  seamExit(m: Mover, line: number, dir: 1 | -1): number | undefined {
+    const end = dir === 1 ? this.last(line) : this.first(line);
+    const current = line === m.line && dir === m.dir;
+    const cursor = current ? m : { kind: m.kind, line, dir };
+    const exits = this.exitOptions(cursor, end);
+    const route = m.junctionRoute?.exits;
+    const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
+    const routeIndex = current ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
+    const reserved = routeIndex >= 0 ? route?.[routeIndex] : undefined;
+    const plan = m.routing?.plan;
+    const planned =
+      current && plan?.line === line && plan.dir === dir && plan.vertex === end
+        ? plan.exit
+        : undefined;
+    return (
+      this.committedExit(exits, reserved, planned, current ? m.next : undefined) ??
+      (exits.length === 1 ? exits[0] : undefined)
+    );
+  }
+
+  /** An accepted boundary belongs to its actual routing piece, rather than earlier junctions. */
+  private crossesSeamLine(m: Mover): boolean {
+    const seam = this.seamLimits?.get(m);
+    return (
+      !!seam?.crossing &&
+      (!seam.boundary || (seam.boundary.line === m.line && seam.boundary.dir === m.dir))
+    );
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
@@ -1953,13 +2260,20 @@ export class TileLife {
       const atEnd = m.dir === 1 ? to === this.last(m.line) : to === this.first(m.line);
       if (atEnd) {
         // The clipped line end is a geographic seam, not a route choice.
-        if (this.seamLimits?.get(m)?.crossing) {
+        if (this.crossesSeamLine(m)) {
           m.from -= m.dir;
           m.d = length;
           break;
         }
         if (junctions) this.turn(m);
-        else m.dir = m.dir === 1 ? -1 : 1;
+        else if (!this.continuePopulation(m)) {
+          if (m.kind === 'vehicle' && this.geo.oneway?.[m.line]) {
+            m.from -= m.dir;
+            m.d = length;
+            break;
+          }
+          m.dir = m.dir === 1 ? -1 : 1;
+        }
         // A train at the end of the track stops there (`step` turns it round).
         if (m.train?.reverse || m.train?.edge) break;
       }
@@ -1977,7 +2291,7 @@ export class TileLife {
     return moved;
   }
 
-  private exitOptions(m: Mover, vertex: number): number[] {
+  private exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[] {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const usable = usableLines[m.kind];
     const codes =
@@ -2097,7 +2411,7 @@ export class TileLife {
 
   private prepareSignalRoute(m: Mover) {
     if (!this.junctionIndex.hasLinked || m.kind !== 'vehicle' || m.junctionRoute) return;
-    const movement = this.junctionIndex.movement(m, 60 * this.perMeter);
+    const movement = this.junctionIndex.movement(m, JUNCTION.linkedLookaheadM * this.perMeter);
     if (!movement?.junction.linked || movement.ahead < 0) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const options = this.exitOptions(m, end);
@@ -2108,7 +2422,8 @@ export class TileLife {
       code =
         options[
           Math.floor(
-            (hashString(`${this.routingSeed}/${m.line}/${m.dir}`) / 0x1_0000_0000) * options.length,
+            (hashString(`${this.routingSeed}/${m.rank}/${m.line}/${m.dir}`) / 0x1_0000_0000) *
+              options.length,
           )
         ];
       m.next = code;
@@ -2138,7 +2453,8 @@ export class TileLife {
         this.plannedExit(future, vertex, next)?.exit ??
         next[
           Math.floor(
-            (hashString(`${this.routingSeed}/${line}/${dir}`) / 0x1_0000_0000) * next.length,
+            (hashString(`${this.routingSeed}/${future.rank}/${line}/${dir}`) / 0x1_0000_0000) *
+              next.length,
           )
         ]!;
     }
@@ -2206,29 +2522,28 @@ export class TileLife {
       }
       return;
     }
-    const reserved = m.junctionRoute?.exits[0];
     const code =
-      reserved !== undefined && options.includes(reserved)
-        ? reserved
-        : plan
-          ? plan.exit
-          : m.vehicle && m.next !== undefined && options.includes(m.next)
-            ? m.next
-            : m.train
-              ? this.straightest(m, options)
-              : options[
-                  Math.floor(
-                    (m.vehicle
-                      ? this.routeRng()
-                      : m.kind === 'cat'
-                        ? this.catRng()
-                        : m.kind === 'dog'
-                          ? this.dogRng()
-                          : m.kind === 'person'
-                            ? this.walkerRng()
-                            : this.rng()) * options.length,
-                  )
-                ]!;
+      this.committedExit(
+        options,
+        m.junctionRoute?.exits[0],
+        plan?.exit,
+        m.vehicle ? m.next : undefined,
+      ) ??
+      (m.train
+        ? this.straightest(m, options)
+        : options[
+            Math.floor(
+              (m.vehicle
+                ? this.routeRng()
+                : m.kind === 'cat'
+                  ? this.catRng()
+                  : m.kind === 'dog'
+                    ? this.dogRng()
+                    : m.kind === 'person'
+                      ? this.walkerRng()
+                      : this.rng()) * options.length,
+            )
+          ]!);
     m.next = undefined;
     if (m.junctionRoute)
       m.junctionRoute =
@@ -2246,6 +2561,18 @@ export class TileLife {
     )
       m.entered = { ...entered, vertex: target.vertex };
     else delete m.entered;
+  }
+
+  /** Reservations, valid plans and remembered exits share the same legal priority. */
+  private committedExit(
+    options: readonly number[],
+    reserved: number | undefined,
+    planned: number | undefined,
+    remembered: number | undefined,
+  ): number | undefined {
+    if (reserved !== undefined && options.includes(reserved)) return reserved;
+    if (planned !== undefined && options.includes(planned)) return planned;
+    if (remembered !== undefined && options.includes(remembered)) return remembered;
   }
 
   /** Of the line ends meeting at a mover's vertex, the one carrying on straightest. */
@@ -3588,6 +3915,7 @@ export type ProcessionRun = { id: string; progress: number; live: boolean };
 type GroundTerrain = {
   key: string;
   blocked: PolygonIndex;
+  seasonal: PolygonIndex;
   water: PolygonIndex;
   roadAccess: RoadAccess;
   trees: PolygonIndex;
@@ -3596,6 +3924,186 @@ type GroundTerrain = {
 };
 
 export class LifeWorld {
+  private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
+  setShopSchedule(shops: ShopSchedule | undefined) {
+    this.cityLife = shops ? { schedules: { shops } } : undefined;
+  }
+  private seasons: readonly SimulationSeason[] = [];
+  private seasonalConfig: SimulationSeason | undefined;
+  setSeasons(seasons: readonly SimulationSeason[]) {
+    if (seasons === this.seasons) return;
+    this.seasons = seasons;
+    this.seasonsDirty = true;
+  }
+  private seasonsDirty = false;
+  /** Retired tiles retain their carts and reconcile the season when they return. */
+  private readonly appliedSeasons = new WeakMap<TileLife, string | null>();
+  private readonly stallAnchors = new WeakMap<TileLife, readonly SeasonAnchor[]>();
+  private readonly stallBounds = new WeakMap<TileLife, readonly number[]>();
+  private readonly stallInputs = new WeakMap<
+    TileLife,
+    {
+      config: SimulationSeason;
+      anchors: readonly SeasonAnchor[];
+      neighbors: readonly TileLife[];
+      quota: number;
+    }
+  >();
+
+  /** Include buffered geography so neighboring roads and finer owners invalidate admission. */
+  private seasonalBounds(life: TileLife): readonly number[] {
+    const saved = this.stallBounds.get(life);
+    if (saved) return saved;
+    let minX = 0,
+      minY = 0,
+      maxX = EXTENT,
+      maxY = EXTENT;
+    const add = (x: number, y: number) => {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    };
+    for (let i = 0; i < life.geo.coords.length; i += 2)
+      add(life.geo.coords[i]!, life.geo.coords[i + 1]!);
+    for (const area of life.geo.areas ?? [])
+      for (const ring of area.rings) for (const p of ring) add(p.x, p.y);
+    let margin = 100;
+    for (const width of life.geo.widths) margin = Math.max(margin, width);
+    for (const r of physicalSeasonalRecords(life.geo)) {
+      const points = r.kind === 'carnival' ? carnivalRing(r) : [r.at];
+      for (const p of points) {
+        const q = lngLatToTile(life.tile, ...p);
+        add(q.x, q.y);
+      }
+      if (r.kind === 'christmas-tree') margin = Math.max(margin, r.radius_m);
+    }
+    const padding = margin * life.perMeter,
+      scale = EXTENT * 2 ** life.tile.z;
+    const bounds = [
+      (life.tile.x * EXTENT + minX - padding) / scale,
+      (life.tile.y * EXTENT + minY - padding) / scale,
+      (life.tile.x * EXTENT + maxX + padding) / scale,
+      (life.tile.y * EXTENT + maxY + padding) / scale,
+    ];
+    this.stallBounds.set(life, bounds);
+    return bounds;
+  }
+
+  private syncSeason(season: string | null | undefined) {
+    const config = this.seasons.find(
+      (s) => s.id === season && (s.stalls || s.installations?.length),
+    );
+    const changed = config?.id !== this.seasonalConfig?.id;
+    if (!changed && !this.seasonsDirty) {
+      this.seasonalConfig = config;
+      return;
+    }
+    const physical = (s: SimulationSeason | undefined) =>
+      s?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
+    const hadPhysical = physical(this.seasonalConfig);
+    if (changed && (config?.installations?.length || this.seasonalConfig?.installations?.length))
+      this.groundTerrain = undefined;
+    this.seasonalConfig = config;
+    this.seasonsDirty = false;
+    for (const life of this.tiles.values()) {
+      const id = config?.id ?? null;
+      if (this.appliedSeasons.get(life) !== id) {
+        life.clearSeasonalStalls();
+        this.stallInputs.delete(life);
+      }
+      this.appliedSeasons.set(life, id);
+    }
+    if (
+      !this.groundTerrain &&
+      this.tiles.size &&
+      (hadPhysical ||
+        physical(config) ||
+        [...this.tiles.values()].some((life) => life.hasSuppressedActors))
+    )
+      this.groundGuard();
+    if (!config?.stalls) return;
+    const lives = [...this.tiles.values()];
+    const anchors = lives.flatMap((life) => {
+      let found = this.stallAnchors.get(life);
+      if (!found) {
+        found = collectSeasonAnchors([{ tile: life.tile, life: life.geo }]);
+        this.stallAnchors.set(life, found);
+      }
+      return found;
+    });
+    const changedTiles = lives.flatMap((life) => {
+      const reach = config.stalls!.radius_m * life.perMeter;
+      const nearby = anchors.filter((a) => {
+        if (a.kind !== 'market' && !config.stalls!.near.includes(a.kind)) return false;
+        const p = lngLatToTile(life.tile, ...a.at);
+        return p.x >= -reach && p.y >= -reach && p.x <= EXTENT + reach && p.y <= EXTENT + reach;
+      });
+      const bounds = this.seasonalBounds(life);
+      const neighbors = lives.filter((other) => {
+        const b = this.seasonalBounds(other);
+        return (
+          b[0]! <= bounds[2]! && b[2]! >= bounds[0]! && b[1]! <= bounds[3]! && b[3]! >= bounds[1]!
+        );
+      });
+      const previous = this.stallInputs.get(life);
+      const quota = Math.max(0, MAX_TILE_AGENTS - life.population);
+      this.stallInputs.set(life, { config, anchors: nearby, neighbors, quota });
+      if (
+        previous?.config === config &&
+        previous.quota === quota &&
+        nearby.length === previous.anchors.length &&
+        nearby.every((a) => previous.anchors.includes(a)) &&
+        neighbors.length === previous.neighbors.length &&
+        neighbors.every((n) => previous.neighbors.includes(n))
+      )
+        return [];
+      if (!nearby.length && !life.seasonalStalls.length) return [];
+      return [{ life, anchors: nearby }];
+    });
+    if (!changedTiles.length) return;
+    const guard = this.groundGuard(0, undefined, undefined, true);
+    for (const { life, anchors } of changedTiles) {
+      const near = seasonProximity(
+        life.tile,
+        anchors,
+        config.stalls.near,
+        config.stalls.radius_m,
+        true,
+      );
+      for (let i = life.seasonalStalls.length - 1; i >= 0; i--) {
+        const stall = life.seasonalStalls[i]!;
+        if (
+          this.owns(life, stall) &&
+          near(stall.x, stall.y) &&
+          life.canIdle(stall) &&
+          guard(life, stall)
+        )
+          continue;
+        guard.remove(stall);
+        life.scenes.removeStall(stall);
+        life.seasonalStalls.splice(i, 1);
+      }
+      life.clearSeasonalStalls(
+        Math.min(config.stalls.per_tile, Math.max(0, MAX_TILE_AGENTS - life.population)),
+      );
+      life.admitSeasonalStalls(
+        config.stalls,
+        anchors,
+        (owner, before) => this.owns(life, owner) && guard(life, owner, before),
+      );
+    }
+  }
+  private terrainKey(keys: readonly string[]) {
+    return (
+      keys.join('|') +
+      (this.seasonalConfig?.installations?.some(
+        (i) => i.kind === 'christmas-tree' || i.kind === 'carnival',
+      )
+        ? `|installations:${this.seasonalConfig.id}`
+        : '')
+    );
+  }
   readonly inspection?: LifeInspection;
   preparationEpoch = 0;
   hasBootstrapped() {
@@ -3684,7 +4192,7 @@ export class LifeWorld {
       b.length *= o.scale;
       b.width *= o.scale;
     }
-    return terrain.roadAccess.allows(bodies, false);
+    return terrain.roadAccess.allows(bodies, false) && !terrain.seasonal.hits(bodies);
   }
   private arrivals = new Map<string, { rng: () => number; left: number; occupied: boolean }>();
   private readonly tiles = new Map<string, TileLife>();
@@ -3722,6 +4230,8 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.seasonalConfig = undefined;
+    this.seasonsDirty = false;
     this.inspection?.clear();
     this.momentOptions?.memory?.clear();
     this.preparationEpoch++;
@@ -3840,10 +4350,12 @@ export class LifeWorld {
           changed = true;
         }
       if (changed) {
+        this.seasonsDirty = true;
         this.groundTerrain = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
-          if (terrain?.key === [...this.tiles.keys()].join('|')) this.groundTerrain = terrain;
+          if (terrain?.key === this.terrainKey([...this.tiles.keys()]))
+            this.groundTerrain = terrain;
           this.preparedTerrain.delete(life);
         }
         this.railTopology = undefined;
@@ -3884,7 +4396,8 @@ export class LifeWorld {
           this.profiler!.add('settle', this.profiler!.time() - settleStart);
         for (const life of added) {
           const quotas = this.history.get(life)!.quotas;
-          for (const m of life.movers) if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
+          for (const m of life.residentMovers())
+            if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
           if (!gradual) this.profiler?.countContinuity('births', life.movers.length);
           if (gradual)
             for (const m of [...life.movers]) {
@@ -4097,9 +4610,10 @@ export class LifeWorld {
     const lives = entries.map(([, life]) => life);
     const ref = lives[0];
     const terrain: GroundTerrain = {
-      key: entries.map(([key]) => key).join('|'),
+      key: this.terrainKey(entries.map(([key]) => key)),
       ref,
       blocked: new PolygonIndex(),
+      seasonal: new PolygonIndex(),
       water: new PolygonIndex(),
       trees: new PolygonIndex(),
       roadAccess: new RoadAccess([], []),
@@ -4141,6 +4655,35 @@ export class LifeWorld {
       yield;
       contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
       for (const polygon of cached.trees) yield* terrain.trees.addSteps(polygon);
+    }
+    if (ref && this.seasonalConfig?.installations?.length) {
+      const found = new Set<string>();
+      for (const life of lives)
+        for (const record of physicalSeasonalRecords(life.geo)) {
+          if (
+            found.has(record.id) ||
+            (record.kind !== 'christmas-tree' &&
+              (record.kind !== 'carnival' || record.style === 'midway')) ||
+            !admitsInstallation(record, this.seasonalConfig)
+          )
+            continue;
+          found.add(record.id);
+          const at = lngLatToTile(ref.tile, ...record.at);
+          const radius = record.kind === 'carnival' ? 0 : record.radius_m / Math.cos(Math.PI / 16);
+          const ring =
+            record.kind === 'carnival'
+              ? carnivalRing(record).map((p) => {
+                  const q = lngLatToTile(ref.tile, ...p);
+                  return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
+                })
+              : Array.from({ length: 17 }, (_, i) => ({
+                  x: at.x / ref.perMeter + Math.cos((i * Math.PI) / 8) * radius,
+                  y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
+                }));
+          yield* terrain.blocked.addSteps([ring]);
+          yield* terrain.seasonal.addSteps([ring]);
+          yield* terrain.trees.addSteps([ring]);
+        }
     }
     const roadsStart = profile ? this.profiler?.time() : undefined;
     terrain.roadAccess = yield* this.roadCache.buildSteps(contributions);
@@ -4190,6 +4733,7 @@ export class LifeWorld {
       const sandbox = new LifeWorld();
       for (const [key, life] of next) sandbox.tiles.set(key, life);
       sandbox.groundTerrain = terrain;
+      sandbox.seasonalConfig = this.seasonalConfig;
       sandbox.lastLevels = this.lastLevels;
       sandbox.mixedZoom = [...next.values()].some(
         (life) => life.tile.z !== next.values().next().value!.tile.z,
@@ -4205,6 +4749,7 @@ export class LifeWorld {
           );
       }
       for (const life of fresh) life.setIdleGuard((owner) => sandbox.canIdle(life, owner));
+      for (const life of fresh) sandbox.reconcileSeasonalTerrain(life);
       const guard = yield* sandbox.groundGuardSteps(0, fresh);
       for (const life of fresh)
         yield* life.settleGroundSteps((owner, before) => guard(life, owner, before));
@@ -4236,6 +4781,7 @@ export class LifeWorld {
     const revalidateStart = this.profiler?.time();
     for (const life of this.tiles.values()) {
       const o = origin(life);
+      this.reconcileSeasonalTerrain(life);
       for (let i = life.gatherers.length - 1; i >= 0; i--)
         if (life.gatherers[i]!.behavior === 'sit' && !life.canIdle(life.gatherers[i]!))
           life.gatherers.splice(i, 1);
@@ -4256,7 +4802,10 @@ export class LifeWorld {
         const stall = life.stalls[i]!;
         const sample = life.groundBodies(stall, 0, this.groundSample);
         for (const body of sample) toRef(o, body);
-        if (!this.groundTerrain!.roadAccess.allows(sample, false)) {
+        if (
+          !this.groundTerrain!.roadAccess.allows(sample, false) ||
+          this.groundTerrain!.seasonal.hits(sample)
+        ) {
           life.scenes.removeStall(stall);
           life.stalls.splice(i, 1);
         }
@@ -4264,6 +4813,39 @@ export class LifeWorld {
     }
     if (revalidateStart !== undefined)
       this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
+  }
+
+  private reconcileSeasonalTerrain(life: TileLife) {
+    const terrain = this.groundTerrain!;
+    const o = terrain.origins.get(life);
+    if (!o) return;
+    const transform = (body: Body) => {
+      body.x = o.x + body.x * o.scale;
+      body.y = o.y + body.y * o.scale;
+      body.length *= o.scale;
+      body.width *= o.scale;
+      return body;
+    };
+    life.reconcileSeasonalActors(
+      (owner) => {
+        const bodies = life.groundBodies(owner, 0, this.groundSample);
+        for (const body of bodies) transform(body);
+        return terrain.seasonal.hits(bodies);
+      },
+      (p) => {
+        const spec = VEHICLES[p.vehicle];
+        return terrain.seasonal.hits([
+          transform({
+            ...p,
+            x: p.x / life.perMeter,
+            y: p.y / life.perMeter,
+            length: spec.length,
+            width: spec.width,
+          }),
+        ]);
+      },
+      terrain.seasonal.polygons.length > 0,
+    );
   }
 
   private groundGuard(
@@ -4290,7 +4872,7 @@ export class LifeWorld {
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const reservations = new Map<GroundAgent, readonly Body[]>();
-    const key = [...this.tiles.keys()].join('|');
+    const key = this.terrainKey([...this.tiles.keys()]);
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
     const { blocked, water } = this.groundTerrain!;
@@ -4404,7 +4986,7 @@ export class LifeWorld {
         if (cooperative && ++visited % 32 === 0) yield;
       }
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
-      for (const s of life.stalls) {
+      for (const s of life.seasonalStalls.length ? life.allStalls() : life.stalls) {
         if (cooperative && ++visited % 32 === 0) yield;
         if (
           allBodies ||
@@ -4412,7 +4994,7 @@ export class LifeWorld {
             s.open !== false &&
             (!this.lastLevels || s.rank < this.lastLevels.person))
         ) {
-          if (allBodies) {
+          if (allBodies || life.seasonalStalls.includes(s)) {
             if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
           } else standing(s, 'cart');
         }
@@ -4703,10 +5285,14 @@ export class LifeWorld {
     zoom?: number,
     bounds?: LngLatBounds,
     wind?: LifeEnv['wind'],
-    weather?: { rain: number; minutes?: number; cityLife?: CityLifeConfig },
+    weather?: { rain: number; minutes?: number; season?: string | null },
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
   ) {
+    this.syncSeason(weather?.season);
+    if (this.seasonalConfig)
+      for (const tile of this.tiles.values())
+        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
@@ -4728,6 +5314,7 @@ export class LifeWorld {
       wind,
       ...weather,
       diagnostics: this.profiler?.lifeDiagnostics,
+      cityLife: this.cityLife,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds, false, undefined, shows);
     this.junctions.begin(new Set(this.tiles.values()));
@@ -4782,7 +5369,7 @@ export class LifeWorld {
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
       env.inspecting,
     );
-    const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
+    const seamLimits = new Map<Mover, SeamLimit>();
     const intents: {
       source: TileLife;
       target: TileLife;
@@ -4843,7 +5430,7 @@ export class LifeWorld {
         const rejectionKey = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}/${target?.tile.z}/${target?.tile.x}/${target?.tile.y}`;
         if (this.rejectedSeams.get(m)?.key !== rejectionKey) this.rejectedSeams.delete(m);
         if (!target || target === source) {
-          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}`;
+          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${seam.preview.line}/${seam.preview.dir}`;
           let wait = this.seamWait.get(m);
           if (wait?.key !== key) {
             wait = { key, at: source.elapsed };
@@ -4860,7 +5447,7 @@ export class LifeWorld {
           });
         let preview: Mover | undefined;
         if (!target || target === source) reject?.('ownership');
-        else if (target.movers.length + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
+        else if (target.population + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
           reject?.('capQuota');
         else preview = target.projectFrom(seam.preview, source, { reject, insideTile: true });
         const safe =
@@ -4873,7 +5460,7 @@ export class LifeWorld {
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
-          seamLimits.set(m, { room: Infinity, crossing: true });
+          seamLimits.set(m, { room: Infinity, crossing: true, boundary: seam.preview });
         } else {
           if (target && target !== source) rejected(source, m, rejectionKey);
           seamLimits.set(m, {
@@ -4992,6 +5579,9 @@ export class LifeWorld {
     }
     if (!shows || shows('train')) this.stepArrivals(clamped);
     this.admitBirths(clamped);
+    if (this.seasonalConfig)
+      for (const tile of this.tiles.values())
+        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -5380,7 +5970,7 @@ export class LifeWorld {
       }
       if (shows('person')) {
         const vendorsOut = levels.person * crowd;
-        for (const s of life.stalls) {
+        for (const s of life.seasonalStalls.length ? life.allStalls() : life.stalls) {
           if (!this.owns(life, s)) continue;
           if (s.open === false) continue;
           if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)

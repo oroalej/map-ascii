@@ -1,9 +1,15 @@
 import * as Comlink from 'comlink';
-import type { ProcessionRoute, TrafficMix } from '@atlas/shared';
+import { simulationSeasons } from './seasonal-simulation';
+import type { RuntimeCityLife, ProcessionRoute, TrafficMix } from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
-import { runLifeFrame, type FrameInput, type LifeWorkerApi } from './worker-api';
+import {
+  configureLifeWorld,
+  runLifeFrame,
+  type FrameInput,
+  type LifeWorkerApi,
+} from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
@@ -18,6 +24,8 @@ export type FrameView = {
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
+  /** Drop replies produced under a previous season without resetting the population. */
+  invalidateFrame(): void;
   sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext): void;
   clearTiles(): void;
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
@@ -40,6 +48,10 @@ export function createInlineHost(
   let acceptedPost: number | undefined;
   let generation = ++nextGeneration;
   return {
+    invalidateFrame() {
+      if (view) view = { ...view, agents: [] };
+      acceptedPost = undefined;
+    },
     sync: (tiles, focus, context) => {
       if (disposed) return;
       preparation.sync(tiles, focus, context);
@@ -101,14 +113,24 @@ export function createInlineHost(
 }
 
 export function createWorkerHost(
-  options: { traffic?: TrafficMix; itemInspection?: boolean; moments?: MomentOptions },
+  options: {
+    traffic?: TrafficMix;
+    cityLife?: RuntimeCityLife;
+    itemInspection?: boolean;
+    moments?: MomentOptions;
+  },
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
 ): LifeHost {
+  const seasons = simulationSeasons(options.cityLife?.seasons);
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
-    world.setProcessions(processions);
+    configureLifeWorld(world, {
+      processions,
+      seasons,
+      shopSchedule: options.cityLife?.schedules?.shops,
+    });
     return createInlineHost(world, profiler);
   };
   try {
@@ -121,6 +143,7 @@ export function createWorkerHost(
     inFlight = false,
     disposed = false,
     generation = ++nextGeneration,
+    agentEpoch = 0,
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
@@ -155,6 +178,8 @@ export function createWorkerHost(
       traffic: options.traffic,
       processions,
       profiling: !!profiler,
+      seasons,
+      shopSchedule: options.cityLife?.schedules?.shops,
       itemInspection: options.itemInspection,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
@@ -163,6 +188,12 @@ export function createWorkerHost(
       if (!disposed && !fallback) ready = true;
     }, fail);
   return {
+    invalidateFrame() {
+      agentEpoch++;
+      acceptedPost = undefined;
+      if (fallback) fallback.invalidateFrame();
+      if (view) view = { ...view, agents: [] };
+    },
     sync(next, nextFocus, nextView) {
       if (disposed) return;
       tiles = next;
@@ -213,23 +244,38 @@ export function createWorkerHost(
       if (!ready || inFlight) return false;
       inFlight = true;
       const requestedGeneration = generation;
+      const requestedAgentEpoch = agentEpoch;
       const frame = ++frames;
       const posted = profiler?.time();
       void remote
         .frame(input)
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
+          if (result.terrain !== undefined) {
+            const start = profiler?.time();
+            terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
+            if (start !== undefined) profiler!.record('terrainSnapshot', profiler!.time() - start);
+          }
+          if (agentEpoch !== requestedAgentEpoch) {
+            const cellTerrain = terrain;
+            if (view || result.terrain !== undefined)
+              view = {
+                agents: [],
+                generation,
+                procession: view?.procession,
+                signalClock: view?.signalClock ?? 0,
+                cellGuard: (toCell) =>
+                  cellTerrain &&
+                  makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+              };
+            return;
+          }
           acceptedPost = posted;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
           // Only frames posted after play() can show that its time-lapse has ended.
           const run = result.procession;
           if (played && frame > playedFrom && !(run && !run.live && run.id === played))
             played = undefined;
-          if (result.terrain !== undefined) {
-            const start = profiler?.time();
-            terrain = result.terrain === null ? undefined : cellTerrainFrom(result.terrain);
-            if (start !== undefined) profiler!.record('terrainSnapshot', profiler!.time() - start);
-          }
           const cellTerrain = terrain;
           view = {
             agents: result.agents,

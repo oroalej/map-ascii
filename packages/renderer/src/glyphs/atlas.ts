@@ -15,6 +15,7 @@ import {
   type FigureGlyph,
 } from '../life/people';
 import { STALL_GLYPH } from '../life/vehicles';
+import { SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 
 export const DEFAULT_FONT =
@@ -294,6 +295,76 @@ function drawStall(slot: Slot) {
   }
 }
 
+/** Rasterize seasonal cloth and ornaments into their fixed atlas slots. */
+function drawSeasonal(slot: Slot, glyph: string) {
+  const points: [number, number][] =
+    glyph === SeasonalGlyph.foliage
+      ? Array.from({ length: 16 }, (_, i) => {
+          const a = (i * Math.PI) / 8,
+            r = i % 2 ? 0.32 : 0.49;
+          return [0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r];
+        })
+      : glyph === SeasonalGlyph.bulb
+        ? Array.from({ length: 16 }, (_, i) => {
+            const a = (i * Math.PI) / 8;
+            return [0.5 + Math.cos(a) * 0.29, 0.5 + Math.sin(a) * 0.19];
+          })
+        : glyph === SeasonalGlyph.bell
+          ? [
+              [0.42, 0.16],
+              [0.58, 0.16],
+              [0.77, 0.32],
+              [0.77, 0.59],
+              [0.94, 0.73],
+              [0.64, 0.73],
+              [0.58, 0.87],
+              [0.42, 0.87],
+              [0.36, 0.73],
+              [0.06, 0.73],
+              [0.23, 0.59],
+              [0.23, 0.32],
+            ]
+          : glyph === SeasonalGlyph.parol
+            ? Array.from({ length: 10 }, (_, i) => {
+                const angle = (i * Math.PI) / 5 - Math.PI / 2,
+                  radius = i % 2 ? 0.21 : 0.48;
+                return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius];
+              })
+            : glyph === SeasonalGlyph.rectangleLeft || glyph === SeasonalGlyph.rectangleRight
+              ? [
+                  [0.08, 0.22],
+                  [0.92, 0.22],
+                  [glyph === SeasonalGlyph.rectangleLeft ? 0.82 : 0.92, 0.87],
+                  [glyph === SeasonalGlyph.rectangleLeft ? 0.08 : 0.18, 0.87],
+                ]
+              : [
+                  [0.05, 0.25],
+                  [0.95, 0.25],
+                  [glyph === SeasonalGlyph.triangleLeft ? 0.35 : 0.65, 0.85],
+                ];
+  for (let y = 0; y < slot.h; y++)
+    for (let x = 0; x < slot.w; x++) {
+      let coverage = 0;
+      for (let sy = 0; sy < 4; sy++)
+        for (let sx = 0; sx < 4; sx++) {
+          const px = (x + (sx + 0.5) / 4) / slot.w,
+            py = (y + (sy + 0.5) / 4) / slot.h;
+          let inside = false;
+          for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const a = points[i]!,
+              b = points[j]!;
+            if (
+              a[1] > py !== b[1] > py &&
+              px < ((b[0] - a[0]) * (py - a[1])) / (b[1] - a[1]) + a[0]
+            )
+              inside = !inside;
+          }
+          if (inside) coverage++;
+        }
+      slot.data[(slot.y0 + y) * slot.stride + slot.x0 + x] = Math.round((255 * coverage) / 16);
+    }
+}
+
 /**
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
  * figure, a bird, a dog, or a vendor's cart.
@@ -313,6 +384,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === STALL_GLYPH) drawStall(slot);
+  else if ((SEASONAL_GLYPHS as readonly string[]).includes(glyph)) drawSeasonal(slot, glyph);
   else return false;
   return true;
 }
@@ -333,11 +405,13 @@ const ATLAS_COLUMNS = 16;
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 function context2d(width: number, height: number): Context2D {
-  const canvas =
+  // Call the literal 2D overload before joining HTML/Offscreen canvas types.
+  const ctx: Context2D | null =
     typeof OffscreenCanvas === 'undefined'
-      ? Object.assign(document.createElement('canvas'), { width, height })
-      : new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as Context2D | null;
+      ? Object.assign(document.createElement('canvas'), { width, height }).getContext('2d', {
+          willReadFrequently: true,
+        })
+      : new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('ASCII Atlas could not create a 2D canvas for its glyph atlas.');
   return ctx;
 }

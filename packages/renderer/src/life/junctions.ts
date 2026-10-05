@@ -2,7 +2,12 @@ import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey } from './signal-approaches';
 import type { TileId } from '../tiles';
 import { JUNCTION } from './config';
-import { LifeLine, SIGNAL_STRIDE, type LifeGeometry } from './geometry';
+import {
+  LifeLine,
+  SIGNAL_STRIDE,
+  TILE_QUANTIZATION_TOLERANCE,
+  type LifeGeometry,
+} from './geometry';
 import type { Mover, TileLife } from './simulate';
 import { VEHICLES } from './vehicles';
 import { frameBetween } from './frames';
@@ -113,7 +118,9 @@ export class JunctionIndex {
           if (
             ends.every((v) =>
               members.some(
-                (p) => Math.hypot(p.x - geo.coords[v * 2]!, p.y - geo.coords[v * 2 + 1]!) <= 2,
+                (p) =>
+                  Math.hypot(p.x - geo.coords[v * 2]!, p.y - geo.coords[v * 2 + 1]!) <=
+                  TILE_QUANTIZATION_TOLERANCE,
               ),
             )
           )
@@ -123,7 +130,8 @@ export class JunctionIndex {
       // A buffered copy with no local approach does not own a reservation zone.
       if (!arms.length) continue;
       for (const [key, j] of vertices)
-        if (members.some((p) => Math.hypot(p.x - j.x, p.y - j.y) <= 2)) vertices.delete(key);
+        if (members.some((p) => Math.hypot(p.x - j.x, p.y - j.y) <= TILE_QUANTIZATION_TOLERANCE))
+          vertices.delete(key);
       resolved.push({
         key: signalJunctionKey(layout),
         x: members[0]!.x,

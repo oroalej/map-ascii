@@ -1,7 +1,7 @@
 import type { SignalArm, SignalLayout } from '@atlas/shared';
 import { hashString, lngLatToTile } from '../raster/geometry';
 import type { TileId } from '../tiles';
-import type { LifeGeometry } from './geometry';
+import { TILE_QUANTIZATION_TOLERANCE, type LifeGeometry } from './geometry';
 
 export type SignalApproach = {
   arm: SignalArm;
@@ -37,7 +37,7 @@ export function signalApproaches(
         if (next < geo.starts[line]! || next >= geo.starts[line + 1]!) continue;
         const x = geo.coords[2 * v]!,
           y = geo.coords[2 * v + 1]!;
-        if (Math.hypot(x - p.x, y - p.y) > 2) continue;
+        if (Math.hypot(x - p.x, y - p.y) > TILE_QUANTIZATION_TOLERANCE) continue;
         const dx = geo.coords[2 * next]! - x,
           dy = geo.coords[2 * next + 1]! - y;
         const length = Math.hypot(dx, dy);

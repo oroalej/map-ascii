@@ -1,7 +1,12 @@
 // @vitest-environment node
 import type { ReactElement } from 'react';
 import { loadCityPacks } from '@atlas/content';
-import { dialogueChoices, type RuntimeDialogueCatalog } from '@atlas/shared';
+import {
+  dialogueChoices,
+  runtimeCityLife,
+  type RuntimeCityLife,
+  type RuntimeDialogueCatalog,
+} from '@atlas/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity } from '@/lib/cities';
@@ -11,10 +16,29 @@ vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
 type PageElement = ReactElement<{
-  children: ReactElement<{ dialogue?: RuntimeDialogueCatalog }>;
+  children: ReactElement<{ dialogue?: RuntimeDialogueCatalog; cityLife?: RuntimeCityLife }>;
 }>;
 
 describe('city page client boundary', () => {
+  it('passes season admission and calendars without pipeline-only geometry', async () => {
+    const { packs } = await loadCityPacks();
+    for (const pack of packs) {
+      vi.mocked(loadCity).mockResolvedValue(pack);
+      const page = (await CityPage({
+        params: Promise.resolve({ city: pack.city.slug }),
+      })) as PageElement;
+      const life = page.props.children.props.cityLife;
+      expect(life).toEqual(pack.city.life ? runtimeCityLife(pack.city.life) : undefined);
+      for (const season of life?.seasons ?? []) {
+        expect(season).not.toHaveProperty('grounds');
+        expect(season).not.toHaveProperty('sources');
+        for (const installation of season.installations ?? []) {
+          expect(installation).not.toHaveProperty('components');
+          expect(installation).not.toHaveProperty('sources');
+        }
+      }
+    }
+  });
   it('serializes every catalog without editorial sources while preserving speech', async () => {
     const { packs, errors } = await loadCityPacks();
     expect(errors).toEqual([]);
