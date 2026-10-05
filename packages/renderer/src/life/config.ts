@@ -79,7 +79,24 @@ export function laneOffset(
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
  * side may overlap this much (m) and still pass.
  */
-export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3 } as const;
+export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+/** Required distance from a vehicle centre to a stop edge, m. */
+export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
+/** Conservative broad phase for ordinary terminal approaches, m/s and m. */
+export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
+/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
+export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
+/** Turn back after this many active seconds attempting a blocked walking route. */
+export const WALK_RECOVERY = { seconds: 3 } as const;
+/** Distances are metres; holdMax counts active simulation seconds. */
+export const PEDESTRIAN = {
+  corridorPad: 0.3,
+  lookaheadPad: 4,
+  maxRange: 30,
+  curbReach: 2,
+  holdMax: 20,
+  holdMatch: 2,
+} as const;
 
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
@@ -665,6 +682,8 @@ export const SIGNAL = {
   lookahead: 40,
   brake: 3,
   walkMin: 5,
+  /** Additional radius for associating crossing quads with signal controllers, m. */
+  crossingMargin: 3.5,
 } as const;
 
 /** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */
