@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type Mover } from './simulate';
 import { worldTiles } from './testing/scenarios';
-import { metersPerUnit } from '../raster/geometry';
-import { ROAD_AVOID } from './config';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
+import { ROAD_AVOID, STALL } from './config';
 import { VEHICLES } from './vehicles';
 import { bodyHitsPolygon, bodiesOverlap } from './occupancy';
 import { buildTileGeometry, createIdRegistry, type TileFeatureLike } from '../raster/geometry';
@@ -62,11 +62,28 @@ describe('terrain-blocked road vehicles', () => {
         follower = make(-30, 'motorcycle');
       life.movers.push(car, follower);
       let adjusted = false;
+      const lane = life.offsetOf(car);
       for (let frame = 0; frame < 600; frame++) {
-        const before = life.offsetOf(car);
+        const before = life.offsetOf(car),
+          start = car.d,
+          from = { ...life.pose(car) };
         world.step(0.1, undefined, 21);
         const offset = life.offsetOf(car);
-        expect(Math.abs(offset - before)).toBeLessThanOrEqual(ROAD_AVOID.shift * 0.1 + 1e-9);
+        // Nose first: the body points the way it moves, within 3°.
+        const to = life.pose(car);
+        const dx = to.x - from.x,
+          dy = to.y - from.y;
+        if (Math.hypot(dx, dy) > 0.05 * pm) {
+          const hx = from.hx + to.hx,
+            hy = from.hy + to.hy;
+          const cos = (dx * hx + dy * hy) / (Math.hypot(dx, dy) * Math.hypot(hx, hy));
+          expect(cos).toBeGreaterThan(Math.cos((3 * Math.PI) / 180));
+        }
+        // It steers: sideways only while moving forward, and no steeper than a lane bend.
+        const forward = Math.abs(car.d - start) / pm;
+        expect(Math.abs(offset - before)).toBeLessThanOrEqual(
+          ROAD_AVOID.slope * forward * 1.05 + 1e-6,
+        );
         expect(Math.abs(offset) + VEHICLES.car.width / 2).toBeLessThanOrEqual(4);
         for (const m of [car, follower]) {
           const bodies = life.groundBodies(m);
@@ -83,7 +100,7 @@ describe('terrain-blocked road vehicles', () => {
         expect(bodiesOverlap(life.groundBodies(car)[0]!, life.groundBodies(follower)[0]!)).toBe(
           false,
         );
-        adjusted ||= car.roadShift !== undefined;
+        adjusted ||= Math.abs(offset - lane) > 0.5;
         if (follower.d > 150 * pm && car.roadShift === undefined) break;
       }
       expect(adjusted).toBe(true);
@@ -173,7 +190,9 @@ describe('terrain-blocked road vehicles', () => {
           { x: 496, y: 231 },
         ],
       ];
-      b.area('vehicle-blocked', curb);
+      // Tile geometry blocks a curb's whole island for vehicles (raster/geometry.ts).
+      const island = [curb[0]!];
+      b.area('vehicle-blocked', island);
       const world = new LifeWorld();
       world.sync([{ key: 'turn', tile, life: b.finish() }]);
       const life = worldTiles(world).get('turn')!;
@@ -218,7 +237,7 @@ describe('terrain-blocked road vehicles', () => {
                   length: body.length * pm,
                   width: body.width * pm,
                 },
-                curb,
+                island,
               ),
             ).toBe(false);
         const bodies = life.movers.map((m) => life.groundBodies(m)[0]!);
@@ -240,6 +259,66 @@ describe('terrain-blocked road vehicles', () => {
         expect(m.roadShift).toBeUndefined();
       }
     });
+});
+
+describe('vehicles that cannot go on', () => {
+  it('never doubles back sharper than a corner can curve while another way on exists', () => {
+    const b = new LifeBuilder();
+    const at = (x: number, y: number) => ({ x: 1000 + x * pm, y: 2000 + y * pm });
+    b.line([at(0, 0), at(100, 0)], LifeLine.roadMid, 8);
+    b.line([at(100, 0), at(10, 8)], LifeLine.roadMid, 8);
+    b.line([at(100, 0), at(200, 0)], LifeLine.roadMid, 8);
+    const world = new LifeWorld();
+    world.sync([{ key: 'hairpin', tile, life: b.finish() }]);
+    const life = worldTiles(world).get('hairpin')! as unknown as {
+      exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[];
+    };
+    const options = life.exitOptions({ kind: 'vehicle', line: 0, dir: 1 }, 1);
+    expect(options).toEqual([4]);
+  });
+
+  it('leaves once fixed obstacles have held it, only where nobody sees it go', () => {
+    const b = new LifeBuilder();
+    const at = (x: number, y: number) => ({ x: 200 + x * pm, y: 2000 + y * pm });
+    b.line([at(0, 0), at(400, 0)], LifeLine.roadMid, 8, 1, 1);
+    // Walls across the road ahead of each vehicle.
+    for (const x of [30, 330])
+      b.area('vehicle-blocked', [[at(x, -5), at(x + 2, -5), at(x + 2, 5), at(x, 5), at(x, -5)]]);
+    const world = new LifeWorld();
+    world.sync([{ key: 'walls', tile, life: b.finish() }]);
+    const life = worldTiles(world).get('walls')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.pending.length = 0;
+    life.scenes.sites.length = 0;
+    const make = (x: number): Mover => ({
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d: x * pm,
+      ...at(x, 0),
+      hx: 1,
+      hy: 0,
+      speed: 4 * pm,
+      v: 4 * pm,
+      lane: 0,
+      paint: 0,
+      pause: 0,
+      rank: 0,
+    });
+    const seen = make(25),
+      unseen = make(325);
+    life.movers.push(seen, unseen);
+    const [w, n] = tileToLngLat(tile, at(0, -40));
+    const [e, s] = tileToLngLat(tile, at(60, 40));
+    world.updateView({ bounds: [w, s, e, n], spawnMarginM: 2 });
+    for (let frame = 0; frame < (STALL.terrainSeconds + 2) * 10; frame++)
+      world.step(0.1, undefined, 21);
+    expect(life.movers).toContain(seen);
+    expect(seen.terrainWait).toBeGreaterThan(STALL.terrainSeconds);
+    expect(life.movers).not.toContain(unseen);
+  });
 });
 
 describe('blocked walking routes', () => {

@@ -79,13 +79,28 @@ export function laneOffset(
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
  * side may overlap this much (m) and still pass.
  */
-export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+export const FOLLOW = {
+  minGap: 1.5,
+  headway: 1.2,
+  squeeze: 0.3,
+  lateralPad: 0.3,
+  /** Where a lane moves sideways, following compares lanes this far ahead too, m. */
+  laneAheadM: 10,
+} as const;
 /** Required distance from a vehicle centre to a stop edge, m. */
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
-/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
-export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
+/**
+ * Terrain recovery for vehicles: sideways metres per metre travelled while shifting or returning
+ * (no sideways move while stopped); clear road edge allowance for inferred widths, m.
+ */
+export const ROAD_AVOID = { slope: 0.25, shoulder: 0.5 } as const;
+/**
+ * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
+ * or the movement guard has refused it for any reason this long.
+ */
+export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
 /** Turn back after this many active seconds attempting a blocked walking route. */
 export const WALK_RECOVERY = { seconds: 3 } as const;
 /** Distances are metres; holdMax counts active simulation seconds. */

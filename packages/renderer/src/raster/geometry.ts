@@ -1334,7 +1334,8 @@ export function buildTileGeometry(
           }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
-            else if (walkableStep) life.area('vehicle-blocked', polygon);
+            // A curb ring encloses its island: vehicles keep off all of it, not just the curb.
+            else if (walkableStep) life.area('vehicle-blocked', [polygon[0]!]);
             else if (solid || standingWater || feature.properties.detail_blocked)
               life.area('blocked', polygon, standingWater);
             else if (className === 'trees') life.area('parking-exclusion', polygon);
