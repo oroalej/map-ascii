@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import type { SeasonConfig, SeasonalRecord } from '@atlas/shared';
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type SeasonalRecord,
+} from '@atlas/shared';
 import { seasonalFixtures, createSeasonalFixtureCache } from './seasonal';
 import { LifeBuilder, LifeLine } from './geometry';
 import { lngLatToTile, tileToLngLat } from '../raster/geometry';
@@ -12,8 +17,6 @@ const point = (x: number, y: number) => tileToLngLat(tile, { x, y });
 const season: SeasonConfig = {
   id: 'feast',
   title: { en: 'Feast' },
-  status: 'draft',
-  note: 'TODO(verify)',
   sources: [],
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   bunting: {
@@ -49,6 +52,55 @@ const make = (places = true) => {
   if (places) b.place({ x: 2000, y: 2000 }, 'worship', 20);
   return { tile, life: b.finish(), fixtures: [], seasonal: [row] };
 };
+it('keeps included corridor records and their dense-row suppression during a different season', () => {
+  const groups = [make()];
+  const preview = expandSeasons([
+    runtimeSeason({
+      ...season,
+      id: 'new-year',
+      includes: ['feast'],
+      bunting: undefined,
+      fireworks: { label: 'Fireworks', variants: ['peony'] },
+    }),
+    runtimeSeason(season),
+  ])[0]!;
+  expect(seasonalFixtures(groups, preview, 13.6)).toEqual(seasonalFixtures(groups, season, 13.6));
+});
+it('admits only own dense bunting when an included group has the same corridor and road', () => {
+  const included = { ...season, id: 'included' };
+  const preview = expandSeasons([
+    runtimeSeason({ ...season, includes: [included.id] }),
+    runtimeSeason(included),
+  ])[0]!;
+  const group = {
+    ...make(),
+    seasonal: [row, { ...row, id: 'included-dense', season: included.id }],
+  };
+  expect(seasonalFixtures([group], preview, 13.6)).toEqual(
+    seasonalFixtures([make()], season, 13.6),
+  );
+});
+it('admits only the first included bunting group when corridor and road identities match', () => {
+  const second = { ...season, id: 'second' };
+  const preview = expandSeasons([
+    runtimeSeason({
+      ...season,
+      id: 'new-year',
+      includes: [season.id, second.id],
+      bunting: undefined,
+      fireworks: { label: 'Fireworks', variants: ['peony'] },
+    }),
+    runtimeSeason(season),
+    runtimeSeason(second),
+  ])[0]!;
+  const group = {
+    ...make(),
+    seasonal: [row, { ...row, id: 'second-dense', season: second.id }],
+  };
+  expect(seasonalFixtures([group], preview, 13.6)).toEqual(
+    seasonalFixtures([make()], season, 13.6),
+  );
+});
 it('uses exact buffered corridor records once, independently of nearby worship samples', () => {
   const a = make(false),
     b = { ...make(false), tile: { ...tile, x: tile.x + 1 } };

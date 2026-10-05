@@ -94,14 +94,14 @@ for (const city of cities) {
           exact: true,
         });
         await expect(preview).toBeVisible();
-        if (first.status === 'draft') await expect(preview).toHaveAttribute('title', /Draft/);
+        await expect(preview).toHaveAttribute('title', 'Preview seasonal decorations');
         if (first.lanterns)
           await expect(page.getByText(first.lanterns.label, { exact: true })).toBeVisible();
         if (first.fireworks)
           await expect(
             page.getByText(`${first.fireworks.label} (illustrative)`, { exact: true }),
           ).toBeVisible();
-        // Also exercise a fixture season: fireworks alone don't compile its glyph variant.
+        // Exercise fixtures separately when the first preview has no inherited lanterns.
         const decorated = city.seasons.findIndex((season) => !!season.lanterns);
         if (decorated > 0) {
           for (let i = 0; i < decorated; i++)

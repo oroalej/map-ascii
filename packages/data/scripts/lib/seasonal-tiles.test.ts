@@ -150,7 +150,6 @@ it('merges the optional layer without dropping rows and restores the original ar
   const season: SeasonConfig = {
     id: 'feast',
     title: { en: 'Feast' },
-    status: 'draft',
     sources: [],
     window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
     bunting: {

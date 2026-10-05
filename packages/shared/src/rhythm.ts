@@ -1,5 +1,10 @@
 import type { LifeSiteConfig } from './life-sites';
-import { runtimeSeason, type SeasonConfig, type RuntimeSeasonConfig } from './seasons';
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type RuntimeSeasonConfig,
+} from './seasons';
 
 /**
  * A city's daily rhythm, as far as the map shows it (SPEC.md §4 "Life layer"): how much of each
@@ -75,7 +80,7 @@ export type CityLifeConfig = {
 export type RuntimeCityLife = Omit<CityLifeConfig, 'seasons'> & { seasons?: RuntimeSeasonConfig[] };
 export function runtimeCityLife(life: CityLifeConfig): RuntimeCityLife {
   const { seasons, ...general } = life;
-  return { ...general, ...(seasons && { seasons: seasons.map(runtimeSeason) }) };
+  return { ...general, ...(seasons && { seasons: expandSeasons(seasons.map(runtimeSeason)) }) };
 }
 
 /**

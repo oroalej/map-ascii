@@ -36,9 +36,7 @@ const ride: SeasonalCarnivalRecord = {
 };
 const season: SeasonConfig = {
   id: 'winter',
-  status: 'draft',
   title: { en: 'Winter' },
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: [],
   installations: [
