@@ -2,7 +2,7 @@ import type { SimulationSeason } from './seasonal-simulation';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 /**
- * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
+ * The life layer's simulation (SPEC.md Ã‚Â§4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
  * water. Agents live in tile units, per tile; a tile's agents are spawned from a seed made of its
  * key when it comes into view, so the same tile always starts with the same agents. Pure TS: the
@@ -286,7 +286,7 @@ export type Mover = {
   /** Vehicles and boats: which kind, and its paint (vehicles.ts `Paint`). */
   vehicle?: CraftType;
   paint: number;
-  /** Vehicles: which of the lanes on its side of the road it keeps to, 0–1 (`laneOffset`). */
+  /** Vehicles: which of the lanes on its side of the road it keeps to, 0Ã¢â‚¬â€œ1 (`laneOffset`). */
   lane: number;
   /** Checked within-road steering, in metres, relative to the seeded lane. */
   roadShift?: number;
@@ -329,8 +329,8 @@ export type Mover = {
 
 /**
  * What the flocks react to (`LifeWorld.step`): who is out (config.ts `activityLevels`), how hard
- * it rains (0–1), and the wind, its direction a unit vector in world axes (x east, y south, like
- * tile units) and its strength 0–1 (life/wind.ts).
+ * it rains (0Ã¢â‚¬â€œ1), and the wind, its direction a unit vector in world axes (x east, y south, like
+ * tile units) and its strength 0Ã¢â‚¬â€œ1 (life/wind.ts).
  */
 export type LifeEnv = {
   diagnostics?: LifeDiagnostics;
@@ -789,7 +789,7 @@ export class TileLife {
   private readonly roadVertices = new Map<string, { code: number; vertex: number }[]>();
   /** Per vertex, the distance along its line from the line's first vertex, in tile units. */
   private readonly along: Float64Array;
-  /** Line ends by position: packed position → line * 2 + (0 start, 1 end). */
+  /** Line ends by position: packed position Ã¢â€ â€™ line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
   private readonly curvable: Uint8Array;
   private time = 0;
@@ -3418,12 +3418,16 @@ export class TileLife {
                 !before.curveCorner ||
                 (before.curveCorner.x === corner.x && before.curveCorner.y === corner.y)
                   ? (before.curveLengthM ?? FILLET.maxM)
-                  : FILLET.maxM;
-            if (length > 2) {
+                  : FILLET.maxM,
+              shape = this.corner(before, vertex, m),
+              // Short mapped segments can cap the arc below its retained maximum.
+              // Start at that cap so accepted retries actually change the physical pose.
+              effective = shape && Math.min(length, shape.length / this.perMeter);
+            if (effective && effective > 2) {
               const oldPose = this.pose(before, undefined, m);
               for (const share of [1, 0.25, 0]) {
                 restoreMover(m, before);
-                m.curveLengthM = Math.max(2, length - dt * steeringSpeed);
+                m.curveLengthM = Math.max(2, effective - dt * steeringSpeed);
                 m.curveCorner = corner;
                 moved = this.advance(m, distance * share);
                 const pose = this.pose(m),
@@ -3435,6 +3439,7 @@ export class TileLife {
                     this.perMeter) /
                     2;
                 if (
+                  cornerTravel > 1e-8 * this.perMeter &&
                   cornerTravel <= distance * share + dt * steeringSpeed * this.perMeter + 1e-8 &&
                   this.groundBodies(m).every((b) => {
                     const p = { x: b.x * this.perMeter, y: b.y * this.perMeter };
@@ -4108,7 +4113,7 @@ type LifeDonor = {
   movers: readonly Mover[];
 };
 
-/** The weather people react to: how hard it rains (0–1) and the sun's altitude (degrees). */
+/** The weather people react to: how hard it rains (0Ã¢â‚¬â€œ1) and the sun's altitude (degrees). */
 export type LifeWeather = { rain: number; sunAltitude: number };
 
 /** Every tile's agents: kept in step with the tiles on screen. */
@@ -4119,7 +4124,7 @@ export type LifeLineShape = {
   tip?: { glyph: string; paint: number };
 };
 
-/** The procession under way: which, how far through (0–1), and whether it is the live one. */
+/** The procession under way: which, how far through (0Ã¢â‚¬â€œ1), and whether it is the live one. */
 export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 type GroundTerrain = {
@@ -5784,7 +5789,7 @@ export class LifeWorld {
 
   /**
    * Move every tile's agents on by `dt` seconds. `gustAt(lng, lat)` is how hard the wind blows
-   * in a tree's crown there (life/wind.ts strength × glyphs/select.ts treeGust); a strong gust
+   * in a tree's crown there (life/wind.ts strength Ãƒâ€” glyphs/select.ts treeGust); a strong gust
    * flushes birds out of the tree. With `zoom`, only the kinds that show at it move (config.ts
    * `LIFE_ZOOM`): the others wait, unseen, until they show. With `bounds` (the view's), only
    * those near it move (`STEP_MARGIN_M`), trains aside. With `wind` (in world axes, x east and
@@ -6590,7 +6595,7 @@ export class LifeWorld {
           balls.push({
             a: ball.a,
             b: ball.b,
-            agent: { kind: 'person', prop: 'ball', glyph: '•', lng, lat, flap: 0 },
+            agent: { kind: 'person', prop: 'ball', glyph: 'Ã¢â‚¬Â¢', lng, lat, flap: 0 },
           });
         }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {

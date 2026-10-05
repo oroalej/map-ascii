@@ -137,6 +137,40 @@ it.each([
   },
 );
 
+it('clears a blocked curve capped by a short mapped outgoing segment', () => {
+  const b = new LifeBuilder(),
+    x = 1000 + 60 * pm;
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x, y: 2048 },
+      { x, y: 2048 + 10 * pm },
+      { x, y: 2048 + 100 * pm },
+    ],
+    LifeLine.roadMajor,
+    6,
+  );
+  b.area('blocked', rectangle(x - 20 * pm, 2048 + 3 * pm, x - 2.7 * pm, 2048 + 20 * pm));
+  const blocked = new PolygonIndex();
+  blocked.add(rectangle(x / pm - 20, 2048 / pm + 3, x / pm - 2.7, 2048 / pm + 20));
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.sync([{ key: 'short', tile, life: b.finish() }]);
+  const life = worldTiles(world).get('short')!;
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  const m = mover('vehicle', 45, 1);
+  life.movers.push(m);
+  for (let frame = 0; frame < 300; frame++) {
+    const before = life.pose(m);
+    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+    const after = life.pose(m);
+    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThan(0.2);
+    expect(blocked.hits(life.groundBodies(m))).toBe(false);
+    expect(m.dir).toBe(1);
+  }
+  expect(m.y).toBeGreaterThan(2048 + 15 * pm);
+});
+
 it.each([false, true])(
   'takes the legal shared interior road vertex (disconnected nearby road %s)',
   (disconnected) => {
