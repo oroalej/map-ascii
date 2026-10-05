@@ -964,6 +964,68 @@ it('executes a selected recovery retreat in bounded steps before reversing', () 
   expect((start - m.x) / pm).toBeCloseTo(0.5);
 });
 
+it('retreats far enough to clear the complete rotation beside a narrowing building edge', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 2230, y: 2356 },
+      { x: 2398, y: 2099 },
+      { x: 2550, y: 1854 },
+    ],
+    LifeLine.roadMinor,
+    5,
+  );
+  b.area('blocked', [
+    [
+      { x: 2147, y: 2232 },
+      { x: 2257, y: 2291 },
+      { x: 2221, y: 2358 },
+      { x: 2111, y: 2298 },
+      { x: 2147, y: 2232 },
+    ],
+  ]);
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.sync([{ key: 'narrow', tile, life: b.finish() }]);
+  const life = worldTiles(world).get('narrow')!;
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  const length = Math.hypot(168, 257),
+    m = mover('vehicle', 0, -1);
+  Object.assign(m, {
+    line: 0,
+    from: 1,
+    d: length - 0.002,
+    x: 2230 + (168 / length) * 0.002,
+    y: 2356 - (257 / length) * 0.002,
+    hx: -168 / length,
+    hy: 257 / length,
+    speed: 4 * pm,
+    v: 0,
+    vehicle: 'motorcycle',
+    lane: 0.37211,
+    roadShift: -0.78,
+    waiting: 30,
+    routing: { seed: 1415479920, turns: 0 },
+  });
+  life.movers.push(m);
+  const start = life.pose(m);
+  const blocked = new PolygonIndex();
+  blocked.add(b.finish().areas![0]!.rings.map((r) => r.map((p) => ({ x: p.x / pm, y: p.y / pm }))));
+  let reversed = false;
+  for (let frame = 0; frame < 18 * 30; frame++) {
+    const previous = { x: m.x, y: m.y };
+    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+    expect(blocked.hits(life.groundBodies(m))).toBe(false);
+    // Translation stays speed-bounded; the direction change itself is a full
+    // swept rotation into the opposite lane, as in the other recovery controls.
+    expect(Math.hypot(m.x - previous.x, m.y - previous.y) / pm).toBeLessThanOrEqual(4 / 30 + 1e-8);
+    reversed ||= m.dir === 1;
+  }
+  expect(reversed).toBe(true);
+  expect(Math.hypot(life.pose(m).x - start.x, life.pose(m).y - start.y) / pm).toBeGreaterThan(10);
+  expect(m.routing?.turns).toBe(0);
+});
+
 it('rejects recovery departure corridors that would enter an unreserved junction', () => {
   const b = new LifeBuilder(),
     x = 1000 + 60 * pm;

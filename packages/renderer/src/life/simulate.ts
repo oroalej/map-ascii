@@ -3710,7 +3710,7 @@ export class TileLife {
     if (!candidate) {
       // Reject-only whole-corridor inspection, including usable departure space.
       // The actual translation is executed in subsequent speed-bounded steps.
-      for (const retreat of [0, 0.5, 1, 2]) {
+      for (const retreat of [0, 0.5, 1, 2, 3, 4]) {
         for (const shift of [...new Set([before.roadShift ?? 0, 0])]) {
           restoreMover(m, before);
           if (retreat * this.perMeter > m.d) continue;
