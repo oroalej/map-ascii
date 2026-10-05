@@ -12,8 +12,10 @@ import {
 import type { TileId } from '../tiles';
 import { inTile, type LifeGeometry } from './geometry';
 import { bodyInside, boundsOf, PolygonIndex, type Point } from './occupancy';
-import { carriageways } from './terrain';
+import { prepareRoadTerrain, transformPolygon } from './terrain';
 import { LampState, type VisibleLamp } from './lights';
+import { project } from '../camera';
+import type { SeasonalFixture } from './seasonal';
 
 type MemorialAnchor = Point & { seed: number; memorial?: string };
 export type CandleFixture = { kind: 'season-candle'; at: [number, number]; seed: number };
@@ -30,11 +32,21 @@ function anchors(tile: TileId, geo: LifeGeometry): readonly MemorialAnchor[] {
   const result: MemorialAnchor[] = [];
   for (let i = 0; i < (geo.graves?.length ?? 0); i += 3)
     result.push({ x: geo.graves![i]!, y: geo.graves![i + 1]!, seed: geo.graves![i + 2]! });
+  if (geo.memorialSites) {
+    for (let i = 0; i < geo.memorialSites.length; i += 3)
+      result.push({
+        x: geo.memorialSites[i]!,
+        y: geo.memorialSites[i + 1]!,
+        seed: geo.memorialSites[i + 2]!,
+        memorial: geo.memorialFragments?.[i / 3],
+      });
+    entries.set(key, result);
+    return result;
+  }
   const fragments = geo.cemeteryAreas?.filter((area) => !area.hasBurials) ?? [];
   if (fragments.length) {
     const unit = metersPerUnit(tile);
-    const metric = (rings: readonly (readonly Point[])[]) =>
-      rings.map((ring) => ring.map((p) => ({ x: p.x * unit, y: p.y * unit })));
+    const metric = (rings: readonly (readonly Point[])[]) => transformPolygon(rings, 0, 0, unit);
     const unsafe = new PolygonIndex();
     for (const area of geo.areas ?? [])
       if (
@@ -43,7 +55,7 @@ function anchors(tile: TileId, geo: LifeGeometry): readonly MemorialAnchor[] {
         area.kind === 'parking-exclusion'
       )
         unsafe.add(metric(area.rings));
-    for (const rings of carriageways(geo, 1 / unit)) unsafe.add(metric(rings));
+    for (const rings of prepareRoadTerrain(geo, 1 / unit).roads) unsafe.add(rings);
     // A fixed equatorial spacing aligns the lattice across tile rows and archive zooms.
     const step = (LATTICE_METERS * EXTENT * 2 ** tile.z) / MERCATOR_METERS;
     const groups: MemorialAnchor[][] = [];
@@ -105,9 +117,11 @@ function anchors(tile: TileId, geo: LifeGeometry): readonly MemorialAnchor[] {
       candidates.sort((a, b) => a.seed - b.seed || a.x - b.x || a.y - b.y);
       if (candidates.length) groups.push(candidates);
     }
-    groups.sort(
-      (a, b) => a[0]!.memorial!.localeCompare(b[0]!.memorial!) || a[0]!.seed - b[0]!.seed,
-    );
+    groups.sort((a, b) => {
+      const left = a[0]!.memorial!,
+        right = b[0]!.memorial!;
+      return (left < right ? -1 : left > right ? 1 : 0) || a[0]!.seed - b[0]!.seed;
+    });
     // Give each safe fragment a site before filling remaining bounded capacity.
     const fallback = groups.slice(0, MAX_FALLBACK).map((group) => group[0]!);
     for (const group of groups)
@@ -119,6 +133,18 @@ function anchors(tile: TileId, geo: LifeGeometry): readonly MemorialAnchor[] {
   }
   entries.set(key, result);
   return result;
+}
+
+/** Tile-worker preparation; consumers share bounded sites without rebuilding terrain indexes. */
+export function prepareMemorialSites(tile: TileId, geo: LifeGeometry): void {
+  if (geo.memorialSites) return;
+  const sites = geo.cemeteryAreas?.some((area) => !area.hasBurials)
+    ? anchors(tile, geo).filter((p) => p.memorial !== undefined)
+    : [];
+  geo.memorialSites = Float32Array.from(sites.flatMap((p) => [p.x, p.y, p.seed]));
+  geo.memorialFragments = sites.map((p) => p.memorial!);
+  // Both inline and structured-cloned consumers use exactly the transferred precision.
+  cache.delete(geo);
 }
 
 export function memorialAnchors(
@@ -146,17 +172,35 @@ export function candleFixtures(tile: TileId, geo: LifeGeometry, share: number): 
   }));
 }
 
-export function candleLamps(fixtures: readonly CandleFixture[], zoom: number): VisibleLamp[] {
+const lampCache = new WeakMap<readonly SeasonalFixture[], readonly VisibleLamp[]>();
+export function candleLamps(
+  fixtures: readonly SeasonalFixture[],
+  zoom: number,
+): readonly VisibleLamp[] {
   if (zoom < SEASON_ZOOM.installationLights.min) return [];
-  return fixtures.map(({ at, seed }) => ({
-    lng: at[0],
-    lat: at[1],
-    center: at,
-    pool: at,
-    east: offsetUtility(at, 1.2, 0),
-    north: offsetUtility(at, 0, 1.2),
-    state: LampState.candle,
-    seed: seed & 31,
-    headless: true,
-  }));
+  const saved = lampCache.get(fixtures);
+  if (saved) return saved;
+  const lamps = fixtures
+    .filter((f): f is CandleFixture => f.kind === 'season-candle')
+    .map(({ at, seed }) => {
+      const east = offsetUtility(at, 1.2, 0),
+        north = offsetUtility(at, 0, 1.2);
+      const [x, y] = project(...at, 0),
+        [ex] = project(...east, 0),
+        [, ny] = project(...north, 0);
+      return {
+        lng: at[0],
+        lat: at[1],
+        center: at,
+        pool: at,
+        east,
+        north,
+        worldPool: [x, y, Math.abs(ex - x), Math.abs(ny - y)] as const,
+        state: LampState.candle,
+        seed: seed & 31,
+        headless: true,
+      };
+    });
+  lampCache.set(fixtures, lamps);
+  return lamps;
 }

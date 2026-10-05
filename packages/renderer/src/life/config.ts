@@ -552,7 +552,11 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
 }
 
 /** Illustrative long pauses beside memorials and outside churches, in seconds. */
-export const SEASON_CROWD = { pause: [40, 180] as const, speed: [0.3, 0.7] as const };
+export const SEASON_CROWD = {
+  pause: [40, 180] as const,
+  speed: [0.3, 0.7] as const,
+  congregationWanderScale: 1.5,
+};
 
 /** The render class each kind is drawn with (its glyphs and color, theme.ts). */
 export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {

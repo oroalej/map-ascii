@@ -6,6 +6,23 @@ import { VEHICLES } from './vehicles';
 
 const clearance = ROAD_SPLIT_CLEARANCE_M;
 
+it('deduplicates full marker identities without dropping compact-seed collisions', () => {
+  const entries = [
+    { x: 10, y: 30, feature: 'row/a', world: [100, 300] as const },
+    { x: 20, y: 30, feature: 'row/a', world: [200, 300] as const },
+    { x: 10, y: 30, feature: 'row/b', world: [100, 300] as const },
+  ];
+  const build = (values: typeof entries) => {
+    const b = new LifeBuilder();
+    for (const entry of values) b.grave(entry, entry.feature, 17, [...entry.world]);
+    return b.finish().graves;
+  };
+  const expected = build(entries);
+  expect(expected).toHaveLength(9);
+  expect(build([...entries].reverse())).toEqual(expected);
+  expect(build([...entries, entries[0]!])).toEqual(expected);
+});
+
 it('keeps exact grave seeds and structured-cloned sidecars, recording only admitted worship places', () => {
   const builder = new LifeBuilder();
   builder.grave({ x: 20, y: 30 }, 'marker', 0xffffff);

@@ -261,6 +261,7 @@ export function seasonalFixtures(
   season: RuntimeSeasonConfig | undefined,
   latitude: number,
   buntingVisible = true,
+  candlesVisible = true,
 ): SeasonalFixture[] {
   if (!season) return [];
   const anchors = collectSeasonAnchors(groups);
@@ -295,7 +296,7 @@ export function seasonalFixtures(
         spans.set(record.span.id, record.span);
   const bunting = new Map<string, Extract<SeasonalFixture, { kind: 'season-bunting' }>>();
   for (const group of groups) {
-    if (season.candles)
+    if (season.candles && candlesVisible)
       result.push(...candleFixtures(group.tile, group.life, season.candles.share));
     if (season.lanterns) {
       const near = seasonProximity(
@@ -407,6 +408,7 @@ export function createSeasonalFixtureCache() {
   let previous: readonly SeasonalTile[] = [],
     previousSeason: RuntimeSeasonConfig | undefined,
     previousBunting = true,
+    previousCandles = true,
     previousLatitude = NaN;
   let result: SeasonalFixture[] = [];
   return (
@@ -414,11 +416,13 @@ export function createSeasonalFixtureCache() {
     season: RuntimeSeasonConfig | undefined,
     latitude: number,
     buntingVisible = true,
+    candlesVisible = true,
   ) => {
     if (!season && !previousSeason) return result;
     if (
       season === previousSeason &&
       buntingVisible === previousBunting &&
+      candlesVisible === previousCandles &&
       latitude === previousLatitude &&
       groups.length === previous.length &&
       groups.every((g, i) => {
@@ -439,7 +443,8 @@ export function createSeasonalFixtureCache() {
     previousSeason = season;
     previousLatitude = latitude;
     previousBunting = buntingVisible;
-    result = seasonalFixtures(groups, season, latitude, buntingVisible);
+    previousCandles = candlesVisible;
+    result = seasonalFixtures(groups, season, latitude, buntingVisible, candlesVisible);
     return result;
   };
 }
@@ -500,14 +505,17 @@ export function packSeasonalFixtures(
       : fixtures;
     surfaceOrderCache.set(fixtures, ordered);
   }
+  const lanternAlpha = Math.round(bandVisibility(SEASON_ZOOM.lanterns, zoom) * 255);
+  const buntingAlpha = Math.round(bandVisibility(SEASON_ZOOM.bunting, zoom) * 255);
+  const installationAlpha = Math.round(bandVisibility(SEASON_ZOOM.installations, zoom) * 255);
+  if (!lanternAlpha && !buntingAlpha && !installationAlpha) return visibility;
   for (const fixture of ordered) {
-    const band =
+    const alpha =
       fixture.kind === 'season-lantern'
-        ? SEASON_ZOOM.lanterns
+        ? lanternAlpha
         : fixture.kind === 'season-bunting'
-          ? SEASON_ZOOM.bunting
-          : SEASON_ZOOM.installations;
-    const alpha = Math.round(bandVisibility(band, zoom) * 255);
+          ? buntingAlpha
+          : installationAlpha;
     if (!alpha) continue;
     if (fixture.kind === 'season-installation') {
       visibility.installations =

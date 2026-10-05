@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
-import { lifeTransferables } from '../life/geometry';
+import { graveSeed, lifeTransferables } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import { pointInside } from '../life/occupancy';
@@ -102,9 +102,11 @@ describe('seasonal cemetery and worship sidecars', () => {
     for (let i = 0; i < geo.graves!.length; i += 3) {
       const [x, y, seed] = geo.graves!.slice(i, i + 3);
       expect(seed).toBe(
-        hashString(
-          `${burial.id}/${Math.round(tile.x * EXTENT + x!)}/${Math.round(tile.y * EXTENT + y!)}`,
-        ) & 0xffffff,
+        graveSeed(
+          hashString(burial.id),
+          Math.round(tile.x * EXTENT + x!),
+          Math.round(tile.y * EXTENT + y!),
+        ),
       );
       expect(Number.isInteger(seed)).toBe(true);
     }
@@ -113,7 +115,7 @@ describe('seasonal cemetery and worship sidecars', () => {
     expect(neighbor.graves).toHaveLength(3);
     expect(neighbor.graves![0]).toBe(0);
     expect(neighbor.graves![2]).toBe(
-      hashString(`${burial.id}/${(tile.x + 1) * EXTENT}/${tile.y * EXTENT + 806}`) & 0xffffff,
+      graveSeed(hashString(burial.id), (tile.x + 1) * EXTENT, tile.y * EXTENT + 806),
     );
     expect(geo.cemeteryAreas![0]!.rings).toHaveLength(2);
     expect(geo.cemeteryAreas!.map((area) => area.hasBurials)).toEqual([true, false]);

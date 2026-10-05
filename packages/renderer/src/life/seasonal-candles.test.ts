@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { LifeBuilder } from './geometry';
-import { candleFixtures, candleLamps, memorialAnchors } from './seasonal-candles';
-import { seasonalFixtures } from './seasonal';
+import { LifeBuilder, lifeTransferables, inTile } from './geometry';
+import {
+  candleFixtures,
+  candleLamps,
+  memorialAnchors,
+  prepareMemorialSites,
+} from './seasonal-candles';
+import { createSeasonalFixtureCache, seasonalFixtures } from './seasonal';
 import { packFixtures, FixturePart } from './fixtures';
 import { LampState, lightByte } from './lights';
 import { mapGlyphs, themes } from '../theme';
@@ -66,12 +71,88 @@ describe('seasonal memorial candles', () => {
     expect(sites.some((p) => p.x > 1500 && p.x < 2500 && p.y > 1500 && p.y < 2500)).toBe(false);
     expect(candleFixtures(tile, geo, 0)).toEqual([]);
   });
+  it('retains uniquely owned fallback selections across a buffered cemetery seam and neighbor removal', () => {
+    const a = new LifeBuilder(),
+      b = new LifeBuilder();
+    const polygon = ring(3800, 1000, 4396, 2000);
+    a.cemeteryArea('cemetery/seam', [polygon]);
+    b.cemeteryArea('cemetery/seam', [polygon.map((p) => ({ x: p.x - 4096, y: p.y }))]);
+    const current = { tile, life: a.finish(), fixtures: [] };
+    const neighbor = { tile: { ...tile, x: tile.x + 1 }, life: b.finish(), fixtures: [] };
+    prepareMemorialSites(current.tile, current.life);
+    prepareMemorialSites(neighbor.tile, neighbor.life);
+    const season = {
+      id: 'memorial',
+      title: { en: 'Memorial' },
+      window: { from: { month: 11, day: 1 }, to: { month: 11, day: 2 } },
+      candles: { label: 'Candles', share: 0.75 },
+    };
+    const keys = (fixtures: ReturnType<typeof seasonalFixtures>) =>
+      fixtures
+        .map((f) => {
+          if (f.kind !== 'season-candle') throw new Error('unexpected fixture');
+          return `${f.at[0].toFixed(9)}/${f.at[1].toFixed(9)}/${f.seed}`;
+        })
+        .sort();
+    const onlyCurrent = keys(seasonalFixtures([current], season, 13));
+    const onlyNeighbor = keys(seasonalFixtures([neighbor], season, 13));
+    expect(onlyCurrent.length).toBeGreaterThan(0);
+    expect(onlyNeighbor.length).toBeGreaterThan(0);
+    const together = keys(seasonalFixtures([current, neighbor], season, 13));
+    expect(together).toEqual([...onlyCurrent, ...onlyNeighbor].sort());
+    expect(new Set(together).size).toBe(together.length);
+    expect(keys(seasonalFixtures([neighbor, current], season, 13))).toEqual(together);
+    expect(keys(seasonalFixtures([current], season, 13))).toEqual(onlyCurrent);
+    expect(keys(seasonalFixtures([neighbor], season, 13))).toEqual(onlyNeighbor);
+    expect(memorialAnchors(current.tile, current.life, 1).every(inTile)).toBe(true);
+    expect(memorialAnchors(neighbor.tile, neighbor.life, 1).every(inTile)).toBe(true);
+  });
   it('finds a safe interior in a small fragment and rejects blocked fragments', () => {
     const b = new LifeBuilder();
     b.cemeteryArea('small', [ring(501, 501, 551, 551)]);
     expect(memorialAnchors(tile, b.finish(), 0.01)).toHaveLength(1);
     b.area('blocked', [ring(400, 400, 600, 600)]);
     expect(memorialAnchors(tile, b.finish(), 1)).toEqual([]);
+  });
+  it('admits bounded fragments by code-point identity regardless of insertion order', () => {
+    const ids = [
+      'cemetery/Z',
+      ...Array.from({ length: 32 }, (_, i) => `cemetery/a${String(i).padStart(2, '0')}`),
+      'cemetery/z',
+    ];
+    const build = (order: readonly string[]) => {
+      const b = new LifeBuilder();
+      for (const id of order) {
+        const i = ids.indexOf(id),
+          x = 100 + (i % 8) * 400,
+          y = 200 + Math.floor(i / 8) * 400;
+        b.cemeteryArea(id, [ring(x, y, x + 20, y + 20)]);
+      }
+      return memorialAnchors(tile, b.finish(), 1).map((p) => p.memorial);
+    };
+    expect(build(ids)).toEqual(ids.slice(0, 32));
+    expect(build([...ids].reverse())).toEqual(ids.slice(0, 32));
+  });
+  it('shares transferred safe sites and fragment identities without rebuilding fallback indexes', () => {
+    const b = new LifeBuilder();
+    b.cemeteryArea('first', [ring(501, 501, 551, 551)]);
+    b.cemeteryArea('second', [ring(1501, 1501, 1551, 1551)]);
+    const geo = b.finish();
+    prepareMemorialSites(tile, geo);
+    const sites = memorialAnchors(tile, geo, 0.000001);
+    expect(sites.map((p) => p.memorial)).toEqual(['first', 'second']);
+    const buffers = lifeTransferables(geo);
+    expect(buffers).toContain(geo.memorialSites!.buffer);
+    const clone = structuredClone(geo, { transfer: buffers });
+    // Prepared consumers need neither polygon fragments nor unsafe terrain indexes.
+    clone.cemeteryAreas = undefined;
+    clone.areas = undefined;
+    expect(memorialAnchors(tile, clone, 0.000001)).toEqual(sites);
+    expect(sites.every((p) => Number.isInteger(p.seed) && p.seed < 0x1000000)).toBe(true);
+    const empty = new LifeBuilder().finish();
+    prepareMemorialSites(tile, empty);
+    empty.cemeteryAreas = [{ id: 'later', rings: [ring()], hasBurials: false }];
+    expect(memorialAnchors(tile, empty, 1)).toEqual([]);
   });
   it('fades candle ink with Life off and gates headless compact light pools at zoom 18', () => {
     const fixture = {
@@ -102,5 +183,25 @@ describe('seasonal memorial candles', () => {
     expect(candleLamps([fixture], 17.99)).toEqual([]);
     expect(candleLamps([fixture], 18)).toMatchObject([{ state: LampState.candle, headless: true }]);
     expect(candleLamps([], 19)).toEqual([]);
+  });
+  it('omits hidden candles from cached admission and restores them at the fade threshold', () => {
+    const b = new LifeBuilder();
+    b.grave({ x: 1000, y: 1000 }, 'grave', 1);
+    const groups = [{ tile, life: b.finish(), fixtures: [] }];
+    const season = {
+      id: 'memorial',
+      title: { en: 'Memorial' },
+      window: { from: { month: 11, day: 1 }, to: { month: 11, day: 2 } },
+      candles: { label: 'Candles', share: 1 },
+    };
+    const cached = createSeasonalFixtureCache();
+    expect(cached(groups, season, 13, true, false)).toEqual([]);
+    const visible = cached(groups, season, 13, true, true);
+    expect(visible).toHaveLength(1);
+    expect(cached(groups, season, 13, true, true)).toBe(visible);
+    expect(candleLamps(visible, 18)).toBe(candleLamps(visible, 19));
+    expect(candleLamps(visible, 17.99)).toEqual([]);
+    expect(cached(groups, season, 13, true, false)).toEqual([]);
+    expect(cached(groups, undefined, 13)).toEqual([]);
   });
 });

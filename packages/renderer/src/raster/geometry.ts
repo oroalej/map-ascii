@@ -59,6 +59,7 @@ import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '
 import {
   CANAL_KIND,
   LifeBuilder,
+  graveSeed,
   LifeLine,
   lifeLineFor,
   lifeTransferables,
@@ -822,6 +823,7 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      let burialHash: number | undefined;
       // A site's building or monument may be in another tile on a cold direct-URL load.
       // Register its real metadata without assigning its id to the surface's outline.
       const descriptor = feature.properties.detail_selection;
@@ -1419,8 +1421,10 @@ export function buildTileGeometry(
               if (typeof feature.properties.detail_parent === 'string')
                 life.burialParent(feature.properties.detail_parent);
               const center = ringCentroid(outer);
-              const identity = `${featureId}/${Math.round(tile.x * EXTENT + center.x)}/${Math.round(tile.y * EXTENT + center.y)}`;
-              life.grave(center, identity, hashString(identity));
+              const wx = Math.round(tile.x * EXTENT + center.x),
+                wy = Math.round(tile.y * EXTENT + center.y);
+              burialHash ??= hashString(featureId);
+              life.grave(center, featureId, graveSeed(burialHash, wx, wy), [wx, wy]);
             }
           }
           if (!isRegion && obstacle) life.obstacle(outer, true);

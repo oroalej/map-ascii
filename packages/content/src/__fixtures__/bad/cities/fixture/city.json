@@ -17,7 +17,7 @@
         "window": { "from": { "month": 11, "day": 1 }, "to": { "month": 11, "day": 2 } },
         "congregations": {
           "label": "Mass-goers",
-          "landmarks": ["landmark/missing-church"],
+          "landmarks": ["landmark/missing-church", "landmark/fixture-school"],
           "extra": 10,
           "hours": [[8, 1]]
         },

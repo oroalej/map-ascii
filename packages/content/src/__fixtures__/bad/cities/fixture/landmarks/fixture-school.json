@@ -1,0 +1,8 @@
+{
+  "id": "landmark/fixture-school",
+  "osm_id": "osm:way/123",
+  "name": { "en": "Fixture School" },
+  "type": "school",
+  "certainty": "unknown",
+  "sources": [{ "title": "Fixture" }]
+}

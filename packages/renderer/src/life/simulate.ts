@@ -4909,12 +4909,26 @@ export class LifeWorld {
         [...this.tiles.values()].some((life) => life.hasSuppressedActors))
     )
       this.groundGuard();
+    let admissionGuard: ReturnType<typeof this.groundGuard> | undefined;
+    const guardForAdmission = () =>
+      (admissionGuard ??= this.groundGuard(0, undefined, undefined, true));
     if (crowdKey && config) {
-      const pending = [...this.tiles.values()].filter(
-        (life) => this.appliedCrowds.get(life) !== crowdKey,
-      );
+      const pending: TileLife[] = [];
+      for (const life of this.tiles.values()) {
+        if (this.appliedCrowds.get(life) === crowdKey) continue;
+        const visitors =
+          config.visitors &&
+          (life.geo.graves?.length ||
+            life.geo.memorialSites?.length ||
+            (!life.geo.memorialSites && life.geo.cemeteryAreas?.some((area) => !area.hasBurials)));
+        const congregations =
+          config.congregations &&
+          life.geo.placeLandmarks?.some(([, id]) => config.congregations!.landmarks.includes(id));
+        if (visitors || congregations) pending.push(life);
+        else this.appliedCrowds.set(life, crowdKey);
+      }
       if (pending.length) {
-        const guard = this.groundGuard(0, undefined, undefined, true);
+        const guard = guardForAdmission();
         for (const life of pending) {
           life.admitSeasonalGatherers(
             config,
@@ -4970,7 +4984,7 @@ export class LifeWorld {
       return [{ life, anchors: nearby }];
     });
     if (!changedTiles.length) return;
-    const guard = this.groundGuard(0, undefined, undefined, true);
+    const guard = guardForAdmission();
     for (const { life, anchors } of changedTiles) {
       const near = seasonProximity(
         life.tile,

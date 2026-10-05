@@ -1,4 +1,5 @@
-import { MAX_TILE_GATHERERS, SEASON_CROWD } from './config';
+import { MAX_TILE_GATHERERS, PLACES, SEASON_CROWD } from './config';
+import { between } from './random';
 import { inTile, PLACE_STRIDE, type LifeGeometry } from './geometry';
 import { memorialAnchors } from './seasonal-candles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS } from './people';
@@ -32,7 +33,6 @@ export function seasonalCrowds(config: SimulationSeason, admission: Admission): 
     source?: number,
   ) => {
     const rng = seasonal === 'visitors' ? admission.visitorsRng : admission.congregationsRng;
-    const between = (range: readonly [number, number]) => range[0] + rng() * (range[1] - range[0]);
     const owner: Gatherer = {
       seasonal,
       source,
@@ -48,8 +48,8 @@ export function seasonalCrowds(config: SimulationSeason, admission: Admission): 
       hy: 0,
       tx: cx,
       ty: cy,
-      speed: between(SEASON_CROWD.speed) * perMeter,
-      pause: between(SEASON_CROWD.pause),
+      speed: between(rng, SEASON_CROWD.speed) * perMeter,
+      pause: between(rng, SEASON_CROWD.pause),
       walked: 0,
       rank: rng(),
       walker: {
@@ -108,7 +108,9 @@ export function seasonalCrowds(config: SimulationSeason, admission: Admission): 
       const radius = geo.places[at + 3]!;
       const around = geo.places[at + 4] === 1;
       const inner = around ? radius + 1.5 * perMeter : 0;
-      const outer = around ? inner + 8 * perMeter : radius * 0.85;
+      const outer = around
+        ? inner + PLACES.worship.wander * SEASON_CROWD.congregationWanderScale * perMeter
+        : radius * 0.85;
       for (let i = 0; i < config.congregations.extra && capacity() > 0; i++) {
         const owner = create(
           'congregations',

@@ -14,7 +14,13 @@ export type TileHeader = {
 };
 
 export type WorkerRequest =
-  | { type: 'init'; url: string; fireworks?: boolean; fireworksActive?: boolean }
+  | {
+      type: 'init';
+      url: string;
+      fireworks?: boolean;
+      fireworksActive?: boolean;
+      memorials?: boolean;
+    }
   | { type: 'fireworks'; active: boolean }
   | { type: 'tile' | 'residential'; key: string; z: number; x: number; y: number };
 
@@ -284,6 +290,7 @@ export class TileSource {
     handlers: TileSourceHandlers,
     private readonly fireworks = false,
     active = false,
+    memorials = false,
   ) {
     this.fireworksActive = fireworks && active;
     this.requests = new RequestQueue((tile, key, group) =>
@@ -311,7 +318,13 @@ export class TileSource {
         if (message.key) this.requests.done(message.key);
       }
     };
-    this.post({ type: 'init', url, fireworks, fireworksActive: this.fireworksActive });
+    this.post({
+      type: 'init',
+      url,
+      fireworks,
+      fireworksActive: this.fireworksActive,
+      ...(memorials && { memorials }),
+    });
   }
 
   setFireworksActive(active: boolean) {

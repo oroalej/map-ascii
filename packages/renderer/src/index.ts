@@ -113,7 +113,7 @@ import {
 } from './life/fixtures';
 import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
-import { candleLamps, type CandleFixture } from './life/seasonal-candles';
+import { candleLamps } from './life/seasonal-candles';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { simulationSeasons } from './life/seasonal-simulation';
@@ -703,6 +703,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     profiler,
     options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
     !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
+    options.cityLife?.seasons?.some((season) => !!(season.candles || season.visitors)) === true,
   );
   const { source } = tileCache;
 
@@ -1203,6 +1204,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let hadUtilities = false;
   let fixtureDisplaysShown = false;
   let fixtureBuntingShown = false;
+  let fixtureCandlesShown = false;
   let fireworkSites = NO_FIREWORK_SITES;
   let residentialInputs: readonly Float64Array[] = [];
   const syncResidentialSites = (tiles: readonly TileId[]) => {
@@ -1238,9 +1240,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
     const displaysShown = camera.zoom >= 18;
     const buntingShown = bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0;
+    const candlesShown =
+      !!season?.candles && bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0;
     if (
       displaysShown === fixtureDisplaysShown &&
       buntingShown === fixtureBuntingShown &&
+      candlesShown === fixtureCandlesShown &&
       showUtilities === hadUtilities &&
       season === fixtureSeason &&
       sameReferenceMembers(inputs, fixtureInputs)
@@ -1248,6 +1253,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     fixtureDisplaysShown = displaysShown;
     fixtureBuntingShown = buntingShown;
+    fixtureCandlesShown = candlesShown;
     fixtureSeason = season;
     fixtureInputs = inputs;
     hadUtilities = showUtilities;
@@ -1275,23 +1281,20 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? inputs.flatMap((t) => (t.utilities ? [t.utilities] : []))
       : [];
     fixtures.push(...cachedUtilities(utilityGroups));
-    fixtures.push(
-      ...cachedSeasonal(
-        seasonalGroups,
-        season,
-        (options.bounds[1] + options.bounds[3]) / 2,
-        buntingShown,
-      ),
+    const ornaments = cachedSeasonal(
+      seasonalGroups,
+      season,
+      (options.bounds[1] + options.bounds[3]) / 2,
+      buntingShown,
+      candlesShown,
     );
+    fixtures.push(...ornaments);
     festiveLamps = [
       ...installationLamps(
         fixtures.filter((f): f is InstallationFixture => f.kind === 'season-installation'),
         camera.zoom,
       ),
-      ...candleLamps(
-        fixtures.filter((f): f is CandleFixture => f.kind === 'season-candle'),
-        camera.zoom,
-      ),
+      ...(season?.candles ? candleLamps(ornaments, camera.zoom) : []),
     ];
     festiveLightVersion++;
   };
