@@ -165,9 +165,16 @@ it.each([
       plain = observed(true, false);
     const history = { key: 'pending', seconds: queued ? 8 : 7, at: 0, queued };
     const plainHistory = { ...history };
-    type Internals = { rejectedSeams: WeakMap<Mover, typeof history> };
+    type Internals = {
+      rejectedSeams: WeakMap<Mover, typeof history>;
+      queuedSeams: Map<Mover, TileLife>;
+    };
     (f.world as unknown as Internals).rejectedSeams.set(f.car, history);
     (plain.world as unknown as Internals).rejectedSeams.set(plain.car, plainHistory);
+    if (queued) {
+      (f.world as unknown as Internals).queuedSeams.set(f.car, f.life);
+      (plain.world as unknown as Internals).queuedSeams.set(plain.car, plain.life);
+    }
     const recover = vi.spyOn(f.life, 'recoverVehicle');
     const start = f.car.x;
     for (let i = 0; i < 120; i++) {

@@ -87,14 +87,15 @@ type Service = {
   arriving: boolean;
   passenger?: Mover;
 };
-type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) & {
-  contact?: (mover: Mover, trial?: Mover) => void;
+export type YieldHooks<Prefix extends unknown[] = []> = {
+  contact?: (...args: [...Prefix, mover: Mover, trial?: Mover]) => void;
   yielding?: (mover: Mover) => Mover | undefined;
-  holding?: (mover: Mover, changedOnly?: boolean) => boolean;
-  holdingCorridor?: (mover: Mover, before: Mover) => boolean;
+  holding?: (...args: [...Prefix, mover: Mover, changedOnly?: boolean]) => boolean;
+  holdingCorridor?: (...args: [...Prefix, mover: Mover, before: Mover]) => boolean;
   passing?: (mover: Mover) => boolean;
   cancelYield?: (mover: Mover) => void;
 };
+type MoveGuard = ((mover: Mover, before: Mover, reserve?: boolean) => boolean) & YieldHooks;
 const dist = (a: WalkPoint, b: WalkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 /** How far `p` lies ahead of a mover along its heading (negative: behind it). */
 const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.hy;

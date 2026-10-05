@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, TileLife, type Mover, type Walker, type WorldGroundGuard } from './simulate';
 import { worldTiles } from './testing/scenarios';
@@ -226,6 +226,41 @@ it.each([false, true])(
     } else expect(m.x).toBeLessThan(x);
   },
 );
+
+it('continues an unblocked bicycle into an interior road without drawing from legacy routing', () => {
+  const b = new LifeBuilder(),
+    x = 1000 + 60 * pm;
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x, y: 2048 },
+    ],
+    LifeLine.roadMinor,
+    6,
+  );
+  b.line(
+    [
+      { x, y: 2048 - 100 * pm },
+      { x, y: 2048 },
+      { x, y: 2048 + 100 * pm },
+    ],
+    LifeLine.roadMajor,
+    6,
+  );
+  const life = new TileLife(tile, b.finish(), 17);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  const m = mover('vehicle', 40, 1);
+  m.vehicle = 'bicycle';
+  m.speed = m.v = 3 * pm;
+  const routeRng = vi.fn(() => 0);
+  (life as unknown as { routeRng: () => number }).routeRng = routeRng;
+  life.movers.push(m);
+  for (let frame = 0; frame < 300 && m.line === 0; frame++) life.step(1 / 30);
+  expect(m.line).toBe(1);
+  expect(m.from).toBe(3);
+  expect(routeRng).not.toHaveBeenCalled();
+});
 
 for (const minimum of [2.9, 1.45])
   it(`lets head-on walkers each travel 20 metres within 30 seconds at minimum ${minimum}`, () => {
@@ -1195,6 +1230,116 @@ it('executes a selected recovery retreat in bounded steps before reversing', () 
   expect(reversed).toBe(true);
   expect(m.waiting).toBe(30);
   expect((start - m.x) / pm).toBeCloseTo(0.5);
+});
+
+it('ignores a stale shortened curve at a later accepted left turn', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x: 1000 + 30 * pm, y: 2048 },
+      { x: 1000 + 40 * pm, y: 2048 },
+      { x: 1000 + 40 * pm, y: 2048 - 10 * pm },
+      { x: 1000 + 40 * pm, y: 2048 - 40 * pm },
+    ],
+    LifeLine.roadMajor,
+    6,
+  );
+  const life = new TileLife(tile, b.finish(), 1);
+  life.movers.length = 0;
+  life.scenes.sites.length = 0;
+  const m = { ...mover('vehicle', 35, 1), from: 1, d: 5 * pm, v: pm };
+  const ordinary = life.pose(m);
+  m.curveLengthM = 2;
+  m.curveCorner = { x: 1000, y: 2048 };
+  expect(life.pose(m)).toEqual(ordinary);
+  life.movers.push(m);
+  life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+  expect(m.curveLengthM).toBeUndefined();
+  expect(m.curveCorner).toBeUndefined();
+  expect(m.d).toBeGreaterThan(5 * pm);
+});
+
+it('retains a shortened fillet through both sides of an endpoint turn', () => {
+  const b = new LifeBuilder();
+  const x = 1000 + 100 * pm;
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    8,
+  );
+  b.line(
+    [
+      { x, y: 2048 },
+      { x, y: 2048 + 100 * pm },
+    ],
+    LifeLine.roadMajor,
+    8,
+  );
+  const life = new TileLife(tile, b.finish(), 1);
+  life.movers.length = 0;
+  life.scenes.sites.length = 0;
+  const corner = { x: life.geo.coords[2]!, y: life.geo.coords[3]! };
+  const m = {
+    ...mover('vehicle', 96, 1),
+    d: corner.x - 1000 - 4 * pm,
+    x: corner.x - 4 * pm,
+    speed: 3 * pm,
+    v: 3 * pm,
+    curveLengthM: 4,
+    curveCorner: corner,
+  };
+  life.movers.push(m);
+  let crossed = false;
+  for (let frame = 0; frame < 240; frame++) {
+    const before = life.pose(m);
+    life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+    const after = life.pose(m);
+    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
+      3.6 / 30 + 1e-5,
+    );
+    if (m.line === 1 && !crossed) {
+      crossed = true;
+      expect(m.curveLengthM).toBe(4);
+      expect(m.curveCorner).toEqual(corner);
+    }
+  }
+  expect(crossed).toBe(true);
+  expect(m.curveLengthM).toBeUndefined();
+  expect(m.curveCorner).toBeUndefined();
+});
+
+it('expires a selected retreat invalidated by a stationary follower and releases its line', () => {
+  const { world, life } = fixture(LifeLine.roadMajor, 8);
+  const m = mover('vehicle', 70, 1);
+  m.waiting = 30;
+  life.movers.push(m);
+  const start = m.x;
+  life.recoverVehicle(
+    m,
+    (next) => !('dir' in next) || next.dir !== -1 || next.x <= start - 2 * pm + 1e-8,
+    new JunctionTable(),
+    new Set(),
+    undefined,
+    1 / 30,
+  );
+  const follower = mover('vehicle', 70 - VEHICLES.car.length - FOLLOW.minGap, 1);
+  follower.speed = follower.v = 0;
+  life.movers.push(follower);
+  type RecoveryState = {
+    recoveryApproaches: WeakMap<Mover, unknown>;
+    recoveryLeaders: Map<number, Mover>;
+  };
+  const state = life as unknown as RecoveryState;
+  expect(state.recoveryApproaches.has(m)).toBe(true);
+  // The existing bumper gap permits part of the retreat before it is rejected.
+  for (let i = 0; i < 450; i++) world.step(1 / 30, undefined, 17);
+  expect(state.recoveryApproaches.has(m)).toBe(false);
+  expect(state.recoveryLeaders.get(m.line)).not.toBe(m);
+  expect(m.x).toBeGreaterThan(start);
 });
 
 it('retreats far enough to clear the complete rotation beside a narrowing building edge', () => {

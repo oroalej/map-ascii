@@ -837,6 +837,105 @@ describe('pedestrian braking targets', () => {
   });
 });
 
+describe('retained pedestrian query geometry', () => {
+  function retained() {
+    const pm = 1 / metersPerUnit(tile),
+      builder = new LifeBuilder();
+    const x = 1000 + 60 * pm;
+    builder.line(
+      [
+        { x: 1000, y: 2048 },
+        { x, y: 2048 },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    builder.line(
+      [
+        { x, y: 2048 - 100 * pm },
+        { x, y: 2048 },
+        { x, y: 2048 + 100 * pm },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    const life = new StandaloneLife(tile, builder.finish(), 42);
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const cx = life.geo.coords[2]!;
+    const car: Mover = {
+      ...person(life),
+      kind: 'vehicle',
+      vehicle: 'car',
+      group: undefined,
+      d: cx - 1000,
+      x: cx,
+      y: 2048,
+      hx: 1,
+      hy: 0,
+      pause: 0,
+      speed: 5 * pm,
+      v: 0,
+      next: 2,
+      curveLengthM: 10,
+      curveCorner: { x: cx, y: 2048 },
+    };
+    const tracer = life as unknown as {
+      pedestrianPath(m: Mover, range: number): Iterable<PedestrianSegment>;
+      pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+    };
+    return { life, car, tracer, pm };
+  }
+  it('starts at the actual shortened pose and invalidates warm stopped paths without cursor movement', () => {
+    const { life, car, tracer, pm } = retained();
+    const before = structuredClone(car);
+    const cached = tracer.pedestrianSegments(car, 15, 15);
+    car.curveLengthM = 6;
+    const changed = tracer.pedestrianSegments(car, 15, 15);
+    const cold = [...tracer.pedestrianPath(car, 15)],
+      pose = life.pose(car);
+    expect(changed).not.toEqual(cached);
+    expect(changed).toEqual(cold);
+    expect(changed[0]!.x).toBeCloseTo(pose.x / pm, 10);
+    expect(changed[0]!.y).toBeCloseTo(pose.y / pm, 10);
+    expect(changed.some((p) => p.line === 1)).toBe(true);
+    expect(car).toEqual({ ...before, curveLengthM: 6 });
+    expect(tracer.pedestrianSegments(car, 15, 15)).toBe(changed);
+  });
+  it('copies interior entry geometry, invalidates in-place changes and clears scratch for another mover', () => {
+    const { life, car, tracer, pm } = retained();
+    car.line = 1;
+    car.from = 3;
+    car.d = 0.2 * pm;
+    car.y += car.d;
+    car.hx = 0;
+    car.hy = 1;
+    car.came = 1;
+    car.next = undefined;
+    car.curveLengthM = 6;
+    car.entered = { vertex: 3, x: 1000, y: 2048, offset: 3 };
+    const cached = tracer.pedestrianSegments(car, 15, 15);
+    car.entered.offset = 2;
+    const changed = tracer.pedestrianSegments(car, 15, 15),
+      pose = life.pose(car);
+    expect(changed).not.toEqual(cached);
+    expect(changed).toEqual([...tracer.pedestrianPath(car, 15)]);
+    expect(changed[0]!.x).toBeCloseTo(pose.x / pm, 10);
+    expect(changed[0]!.y).toBeCloseTo(pose.y / pm, 10);
+    const ordinary = {
+      ...car,
+      curveLengthM: undefined,
+      curveCorner: undefined,
+      entered: undefined,
+    };
+    const original = structuredClone(ordinary);
+    const afterReuse = [...tracer.pedestrianPath(ordinary, 15)];
+    const other = retained();
+    expect(afterReuse).toEqual([...other.tracer.pedestrianPath(ordinary, 15)]);
+    expect(ordinary).toEqual(original);
+  });
+});
+
 function crossingFixture(angle = 0, reverse = false, signal = false) {
   const pm = 1 / metersPerUnit(tile),
     cx = 2000,

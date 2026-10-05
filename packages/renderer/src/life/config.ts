@@ -86,8 +86,6 @@ export const frontClearance = (length: number): number => length / 2 + FOLLOW.mi
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
 /** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
 export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
-/** Turn back after this many active seconds attempting a blocked walking route. */
-export const WALK_RECOVERY = { seconds: 3 } as const;
 /** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,

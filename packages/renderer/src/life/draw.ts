@@ -121,6 +121,47 @@ type MemberRaster = {
   cells: { col: number; row: number; bytes: readonly number[] }[];
   point?: [number, number];
 };
+// Coarse draws capture into fixed scratch; rejected draws alone materialize payload objects.
+const memberCells = new Float64Array(4 * 4 * 6);
+const memberCounts = new Uint8Array(4);
+const memberExpected = new Uint8Array(4);
+const memberPoints = new Float64Array(8);
+function capturedMembers(count: number): MemberRaster[] {
+  return Array.from({ length: count }, (_, member) => ({
+    expected: memberExpected[member]!,
+    cells: Array.from({ length: memberCounts[member]! }, (_, cell) => {
+      const at = (member * 4 + cell) * 6;
+      return {
+        col: memberCells[at]!,
+        row: memberCells[at + 1]!,
+        bytes: Array.from(memberCells.subarray(at + 2, at + 6)),
+      };
+    }),
+    point: Number.isNaN(memberPoints[member * 2]!)
+      ? undefined
+      : ([memberPoints[member * 2]!, memberPoints[member * 2 + 1]!] as [number, number]),
+  }));
+}
+function commitMembers(
+  out: Uint8Array,
+  cols: number,
+  members: readonly MemberRaster[],
+  offsets: readonly (readonly [number, number])[],
+) {
+  members.forEach((member, i) => {
+    const [dx, dy] = offsets[i]!;
+    for (const { col, row, bytes } of member.cells) {
+      const cell = (row + dy) * cols + col + dx;
+      out.set(bytes, cell * 4);
+      groundCells[cell] = 1;
+      if (drawingOwners) drawingOwners[cell] = drawingOwner;
+      if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
+      drawingClockCells?.push(cell);
+    }
+    if (member.point)
+      drawingSpeakers?.points.set(drawingOwner, [member.point[0] + dx, member.point[1] + dy]);
+  });
+}
 const adjacentCells = [
   [1, 0],
   [-1, 0],
@@ -136,6 +177,7 @@ let journal:
       before: Map<number, [number, number, number, number, number, number?]>;
       denied: boolean;
       incomplete?: boolean;
+      memberCount?: number;
       members?: MemberRaster[];
     }
   | undefined;
@@ -333,6 +375,8 @@ export function packLife(
         if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
         else if (journal.denied) {
+          if (journal.memberCount !== undefined)
+            journal.members = capturedMembers(journal.memberCount);
           const eligible =
             (n > 0 || !!journal.members?.length) &&
             !detailedPeopleStamp &&
@@ -451,22 +495,7 @@ export function packLife(
               return false;
             };
             if (assign(0)) {
-              members.forEach((member, i) => {
-                const [dx, dy] = selected[i]!;
-                for (const { col, row, bytes } of member.cells) {
-                  const cell = (row + dy) * grid.cols + col + dx;
-                  out.set(bytes, cell * 4);
-                  groundCells[cell] = 1;
-                  if (drawingOwners) drawingOwners[cell] = drawingOwner;
-                  if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
-                  drawingClockCells?.push(cell);
-                }
-                if (member.point)
-                  drawingSpeakers?.points.set(drawingOwner, [
-                    member.point[0] + dx,
-                    member.point[1] + dy,
-                  ]);
-              });
+              commitMembers(out, grid.cols, members, selected);
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn += members.length;
               placed = true;
@@ -490,20 +519,7 @@ export function packLife(
                 (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
             );
             if (result.offset) {
-              const [dx, dy] = result.offset;
-              for (const { col, row, bytes } of member.cells) {
-                const cell = (row + dy) * grid.cols + col + dx;
-                out.set(bytes, cell * 4);
-                groundCells[cell] = 1;
-                if (drawingOwners) drawingOwners[cell] = drawingOwner;
-                if (drawingSpeakers) drawingSpeakers.members[cell] = 1;
-                drawingClockCells?.push(cell);
-              }
-              if (member.point)
-                drawingSpeakers?.points.set(drawingOwner, [
-                  member.point[0] + dx,
-                  member.point[1] + dy,
-                ]);
+              commitMembers(out, grid.cols, [member], [result.offset]);
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn++;
               placed = true;
@@ -520,22 +536,7 @@ export function packLife(
                 (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
             );
             if (result.offsets) {
-              members.forEach((member, i) => {
-                const [dx, dy] = result.offsets![i]!;
-                for (const { col, row, bytes } of member.cells) {
-                  const cell = (row + dy) * grid.cols + col + dx;
-                  out.set(bytes, cell * 4);
-                  groundCells[cell] = 1;
-                  if (drawingOwners) drawingOwners[cell] = drawingOwner;
-                  if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
-                  drawingClockCells?.push(cell);
-                }
-                if (member.point)
-                  drawingSpeakers?.points.set(drawingOwner, [
-                    member.point[0] + dx,
-                    member.point[1] + dy,
-                  ]);
-              });
+              commitMembers(out, grid.cols, members, result.offsets);
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn += members.length;
             }
@@ -780,24 +781,33 @@ function drawPeople(
         : PersonPart.figure;
     return personByte(look.paint, part, agent.candle);
   };
-  let captured: MemberRaster | undefined;
+  let captured = -1;
   const put = (c: number, r: number, glyph: string, byte: number) => {
     const index = glyphIndex(glyph);
     if (!Number.isInteger(c) || !Number.isInteger(r) || index <= 0 || index > MAX_GLYPHS) {
-      if (captured && journal) journal.denied = journal.incomplete = true;
+      if (captured >= 0 && journal) journal.denied = journal.incomplete = true;
       return false;
     }
-    captured?.cells.push({
-      col: c,
-      row: r,
-      bytes: [...packGlyph(index, cls), bits | drawingFocus, byte],
-    });
+    if (captured >= 0) {
+      const cell = memberCounts[captured]!;
+      if (cell >= 4) journal!.denied = journal!.incomplete = true;
+      else {
+        const at = (captured * 4 + cell) * 6;
+        memberCells[at] = c;
+        memberCells[at + 1] = r;
+        memberCells[at + 2] = index & 255;
+        memberCells[at + 3] = (cls & 63) | ((index >> 8) << 6);
+        memberCells[at + 4] = bits | drawingFocus;
+        memberCells[at + 5] = byte;
+        memberCounts[captured] = cell + 1;
+      }
+    }
     if (c < 0 || r < 0 || c >= cols || r >= rows) {
-      if (captured && journal) journal.denied = journal.incomplete = true;
+      if (captured >= 0 && journal) journal.denied = journal.incomplete = true;
       return false;
     }
     const at = (r * cols + c) * 4;
-    if (captured && journal?.before.has(at)) journal.denied = journal.incomplete = true;
+    if (captured >= 0 && journal?.before.has(at)) journal.denied = journal.incomplete = true;
     rememberGroundCell(out, at);
     writeCell(out, at, index, cls, bits, byte);
     coverage?.set(at, figureCellMask(glyph, cellWidth, cellHeight));
@@ -923,12 +933,15 @@ function drawPeople(
     r0 >= 0 &&
     c0 < cols &&
     r0 < rows
-  )
-    journal.members = [];
+  ) {
+    journal.memberCount = looks.length;
+    memberCounts.fill(0);
+    memberPoints.fill(NaN);
+  }
   looks.forEach((look, i) => {
     drawingMember = i + 1;
-    captured = journal?.members ? { cells: [], expected: fits[i] === 'big' ? 4 : 1 } : undefined;
-    if (captured) journal!.members!.push(captured);
+    captured = journal?.memberCount !== undefined ? i : -1;
+    if (captured >= 0) memberExpected[captured] = fits[i] === 'big' ? 4 : 1;
     const lateral =
       clearance > 0 && look.lateral !== 0
         ? Math.sign(look.lateral) * Math.max(size, Math.ceil(clear + size / 2))
@@ -943,7 +956,10 @@ function drawPeople(
     if (agent.speech && (agent.speech.member ?? 0) === i) {
       const point: [number, number] = fit === 'big' ? [c + 1, r + 1] : [c + dc + 0.5, r + dr + 0.5];
       drawingSpeakers?.points.set(drawingOwner, point);
-      if (captured) captured.point = point;
+      if (captured >= 0) {
+        memberPoints[captured * 2] = point[0];
+        memberPoints[captured * 2 + 1] = point[1];
+      }
     }
     let any: boolean;
     if (fit === 'big') {

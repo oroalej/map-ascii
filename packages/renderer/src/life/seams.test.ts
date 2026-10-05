@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LifeWorld, type LifeTile, type Mover } from './simulate';
+import { LifeWorld, type TileLife, type LifeTile, type Mover } from './simulate';
 import { continuityTile, continuityMover, left, right, parent } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import { LifeBuilder, LifeLine } from './geometry';
@@ -688,11 +688,98 @@ it('keeps a queued seam recovery frozen during an active service hold', () => {
     m,
     history,
   );
+  (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
   world.step(0.1);
   expect(m.dir).toBe(1);
   expect(m.x).toBe(4095);
   expect(source.scenes.services.get(m)?.time).toBeCloseTo(9.9);
   expect(history.seconds).toBe(8);
+});
+
+it.each([30, 60, 120])(
+  'advances a queued recovery once per frame at %s Hz, including selection',
+  (hz) => {
+    const { world, lives } = fixture([continuityTile(left), continuityTile(right, LifeLine.path)]);
+    const source = lives[0]!,
+      m = continuityMover(source, 4055);
+    for (const life of lives) life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    m.v = 0;
+    m.waiting = 30;
+    source.movers.push(m);
+    const start = m.x,
+      original = source.recoverVehicle.bind(source);
+    const recover = vi
+      .spyOn(source, 'recoverVehicle')
+      .mockImplementation((owner, guard, table, lines, owns, dt) =>
+        original(
+          owner,
+          (next, before, reserve) =>
+            (!('dir' in next) ||
+              next.dir !== -1 ||
+              next.x <= start - 0.5 * source.perMeter + 1e-8) &&
+            guard(next, before, reserve),
+          table,
+          lines,
+          owns,
+          dt,
+        ),
+      );
+    const history = { key: 'pending', seconds: 8, at: 0, queued: true };
+    (world as unknown as { rejectedSeams: WeakMap<Mover, typeof history> }).rejectedSeams.set(
+      m,
+      history,
+    );
+    (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
+    (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
+    for (let frame = 0; frame < 3; frame++) {
+      recover.mockClear();
+      const before = m.x;
+      world.step(1 / hz, undefined, 17);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(recover.mock.calls[0]![5]).toBe(1 / hz);
+      expect((before - m.x) / source.perMeter).toBeCloseTo(0.6 / hz);
+      expect(m.dir).toBe(1);
+    }
+  },
+);
+
+it('releases sparse queue ownership on retirement and reset, and revives frozen history', () => {
+  const entries = [continuityTile(left), continuityTile(right, LifeLine.path)];
+  const { world, lives } = fixture(entries);
+  const source = lives[0]!,
+    m = continuityMover(source, 4055);
+  source.movers.push(m);
+  const state = world as unknown as {
+    rejectedSeams: WeakMap<Mover, { key: string; seconds: number; at: number; queued: boolean }>;
+    queuedSeams: Map<Mover, TileLife>;
+  };
+  state.rejectedSeams.set(m, { key: 'pending', seconds: 8, at: 0, queued: true });
+  state.queuedSeams.set(m, source);
+  world.sync([entries[1]!]);
+  expect(state.queuedSeams.size).toBe(0);
+  expect(state.rejectedSeams.get(m)?.queued).toBe(true);
+  world.sync(entries);
+  expect(state.queuedSeams.get(m)).toBe(source);
+  world.clearTiles();
+  expect(state.queuedSeams.size).toBe(0);
+  expect(state.rejectedSeams.get(m)).toBeUndefined();
+});
+
+it('prunes a queued actor removed from its source before attempting recovery', () => {
+  const { world, lives } = fixture([continuityTile(left), continuityTile(right, LifeLine.path)]);
+  const source = lives[0]!,
+    m = continuityMover(source, 4055);
+  const state = world as unknown as {
+    rejectedSeams: WeakMap<Mover, { key: string; seconds: number; at: number; queued: boolean }>;
+    queuedSeams: Map<Mover, TileLife>;
+  };
+  state.rejectedSeams.set(m, { key: 'pending', seconds: 8, at: 0, queued: true });
+  state.queuedSeams.set(m, source);
+  const recover = vi.spyOn(source, 'recoverVehicle');
+  world.step(0.1);
+  expect(recover).not.toHaveBeenCalled();
+  expect(state.queuedSeams.size).toBe(0);
+  expect(state.rejectedSeams.get(m)).toBeUndefined();
 });
 
 it('keeps a queued seam recovery frozen at a red signal', () => {
@@ -726,6 +813,7 @@ it('keeps a queued seam recovery frozen at a red signal', () => {
     m,
     history,
   );
+  (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
   world.step(0.1);
   expect(m.dir).toBe(1);
   expect(m.x).toBeCloseTo(4095);
