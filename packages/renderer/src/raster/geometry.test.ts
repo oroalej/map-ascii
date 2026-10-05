@@ -1154,6 +1154,161 @@ describe('buildTileGeometry', () => {
 describe('buildTileGeometry life', () => {
   const tile = { z: 16, x: 55192, y: 30266 };
 
+  it('keeps a duplicated shared road vertex without creating a zero-length routing piece', () => {
+    const { life } = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_mid', id: 'through', width: 10, oneway: 1 }, [
+            [
+              [100, 200],
+              [200, 200],
+              [200, 200],
+              [300, 200],
+            ],
+          ]),
+          feature(2, { class: 'road_minor', id: 'side', width: 6, oneway: -1 }, [
+            [
+              [200, 200],
+              [200, 300],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(life.starts)).toEqual([0, 3, 5, 7]);
+    expect(Array.from(life.coords.slice(0, 6))).toEqual([100, 200, 200, 200, 200, 200]);
+    expect(Array.from(life.kinds)).toEqual([
+      LifeLine.roadMid,
+      LifeLine.roadMid,
+      LifeLine.roadMinor,
+    ]);
+    expect(Array.from(life.widths)).toEqual([10, 10, 6]);
+    expect(Array.from(life.lineIds!)).toEqual([
+      hashString('through'),
+      hashString('through'),
+      hashString('side'),
+    ]);
+    expect(Array.from(life.oneway!)).toEqual([1, 1, -1]);
+    expect(Array.from(life.spawnGroups!)).toEqual([0, 0, 1]);
+  });
+
+  it('starts junction splitting at the existing z13 Life tile boundary', () => {
+    for (const z of [12, 13]) {
+      const { life } = buildTileGeometry(
+        {
+          roads: layer([
+            feature(2, { class: 'road_mid', id: 'through', width: 10 }, [
+              [
+                [100, 200],
+                [200, 200],
+                [300, 200],
+              ],
+            ]),
+            feature(2, { class: 'road_minor', id: 'side', width: 6 }, [
+              [
+                [200, 200],
+                [200, 300],
+              ],
+            ]),
+          ]),
+        },
+        createIdRegistry(),
+        { z, x: tile.x >> (16 - z), y: tile.y >> (16 - z) },
+      );
+      expect(life.kinds).toHaveLength(z === 12 ? 2 : 3);
+      expect(life.spawnGroups === undefined).toBe(z === 12);
+    }
+  });
+
+  it('protects production signal lookahead, setback and vehicle half-length', () => {
+    // Inside 67 m + the 6 m controller radius + quantization, outside either reduced allowance.
+    const junction = 1000 + 73.1 / metersPerUnit(tile);
+    const { life } = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_mid', id: 'through', width: 10 }, [
+            [
+              [500, 2000],
+              [junction, 2000],
+              [3000, 2000],
+            ],
+          ]),
+          feature(2, { class: 'road_minor', id: 'side', width: 6 }, [
+            [
+              [junction, 1000],
+              [junction, 2000],
+              [junction, 3000],
+            ],
+          ]),
+        ]),
+        poi: layer([
+          feature(
+            1,
+            {
+              id: 'signal',
+              class: 'furniture',
+              variant: 'signals',
+              signal_radius: 6,
+              signal_a: 90,
+              signal_b: 0,
+              life_signal: 'mapped',
+            },
+            [[[1000, 2000]]],
+          ),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    expect(Array.from(life.kinds)).toEqual([LifeLine.roadMid, LifeLine.roadMinor]);
+    expect(life.spawnGroups).toBeUndefined();
+  });
+
+  it('makes shared interior road vertices routable in production geometry', () => {
+    const { life } = buildTileGeometry(
+      {
+        roads: layer([
+          feature(2, { class: 'road_mid', id: 'through', width: 10, oneway: 1 }, [
+            [
+              [100, 200],
+              [200, 200],
+              [300, 200],
+            ],
+          ]),
+          feature(2, { class: 'road_mid', id: 'cross', width: 8, oneway: -1 }, [
+            [
+              [200, 100],
+              [200, 200],
+              [200, 300],
+            ],
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const roads = Array.from(life.kinds.keys()).filter(
+      (line) => life.kinds[line] === LifeLine.roadMid,
+    );
+    expect(roads).toHaveLength(4);
+    expect(roads.map((line) => life.lineIds![line])).toEqual([
+      hashString('through'),
+      hashString('through'),
+      hashString('cross'),
+      hashString('cross'),
+    ]);
+    expect(roads.map((line) => life.widths[line])).toEqual([10, 10, 8, 8]);
+    expect(roads.map((line) => life.oneway![line])).toEqual([1, 1, -1, -1]);
+    for (const line of roads) {
+      const ends = [life.starts[line]!, life.starts[line + 1]! - 1];
+      expect(ends.some((v) => life.coords[v * 2] === 200 && life.coords[v * 2 + 1] === 200)).toBe(
+        true,
+      );
+    }
+  });
+
   it('keeps roads, paths, and rivers as life lines, and parks as plazas and roosts', () => {
     const g = buildTileGeometry(
       {

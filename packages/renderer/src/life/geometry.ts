@@ -173,6 +173,8 @@ export type LifeGeometry = {
   signalLayouts?: (SignalLayout | undefined)[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
+  /** Original population line per routing piece; splitting must not reshuffle spawn streams. */
+  spawnGroups?: Uint32Array;
   /** Lot boundaries and solid ground obstacles, including polygon holes. */
   areas?: LifeArea[];
   /** Interaction sites: x, y, kind (0 stop, 1 terminal, 2 shelter), mode bits, covered. */
@@ -235,6 +237,31 @@ export const PLACE_STRIDE = 5;
 export const SITE_STRIDE = 5;
 export const SIGNAL_STRIDE = 6;
 
+/** Signal/member coordinate matching allows two tile units of vector-tile quantization. */
+export const TILE_QUANTIZATION_TOLERANCE = 2;
+const VERTEX_COORD_OFFSET = 32768;
+const VERTEX_COORD_RANGE = 65536;
+
+/** Rounded, buffered tile coordinates use the same connection key in builders and simulation. */
+export const vertexKey = (x: number, y: number) =>
+  (Math.round(x) + VERTEX_COORD_OFFSET) * VERTEX_COORD_RANGE + Math.round(y) + VERTEX_COORD_OFFSET;
+
+/** Accumulate shared road vertices without counting a line's own repeated vertices. */
+export function sharedRoadVertexRecorder(
+  coords: ArrayLike<number>,
+  kinds: ArrayLike<number>,
+  shared: Set<number>,
+) {
+  const owners = new Map<number, number>();
+  return (vertex: number, line: number) => {
+    if (kinds[line]! > LifeLine.roadMinor) return;
+    const key = vertexKey(coords[vertex * 2]!, coords[vertex * 2 + 1]!);
+    const owner = owners.get(key);
+    if (owner === undefined) owners.set(key, line);
+    else if (owner !== line) shared.add(key);
+  };
+}
+
 /** A tile's own extent in tile units (raster/geometry.ts `EXTENT`). */
 const TILE_EXTENT = 4096;
 /** Whether a point is in its own tile, not in the buffer its neighbor owns. */
@@ -272,6 +299,8 @@ export class LifeBuilder {
   }
   private signals: number[] = [];
   private signalLayouts: (SignalLayout | undefined)[] = [];
+  private signalMembers: TilePoint[][] = [];
+  private spawnGroups?: number[];
   signal(
     p: TilePoint,
     radius: number,
@@ -338,7 +367,39 @@ export class LifeBuilder {
     this.widths.push(width);
     this.oneways.push(oneway);
     this.lineIds.push(id);
+    this.spawnGroups?.push(this.kinds.length - 1);
     for (const p of points) this.coords.push(p.x, p.y);
+  }
+
+  private takeLines(groupPieces = false) {
+    const source = {
+      coords: this.coords,
+      starts: [...this.starts, this.coords.length / 2],
+      kinds: this.kinds,
+      widths: this.widths,
+      ids: this.lineIds,
+      flows: this.oneways,
+      groups: this.spawnGroups,
+    };
+    this.coords = [];
+    this.starts = [];
+    this.kinds = [];
+    this.widths = [];
+    this.lineIds = [];
+    this.oneways = [];
+    this.spawnGroups = groupPieces || source.groups ? [] : undefined;
+    const addPiece = (points: readonly TilePoint[], line: number) => {
+      if (points.length < 2) return;
+      this.line(
+        points,
+        source.kinds[line]! as LifeLine,
+        source.widths[line],
+        source.ids[line],
+        source.flows[line] as -1 | 0 | 1,
+      );
+      if (this.spawnGroups) this.spawnGroups[this.kinds.length - 1] = source.groups?.[line] ?? line;
+    };
+    return { ...source, addPiece };
   }
 
   /** Signal entrances must be routable endpoints, even when OSM keeps a way continuous. */
@@ -346,22 +407,12 @@ export class LifeBuilder {
     project: (position: [number, number]) => TilePoint,
     identify: (id: string) => number,
   ) {
+    this.signalMembers = this.signalLayouts.map((layout) => layout?.members.map(project) ?? []);
     const members = this.signalLayouts
       .flatMap((layout) => layout?.arms ?? [])
       .map((arm) => ({ ...project(arm.junction), id: identify(arm.road_id) }));
     if (!members.length) return;
-    const coords = this.coords,
-      starts = [...this.starts, coords.length / 2],
-      kinds = this.kinds,
-      widths = this.widths,
-      ids = this.lineIds,
-      flows = this.oneways;
-    this.coords = [];
-    this.starts = [];
-    this.kinds = [];
-    this.widths = [];
-    this.lineIds = [];
-    this.oneways = [];
+    const { coords, starts, kinds, ids, addPiece } = this.takeLines();
     for (let line = 0; line < kinds.length; line++) {
       const junctions = members.filter((m) => m.id === ids[line]);
       const original: TilePoint[] = [];
@@ -374,18 +425,22 @@ export class LifeBuilder {
           const length2 = dx * dx + dy * dy;
           // Simplification can remove a shared vertex from a straight way. Restore only
           // authoritative members on this exact road, within tile quantization error.
-          const inserted = new Map<string, { point: TilePoint; t: number }>();
+          const inserted = new Map<number, { point: TilePoint; t: number }>();
           for (const m of junctions) {
             const t = ((m.x - previous.x) * dx + (m.y - previous.y) * dy) / length2;
             if (t <= 0 || t >= 1 || !Number.isFinite(t)) continue;
             if (
-              Math.hypot(m.x - previous.x, m.y - previous.y) <= 2 ||
-              Math.hypot(m.x - p.x, m.y - p.y) <= 2
+              Math.hypot(m.x - previous.x, m.y - previous.y) <= TILE_QUANTIZATION_TOLERANCE ||
+              Math.hypot(m.x - p.x, m.y - p.y) <= TILE_QUANTIZATION_TOLERANCE
             )
               continue;
-            if (Math.hypot(m.x - previous.x - t * dx, m.y - previous.y - t * dy) > 2) continue;
+            if (
+              Math.hypot(m.x - previous.x - t * dx, m.y - previous.y - t * dy) >
+              TILE_QUANTIZATION_TOLERANCE
+            )
+              continue;
             const point = { x: Math.round(m.x), y: Math.round(m.y) };
-            inserted.set(`${point.x}/${point.y}`, { point, t });
+            inserted.set(vertexKey(point.x, point.y), { point, t });
           }
           original.push(
             ...[...inserted.values()].sort((a, b) => a.t - b.t).map((entry) => entry.point),
@@ -400,25 +455,71 @@ export class LifeBuilder {
           kinds[line]! <= LifeLine.roadMinor &&
           points.length > 1 &&
           v < original.length - 1 &&
-          junctions.some((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 2)
+          junctions.some((m) => Math.hypot(m.x - p.x, m.y - p.y) <= TILE_QUANTIZATION_TOLERANCE)
         ) {
-          this.line(
-            points,
-            kinds[line]! as LifeLine,
-            widths[line],
-            ids[line],
-            flows[line] as -1 | 0 | 1,
-          );
+          addPiece(points, line);
           points = [p];
         }
       }
-      this.line(
-        points,
-        kinds[line]! as LifeLine,
-        widths[line],
-        ids[line],
-        flows[line] as -1 | 0 | 1,
-      );
+      addPiece(points, line);
+    }
+  }
+
+  /**
+   * Shared road vertices become endpoints so traffic can choose an exit at each junction.
+   * Call splitSignalRoads first to initialize linked-member protection, even without local arms.
+   */
+  splitRoadJunctions(perMeter: number, signalClearanceM: number) {
+    const splits = new Set<number>();
+    const recordRoadVertex = sharedRoadVertexRecorder(this.coords, this.kinds, splits);
+    const starts = [...this.starts, this.coords.length / 2];
+    for (let line = 0; line < this.kinds.length; line++) {
+      if (this.kinds[line]! > LifeLine.roadMinor) continue;
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) recordRoadVertex(v, line);
+    }
+    for (const key of splits) {
+      const x = Math.floor(key / VERTEX_COORD_RANGE) - VERTEX_COORD_OFFSET;
+      const y = (key % VERTEX_COORD_RANGE) - VERTEX_COORD_OFFSET;
+      let protectedApproach = false;
+      for (let s = 0; s < this.signals.length; s += SIGNAL_STRIDE) {
+        const clearance =
+          (signalClearanceM + this.signals[s + 2]!) * perMeter + TILE_QUANTIZATION_TOLERANCE;
+        if (
+          Math.hypot(x - this.signals[s]!, y - this.signals[s + 1]!) <= clearance ||
+          this.signalMembers[s / SIGNAL_STRIDE]?.some(
+            (p) => Math.hypot(x - p.x, y - p.y) <= clearance,
+          )
+        ) {
+          protectedApproach = true;
+          break;
+        }
+      }
+      if (protectedApproach) splits.delete(key);
+    }
+    if (!splits.size) return;
+    const { coords, kinds, addPiece } = this.takeLines(true);
+    for (let line = 0; line < kinds.length; line++) {
+      let points: TilePoint[] = [];
+      let hasLength = false;
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
+        const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
+        const previous = points.at(-1);
+        hasLength ||= !!previous && (previous.x !== p.x || previous.y !== p.y);
+        points.push(p);
+        const key = vertexKey(p.x, p.y);
+        if (
+          kinds[line]! <= LifeLine.roadMinor &&
+          hasLength &&
+          v < starts[line + 1]! - 1 &&
+          splits.has(key) &&
+          key !== vertexKey(coords[(v + 1) * 2]!, coords[(v + 1) * 2 + 1]!)
+        ) {
+          addPiece(points, line);
+          points = [p];
+          hasLength = false;
+        }
+      }
+      addPiece(points, line);
     }
   }
 
@@ -490,6 +591,7 @@ export class LifeBuilder {
       signalLayouts: this.signalLayouts,
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
+      spawnGroups: this.spawnGroups && Uint32Array.from(this.spawnGroups),
       areas: this.areas,
       sites: Float32Array.from(this.sites),
       obstacles: Float32Array.from(this.obstacles),
@@ -527,6 +629,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   ...(g.signals ? [g.signals.buffer as ArrayBuffer] : []),
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
+  ...(g.spawnGroups ? [g.spawnGroups.buffer as ArrayBuffer] : []),
   ...(g.oneway ? [g.oneway.buffer as ArrayBuffer] : []),
   g.sites.buffer as ArrayBuffer,
   g.obstacles.buffer as ArrayBuffer,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
+import { drawProcedural } from '../glyphs/atlas';
 import { sextantGlyphs, themes } from '../theme';
 import { BirdHeading, BirdPose, birdByte, birdGlyph, birdGlyphs, BIRD_SPECIES } from './birds';
 import { agentBit, CellBit, LIFE_SHADOW } from './config';
@@ -760,6 +761,215 @@ describe('packLife people', () => {
     const { cells } = pack(person(1, 0, 0.2, { people: [look({ figure: 'umbrella' })] }));
     expect(cells[0]!.texel[0]).toBe(glyphIndex(figureGlyph('umbrella', false, 0, { scale: 0 })));
     expect(cells[0]!.texel[3]).toBe(personByte(Paint.red, PersonPart.canopy));
+  });
+
+  it('uses staged canopy glyphs for one-cell and two-by-two transitions', () => {
+    for (const [open, stage] of [
+      [0.2, 0],
+      [0.9, 1],
+    ] as const)
+      for (const scale of [1, 2]) {
+        const transitioning = look({
+          figure: 'umbrella',
+          paint: Paint.blue,
+          canopy: { open, figure: 'adult', paint: Paint.red },
+        });
+        const packed = pack(person(1, 0, scale, { people: [transitioning] }));
+        expect(packed.drawn).toBe(1);
+        expect(packed.cells).toHaveLength(scale === 1 ? 1 : 4);
+        for (const c of packed.cells) {
+          const figure = figureOf(glyphs[packedGlyph(c.texel)]!)!;
+          expect(figure).toMatchObject({ figure: 'umbrella', stage });
+          expect(c.texel[3]).toBe(personByte(Paint.blue, PersonPart.canopy));
+        }
+        if (scale === 1)
+          expect(figureOf(glyphs[packedGlyph(packed.cells[0]!.texel)]!)!.scale).toBe(2);
+        else
+          expect(packed.cells.map((c) => figureOf(glyphs[packedGlyph(c.texel)]!)!.slice)).toEqual([
+            0, 1, 2, 3,
+          ]);
+      }
+  });
+
+  it('retains adult and seated slice glyphs beneath a canopy at mixed-fit density', () => {
+    for (const figure of ['adult', 'seated'] as const) {
+      const ordinary = look({ figure, flap: 1, pose: 'gesture' });
+      const before = pack(person(1, 0, 3.9, { people: [ordinary], candle: true }));
+      expect(before.cells).toHaveLength(4);
+      const during = pack(
+        person(1, 0, 3.9, {
+          people: [
+            {
+              ...ordinary,
+              figure: 'umbrella',
+              paint: Paint.blue,
+              canopy: { open: 0.000001, figure, paint: ordinary.paint },
+            },
+          ],
+          candle: true,
+        }),
+      );
+      expect(during.drawn).toBe(1);
+      const uncovered = during.cells.filter((c) => (c.texel[3]! & 15) === Paint.red);
+      expect(uncovered.length).toBeGreaterThan(0);
+      for (const c of uncovered) {
+        expect(c.texel).toEqual(
+          before.cells.find((b) => b.col === c.col && b.row === c.row)!.texel,
+        );
+        expect(figureOf(glyphs[packedGlyph(c.texel)]!)).toMatchObject({ figure });
+      }
+      const canopy = during.cells.filter((c) => (c.texel[3]! & 15) === Paint.blue);
+      expect(canopy.length).toBeGreaterThan(0);
+      for (const c of canopy) expect(sextantGlyphs).toContain(glyphs[packedGlyph(c.texel)]);
+    }
+  });
+
+  it('preserves underlying adult and seated ink where partial canopy cells overlap it', () => {
+    for (const figure of ['adult', 'seated'] as const)
+      for (const scale of [3.9, 5.5, 12])
+        for (const [cellWidth, cellHeight] of [
+          [5, 9],
+          [10, 18],
+          [15, 27],
+        ]) {
+          const ordinary = look({ figure, flap: 1, pose: 'gesture' });
+          const [base, agent] = person(1, 0, scale, { people: [ordinary], candle: true });
+          const g = { ...base, cellWidth: cellWidth!, cellHeight: cellHeight! };
+          const before = pack([g, agent]);
+          const transitioning = {
+            ...agent,
+            people: [
+              {
+                ...ordinary,
+                figure: 'umbrella' as const,
+                paint: Paint.blue,
+                canopy: { open: 0.2, figure, paint: ordinary.paint },
+              },
+            ],
+          };
+          const during = pack([g, transitioning]);
+          const pixels = (texel: number[]) => {
+            const data = new Uint8Array(g.cellWidth * g.cellHeight);
+            expect(
+              drawProcedural(
+                { data, stride: g.cellWidth, x0: 0, y0: 0, w: g.cellWidth, h: g.cellHeight },
+                glyphs[packedGlyph(texel)]!,
+              ),
+            ).toBe(true);
+            return data;
+          };
+          let overlaps = 0;
+          for (const original of before.cells) {
+            const next = during.cells.find((c) => c.col === original.col && c.row === original.row);
+            expect(next).toBeDefined();
+            const previousInk = pixels(original.texel);
+            const currentInk = pixels(next!.texel);
+            for (let i = 0; i < previousInk.length; i++)
+              if (previousInk[i]) expect(currentInk[i]).toBeGreaterThan(0);
+            if ((next!.texel[3]! & 15) === Paint.blue) overlaps++;
+          }
+          expect(overlaps).toBeGreaterThan(0);
+          const owners = new Uint32Array(g.cols * g.rows);
+          const out = new Uint8Array(owners.length * 4);
+          expect(
+            packLife(out, g, [transitioning], themes.dark, glyphIndex, null, undefined, { owners }),
+          ).toBe(1);
+          for (const c of during.cells) expect(owners[c.row * g.cols + c.col]).toBe(1);
+          const denied = during.cells.find((c) => (c.texel[3]! & 15) === Paint.blue)!;
+          expect(
+            packLife(
+              out,
+              { ...g, allowsGroundCell: (_a, c, r) => c !== denied.col || r !== denied.row },
+              [transitioning],
+              themes.dark,
+              glyphIndex,
+              null,
+              undefined,
+              { owners },
+            ),
+          ).toBe(0);
+          expect(out.every((byte) => byte === 0)).toBe(true);
+          expect(owners.every((owner) => owner === 0)).toBe(true);
+        }
+  });
+
+  it('chooses canopy tone from merged sixths without double-counting shared coverage', () => {
+    for (const [open, mask, part] of [
+      [0.2, 7, PersonPart.canopy],
+      [0.05, 3, PersonPart.rib],
+    ] as const) {
+      const packed = pack(
+        person(1, 0, 3.1, {
+          lng: 20.05,
+          lat: 15.05,
+          ahead: [21.05, 15.05],
+          people: [
+            look({
+              figure: 'umbrella',
+              paint: Paint.blue,
+              pose: 'attentive',
+              canopy: { open, figure: 'adult', paint: Paint.red },
+            }),
+          ],
+        }),
+      );
+      const overlap = packed.cells.find((c) => c.col === 20 && c.row === 15)!;
+      expect(glyphs[packedGlyph(overlap.texel)]).toBe(sextantGlyphs[mask]);
+      expect(overlap.texel[3]).toBe(personByte(Paint.blue, part));
+    }
+  });
+
+  it('grows a stamped canopy over the underlying figure and preserves whole-agent rollback', () => {
+    const packs = [0.2, 0.9].map((open) => {
+      const [g, agent] = person(1, 0, 12, {
+        people: [
+          look({
+            figure: 'umbrella',
+            paint: Paint.blue,
+            canopy: { open, figure: 'adult', paint: Paint.red },
+          }),
+        ],
+        candle: true,
+      });
+      const packed = pack([g, agent]);
+      expect(packed.drawn).toBe(1);
+      for (const cell of packed.cells) expect(cell.texel[3]! & CANDLE_BIT).toBe(CANDLE_BIT);
+      const owners = new Uint32Array(g.cols * g.rows);
+      const out = new Uint8Array(owners.length * 4);
+      const denied = packed.cells[0]!;
+      expect(
+        packLife(
+          out,
+          { ...g, allowsGroundCell: (_a, c, r) => c !== denied.col || r !== denied.row },
+          [agent],
+          themes.dark,
+          glyphIndex,
+          null,
+          undefined,
+          { owners },
+        ),
+      ).toBe(0);
+      expect(out.every((byte) => byte === 0)).toBe(true);
+      expect(owners.every((owner) => owner === 0)).toBe(true);
+      return packed;
+    });
+    const part = (texel: number[]) => (texel[3]! >> 4) & 7;
+    const canopyCells = (packed: (typeof packs)[number]) =>
+      packed.cells.filter(
+        (c) => part(c.texel) === PersonPart.canopy || part(c.texel) === PersonPart.rib,
+      );
+    expect(canopyCells(packs[0]!).length).toBeLessThan(canopyCells(packs[1]!).length);
+    expect(new Set(packs[0]!.cells.map((c) => part(c.texel)))).toEqual(
+      new Set([PersonPart.figure, PersonPart.skin, PersonPart.canopy, PersonPart.rib]),
+    );
+    for (const c of packs[0]!.cells) {
+      const paint = c.texel[3]! & 15;
+      expect(paint).toBe(
+        part(c.texel) === PersonPart.canopy || part(c.texel) === PersonPart.rib
+          ? Paint.blue
+          : Paint.red,
+      );
+    }
   });
 
   it('draws static seated people at every size and heading, retaining whole-agent rollback', () => {
