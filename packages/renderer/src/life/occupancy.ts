@@ -85,6 +85,30 @@ export function bodiesOverlap(a: Body, b: Body, gap = 0.15): boolean {
   return overlapDepth(a, b, gap) > 0;
 }
 
+/** Exact linear sweep of a fixed-orientation rectangle; touching edges are allowed. */
+export function sweptBodyOverlap(a: Body, target: Point, b: Body, gap = 0.15): boolean {
+  let enter = 0,
+    leave = 1;
+  for (let i = 0; i < 4; i++) {
+    const p = i < 2 ? a : b;
+    const x = i % 2 ? -p.hy : p.hx,
+      y = i % 2 ? p.hx : p.hy;
+    const radius = reach(a, x, y) + reach(b, x, y) + gap,
+      separation = (a.x - b.x) * x + (a.y - b.y) * y,
+      velocity = (target.x - a.x) * x + (target.y - a.y) * y;
+    if (Math.abs(velocity) < 1e-12) {
+      if (Math.abs(separation) >= radius) return false;
+      continue;
+    }
+    const first = (-radius - separation) / velocity,
+      last = (radius - separation) / velocity;
+    enter = Math.max(enter, Math.min(first, last));
+    leave = Math.min(leave, Math.max(first, last));
+    if (enter >= leave) return false;
+  }
+  return enter < leave;
+}
+
 function overlapDepth(a: Body, b: Body, gap = 0.15): number {
   let depth = Infinity;
   for (let i = 0; i < 4; i++) {

@@ -138,6 +138,7 @@ import {
 import {
   bodyInside,
   bodiesOverlap,
+  sweptBodyOverlap,
   segmentCrossing,
   Occupancy,
   PolygonIndex,
@@ -5628,10 +5629,9 @@ export class LifeWorld {
               y: start.y + direction.hy * decision.clearance,
             },
           ];
-      // Follow the retained visit's bends and full member rotation, rather than
-      // proving only its next straight heading. These are reject-only trials.
+      // Prove the whole retained visit path, including any later return through
+      // the holding area. Linear sweeps avoid sampling long routes at each metre.
       let previous = start,
-        remaining = decision.clearance,
         heading = { hx: moving[0]!.hx, hy: moving[0]!.hy };
       const clear = (point: { x: number; y: number }, hx: number, hy: number) =>
         moving.every((body) => {
@@ -5658,15 +5658,20 @@ export class LifeWorld {
           const bearing = initial + (angle * turn) / 8;
           if (!clear(previous, Math.cos(bearing), Math.sin(bearing))) return false;
         }
-        const travel = Math.min(length, remaining),
-          steps = Math.ceil(travel / 0.2);
-        for (let step = 1; step <= steps; step++) {
-          const distance = (travel * step) / steps;
-          if (!clear({ x: previous.x + hx * distance, y: previous.y + hy * distance }, hx, hy))
-            return false;
+        for (const body of moving) {
+          const sample = {
+            ...body,
+            x: body.x + previous.x - start.x,
+            y: body.y + previous.y - start.y,
+            hx,
+            hy,
+          };
+          const target = {
+            x: body.x + point.x - start.x,
+            y: body.y + point.y - start.y,
+          };
+          if (waiting.some((other) => sweptBodyOverlap(sample, target, other))) return false;
         }
-        remaining -= travel;
-        if (remaining <= 0) break;
         previous = point;
         heading = { hx, hy };
       }

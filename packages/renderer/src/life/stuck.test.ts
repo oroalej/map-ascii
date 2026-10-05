@@ -477,12 +477,12 @@ it('releases a short-path yield after the complete priority footprint passes the
   expect(guard.yielding(yielding)).toBeUndefined();
 });
 
-it('rejects a holding spot on a later bend of the retained return route', () => {
+it.each([3, 12])('rejects a holding spot on a later bend beyond %s metres', (distance) => {
   const { world, life } = fixture(LifeLine.path, 3);
   const priority = mover('person', 70, 1),
     yielding = mover('person', 71.06, -1);
   const start = { x: priority.x, y: priority.y },
-    end = { x: start.x + pm, y: start.y - 3 * pm };
+    end = { x: start.x + pm, y: start.y - distance * pm };
   life.scenes.visits.set(priority, {
     site: {
       ...end,
@@ -513,7 +513,7 @@ it('rejects a holding spot on a later bend of the retained return route', () => 
   guard.contact(life, yielding, { ...yielding, x: yielding.x - 0.02 * pm });
   expect(guard.yielding(yielding)).toBe(priority);
   yielding.x = end.x;
-  yielding.y = start.y - 1.6 * pm;
+  yielding.y = start.y - (distance - 1.4) * pm;
   expect(guard.holding(life, yielding)).toBe(false);
   yielding.x = start.x - 0.5 * pm;
   expect(guard.holding(life, yielding)).toBe(true);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bodiesOverlap,
+  sweptBodyOverlap,
   bodyInside,
   bodyHitsPolygon,
   Occupancy,
@@ -26,6 +27,25 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 
 describe('ground footprints', () => {
+  it('detects an intermediate swept collision with clear endpoints', () => {
+    const moving = box(-10, 0),
+      target = { x: 10, y: 0 },
+      obstacle = box(0, 0);
+    expect(bodiesOverlap(moving, obstacle, 0)).toBe(false);
+    expect(bodiesOverlap({ ...moving, ...target }, obstacle, 0)).toBe(false);
+    expect(sweptBodyOverlap(moving, target, obstacle, 0)).toBe(true);
+    expect(sweptBodyOverlap(moving, target, box(0, 2), 0)).toBe(false);
+    expect(sweptBodyOverlap(moving, target, box(0, 2), 0.15)).toBe(true);
+  });
+  it('intersects time intervals on every rotated separating axis', () => {
+    const moving = { ...box(-6, -6, 6, 1), hx: Math.SQRT1_2, hy: Math.SQRT1_2 },
+      target = { x: 6, y: 6 },
+      obstacle = { ...box(0, 0, 1, 4), hx: -Math.SQRT1_2, hy: Math.SQRT1_2 };
+    expect(sweptBodyOverlap(moving, target, obstacle, 0)).toBe(true);
+    expect(sweptBodyOverlap(moving, target, { ...obstacle, x: 4, y: -4 }, 0)).toBe(false);
+    // Per-axis overlap at different times must not imply simultaneous overlap.
+    expect(sweptBodyOverlap(box(0, 0, 1, 1), { x: 10, y: 10 }, box(2, 8, 1, 1), 0)).toBe(false);
+  });
   it('finds the same first blocker with owner/ignore exclusions without changing occupancy', () => {
     const occupied = new Occupancy(),
       owner = {},
