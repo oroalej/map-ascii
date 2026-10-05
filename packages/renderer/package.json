@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc -p scripts --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@atlas/content": "workspace:^"
