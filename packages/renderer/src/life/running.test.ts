@@ -4,7 +4,7 @@ import { activityLevels, RUN } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { JunctionTable } from './junctions';
 import { exposed, runPace } from './running';
-import { TileLife, type Mover, type Walker } from './simulate';
+import { TileLife, type LifeEnv, type Mover, type Walker } from './simulate';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const perMeter = 1 / metersPerUnit(tile);
@@ -192,6 +192,38 @@ describe('random runners', () => {
     expect(inspected.x).toBe(x);
     expect(life.movers.slice(1).every((m) => (m.run ?? 0) > 0)).toBe(true);
   });
+
+  it.each(['view', 'activity', 'ownership', 'inspection'] as const)(
+    'keeps resumed runs within the cap after a change in %s',
+    (change) => {
+      const frozenCount = change === 'inspection' ? 1 : 2;
+      const life = street(Array.from({ length: frozenCount + RUN.maxPerTile }, () => [adult(0.5)]));
+      streams(life).walkerRng = () => 1;
+      streams(life).runRng = () => 0;
+      const frozen = life.movers.slice(0, frozenCount);
+      for (const m of frozen) Object.assign(m, { rank: 0.6, run: 5 });
+      const env: LifeEnv = { rain: 0 };
+      if (change === 'activity') env.levels = activityLevels(0, { minutes: 22 * 60, weekday: 1 });
+      if (change === 'inspection') env.inspecting = frozen[0];
+      const cutoff = life.movers[frozenCount]!.x;
+      const near = change === 'view' ? (x: number) => x >= cutoff : undefined;
+      const pass =
+        change === 'ownership'
+          ? { junctions: new JunctionTable(), owns: (p: { x: number; y: number }) => p.x >= cutoff }
+          : undefined;
+      life.step(0.1, undefined, undefined, near, env, undefined, pass);
+      expect(frozen.every((m) => m.run === 5)).toBe(true);
+      expect(life.movers.slice(frozenCount).every((m) => (m.run ?? 0) > 0)).toBe(true);
+
+      const walked = life.movers.map((m) => m.walked ?? 0);
+      life.step(0.1, undefined, undefined, undefined, { rain: 0 });
+      expect(life.movers.filter((m) => (m.run ?? 0) > 0)).toHaveLength(RUN.maxPerTile);
+      const boosted = life.movers.filter(
+        (m, i) => (m.walked ?? 0) - walked[i]! >= RUN.speed[0] * 0.1 - 1e-9,
+      );
+      expect(boosted).toHaveLength(RUN.maxPerTile);
+    },
+  );
 
   it('replays exactly for the same seed', () => {
     const a = street(singles(), 9);

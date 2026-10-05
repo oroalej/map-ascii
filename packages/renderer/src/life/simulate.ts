@@ -3153,7 +3153,7 @@ export class TileLife {
           a.i - b.i,
       );
     const rain = env?.rain ?? 0;
-    // Frozen runners retain their timer, but only those stepped here occupy running slots.
+    // Frozen runners retain their timer. On resuming, runs share the cap in stable mover order.
     let running = 0;
     for (const m of this.movers)
       if ((m.run ?? 0) <= 0) continue;
@@ -3164,8 +3164,10 @@ export class TileLife {
         (!shows || shows(m.kind)) &&
         (!near || near(m.x, m.y)) &&
         (!env?.levels || m.rank < env.levels[m.kind])
-      )
-        running++;
+      ) {
+        if (running < RUN.maxPerTile) running++;
+        else this.stopRun(m);
+      }
     for (const { i, m } of order) {
       if (this.inspected === m) continue;
       if (pass?.owns && !pass.owns(m)) continue;
