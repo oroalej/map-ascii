@@ -1426,7 +1426,9 @@ it('checks intermediate occupancy even during terrain inflation escape', () => {
 
 it('admits a physically safe turn with a new inflation-only terrain conflict', () => {
   const { world, life } = fixture(LifeLine.path, 2, false, (b) =>
-    b.area('blocked', rectangle(1000 + 65 * pm, 2048 + 1.05 * pm, 1000 + 75 * pm, 2048 + 3 * pm)),
+    // The square raster footprint fits before rotation, but its diagonal meets
+    // this wall during the turn. Every physical intermediate pose stays clear.
+    b.area('blocked', rectangle(1000 + 65 * pm, 2048 + 1.55 * pm, 1000 + 75 * pm, 2048 + 3 * pm)),
   );
   const before = mover('person', 70, 1),
     next = { ...before, hx: -1, dir: -1 as const };
