@@ -1250,10 +1250,7 @@ export class TileLife {
   private strandedWalk(line: number): boolean {
     const kind = this.geo.kinds[line]!;
     if (kind !== LifeLine.path && kind !== LifeLine.plaza) return false;
-    if (
-      this.lineLength(line) / this.perMeter >= STRANDED_WALK_M &&
-      !this.crossingLine(line)
-    )
+    if (this.lineLength(line) / this.perMeter >= STRANDED_WALK_M && !this.crossingLine(line))
       return false;
     const joined = (atStart: boolean) => {
       const v = atStart ? this.first(line) : this.last(line);
@@ -1692,8 +1689,12 @@ export class TileLife {
     // Traffic keeps right: left turns use the available straight span, while a right
     // turn keeps its shorter approach rather than cutting across the inside curb early.
     const leftTurn = m.kind === 'vehicle' && ix * oy - iy * ox < 0;
-    const spanIn = leftTurn ? this.cornerSpan(inLine, incoming, -inDir, -ix / li, -iy / li, li) : li;
-    const spanOut = leftTurn ? this.cornerSpan(outLine, outgoing, outDir, ox / lo, oy / lo, lo) : lo;
+    const spanIn = leftTurn
+      ? this.cornerSpan(inLine, incoming, -inDir, -ix / li, -iy / li, li)
+      : li;
+    const spanOut = leftTurn
+      ? this.cornerSpan(outLine, outgoing, outDir, ox / lo, oy / lo, lo)
+      : lo;
     const pm = this.perMeter;
     /** A fillet running `before` and `after` its vertex, in tile units. */
     const build = (before: number, after: number) => {
@@ -4472,7 +4473,7 @@ export class TileLife {
             speeds[i]! * dt,
             clock,
           ) / dt;
-        if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
+        if (m.kind === 'person' && speeds[i] > 0 && this.trafficTooClose(m, speeds[i] * dt))
           speeds[i] = 0;
       }
       if (m.vehicle) {
@@ -4518,8 +4519,7 @@ export class TileLife {
       if (walking) {
         delete m.momentFacing;
         // Drift back toward the middle of the path only while walking on.
-        m.avoid =
-          (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
+        m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
       let moved = distance === 0 && m.vehicle && m.v === 0 ? 0 : this.advance(m, distance);
@@ -4583,8 +4583,7 @@ export class TileLife {
           for (const side of [first, -first]) {
             for (const share of [1, 0.25]) {
               const step = (ROAD_AVOID.slope * distance * share) / this.perMeter;
-              const shift =
-                Math.max(minimum, Math.min(maximum, offset + side * step)) - offset;
+              const shift = Math.max(minimum, Math.min(maximum, offset + side * step)) - offset;
               if (Math.abs(shift) < 1e-9) continue;
               Object.assign(m, before);
               m.roadShift = (before.roadShift ?? 0) + shift;

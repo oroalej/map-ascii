@@ -66,8 +66,14 @@ export function laneBend(spec: LaneSpec, terrain: LaneTerrain): Float32Array | u
     y1 = Math.max(y1, y);
   }
   if (!terrain.near(x0 - reach, y0 - reach, x1 + reach, y1 + reach)) return;
-  const segments: { x: number; y: number; hx: number; hy: number; start: number; length: number }[] =
-    [];
+  const segments: {
+    x: number;
+    y: number;
+    hx: number;
+    hy: number;
+    start: number;
+    length: number;
+  }[] = [];
   let total = 0;
   for (let i = 0; i < count - 1; i++) {
     const x = points[i * 2]! / perMeter,
@@ -160,8 +166,8 @@ export function laneBend(spec: LaneSpec, terrain: LaneTerrain): Float32Array | u
     let changed = false;
     for (let i = 0; i < samples; i++) {
       const yaw =
-        ((profile[Math.min(samples - 1, i + 1)]! - profile[Math.max(0, i - 1)]!) /
-          (Math.min(samples - 1, i + 1) - Math.max(0, i - 1) || 1)) /
+        (profile[Math.min(samples - 1, i + 1)]! - profile[Math.max(0, i - 1)]!) /
+        (Math.min(samples - 1, i + 1) - Math.max(0, i - 1) || 1) /
         LANE_BEND.sampleM;
       if (!yaw) continue;
       const s = near(i);
