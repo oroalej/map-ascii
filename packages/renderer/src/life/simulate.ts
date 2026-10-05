@@ -1,6 +1,13 @@
 import type { SimulationSeason } from './seasonal-simulation';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
+import {
+  EmojiObserver,
+  EmojiMemory,
+  type EmojiCue,
+  type EmojiObservation,
+  type EmojiObserverOptions,
+} from './emoji';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -370,6 +377,13 @@ export type LifeEnv = {
   minutes?: number;
   cityLife?: Pick<CityLifeConfig, 'schedules'>;
   season?: string | null;
+  /** Installed, composed observer metadata; schedules remain in cityLife. */
+  emojiSeasons?: readonly SimulationSeason[];
+  /** Observer-only city calendar and same-frame lighting/weather choice. */
+  date?: { epochDay: number; weekday: number; preview: boolean };
+  sunAltitude?: number;
+  windPreset?: 'calm' | 'breeze' | 'gusty' | 'storm';
+  emojiView?: { levels: Activity; crowd: number; bounds?: LngLatBounds };
   levels?: Activity;
   rain: number;
   wind?: { dir: readonly [number, number]; strength: number };
@@ -656,6 +670,7 @@ export class TileLife {
   private readonly sharedRoadVertices = new Set<number>();
   private inspected?: object;
   readonly momentHost: MomentHost;
+  readonly emoji: EmojiObserver;
   private readonly walkerRng: () => number;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
@@ -826,6 +841,7 @@ export class TileLife {
     const preview = this.projectFrom(m, source, options);
     if (!preview || (admit && !admit(preview))) return false;
     if (replace) this.release(replace);
+    this.emoji.adopt(m, source.emoji);
     source.release(m);
     m.line = preview.line;
     m.from = preview.from;
@@ -849,6 +865,7 @@ export class TileLife {
   }
 
   release(m: Mover): void {
+    this.emoji.release(m);
     const index = this.movers.indexOf(m);
     if (index >= 0) this.movers.splice(index, 1);
     this.scenes.release(m);
@@ -999,6 +1016,7 @@ export class TileLife {
     deferred = false,
     momentOptions?: MomentOptions,
     private readonly forageMode: ForageMode = 'standalone',
+    emojiOptions?: EmojiObserverOptions,
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
@@ -1018,6 +1036,7 @@ export class TileLife {
     this.along = new Float64Array(geo.coords.length / 2);
     this.curvable = new Uint8Array(lines);
     this.momentHost = new MomentHost(this, seed, momentOptions);
+    this.emoji = new EmojiObserver(seed, this.perMeter, emojiOptions);
     if (!deferred) complete(this.prepare());
   }
 
@@ -3743,6 +3762,57 @@ export class TileLife {
     this.stepFrame(dt, gustAt, shows, near, env, guard, pass, pedestrians);
   }
 
+  private emojiObservations(
+    env: LifeEnv,
+    near?: (x: number, y: number) => boolean,
+    owns?: (p: { x: number; y: number }) => boolean,
+  ): EmojiObservation[] {
+    const levels = env.emojiView?.levels ?? env.levels;
+    const crowd = env.emojiView?.crowd ?? 1;
+    const visible = viewIn(this.tile, env.emojiView?.bounds, 0);
+    const eligible = (p: { x: number; y: number }) =>
+      inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
+    const observations: EmojiObservation[] = [];
+    for (const m of this.movers) {
+      if (m.train || !['person', 'vehicle', 'dog', 'cat'].includes(m.kind)) continue;
+      const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
+      if (subject === 'person' && !m.group) continue;
+      observations.push({
+        owner: m,
+        mover: m,
+        subject,
+        figure: m.group?.[0]?.figure,
+        eligible:
+          eligible(m) && (!levels || m.rank < levels[m.kind] * crowd) && !this.scenes.hidden(m),
+        speaking: this.momentHost.speaking(m),
+        visit: this.scenes.visits.get(m),
+        held: this.scenes.held(m),
+        passenger: this.scenes.services.get(m)?.passenger,
+        arrival: this.scenes.speechEvents.some((e) => e.kind === 'arrival' && e.mover === m),
+        still: m.pause > 0 || this.scenes.still(m),
+      });
+    }
+    for (const g of this.gatherers)
+      if (g.carabao === undefined)
+        observations.push({
+          owner: g,
+          gatherer: g,
+          subject: 'person',
+          figure: g.walker.figure,
+          eligible: eligible(g) && (!levels || g.rank < levels.places[g.place] * crowd),
+          speaking: this.momentHost.speaking(g),
+        });
+    for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls)
+      observations.push({
+        owner: s,
+        subject: 'person',
+        figure: 'adult',
+        vendor: true,
+        eligible: eligible(s) && s.open !== false && (!levels || s.rank < levels.person * crowd),
+        speaking: this.momentHost.speaking(s),
+      });
+    return observations;
+  }
   private stepFrame(
     dt: number,
     gustAt?: (x: number, y: number) => number,
@@ -3782,6 +3852,15 @@ export class TileLife {
       momentView?.cellWidth ?? 0,
       momentView?.cellAspect ?? DEFAULT_CELLS.aspect,
       this.inspected,
+    );
+    const emojiEnv = env ?? { rain: 0, clock };
+    this.emoji.step(
+      dt,
+      momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
+      emojiEnv,
+      this.emojiObservations(emojiEnv, near, pass?.owns),
+      this.scenes.purchaseCompletions,
+      this.momentHost.voiceCompletions,
     );
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
@@ -4616,6 +4695,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  emoji?: EmojiCue;
   /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
   /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
@@ -4950,6 +5030,7 @@ export class LifeWorld {
       true,
       this.momentOptions,
       'world',
+      { memory: this.emojiMemory, enabled: this.emojiObserver },
     ).prepare();
     if (this.profiler) {
       this.profiler.registerPopulation(entry.key, life.movers);
@@ -5036,6 +5117,15 @@ export class LifeWorld {
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
   private lastRain = 0;
+  readonly emojiMemory = new EmojiMemory();
+  private emojiView?: LifeEnv['emojiView'];
+  setEmojiView(view: Parameters<LifeWorld['visible']>) {
+    this.emojiView = {
+      levels: typeof view[1] === 'number' ? activityLevels(view[1]) : view[1],
+      crowd: view[5] ?? 1,
+      bounds: view[4],
+    };
+  }
 
   /** `traffic`: the city's vehicle mix (its pack's `traffic`), over the default. */
   constructor(
@@ -5043,6 +5133,7 @@ export class LifeWorld {
     private readonly profiler?: FrameProfiler,
     private readonly momentOptions?: MomentOptions,
     itemInspection = false,
+    private readonly emojiObserver = true,
   ) {
     this.traffic = resolveTraffic(traffic);
     if (itemInspection) this.inspection = new LifeInspection();
@@ -5057,6 +5148,10 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    for (const tile of this.tiles.values()) tile.emoji.dispose();
+    for (const { life } of this.retired.values()) life.emoji.dispose();
+    this.emojiMemory.reset();
+    this.emojiView = undefined;
     this.puffPacket = EMPTY_PUFFS;
     this.puffSources.clear();
     this.actorSources.clear();
@@ -5096,6 +5191,7 @@ export class LifeWorld {
       if (this.clock - entry.at >= RETIRE.seconds) {
         this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
+        entry.life.emoji.dispose();
         this.retired.delete(key);
       }
     if (cap)
@@ -5104,6 +5200,7 @@ export class LifeWorld {
         const life = this.retired.get(key)!.life;
         this.forgetBirds(life);
         life.momentHost.clear();
+        life.emoji.dispose();
         this.retired.delete(key);
       }
   }
@@ -5166,6 +5263,7 @@ export class LifeWorld {
               false,
               this.momentOptions,
               'world',
+              { memory: this.emojiMemory, enabled: this.emojiObserver },
             );
           this.retired.delete(key);
           this.tiles.set(key, fresh);
@@ -5185,6 +5283,7 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
+          life.emoji.freeze();
           this.retired.set(key, { life, at: this.clock });
           this.tiles.delete(key);
           changed = true;
@@ -6012,7 +6111,7 @@ export class LifeWorld {
     zoom?: number,
     bounds?: LngLatBounds,
     wind?: LifeEnv['wind'],
-    weather?: { rain: number; minutes?: number; season?: string | null },
+    weather?: Pick<LifeEnv, 'rain' | 'minutes' | 'season' | 'date' | 'sunAltitude' | 'windPreset'>,
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
@@ -6045,6 +6144,8 @@ export class LifeWorld {
       nextSourceId: this.nextSourceId,
       ...weather,
       cityLife: this.cityLife,
+      emojiSeasons: this.seasons,
+      emojiView: this.emojiView,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
     this.junctions.begin(new Set(this.tiles.values()));
@@ -6518,9 +6619,23 @@ export class LifeWorld {
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const push: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
+    const present: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
       ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
       : (_owner, agent) => out.push(agent);
+    const push = (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+      const cue = this.emojiMemory.cue(owner);
+      if (
+        cue &&
+        !agent.speech &&
+        !agent.aboard &&
+        !agent.parked &&
+        !agent.prop &&
+        !agent.consist &&
+        agent.vehicle !== 'carabao'
+      )
+        agent.emoji = cue;
+      return present(owner, agent, birdSpeed);
+    };
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);

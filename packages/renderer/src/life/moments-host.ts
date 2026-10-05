@@ -28,6 +28,17 @@ export class MomentHost {
   get scenes() {
     return this.sceneHost.speech;
   }
+  speaking(owner: object) {
+    return (
+      this.moments.busy(owner) ||
+      this.scenes.busy(owner) ||
+      this.moments.voiceActive(owner) ||
+      this.scenes.voiceActive(owner)
+    );
+  }
+  get voiceCompletions() {
+    return [...this.moments.voiceCompletions, ...this.scenes.voiceCompletions];
+  }
   private inspected?: object;
   private heldPoses: (PersonPose | undefined)[] = [];
   /** Hold only the selected person's gesture; exchanges and other participants continue. */
