@@ -296,6 +296,75 @@ it('trims only crown intersections and keeps both outside ends, with stable defa
     'no light-string geometry',
   );
 });
+it('keeps unique clipped IDs for centimeter survivors before a perimeter corner', () => {
+  const meters = (x: number, y: number): SeasonalPoint => [x / 111320, y / 111320];
+  const ground: AtlasFeature = {
+    ...area,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          meters(0.0035, 0),
+          meters(20.0035, 0),
+          meters(20.0035, 20),
+          meters(0.0035, 20),
+          meters(0.0035, 0),
+        ],
+      ],
+    },
+  };
+  const config = Season.parse({
+    ...season,
+    installations: [
+      {
+        ...shared,
+        id: 'perimeter',
+        kind: 'light-string',
+        layout: 'perimeter',
+        spacing_m: 3,
+        exclude_tree_crowns: true,
+      },
+    ],
+  });
+  const uncut = generateSeasonalInstallations([ground], [config]);
+  const span = uncut.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      r.from[1] === r.to[1] &&
+      r.from[0] < r.to[0] &&
+      r.to[0] * 111320 > 18,
+  );
+  if (!span || span.kind !== 'light-string') throw new Error('expected corner span');
+  const next = uncut.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      Math.hypot(r.from[0] - span.to[0], r.from[1] - span.to[1]) * 111320 < 1e-8,
+  );
+  if (!next) throw new Error('expected next perimeter segment');
+  const crownExit: SeasonalPoint = [span.to[0] - 0.01005 / 111320, span.to[1]];
+  expect(`season:winter/perimeter/${crownExit[0].toFixed(7)}/${crownExit[1].toFixed(7)}`).toBe(
+    next.id,
+  );
+  const tree: AtlasFeature = {
+    ...features[3]!,
+    properties: { id: 'osm:node/2', class: 'tree', crown: 4 },
+    geometry: { type: 'Point', coordinates: [crownExit[0] - 2 / 111320, crownExit[1]] },
+  };
+  const result = generateSeasonalInstallations([ground, tree], [config]);
+  expect(new Set(result.records.map((r) => r.id)).size).toBe(result.records.length);
+  expect(generateSeasonalInstallations([tree, ground], [config])).toEqual(result);
+  for (const untouched of uncut.records)
+    if (untouched !== span)
+      expect(result.records.find((r) => r.id === untouched.id)).toEqual(untouched);
+  const survivor = result.records.find(
+    (r) =>
+      r.kind === 'light-string' &&
+      Math.abs(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) * 111320 - 0.01005) < 1e-6,
+  );
+  expect(survivor).toBeDefined();
+  expect(survivor?.id).not.toBe(next.id);
+});
+
 it('keeps deterministic tree footprints away from paths, monuments and each other; retains mapped crowns', () => {
   const a = generateSeasonalInstallations(features, [season]);
   expect(generateSeasonalInstallations([...features].reverse(), [season])).toEqual(a);

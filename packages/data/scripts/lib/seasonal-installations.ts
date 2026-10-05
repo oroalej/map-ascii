@@ -67,14 +67,14 @@ function outsideCrowns(a: Point, b: Point, crowns: readonly { at: Point; radius:
     if (from < to) intervals.push([from, to]);
   }
   intervals.sort((left, right) => left[0] - right[0]);
-  const spans: [Point, Point][] = [];
+  const spans: { start: Point; end: Point; clipped: boolean }[] = [];
   const at = (t: number): Point => [a[0] + dx * t, a[1] + dy * t];
   let cursor = 0;
   for (const [from, to] of intervals) {
-    if (from > cursor) spans.push([at(cursor), at(from)]);
+    if (from > cursor) spans.push({ start: at(cursor), end: at(from), clipped: true });
     cursor = Math.max(cursor, to);
   }
-  if (cursor < 1) spans.push([at(cursor), at(1)]);
+  if (cursor < 1) spans.push({ start: at(cursor), end: at(1), clipped: cursor !== 0 });
   return spans;
 }
 
@@ -478,13 +478,17 @@ export function generateSeasonalInstallations(
           )
             return;
           if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 2) return;
-          for (const [start, end] of outsideCrowns(a, b, crowns)) {
+          for (const { start, end, clipped } of outsideCrowns(a, b, crowns)) {
             // Preserve short surviving pieces of a clipped row instead of dropping its ends.
             if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.01) continue;
             const from = unproject(start),
               to = unproject(end);
             records.push({
-              ...base(`${from[0].toFixed(7)}/${from[1].toFixed(7)}`),
+              ...base(
+                clipped
+                  ? `clipped/${from.join('/')}/${to.join('/')}`
+                  : `${from[0].toFixed(7)}/${from[1].toFixed(7)}`,
+              ),
               kind: 'light-string',
               from,
               to,

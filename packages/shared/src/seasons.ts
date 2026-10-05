@@ -134,6 +134,14 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
   };
 }
 
+/** Keep authored installations first, followed by each included list in reference order. */
+export function composeSeasonInstallations<T>(
+  own: readonly T[] | undefined,
+  included: readonly (readonly T[] | undefined)[],
+): T[] {
+  return [...(own ?? []), ...included.flatMap((list) => list ?? [])];
+}
+
 /** Expand the validated, one-level decoration references once, before identity-based caches. */
 export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeSeasonConfig[] {
   const byId = new Map(seasons.map((season) => [season.id, season]));
@@ -146,10 +154,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
     const buntingSeason = season.bunting ? season : included.find((s) => s.bunting);
     const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
     const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
-    const installations = [
-      ...(season.installations ?? []),
-      ...included.flatMap((s) => s.installations ?? []),
-    ];
+    const installations = composeSeasonInstallations(
+      season.installations,
+      included.map((s) => s.installations),
+    );
     return {
       ...season,
       ...(lanterns && { lanterns }),

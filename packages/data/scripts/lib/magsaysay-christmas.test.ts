@@ -122,6 +122,50 @@ it('retains yard strings outside the roadside crown, with crown wraps and unchan
   ).toEqual(strings);
 });
 
+it('keeps yard strings in their grounds, orange access clear and yellow patches dense', () => {
+  const result = generateSeasonalInstallations(features, [config]);
+  const red = polygon([reference.red]),
+    yellow = polygon([reference.yellow]);
+  const house = features.find((f) => f.properties.id === anchor)!;
+  if (house.geometry.type !== 'Polygon') throw new Error('expected complete house');
+  const roof = polygon(house.geometry.coordinates);
+  for (const record of result.records) {
+    if (record.kind !== 'light-string' || record.mount === 'building') continue;
+    const installation = config.installations.find((i) => i.id === record.installation)!;
+    const ground = polygon([config.grounds.find((g) => g.id === installation.grounds)!.ring]);
+    for (let n = 0; n <= 100; n++) {
+      const point: SeasonalPoint = [
+        record.from[0] + ((record.to[0] - record.from[0]) * n) / 100,
+        record.from[1] + ((record.to[1] - record.from[1]) * n) / 100,
+      ];
+      expect(booleanPointInPolygon(point, ground)).toBe(true);
+      expect(booleanPointInPolygon(point, roof)).toBe(false);
+      if (['magsaysay-orange-garlands', 'magsaysay-orange-border'].includes(installation.id)) {
+        expect(booleanPointInPolygon(point, red)).toBe(true);
+        expect(booleanPointInPolygon(point, yellow)).toBe(false);
+      }
+    }
+  }
+  expect(config.installations.find((i) => i.id === 'magsaysay-orange-garlands')).toMatchObject({
+    layout: 'canopy',
+    mount: 'canopy',
+    spacing_m: 0.9,
+  });
+  for (const patch of ['west', 'middle', 'east']) {
+    const id = `magsaysay-yellow-${patch}-lights`;
+    expect(config.installations.find((i) => i.id === id)).toMatchObject({
+      kind: 'light-string',
+      spacing_m: 0.75,
+      bulb_spacing_m: 0.3,
+      palette: 'christmas',
+      mount: 'canopy',
+    });
+    expect(
+      result.records.filter((r) => r.kind === 'light-string' && r.installation === id).length,
+    ).toBeGreaterThanOrEqual(3);
+  }
+});
+
 it('preserves both Christmas tree identities, footprints and exact positions', () => {
   const result = generateSeasonalInstallations(features, [config]);
   const trees = result.records.filter((r) => r.kind === 'christmas-tree');

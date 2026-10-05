@@ -20,6 +20,7 @@ import {
   FIREWORK_VARIANTS,
   validMonthDay,
   runtimeSeason,
+  composeSeasonInstallations,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
@@ -1269,7 +1270,7 @@ export const CityLife = z.strictObject({
       for (const [index, season] of seasons.entries()) {
         if (!season.includes) continue;
         const seen = new Set<string>();
-        const installations = [...(season.installations ?? [])];
+        const includedInstallations: (typeof season.installations)[] = [];
         for (const [includeIndex, id] of season.includes.entries()) {
           const included = byId.get(id);
           const message = !included
@@ -1287,9 +1288,13 @@ export const CityLife = z.strictObject({
               path: [index, 'includes', includeIndex],
               message,
             });
-          else if (included) installations.push(...(included.installations ?? []));
+          else if (included) includedInstallations.push(included.installations);
           seen.add(id);
         }
+        const installations = composeSeasonInstallations(
+          season.installations,
+          includedInstallations,
+        );
         if (new Set(installations.map((i) => i.id)).size !== installations.length)
           ctx.addIssue({
             code: 'custom',
