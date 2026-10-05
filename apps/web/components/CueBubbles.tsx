@@ -123,7 +123,7 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
         records,
         { width: window.innerWidth, height: window.innerHeight },
         obstacles,
-        atlas.getLabelObstacles?.() ?? [],
+        moods.length ? (atlas.getLabelObstacles?.() ?? []) : [],
         origin,
       );
       for (const cue of records) {
@@ -136,24 +136,41 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
         entry.node.dataset.below = String(box.below);
       }
     };
+    let drawFrame: number | undefined;
+    const scheduleDraw = () => {
+      if (drawFrame !== undefined) return;
+      drawFrame = window.requestAnimationFrame(() => {
+        drawFrame = undefined;
+        draw();
+      });
+    };
+    const drawNow = () => {
+      if (drawFrame !== undefined) window.cancelAnimationFrame(drawFrame);
+      drawFrame = undefined;
+      draw();
+    };
     const off = atlas.on('speechchange', (next) => {
       cues = next;
-      draw();
+      // Empty channels clear immediately on camera/lifecycle invalidation.
+      if (next.length) scheduleDraw();
+      else drawNow();
     });
     const offEmoji = atlas.on('emojichange', (next) => {
       emojiCues = next;
-      draw();
+      if (next.length) scheduleDraw();
+      else drawNow();
     });
-    const offEmojiPrefs = useEmojiStore.subscribe(draw);
-    const offPrefs = useSpeechStore.subscribe(draw);
+    const offEmojiPrefs = useEmojiStore.subscribe(drawNow);
+    const offPrefs = useSpeechStore.subscribe(drawNow);
     // A panel can open while stationary speakers emit no changed anchors.
-    const layoutTimer = window.setInterval(draw, 200);
+    const layoutTimer = window.setInterval(scheduleDraw, 200);
     const resize = () => {
       lastMeasure = -Infinity;
-      draw();
+      scheduleDraw();
     };
     window.addEventListener('resize', resize);
     return () => {
+      if (drawFrame !== undefined) window.cancelAnimationFrame(drawFrame);
       off();
       offPrefs();
       offEmoji();

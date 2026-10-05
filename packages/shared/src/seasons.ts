@@ -220,7 +220,7 @@ export function validMonthDay({ month, day }: MonthDay): boolean {
     day <= new Date(Date.UTC(2000, month, 0)).getUTCDate()
   );
 }
-function occurrence(year: number, date: MonthDay): number | undefined {
+export function occurrence(year: number, date: MonthDay): number | undefined {
   const day = epochDay(year, date.month, date.day);
   return new Date(day * 86_400_000).getUTCMonth() + 1 === date.month ? day : undefined;
 }

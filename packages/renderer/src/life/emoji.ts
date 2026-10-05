@@ -23,7 +23,13 @@ export const EMOJI = {
   pairReach: 3,
   hours: { night: [1320, 390], coffee: [330, 540], hot: [660, 870] },
 } as const;
-export type EmojiCue = { id: string; subject: EmojiSubject; mood: EmojiMood; pair?: string };
+export type EmojiCue = {
+  id: string;
+  subject: EmojiSubject;
+  mood: EmojiMood;
+  pair?: string;
+  order?: 0 | 1;
+};
 export type Temperament = 'neutral' | 'cheerful' | 'grumpy' | 'sleepy';
 export const TEMPERAMENT: Record<
   Temperament,
@@ -159,6 +165,16 @@ export function ambientPool(
     weight: p.weight * (t.up.includes(p.mood) ? 2 : t.down.includes(p.mood) ? 0.5 : 1),
   }));
 }
+// Only sampled event conditions use this mask; ambient moods remain weighted entries.
+const CONDITIONS = {
+  angry: 1 << 0,
+  impatient: 1 << 1,
+  sleeping: 1 << 2,
+  sleepy: 1 << 3,
+  happy: 1 << 4,
+  bored: 1 << 5,
+} as const;
+const CONDITION_MOODS = Object.keys(CONDITIONS) as (keyof typeof CONDITIONS)[];
 type Track = {
   cooldownUntil: number;
   attemptAt?: number;
@@ -177,7 +193,7 @@ type Track = {
   grooming: boolean;
   lying: boolean;
   paused: boolean;
-  triggers: Set<EmojiMood>;
+  triggers: number;
   edges: Set<EmojiMood>;
   replies: Map<EmojiMood, object>;
   seen: WeakSet<object>;
@@ -220,7 +236,7 @@ export class EmojiMemory {
         grooming: false,
         lying: false,
         paused: false,
-        triggers: new Set(),
+        triggers: 0,
         edges: new Set(),
         replies: new Map(),
         seen: new WeakSet(),
@@ -273,6 +289,9 @@ export class EmojiObserver {
   cue(owner: object) {
     return this.memory.cue(owner);
   }
+  observes(zoom: number) {
+    return this.enabled && zoom >= EMOJI_ZOOM;
+  }
   get size() {
     return this.groups.size;
   }
@@ -296,7 +315,7 @@ export class EmojiObserver {
     }
     const t = this.memory.get(owner);
     if (!t) return;
-    t.epoch = this.epoch;
+    t.epoch = t.epoch === source.epoch ? this.epoch : -1;
     const g = t.group;
     if (!g || g.index === this) return;
     if (this.size >= EMOJI.capacity) {
@@ -341,13 +360,19 @@ export class EmojiObserver {
     const members: Episode[] = [
       {
         owner: o.owner,
-        cue: { id: this.memory.id(), subject: o.subject, mood, ...(pair && { pair }) },
+        cue: { id: this.memory.id(), subject: o.subject, mood, order: 0, ...(pair && { pair }) },
       },
     ];
     if (partner)
       members.push({
         owner: partner.owner,
-        cue: { id: this.memory.id(), subject: partner.subject, mood: replyMood ?? 'happy', pair },
+        cue: {
+          id: this.memory.id(),
+          subject: partner.subject,
+          mood: replyMood ?? 'happy',
+          pair,
+          order: 1,
+        },
       });
     const g: Group = {
       index: this,
@@ -371,7 +396,7 @@ export class EmojiObserver {
     completions: readonly { token: object; owners: readonly object[] }[] = [],
   ) {
     this.clock = env.clock ?? this.clock + dt;
-    if (!this.enabled || zoom < EMOJI_ZOOM) {
+    if (!this.observes(zoom)) {
       this.dispose();
       this.freeze();
       return;
@@ -417,7 +442,8 @@ export class EmojiObserver {
         // Bias the one initial opportunity toward the early part of its 2–12 s window.
         // Slow rendering must not require most owners to wait near the upper bound.
         const delay = t.rng();
-        t.attemptAt = this.clock + 2 + delay * delay * 10;
+        const [lo, hi] = EMOJI.firstAttempt;
+        t.attemptAt = this.clock + lo + delay * delay * (hi - lo);
       }
       const m = o.mover;
       const resting =
@@ -436,37 +462,38 @@ export class EmojiObserver {
         t.visit.state === 'wait'
           ? t.wait + dt
           : 0;
-      const conditions: EmojiMood[] = [];
+      let conditions = 0;
       if (o.subject === 'driver') {
-        if ((m?.waiting ?? 0) >= 6 || t.stop + 1e-8 >= 25) conditions.push('angry');
-        if ((m?.waiting ?? 0) >= 2) conditions.push('impatient');
+        if ((m?.waiting ?? 0) >= 6 || t.stop + 1e-8 >= 25) conditions |= CONDITIONS.angry;
+        if ((m?.waiting ?? 0) >= 2) conditions |= CONDITIONS.impatient;
         if (!gap && o.passenger && o.passenger !== t.passenger) {
           t.edges.add('happy');
           t.replies.set('happy', o.passenger);
         }
-        if (t.stop + 1e-8 >= 8 && !o.held) conditions.push('bored');
+        if (t.stop + 1e-8 >= 8 && !o.held) conditions |= CONDITIONS.bored;
       } else if (o.subject === 'dog' || o.subject === 'cat') {
-        if (o.subject === 'dog' && (m?.waiting ?? 0) >= 1.5) conditions.push('angry');
-        if (t.rest + 1e-8 >= (night ? 10 : 20)) conditions.push('sleeping');
+        if (o.subject === 'dog' && (m?.waiting ?? 0) >= 1.5) conditions |= CONDITIONS.angry;
+        if (t.rest + 1e-8 >= (night ? 10 : 20)) conditions |= CONDITIONS.sleeping;
         if (
           night &&
           ((!t.lying && m?.lying) || (o.subject === 'cat' && !t.paused && (m?.pause ?? 0) > 0))
         )
-          conditions.push('sleepy');
+          conditions |= CONDITIONS.sleepy;
         if (
           ((m?.trot ?? 0) > 0 && !t.trot) ||
           (!!m?.grooming && !t.grooming) ||
           (o.visit?.state === 'rest' && t.visit?.state !== 'rest')
         )
-          conditions.push('happy');
+          conditions |= CONDITIONS.happy;
       } else if (!o.vendor) {
-        if (t.wait + 1e-8 >= 12 || (m?.waiting ?? 0) >= 3) conditions.push('impatient');
+        if (t.wait + 1e-8 >= 12 || (m?.waiting ?? 0) >= 3) conditions |= CONDITIONS.impatient;
         if (!gap && o.visit?.state === 'shelter' && t.visit?.state !== 'shelter' && env.rain >= 0.5)
           t.edges.add('rained');
         if (!gap && o.arrival && o.visit?.state === 'wait') t.edges.add('happy');
       }
-      if (!gap) for (const mood of conditions) if (!t.triggers.has(mood)) t.edges.add(mood);
-      t.triggers = new Set(conditions);
+      const edges = conditions & ~t.triggers;
+      if (!gap) for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
+      t.triggers = conditions;
       t.resting = resting;
       t.stopped = stopped;
       t.cruising = cruising;
@@ -475,12 +502,18 @@ export class EmojiObserver {
       t.lying = !!m?.lying;
       t.paused = (m?.pause ?? 0) > 0;
       t.passenger = o.passenger;
-      t.visit = o.visit && {
-        identity: o.visit,
-        state: o.visit.state,
-        time: o.visit.time,
-        stall: o.visit.site.stall,
-      };
+      if (o.visit) {
+        t.visit ??= {
+          identity: o.visit,
+          state: o.visit.state,
+          time: o.visit.time,
+          stall: o.visit.site.stall,
+        };
+        t.visit.identity = o.visit;
+        t.visit.state = o.visit.state;
+        t.visit.time = o.visit.time;
+        t.visit.stall = o.visit.site.stall;
+      } else t.visit = undefined;
       if (!gap) {
         for (const p of purchases)
           if (p.mover === o.owner && !t.seen.has(p.key)) {
@@ -572,11 +605,12 @@ export class EmojiObserver {
       }
       t.edges.clear();
       t.replies.clear();
-      for (let i = 0; i < t.followups.length; i++) {
-        const adjustment = this.chance(o, 'playful') / EMOJI.chance;
-        if (t.rng() < 0.25 * adjustment)
-          this.admit(o, t.rng() < 0.5 ? 'playful' : 'thumbs', observations);
-      }
+      if (!o.vendor)
+        for (let i = 0; i < t.followups.length; i++) {
+          const adjustment = this.chance(o, 'playful') / EMOJI.chance;
+          if (t.rng() < 0.25 * adjustment)
+            this.admit(o, t.rng() < 0.5 ? 'playful' : 'thumbs', observations);
+        }
       t.followups.length = 0;
       if (!o.eligible || t.attemptAt === undefined || this.clock + 1e-8 < t.attemptAt) continue;
       t.attemptAt = this.clock + EMOJI.ambientWindow;

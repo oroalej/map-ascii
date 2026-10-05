@@ -19,7 +19,7 @@ import {
 import {
   FIREWORK_VARIANTS,
   validMonthDay,
-  epochDay,
+  occurrence,
   seasonContains,
   composeSeasonInstallations,
   type FireworksConfig,
@@ -1259,8 +1259,8 @@ export const Season = z
     for (const [index, entry] of (season.emoji ?? []).entries())
       for (const date of entry.days ?? [])
         for (let year = 2000; year < 2400; year++) {
-          const day = epochDay(year, date.month, date.day);
-          if (new Date(day * 86_400_000).getUTCMonth() + 1 !== date.month) continue;
+          const day = occurrence(year, date);
+          if (day === undefined) continue;
           if (!seasonContains(season.window, year, day)) {
             ctx.addIssue({
               code: 'custom',

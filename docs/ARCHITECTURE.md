@@ -97,7 +97,7 @@ atlas.getSeason(): SeasonState | null;               // immutable resolved calen
 atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
 atlas.on('camerachange' | 'hover' | 'lifehover' | 'click' | 'flyend' | 'input'
-  | 'classeschange' | 'labelschange' | 'fixtureschange' | 'seasonchange' | 'speechchange' | 'contextlost' | 'contextrestored', handler);
+  | 'classeschange' | 'labelschange' | 'fixtureschange' | 'seasonchange' | 'speechchange' | 'emojichange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { epochDay } from '@atlas/shared';
 import {
   EmojiObserver,
@@ -14,6 +14,7 @@ import { LifeWorld, TileLife, type LifeEnv } from './simulate';
 import { completeScenarioState } from './testing/scenarios';
 import type { Gatherer, Stall } from './simulate';
 import type { Visit } from './interactions';
+import { SceneSpeech } from './scene-speech';
 
 function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = () => 0) {
   const entry = continuityTile(left);
@@ -38,6 +39,49 @@ function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = ()
   return { observer, o, m, tile, step };
 }
 describe('read-only emoji observer', () => {
+  it.each([
+    [0, 2],
+    [0.5, 4.5],
+    [0.999, 11.98001],
+  ])(
+    'schedules the first sample %s within the initial window at %s seconds',
+    (sample, deadline) => {
+      let rolls = 0;
+      const f = fixture('person', () => (rolls++ === 0 ? sample : 0));
+      f.step(0);
+      const track = f.observer.memory.get(f.m)!;
+      expect(track.attemptAt).toBeCloseTo(deadline, 5);
+      expect(track.attemptAt).toBeGreaterThanOrEqual(2);
+      expect(track.attemptAt).toBeLessThan(12);
+      f.step(1.999);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      f.step(12 - 1.999);
+      expect(f.observer.cue(f.m)).toBeDefined();
+      expect(track.attemptAt).toBe(72);
+    },
+  );
+  it.each([
+    [17, true],
+    [19, false],
+  ] as const)('skips observation inputs at z%s with internal enablement=%s', (zoom, enabled) => {
+    const world = new LifeWorld(undefined, undefined, undefined, false, enabled);
+    const entry = continuityTile(left);
+    world.sync([entry]);
+    world.setEmojiView([zoom, 1, [0, 0]]);
+    const tile = world.resident(entry.key)!;
+    expect(tile.movers.length).toBeGreaterThan(0);
+    const speaking = vi.spyOn(tile.momentHost, 'speaking');
+    world.step(0.1, undefined, zoom);
+    expect(speaking).not.toHaveBeenCalled();
+    speaking.mockRestore();
+    if (enabled) {
+      world.setEmojiView([19, 1, [0, 0]]);
+      const resumed = vi.spyOn(tile.momentHost, 'speaking');
+      world.step(0.1, undefined, 19);
+      expect(resumed).toHaveBeenCalled();
+      resumed.mockRestore();
+    }
+  });
   it('latches purchase, shelter and arrival edges between evaluation ticks and ignores canceled purchases', () => {
     const f = fixture(),
       stall: Stall = {
@@ -93,6 +137,40 @@ describe('read-only emoji observer', () => {
     expect(f.observer.groups.size).toBe(0);
     expect(f.observer.cue(f.m)).toBeUndefined();
   });
+  it.each(['off-view', 'frozen'] as const)(
+    'rebaselines a %s donor after transfer without replaying elapsed state or overdue opportunities',
+    (gap) => {
+      const f = fixture('vehicle');
+      f.m.v = 0;
+      f.step(0);
+      f.step(20);
+      const track = f.observer.memory.get(f.m)!;
+      track.attemptAt = 21;
+      const cooldown = track.cooldownUntil;
+      if (gap === 'off-view') {
+        f.o.eligible = false;
+        f.step(0.5);
+        f.o.eligible = true;
+      } else f.observer.freeze();
+      const destination = new EmojiObserver(456, f.tile.perMeter, {
+        memory: f.observer.memory,
+        rng: () => 0,
+      });
+      destination.adopt(f.m, f.observer);
+      const passenger = fixture().m;
+      f.o.passenger = passenger;
+      destination.step(0.5, 19, { rain: 0, clock: 100 }, [f.o]);
+      expect(destination.memory.get(f.m)).toBe(track);
+      expect(track.stop).toBe(0);
+      expect(track.cooldownUntil).toBe(cooldown);
+      expect(track.attemptAt).toBe(160);
+      expect(destination.cue(f.m)).toBeUndefined();
+      for (let clock = 100.5; clock <= 105; clock += 0.5)
+        destination.step(0.5, 19, { rain: 0, clock }, [f.o]);
+      expect(destination.cue(f.m)).toBeUndefined();
+      expect(track.passenger).toBe(passenger);
+    },
+  );
   it.each([false, true])(
     'uses one isolated first opportunity with the specified ambient rate (seasonal=%s)',
     (seasonal) => {
@@ -262,6 +340,61 @@ describe('read-only emoji observer', () => {
     expect(f.observer.cue(f.m)).toBeUndefined();
     f.observer.step(0.5, 19, { rain: 0, clock: 1.5 }, [f.o], [], [{ token: {}, owners: [f.m] }]);
     expect(f.observer.cue(f.m)?.mood).toBe('playful');
+  });
+  it('follows a normally voiced purchase for the buyer without a solo vendor reaction', () => {
+    const f = fixture();
+    const stall: Stall = {
+      x: f.m.x + f.tile.perMeter,
+      y: f.m.y,
+      hx: 1,
+      hy: 0,
+      paint: 0,
+      shirt: 0,
+      side: 1,
+      rank: 0,
+    };
+    const vendor: EmojiObservation = {
+      owner: stall,
+      subject: 'person',
+      figure: 'adult',
+      vendor: true,
+      eligible: true,
+      speaking: false,
+    };
+    f.step(0.1, {}, [f.o, vendor]);
+    const scenes = new SceneSpeech(1, [
+      {
+        id: 'order',
+        kind: 'talk',
+        profile: 'vendor-order',
+        turns: 2,
+        speakers: [0, 1],
+      },
+    ]);
+    expect(
+      scenes.admit(
+        {
+          key: {},
+          speakers: [
+            { owner: f.m, member: 0, figure: 'adult' },
+            { owner: stall, member: 0, figure: 'adult' },
+          ],
+          profiles: ['vendor-order'],
+          context: { minutes: 720, rain: 0, wind: 0, figures: [] },
+          remaining: 3,
+          valid: () => true,
+        },
+        12,
+      ),
+    ).toBe(true);
+    expect(scenes.voiceActive(stall)).toBe(true);
+    scenes.step(1.5, true);
+    scenes.step(1.5, true);
+    expect(scenes.voiceCompletions).toHaveLength(1);
+    f.observer.step(3, 19, { rain: 0, clock: 3.1 }, [f.o, vendor], [], scenes.voiceCompletions);
+    expect(f.observer.cue(f.m)?.mood).toBe('playful');
+    expect(f.observer.cue(stall)).toBeUndefined();
+    expect(f.observer.memory.get(stall)!.followups).toHaveLength(0);
   });
   it('produces a first ambient pop in a fixed seeded 30-owner fixture', () => {
     const f = fixture();

@@ -16,6 +16,7 @@ export type CueConfig<C> = {
   requiresSpeakers(agent: VisibleAgent, cue: C): boolean;
   displayed: readonly [number, number];
   group?(cue: C): string | undefined;
+  order?(this: void, cue: C): number;
   spread?: number;
   kind: 'speech' | 'emoji';
 };
@@ -143,11 +144,10 @@ export class CueController<C extends { id: string }> {
           }).length === 2)
       );
     });
-    for (const group of groups)
-      if (group.length > 1)
-        group.sort(
-          (a, b) => Number(a.cue.id.split(':').at(-1)) - Number(b.cue.id.split(':').at(-1)),
-        );
+    const order = this.config.order;
+    if (order)
+      for (const group of groups)
+        if (group.length > 1) group.sort((a, b) => order(a.cue) - order(b.cue));
     groups.sort(
       (a, b) => distance(a[0]!) - distance(b[0]!) || a[0]!.cue.id.localeCompare(b[0]!.cue.id),
     );
@@ -232,12 +232,12 @@ export class CueController<C extends { id: string }> {
         ),
       );
     if (!scheduled.length) return;
-    const candidate =
-      candidates.find((c) => c.key === this.continuation && due(c)) ??
-      scheduled[this.cursor++ % scheduled.length]!;
+    const continuation = candidates.find((c) => c.key === this.continuation && due(c));
+    const candidate = continuation ?? scheduled[this.cursor % scheduled.length]!;
     if (!this.ready.has(candidate.key)) this.ready.set(candidate.key, now);
     const release = this.arbiter?.acquire(this.config.kind, now);
     if (this.arbiter && !release) return;
+    if (!continuation) this.cursor++;
     if (candidate === spare) this.spareCursor++;
     const serial = ++this.serial;
     // A slow frame can spend most of the watchdog interval drawing before this request.

@@ -4,7 +4,7 @@
  * always matches the map; nothing in it is written by hand except the class names
  * (`CLASS_LABELS`).
  */
-import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
+import { bandVisibility, CLASS_ZOOM, EMOJI_ZOOM, type AtlasClass } from '@atlas/shared';
 import { ROAD_AREA_ZOOM } from './glyphs/select';
 import type { LegendFocus, LifeFocus } from './focus';
 import {
@@ -324,7 +324,7 @@ export function legendEntries(
       glyphs: '◊ ( )',
       color: css(theme.styles.water_river?.color ?? theme.label),
     });
-  if (life && emoji && zoom >= 18) {
+  if (life && emoji && zoom >= EMOJI_ZOOM) {
     const pets = entries.findIndex((e) => e.id === 'life:pets');
     entries.splice(pets + 1, 0, {
       id: 'info:emoji',

@@ -129,7 +129,8 @@ it('preserves complete mixed-world and speech state through real pairs, seasons 
         () => 0,
       );
   }
-  let paired = false;
+  let paired = false,
+    spoke = false;
   for (let frame = 0; frame < 120; frame++) {
     for (const world of [a, b]) {
       if (frame === 40) world.sync([]);
@@ -147,10 +148,16 @@ it('preserves complete mixed-world and speech state through real pairs, seasons 
     }
     const current = a.resident(entry.key);
     paired ||= !!current?.movers.some((m) => a.emojiMemory.cue(m)?.pair);
+    if (current)
+      spoke ||= [...current.movers, ...current.gatherers, ...current.stalls].some(
+        (owner) =>
+          !!(current.momentHost.moments.speech(owner) || current.momentHost.scenes.speech(owner)),
+      );
     if (frame % 15 === 0 || frame === 119) {
       expect(completeScenarioState(a)).toEqual(completeScenarioState(b));
       if (current) expect(speechState(current)).toEqual(speechState(b.resident(entry.key)!));
     }
   }
   expect(paired).toBe(true);
+  expect(spoke).toBe(true);
 });

@@ -14,6 +14,7 @@ function fixture(agents: VisibleAgent[], width = 800) {
     retire?: () => void;
     at: number;
     slot: number;
+    rect: ReadRect;
   }[] = [];
   const reads = {
     get size() {
@@ -22,10 +23,10 @@ function fixture(agents: VisibleAgent[], width = 800) {
     request: (
       _f: WebGLFramebuffer,
       _a: number,
-      _r: ReadRect,
+      rect: ReadRect,
       done: (b: Uint8Array) => void,
       retire?: () => void,
-    ) => queue.push({ done, retire, at: now, slot: queue.length % 3 }),
+    ) => queue.push({ done, retire, at: now, slot: queue.length % 3, rect }),
   };
   const frame: SpeechFrame = {
     targets: { cols: 80, rows: 60, glyphFbo: {}, sub: { fbo: {} } as never },
@@ -96,6 +97,55 @@ const dog = (id: string, x: number, y = 30, pair?: string): VisibleAgent => ({
   emoji: { id, subject: 'dog', mood: 'happy', pair },
 });
 describe('production cue wrappers', () => {
+  it('uses explicit leader order with nonnumeric IDs even when the reply is closer to center', () => {
+    const leader = dog('leader', 10, 30, 'pair');
+    const reply = dog('reply', 40, 30, 'pair');
+    leader.emoji!.order = 0;
+    reply.emoji!.order = 1;
+    const pair = fixture([reply, leader], 600);
+    pair.tick(0);
+    expect(pair.queue[0]!.rect.x).toBe(10);
+    pair.tick(20);
+    pair.tick(40);
+    expect(pair.emojiEvents.at(-1)?.map((cue) => cue.id)).toEqual(['leader', 'reply']);
+    const ranked = fixture([reply, leader, dog('solo', 30)], 600);
+    for (let time = 0; time <= 600; time += 20) ranked.tick(time);
+    expect(ranked.emojiEvents.at(-1)?.map((cue) => cue.id)).toEqual(['solo']);
+  });
+  it.each([1, 2])(
+    'preserves two-speaker rotation after %s refused emoji-lease frames',
+    (refusals) => {
+      const speakers: VisibleAgent[] = [35, 50].map((x, i) => ({
+        kind: 'person',
+        lng: x,
+        lat: 30,
+        flap: 0,
+        speech: { id: `s${i + 1}`, exchangeId: 'hello', line: 0 },
+      }));
+      const baseline = fixture([...speakers, dog('mood', 15)]);
+      const mixed = fixture([...speakers, dog('mood', 15)]);
+      for (const f of [baseline, mixed]) {
+        for (const time of [0, 20, 40]) f.tick(time, 0, false);
+        expect(f.speechEvents.at(-1)).toHaveLength(2);
+      }
+      baseline.tick(500, 0, false);
+      const nextSpeakerCell = baseline.queue[0]!.rect.x;
+      mixed.tick(100);
+      expect(mixed.queue).toHaveLength(3);
+      for (let i = 0; i < refusals; i++) mixed.tick(500 + i * 20, 1000, false);
+      const releasedAt = 500 + refusals * 20;
+      mixed.tick(releasedAt, 0, false);
+      expect(mixed.queue[0]!.rect.x).toBe(nextSpeakerCell);
+      expect(mixed.speechEvents.at(-1)?.map((cue) => cue.id)).toEqual(
+        baseline.speechEvents.at(-1)?.map((cue) => cue.id),
+      );
+      for (let time = releasedAt + 20; time <= 1500; time += 20) {
+        baseline.tick(time, 20, false);
+        mixed.tick(time, 20);
+        expect(mixed.speechEvents.at(-1)).toHaveLength(baseline.speechEvents.at(-1)!.length);
+      }
+    },
+  );
   it('accepts pets and moving vehicles with one physical batch and 4/2 caps', () => {
     for (const width of [800, 600]) {
       const f = fixture(

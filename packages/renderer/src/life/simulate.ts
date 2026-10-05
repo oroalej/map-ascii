@@ -3854,14 +3854,17 @@ export class TileLife {
       this.inspected,
     );
     const emojiEnv = env ?? { rain: 0, clock };
-    this.emoji.step(
-      dt,
-      momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
-      emojiEnv,
-      this.emojiObservations(emojiEnv, near, pass?.owns),
-      this.scenes.purchaseCompletions,
-      this.momentHost.voiceCompletions,
-    );
+    const emojiZoom = momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0);
+    if (this.emoji.observes(emojiZoom))
+      this.emoji.step(
+        dt,
+        emojiZoom,
+        emojiEnv,
+        this.emojiObservations(emojiEnv, near, pass?.owns),
+        this.scenes.purchaseCompletions,
+        this.momentHost.voiceCompletions,
+      );
+    else this.emoji.step(dt, emojiZoom, emojiEnv, []);
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
     const speeds = this.followLimits(dt, table);

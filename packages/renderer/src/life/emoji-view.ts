@@ -24,6 +24,7 @@ export class EmojiController extends CueController<EmojiCue> {
         pick: (a) => (!a.speech && !a.aboard && !a.prop && !a.parked ? a.emoji : undefined),
         key: (c) => `${c.id}/${c.mood}`,
         group: (c) => c.pair,
+        order: (c) => c.order ?? 0,
         member: (a) => (a.kind === 'person' ? 0 : undefined),
         requiresSpeakers: (a) => a.kind === 'person',
       },

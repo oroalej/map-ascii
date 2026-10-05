@@ -8,6 +8,20 @@ const cue = (id: string, x = 400, pair?: string): BubbleLayout => ({
   size: { width: 38, height: 34 },
 });
 const viewport = { width: 800, height: 600 };
+it('rolls back a blocked pair footprint before placing the next group', () => {
+  const block = { left: 560, top: 0, width: 120, height: 600 };
+  const later = cue('later', 300);
+  const expected = layoutBubbles([later], viewport, [block], []).get('later');
+  const actual = layoutBubbles(
+    [cue('a', 300, 'pair'), cue('b', 600, 'pair'), later],
+    viewport,
+    [block],
+    [],
+  );
+  expect(actual.has('a')).toBe(false);
+  expect(actual.has('b')).toBe(false);
+  expect(actual.get('later')).toEqual(expected);
+});
 it('places speech first and includes thought dots when avoiding map labels', () => {
   const speech: BubbleLayout = {
     id: 'speech',
