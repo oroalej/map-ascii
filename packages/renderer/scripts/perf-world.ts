@@ -5,8 +5,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { cpus, platform, release, getPriority } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { snapshotRevision, snapshotCurrent, currentSourceHash } from './snapshot';
+import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
 import { adaptPuffPacking, type PuffPacking } from './puff-packing';
+import { pairedRuns, pooledSummary, quantile, summary, withinControl } from './paired';
 import {
   scenarioTilesAt,
   worldTiles,
@@ -80,17 +81,12 @@ async function cleanup() {
 const warmup = 90;
 const glyph = (s: string) => ((s.codePointAt(0) ?? 0) % 254) + 1;
 
-const quantile = (vs: number[], q: number) => {
-  const s = vs.slice().sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor(s.length * q))]!;
-};
-const summary = (vs: number[]) => ({ median: quantile(vs, 0.5), p95: quantile(vs, 0.95) });
 type Stages = 'step' | 'visible' | 'pack' | 'combined';
 try {
   const currentHash = await currentSourceHash(root);
-  const changedGraph = await snapshotCurrent(root, join(temporary, 'current'));
+  const changedGraph = await snapshotWorkingTree(root, join(temporary, 'current'));
   const frozen = control
-    ? await snapshotCurrent(root, join(temporary, 'baseline'))
+    ? await snapshotWorkingTree(root, join(temporary, 'baseline'))
     : await snapshotRevision(root, baseline, join(temporary, 'baseline'));
   const before = (await import(frozen.path('life/simulate.ts'))) as typeof Simulation;
   const { LifeWorld } = (await import(changedGraph.path('life/simulate.ts'))) as typeof Simulation;
@@ -741,38 +737,14 @@ try {
         for (let frame = 0; frame < warmup + samples; frame++) arm.sample(frame);
         return arm.result();
       };
-      // Warm both graphs and the shared caller before retaining any paired observations.
-      const calibrationA = prepareMeasure(before.LifeWorld, oldPack),
-        calibrationB = prepareMeasure(LifeWorld, currentPack);
-      for (let frame = 0; frame < warmup + samples; frame++) {
-        if (frame % 2) {
-          calibrationB.sample(frame);
-          calibrationA.sample(frame);
-        } else {
-          calibrationA.sample(frame);
-          calibrationB.sample(frame);
-        }
-      }
-      const oldRuns: ReturnType<typeof measure>[] = [],
-        currentRuns: ReturnType<typeof measure>[] = [];
-      for (let run = 0; run < runs; run++) {
-        const a = prepareMeasure(before.LifeWorld, oldPack),
-          b = prepareMeasure(LifeWorld, currentPack);
-        for (let frame = 0; frame < warmup + samples; frame++) {
-          if (run % 2) {
-            b.sample(frame);
-            a.sample(frame);
-          } else {
-            a.sample(frame);
-            b.sample(frame);
-          }
-        }
-        oldRuns.push(a.result());
-        currentRuns.push(b.result());
-      }
+      const { oldRuns, currentRuns } = pairedRuns(
+        () => prepareMeasure(before.LifeWorld, oldPack),
+        () => prepareMeasure(LifeWorld, currentPack),
+        { calibration: warmup + samples, warmup, samples, runs, interleaved: true },
+      );
       // Pool retained samples; individual runs have relatively few tail observations.
       const aggregate = (rs: typeof oldRuns, stage: Stages) =>
-        summary(rs.flatMap((r) => r.timings[stage]));
+        pooledSummary(rs, (r) => r.timings[stage]);
       const stages = Object.fromEntries(
         (['step', 'visible', 'pack', 'combined'] as const).map((stage) => {
           const old = aggregate(oldRuns, stage),
@@ -853,7 +825,7 @@ try {
         ? rows.every((r) =>
             ['step', 'combined'].every((stage) => {
               const v = r.stages[stage as Stages]!;
-              return Math.abs(v.medianGain) <= 0.05 && Math.abs(v.p95Change) <= 0.05;
+              return withinControl(v);
             }),
           )
         : undefined,

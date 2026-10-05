@@ -11,7 +11,8 @@ import { LifeBuilder, LifeLine } from '../src/life/geometry';
 import type * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
 import type { LngLatBounds } from '../src/life/procession';
-import { snapshotRevision, snapshotCurrent, currentSourceHash } from './snapshot';
+import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
+import { pairedRuns, pooledSummary, summary, withinControl } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const revision =
@@ -79,10 +80,6 @@ const boundsFor = (width: number, height: number): LngLatBounds => {
   ];
   return [west, south, east, north];
 };
-const quantile = (values: number[], q: number) => {
-  const sorted = values.slice().sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
-};
 function compare(before: () => () => unknown, after: () => () => unknown) {
   const cost = (action: () => unknown) => {
     const start = performance.now();
@@ -97,65 +94,25 @@ function compare(before: () => () => unknown, after: () => () => unknown) {
     for (let i = 0; i < batch; i++) action();
     if (retained) retained.push((performance.now() - start) / batch);
   };
-  const calibrationA = before(),
-    calibrationB = after();
-  for (let frame = 0; frame < 250; frame++) {
-    if (frame % 2) {
-      sample(calibrationB);
-      sample(calibrationA);
-    } else {
-      sample(calibrationA);
-      sample(calibrationB);
-    }
-  }
-  const summarize = (samples: number[]) => ({
-    median: quantile(samples, 0.5),
-    p95: quantile(samples, 0.95),
-    samples,
-  });
-  const old: ReturnType<typeof summarize>[] = [],
-    next: ReturnType<typeof summarize>[] = [];
-  for (let run = 0; run < runs; run++) {
-    const a = before(),
-      b = after(),
-      oldSamples: number[] = [],
-      nextSamples: number[] = [];
-    const arm = (action: () => unknown, retained: number[]) => {
-      for (let frame = 0; frame < warmup + samples; frame++)
-        sample(action, frame >= warmup ? retained : undefined);
+  const arm = (factory: () => () => unknown) => {
+    const action = factory(),
+      retained: number[] = [];
+    return {
+      sample(_frame: number, keep: boolean) {
+        sample(action, keep ? retained : undefined);
+      },
+      result() {
+        return { ...summary(retained), samples: retained };
+      },
     };
-    if (interleaved) {
-      for (let frame = 0; frame < warmup + samples; frame++) {
-        if (run % 2) {
-          sample(b, frame >= warmup ? nextSamples : undefined);
-          sample(a, frame >= warmup ? oldSamples : undefined);
-        } else {
-          sample(a, frame >= warmup ? oldSamples : undefined);
-          sample(b, frame >= warmup ? nextSamples : undefined);
-        }
-      }
-    } else if (run % 2) {
-      arm(b, nextSamples);
-      arm(a, oldSamples);
-    } else {
-      arm(a, oldSamples);
-      arm(b, nextSamples);
-    }
-    old.push(summarize(oldSamples));
-    next.push(summarize(nextSamples));
-  }
-  const result = (runs: typeof old) => ({
-    median: quantile(
-      runs.flatMap((r) => r.samples),
-      0.5,
-    ),
-    p95: quantile(
-      runs.flatMap((r) => r.samples),
-      0.95,
-    ),
-  });
-  const baseline = result(old),
-    changed = result(next);
+  };
+  const { oldRuns: old, currentRuns: next } = pairedRuns(
+    () => arm(before),
+    () => arm(after),
+    { calibration: 250, warmup, samples, runs, interleaved },
+  );
+  const baseline = pooledSummary(old, (run) => run.samples),
+    changed = pooledSummary(next, (run) => run.samples);
   return {
     baseline,
     oldRuns: old,
@@ -170,14 +127,14 @@ function compare(before: () => () => unknown, after: () => () => unknown) {
 
 try {
   const currentHash = await currentSourceHash(root);
-  const frozenCurrent = await snapshotCurrent(root, join(temporary, 'current-snapshot'));
+  const frozenCurrent = await snapshotWorkingTree(root, join(temporary, 'current-snapshot'));
   const current = (await import(frozenCurrent.path('life/simulate.ts'))) as Simulation;
   const sourcePath = 'packages/renderer/src/life/simulate.ts';
   const frozenRoot = join(temporary, 'baseline-snapshot');
   const frozen = baselineFile
     ? undefined
     : control
-      ? await snapshotCurrent(root, frozenRoot)
+      ? await snapshotWorkingTree(root, frozenRoot)
       : await snapshotRevision(root, revision, frozenRoot);
   const rawSource = baselineFile
     ? await readFile(resolve(root, baselineFile), 'utf8')
@@ -380,11 +337,7 @@ try {
     interleaved,
     currentHash,
     currentGraphHash: frozenCurrent.hash,
-    controlPass: control
-      ? rows.every(
-          (r) => Math.abs(r.timings.medianGain) <= 0.05 && Math.abs(r.timings.p95Change) <= 0.05,
-        )
-      : undefined,
+    controlPass: control ? rows.every((r) => withinControl(r.timings)) : undefined,
     allowDiff,
     baselineGraphHash: frozen?.hash,
     candidates,

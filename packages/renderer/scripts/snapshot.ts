@@ -121,8 +121,6 @@ async function writeSnapshot(
     path: (file: string) => pathToFileURL(resolve(destination, 'packages/renderer/src', file)).href,
   };
 }
-/** Freeze the working tree exactly like a revision, avoiding static-import/load-order bias. */
-export const snapshotCurrent = snapshotWorkingTree;
 export async function currentSourceHash(root: string) {
   const paths = workingPaths(root);
   const hash = createHash('sha256');

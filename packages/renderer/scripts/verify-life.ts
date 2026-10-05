@@ -3,7 +3,7 @@ import { deepStrictEqual } from 'node:assert';
 import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { snapshotCurrent, snapshotRevision, currentSourceHash } from './snapshot';
+import { snapshotWorkingTree, snapshotRevision, currentSourceHash } from './snapshot';
 import { withoutDecorations } from './decorations';
 import type * as Scenarios from '../src/life/testing/scenarios';
 import type * as Simulation from '../src/life/simulate';
@@ -19,7 +19,7 @@ const temporary = await mkdtemp(join(scratch, 'life-invariants-'));
 try {
   const sourceHash = await currentSourceHash(root);
   const old = await snapshotRevision(root, revision, join(temporary, 'baseline'));
-  const next = await snapshotCurrent(root, join(temporary, 'current'));
+  const next = await snapshotWorkingTree(root, join(temporary, 'current'));
   const baseline = (await import(old.path('life/simulate.ts'))) as typeof Simulation;
   const current = (await import(next.path('life/simulate.ts'))) as typeof Simulation;
   // Identical fixture inputs and complete introspection for both arms; only decoration key excluded.
