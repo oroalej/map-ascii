@@ -3521,7 +3521,26 @@ export class TileLife {
           clock,
           Math.max(0, ahead),
         );
-      table.request({ m, life: this, tileKey, index, movement, ready, inside, room: room / pm });
+      const atLine =
+        ahead / pm <= JUNCTION.atLine &&
+        !(this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? []).some(
+          (i) =>
+            i !== index &&
+            this.progress[i]! > this.progress[index]! &&
+            this.progress[i]! * pm < movement.dir * movement.stop &&
+            !table.granted(this.movers[i]!),
+        );
+      table.request({
+        m,
+        life: this,
+        tileKey,
+        index,
+        movement,
+        ready,
+        inside,
+        atLine,
+        room: room / pm,
+      });
     }
   }
 

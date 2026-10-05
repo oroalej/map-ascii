@@ -119,6 +119,7 @@ export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
 export const JUNCTION = {
+  atLine: 3,
   linkedLookaheadM: 60,
   gap: 1.5,
   margin: 1,

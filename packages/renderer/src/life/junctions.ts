@@ -230,6 +230,91 @@ export function compatible(a: Movement, b: Movement): boolean {
   return right(a) && right(b);
 }
 
+/** Tile y points south: northbound traffic yields to westbound traffic from the east. */
+export function fromRight(a: Movement, b: Movement): boolean {
+  return a.inHx * b.inHy - a.inHy * b.inHx < -0.5;
+}
+const leftTurn = (m: Movement) => m.inHx * m.outHy - m.inHy * m.outHx < -0.5;
+const stable = (a: JunctionRequest, b: JunctionRequest) =>
+  a.tileKey.localeCompare(b.tileKey) || a.index - b.index;
+
+/** Reused adjacency/Tarjan buffers. SCCs break cycles without dropping external precedence. */
+class Precedence {
+  private edges = new Uint8Array(0);
+  private visits: number[] = [];
+  private lows: number[] = [];
+  private stack: number[] = [];
+  private active: boolean[] = [];
+  private components: number[] = [];
+  private degrees: number[] = [];
+  private done: boolean[] = [];
+  private output: Hold[] = [];
+  order(rows: Hold[], precedes: (a: Hold, b: Hold) => boolean): Hold[] {
+    const n = rows.length;
+    if (this.edges.length < n * n) this.edges = new Uint8Array(n * n);
+    this.edges.fill(0, 0, n * n);
+    this.visits.length = this.lows.length = this.active.length = this.components.length = n;
+    this.visits.fill(-1);
+    this.active.fill(false);
+    this.stack.length = 0;
+    let visit = 0,
+      count = 0;
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (i !== j && precedes(rows[i]!, rows[j]!)) this.edges[i * n + j] = 1;
+    const dfs = (i: number) => {
+      this.visits[i] = this.lows[i] = visit++;
+      this.stack.push(i);
+      this.active[i] = true;
+      for (let j = 0; j < n; j++)
+        if (this.edges[i * n + j]) {
+          if (this.visits[j] === -1) {
+            dfs(j);
+            this.lows[i] = Math.min(this.lows[i]!, this.lows[j]!);
+          } else if (this.active[j]) this.lows[i] = Math.min(this.lows[i]!, this.visits[j]!);
+        }
+      if (this.lows[i] !== this.visits[i]) return;
+      let j: number;
+      do {
+        j = this.stack.pop()!;
+        this.active[j] = false;
+        this.components[j] = count;
+      } while (j !== i);
+      count++;
+    };
+    for (let i = 0; i < n; i++) if (this.visits[i] === -1) dfs(i);
+    this.degrees.length = count;
+    this.degrees.fill(0);
+    this.done.length = n;
+    this.done.fill(false);
+    this.output.length = 0;
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (this.edges[i * n + j] && this.components[i] !== this.components[j])
+          this.degrees[this.components[j]!]!++;
+    while (this.output.length < n) {
+      const first = rows.findIndex(
+        (_, i) => !this.done[i] && this.degrees[this.components[i]!] === 0,
+      );
+      const component = this.components[first]!;
+      // Stable order inside a cycle; baseline order selects among unconstrained components.
+      const members: number[] = this.stack;
+      members.length = 0;
+      for (let i = 0; i < n; i++) if (this.components[i] === component) members.push(i);
+      members.sort((a, b) => stable(rows[a]!, rows[b]!));
+      for (const i of members) {
+        this.output.push(rows[i]!);
+        this.done[i] = true;
+      }
+      for (const i of members)
+        for (let j = 0; j < n; j++)
+          if (this.edges[i * n + j] && this.components[j] !== component)
+            this.degrees[this.components[j]!]!--;
+    }
+    return this.output;
+  }
+}
+
 export type JunctionRequest = {
   m: Mover;
   life: TileLife;
@@ -238,16 +323,22 @@ export type JunctionRequest = {
   movement: Movement;
   ready: boolean;
   inside: boolean;
+  atLine?: boolean;
   /** Free metres beyond the exit box; pending holders consume this space too. */
   room?: number;
 };
-type Hold = JunctionRequest & { arrival: number; since?: number; carried?: boolean };
+type Hold = JunctionRequest & { arrival?: number; since?: number; carried?: boolean };
 
 /** Two-phase world arbitration. Physical occupants never expire or authorize running red. */
 export class JunctionTable {
   private records = new Map<Mover, Hold>();
   private requests: JunctionRequest[] = [];
   private clock = 0;
+  private readonly precedence = new Precedence();
+  private readonly batch: Hold[] = [];
+  private readonly ordered: Hold[] = [];
+  private readonly blocking: Hold[] = [];
+  private readonly yielded = new Set<Hold>();
   get empty(): boolean {
     return this.records.size === 0;
   }
@@ -266,7 +357,7 @@ export class JunctionTable {
   }
   waited(m: Mover): number {
     const r = this.records.get(m);
-    return r ? this.clock - r.arrival : 0;
+    return r?.arrival === undefined ? 0 : this.clock - r.arrival;
   }
   release(m: Mover): void {
     this.records.delete(m);
@@ -358,7 +449,8 @@ export class JunctionTable {
       const r: Hold =
         previous?.movement.key === request.movement.key
           ? Object.assign(previous, request)
-          : { ...request, arrival: clock };
+          : { ...request };
+      if (r.arrival === undefined && (r.atLine === true || r.inside)) r.arrival = clock;
       if (!r.inside && r.since !== undefined && clock - r.since > JUNCTION.holdMax)
         r.since = undefined;
       this.records.set(r.m, r);
@@ -369,18 +461,64 @@ export class JunctionTable {
     }
     for (const m of this.records.keys()) if (!seen.has(m)) this.records.delete(m);
     for (const group of groups.values()) {
+      const over = (r: Hold) => r.arrival !== undefined && clock - r.arrival >= JUNCTION.maxWait;
       group.sort(
         (a, b) =>
-          Number(clock - b.arrival >= JUNCTION.maxWait) -
-            Number(clock - a.arrival >= JUNCTION.maxWait) ||
-          Math.floor(a.arrival / JUNCTION.tie) - Math.floor(b.arrival / JUNCTION.tie) ||
-          a.movement.rank - b.movement.rank ||
-          a.arrival - b.arrival ||
-          a.tileKey.localeCompare(b.tileKey) ||
-          a.index - b.index,
+          Number(over(b)) - Number(over(a)) ||
+          (a.arrival ?? Infinity) - (b.arrival ?? Infinity) ||
+          stable(a, b),
       );
-      const blocking = group.filter((r) => r.inside || r.since !== undefined);
-      for (const r of group) {
+      const ordered = this.ordered;
+      ordered.length = 0;
+      for (let i = 0; i < group.length;) {
+        const anchor = group[i]!;
+        if (over(anchor) || anchor.arrival === undefined || !anchor.ready) {
+          ordered.push(anchor);
+          i++;
+          continue;
+        }
+        const batch = this.batch;
+        batch.length = 0;
+        let end = i;
+        while (
+          end < group.length &&
+          group[end]!.arrival !== undefined &&
+          group[end]!.arrival! - anchor.arrival < JUNCTION.tie
+        )
+          end++;
+        for (; i < end; i++)
+          if (group[i]!.ready) batch.push(group[i]!);
+          else ordered.push(group[i]!);
+        ordered.push(
+          ...this.precedence.order(
+            batch,
+            (a, b) => !compatible(a.movement, b.movement) && fromRight(b.movement, a.movement),
+          ),
+        );
+      }
+      const oncoming = (a: Hold, b: Hold) =>
+        a !== b &&
+        leftTurn(a.movement) &&
+        !over(a) &&
+        !leftTurn(b.movement) &&
+        ((b.atLine === true && b.ready) || (b.inside && b.since !== undefined)) &&
+        a.movement.inHx * b.movement.inHx + a.movement.inHy * b.movement.inHy < -COS20 &&
+        (b.room ?? Infinity) >= VEHICLES[b.m.vehicle!].length + JUNCTION.gap;
+      this.yielded.clear();
+      for (const r of group)
+        if (!r.inside && group.some((b) => oncoming(r, b))) {
+          r.since = undefined;
+          this.yielded.add(r);
+        }
+      const final = this.precedence.order(ordered, (a, b) => oncoming(b, a));
+      const blocking = this.blocking;
+      blocking.length = 0;
+      for (const r of group) if (r.inside || r.since !== undefined) blocking.push(r);
+      for (const r of final) {
+        if (this.yielded.has(r)) {
+          if (r.arrival !== undefined) blocking.push(r);
+          continue;
+        }
         if (r.since !== undefined || !r.ready) continue;
         const reserved = blocking.reduce(
           (sum, b) =>
@@ -398,7 +536,7 @@ export class JunctionTable {
         if (blocking.every((b) => b === r || compatible(r.movement, b.movement))) {
           r.since = clock;
           blocking.push(r);
-        } else blocking.push(r); // Earlier ready waiters retain priority against later conflicts.
+        } else if (r.arrival !== undefined) blocking.push(r);
       }
     }
   }

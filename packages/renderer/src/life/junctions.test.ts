@@ -88,7 +88,7 @@ describe('junction arbitration', () => {
     expect(compatible(east, movement(0, 1, 1, 0))).toBe(false);
     expect(compatible(movement(1, 0, 0, 1), movement(0, 1, -1, 0))).toBe(true);
   });
-  it('uses road rank in the arrival tie and ages a conflicting waiter', () => {
+  it('uses arrival at the line and ages a conflicting waiter', () => {
     const table = new JunctionTable(),
       a = mover(),
       b = mover();
@@ -102,6 +102,7 @@ describe('junction arbitration', () => {
         movement: south,
         ready: true,
         inside: false,
+        atLine: true,
       });
       if (includeA)
         table.request({
@@ -112,6 +113,7 @@ describe('junction arbitration', () => {
           movement: east,
           ready: true,
           inside: false,
+          atLine: true,
         });
       table.resolve(clock);
     };
