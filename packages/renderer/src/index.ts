@@ -88,6 +88,7 @@ import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
   activityLevels,
+  LIFE_TILE_MIN_ZOOM,
   FLOOD,
   SHOP,
   STREETLIGHT,
@@ -407,8 +408,6 @@ const sameCamera = (a: CameraState, b: CameraState) =>
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
 const SUN_MS = 1000;
-/** Life agents come from tiles at least this deep (the shallowest life zoom band is 13.5). */
-const LIFE_TILE_MIN_ZOOM = 13;
 /** Smoothing for the timing stats: each new sample's weight. */
 const STATS_WEIGHT = 0.1;
 const smooth = (average: number, sample: number) =>
