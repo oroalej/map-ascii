@@ -1,5 +1,5 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
-import type { PlaceKind } from './rhythm';
+import { PLACE_KINDS, type RhythmCurve } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
 import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
 export * from './seasonal-record';
@@ -30,6 +30,26 @@ export type SeasonGrounds = {
 export const FIREWORK_VARIANTS = ['peony', 'chrysanthemum', 'ring', 'willow'] as const;
 export type FireworkVariant = (typeof FIREWORK_VARIANTS)[number];
 export type FireworksConfig = { label: string; variants: FireworkVariant[] };
+/** Places a season's `near` may name: gathering places, plus mapped cemeteries. */
+export const SEASON_ANCHOR_KINDS = [...PLACE_KINDS, 'cemetery'] as const;
+export type SeasonAnchorKind = (typeof SEASON_ANCHOR_KINDS)[number];
+/** Illustrative candles on a seeded `share` of the city's mapped burial markers. */
+export type SeasonCandles = { label: string; share: number };
+/** Simulated families standing at a seeded `share` of graves, shown by `hours`. */
+export type SeasonVisitors = {
+  label: string;
+  share: number;
+  per_grave_family: [number, number];
+  max_per_tile: number;
+  hours: RhythmCurve;
+};
+/** Simulated extra crowds around the pack's named landmark churches, shown by `hours`. */
+export type SeasonCongregations = {
+  label: string;
+  landmarks: string[];
+  extra: number;
+  hours: RhythmCurve;
+};
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
@@ -39,15 +59,18 @@ export type SeasonConfig = {
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
-  lanterns?: { label: string; shape: 'star'; near?: PlaceKind[]; radius_m?: number };
+  lanterns?: { label: string; shape: 'star'; near?: SeasonAnchorKind[]; radius_m?: number };
   bunting?: {
     label: string;
-    near: PlaceKind[];
+    near: SeasonAnchorKind[];
     radius_m: number;
     spacing_m: number;
     corridors?: BuntingCorridor[];
   };
-  stalls?: { label: string; near: PlaceKind[]; radius_m: number; per_tile: number };
+  stalls?: { label: string; near: SeasonAnchorKind[]; radius_m: number; per_tile: number };
+  candles?: SeasonCandles;
+  visitors?: SeasonVisitors;
+  congregations?: SeasonCongregations;
   sources: Source[];
 };
 

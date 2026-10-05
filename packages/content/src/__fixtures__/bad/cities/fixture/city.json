@@ -7,5 +7,24 @@
   "region": { "bbox": [0, 0, 1, 1] },
   "subdivision": { "admin_level": 10, "label": { "en": "ward" } },
   "languages": ["xx"],
-  "smoke_landmark": "Fixture Church"
+  "smoke_landmark": "Fixture Church",
+  "life": {
+    "source": "Fixture calendar",
+    "seasons": [
+      {
+        "id": "saints",
+        "title": { "en": "Saints" },
+        "status": "draft",
+        "window": { "from": { "month": 11, "day": 1 }, "to": { "month": 11, "day": 2 } },
+        "note": "TODO(verify): fixture",
+        "congregations": {
+          "label": "Mass-goers",
+          "landmarks": ["landmark/missing-church"],
+          "extra": 10,
+          "hours": [[8, 1]]
+        },
+        "sources": [{ "title": "Fixture calendar" }]
+      }
+    ]
+  }
 }

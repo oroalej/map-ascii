@@ -177,6 +177,15 @@ export async function loadCityPacks(
       }
     }
 
+    const landmarkIds = new Set(content.landmarks.map((l) => l.id));
+    for (const [index, season] of (city.life?.seasons ?? []).entries())
+      for (const id of season.congregations?.landmarks ?? [])
+        if (!landmarkIds.has(id))
+          errors.push({
+            file: configFile,
+            message: `life.seasons.${index}.congregations.landmarks: no landmark "${id}"`,
+          });
+
     const dialoguePath = join(dir, 'dialogue.json');
     const dialogue = (await exists(dialoguePath))
       ? await readValid(dialoguePath, dialogueCatalog(city.languages), toFile(dialoguePath), errors)

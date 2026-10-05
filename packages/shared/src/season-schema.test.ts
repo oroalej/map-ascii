@@ -251,6 +251,59 @@ describe('season content validation', () => {
         .success,
     ).toBe(false);
   });
+  it('admits cemetery anchors and crowd-only or candle-only calendars', () => {
+    const { lanterns: _lanterns, ...bare } = season;
+    const hours = [
+      [6, 0.2],
+      [18, 1],
+    ];
+    const visitors = {
+      label: 'Families',
+      share: 0.3,
+      per_grave_family: [2, 5],
+      max_per_tile: 80,
+      hours,
+    };
+    const congregations = {
+      label: 'Mass-goers',
+      landmarks: ['landmark/cathedral'],
+      extra: 40,
+      hours,
+    };
+    const stalls = { label: 'Candles', near: ['cemetery'], radius_m: 120, per_tile: 8 };
+    expect(Season.safeParse({ ...bare, stalls }).success).toBe(true);
+    expect(Season.safeParse({ ...bare, candles: { label: 'Candles', share: 0.7 } }).success).toBe(
+      true,
+    );
+    expect(Season.safeParse({ ...bare, visitors }).success).toBe(true);
+    expect(Season.safeParse({ ...bare, congregations }).success).toBe(true);
+    expect(Season.safeParse(bare).success).toBe(false);
+    for (const change of [
+      { candles: { label: 'Candles', share: 0 } },
+      { candles: { label: 'Candles', share: 1.1 } },
+      { visitors: { ...visitors, per_grave_family: [5, 2] } },
+      { visitors: { ...visitors, max_per_tile: 151 } },
+      {
+        visitors: {
+          ...visitors,
+          hours: [
+            [18, 1],
+            [6, 0.2],
+          ],
+        },
+      },
+      { congregations: { ...congregations, landmarks: [] } },
+      { congregations: { ...congregations, landmarks: ['cathedral'] } },
+      {
+        congregations: {
+          ...congregations,
+          landmarks: ['landmark/cathedral', 'landmark/cathedral'],
+        },
+      },
+      { stalls: { ...stalls, near: ['graveyard'] } },
+    ])
+      expect(Season.safeParse({ ...bare, ...change }).success, JSON.stringify(change)).toBe(false);
+  });
   it('checks season title languages against the city', () => {
     const city = {
       slug: 'test',

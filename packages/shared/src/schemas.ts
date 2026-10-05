@@ -7,9 +7,10 @@ import * as z from 'zod';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
-import { RHYTHM_KINDS, PLACE_KINDS, type CityLifeConfig } from './rhythm';
+import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
 import {
   FIREWORK_VARIANTS,
+  SEASON_ANCHOR_KINDS,
   validMonthDay,
   type FireworksConfig,
   type SeasonConfig,
@@ -1049,7 +1050,7 @@ export const SeasonWindowSchema = z.union([
   }),
 ]) satisfies z.ZodType<SeasonWindow>;
 const SeasonPlaces = z
-  .array(z.enum(PLACE_KINDS))
+  .array(z.enum(SEASON_ANCHOR_KINDS))
   .min(1)
   .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
 export const SeasonGroundsSchema = z.strictObject({
@@ -1217,6 +1218,32 @@ export const Season = z
         per_tile: z.int().min(1).max(24),
       })
       .optional(),
+    candles: z
+      .strictObject({ label: z.string().trim().min(1), share: z.number().gt(0).max(1) })
+      .optional(),
+    visitors: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        share: z.number().gt(0).max(1),
+        per_grave_family: z
+          .tuple([z.int().min(1).max(8), z.int().min(1).max(8)])
+          .refine(([min, max]) => min <= max, 'expected [min, max]'),
+        max_per_tile: z.int().min(1).max(150),
+        hours: RhythmCurve,
+      })
+      .optional(),
+    congregations: z
+      .strictObject({
+        label: z.string().trim().min(1),
+        landmarks: z
+          .array(z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>'))
+          .min(1)
+          .max(16)
+          .refine((v) => new Set(v).size === v.length, 'duplicate landmarks'),
+        extra: z.int().min(1).max(100),
+        hours: RhythmCurve,
+      })
+      .optional(),
     sources: Sources,
   })
   .superRefine((season, ctx) => {
@@ -1259,7 +1286,10 @@ export const Season = z
       !season.bunting &&
       !season.stalls &&
       !season.installations?.length &&
-      !season.fireworks
+      !season.fireworks &&
+      !season.candles &&
+      !season.visitors &&
+      !season.congregations
     )
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
     const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
