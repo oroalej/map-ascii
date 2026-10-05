@@ -260,11 +260,14 @@ export class Occupancy {
       mask |= b.kind ?? BODY_KIND.fixed;
       for (const key of this.keys(b)) this.uniqueKeys.add(key);
     }
-    if (
-      previous &&
-      previous.keys.length === this.uniqueKeys.size &&
-      previous.keys.every((key) => this.uniqueKeys.has(key))
-    ) {
+    let sameBins = previous !== undefined && previous.keys.length === this.uniqueKeys.size;
+    if (sameBins && previous)
+      for (const key of previous.keys)
+        if (!this.uniqueKeys.has(key)) {
+          sameBins = false;
+          break;
+        }
+    if (previous && sameBins) {
       this.humans +=
         Number(!!(mask & BODY_KIND.human)) - Number(!!(previous.mask & BODY_KIND.human));
       previous.bodies = bodies;
@@ -299,57 +302,6 @@ export class Occupancy {
   }
   bodies(owner: object): readonly Body[] {
     return this.entries.get(owner)?.bodies ?? [];
-  }
-  nearestInCorridor(
-    x: number,
-    y: number,
-    hx: number,
-    hy: number,
-    halfWidth: number,
-    range: number,
-    kindMask: number,
-    ignore?: object,
-    excludedAreas?: readonly Polygon[],
-  ): number {
-    if (range < 0 || halfWidth < 0) return Infinity;
-    const corridor: Body = {
-      x: x + (hx * range) / 2,
-      y: y + (hy * range) / 2,
-      hx,
-      hy,
-      length: range,
-      width: halfWidth * 2,
-    };
-    const owners = this.queryNeighbors;
-    const support = (BIN_M / 2) * (Math.abs(hx) + Math.abs(hy));
-    owners.clear();
-    try {
-      for (const key of this.keys(corridor)) {
-        const bx = Math.floor(key / 65536) - 32768,
-          by = (key % 65536) - 32768;
-        const dx = (bx + 0.5) * BIN_M - x,
-          dy = (by + 0.5) * BIN_M - y;
-        const forward = dx * hx + dy * hy;
-        if (
-          Math.abs(-dx * hy + dy * hx) > halfWidth + support + 1e-9 ||
-          forward < -support - 1e-9 ||
-          forward > range + support + 1e-9
-        )
-          continue;
-        for (const owner of this.bins.get(key) ?? [])
-          if (owner !== ignore && this.entries.get(owner)!.mask & kindMask) owners.add(owner);
-      }
-      let nearest = Infinity;
-      for (const owner of owners)
-        for (const b of this.entries.get(owner)!.bodies) {
-          if (!((b.kind ?? BODY_KIND.fixed) & kindMask)) continue;
-          if (excludedAreas?.some((area) => bodyHitsPolygon(b, area))) continue;
-          nearest = Math.min(nearest, corridorDistance(b, x, y, hx, hy, halfWidth, range));
-        }
-      return nearest;
-    } finally {
-      owners.clear();
-    }
   }
   /** Visit matching footprints, never expose owners or retain callback/body references. */
   someInArea(

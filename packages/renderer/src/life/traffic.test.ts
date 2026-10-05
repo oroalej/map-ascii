@@ -444,6 +444,14 @@ describe('crossroads traffic', () => {
       expect(table.granted(waiter)).toBe(false);
     }
     expect(car.v).toBe(0);
+    expect(table.snapshot().find((r) => r.index === 1)).toMatchObject({
+      ready: true,
+      inside: false,
+    });
+    expect(waiter.v! / pm).toBeCloseTo(0, 6);
+    const pending = table.movement(waiter);
+    if (!pending) throw new Error('Expected a ready waiter at the stop line');
+    expect(Math.abs(pending.ahead / pm)).toBeLessThan(0.01);
     life.movers.splice(life.movers.indexOf(human), 1);
     for (let i = 0; i < 180; i++) world.step(0.1, undefined, 18);
     expect(car.x).toBeGreaterThan(cx + 20 * pm);

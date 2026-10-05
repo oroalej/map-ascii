@@ -75,8 +75,11 @@ export function laneOffset(
  * side may overlap this much (m) and still pass.
  */
 export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+/** Required distance from a vehicle centre to a stop edge, m. */
+export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
+/** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,
   lookaheadPad: 4,
@@ -623,4 +626,6 @@ export const SIGNAL = {
   lookahead: 40,
   brake: 3,
   walkMin: 5,
+  /** Additional radius for associating crossing quads with signal controllers, m. */
+  crossingMargin: 3.5,
 } as const;

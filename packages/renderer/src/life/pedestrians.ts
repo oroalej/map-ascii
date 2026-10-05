@@ -2,13 +2,15 @@
 import {
   BODY_KIND,
   binKeys,
+  bodyCorners,
+  bodyHitsPolygon,
   corridorDistance,
   type Body,
   type Occupancy,
   type Point,
   type Polygon,
 } from './occupancy';
-import { FOLLOW, PEDESTRIAN, type Kinematics } from './config';
+import { frontClearance, PEDESTRIAN, type Kinematics } from './config';
 import { stopBefore, stoppingReach } from './motion';
 import { LifeLine, type LifeGeometry } from './geometry';
 import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
@@ -18,22 +20,12 @@ import type { SignalControl } from './signals';
 export type PedestrianView = {
   readonly empty: boolean;
   readonly minimum: number;
-  walkersAhead(
-    x: number,
-    y: number,
-    hx: number,
-    hy: number,
-    halfWidth: number,
-    range: number,
-    excludedAreas?: readonly Polygon[],
-  ): number;
   walkersInArea(polygon: Polygon, predicate?: (body: Readonly<Body>) => boolean): boolean;
   walkersAlong(path: Iterable<PedestrianSegment>, halfWidth: number, range: number): number;
 };
 export const EMPTY_PEDESTRIANS: PedestrianView = {
   empty: true,
   minimum: 0,
-  walkersAhead: () => Infinity,
   walkersInArea: () => false,
   walkersAlong: () => Infinity,
 };
@@ -58,6 +50,43 @@ export function pedestrianView(
 /** Shared methods keep readers small and stable across frames and tile coordinate systems. */
 class IndexedPedestrians implements PedestrianView {
   private readonly candidateBodies: Body[] = [];
+  private candidateCount = 0;
+  private readonly queryCorners: Point[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0 }));
+  private readonly queryRegion: Polygon = [[...this.queryCorners, this.queryCorners[0]!]];
+  private areaPredicate: ((body: Readonly<Body>) => boolean) | undefined;
+  private readonly collect = (b: Readonly<Body>) => {
+    const i = this.candidateCount++;
+    const copy =
+      this.candidateBodies[i] ??
+      (this.candidateBodies[i] = {
+        x: 0,
+        y: 0,
+        hx: 0,
+        hy: 0,
+        length: 0,
+        width: 0,
+      });
+    copy.x = b.x;
+    copy.y = b.y;
+    copy.hx = b.hx;
+    copy.hy = b.hy;
+    copy.length = b.length;
+    copy.width = b.width;
+    copy.kind = b.kind;
+    return false;
+  };
+  private readonly matches = (b: Readonly<Body>) => {
+    const out = this.predicateBody,
+      frame = this.frame;
+    out.x = (b.x - frame.x) / frame.scale;
+    out.y = (b.y - frame.y) / frame.scale;
+    out.hx = b.hx;
+    out.hy = b.hy;
+    out.kind = b.kind;
+    out.length = b.length / frame.scale;
+    out.width = b.width / frame.scale;
+    return this.areaPredicate?.(out) ?? false;
+  };
   constructor(
     private readonly occupied: Occupancy,
     readonly minimum: number,
@@ -85,101 +114,65 @@ class IndexedPedestrians implements PedestrianView {
     cached?.set(p, converted);
     return converted;
   }
-  walkersAhead(
-    x: number,
-    y: number,
-    hx: number,
-    hy: number,
-    halfWidth: number,
-    range: number,
-    excludedAreas?: readonly Polygon[],
-  ) {
-    const { frame } = this;
-    const query = (occupied: Occupancy) =>
-      occupied.nearestInCorridor(
-        frame.x + x * frame.scale,
-        frame.y + y * frame.scale,
-        hx,
-        hy,
-        halfWidth * frame.scale,
-        range * frame.scale,
-        BODY_KIND.human,
-        undefined,
-        excludedAreas?.map((area) => this.polygonToRef(area)),
-      );
-    return (
-      Math.min(query(this.occupied), this.queryOnly ? query(this.queryOnly) : Infinity) /
-      frame.scale
-    );
-  }
   walkersInArea(polygon: Polygon, predicate?: (body: Readonly<Body>) => boolean) {
-    const { frame } = this;
     const converted = this.polygonToRef(polygon);
-    const query = (occupied: Occupancy) =>
-      occupied.someInArea(
-        converted,
-        BODY_KIND.human,
-        predicate &&
-          ((b) => {
-            // Predicates run synchronously; this numeric scratch contains no live body references.
-            Object.assign(this.predicateBody, {
-              x: (b.x - frame.x) / frame.scale,
-              y: (b.y - frame.y) / frame.scale,
-              hx: b.hx,
-              hy: b.hy,
-              kind: b.kind,
-              length: b.length / frame.scale,
-              width: b.width / frame.scale,
-            });
-            return predicate(this.predicateBody);
-          }),
+    this.areaPredicate = predicate;
+    try {
+      const matches = predicate ? this.matches : undefined;
+      return (
+        this.occupied.someInArea(converted, BODY_KIND.human, matches) ||
+        (this.queryOnly?.someInArea(converted, BODY_KIND.human, matches) ?? false)
       );
-    return query(this.occupied) || (this.queryOnly ? query(this.queryOnly) : false);
+    } finally {
+      this.areaPredicate = undefined;
+    }
   }
   /** One live footprint query covers every chord, including footprints centered outside the envelope. */
   walkersAlong(path: Iterable<PedestrianSegment>, halfWidth: number, range: number): number {
+    if (!Number.isFinite(range) || !Number.isFinite(halfWidth) || range < 0 || halfWidth < 0)
+      return Infinity;
     const iterator = path[Symbol.iterator]();
-    let count = 0;
+    this.candidateCount = 0;
     try {
       let item = iterator.next();
       if (item.done) return Infinity;
       const { frame } = this;
-      const x = frame.x + item.value.x * frame.scale,
+      const first = item.value;
+      const x = frame.x + first.x * frame.scale,
         y = frame.y + item.value.y * frame.scale,
         reach = (range + halfWidth) * frame.scale;
-      const corner = { x: x - reach, y: y - reach };
-      const region = [
-        [
-          corner,
-          { x: x + reach, y: y - reach },
-          { x: x + reach, y: y + reach },
-          { x: x - reach, y: y + reach },
-          corner,
-        ],
-      ];
-      const collect = (b: Readonly<Body>) => {
-        const copy =
-          this.candidateBodies[count] ??
-          (this.candidateBodies[count] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
-        Object.assign(copy, {
-          x: b.x,
-          y: b.y,
-          hx: b.hx,
-          hy: b.hy,
-          length: b.length,
-          width: b.width,
-          kind: b.kind,
-        });
-        count++;
-        return false;
-      };
-      this.occupied.someInArea(region, BODY_KIND.human, collect);
-      this.queryOnly?.someInArea(region, BODY_KIND.human, collect);
+      const [a, b, c, d] = this.queryCorners;
+      if (first.length >= range) {
+        const nx = -first.hy * halfWidth * frame.scale,
+          ny = first.hx * halfWidth * frame.scale,
+          dx = first.hx * range * frame.scale,
+          dy = first.hy * range * frame.scale;
+        a!.x = x + nx;
+        a!.y = y + ny;
+        b!.x = x + dx + nx;
+        b!.y = y + dy + ny;
+        c!.x = x + dx - nx;
+        c!.y = y + dy - ny;
+        d!.x = x - nx;
+        d!.y = y - ny;
+      } else {
+        a!.x = x - reach;
+        a!.y = y - reach;
+        b!.x = x + reach;
+        b!.y = y - reach;
+        c!.x = x + reach;
+        c!.y = y + reach;
+        d!.x = x - reach;
+        d!.y = y + reach;
+      }
+      this.occupied.someInArea(this.queryRegion, BODY_KIND.human, this.collect);
+      this.queryOnly?.someInArea(this.queryRegion, BODY_KIND.human, this.collect);
+      const count = this.candidateCount;
       if (!count) return Infinity;
       let nearest = Infinity;
       for (; !item.done; item = iterator.next()) {
         const p = item.value;
-        if (p.ahead >= range - 1e-7 || p.ahead >= nearest) break;
+        if ((range > 0 && p.ahead >= range - 1e-7) || p.ahead > range || p.ahead >= nearest) break;
         for (let i = 0; i < count; i++) {
           const d = corridorDistance(
             this.candidateBodies[i]!,
@@ -196,6 +189,7 @@ class IndexedPedestrians implements PedestrianView {
       return nearest;
     } finally {
       // Only numeric copies remain in the pool; no live body or owner references are retained.
+      this.candidateCount = 0;
       iterator.return?.();
     }
   }
@@ -214,14 +208,14 @@ export type PedestrianSegment = {
 export const pedestrianRange = (velocity: number, length: number, k: Kinematics) =>
   Math.min(
     PEDESTRIAN.maxRange,
-    stoppingReach(velocity, k.brake, length / 2 + FOLLOW.minGap, PEDESTRIAN.lookaheadPad),
+    stoppingReach(velocity, k.brake, frontClearance(length), PEDESTRIAN.lookaheadPad),
   );
 function stopTarget(distance: number, length: number, k: Kinematics, pm: number, dt: number) {
   return stopBefore(
     distance * pm,
     0,
     k.brake * pm,
-    (FOLLOW.minGap + length / 2) * pm,
+    frontClearance(length) * pm,
     k.brake * dt * dt * pm,
   );
 }
@@ -284,6 +278,16 @@ export class PedestrianCrossings {
   ) {}
   *prepare(geo: LifeGeometry, signals: SignalControl): Generator<void, void, void> {
     const quads = new Map<number, Polygon[]>();
+    const geometry = new Map<
+      Polygon,
+      {
+        centre: Point;
+        distance: number;
+        hx: number;
+        hy: number;
+        lines: Set<number>;
+      }
+    >();
     for (const area of geo.areas ?? []) {
       yield;
       if (area.kind !== 'crossing') continue;
@@ -292,6 +296,12 @@ export class PedestrianCrossings {
       const polygon = preparedArea([
         ring.slice(0, 4).map((p) => ({ x: p.x / this.pm, y: p.y / this.pm })),
       ]);
+      const centre = { x: 0, y: 0 };
+      for (const p of polygon[0]!) {
+        centre.x += p.x / 4;
+        centre.y += p.y / 4;
+      }
+      geometry.set(polygon, { centre, distance: Infinity, hx: 1, hy: 0, lines: new Set() });
       for (const key of binKeys(polygon[0]!)) {
         let entries = quads.get(key);
         if (!entries) quads.set(key, (entries = []));
@@ -302,7 +312,6 @@ export class PedestrianCrossings {
     for (let line = 0; line < geo.kinds.length; line++) {
       yield;
       if (geo.kinds[line]! > LifeLine.roadMinor) continue;
-      const added = new Set<Polygon>();
       for (let v = geo.starts[line]! + 1; v < geo.starts[line + 1]!; v++) {
         if ((v & 63) === 0) yield;
         const x = geo.coords[(v - 1) * 2]! / this.pm,
@@ -314,6 +323,8 @@ export class PedestrianCrossings {
         const hx = dx / length,
           hy = dy / length,
           halfWidth = Math.max(0.1, geo.widths[line]! / 2);
+        const road: Body = { x: x + dx / 2, y: y + dy / 2, hx, hy, length, width: halfWidth * 2 };
+        const corners = bodyCorners(road);
         const candidates = new Set<Polygon>();
         for (const key of binKeys([
           { x: x - hy * halfWidth, y: y + hx * halfWidth },
@@ -323,31 +334,53 @@ export class PedestrianCrossings {
         ]))
           for (const polygon of quads.get(key) ?? []) candidates.add(polygon);
         for (const polygon of candidates) {
-          if (added.has(polygon)) continue;
-          const crossing = this.derive(polygon, line, hx, hy, signals);
-          if (crossing.controlled) continue;
-          if (!Number.isFinite(corridorDistance(crossing.body, x, y, hx, hy, halfWidth, length)))
-            continue;
-          added.add(polygon);
-          let associated = this.lines.get(line);
-          if (!associated) this.lines.set(line, (associated = []));
-          associated.push(crossing);
-          for (const key of binKeys(polygon[0]!)) {
-            let entries = this.index.get(key);
-            if (!entries) this.index.set(key, (entries = []));
-            entries.push(crossing);
+          if (!bodyHitsPolygon(road, polygon, corners)) continue;
+          const prepared = geometry.get(polygon)!;
+          prepared.lines.add(line);
+          const along = Math.max(
+            0,
+            Math.min(length, (prepared.centre.x - x) * hx + (prepared.centre.y - y) * hy),
+          );
+          const distance = Math.hypot(
+            prepared.centre.x - x - hx * along,
+            prepared.centre.y - y - hy * along,
+          );
+          // Equal distances retain the first segment in deterministic line/vertex order.
+          if (distance < prepared.distance) {
+            prepared.distance = distance;
+            prepared.hx = hx;
+            prepared.hy = hy;
           }
+        }
+      }
+    }
+    for (const [polygon, prepared] of geometry) {
+      yield;
+      if (!prepared.lines.size) continue;
+      const shared = this.derive(polygon, prepared.hx, prepared.hy);
+      for (const line of prepared.lines) {
+        const controlled = signals.controlsCrossing(line, {
+          x: prepared.centre.x * this.pm,
+          y: prepared.centre.y * this.pm,
+        });
+        if (controlled) continue;
+        const crossing = { ...shared, line, controlled };
+        let associated = this.lines.get(line);
+        if (!associated) this.lines.set(line, (associated = []));
+        associated.push(crossing);
+        for (const key of binKeys(polygon[0]!)) {
+          let entries = this.index.get(key);
+          if (!entries) this.index.set(key, (entries = []));
+          entries.push(crossing);
         }
       }
     }
   }
   private derive(
     polygon: Polygon,
-    line: number,
     hx: number,
     hy: number,
-    signals: SignalControl,
-  ): PedestrianCrossing {
+  ): Omit<PedestrianCrossing, 'line' | 'controlled'> {
     const ring = polygon[0]!;
     const centre = { x: 0, y: 0 };
     for (const p of ring) {
@@ -404,8 +437,6 @@ export class PedestrianCrossings {
       body: { ...centre, hx: ex, hy: ey, length: along * 2, width: side * 2 },
       entrances,
       entranceAreas: [entranceArea(entrances[0]), entranceArea(entrances[1])],
-      line,
-      controlled: signals.controlsCrossing(line, { x: centre.x * this.pm, y: centre.y * this.pm }),
       identity: {
         key: `${Math.round(global.x)},${Math.round(global.y)}`,
         ...global,
@@ -422,6 +453,24 @@ export class PedestrianCrossings {
       x: (this.tile.x * EXTENT + p.x * this.pm) * scale,
       y: (this.tile.y * EXTENT + p.y * this.pm) * scale,
     };
+  }
+  /** Only a full straight route can use geographic projection as an along-route bound. */
+  heldRange(
+    holds: readonly PedestrianHold[],
+    straight: PedestrianSegment,
+    physicalRange: number,
+  ): number {
+    const start = this.geographic(straight),
+      scale = this.geographicScale;
+    let range = physicalRange;
+    for (const h of holds) {
+      const projected = (h.x - start.x) * straight.hx + (h.y - start.y) * straight.hy;
+      // Both centre and radius may differ by the geographic matching tolerance after adoption.
+      const reach = (projected + h.radius) / scale + 2 * PEDESTRIAN.holdMatch;
+      if (!Number.isFinite(reach)) return PEDESTRIAN.maxRange;
+      range = Math.max(range, reach);
+    }
+    return Math.min(PEDESTRIAN.maxRange, range);
   }
   along(
     path: readonly PedestrianSegment[],
@@ -523,7 +572,7 @@ export class PedestrianCrossings {
         const committed =
           previous?.committed === true ||
           front <= 0 ||
-          (!previous && front < (velocity * velocity) / (2 * k.maxBrake));
+          (!previous && front < stoppingReach(velocity, k.maxBrake, 0));
         const record =
           previous &&
           elapsed === previous.elapsed &&

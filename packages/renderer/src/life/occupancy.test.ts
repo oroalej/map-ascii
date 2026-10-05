@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pedestrianView } from './pedestrians';
 import {
   bodiesOverlap,
   bodyCorners,
@@ -21,34 +22,36 @@ const box = (x: number, y: number, length = 4, width = 2): Body => ({
   hx: 1,
   hy: 0,
 });
+const nearest = (o: Occupancy, x = 0, y = 0, hx = 1, hy = 0, width = 1, range = 10) =>
+  pedestrianView(o, 0.9).walkersAlong(
+    [{ x, y, hx, hy, length: range, ahead: 0, line: 0 }],
+    width,
+    range,
+  );
 
 describe('pedestrian occupancy queries', () => {
   const human = (x: number, y: number): Body => ({ ...box(x, y, 1, 1), kind: BODY_KIND.human });
-  const ahead = (o: Occupancy, ignore?: object, excluded?: readonly Polygon[]) =>
-    o.nearestInCorridor(0, 0, 1, 0, 1, 10, BODY_KIND.human, ignore, excluded);
   it('uses the intersected footprint, with side, behind, range and kind filtering', () => {
     const o = new Occupancy();
     for (const b of [human(-1, 0), human(4, 2), human(10.6, 0), box(2, 0)]) o.set({}, [b]);
-    expect(ahead(o)).toBe(Infinity);
+    expect(nearest(o)).toBe(Infinity);
     const person = {};
     o.set(person, [human(10.4, 0)]);
-    expect(ahead(o)).toBeCloseTo(9.9);
-    expect(ahead(o, person)).toBe(Infinity);
+    expect(nearest(o)).toBeCloseTo(9.9);
     o.set(person, [human(5, 0)]);
-    expect(ahead(o)).toBe(4.5);
-    expect(ahead(o, undefined, [[ring(4, -1, 2, 2)]])).toBe(Infinity);
+    expect(nearest(o)).toBe(4.5);
     o.delete(person);
-    expect(ahead(o)).toBe(Infinity);
+    expect(nearest(o)).toBe(Infinity);
   });
   it('clips a rotated body and corridor across spatial bins', () => {
     const o = new Occupancy(),
       h = Math.SQRT1_2;
     o.set({}, [{ ...human(12 * h, 12 * h), hx: h, hy: h }]);
-    expect(o.nearestInCorridor(0, 0, h, h, 1, 15, BODY_KIND.human)).toBeCloseTo(11.5);
+    expect(nearest(o, 0, 0, h, h, 1, 15)).toBeCloseTo(11.5);
     const rotated = new Occupancy();
     rotated.set({}, [{ ...human(5, 1), hx: h, hy: h, length: 4 }]);
-    expect(ahead(rotated)).toBeGreaterThan(3);
-    expect(ahead(rotated)).toBeLessThan(4);
+    expect(nearest(rotated)).toBeGreaterThan(3);
+    expect(nearest(rotated)).toBeLessThan(4);
   });
   it('visits area footprints with heading predicates and releases scratch references', () => {
     const o = new Occupancy(),
@@ -61,7 +64,7 @@ describe('pedestrian occupancy queries', () => {
     expect(o.someInArea([ring(20, 20, 2, 2)], BODY_KIND.human)).toBe(false);
     const scratch = o as unknown as { queryNeighbors: Set<object> };
     expect(scratch.queryNeighbors.size).toBe(0);
-    ahead(o);
+    nearest(o);
     expect(scratch.queryNeighbors.size).toBe(0);
     expect(() =>
       o.someInArea(area, BODY_KIND.human, () => {
@@ -70,7 +73,7 @@ describe('pedestrian occupancy queries', () => {
     ).toThrow('predicate');
     expect(scratch.queryNeighbors.size).toBe(0);
     o.set(person, [{ ...human(5, 0), kind: BODY_KIND.animal }]);
-    expect(ahead(o)).toBe(Infinity);
+    expect(nearest(o)).toBe(Infinity);
   });
   it('matches replacement updates for scores, classification and removal within shared bins', () => {
     const current = new Occupancy(),
@@ -95,13 +98,11 @@ describe('pedestrian occupancy queries', () => {
           replaced.conflicts(owners[i]!, [bodies[i]!]),
         );
       expect(current.hasHumans).toBe(replaced.hasHumans);
-      expect(current.nearestInCorridor(0, 4, 1, 0, 1, 10, BODY_KIND.human)).toBe(
-        replaced.nearestInCorridor(0, 4, 1, 0, 1, 10, BODY_KIND.human),
-      );
+      expect(nearest(current, 0, 4)).toBe(nearest(replaced, 0, 4));
     }
     for (const owner of owners) current.delete(owner);
     expect(current.hasHumans).toBe(false);
-    expect(current.nearestInCorridor(0, 4, 1, 0, 1, 10, BODY_KIND.human)).toBe(Infinity);
+    expect(nearest(current, 0, 4)).toBe(Infinity);
   });
 });
 const ring = (x: number, y: number, w: number, h: number) => [
@@ -255,7 +256,7 @@ it('matches polygon clipping for seeded rotated footprints and zero-width/range 
     else expect(actual).toBe(Infinity);
     const occupied = new Occupancy();
     occupied.set({}, [{ ...body, kind: BODY_KIND.human }]);
-    const indexed = occupied.nearestInCorridor(x, y, hx, hy, width, range, BODY_KIND.human);
+    const indexed = nearest(occupied, x, y, hx, hy, width, range);
     if (Number.isFinite(expected)) expect(indexed).toBeCloseTo(expected, 8);
     else expect(indexed).toBe(Infinity);
   }

@@ -54,6 +54,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  frontClearance,
   TERMINAL,
   PEDESTRIAN,
   FILLET,
@@ -169,7 +170,7 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
-  return stoppingReach(velocity, brake, length / 2 + FOLLOW.minGap, TERMINAL.pad);
+  return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
 }
 
 type GroundAgent = Mover | Gatherer | Stall;
@@ -758,6 +759,11 @@ export class TileLife {
 
   private pedestrianCrossings!: PedestrianCrossings;
   private readonly pathScratch: { cursor: Mover; at: Pose; next: Pose }[] = [];
+  private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  /** Borrowed only by the synchronous physical query; generator/cache results remain detached. */
+  private readonly straightSegments: PedestrianSegment[] = [
+    { x: 0, y: 0, hx: 1, hy: 0, length: 0, ahead: 0, line: 0 },
+  ];
   private stoppedPaths?: WeakMap<
     Mover,
     {
@@ -1081,14 +1087,8 @@ export class TileLife {
     return target;
   }
 
-  /** Pure lookahead over known exits, using the same fillet poses as clearance. */
-  private *pedestrianPath(
-    m: Mover,
-    range: number,
-    physicalRange = range,
-  ): Generator<PedestrianSegment> {
-    const pm = this.perMeter,
-      c = this.geo.coords;
+  private straightPedestrianSegment(m: Mover, range: number, out?: PedestrianSegment) {
+    const pm = this.perMeter;
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
     const reach = FILLET.maxM * pm;
     if (
@@ -1097,18 +1097,42 @@ export class TileLife {
       (!this.curvable[m.line] || (m.d > reach && remaining - range * pm > reach))
     ) {
       // No bend or changing curb offset can affect this entire lookahead chord.
-      const at = this.pose(m);
-      yield {
-        x: at.x / pm,
-        y: at.y / pm,
-        hx: at.hx,
-        hy: at.hy,
-        length: range,
-        ahead: 0,
-        line: m.line,
-      };
+      const at = this.pose(m, this.pedestrianPose);
+      if (!out)
+        return {
+          x: at.x / pm,
+          y: at.y / pm,
+          hx: at.hx,
+          hy: at.hy,
+          length: range,
+          ahead: 0,
+          line: m.line,
+        };
+      out.x = at.x / pm;
+      out.y = at.y / pm;
+      out.hx = at.hx;
+      out.hy = at.hy;
+      out.length = range;
+      out.ahead = 0;
+      out.line = m.line;
+      return out;
+    }
+    return undefined;
+  }
+
+  /** Pure lookahead over known exits, using the same fillet poses as clearance. */
+  private *pedestrianPath(
+    m: Mover,
+    range: number,
+    physicalRange = range,
+  ): Generator<PedestrianSegment> {
+    const straight = this.straightPedestrianSegment(m, range);
+    if (straight) {
+      yield straight;
       return;
     }
+    const pm = this.perMeter,
+      c = this.geo.coords;
     const exits = m.junctionRoute?.exits;
     const firstExit = m.routing?.plan?.exit ?? m.next;
     const curbScenes = this.scenes.curbSite(m) !== undefined;
@@ -1134,22 +1158,20 @@ export class TileLife {
       next: { x: 0, y: 0, hx: 0, hy: 0 },
     };
     const cursor = scratch.cursor;
-    Object.assign(cursor, {
-      kind: m.kind,
-      vehicle: m.vehicle,
-      line: m.line,
-      from: m.from,
-      dir: m.dir,
-      d: m.d,
-      x: m.x,
-      y: m.y,
-      hx: m.hx,
-      hy: m.hy,
-      lane: m.lane,
-      came: m.came,
-      next: exits ? exits[0] : firstExit,
-      momentFacing: m.momentFacing,
-    });
+    cursor.kind = m.kind;
+    cursor.vehicle = m.vehicle;
+    cursor.line = m.line;
+    cursor.from = m.from;
+    cursor.dir = m.dir;
+    cursor.d = m.d;
+    cursor.x = m.x;
+    cursor.y = m.y;
+    cursor.hx = m.hx;
+    cursor.hy = m.hy;
+    cursor.lane = m.lane;
+    cursor.came = m.came;
+    cursor.next = exits ? exits[0] : firstExit;
+    cursor.momentFacing = m.momentFacing;
     try {
       let at = this.pose(cursor, scratch.at, m),
         next = scratch.next,
@@ -1339,7 +1361,15 @@ export class TileLife {
     const length = Math.max(spec.length, pedestrians.minimum);
     const range = pedestrianRange((m.v ?? m.speed) / this.perMeter, length, k);
     const halfWidth = spec.width / 2 + PEDESTRIAN.corridorPad;
-    const fullRange = m.pedestrianHolds ? PEDESTRIAN.maxRange : range;
+    let fullRange = range;
+    if (m.pedestrianHolds?.length) {
+      const straight =
+        !m.momentFacing &&
+        this.straightPedestrianSegment(m, PEDESTRIAN.maxRange, this.straightSegments[0]);
+      fullRange = straight
+        ? crossings.heldRange(m.pedestrianHolds, straight, range)
+        : PEDESTRIAN.maxRange;
+    }
     const segments = this.hasPedestrianCrossing(m)
       ? this.pedestrianSegments(m, fullRange, range)
       : undefined;
@@ -1358,12 +1388,16 @@ export class TileLife {
         (m.v ?? m.speed) / this.perMeter,
       );
     m.pedestrianHolds = crossing?.holds;
+    const physicalTarget = crossing?.target ?? target;
+    if (physicalTarget <= 0 || pedestrians.empty) return physicalTarget;
+    const straight =
+      !segments && this.straightPedestrianSegment(m, range, this.straightSegments[0]);
     return pedestrianLimit(
       pedestrians,
-      segments ?? this.pedestrianPath(m, fullRange, range),
+      segments ?? (straight ? this.straightSegments : this.pedestrianPath(m, fullRange, range)),
       halfWidth,
       length,
-      crossing?.target ?? target,
+      physicalTarget,
       k,
       this.perMeter,
       dt,
@@ -2370,12 +2404,16 @@ export class TileLife {
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
   private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
+    return this.endpointRoom(m, undefined, junctions);
+  }
+
+  private endpointRoom(m: Mover, remaining?: number, junctions = true): number | undefined {
     if (this.seamLimits?.get(m)?.crossing) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
-    if (junctions && this.exitOptions(m, end).length) return;
+    if (junctions && this.hasExit(m, end)) return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
-    const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
-    return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
+    const distance = remaining ?? m.dir * (this.along[end]! - this.along[m.from]!) - m.d;
+    return Math.max(0, distance - frontClearance(length) * this.perMeter);
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
@@ -3060,30 +3098,15 @@ export class TileLife {
   }
 
   private terminalTarget(m: Mover, target: number, remaining: number): number {
-    if (
-      m.kind !== 'vehicle' ||
-      !m.vehicle ||
-      this.geo.oneway?.[m.line] ||
-      this.seamLimits?.get(m)?.crossing
-    )
-      return target;
+    if (m.kind !== 'vehicle' || !m.vehicle || this.geo.oneway?.[m.line]) return target;
     const pm = this.perMeter;
-    const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const k = kinematicsOf(m.vehicle);
-    if (
-      remaining >= terminalReach((m.v ?? m.speed) / pm, VEHICLES[m.vehicle].length, k.brake) * pm ||
-      this.hasExit(m, end)
-    )
+    if (remaining >= terminalReach((m.v ?? m.speed) / pm, VEHICLES[m.vehicle].length, k.brake) * pm)
       return target;
-    return Math.min(
-      target,
-      stopBefore(
-        remaining,
-        TERMINAL.creep * pm,
-        k.brake * pm,
-        (VEHICLES[m.vehicle].length / 2 + FOLLOW.minGap) * pm,
-      ),
-    );
+    const room = this.endpointRoom(m, remaining);
+    return room === undefined
+      ? target
+      : Math.min(target, stopBefore(room, TERMINAL.creep * pm, k.brake * pm));
   }
 
   private mergeLane(m: Mover): number {

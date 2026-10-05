@@ -24,10 +24,21 @@ import {
 } from './pedestrians';
 import { complete } from './cooperate';
 import { TileLife as StandaloneLife } from './simulate';
-import { metersPerUnit } from '../raster/geometry';
+import { EXTENT, metersPerUnit } from '../raster/geometry';
 import { pedestrianWorld } from './testing/pedestrians';
 
 const tile = { z: 16, x: 55192, y: 30266 };
+function ahead(
+  view: PedestrianView,
+  x: number,
+  y: number,
+  hx: number,
+  hy: number,
+  width: number,
+  range: number,
+) {
+  return view.walkersAlong([{ x, y, hx, hy, length: range, ahead: 0, line: 0 }], width, range);
+}
 function population(tiles = [tile], profiled = false) {
   const builder = new LifeBuilder();
   builder.line(
@@ -68,6 +79,42 @@ function guard(world: LifeWorld) {
   return (world as unknown as { groundGuard(minimum: number): WorldGroundGuard }).groundGuard(0.9);
 }
 describe('live pedestrian readers', () => {
+  it('clips a full straight query to rotated, scaled footprint boundaries', () => {
+    for (const angle of [Math.PI / 4, -Math.PI / 3]) {
+      const hx = Math.cos(angle),
+        hy = Math.sin(angle),
+        frame = { x: 100, y: -30, scale: 2 },
+        occupied = new Occupancy();
+      const body = (along: number, side: number, length = 1, width = 1): Body => ({
+        x: frame.x + (along * hx - side * hy) * frame.scale,
+        y: frame.y + (along * hy + side * hx) * frame.scale,
+        hx,
+        hy,
+        length: length * frame.scale,
+        width: width * frame.scale,
+        kind: BODY_KIND.human,
+      });
+      occupied.set({}, [body(-20, 0), body(20, 25), body(31, 1.6, 4, 1)]);
+      const visited: number[] = [],
+        scan = occupied.someInArea.bind(occupied);
+      vi.spyOn(occupied, 'someInArea').mockImplementation((area, mask, predicate, ignore) =>
+        scan(
+          area,
+          mask,
+          (b) => {
+            visited.push(b.x);
+            return predicate?.(b) ?? true;
+          },
+          ignore,
+        ),
+      );
+      const reader = pedestrianView(occupied, 0.9, frame);
+      expect(
+        reader.walkersAlong([{ x: 0, y: 0, hx, hy, length: 30, ahead: 0, line: 0 }], 1.2, 30),
+      ).toBeCloseTo(29);
+      expect(visited).toHaveLength(1);
+    }
+  });
   it('reuses prepared conversions across readers but converts mutable query geometry again', () => {
     const f = crossingFixture(),
       frame = { x: 10, y: 20, scale: 2 };
@@ -111,11 +158,9 @@ describe('live pedestrian readers', () => {
       { x: 0, y: 0, hx: 1, hy: 0, length: 15, ahead: 0, line: 0 },
       { x: 15, y: 0, hx: 0, hy: 1, length: 15, ahead: 15, line: 0 },
     ];
-    const regions = vi.spyOn(occupied, 'someInArea'),
-      corridors = vi.spyOn(occupied, 'nearestInCorridor');
+    const regions = vi.spyOn(occupied, 'someInArea');
     expect(pedestrianLimit(view, path, 1.2, 4.4, 8, kinematicsOf('car'), 1, 0.1, 30)).toBe(8);
     expect(regions).toHaveBeenCalledTimes(1);
-    expect(corridors).not.toHaveBeenCalled();
     body.x = 15;
     body.y = 5;
     occupied.set(owner, [body]);
@@ -164,7 +209,7 @@ describe('live pedestrian readers', () => {
       ).standalonePedestrians();
       for (const view of [guard(world).pedestrians(life!), local])
         expect(
-          view.walkersAhead(human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
+          ahead(view, human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
         ).toBe(Infinity);
       life!.movers.length = 0;
     }
@@ -212,7 +257,7 @@ describe('live pedestrian readers', () => {
     ).standalonePedestrians();
     for (const view of [guard(world).pedestrians(life!), local])
       expect(
-        view.walkersAhead(human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
+        ahead(view, human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
       ).toBeCloseTo(9.55);
   });
   it('exposes an ordinary attendant to both readers without adding collision footprints', () => {
@@ -237,17 +282,10 @@ describe('live pedestrian readers', () => {
     ).standalonePedestrians();
     for (const reader of [view, local]) {
       expect(
-        reader.walkersAhead(human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 0.1, 30),
+        ahead(reader, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 0.1, 30),
       ).toBeCloseTo(9.5);
       expect(
-        reader.walkersAhead(
-          stall.x / life.perMeter - 10,
-          stall.y / life.perMeter - 1,
-          1,
-          0,
-          0.05,
-          30,
-        ),
+        ahead(reader, stall.x / life.perMeter - 10, stall.y / life.perMeter - 1, 1, 0, 0.05, 30),
       ).toBe(Infinity);
     }
     // The original movement guard reserves the cart alone, so this legal attendant overlap stays legal.
@@ -259,9 +297,9 @@ describe('live pedestrian readers', () => {
     expect(car.v! / life.perMeter).toBeLessThan(8);
     expect(stall).toEqual(snapshot);
     g.remove(stall);
-    expect(
-      view.walkersAhead(human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 1, 30),
-    ).toBe(Infinity);
+    expect(ahead(view, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 1, 30)).toBe(
+      Infinity,
+    );
     stall.open = false;
     expect(guard(world).pedestrians(life).empty).toBe(true);
     expect(
@@ -301,14 +339,14 @@ describe('live pedestrian readers', () => {
         view = g.pedestrians(life!);
       const start = (m.x - 10 * life!.perMeter) / life!.perMeter;
       expect(view.minimum).toBe(0.9);
-      expect(view.walkersAhead(start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBeCloseTo(9.55);
+      expect(ahead(view, start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBeCloseTo(9.55);
       const before = { ...m };
       m.x += 5 * life!.perMeter;
       m.d = m.x;
       expect(g(life!, m, before)).toBe(true);
-      expect(view.walkersAhead(start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBeCloseTo(14.55);
+      expect(ahead(view, start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBeCloseTo(14.55);
       g.remove(m);
-      expect(view.walkersAhead(start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBe(Infinity);
+      expect(ahead(view, start, 2000 / life!.perMeter, 1, 0, 1, 30)).toBe(Infinity);
     });
   it('converts adjacent and mixed-zoom footprints to the querying tile metres', () => {
     for (const sourceTile of [tile, { z: 15, x: tile.x >> 1, y: tile.y >> 1 }]) {
@@ -324,7 +362,7 @@ describe('live pedestrian readers', () => {
       const cy = (f.y + m.y * f.scale) / source!.perMeter;
       const sizeScale = (f.scale * target!.perMeter) / source!.perMeter;
       const view = guard(world).pedestrians(source!);
-      expect(view.walkersAhead(cx - 10, cy, 1, 0, 1, 30)).toBeCloseTo(10 - 0.45 * sizeScale, 6);
+      expect(ahead(view, cx - 10, cy, 1, 0, 1, 30)).toBeCloseTo(10 - 0.45 * sizeScale, 6);
       let at = 0;
       expect(
         view.walkersInArea(
@@ -352,11 +390,9 @@ describe('live pedestrian readers', () => {
     } = population();
     life!.movers.push(person(life!), person(life!, -10));
     life!.scenes.hidden = () => true;
-    expect(
-      guard(world)
-        .pedestrians(life!)
-        .walkersAhead(0, 2000 / life!.perMeter, 1, 0, 1, 100),
-    ).toBe(Infinity);
+    expect(ahead(guard(world).pedestrians(life!), 0, 2000 / life!.perMeter, 1, 0, 1, 100)).toBe(
+      Infinity,
+    );
   });
   it('provides a standalone human reader and an empty fast path', () => {
     const {
@@ -364,15 +400,15 @@ describe('live pedestrian readers', () => {
     } = population();
     const read = () =>
       (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians();
-    expect(read().walkersAhead(0, 2000 / life!.perMeter, 1, 0, 1, 200)).toBe(Infinity);
+    expect(ahead(read(), 0, 2000 / life!.perMeter, 1, 0, 1, 200)).toBe(Infinity);
     const m = person(life!);
     life!.movers.push(m);
     expect(
-      read().walkersAhead(m.x / life!.perMeter - 10, 2000 / life!.perMeter, 1, 0, 1, 30),
+      ahead(read(), m.x / life!.perMeter - 10, 2000 / life!.perMeter, 1, 0, 1, 30),
     ).toBeCloseTo(9.55);
     m.x += life!.perMeter;
     expect(
-      read().walkersAhead(1000 / life!.perMeter - 10, 2000 / life!.perMeter, 1, 0, 1, 30),
+      ahead(read(), 1000 / life!.perMeter - 10, 2000 / life!.perMeter, 1, 0, 1, 30),
     ).toBeCloseTo(10.55);
   });
 });
@@ -409,6 +445,52 @@ function brakingFixture(craft: 'car' | 'bus' = 'car', distance = 15) {
   return { world, life, car, human };
 }
 describe('pedestrian braking targets', () => {
+  for (const expired of [false, true])
+    it(`bounds a slow straight courtesy path without losing its timer (expired=${expired})`, () => {
+      const { world, life, car } = pedestrianWorld(-9.5);
+      car.x = car.d = 2000 - 8 * life.perMeter;
+      car.v = 0.3 * life.perMeter;
+      world.step(0.1, undefined, 18);
+      const first = car.pedestrianHolds?.[0];
+      if (!first) throw new Error('Expected a crossing record');
+      if (expired) car.pedestrianHolds = [{ ...first, elapsed: PEDESTRIAN.holdMax, expired: true }];
+      const tracer = life as unknown as {
+        pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
+        pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+      };
+      const paths = vi.spyOn(tracer, 'pedestrianSegments');
+      tracer.pedestrianTarget(car, car.speed, guard(world).pedestrians(life), 0.1);
+      expect(paths).toHaveBeenCalledOnce();
+      const [, full, physical] = paths.mock.calls[0]!;
+      expect(full).toBeGreaterThanOrEqual(physical);
+      expect(full).toBeLessThan(PEDESTRIAN.maxRange);
+      expect(car.pedestrianHolds?.[0]?.key).toBe(first.key);
+      expect(car.pedestrianHolds?.[0]?.elapsed).toBeCloseTo(
+        expired ? PEDESTRIAN.holdMax : first.elapsed + 0.1,
+      );
+      expect(car.pedestrianHolds?.[0]?.expired).toBe(expired);
+    });
+  it('retains detached straight paths across synchronous borrowed-buffer queries', () => {
+    const { world, life, car } = brakingFixture();
+    const tracer = life as unknown as {
+      pedestrianPath(m: Mover, range: number): Generator<PedestrianSegment>;
+      pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
+    };
+    const path = [...tracer.pedestrianPath(car, 20)],
+      saved = structuredClone(path),
+      other = { ...car, x: car.x - life.perMeter, d: car.d - life.perMeter };
+    const a = tracer.pedestrianPath(car, 20),
+      first = a.next();
+    if (first.done) throw new Error('Expected a straight segment');
+    const retained = structuredClone(first.value);
+    const view = guard(world).pedestrians(life);
+    tracer.pedestrianTarget(car, car.speed, view, 0.1);
+    tracer.pedestrianTarget(other, other.speed, view, 0.1);
+    expect(path).toEqual(saved);
+    expect(first.value).toEqual(retained);
+    expect(a.next().done).toBe(true);
+    expect([...tracer.pedestrianPath(other, 20)][0]).not.toBe(path[0]);
+  });
   it('keeps unrelated crossings lazy while checking known exits and cleaning retained holds', () => {
     const setup = (onExit: boolean) => {
       const pm = 1 / metersPerUnit(tile),
@@ -490,7 +572,13 @@ describe('pedestrian braking targets', () => {
       const materialized = vi.spyOn(tracer, 'pedestrianSegments');
       const target = () =>
         tracer.pedestrianTarget(car, car.speed, pedestrianView(occupied, 0.9), 0.1);
-      return { car, target, materialized, consumed: () => consumed };
+      return {
+        car,
+        target,
+        materialized,
+        path: () => [...original(car, 30, 30)],
+        consumed: () => consumed,
+      };
     };
     const unrelated = setup(false);
     expect(unrelated.target()).toBe(unrelated.car.speed);
@@ -511,11 +599,25 @@ describe('pedestrian braking targets', () => {
       expect(exit.car.pedestrianHolds).toHaveLength(1);
       expect(exit.materialized).toHaveBeenCalledTimes(1);
       expect(exit.consumed()).toBeGreaterThan(1);
+      const key = exit.car.pedestrianHolds?.[0]?.key;
+      exit.car.v = (0.3 * exit.car.speed) / 8;
+      exit.target();
+      expect(exit.materialized.mock.calls[1]?.[1]).toBe(PEDESTRIAN.maxRange);
+      expect(exit.car.pedestrianHolds?.[0]?.key).toBe(key);
+      const path = exit.path(),
+        start = path[0]!,
+        last = path[path.length - 1]!;
+      expect(
+        Math.hypot(
+          last.x + last.hx * last.length - start.x,
+          last.y + last.hy * last.length - start.y,
+        ),
+      ).toBeLessThan(last.ahead + last.length);
       exit.car.next = -1;
       exit.car.routing = undefined;
       exit.car.junctionRoute = undefined;
       exit.target();
-      expect(exit.materialized).toHaveBeenCalledTimes(2);
+      expect(exit.materialized).toHaveBeenCalledTimes(3);
       expect(exit.car.pedestrianHolds).toBeUndefined();
     }
   });
@@ -789,6 +891,184 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   return { pm, crossings, path, occupied, view, body, limit };
 }
 describe('unsignalised pedestrian crossings', () => {
+  for (const expired of [false, true])
+    it(`retains a real crossing timer through an adjacent-tile handover (expired=${expired})`, () => {
+      const right = { ...tile, x: tile.x + 1 },
+        pm = 1 / metersPerUnit(tile);
+      const geometry = (cx: number) => {
+        const b = new LifeBuilder();
+        b.line(
+          [
+            { x: 0, y: 2000 },
+            { x: EXTENT, y: 2000 },
+          ],
+          LifeLine.roadMajor,
+          14,
+        );
+        b.line(
+          [
+            { x: cx, y: 2000 - 40 * pm },
+            { x: cx, y: 2000 + 40 * pm },
+          ],
+          LifeLine.path,
+          3,
+        );
+        b.area('crossing', [
+          [
+            { x: cx - 1.5 * pm, y: 2000 - 7 * pm },
+            { x: cx + 1.5 * pm, y: 2000 - 7 * pm },
+            { x: cx + 1.5 * pm, y: 2000 + 7 * pm },
+            { x: cx - 1.5 * pm, y: 2000 + 7 * pm },
+          ],
+        ]);
+        return b.finish();
+      };
+      const world = new LifeWorld();
+      world.sync([
+        { key: 'left', tile, life: geometry(EXTENT) },
+        { key: 'right', tile: right, life: geometry(0) },
+      ]);
+      const lives = worldTiles(world),
+        left = lives.get('left')!,
+        incoming = lives.get('right')!;
+      for (const life of [left, incoming]) {
+        life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+        life.scenes.sites.length = 0;
+      }
+      const car: Mover = {
+        ...person(left, EXTENT - pm),
+        kind: 'vehicle',
+        vehicle: 'car',
+        group: undefined,
+        pause: 0,
+        speed: 8 * pm,
+        v: 3 * pm,
+      };
+      const human: Mover = {
+        ...person(incoming, 0.2 * pm),
+        line: 1,
+        from: 2,
+        d: 30.5 * pm,
+        y: 2000 - 9.5 * pm,
+        hx: 0,
+        hy: 1,
+      };
+      left.movers.push(car);
+      incoming.movers.push(human);
+      world.step(0.1, undefined, 18);
+      const first = car.pedestrianHolds?.[0];
+      expect(first).toBeDefined();
+      if (!first) throw new Error('Expected a real crossing hold');
+      expect(first.committed).toBe(true);
+      if (expired) car.pedestrianHolds = [{ ...first, elapsed: PEDESTRIAN.holdMax, expired: true }];
+      let previous = car.pedestrianHolds![0]!.elapsed;
+      for (let frame = 0; frame < 20 && !incoming.movers.includes(car); frame++) {
+        world.step(0.1, undefined, 18);
+        expect(car.pedestrianHolds?.[0]?.key).toBe(first.key);
+        expect(car.pedestrianHolds?.[0]?.elapsed).toBeCloseTo(
+          expired ? PEDESTRIAN.holdMax : previous + 0.1,
+        );
+        expect(car.pedestrianHolds?.[0]?.expired).toBe(expired);
+        previous = car.pedestrianHolds![0]!.elapsed;
+      }
+      expect(incoming.movers).toContain(car);
+      expect(left.movers).not.toContain(car);
+      world.step(0.1, undefined, 18);
+      expect(car.pedestrianHolds?.[0]?.key).toBe(first.key);
+      expect(car.pedestrianHolds?.[0]?.elapsed).toBeCloseTo(
+        expired ? PEDESTRIAN.holdMax : previous + 0.1,
+      );
+      expect(car.pedestrianHolds?.[0]?.expired).toBe(expired);
+    });
+  for (const angle of [0, Math.PI / 4])
+    it(`shares actual curb entrances across overlapping roads at ${angle} radians`, () => {
+      const pm = 1 / metersPerUnit(tile),
+        hx = Math.cos(angle),
+        hy = Math.sin(angle);
+      const point = (x: number, y: number) => ({
+        x: 2000 + (x * hx - y * hy) * pm,
+        y: 2000 + (x * hy + y * hx) * pm,
+      });
+      const builder = new LifeBuilder();
+      builder.line([point(0, 0), point(100, 0)], LifeLine.roadMajor, 14);
+      builder.line([point(50, -20), point(50, 30)], LifeLine.roadMinor, 6);
+      builder.area('crossing', [[point(47, 3.5), point(53, 3.5), point(53, 6.5), point(47, 6.5)]]);
+      const life = new StandaloneLife(tile, builder.finish(), 1),
+        crossings = new PedestrianCrossings(tile, pm);
+      complete(crossings.prepare(life.geo, life.signals));
+      const start = point(35, 5.25);
+      const path: PedestrianSegment[] = [
+        {
+          x: start.x / pm,
+          y: start.y / pm,
+          hx,
+          hy,
+          ahead: 0,
+          length: 30,
+          line: 0,
+        },
+      ];
+      const main = [...crossings.along(path, 1.2).keys()][0]!;
+      const sideStart = point(48.5, -10);
+      const side = [
+        ...crossings
+          .along(
+            [
+              {
+                x: sideStart.x / pm,
+                y: sideStart.y / pm,
+                hx: -hy,
+                hy: hx,
+                ahead: 0,
+                length: 30,
+                line: 1,
+              },
+            ],
+            1.2,
+          )
+          .keys(),
+      ][0]!;
+      expect(main.body).toBe(side.body);
+      expect(main.entrances).toBe(side.entrances);
+      expect(main.entranceAreas).toBe(side.entranceAreas);
+      expect(main.identity).toBe(side.identity);
+      for (const at of [point(46, 5), point(54, 5)])
+        expect(
+          main.entrances.some((p) => Math.hypot(p.x - at.x / pm, p.y - at.y / pm) < 1e-6),
+        ).toBe(true);
+      const occupied = new Occupancy();
+      const set = (x: number, y: number, dx: number, dy: number) => {
+        const at = point(x, y);
+        occupied.set(occupied, [
+          {
+            x: at.x / pm,
+            y: at.y / pm,
+            hx: dx * hx - dy * hy,
+            hy: dx * hy + dy * hx,
+            length: 0.9,
+            width: 1,
+            kind: BODY_KIND.human,
+          },
+        ]);
+      };
+      const limit = () =>
+        crossings.limit(
+          pedestrianView(occupied, 0.9),
+          path,
+          1.2,
+          4.4,
+          30,
+          8 * pm,
+          kinematicsOf('car'),
+          0.1,
+        );
+      set(46, 5, 1, 0);
+      expect(limit().holds).toHaveLength(1);
+      expect(limit().target).toBeLessThan(8 * pm);
+      set(50, 2.5, 0, 1);
+      expect(limit().holds).toBeUndefined();
+      expect(limit().target).toBe(8 * pm);
+    });
   it('keeps yielding inside the stopping margin after a leader clears', () => {
     const { world, life, car } = pedestrianWorld(-9.5);
     // The front is 1 m before the stripes, inside the 1.5 m desired stopping margin.
@@ -1075,13 +1355,13 @@ describe('unsignalised pedestrian crossings', () => {
     for (let i = 1; i < 210; i++) result = f.limit(result.holds);
     expect(result.holds?.[0]).toMatchObject({ expired: true, elapsed: PEDESTRIAN.holdMax });
     expect(result.target / f.pm).toBe(8);
-    expect(f.view.walkersAhead(f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(14.5, 3);
+    expect(ahead(f.view, f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(14.5, 3);
     f.path[0]!.x += 5;
     expect(
       pedestrianLimit(f.view, f.path, 1.2, 4.4, result.target, kinematicsOf('car'), f.pm, 0.1, 30),
     ).toBeLessThan(result.target);
     f.occupied.set(owner, [f.body(-5, 3.5)]);
-    expect(f.view.walkersAhead(f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(4.5, 3);
+    expect(ahead(f.view, f.path[0]!.x, f.path[0]!.y, 1, 0, 1.2, 30)).toBeCloseTo(4.5, 3);
     f.path[0]!.line = 1;
     expect(f.limit(result.holds).holds).toBeUndefined();
   });

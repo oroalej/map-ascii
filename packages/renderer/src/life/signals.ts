@@ -145,7 +145,7 @@ export class SignalControl {
   /** The extra entrance hold belongs only to crossings without an existing controller. */
   controlsCrossing(line: number, centre: Point): boolean {
     for (const s of this.signals) {
-      const reach = (s.radius + 3.5) * this.perMeter;
+      const reach = (s.radius + SIGNAL.crossingMargin) * this.perMeter;
       if (s.approaches?.length) {
         if (
           s.approaches.some(
