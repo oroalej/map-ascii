@@ -2,34 +2,19 @@
   "terminal.integrated.profiles.windows": {
     "Codex: Implement Handoff": {
       "source": "Git Bash",
-      "args": [
-        "--login",
-        "-i",
-        "-c",
-        "\"$(pnpm --silent cli:latest codex || command -v codex)\" -c 'tui.terminal_title=[\"spinner\",\"thread-title\",\"run-state\",\"task-progress\"]'; exec bash --login -i"
-      ],
+      "args": ["--login", "-i", "${workspaceFolder}/scripts/codex-terminal.sh"],
       "icon": "rocket",
       "color": "terminal.ansiMagenta"
     },
     "Codex: Review PR": {
       "source": "Git Bash",
-      "args": [
-        "--login",
-        "-i",
-        "-c",
-        "\"$(pnpm --silent cli:latest codex || command -v codex)\" -c 'tui.terminal_title=[\"spinner\",\"thread-title\",\"run-state\",\"task-progress\"]'; exec bash --login -i"
-      ],
+      "args": ["--login", "-i", "${workspaceFolder}/scripts/codex-terminal.sh"],
       "icon": "git-pull-request",
       "color": "terminal.ansiBlue"
     },
     "Codex: Review Handoff": {
       "source": "Git Bash",
-      "args": [
-        "--login",
-        "-i",
-        "-c",
-        "\"$(pnpm --silent cli:latest codex || command -v codex)\" -c 'tui.terminal_title=[\"spinner\",\"thread-title\",\"run-state\",\"task-progress\"]'; exec bash --login -i"
-      ],
+      "args": ["--login", "-i", "${workspaceFolder}/scripts/codex-terminal.sh"],
       "icon": "checklist",
       "color": "terminal.ansiGreen"
     }
