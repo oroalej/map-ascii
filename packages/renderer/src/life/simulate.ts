@@ -133,8 +133,9 @@ import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, curvePose, type Pose, type Curve } from './curves';
-import { JunctionIndex, JunctionTable } from './junctions';
+import { JunctionIndex, JunctionTable, type Movement } from './junctions';
 import { JunctionTraffic } from './junction-traffic';
+import { JunctionCrossings } from './junction-crossings';
 import { trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -668,6 +669,7 @@ export class TileLife {
   private readonly localJunctions = new JunctionTable();
   private readonly localJunctionTraffic = new JunctionTraffic();
   private readonly clearingJunctions = new Set<string>();
+  readonly junctionCrossings = new JunctionCrossings(this);
   private readonly trafficGroups = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
@@ -959,7 +961,7 @@ export class TileLife {
   private time = 0;
   private junctions: { x: number; y: number; radius: number }[] = [];
 
-  private pedestrianCrossings!: PedestrianCrossings;
+  pedestrianCrossings!: PedestrianCrossings;
   private readonly pathScratch: { cursor: Mover; at: Pose; next: Pose }[] = [];
   private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly followingPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
@@ -1060,6 +1062,7 @@ export class TileLife {
     yield* crossings.prepare(geo, this.signals);
     this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along, true);
     yield* this.junctionIndex.prepare(tile);
+    this.junctionCrossings.prepare([this]);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
     yield* this.findJunctions();
@@ -3430,6 +3433,7 @@ export class TileLife {
     clock: number,
     tileKey = '',
     traffic?: JunctionTraffic,
+    pedestrians: PedestrianView = EMPTY_PEDESTRIANS,
   ) {
     if (!this.junctionIndex.junctions.length && table.empty) return;
     traffic ??= this.localJunctionTraffic;
@@ -3461,7 +3465,8 @@ export class TileLife {
             clock,
             Math.max(0, movement.ahead),
             movement,
-          );
+          ) &&
+          this.junctionClear(movement, pedestrians);
         table.request({
           m,
           life: this,
@@ -3501,7 +3506,7 @@ export class TileLife {
                 clock,
                 Math.max(0, p.ahead),
                 p,
-              ),
+              ) && this.junctionClear(p, pedestrians),
             traffic.room(m, previous, this),
             previous.key,
             traffic.atLine(m, previous, this, table),
@@ -3523,6 +3528,17 @@ export class TileLife {
       for (const movement of movements)
         submit(movement, movement.ahead < -0.05 * pm && movement.line === m.line);
     }
+  }
+
+  junctionClear(movement: Movement, pedestrians: PedestrianView): boolean {
+    const j = movement.junction;
+    const controlled =
+      j.controlled === true ||
+      this.signals.controlsCrossing(movement.entry?.line ?? movement.line, {
+        x: movement.entry?.x ?? j.x,
+        y: movement.entry?.y ?? j.y,
+      });
+    return this.junctionCrossings.clear(movement, pedestrians, controlled);
   }
 
   private terminalTarget(m: Mover, target: number, remaining: number): number {
@@ -3699,7 +3715,14 @@ export class TileLife {
       !this.scenes.hidden(m);
     this.prepareTraffic(active);
     table.begin(new Set([this]));
-    this.requestJunctions(table, active, clock);
+    this.requestJunctions(
+      table,
+      active,
+      clock,
+      '',
+      undefined,
+      this.standalonePedestrians(shows, near, env),
+    );
     table.resolve(clock);
   }
 
@@ -3798,6 +3821,7 @@ export class TileLife {
     };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
     const order = this.movementOrder();
+    let livePedestrians = pass?.pedestrians;
     // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
     // the cap in stable mover order.
     let running = 0;
@@ -3944,6 +3968,21 @@ export class TileLife {
             speeds[i]!,
             approach(seam.room, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
           );
+        if (m.kind === 'vehicle') {
+          livePedestrians ??= this.standalonePedestrians(shows, near, env);
+          for (const r of table.holds(m)) {
+            const p = r.movement;
+            if (r.inside || this.junctionClear(p, livePedestrians)) continue;
+            table.revokeGrant(m, p.key);
+            if (p.ahead >= -0.05 * this.perMeter) {
+              speeds[i] = Math.min(
+                speeds[i]!,
+                approach(p.ahead, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
+              );
+              this.caps[i] = Math.min(this.caps[i]!, Math.max(0, p.ahead) / dt);
+            }
+          }
+        }
         if (pedestrianTarget && m.kind === 'vehicle') speeds[i] = pedestrianTarget(m, speeds[i]!);
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
@@ -6060,6 +6099,8 @@ export class LifeWorld {
     this.junctionTraffic.begin(this.tiles.values().next().value!);
     for (const tile of this.tiles.values())
       for (const m of tile.movers) if (eligibility.get(tile)!(m)) this.junctionTraffic.add(tile, m);
+    const crossingSources = [...this.tiles.values()];
+    for (const tile of crossingSources) tile.junctionCrossings.prepare(crossingSources);
     for (const [key, tile] of this.tiles)
       tile.requestJunctions(
         this.junctions,
@@ -6067,6 +6108,7 @@ export class LifeWorld {
         this.clock,
         key,
         this.junctionTraffic,
+        guard.pedestrians(tile),
       );
     this.junctions.resolve(this.clock);
     const trains = trainLimits(

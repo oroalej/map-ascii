@@ -33,6 +33,7 @@ export type Junction = {
   radius: number;
   arms: Arm[];
   linked?: boolean;
+  controlled?: boolean;
 };
 export type Movement = {
   key: string;
@@ -131,6 +132,7 @@ export class JunctionIndex {
         y: members[0]!.y,
         radius: geo.signals![index * SIGNAL_STRIDE + 2]! * pm,
         linked: members.length > 1,
+        controlled: true,
         arms: arms.map((a) => ({
           line: a.line,
           along: a.along,

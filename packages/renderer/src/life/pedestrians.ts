@@ -290,10 +290,37 @@ export type PedestrianCrossing = {
 const DIRECT_CROSSINGS = 8;
 const NO_HOLDS: readonly PedestrianHold[] = [];
 
+/** Prepared owner/neighbor geometry in a consumer's metric frame, cached by junction gating. */
+export function transformCrossing(c: PedestrianCrossing, f: MetricFrame): PedestrianCrossing {
+  if (f.x === 0 && f.y === 0 && f.scale === 1) return c;
+  const point = (p: Point) => ({ x: f.x + p.x * f.scale, y: f.y + p.y * f.scale });
+  const polygon = (p: Polygon) => preparedArea(p.map((r) => r.map(point)));
+  return {
+    ...c,
+    polygon: polygon(c.polygon),
+    body: {
+      ...c.body,
+      ...point(c.body),
+      length: c.body.length * f.scale,
+      width: c.body.width * f.scale,
+    },
+    entrances: [point(c.entrances[0]), point(c.entrances[1])],
+    entranceAreas: [polygon(c.entranceAreas[0]), polygon(c.entranceAreas[1])],
+  };
+}
+
 /** Cached road associations and metric quads; neither walkers nor tiles are retained here. */
 export class PedestrianCrossings {
   private readonly index = new Map<number, PedestrianCrossing[]>();
   private readonly lines = new Map<number, PedestrianCrossing[]>();
+  private readonly controlledLines = new Map<number, PedestrianCrossing[]>();
+  /** Junction gating reads both; courtesy APIs continue to see only uncontrolled stripes. */
+  get uncontrolledAssociations(): ReadonlyMap<number, readonly PedestrianCrossing[]> {
+    return this.lines;
+  }
+  get controlledAssociations(): ReadonlyMap<number, readonly PedestrianCrossing[]> {
+    return this.controlledLines;
+  }
   private readonly foundCrossings = new Map<PedestrianCrossing, number>();
   private readonly limitCandidates = new Map<string, PedestrianCrossing>();
   private readonly usedHolds = new Set<PedestrianHold>();
@@ -394,11 +421,12 @@ export class PedestrianCrossings {
           x: prepared.centre.x * this.pm,
           y: prepared.centre.y * this.pm,
         });
-        if (controlled) continue;
         const crossing = { ...shared, line, controlled };
-        let associated = this.lines.get(line);
-        if (!associated) this.lines.set(line, (associated = []));
+        const lines = controlled ? this.controlledLines : this.lines;
+        let associated = lines.get(line);
+        if (!associated) lines.set(line, (associated = []));
         associated.push(crossing);
+        if (controlled) continue;
         for (const key of binKeys(polygon[0]!)) {
           let entries = this.index.get(key);
           if (!entries) this.index.set(key, (entries = []));
@@ -540,7 +568,7 @@ export class PedestrianCrossings {
     }
     return found;
   }
-  private blocked(c: PedestrianCrossing, view: PedestrianView): boolean {
+  blocked(c: PedestrianCrossing, view: PedestrianView): boolean {
     if (view.walkersInArea(c.polygon)) return true;
     const reach = PEDESTRIAN.curbReach;
     return c.entrances.some((p, i) => {
