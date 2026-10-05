@@ -45,16 +45,17 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 ## Rules
 
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`.
-- **Main moves on.** Pull `origin/main` before handoff review and once more before implementing (steps 0.4 and 3.0). Review amends stale assumptions; drift is never an unfixable `blocked` premise. If the final pull changes reviewed inputs, pause with `stale` instead of silently exceeding the handoff's two-round budget. After implementation starts, `$review-pr` handles synchronization.
+- **Main moves on.** Pull `origin/main` before handoff review and once more before implementing (steps 0.4 and 3.0). Review amends stale assumptions; drift is never an unfixable `blocked` premise. If the final pull changes reviewed inputs, pause with `stale` instead of silently exceeding the handoff's two-round budget, except when step 0.6 reused a review: step 3.0 then requires one fresh invocation. After implementation starts, `$review-pr` handles synchronization.
 - **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
 - **Long commands:** the `$review-pr` run can take several hours. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<scratch>`, and poll until it exits.
 - **Solve blockers; don't pause for them.** A failed gate, a premise that turns out false, an approach that doesn't work, or a finding a reviewer noticed is a problem to solve inside this task, not a decision for the owner. Diagnose it, change the approach within the handoff's goal, Invariants, Out of scope and `AGENTS.md`, and measure again. A gate that still fails after that doesn't stop the run: commit, open the PR, and list the gate as unmet in the PR body and the report.
-- **Hard stops** are the only reasons to pause:
+- **Setup guards:** the Models requirement and step 0's resolution checks can stop the run before a task is resolved. Once the task is resolved, these **hard stops** are the reasons to pause:
   - a tool or credential the work needs can't run (`merge tool unavailable`, missing `gh` auth, no tippecanoe/Docker for a required `data:build`)
   - another session's uncommitted files are in the way
   - the only fix would break a rule in `AGENTS.md` (its conventions, Git rules or Don'ts) or this skill's git safety
   - the handoff names a branch or worktree that belongs to another task
   - the handoff review ended `capped`, `stalled`, `stale` or `error` (step 2)
+  - a held-back file or rejected push prevents landing the branch (step 4)
 - **To pause:** move the task folder to `.plans/paused/`, rebase task-local path variables as step 0.5 describes, set its `.plans/README.md` row's Next step to the reason and what needs a human, then go to step 6. Historical review records remain unchanged; report their relocated artifact paths.
 
 ## 0. Resolve the handoff
@@ -82,7 +83,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    Then pull `origin/main` into it (see "Pull main" below).
 5. Move `<task-dir>` to `<main-checkout>/.plans/active/` if it is not already there. Before moving, verify resolved old/new paths stay within this task's main-checkout `.plans/` locations and that the destination is unoccupied. Retain each task-local path's suffix relative to the old task directory. After moving, rebase `<task-dir>`, `<scratch>`, a supplied task-local `--candidate`, and any result/artifact variables onto the new directory. Verify the relocated candidate and its adjacent canonical result still exist before forwarding them; preserve historical JSON records unchanged. Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`. Leave its Handoff review and PR review cells as they are (`not run` in a new row); the review skills write them.
 6. **Resume where the task left off.** Decide from the result files, not from the README cells (those are for people):
-   - **An open, non-draft PR exists for the branch** (`gh pr list --head <branch> --state open --json number,isDraft,headRefOid`): the implementation already landed. Skip steps 1–4. If the newest `review-pr` result for this PR (`review.json` in this task's scratch, or `result.json`/the `review-pr-result` block under `.plans/*/pr<N>-review-fixes/run-*/`) is `clean` with `headSha` equal to the PR's current `headRefOid`, report "PR review: already clean at <sha>" and go to step 6 as `clean`. Otherwise go to step 5.
+   - **An open, non-draft PR exists for the branch** (`gh pr list --head <branch> --state open --json number,isDraft,headRefOid`): the implementation already landed. Read its body with `gh pr view <N> --json body` and restore the "Unmet gates" section's gates, targets, latest measurements and approaches tried for steps 5–6. Skip steps 1–4. Search only `<task-dir>/review.json` and invocation-root `.plans/*/pr<N>-review-fixes/run-*/result.json` files for final `review-pr` results; never consume `round<k>/result.json` records. Require `pr: <N>` and `headSha` equal to the PR's current `headRefOid`, then select the newest matching final result by modification time. If it is `clean` with `ci.status` equal to `green` or `fixed`, report "PR review: already clean at <sha>" and go to step 6 as `clean`, retaining the restored unmet gates. Otherwise go to step 5 with those gates retained.
    - **Otherwise, a ready handoff review may be reused.** Take the newest `<task-dir>/handoff-review/run-*/result.json` with `status: ready`, `applied: true`, this task and branch, and a `candidateHash` equal to the SHA-256 of the current `handoff.md`. If one exists, skip step 1, set `<handoff-result>` to it and go to step 2. Step 3.0's freshness preflight still runs against it. If that preflight finds changed inputs, run step 1 once as a fresh `$review-handoff` invocation (a new two-round budget, not a third round) instead of pausing with `stale`.
    - **A resumed implementation:** if the branch already has this task's commits after the reused result's `branchSha` (`git merge-base --is-ancestor <branchSha> HEAD` succeeds and HEAD differs), those commits are the implementation in progress. Step 3.0's branch-side comparison then skips the changes those commits made, because they are this task's own work, and merges of `main` among them are checked as part of the `main` side. The `main` side is compared as usual. Step 3.1 continues from the first step that `<scratch>/progress.md` and `git log` don't show as done.
    - **Nothing to reuse:** continue normally.
@@ -151,7 +152,7 @@ Start it once, in a fresh Codex PR-review coordinator, with a shell timeout of a
 
 Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`. `$review-pr` has already written the PR review cell of the task's row.
 
-- `clean` (review clean and CI green): the task is done.
+- `clean` (review clean and CI green): go to step 6, which decides completion from the retained unmet-gate state.
 - Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), including `stopped` for `merge tool unavailable`: the PR stays open. Set the row's Next step to the status and its `stopReason`. The folder stays in `active/`.
 
 ## 6. Report and clean up
