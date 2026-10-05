@@ -101,7 +101,7 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 - Shell timeout: at least 4 hours (three review rounds plus CI). Background-and-poll as needed.
 - Read `<run>/<slug>-review.json`. If it's missing, use the `review-pr-result` block at the end of the `-o` file.
 - `status` is `clean` → go to step 5.
-- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), or no result → stop, with the result's `status` and `stopReason`. That includes `stopped` for a blocker or should-fix the validator noticed (a person decides on it before the PR merges), and `stopped` for `merge tool unavailable` (a tool the conflict resolution needs couldn't run).
+- Anything else (`capped`, `stalled`, `stopped`, `ci-red`, `error`), or no result → stop, with the result's `status` and `stopReason`. That includes `stopped` for a blocker or should-fix whose fix couldn't be made to pass, and `stopped` for `merge tool unavailable` (a tool the conflict resolution needs couldn't run). Blockers or should-fix items the validator noticed are fixed inside `$review-pr` and no longer stop it.
 
 ## 5. Confirm CI
 
@@ -125,7 +125,7 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 
 ## 7. Note a stopped branch in `.plans`
 
-Only when a branch stopped before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
+Only when a branch stopped before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. `$review-pr` has already set their PR review cell. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
 
 ## 8. Report
 
