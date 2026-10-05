@@ -8,12 +8,14 @@ import { metersPerUnit } from '../raster/geometry';
 import { EMPTY_PEDESTRIANS, type PedestrianView } from './pedestrians';
 import { signalState } from './signals';
 import { kinematicsOf } from './config';
+import { reach } from './occupancy';
+import { VEHICLES } from './vehicles';
 
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
 const humanView = (life: TileLife) =>
   (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians();
-function fixture(signal = false) {
+function fixture(signal = false, remoteCrossing?: number) {
   const b = new LifeBuilder(),
     center = { x: 2000, y: 2000 },
     directions = [
@@ -36,6 +38,17 @@ function fixture(signal = false) {
         x: x + (hx! * a! - hy! * s!) * pm,
         y: y + (hy! * a! + hx! * s!) * pm,
       })),
+    ]);
+  }
+  if (remoteCrossing !== undefined) {
+    const x = center.x - remoteCrossing * pm;
+    b.area('crossing', [
+      [
+        { x: x - 1.5 * pm, y: center.y - 6.5 * pm },
+        { x: x + 1.5 * pm, y: center.y - 6.5 * pm },
+        { x: x + 1.5 * pm, y: center.y + 6.5 * pm },
+        { x: x - 1.5 * pm, y: center.y + 6.5 * pm },
+      ],
     ]);
   }
   b.line(
@@ -93,6 +106,38 @@ function fixture(signal = false) {
   const table = (world as unknown as { junctions: JunctionTable }).junctions;
   return { world, life, car, human, table };
 }
+
+it('excludes a remote road crossing while retaining the nearby entrance stripe', () => {
+  const { life, car, human } = fixture(false, 30),
+    p = life.junctionIndex.movement(car, 60 * pm)!;
+  expect(life.junctionCrossings.forArm(p.junction, p.entry)).toHaveLength(1);
+  human.x = 2000 - 30 * pm;
+  life.movers.push(human);
+  expect(life.junctionClear(p, humanView(life))).toBe(true);
+  life.junctionCrossings.holdAhead(p, false);
+  expect((p.boxAhead! - p.ahead) / pm).toBeCloseTo(6.5);
+});
+
+it('denies occupied entry after the front passed the stripe while the rear still overlaps it', () => {
+  const { life, car, human, table } = fixture(),
+    p = life.junctionIndex.movement(car, 60 * pm)!,
+    crossing = life.junctionCrossings.forArm(p.junction, p.entry)[0]!,
+    outward = (p.junction.x / pm - crossing.body.x) * p.inHx,
+    half = reach(crossing.body, p.inHx, p.inHy),
+    distance = (p.junction.x - car.x) / pm,
+    front = distance - VEHICLES.car.length / 2,
+    rear = distance + VEHICLES.car.length / 2;
+  expect(front).toBeLessThan(outward - half);
+  expect(rear).toBeGreaterThan(outward - half);
+  expect(rear).toBeLessThan(outward + half);
+  life.movers.push(human);
+  expect(life.junctionClear(p, humanView(life))).toBe(false);
+  life.prepareTraffic(() => true);
+  life.requestJunctions(table, () => true, 0, '', undefined, humanView(life));
+  table.resolve(0);
+  expect(table.granted(car, p.key)).toBe(false);
+  expect(table.snapshot().find((r) => r.key === p.key)!.inside).toBe(false);
+});
 
 for (const arm of ['entry', 'exit'] as const)
   it(`revokes a provisional grant when the ${arm} crossing fills and holds the line`, () => {
@@ -296,8 +341,8 @@ it('caches relevant crossing sources and invalidates on addition, replacement an
     return b.finish();
   };
   const base = { key: 'junction-crossings', tile, life: owner.geo },
-    near = { key: 'near', tile: neighborTile, life: geometry(20) },
-    far = { key: 'far', tile: { ...tile, x: tile.x + 100 }, life: geometry(20) },
+    near = { key: 'near', tile: neighborTile, life: geometry(10) },
+    far = { key: 'far', tile: { ...tile, x: tile.x + 100 }, life: geometry(10) },
     prepare = vi.spyOn(owner.junctionCrossings, 'prepare'),
     j = owner.junctionIndex.junctions[0]!,
     east = j.arms.find((a) => a.hx === 1)!;
@@ -309,18 +354,18 @@ it('caches relevant crossing sources and invalidates on addition, replacement an
   expect(owner.junctionCrossings.forArm(j, east)).toHaveLength(2);
   f.world.step(0.01);
   expect(prepare).toHaveBeenCalledTimes(1);
-  f.world.sync([base, { ...near, key: 'replacement', life: geometry(25) }, far]);
+  f.world.sync([base, { ...near, key: 'replacement', life: geometry(11) }, far]);
   f.world.step(0.01);
   expect(prepare).toHaveBeenCalledTimes(2);
   expect(
     owner.junctionCrossings
       .forArm(j, east)
-      .some((c) => Math.abs(c.body.x - (2000 + 25 * pm) / pm) < 0.01),
+      .some((c) => Math.abs(c.body.x - (2000 + 11 * pm) / pm) < 0.01),
   ).toBe(true);
   expect(
     owner.junctionCrossings
       .forArm(j, east)
-      .some((c) => Math.abs(c.body.x - (2000 + 20 * pm) / pm) < 0.01),
+      .some((c) => Math.abs(c.body.x - (2000 + 10 * pm) / pm) < 0.01),
   ).toBe(false);
   f.world.sync([base]);
   f.world.step(0.01);
@@ -364,17 +409,17 @@ it('uses the shared default corridor for an unknown-width arm', () => {
   b.line([{ x: 1000, y: 2000 }, center, { x: 3000, y: 2000 }], 0, 0);
   b.line([{ x: 2000, y: 1000 }, center, { x: 2000, y: 3000 }], 0, 6);
   for (const [outward, side] of [
-    [20, 6],
-    [30, 0],
+    [10, 5.5],
+    [10, 0],
   ]) {
     const x = center.x + outward! * pm,
       y = center.y + side! * pm;
     b.area('crossing', [
       [
-        { x: x - 1.5 * pm, y: y - 6.5 * pm },
-        { x: x + 1.5 * pm, y: y - 6.5 * pm },
-        { x: x + 1.5 * pm, y: y + 6.5 * pm },
-        { x: x - 1.5 * pm, y: y + 6.5 * pm },
+        { x: x - 3 * pm, y: y - 6.5 * pm },
+        { x: x + 3 * pm, y: y - 6.5 * pm },
+        { x: x + 3 * pm, y: y + 6.5 * pm },
+        { x: x - 3 * pm, y: y + 6.5 * pm },
       ],
     ]);
   }

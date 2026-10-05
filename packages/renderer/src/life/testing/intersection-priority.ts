@@ -194,6 +194,8 @@ export function observePriority(fixture: Fixture) {
     original = internal.groundGuard,
     table = internal.junctions,
     counts = Array.from({ length: 3 }, () => [0, 0, 0, 0]),
+    entriesPer60 = [0, 0, 0],
+    unsafeEntriesPer60 = [0, 0, 0],
     pedestrianEpisodes = [0, 0, 0, 0],
     occupied = [false, false, false, false],
     episodes = new Map<Mover, Map<string, { age: number; reported: boolean }>>(),
@@ -240,12 +242,15 @@ export function observePriority(fixture: Fixture) {
             view = base.pedestrians(life);
           entries++;
           const window = Math.min(2, Math.floor(seconds / 60));
+          entriesPer60[window]!++;
           if (entryArm >= 0) counts[window]![entryArm]!++;
           if (
             (entryArm >= 0 && view.walkersInArea(crossings[entryArm]!)) ||
             (exitArm >= 0 && view.walkersInArea(crossings[exitArm]!))
-          )
+          ) {
             unsafeEntries++;
+            unsafeEntriesPer60[window]!++;
+          }
         }
       }
       return accepted;
@@ -255,6 +260,9 @@ export function observePriority(fixture: Fixture) {
   };
   return {
     table,
+    pedestrians() {
+      return guard?.pedestrians(life);
+    },
     afterStep(dt: number) {
       const snapshots = table.snapshot();
       requests += snapshots.length;
@@ -317,6 +325,8 @@ export function observePriority(fixture: Fixture) {
           })),
         ),
         crossingsPerArmPer60: counts,
+        entriesPer60,
+        unsafeEntriesPer60,
         pedestrianEpisodes,
         entries,
         unsafeEntries,

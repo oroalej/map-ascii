@@ -1,7 +1,7 @@
 import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey } from './signal-approaches';
 import type { TileId } from '../tiles';
-import { JUNCTION } from './config';
+import { COS20, COS30, JUNCTION } from './config';
 import {
   LifeLine,
   SIGNAL_STRIDE,
@@ -36,6 +36,11 @@ export type Junction = {
   linked?: boolean;
   controlled?: boolean;
 };
+type RouteCursor = Pick<
+  Mover,
+  'line' | 'dir' | 'from' | 'd' | 'vehicle' | 'next' | 'routing' | 'junctionRoute'
+>;
+
 export type Movement = {
   key: string;
   junction: Junction;
@@ -78,6 +83,9 @@ export class JunctionIndex {
   private readonly spawnCorners: Point[] = [];
   private readonly spawnCandidates = new Set<Junction>();
   private readonly spawnBody: Body = { x: 0, y: 0, hx: 1, hy: 0, length: 0, width: 0 };
+  private readonly found: Movement[] = [];
+  private readonly visited = new Set<number>();
+  private readonly routeCursor: RouteCursor = { line: 0, dir: 1, from: 0, d: 0 };
   constructor(
     tile: TileId,
     private geo: LifeGeometry,
@@ -232,43 +240,46 @@ export class JunctionIndex {
   movement(m: Mover, reach: number): Movement | undefined {
     return this.movements(m, reach)[0];
   }
-  /** Only a committed/uniquely legal continuation is enumerated; this never chooses a route. */
+  /** Reuses the result array; movement objects remain owned by their retained records.
+   * Only committed/uniquely legal continuations are enumerated; this never chooses a route. */
   movements(
     m: Mover,
     reach: number,
     next?: (line: number, dir: 1 | -1) => number | undefined,
   ): Movement[] {
-    const found: Movement[] = [];
-    let cursor = m,
+    const found = this.found;
+    found.length = 0;
+    let cursor: RouteCursor = m,
       distance = 0;
-    const visited = new Set<number>();
+    const visited = this.visited;
+    visited.clear();
     while (distance <= reach) {
       const route = cursor.line * 2 + Number(cursor.dir === 1);
       if (visited.has(route)) break;
       visited.add(route);
+      const code = next?.(cursor.line, cursor.dir);
+      if (cursor !== m) cursor.next = code;
       this.lineMovements(cursor, reach - distance, distance, found);
       if (!next) break;
       const end =
         cursor.dir === 1 ? this.geo.starts[cursor.line + 1]! - 1 : this.geo.starts[cursor.line]!;
       distance += cursor.dir * (this.along[end]! - this.along[cursor.from]!) - cursor.d;
-      const code = next(cursor.line, cursor.dir);
       if (code === undefined || code < 0 || distance > reach) break;
       const line = code >> 1,
         dir = code & 1 ? -1 : 1;
-      cursor = {
-        ...m,
-        line,
-        dir,
-        from: dir === 1 ? this.geo.starts[line]! : this.geo.starts[line + 1]! - 1,
-        d: 0,
-        next: next(line, dir),
-        routing: undefined,
-      };
+      cursor = this.routeCursor;
+      cursor.line = line;
+      cursor.dir = dir;
+      cursor.from = dir === 1 ? this.geo.starts[line]! : this.geo.starts[line + 1]! - 1;
+      cursor.d = 0;
+      cursor.vehicle = m.vehicle;
+      cursor.junctionRoute = m.junctionRoute;
+      cursor.routing = undefined;
     }
     found.sort((a, b) => a.ahead - b.ahead || a.key.localeCompare(b.key));
     return found;
   }
-  private lineMovements(m: Mover, reach: number, routeDistance: number, found: Movement[]) {
+  private lineMovements(m: RouteCursor, reach: number, routeDistance: number, found: Movement[]) {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const j of this.lines.get(m.line) ?? []) {
       if (found.some((p) => p.key === j.key)) continue;
@@ -315,8 +326,6 @@ export class JunctionIndex {
   }
 }
 
-const COS20 = Math.cos(Math.PI / 9),
-  COS30 = Math.cos(Math.PI / 6);
 export function compatible(a: Movement, b: Movement): boolean {
   const sameIn = a.inHx * b.inHx + a.inHy * b.inHy > COS20;
   // Offset member junctions can make nominally opposing straight routes cross. Reserve
@@ -446,7 +455,7 @@ function sameExit(a: Hold, b: Hold): boolean {
   const f = frameBetween(a.life.tile, b.life.tile);
   const dx = f.x + (x.exit.x ?? x.junction.x) * f.scale - (y.exit.x ?? y.junction.x),
     dy = f.y + (x.exit.y ?? x.junction.y) * f.scale - (y.exit.y ?? y.junction.y);
-  return Math.abs(dx * y.outHy - dy * y.outHx) < 4 * b.life.perMeter;
+  return Math.abs(dx * y.outHy - dy * y.outHx) < JUNCTION.exitHalfWidth * b.life.perMeter;
 }
 
 /** Two-phase world arbitration. Physical occupants never expire or authorize running red. */
@@ -621,6 +630,45 @@ export class JunctionTable {
       })),
     );
   }
+  private over(r: Hold): boolean {
+    return r.arrival !== undefined && this.clock - r.arrival >= JUNCTION.maxWait;
+  }
+  private oncoming(a: Hold, b: Hold): boolean {
+    return (
+      a !== b &&
+      leftTurn(a.movement) &&
+      !this.over(a) &&
+      !leftTurn(b.movement) &&
+      ((b.atLine === true && b.ready && this.eligibleRows.has(b)) ||
+        (b.inside && b.since !== undefined)) &&
+      a.movement.inHx * b.movement.inHx + a.movement.inHy * b.movement.inHy < -COS20 &&
+      (b.room ?? Infinity) >= VEHICLES[b.m.vehicle!].length + JUNCTION.gap
+    );
+  }
+  private revalidateRoutes(): void {
+    for (const [m, records] of this.records) {
+      for (const r of records.values()) {
+        if (r.inside) continue;
+        let preceding = r.precedingKey;
+        for (let remaining = records.size; preceding !== undefined; remaining--) {
+          const upstream = records.get(preceding);
+          if (upstream?.inside) break;
+          if (
+            !remaining ||
+            !upstream ||
+            upstream.since === undefined ||
+            !upstream.ready ||
+            (upstream.room ?? Infinity) < VEHICLES[m.vehicle!].length + JUNCTION.gap
+          ) {
+            r.ready = false;
+            r.since = undefined;
+            break;
+          }
+          preceding = upstream.precedingKey;
+        }
+      }
+    }
+  }
   resolve(clock: number): void {
     this.clock = clock;
     const groups = new Map<string, Hold[]>();
@@ -648,28 +696,26 @@ export class JunctionTable {
     for (const [m, records] of this.records) {
       for (const [key, r] of records) if (!r.seen) records.delete(key);
       if (!records.size) this.records.delete(m);
-      // Revalidate the whole route after every request's current-step safety gates are known.
-      for (const r of records.values()) {
-        if (r.inside) continue;
-        let preceding = r.precedingKey;
-        for (let remaining = records.size; preceding !== undefined; remaining--) {
-          const upstream = records.get(preceding);
-          if (upstream?.inside) break;
-          if (
-            !remaining ||
-            !upstream ||
-            upstream.since === undefined ||
-            !upstream.ready ||
-            (upstream.room ?? Infinity) < VEHICLES[m.vehicle!].length + JUNCTION.gap
-          ) {
-            r.ready = false;
-            r.since = undefined;
-            break;
-          }
-          preceding = upstream.precedingKey;
-        }
-      }
     }
+    this.revalidateRoutes();
+    this.eligibleRows.clear();
+    this.yielded.clear();
+    for (const group of groups.values())
+      for (const r of group)
+        if (
+          r.ready &&
+          (r.room ?? Infinity) >= VEHICLES[r.m.vehicle!].length + JUNCTION.gap &&
+          group.every((b) => !b.inside || b === r || compatible(r.movement, b.movement))
+        )
+          this.eligibleRows.add(r);
+    // Determine all upstream yields before any downstream group can arbitrate.
+    for (const group of groups.values())
+      for (const r of group)
+        if (!r.inside && group.some((b) => this.oncoming(r, b))) {
+          r.since = undefined;
+          this.yielded.add(r);
+        }
+    this.revalidateRoutes();
     for (const group of groups.values()) {
       const over = (r: Hold) => r.arrival !== undefined && clock - r.arrival >= JUNCTION.maxWait;
       group.sort(
@@ -706,30 +752,9 @@ export class JunctionTable {
           ),
         );
       }
-      const eligible = (r: Hold) => this.eligibleRows.has(r);
-      this.eligibleRows.clear();
-      for (const r of group)
-        if (
-          r.ready &&
-          (r.room ?? Infinity) >= VEHICLES[r.m.vehicle!].length + JUNCTION.gap &&
-          group.every((b) => !b.inside || b === r || compatible(r.movement, b.movement))
-        )
-          this.eligibleRows.add(r);
-      const oncoming = (a: Hold, b: Hold) =>
-        a !== b &&
-        leftTurn(a.movement) &&
-        !over(a) &&
-        !leftTurn(b.movement) &&
-        ((b.atLine === true && eligible(b)) || (b.inside && b.since !== undefined)) &&
-        a.movement.inHx * b.movement.inHx + a.movement.inHy * b.movement.inHy < -COS20 &&
-        (b.room ?? Infinity) >= VEHICLES[b.m.vehicle!].length + JUNCTION.gap;
-      this.yielded.clear();
-      for (const r of group)
-        if (!r.inside && group.some((b) => oncoming(r, b))) {
-          r.since = undefined;
-          this.yielded.add(r);
-        }
+      const eligible = (r: Hold) => r.ready && this.eligibleRows.has(r);
       const surrender = (a: Hold, b: Hold) =>
+        !this.yielded.has(a) &&
         b.surrenderedAt !== undefined &&
         !over(b) &&
         a.surrenderedAt === undefined &&
@@ -738,7 +763,10 @@ export class JunctionTable {
         a.atLine === true &&
         eligible(a) &&
         !compatible(a.movement, b.movement);
-      const final = this.precedence.order(ordered, (a, b) => oncoming(b, a) || surrender(a, b));
+      const final = this.precedence.order(
+        ordered,
+        (a, b) => this.oncoming(b, a) || surrender(a, b),
+      );
       const blocking = this.blocking;
       blocking.length = 0;
       for (const r of group) if (r.inside || r.since !== undefined) blocking.push(r);

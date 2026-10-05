@@ -1,6 +1,6 @@
 import { frameBetween } from './frames';
 import { VEHICLES } from './vehicles';
-import { JUNCTION } from './config';
+import { COS20, JUNCTION } from './config';
 import type { JunctionTable, Movement } from './junctions';
 import type { Mover, TileLife } from './simulate';
 
@@ -18,8 +18,7 @@ type TrafficBody = {
   qhy: number;
 };
 type TrafficFrame = { reference: TileLife; x: number; y: number; units: number; scale: number };
-const BIN = 32,
-  COS20 = Math.cos(Math.PI / 9);
+const BIN = 32;
 /** One ownership-filtered, deduplicated metric traffic index for the entire arbitration step. */
 export class JunctionTraffic {
   private reference?: TileLife;
@@ -124,7 +123,7 @@ export class JunctionTraffic {
       dy = b.y - f.y;
     return (
       dx * p.outHx + dy * p.outHy >= 0 &&
-      Math.abs(dx * p.outHy - dy * p.outHx) < 4 * f.scale &&
+      Math.abs(dx * p.outHy - dy * p.outHx) < JUNCTION.exitHalfWidth * f.scale &&
       b.hx * p.outHx + b.hy * p.outHy > COS20
     );
   }
@@ -156,7 +155,7 @@ export class JunctionTraffic {
       if (
         ahead > 1e-6 &&
         ahead < toLine &&
-        Math.abs((b.x - f.x) * p.inHy - (b.y - f.y) * p.inHx) < 4 * f.scale
+        Math.abs((b.x - f.x) * p.inHy - (b.y - f.y) * p.inHx) < JUNCTION.exitHalfWidth * f.scale
       )
         return false;
     }

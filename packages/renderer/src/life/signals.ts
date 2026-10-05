@@ -1,7 +1,7 @@
 import type { TileId } from '../tiles';
 import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
-import { SIGNAL, kinematicsOf } from './config';
+import { COS20, SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
 import {
   LifeLine,
@@ -208,7 +208,7 @@ export class SignalControl {
           (a) =>
             a.arm.inbound &&
             (movement?.entry?.line === -1
-              ? -a.hx * movement.inHx - a.hy * movement.inHy > Math.cos(Math.PI / 9)
+              ? -a.hx * movement.inHx - a.hy * movement.inHy > COS20
               : a.line === (movement?.entry?.line ?? m.line) &&
                 a.arm.direction === (movement?.dir ?? m.dir)) &&
             Math.hypot(a.x - x, a.y - y) <= TILE_QUANTIZATION_TOLERANCE,

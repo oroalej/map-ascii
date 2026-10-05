@@ -98,6 +98,9 @@ export const PEDESTRIAN = {
   holdMatch: 2,
 } as const;
 
+export const COS20 = Math.cos(Math.PI / 9),
+  COS30 = Math.cos(Math.PI / 6);
+
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
 export type Kinematics = { accel: number; brake: number; maxBrake: number; lateral: number };
@@ -127,6 +130,8 @@ export const JUNCTION = {
   maxWait: 10,
   giveUp: 30,
   holdMax: 20,
+  exitHalfWidth: 4,
+  crossingReach: 30,
 } as const;
 export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
 

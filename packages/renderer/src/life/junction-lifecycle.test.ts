@@ -34,6 +34,52 @@ const movement = (key = 'a', vertical = false): Movement => ({
   ahead: 2,
 });
 
+it('reuses route lookup scratch, queries each hop once and keeps retained movements and movers intact', () => {
+  const tile = { z: 16, x: 55192, y: 30266 },
+    pm = 1 / metersPerUnit(tile),
+    builder = new LifeBuilder();
+  for (let line = 0; line < 3; line++)
+    builder.line(
+      [
+        { x: 1000 + line * 20 * pm, y: 2000 },
+        { x: 1000 + (line + 1) * 20 * pm, y: 2000 },
+      ],
+      0,
+      4,
+    );
+  for (const x of [1000 + 20 * pm, 1000 + 40 * pm])
+    builder.line(
+      [
+        { x, y: 1900 },
+        { x, y: 2000 },
+        { x, y: 2100 },
+      ],
+      0,
+      4,
+    );
+  const life = new TileLife(tile, builder.finish(), 1),
+    m = { ...car(), x: 1000, y: 2000, next: 2 };
+  const original = structuredClone(m),
+    calls: number[] = [];
+  const next = (line: number) => {
+    calls.push(line);
+    return line < 2 ? (line + 1) * 2 : 0;
+  };
+  const found = life.junctionIndex.movements(m, 65 * pm, next),
+    retained = [...found];
+  const values = structuredClone(retained);
+  expect(found).toHaveLength(2);
+  expect(calls).toEqual([0, 1, 2]);
+  calls.length = 0;
+  expect(life.junctionIndex.movements(m, 65 * pm, next)).toBe(found);
+  expect(calls).toEqual([0, 1, 2]);
+  expect(found.every((p, i) => p !== retained[i])).toBe(true);
+  expect(retained).toEqual(values);
+  expect(m).toEqual(original);
+  expect(life.junctionIndex.movements(m, 5 * pm, next)).toHaveLength(0);
+  expect(retained).toEqual(values);
+});
+
 it('does not reserve a downstream box or block its cross traffic behind a real red', () => {
   const tile = { z: 16, x: 55192, y: 30266 },
     pm = 1 / metersPerUnit(tile),
@@ -131,6 +177,65 @@ it('revokes downstream outside grants for current-step closure and live upstream
   table.revokeGrant(m, 'a');
   expect(table.granted(m, 'b')).toBe(false);
 });
+for (const downstreamFirst of [false, true])
+  it(`revokes downstream eligibility before left-turn arbitration (downstreamFirst=${downstreamFirst})`, () => {
+    const life = empty(),
+      table = new JunctionTable(),
+      left = car(),
+      straight = car(),
+      cross = car();
+    const a = { ...movement('a'), outHx: 0, outHy: -1 };
+    const b = { ...movement('b', true), inHy: -1, outHx: 0, outHy: -1, ahead: 14 };
+    const step = (clock: number, traffic: boolean) => {
+      table.begin(new Set([life]));
+      for (const key of downstreamFirst ? ['b', 'a'] : ['a', 'b'])
+        table.request({
+          m: left,
+          life,
+          tileKey: '0',
+          index: 0,
+          movement: key === 'a' ? a : b,
+          precedingKey: key === 'b' ? 'a' : undefined,
+          ready: true,
+          inside: false,
+          atLine: key === 'a',
+        });
+      if (traffic) {
+        table.request({
+          m: straight,
+          life,
+          tileKey: '1',
+          index: 1,
+          movement: { ...movement('a'), inHx: -1, outHx: -1 },
+          ready: true,
+          inside: false,
+          atLine: true,
+        });
+        table.request({
+          m: cross,
+          life,
+          tileKey: '2',
+          index: 2,
+          movement: movement('b'),
+          ready: true,
+          inside: false,
+          atLine: true,
+        });
+      }
+      table.resolve(clock);
+    };
+    step(0, false);
+    step(1, false);
+    expect(table.granted(left, 'a')).toBe(true);
+    expect(table.granted(left, 'b')).toBe(true);
+    step(2, true);
+    expect(table.granted(left, 'a')).toBe(false);
+    expect(table.granted(left, 'b')).toBe(false);
+    expect(table.snapshot().find((r) => r.index === 0 && r.key === 'b')!.ready).toBe(false);
+    expect(table.granted(straight, 'a')).toBe(true);
+    expect(table.granted(cross, 'b')).toBe(true);
+  });
+
 it('reclaims a carried next junction after a committed turn without projecting it inside', () => {
   const tile = { z: 16, x: 55192, y: 30266 },
     pm = 1 / metersPerUnit(tile),
@@ -355,27 +460,29 @@ it('does not let an ineligible waiter prevent safe regrant after expiry', () => 
     expect(table.granted(a)).toBe(true);
   }
 });
-it('revokes a provisional grant on red or unavailable room while retaining arrival', () => {
-  const life = empty(),
-    table = new JunctionTable(),
-    a = car();
-  for (const clock of [0, 1]) {
-    table.begin(new Set([life]));
-    table.request({
-      m: a,
-      life,
-      tileKey: 'a',
-      index: 0,
-      movement: movement(),
-      ready: clock === 0,
-      inside: false,
-      atLine: true,
-    });
-    table.resolve(clock);
-  }
-  expect(table.granted(a)).toBe(false);
-  expect(table.waited(a)).toBe(1);
-});
+for (const blockedBy of ['red', 'room'])
+  it(`revokes a provisional grant on ${blockedBy} while retaining arrival`, () => {
+    const life = empty(),
+      table = new JunctionTable(),
+      a = car();
+    for (const clock of [0, 1]) {
+      table.begin(new Set([life]));
+      table.request({
+        m: a,
+        life,
+        tileKey: 'a',
+        index: 0,
+        movement: movement(),
+        ready: blockedBy === 'room' || clock === 0,
+        room: blockedBy === 'room' && clock === 1 ? 1 : Infinity,
+        inside: false,
+        atLine: true,
+      });
+      table.resolve(clock);
+    }
+    expect(table.granted(a)).toBe(false);
+    expect(table.waited(a)).toBe(1);
+  });
 it('keeps primary observation and keyed permissions consistent across three records and rebind', () => {
   const life = empty(),
     target = empty(),
@@ -482,13 +589,32 @@ it('queries a neighboring exit queue and preserves its room after rebind without
     tileKey: 'a',
     index: 0,
     movement: p,
-    ready: false,
+    ready: true,
+    room: traffic.room(m, p, a),
     inside: false,
     atLine: true,
   });
   table.resolve(0);
+  expect(table.granted(m, 'a')).toBe(false);
+  const arrival = table.snapshot()[0]!.arrival;
   table.rebind(m, b, 'b', a);
   expect(traffic.room(m, table.movement(m, 'a')!, b)).toBeCloseTo(0.8);
+  const rebound = table.movement(m, 'a')!;
+  table.begin(new Set([b]));
+  table.request({
+    m,
+    life: b,
+    tileKey: 'b',
+    index: 0,
+    movement: rebound,
+    ready: true,
+    room: traffic.room(m, rebound, b),
+    inside: false,
+    atLine: true,
+  });
+  table.resolve(1);
+  expect(table.granted(m, 'a')).toBe(false);
+  expect(table.snapshot()[0]!.arrival).toBe(arrival);
 });
 it('deduplicates complete quantized identities at positive and negative bin edges', () => {
   const tile = { z: 16, x: 55192, y: 30266 },

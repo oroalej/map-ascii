@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { compatible, fromRight, JunctionTable, type Movement } from './junctions';
+import { fromRight, JunctionTable, type Movement } from './junctions';
 import { LifeBuilder } from './geometry';
 import { TileLife, type Mover } from './simulate';
 
@@ -17,7 +17,7 @@ const movement = (ix: number, iy: number, ox = ix, oy = iy): Movement => ({
   exit: { line: 0, along: 0, out: 1, hx: ox, hy: oy },
   ahead: 2,
 });
-function harness(paths: Movement[]) {
+function harness(paths: Movement[], keys = paths.map((_, i) => i)) {
   const table = new JunctionTable(),
     cars = paths.map(() => ({ kind: 'vehicle', vehicle: 'car' }) as Mover);
   return {
@@ -34,7 +34,7 @@ function harness(paths: Movement[]) {
         table.request({
           m: cars[i]!,
           life,
-          tileKey: String(i),
+          tileKey: String(keys[i]),
           index: i,
           movement: paths[i]!,
           ready: ready[i]!,
@@ -83,18 +83,22 @@ it('gives all four simultaneous arrivals the same cycle break in every permutati
   }
 });
 it('preserves precedence outside a cyclic component', () => {
-  const h = harness([
-    movement(1, 0),
+  const paths = [
+    movement(1, 0, 0, 1),
     movement(0, 1),
     movement(-1, 0),
     movement(0, -1),
-    movement(1, 0),
-  ]);
-  h.step(0, [4, 3, 2, 1, 0]);
-  for (const a of h.winners())
-    for (const b of h.winners())
-      expect(compatible(h.table.movement(h.cars[a]!)!, h.table.movement(h.cars[b]!)!)).toBe(true);
-  expect(h.winners()).toContain(0);
+    movement(0, -1, 1, 0),
+  ];
+  const permutations = (xs: number[]): number[][] =>
+    xs.length
+      ? xs.flatMap((x, i) => permutations(xs.filter((_, j) => i !== j)).map((rest) => [x, ...rest]))
+      : [[]];
+  for (const order of permutations([0, 1, 2, 3, 4])) {
+    const h = harness(paths, [1, 2, 3, 4, 0]);
+    h.step(0, order);
+    expect(h.winners()).toEqual([0]);
+  }
 });
 for (const provisional of [false, true])
   it(`processes oncoming before an earlier left turn (provisional=${provisional})`, () => {
@@ -108,6 +112,14 @@ it('does not yield to red or pedestrian-blocked oncoming traffic', () => {
   const h = harness([movement(1, 0, 0, -1), movement(-1, 0)]);
   h.step(0, [0, 1], [true, false]);
   expect(h.winners()).toEqual([0]);
+});
+it('does not put a yielded left turn ahead of an expired oncoming holder', () => {
+  const h = harness([movement(1, 0, 0, -1), movement(-1, 0)]);
+  h.step(0, [1]);
+  expect(h.winners()).toEqual([1]);
+  h.step(21);
+  expect(h.winners()).toEqual([1]);
+  expect(h.table.snapshot().find((r) => r.index === 1)!.surrenderedAt).toBeUndefined();
 });
 it('does not let an unready yielded left turn block a compatible oncoming follower', () => {
   const h = harness([movement(1, 0, 0, -1), movement(-1, 0), movement(-1, 0)]);

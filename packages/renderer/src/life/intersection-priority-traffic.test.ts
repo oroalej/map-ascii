@@ -9,7 +9,7 @@ const fixture = priorityFixture(LifeWorld, LifeBuilder, metersPerUnit),
 
 afterAll(() => observer.restore());
 for (let window = 0; window < 3; window++) {
-  it(`safely advances the priority crossroads fixture through window ${window + 1}`, () => {
+  it(`observes crossroads entries and safety in window ${window + 1}`, () => {
     for (let frame = 0; frame < 60 * 30; frame++) {
       fixture.beforeStep();
       fixture.world.step(
@@ -26,9 +26,18 @@ for (let window = 0; window < 3; window++) {
     const result = observer.result();
     expect(result.indexedJunctions).toBeGreaterThan(0);
     expect(result.requests).toBeGreaterThan(0);
-    expect(result.entries).toBeGreaterThan(0);
+    expect(result.entriesPer60[window]).toBeGreaterThanOrEqual([8, 6, 6][window]!);
+    for (let arm = 0; arm < 4; arm++)
+      expect(result.crossingsPerArmPer60[window]![arm]).toBeGreaterThanOrEqual(
+        [
+          [3, 1, 3, 1],
+          [3, 0, 3, 0],
+          [3, 0, 3, 0],
+        ][window]![arm]!,
+      );
     expect(result.pedestrianEpisodes.every((n) => n > 0)).toBe(true);
     expect(result.unsafeEntries).toBe(0);
+    expect(result.unsafeEntriesPer60[window]).toBe(0);
   });
   // Recorded unmet gates stay visible without putting safety in an expected-failure test.
   const progress = window === 0 ? it : it.fails;
@@ -36,6 +45,13 @@ for (let window = 0; window < 3; window++) {
     expect(observer.result().crossingsPerArmPer60[window]!.every((n) => n > 0)).toBe(true);
   });
 }
+it('does not worsen the recorded carried crossroads wait, stall or freeze measurements', () => {
+  const result = observer.result();
+  expect(result.maxWaited).toBeLessThanOrEqual(171.8 + 1e-6);
+  expect(result.peakStall).toBeLessThanOrEqual(170.3 + 1e-6);
+  expect(result.stallsOver30).toBeLessThanOrEqual(4);
+  expect(result.twoCarFreezes).toBeLessThanOrEqual(1);
+});
 it.fails('limits raw crossroads at-line wait to 30 seconds', () => {
   expect(observer.result().maxWaited).toBeLessThanOrEqual(30);
 });

@@ -2,11 +2,11 @@ import type { Arm, Junction, JunctionTable, Movement } from './junctions';
 import type { TileLife } from './simulate';
 import { frameBetween } from './frames';
 import { EXTENT } from '../raster/geometry';
-import { DEFAULT_ROAD_WIDTH_M } from './config';
+import { COS30, DEFAULT_ROAD_WIDTH_M, JUNCTION, PEDESTRIAN } from './config';
+import { reach } from './occupancy';
 import { transformCrossing, type PedestrianCrossing, type PedestrianView } from './pedestrians';
 
-const COS30 = Math.cos(Math.PI / 6),
-  NO_CROSSINGS: readonly PedestrianCrossing[] = [];
+const NO_CROSSINGS: readonly PedestrianCrossing[] = [];
 type Bounds = { x0: number; y0: number; x1: number; y1: number };
 /** Uses prepared road associations, without a second crossing spatial index. */
 export class JunctionCrossings {
@@ -31,18 +31,25 @@ export class JunctionCrossings {
     ])
       for (const list of lines.values())
         for (const c of list) {
-          bounds.x0 = Math.min(bounds.x0, c.body.x);
-          bounds.y0 = Math.min(bounds.y0, c.body.y);
-          bounds.x1 = Math.max(bounds.x1, c.body.x);
-          bounds.y1 = Math.max(bounds.y1, c.body.y);
+          const x = reach(c.body, 1, 0),
+            y = reach(c.body, 0, 1);
+          bounds.x0 = Math.min(bounds.x0, c.body.x - x);
+          bounds.y0 = Math.min(bounds.y0, c.body.y - y);
+          bounds.x1 = Math.max(bounds.x1, c.body.x + x);
+          bounds.y1 = Math.max(bounds.y1, c.body.y + y);
         }
     return (this.sourceBounds = bounds);
   }
   bounds(table: JunctionTable): Bounds {
     const pm = this.life.perMeter,
-      bounds = { x0: -30, y0: -30, x1: EXTENT / pm + 30, y1: EXTENT / pm + 30 };
+      bounds = {
+        x0: -JUNCTION.crossingReach,
+        y0: -JUNCTION.crossingReach,
+        x1: EXTENT / pm + JUNCTION.crossingReach,
+        y1: EXTENT / pm + JUNCTION.crossingReach,
+      };
     const include = (j: Junction) => {
-      const reach = j.radius / pm + 30;
+      const reach = j.radius / pm + JUNCTION.crossingReach;
       for (const arm of j.arms) {
         const x = (arm.x ?? j.x) / pm,
           y = (arm.y ?? j.y) / pm;
@@ -110,7 +117,15 @@ export class JunctionCrossings {
           dx = c.body.x - x,
           dy = c.body.y - y,
           distance = Math.hypot(dx, dy);
-        if (!distance || distance > j.radius / pm + 30) continue;
+        if (!distance) continue;
+        const outward = dx * arm.hx + dy * arm.hy;
+        // The stripe's near edge belongs beside the box's admission/curb area,
+        // rather than an arbitrary centre-distance range along the entire road.
+        if (
+          outward - reach(c.body, arm.hx, arm.hy) >
+          j.radius / pm + PEDESTRIAN.curbReach + JUNCTION.gap + 1e-9
+        )
+          continue;
         const dot = (dx * arm.hx + dy * arm.hy) / distance;
         if (
           dot < COS30 ||
@@ -161,10 +176,7 @@ export class JunctionCrossings {
     let extra = 0;
     for (const c of this.forArm(p.junction, p.entry)) {
       const outward = -(c.body.x - x) * p.inHx - (c.body.y - y) * p.inHy;
-      const half =
-        (Math.abs(c.body.hx * p.inHx + c.body.hy * p.inHy) * c.body.length +
-          Math.abs(c.body.hy * p.inHx - c.body.hx * p.inHy) * c.body.width) /
-        2;
+      const half = reach(c.body, p.inHx, p.inHy);
       extra = Math.max(extra, outward + half - p.junction.radius / pm);
     }
     p.ahead = p.boxAhead - extra * pm;
