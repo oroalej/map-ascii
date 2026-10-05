@@ -28,7 +28,7 @@ import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
-import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_POOL } from '../life/lamps';
+import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
   CROWN_LIGHT,
@@ -637,7 +637,7 @@ void main() {
   vec4 light = texelFetch(u_light, cell, 0);
   float lampsNow = lamps() * u_lampShow;
   int lampG = int(light.g * 255.0 + 0.5);
-  bool brakePool = (lampG & 7) == ${LampState.beam} && (lampG >> 3) == ${BRAKE_POOL.seed};
+  bool brakeGlow = (lampG & 7) == ${LampState.beam} && (lampG >> 3) == ${BRAKE_GLOW.seed};
   float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
   float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock) * switchedOn(lampG) * u_lampShow : 0.0;
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
@@ -646,13 +646,13 @@ void main() {
   bool shop = (lampG & 7) == ${LampState.shop};
   // Floods, candles, and open shops light their own place, whatever it is.
   bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
-  poolColor = brakePool ? vec3(${BRAKE_COLOR.night.map(float).join(', ')}) :
+  poolColor = brakeGlow ? vec3(${BRAKE_COLOR.night.map(float).join(', ')}) :
     flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
   float poolR = texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
   float pool = 0.0;
   if (poolR > 0.01 && light.a > 0.5 && lampLight > 0.0) {
-    if (brakePool) {
+    if (brakeGlow) {
       // Like ground agents, the glow uses the visible subcell surface beneath canopy edges;
       // trunks remain occluders. Only road pixels receive the red spill.
       int surface = cls == u_vehicleOccluders.x ? cls :
@@ -663,11 +663,11 @@ void main() {
     }
   }
   // Road spill never recolors fixture ink or rain streaks.
-  rainLight = brakePool ? 0.0 : pool;
+  rainLight = brakeGlow ? 0.0 : pool;
   // On water, the lamps along the bank reflect.
   bool water = (u_cellBits[cls] & ${CellBit.boat}) != 0;
   float refl = water && lampsNow > 0.0 ? reflection(grid / u_cell, cell) : 0.0;
-  vec3 glow = (brakePool ? vec3(0.0) : poolColor * pool * poolGlow()) + LAMP * refl * 0.9;
+  vec3 glow = (brakeGlow ? vec3(0.0) : poolColor * pool * poolGlow()) + LAMP * refl * 0.9;
   // Under the moon, water glints linger on staggered beats (still with reduced motion).
   if (water && u_moon > 0.0 && night > 0.0) {
     ivec2 world = u_origin + cell;
@@ -678,7 +678,7 @@ void main() {
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
   // A colour wash also reads on the light theme's paper, where additive red would clip white.
-  back = (brakePool ? mix(back, poolColor, pool * poolGlow()) : back) + glow;
+  back = (brakeGlow ? mix(back, poolColor, pool * poolGlow()) : back) + glow;
   vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
@@ -721,7 +721,7 @@ void main() {
       float flicker = u_shimmer ? 0.85 + 0.15 * sin(effectTime(cell, 0) * beat) : 1.0;
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
-    color = lampLit(color, brakePool ? 0.0 : pool);
+    color = lampLit(color, brakeGlow ? 0.0 : pool);
     if (puff) color = mix(back, color, 1.0 - float(lifeByte & ${PUFF_AGE_MASK}) / ${float(PUFF_AGE_MASK)});
     if (u_focus) {
       color = (lifeFlags & ${LIFE_FOCUS_BIT}) != 0 ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
@@ -796,7 +796,7 @@ void main() {
   // (Its streetlight pool too, which that just replaced.)
   if (!edge && bgClass == cls) {
     vec3 fill = fillOf(cls, color) * shade;
-    back = (brakePool ? mix(fill, poolColor, pool * poolGlow()) : fill) + glow;
+    back = (brakeGlow ? mix(fill, poolColor, pool * poolGlow()) : fill) + glow;
   }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.

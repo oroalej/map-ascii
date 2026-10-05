@@ -186,14 +186,9 @@ export function packLife(
   glyphIndex: (glyph: string) => number,
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
-  metadata: LifePackMetadata | Float64Array = {},
+  metadata: LifePackMetadata = {},
   puffs: Float64Array = EMPTY_PUFFS,
 ): number {
-  // Frozen benchmark revisions used the eighth argument for the puff packet.
-  if (metadata instanceof Float64Array) {
-    puffs = metadata;
-    metadata = {};
-  }
   const cells = grid.cols * grid.rows;
   drawingOwners = metadata.owners ?? grid.owners;
   if (drawingOwners && drawingOwners.length !== cells)

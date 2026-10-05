@@ -27,7 +27,7 @@
     "typecheck": "pnpm -r typecheck && tsc -p scripts --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify:life": "tsx packages/renderer/scripts/verify-life.ts",
+    "verify:life": "tsx scripts/heavy.ts packages/renderer/scripts/verify-life.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "worktree:new": "tsx scripts/worktree-new.ts",
     "plans:clean": "tsx scripts/plans-clean.ts",

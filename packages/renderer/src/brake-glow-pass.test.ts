@@ -5,7 +5,7 @@ import { uploadLights } from './gpu';
 import type { ThemeResources } from './gpu-context';
 import { lifePass, lightPass, type View, type GridPlacement } from './passes';
 import { buildLifeGlyphs } from './life/draw';
-import { BRAKE_POOL } from './life/lamps';
+import { BRAKE_GLOW } from './life/lamps';
 import { LampState, lightByte } from './life/lights';
 import type { VisibleAgent } from './life/simulate';
 import { themes } from './theme';
@@ -51,7 +51,7 @@ const uploaded = () => vi.mocked(uploadLights).mock.calls.at(-1)![2];
 const hasGlow = () => {
   const texels = uploaded();
   for (let at = 0; at < texels.length; at += 4)
-    if (texels[at] && texels[at + 1] === lightByte(LampState.beam, BRAKE_POOL.seed)) return true;
+    if (texels[at] && texels[at + 1] === lightByte(LampState.beam, BRAKE_GLOW.seed)) return true;
   return false;
 };
 const paint = (target: CellTargets, agents: VisibleAgent[], allowed = true) =>

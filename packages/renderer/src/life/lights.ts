@@ -15,7 +15,7 @@ import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import { random } from './random';
 import type { VisibleAgent } from './simulate';
 import { VEHICLES, type CraftType } from './vehicles';
-import { BRAKE_POOL } from './lamps';
+import { BRAKE_GLOW } from './lamps';
 import { hasTurnSignals } from './turn-signals';
 import { ORDINARY_CLOCK } from './effect-clocks';
 
@@ -365,15 +365,15 @@ export function packBeams(
 }
 
 /** Rear light only from braking vehicles admitted as detailed stamps in this same frame. */
-export function packBrakePools(
+export function packBrakeGlow(
   out: Uint8Array,
   grid: LightGrid,
   agents: readonly VisibleAgent[],
   stampedVehicles: Uint8Array,
   scratch?: ConePackingScratch,
 ): number {
-  prepareCones(scratch, grid, agents.length, -1, BRAKE_POOL);
-  const g = lightByte(LampState.beam, BRAKE_POOL.seed);
+  prepareCones(scratch, grid, agents.length, -1, BRAKE_GLOW);
+  const g = lightByte(LampState.beam, BRAKE_GLOW.seed);
   let cast = 0;
   for (let i = 0; i < agents.length; i++) {
     const agent = agents[i]!;
@@ -385,12 +385,12 @@ export function packBrakePools(
       agent.lamps?.kind !== 'brake'
     )
       continue;
-    if (cachedCone(out, grid, agent, -1, BRAKE_POOL, BRAKE_POOL.minCells, g, scratch, i)) cast++;
+    if (cachedCone(out, grid, agent, -1, BRAKE_GLOW, BRAKE_GLOW.minCells, g, scratch, i)) cast++;
   }
   return cast;
 }
 
-/** The same bounded, world-metre cone geometry for headlights and rear brake spill. */
+/** The same bounded, world-metre cone geometry for headlights and rear brake glow. */
 function packCone(
   out: Uint8Array,
   grid: LightGrid,

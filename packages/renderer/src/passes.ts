@@ -62,7 +62,7 @@ import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
   packBeams,
-  packBrakePools,
+  packBrakeGlow,
   packCandles,
   packLights,
   createConePackingScratch,
@@ -717,7 +717,7 @@ export function lightPass(
   lightTexels.set(lampTexels);
   packBeams(lightTexels, grid, agents, buffers.beamCones);
   if (buffers.stampedAgents === agents)
-    packBrakePools(lightTexels, grid, agents, buffers.stampedVehicles, buffers.brakeCones);
+    packBrakeGlow(lightTexels, grid, agents, buffers.stampedVehicles, buffers.brakeCones);
   // A cell's size in meters at the view's center sizes the candles.
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
   const clocks = buffers.clocks;

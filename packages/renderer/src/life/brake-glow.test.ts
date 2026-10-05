@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { packLife, type LifeGrid } from './draw';
-import { BRAKE_POOL } from './lamps';
+import { BRAKE_GLOW } from './lamps';
 import {
   LampState,
   lightByte,
-  packBrakePools,
+  packBrakeGlow,
   packBeams,
   createConePackingScratch,
   type LightGrid,
@@ -42,7 +42,7 @@ const litCells = (out: Uint8Array) => {
 };
 const sameBytes = (a: Uint8Array, b: Uint8Array) => Buffer.from(a).equals(Buffer.from(b));
 
-describe('brake pools', () => {
+describe('brake glow', () => {
   for (const vehicle of SIGNAL_VEHICLES)
     for (const heading of [
       [1, 0],
@@ -53,7 +53,7 @@ describe('brake pools', () => {
     ])
       it(`casts ${vehicle} behind its tail at heading ${heading.join(',')}`, () => {
         const out = empty();
-        expect(packBrakePools(out, grid, [braking(vehicle, heading)], new Uint8Array([1]))).toBe(1);
+        expect(packBrakeGlow(out, grid, [braking(vehicle, heading)], new Uint8Array([1]))).toBe(1);
         const cells = litCells(out);
         expect(cells.length).toBeGreaterThan(0);
         const spec = VEHICLES[vehicle];
@@ -63,19 +63,19 @@ describe('brake pools', () => {
           const behind = -dx * heading[0]! - dy * heading[1]! - spec.length / 2;
           const right = -dx * heading[1]! + dy * heading[0]!;
           expect(behind).toBeGreaterThan(0);
-          expect(behind).toBeLessThan(BRAKE_POOL.length);
-          expect(Math.abs(right)).toBeLessThan(spec.width / 2 + behind * BRAKE_POOL.spread);
-          expect(value).toBeLessThanOrEqual(Math.round(255 * BRAKE_POOL.strength));
+          expect(behind).toBeLessThan(BRAKE_GLOW.length);
+          expect(Math.abs(right)).toBeLessThan(spec.width / 2 + behind * BRAKE_GLOW.spread);
+          expect(value).toBeLessThanOrEqual(Math.round(255 * BRAKE_GLOW.strength));
           const at = (row * grid.cols + col) * 4;
           expect(out.subarray(at + 1, at + 4)).toEqual(
-            new Uint8Array([lightByte(LampState.beam, BRAKE_POOL.seed), 0, 255]),
+            new Uint8Array([lightByte(LampState.beam, BRAKE_GLOW.seed), 0, 255]),
           );
         }
       });
 
   it('fades along and across the cone', () => {
     const out = empty();
-    packBrakePools(out, grid, [braking()], new Uint8Array([1]));
+    packBrakeGlow(out, grid, [braking()], new Uint8Array([1]));
     const cells = litCells(out);
     const near = cells.filter((c) => c.col >= 57);
     const far = cells.filter((c) => c.col <= 54);
@@ -88,14 +88,14 @@ describe('brake pools', () => {
 
   it('preserves lamp heads and stronger competing pools byte for byte', () => {
     const probe = empty();
-    packBrakePools(probe, grid, [braking()], new Uint8Array([1]));
+    packBrakeGlow(probe, grid, [braking()], new Uint8Array([1]));
     const out = empty();
     for (const { col, row } of litCells(probe)) {
       const at = (row * grid.cols + col) * 4;
       out.set(row % 2 ? [255, lightByte(LampState.working, 9), 0, 255] : [0, 1, 255, 255], at);
     }
     const before = out.slice();
-    packBrakePools(out, grid, [braking()], new Uint8Array([1]));
+    packBrakeGlow(out, grid, [braking()], new Uint8Array([1]));
     expect(sameBytes(out, before)).toBe(true);
   });
 
@@ -114,7 +114,7 @@ describe('brake pools', () => {
     const admitted = new Uint8Array(sources.length).fill(1);
     admitted[admitted.length - 1] = 0;
     const out = empty();
-    expect(packBrakePools(out, grid, sources, admitted)).toBe(0);
+    expect(packBrakeGlow(out, grid, sources, admitted)).toBe(0);
     expect(out.some(Boolean)).toBe(false);
   });
 
@@ -122,10 +122,10 @@ describe('brake pools', () => {
     const car = braking();
     const left = { ...car, lng: 4, ahead: [5, 48], side: [4, 49] } satisfies VisibleAgent;
     const out = empty();
-    expect(packBrakePools(out, grid, [left], new Uint8Array([1]))).toBe(1);
+    expect(packBrakeGlow(out, grid, [left], new Uint8Array([1]))).toBe(1);
     expect(litCells(out).length).toBeGreaterThan(0);
     expect(
-      packBrakePools(
+      packBrakeGlow(
         out,
         { ...grid, toCell: (x, y) => [x / 10, y / 10] },
         [car],
@@ -138,7 +138,7 @@ describe('brake pools', () => {
       ahead: [-99, 48],
       side: [-100, 49],
     } satisfies VisibleAgent;
-    expect(packBrakePools(out, grid, [outside], new Uint8Array([1]))).toBe(0);
+    expect(packBrakeGlow(out, grid, [outside], new Uint8Array([1]))).toBe(0);
   });
 });
 
@@ -172,7 +172,7 @@ describe('successful vehicle stamp mask', () => {
     );
     expect(admitted.some(Boolean)).toBe(false);
     const lights = empty();
-    expect(packBrakePools(lights, grid, [car], admitted)).toBe(0);
+    expect(packBrakeGlow(lights, grid, [car], admitted)).toBe(0);
   });
 
   it('does not admit miniature glyphs and clears unused entries on smaller or empty frames', () => {
@@ -212,22 +212,22 @@ describe('bounded cone reuse', () => {
       car = braking(),
       admitted = new Uint8Array([1]);
     const probe = empty();
-    packBrakePools(probe, grid, [car], admitted, scratch);
+    packBrakeGlow(probe, grid, [car], admitted, scratch);
     const blocked = empty();
     for (const { col, row } of litCells(probe)) blocked[(row * grid.cols + col) * 4 + 2] = 255;
     const before = blocked.slice();
-    packBrakePools(blocked, grid, [car], admitted, scratch);
+    packBrakeGlow(blocked, grid, [car], admitted, scratch);
     expect(sameBytes(blocked, before)).toBe(true);
     const redrawn = empty();
-    packBrakePools(redrawn, grid, [{ ...car }], admitted, scratch);
+    packBrakeGlow(redrawn, grid, [{ ...car }], admitted, scratch);
     expect(sameBytes(redrawn, probe)).toBe(true);
-    expect(packBrakePools(empty(), grid, [car], new Uint8Array([0]), scratch)).toBe(0);
+    expect(packBrakeGlow(empty(), grid, [car], new Uint8Array([0]), scratch)).toBe(0);
   });
 
   it('invalidates for pose, craft, projection, target size and cone direction', () => {
     const scratch = createConePackingScratch(),
       admitted = new Uint8Array([1]);
-    packBrakePools(empty(), grid, [braking()], admitted, scratch);
+    packBrakeGlow(empty(), grid, [braking()], admitted, scratch);
     const cases: [LifeGrid, VisibleAgent][] = [
       [grid, { ...braking(), lng: 33, ahead: [34, 48], side: [33, 49] }],
       [grid, braking('bus', [0, 1])],
@@ -237,8 +237,8 @@ describe('bounded cone reuse', () => {
     for (const [g, car] of cases) {
       const cached = new Uint8Array(g.cols * g.rows * 4),
         fresh = cached.slice();
-      packBrakePools(cached, g, [car], admitted, scratch);
-      packBrakePools(fresh, g, [car], admitted);
+      packBrakeGlow(cached, g, [car], admitted, scratch);
+      packBrakeGlow(fresh, g, [car], admitted);
       expect(sameBytes(cached, fresh)).toBe(true);
     }
     const cached = empty(),
@@ -246,7 +246,7 @@ describe('bounded cone reuse', () => {
     packBeams(cached, grid, [braking()], scratch);
     packBeams(fresh, grid, [braking()]);
     expect(sameBytes(cached, fresh)).toBe(true);
-    packBrakePools(empty(), grid, [], new Uint8Array(0), scratch);
+    packBrakeGlow(empty(), grid, [], new Uint8Array(0), scratch);
     expect(scratch.entries.length).toBe(0);
   });
 });

@@ -170,7 +170,12 @@ export class VehicleEffectTracker {
         if (c.state) this.deactivate(c, this.clock - this.dt);
         return;
       }
-      if (c.atHold && !services && this.clock + 1e-9 < c.wake) {
+      if (
+        c.atHold &&
+        c.state?.inactiveAt === undefined &&
+        !services &&
+        this.clock + 1e-9 < c.wake
+      ) {
         const speed = m.v ?? m.speed;
         if (
           speed < BRAKE.stopped * this.tile.perMeter &&

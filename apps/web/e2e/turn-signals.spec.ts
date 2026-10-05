@@ -7,7 +7,7 @@ import {
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
-import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_POOL } from '../../../packages/renderer/src/life/lamps';
+import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../../../packages/renderer/src/life/lamps';
 import { LampState, lightByte } from '../../../packages/renderer/src/life/lights';
 import { PersonPart } from '../../../packages/renderer/src/life/people';
 import { fullscreenVertex } from '../../../packages/renderer/src/shaders/fullscreen';
@@ -272,7 +272,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, life);
         const off = render(1).cells[0];
         const light = new Uint8Array(n * 4);
-        for (let x = 21; x < n; x++) light.set([77, input.brakePool, 0, 255], x * 4);
+        for (let x = 21; x < n; x++) light.set([77, input.brakeGlow, 0, 255], x * 4);
         activeLight = texture(n, 1, light);
         const brakeNight = render(0),
           brakeDay = render(1);
@@ -310,7 +310,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         tail: VehiclePart.taillight,
         puff: PersonPart.puff,
         brake: BRAKE_LAMP,
-        brakePool: lightByte(LampState.beam, BRAKE_POOL.seed),
+        brakeGlow: lightByte(LampState.beam, BRAKE_GLOW.seed),
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));

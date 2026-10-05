@@ -119,6 +119,38 @@ describe('accepted vehicle effects', () => {
     expect(effects.exhaust.nextIdle).toBeGreaterThan(world.signalClock);
   });
 
+  it('rebases a cached queued emitter immediately after inspection', () => {
+    const life = new TileLife(left, continuityTile(left).life, 1);
+    life.movers.length = 0;
+    const m = continuityMover(life, 1000);
+    m.vehicle = 'bus';
+    m.v = 0;
+    life.movers.push(m);
+    const tracker = life.effects;
+    tracker.begin(0.1, 0.1, 0, undefined);
+    tracker.capture(m, 0, true, 0, 0, false);
+    tracker.finish(0.1, 0.1, undefined);
+    const state = vehicleEffects(m)!,
+      deadline = state.exhaust!.nextIdle;
+    for (let frame = 2; frame <= 6; frame++)
+      life.step(0.1, undefined, undefined, undefined, {
+        rain: 0,
+        clock: frame / 10,
+        inspecting: m,
+      });
+    expect(state.inactiveAt).toBeCloseTo(0.1);
+    expect(state.brake).toBe(BRAKE.hold);
+    expect(state.exhaust!.nextIdle).toBe(deadline);
+    // Still queued after release, before the cached wake deadline.
+    tracker.begin(0.7, 0.1, 0, undefined);
+    tracker.capture(m, 0, true, 0, 0, false);
+    tracker.finish(0.7, 0.1, undefined);
+    expect(state.inactiveAt).toBeUndefined();
+    expect(state.exhaust!.nextIdle).toBeCloseTo(deadline + 0.5);
+    expect(state.exhaust!.emitted).toBe(0);
+    expect(state.brake).toBe(BRAKE.hold);
+  });
+
   it.each([30, 60, 120])(
     'matches eager accepted-speed scheduling through lazy idle and pull-away at %s Hz',
     (hz) => {
@@ -528,16 +560,20 @@ describe('lamp and puff packing', () => {
       };
       const normal = packed([source]);
       const hazard = packed([{ ...source, lamps: { kind: 'hazard', on: true } }]);
+      const permissions = new Uint8Array(grid.cols * grid.rows),
+        normalPermissions = new Uint8Array(permissions.length);
       const corners = new Set<string>();
       let lamps = 0;
       for (let at = 0; at < hazard.out.length; at += 4) {
-        expect(hazard.out[at + 2]! & 127).toBe(normal.out[at + 2]);
+        permissions[at / 4] = hazard.out[at + 2]! & ~TURN_SIGNAL_BIT;
+        normalPermissions[at / 4] = normal.out[at + 2]!;
         if (!(hazard.out[at + 2]! & TURN_SIGNAL_BIT)) continue;
         lamps++;
         const x = ((at / 4) % grid.cols) + 0.5 - 40,
           y = Math.floor(at / 4 / grid.cols) + 0.5 - 40;
         corners.add(`${x * dx + y * dy > 0}/${-x * dy + y * dx > 0}`);
       }
+      sameBytes(permissions, normalPermissions);
       expect(lamps).toBe(4);
       expect(corners.size).toBe(4);
       sameBytes(packed([{ ...source, lamps: { kind: 'hazard', on: false } }]).out, normal.out);

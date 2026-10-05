@@ -6,6 +6,7 @@ import { cpus, platform, release, getPriority } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshotRevision, snapshotCurrent, currentSourceHash } from './snapshot';
+import { adaptPuffPacking, type PuffPacking } from './puff-packing';
 import {
   scenarioTilesAt,
   worldTiles,
@@ -97,6 +98,14 @@ try {
   const { packLife, buildLifeGlyphs } = (await import(
     changedGraph.path('life/draw.ts')
   )) as typeof Draw;
+  const oldPack = adaptPuffPacking(
+    oldDraw.packLife,
+    await readFile(new URL(frozen.path('life/draw.ts')), 'utf8'),
+  );
+  const currentPack = adaptPuffPacking(
+    packLife,
+    await readFile(new URL(changedGraph.path('life/draw.ts')), 'utf8'),
+  );
   const oldScenarios = (await import(frozen.path('life/testing/scenarios.ts'))) as typeof Scenarios;
   const { makeScenario, completeScenarioState } = (await import(
     changedGraph.path('life/testing/scenarios.ts')
@@ -534,7 +543,7 @@ try {
                 : oldScenarios.completeScenarioState(a.world),
               `${name}: state frame ${frame}`,
             );
-          oldDraw.packLife(
+          oldPack(
             oldPixels,
             a.grid,
             av,
@@ -544,7 +553,7 @@ try {
             glyphs,
             a.world.visiblePuffs,
           );
-          packLife(
+          currentPack(
             nextPixels,
             b.grid,
             bv,
@@ -552,7 +561,6 @@ try {
             glyph,
             undefined,
             glyphs,
-            undefined,
             b.world.visiblePuffs,
           );
           if (!observedCues.puff)
@@ -571,7 +579,7 @@ try {
       }
       const prepareMeasure = (
         Constructor: typeof LifeWorld,
-        pack: typeof packLife,
+        pack: PuffPacking,
         profiler?: FrameProfiler,
       ) => {
         const scenarioFactory =
@@ -726,7 +734,7 @@ try {
       };
       const measure = (
         Constructor: typeof LifeWorld,
-        pack: typeof packLife,
+        pack: PuffPacking,
         profiler?: FrameProfiler,
       ) => {
         const arm = prepareMeasure(Constructor, pack, profiler);
@@ -734,8 +742,8 @@ try {
         return arm.result();
       };
       // Warm both graphs and the shared caller before retaining any paired observations.
-      const calibrationA = prepareMeasure(before.LifeWorld, oldDraw.packLife),
-        calibrationB = prepareMeasure(LifeWorld, packLife);
+      const calibrationA = prepareMeasure(before.LifeWorld, oldPack),
+        calibrationB = prepareMeasure(LifeWorld, currentPack);
       for (let frame = 0; frame < warmup + samples; frame++) {
         if (frame % 2) {
           calibrationB.sample(frame);
@@ -748,8 +756,8 @@ try {
       const oldRuns: ReturnType<typeof measure>[] = [],
         currentRuns: ReturnType<typeof measure>[] = [];
       for (let run = 0; run < runs; run++) {
-        const a = prepareMeasure(before.LifeWorld, oldDraw.packLife),
-          b = prepareMeasure(LifeWorld, packLife);
+        const a = prepareMeasure(before.LifeWorld, oldPack),
+          b = prepareMeasure(LifeWorld, currentPack);
         for (let frame = 0; frame < warmup + samples; frame++) {
           if (run % 2) {
             b.sample(frame);
@@ -786,11 +794,11 @@ try {
       if (instrumentation)
         for (let run = 0; run < runs; run++) {
           if (run % 2) {
-            instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
-            instrumentation.plain.push(measure(LifeWorld, packLife));
+            instrumentation.profiled.push(measure(LifeWorld, currentPack, new FrameProfiler()));
+            instrumentation.plain.push(measure(LifeWorld, currentPack));
           } else {
-            instrumentation.plain.push(measure(LifeWorld, packLife));
-            instrumentation.profiled.push(measure(LifeWorld, packLife, new FrameProfiler()));
+            instrumentation.plain.push(measure(LifeWorld, currentPack));
+            instrumentation.profiled.push(measure(LifeWorld, currentPack, new FrameProfiler()));
           }
         }
       rows.push({

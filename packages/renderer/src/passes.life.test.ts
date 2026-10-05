@@ -17,7 +17,6 @@ it('reuses held uploads, invalidates packing inputs, and clears the raster when 
   vi.mocked(packLife).mockImplementation(
     (out, _grid, agents, _theme, _glyph, _sun, _glyphs, metadata) => {
       out.fill(agents.length);
-      if (metadata instanceof Float64Array) throw new Error('Expected packing metadata');
       metadata!.owners!.fill(agents.length);
       return agents.length;
     },
