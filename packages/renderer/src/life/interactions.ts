@@ -701,6 +701,13 @@ export class LocalScenes {
       guard.cancelYield?.(m);
       priority = undefined;
     }
+    const physicalPoint = (pose: Mover) => {
+      const lane = this.visits.has(m) ? 0 : (pose.avoid ?? 0);
+      return {
+        x: pose.x - pose.hy * lane * this.perMeter,
+        y: pose.y + pose.hx * lane * this.perMeter,
+      };
+    };
     if (!state) {
       const anchor = snapshotMover(m);
       const heading = anchor.momentFacing ?? anchor;
@@ -716,7 +723,7 @@ export class LocalScenes {
           (!owns || owns(m)) &&
           bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
           this.graph.allowsBodies(bodies, true) &&
-          this.graph.clear(previous, m) &&
+          this.graph.clear(physicalPoint(previous), physicalPoint(m)) &&
           guard(m, previous, false)
         );
       };
@@ -735,7 +742,7 @@ export class LocalScenes {
               y: back.y + heading.hx * side * offset * this.perMeter,
             };
             if (
-              !this.graph.route(anchor, holding) ||
+              !this.graph.route(physicalPoint(anchor), physicalPoint({ ...m, ...holding })) ||
               !admissible(previous, holding) ||
               (guard.holding && !guard.holding(m))
             )
@@ -791,7 +798,7 @@ export class LocalScenes {
       !inTile(m) ||
       (owns && !owns(m)) ||
       !bodies.every((body) => inTile(body) && (!owns || owns(body))) ||
-      !this.graph.clear(previous, m) ||
+      !this.graph.clear(physicalPoint(previous), physicalPoint(m)) ||
       !guard(m, previous)
     ) {
       restoreMover(m, previous);
