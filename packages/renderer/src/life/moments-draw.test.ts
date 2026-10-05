@@ -122,16 +122,21 @@ function draw(
 it('keeps canopy stages after all existing map glyphs in both themes', () => {
   const stages = personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined);
   expect(stages).toHaveLength(14);
-  for (const theme of Object.values(themes)) expect(mapGlyphs(theme).slice(-14)).toEqual(stages);
+  for (const theme of Object.values(themes)) {
+    const glyphs = mapGlyphs(theme),
+      start = glyphs.indexOf(stages[0]!);
+    expect(glyphs.slice(start, start + stages.length)).toEqual(stages);
+    expect(start).toBeGreaterThan(Math.max(...ACCESS_GLYPHS.map((glyph) => glyphs.indexOf(glyph))));
+  }
 });
 
 it('packs attentive and gesturing adults and children at one-cell, big and stamp sizes', () => {
   // Seasonal symbols, parking labels and fourteen canopy stages extend the original glyph set.
   expect(mapGlyphs(themes.dark)).toHaveLength(
-    383 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
-    383 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
+    385 + SEASONAL_GLYPHS.length + ACCESS_GLYPHS.length + 14,
   );
   for (const figure of ['adult', 'child'] as const)
     for (const pose of ['attentive', 'gesture'] as const)
