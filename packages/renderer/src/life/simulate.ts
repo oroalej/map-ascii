@@ -2284,7 +2284,10 @@ export class TileLife {
     for (let guard = 0; guard < 256 && left > 0; guard++) {
       // Also protects initial placement, oversized steps, and collision retries. Re-evaluate
       // after each junction in case this step enters a one-way line ending at a dead end.
-      const room = this.oneWayEndRoom(m, junctions);
+      const room =
+        m.kind === 'vehicle' && this.geo.oneway?.[m.line]
+          ? this.oneWayEndRoom(m, junctions)
+          : undefined;
       if (room !== undefined) left = Math.min(left, room);
       if (left <= 0) break;
       const to = m.from + m.dir;
@@ -3015,7 +3018,8 @@ export class TileLife {
       const m = movers[i]!;
       speeds[i] = m.speed;
       caps[i] = Infinity;
-      const room = this.oneWayEndRoom(m);
+      const room =
+        m.kind === 'vehicle' && this.geo.oneway?.[m.line] ? this.oneWayEndRoom(m) : undefined;
       if (room !== undefined) {
         speeds[i] = Math.min(m.speed, approach(room, 0, kinematicsOf(m.vehicle).brake * pm));
         caps[i] = room / dt;
