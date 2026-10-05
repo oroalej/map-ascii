@@ -3,7 +3,7 @@ import { frameBetween } from './frames';
 import { lngLatToTile, tileToLngLat } from '@atlas/shared';
 import type { TileId } from '../tiles';
 import { type PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
-export { PUFF_AGE_MASK, PUFF_KIND_BIT, PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
+import { hasTurnSignals, type SIGNAL_VEHICLES } from './turn-signals';
 
 export const PUFF = {
   cap: 96,
@@ -43,12 +43,16 @@ export type ExhaustEmitter = {
   emitted: number;
 };
 export type Wind = { dir: readonly [number, number]; strength: number } | undefined;
+const EXHAUST_KIND: Record<(typeof SIGNAL_VEHICLES)[number], PuffKind | undefined> = {
+  car: undefined,
+  jeepney: 'diesel',
+  bus: 'diesel',
+  truck: 'diesel',
+  motorcycle: 'twoStroke',
+  tricycle: 'twoStroke',
+};
 export const exhaustKind = (vehicle: CraftType | undefined): PuffKind | undefined =>
-  vehicle === 'jeepney' || vehicle === 'bus' || vehicle === 'truck'
-    ? 'diesel'
-    : vehicle === 'motorcycle' || vehicle === 'tricycle'
-      ? 'twoStroke'
-      : undefined;
+  hasTurnSignals(vehicle) ? EXHAUST_KIND[vehicle] : undefined;
 
 /** Independent integer hash: never advances any of the simulation's random streams. */
 function sample(seed: number, ordinal: number, tag: number) {
@@ -72,11 +76,11 @@ export function emitter(seed: number, clock: number): ExhaustEmitter {
   };
 }
 
-export const burstDeadline = (s: ExhaustEmitter) =>
+const burstDeadline = (s: ExhaustEmitter) =>
   s.burstAt + (s.burstNext * PUFF.pullAway.window) / (s.burstCount - 1);
 export const burstDue = (s: ExhaustEmitter, clock: number) =>
   s.burstNext < s.burstCount && burstDeadline(s) <= clock + 1e-9;
-export function rebaseEmitter(s: ExhaustEmitter, clock: number, dt: number) {
+function rebaseEmitter(s: ExhaustEmitter, clock: number, dt: number) {
   const gap = Math.max(0, clock - dt - s.clock);
   shiftEmitter(s, gap);
   s.clock = clock;
@@ -253,7 +257,7 @@ export class PuffStore {
   }
 }
 
-export type PuffSelectionTile = {
+type PuffSelectionTile = {
   tile: TileId;
   perMeter: number;
   puffs: PuffStore;

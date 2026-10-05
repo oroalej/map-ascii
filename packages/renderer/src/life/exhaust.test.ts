@@ -15,8 +15,8 @@ import {
   stoppedFor,
 } from './exhaust';
 
-function replay(hz: number, kind: PuffKind = 'diesel', idle = false) {
-  const state = emitter(42, 0);
+function replay(hz: number, kind: PuffKind = 'diesel', idle = false, seed = 42) {
+  const state = emitter(seed, 0);
   const events: { at: number; life: number; spread: number }[] = [];
   const store = new PuffStore();
   const speed = (t: number) => (idle ? 0 : Math.max(0, Math.min(2, (t - 2) * 2)));
@@ -64,13 +64,19 @@ describe('exhaust scheduling', () => {
       expect(exhaustKind(v)).toBeUndefined();
   });
   it('emits 2–4 pull-away puffs and half as many for smaller engines', () => {
-    const diesel = replay(60).events,
-      small = replay(60, 'twoStroke').events;
-    expect(diesel.length).toBeGreaterThanOrEqual(2);
-    expect(diesel.length).toBeLessThanOrEqual(4);
-    expect(small).toHaveLength(Math.ceil(diesel.length / 2));
-    expect(diesel.at(-1)!.at - diesel[0]!.at).toBeCloseTo(PUFF.pullAway.window);
-    expect(diesel[0]!.at).toBeCloseTo(2.25);
+    const counts = new Set<number>();
+    for (let seed = 0; seed < 32; seed++) {
+      const diesel = replay(60, 'diesel', false, seed).events,
+        small = replay(60, 'twoStroke', false, seed).events;
+      counts.add(diesel.length);
+      expect(small).toHaveLength(Math.ceil(diesel.length / 2));
+      expect(small.map((event) => event.at)).toEqual(
+        diesel.filter((_, index) => index % 2 === 0).map((event) => event.at),
+      );
+      expect(diesel.at(-1)!.at - diesel[0]!.at).toBeCloseTo(PUFF.pullAway.window);
+      expect(diesel[0]!.at).toBeCloseTo(2.25);
+    }
+    expect(counts).toEqual(new Set([2, 3, 4]));
   });
   it('uses 3–6 second idle intervals, doubled for smaller engines', () => {
     for (const kind of ['diesel', 'twoStroke'] as const) {

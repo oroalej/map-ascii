@@ -19,7 +19,7 @@ import {
 import { birdGlyphs } from '../life/birds';
 import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
-import { PUFF_GLYPHS } from '../life/exhaust';
+import { PUFF_GLYPHS } from '../life/puff-style';
 import {
   FIGURE_TONE,
   figureGlyph,

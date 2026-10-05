@@ -36,7 +36,8 @@ import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
 import { BRAKE_LAMP } from './lamps';
-import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE, PUFF_AGE_MASK, PUFF_KIND_BIT } from './exhaust';
+import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
+import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
