@@ -5,6 +5,7 @@ import {
   bodyHitsPolygon,
   Occupancy,
   PolygonIndex,
+  segmentBody,
   type Body,
   type Polygon,
 } from './occupancy';
@@ -26,6 +27,17 @@ const ring = (x: number, y: number, w: number, h: number) => [
 ];
 
 describe('ground footprints', () => {
+  it('keeps zero-length swept segments finite and detects point obstacles', () => {
+    const p = { x: 2, y: 3 };
+    const index = new PolygonIndex();
+    index.add([ring(1, 2, 2, 2)]);
+    for (const padding of [0, 0.01]) {
+      const body = segmentBody(p, p, padding);
+      expect(Object.values(body).every(Number.isFinite)).toBe(true);
+      expect(index.hits([body])).toBe(true);
+      expect(index.hits([segmentBody({ x: 10, y: 10 }, { x: 10, y: 10 }, padding)])).toBe(false);
+    }
+  });
   it('matches exhaustive tests around a concave polygon with a hole', () => {
     const polygons: Polygon[] = [
       [

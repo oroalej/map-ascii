@@ -378,6 +378,16 @@ export const BIRDS = {
   stay: [15, 45] as const,
 };
 
+/** Ground feeding: bounded spot searches, visit seconds, nearby tree rests and landing blend. */
+export const FORAGE = {
+  attempts: 8,
+  /** Search radius in metres for both reachable shoreline and a nearby resting tree. */
+  reach: 40,
+  visit: [60, 180],
+  returnChance: 0.8,
+  settleSeconds: 1,
+} as const;
+
 /**
  * Birds in trees: a flock picking where to go next lands in a tree (a perch, raster/geometry.ts)
  * with its species' chance (life/birds.ts `BirdSpec.perch`), settles within `spread` m of its
